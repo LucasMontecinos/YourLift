@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FECHIPO — Inscripción a Campeonatos</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0A1628;--card:#11223B;--border:#1E3A5F;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A;--blue:#1E5BA8;--gold:#D4A843;--green:#22c55e;--red:#ef4444}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+input,select,button,textarea{font-family:inherit;outline:none}
+.os{font-family:'Oswald',sans-serif}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fade{animation:fadeIn .4s ease}
+.sp{width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+.ctn{max-width:720px;margin:0 auto;padding:16px 20px}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:rgba(17,34,59,.95);position:sticky;top:0;z-index:100;backdrop-filter:blur(10px)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 24px;border-radius:8px;border:none;font-weight:600;font-size:14px;cursor:pointer;font-family:'Oswald',sans-serif;letter-spacing:1px;text-transform:uppercase;transition:all .15s}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-accent{background:var(--accent);color:#fff}.btn-accent:hover:not(:disabled){background:#a8182f}
+.btn-green{background:var(--green);color:#fff}.btn-green:hover:not(:disabled){background:#1aa34a}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--muted)}.btn-outline:hover{border-color:var(--accent);color:var(--text)}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-family:'Oswald',sans-serif}
+.field label .req{color:var(--accent)}
+.input{width:100%;padding:12px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;transition:border-color .2s}
+.input:focus{border-color:var(--accent)}
+.input.ok{border-color:var(--green)}
+select.input{cursor:pointer}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.row{grid-template-columns:1fr}}
+.upload-zone{border:2px dashed var(--border);border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(196,30,58,.05)}
+.upload-zone.done{border-color:var(--green);border-style:solid;background:rgba(34,197,94,.05)}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.upload-zone .icon{font-size:28px;margin-bottom:6px}
+.upload-zone .txt{font-size:12px;color:var(--muted)}
+.upload-zone .fname{font-size:13px;color:var(--green);font-weight:600;margin-top:4px}
+.tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.step-bar{display:flex;gap:4px;margin-bottom:24px}
+.step-dot{flex:1;height:4px;border-radius:2px;background:var(--border);transition:background .3s}
+.step-dot.active{background:var(--accent)}
+.step-dot.done{background:var(--green)}
+.alert{padding:14px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px}
+.alert-info{background:rgba(30,91,168,.15);border:1px solid rgba(30,91,168,.3);color:var(--blue)}
+.alert-error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red)}
+.alert-success{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:var(--green)}
+/* Admin table */
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{padding:10px 8px;text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid var(--border);font-family:'Oswald',sans-serif}
+.tbl td{padding:10px 8px;border-bottom:1px solid rgba(30,58,95,.3)}
+.tbl tr:hover{background:rgba(196,30,58,.03)}
+.status-pending{color:var(--gold)}.status-approved{color:var(--green)}.status-rejected{color:var(--red)}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="os" style="font-size:22px;font-weight:700;letter-spacing:2px">
+      <span style="color:var(--accent)">FECHIPO</span> <span style="font-weight:400;color:var(--muted)">Inscripción</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="index.html" class="btn btn-outline" style="padding:6px 14px;font-size:11px;text-decoration:none">Base de Datos</a>
+    <button id="adminToggle" class="btn btn-outline" style="padding:6px 14px;font-size:11px" onclick="toggleAdmin()">🔒 Admin</button>
+  </div>
+</div>
+
+<div class="ctn" id="app"></div>
+
+<script>
+// ══════════════════════════════════════════════
+// FIREBASE CONFIG — REEMPLAZA CON TUS DATOS
+// ══════════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey: "TU_API_KEY_AQUI",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "TU_APP_ID"
+};
+
+// ══════════════════════════════════════════════
+// FIREBASE SDK LOADING
+// ══════════════════════════════════════════════
+let db = null, storage = null, firebaseReady = false;
+
+async function initFirebase() {
+  try {
+    const {initializeApp} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+    const {getFirestore, collection, addDoc, getDocs, doc, updateDoc, query, orderBy, where, serverTimestamp} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const {getStorage, ref, uploadBytes, getDownloadURL} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js');
+    
+    if (FIREBASE_CONFIG.apiKey === "TU_API_KEY_AQUI") {
+      console.warn("Firebase no configurado. Usando modo demo.");
+      return false;
+    }
+    
+    const app = initializeApp(FIREBASE_CONFIG);
+    db = getFirestore(app);
+    storage = getStorage(app);
+    
+    // Expose functions globally
+    window.FB = {collection, addDoc, getDocs, doc, updateDoc, query, orderBy, where, serverTimestamp, ref, uploadBytes, getDownloadURL};
+    firebaseReady = true;
+    return true;
+  } catch(e) {
+    console.error("Firebase init error:", e);
+    return false;
+  }
+}
+
+// ══════════════════════════════════════════════
+// DEMO MODE (localStorage fallback)
+// ══════════════════════════════════════════════
+const DEMO_KEY = 'fechipo_inscripciones';
+function demoSave(entry) {
+  const all = JSON.parse(localStorage.getItem(DEMO_KEY) || '[]');
+  entry.id = 'demo_' + Date.now();
+  entry.timestamp = new Date().toISOString();
+  entry.status = 'pending';
+  all.push(entry);
+  localStorage.setItem(DEMO_KEY, JSON.stringify(all));
+  return entry.id;
+}
+function demoGetAll() {
+  return JSON.parse(localStorage.getItem(DEMO_KEY) || '[]');
+}
+function demoUpdate(id, updates) {
+  const all = demoGetAll();
+  const idx = all.findIndex(e => e.id === id);
+  if (idx >= 0) { Object.assign(all[idx], updates); localStorage.setItem(DEMO_KEY, JSON.stringify(all)); }
+}
+
+// ══════════════════════════════════════════════
+// DATA
+// ══════════════════════════════════════════════
+const CLUBS = [
+  "All Power CD","Atacama Powerlifting","Athor Powerlifting","Beers and Lifts","Black Bars",
+  "Club Bushido Lifting","Club Kensei","Concebarbell","Hannya Strength","Himalaya Powerlifting",
+  "Iron Forces Powerlifting","Kaizen","Los Toros","Potencia Muscular CD","Primal Strength",
+  "REMA","Shoganai Strength","South Side Club","Otro"
+];
+
+const EVENTS = [
+  {id:"regional_centro_2026",name:"Campeonato Regional Centro FECHIPO 2026",date:"2026-05-09",closeDate:"2026-04-09",location:"Santiago, RM",org:"Athor Powerlifting"},
+  {id:"universitario_2026",name:"Primer Campeonato Nacional Universitario FECHIPO 2026",date:"2026-05-23",closeDate:"2026-04-23",location:"Talca",org:"Club Bushido Lifting"},
+];
+
+const CATEGORIES_M = ["-53 kg","-59 kg","-66 kg","-74 kg","-83 kg","-93 kg","-105 kg","-120 kg","+120 kg"];
+const CATEGORIES_F = ["-43 kg","-47 kg","-52 kg","-57 kg","-63 kg","-69 kg","-76 kg","-84 kg","+84 kg"];
+const DIVISIONS = ["Sub-Junior","Junior","Open","Master I","Master II","Master III","Master IV"];
+const MODALITIES = ["Powerlifting Classic","Only Bench Classic","Powerlifting Classic + Only Bench Classic"];
+
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+let state = {
+  view: 'form', // form, confirm, admin
+  step: 0,
+  form: {evento:'',nombre:'',rut:'',codigo:'',sexo:'',fechaNac:'',division:'',categoria:'',modalidad:'',club:'',clubOtro:'',comuna:''},
+  carnetFile: null, carnetName: '',
+  wadeFile: null, wadeName: '',
+  submitting: false,
+  adminAuth: false,
+  inscripciones: [],
+  adminFilter: 'all',
+  adminEvent: '',
+  error: '',
+  success: '',
+};
+
+const ADMIN_PIN = '2026';
+
+// ══════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════
+function render() {
+  const app = document.getElementById('app');
+  if (state.view === 'admin') { app.innerHTML = renderAdmin(); return; }
+  if (state.view === 'confirm') { app.innerHTML = renderConfirm(); return; }
+  app.innerHTML = renderForm();
+}
+
+function renderForm() {
+  const f = state.form;
+  const steps = ['Evento','Datos Personales','Competencia','Documentos'];
+  const s = state.step;
+  const cats = f.sexo === 'Femenino' ? CATEGORIES_F : CATEGORIES_M;
+  const isUni = f.evento === 'universitario_2026';
+  const ev = EVENTS.find(e => e.id === f.evento);
+  const closed = ev && new Date() > new Date(ev.closeDate + 'T23:59:59');
+
+  let h = `<div class="fade" style="margin-top:20px">`;
+  
+  // Title
+  h += `<div style="text-align:center;margin-bottom:24px">
+    <h1 class="os" style="font-size:clamp(22px,4vw,30px);letter-spacing:2px"><span style="color:var(--accent)">INSCRIPCIÓN</span> A CAMPEONATO</h1>
+    <p style="color:var(--muted);font-size:13px;margin-top:4px">Completa el formulario para inscribirte</p>
+    <div style="width:60px;height:3px;background:linear-gradient(90deg,var(--accent),var(--gold));margin:10px auto;border-radius:2px"></div>
+  </div>`;
+
+  // Firebase status
+  if (!firebaseReady) {
+    h += `<div class="alert alert-info">ℹ️ Modo demostración — Los datos se guardan localmente. Configura Firebase para inscripciones reales.</div>`;
+  }
+
+  // Step bar
+  h += `<div class="step-bar">${steps.map((st,i) => `<div class="step-dot ${i<s?'done':i===s?'active':''}"></div>`).join('')}</div>`;
+  h += `<p style="font-size:12px;color:var(--muted);margin-bottom:16px">Paso ${s+1} de ${steps.length}: <strong style="color:var(--text)">${steps[s]}</strong></p>`;
+
+  if (state.error) h += `<div class="alert alert-error">⚠️ ${state.error}</div>`;
+
+  // STEP 0: Event selection
+  if (s === 0) {
+    h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Selecciona la Competencia</h3>`;
+    EVENTS.forEach(ev => {
+      const sel = f.evento === ev.id;
+      const isClosed = new Date() > new Date(ev.closeDate + 'T23:59:59');
+      h += `<div onclick="${isClosed?'':`selectEvent('${ev.id}')`}" style="padding:16px;border-radius:10px;border:2px solid ${sel?'var(--accent)':isClosed?'var(--border)':'var(--border)'};background:${sel?'rgba(196,30,58,.08)':'transparent'};margin-bottom:10px;cursor:${isClosed?'not-allowed':'pointer'};transition:all .2s;opacity:${isClosed?'.5':'1'}">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div class="os" style="font-size:15px;font-weight:700">${ev.name}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">${ev.org} · ${ev.location} · ${ev.date}</div>
+          </div>
+          ${isClosed ? '<span class="tag" style="background:rgba(239,68,68,.15);color:var(--red)">Cerrado</span>' : sel ? '<span style="color:var(--accent);font-size:20px">✓</span>' : ''}
+        </div>
+      </div>`;
+    });
+    h += `<div style="text-align:right;margin-top:16px">
+      <button class="btn btn-accent" onclick="nextStep()" ${!f.evento?'disabled':''}>Siguiente →</button>
+    </div></div>`;
+  }
+
+  // STEP 1: Personal data
+  if (s === 1) {
+    h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Datos del Atleta</h3>
+    <div class="field">
+      <label>Nombre Completo <span class="req">*</span></label>
+      <input class="input ${f.nombre?'ok':''}" type="text" placeholder="Nombre Apellido Apellido" value="${f.nombre}" oninput="upd('nombre',this.value)">
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>RUT <span class="req">*</span></label>
+        <input class="input ${f.rut?'ok':''}" type="text" placeholder="12345678-9" value="${f.rut}" oninput="upd('rut',this.value)">
+      </div>
+      <div class="field">
+        <label>Código de Atleta FECHIPO</label>
+        <input class="input" type="text" placeholder="ej: 2044IAR-2023 (si tienes)" value="${f.codigo}" oninput="upd('codigo',this.value)">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Sexo <span class="req">*</span></label>
+        <select class="input ${f.sexo?'ok':''}" onchange="upd('sexo',this.value)">
+          <option value="">Seleccionar...</option>
+          <option ${f.sexo==='Masculino'?'selected':''}>Masculino</option>
+          <option ${f.sexo==='Femenino'?'selected':''}>Femenino</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Fecha de Nacimiento <span class="req">*</span></label>
+        <input class="input ${f.fechaNac?'ok':''}" type="date" value="${f.fechaNac}" oninput="upd('fechaNac',this.value)">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Club <span class="req">*</span></label>
+        <select class="input ${f.club?'ok':''}" onchange="upd('club',this.value)">
+          <option value="">Seleccionar club...</option>
+          ${CLUBS.map(c => `<option ${f.club===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>
+      ${f.club==='Otro'?`<div class="field">
+        <label>Nombre del Club</label>
+        <input class="input" type="text" placeholder="Nombre de tu club" value="${f.clubOtro}" oninput="upd('clubOtro',this.value)">
+      </div>`:`<div class="field">
+        <label>Comuna y Región</label>
+        <input class="input" type="text" placeholder="ej: Talca, Región del Maule" value="${f.comuna}" oninput="upd('comuna',this.value)">
+      </div>`}
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:16px">
+      <button class="btn btn-outline" onclick="prevStep()">← Atrás</button>
+      <button class="btn btn-accent" onclick="nextStep()" ${!(f.nombre&&f.rut&&f.sexo&&f.fechaNac&&f.club)?'disabled':''}>Siguiente →</button>
+    </div></div>`;
+  }
+
+  // STEP 2: Competition details
+  if (s === 2) {
+    h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Datos de Competencia</h3>
+    <div class="row">
+      <div class="field">
+        <label>División de Edad <span class="req">*</span></label>
+        <select class="input ${f.division?'ok':''}" onchange="upd('division',this.value)">
+          <option value="">Seleccionar...</option>
+          ${DIVISIONS.map(d => `<option ${f.division===d?'selected':''}>${d}</option>`).join('')}
+          ${isUni?'<option '+(f.division==='Universitario'?'selected':'')+'>Universitario</option>':''}
+        </select>
+      </div>
+      <div class="field">
+        <label>Categoría de Peso <span class="req">*</span></label>
+        <select class="input ${f.categoria?'ok':''}" onchange="upd('categoria',this.value)" ${!f.sexo?'disabled':''}>
+          <option value="">Seleccionar...</option>
+          ${cats.map(c => `<option ${f.categoria===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Modalidad <span class="req">*</span></label>
+      <select class="input ${f.modalidad?'ok':''}" onchange="upd('modalidad',this.value)">
+        <option value="">Seleccionar...</option>
+        ${MODALITIES.map(m => `<option ${f.modalidad===m?'selected':''}>${m}</option>`).join('')}
+      </select>
+    </div>
+    ${isUni ? `<div class="field">
+      <label>Universidad <span class="req">*</span></label>
+      <input class="input ${f.universidad?'ok':''}" type="text" placeholder="Nombre completo de tu universidad" value="${f.universidad||''}" oninput="upd('universidad',this.value)">
+    </div>` : ''}
+    <div style="display:flex;justify-content:space-between;margin-top:16px">
+      <button class="btn btn-outline" onclick="prevStep()">← Atrás</button>
+      <button class="btn btn-accent" onclick="nextStep()" ${!(f.division&&f.categoria&&f.modalidad)?'disabled':''}>Siguiente →</button>
+    </div></div>`;
+  }
+
+  // STEP 3: Documents
+  if (s === 3) {
+    h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Documentos</h3>
+    <div class="field">
+      <label>Carnet de Identidad (cara frontal) <span class="req">*</span></label>
+      <div class="upload-zone ${state.carnetName?'done':''}" id="carnetZone">
+        <input type="file" accept="image/*,.pdf" onchange="handleFile(this,'carnet')">
+        ${state.carnetName ? `<div class="icon">✅</div><div class="fname">${state.carnetName}</div><div class="txt">Click para cambiar</div>` : `<div class="icon">📷</div><div class="txt">Arrastra o haz click para subir imagen del carnet</div><div style="font-size:10px;color:var(--muted);margin-top:4px">JPG, PNG o PDF · Máx 5MB</div>`}
+      </div>
+    </div>
+    <div class="field">
+      <label>Certificado ADEL/WADA</label>
+      <div class="upload-zone ${state.wadeName?'done':''}" id="wadeZone">
+        <input type="file" accept="image/*,.pdf" onchange="handleFile(this,'wade')">
+        ${state.wadeName ? `<div class="icon">✅</div><div class="fname">${state.wadeName}</div><div class="txt">Click para cambiar</div>` : `<div class="icon">📄</div><div class="txt">Certificado ADEL/WADA (opcional para nivel nacional)</div><div style="font-size:10px;color:var(--muted);margin-top:4px">JPG, PNG o PDF · Máx 5MB</div>`}
+      </div>
+    </div>
+    
+    <!-- Summary -->
+    <div style="background:var(--bg);border-radius:10px;padding:16px;margin-top:16px;border:1px solid var(--border)">
+      <h4 class="os" style="font-size:13px;letter-spacing:1px;color:var(--gold);margin-bottom:10px">RESUMEN DE INSCRIPCIÓN</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+        <div><span style="color:var(--muted)">Evento:</span> <strong>${EVENTS.find(e=>e.id===f.evento)?.name||''}</strong></div>
+        <div><span style="color:var(--muted)">Atleta:</span> <strong>${f.nombre}</strong></div>
+        <div><span style="color:var(--muted)">RUT:</span> ${f.rut}</div>
+        <div><span style="color:var(--muted)">Club:</span> ${f.club==='Otro'?f.clubOtro:f.club}</div>
+        <div><span style="color:var(--muted)">División:</span> ${f.division}</div>
+        <div><span style="color:var(--muted)">Categoría:</span> ${f.categoria}</div>
+        <div><span style="color:var(--muted)">Modalidad:</span> ${f.modalidad}</div>
+        <div><span style="color:var(--muted)">Carnet:</span> ${state.carnetName?'✅':'❌ Falta'}</div>
+      </div>
+    </div>
+    
+    <div style="display:flex;justify-content:space-between;margin-top:20px">
+      <button class="btn btn-outline" onclick="prevStep()">← Atrás</button>
+      <button class="btn btn-green" onclick="submitForm()" ${!state.carnetName||state.submitting?'disabled':''}>${state.submitting?'<span class="sp"></span> Enviando...':'✓ Enviar Inscripción'}</button>
+    </div></div>`;
+  }
+
+  h += `</div>`;
+  return h;
+}
+
+function renderConfirm() {
+  return `<div class="fade" style="max-width:500px;margin:60px auto;text-align:center">
+    <div style="font-size:64px;margin-bottom:16px">✅</div>
+    <h2 class="os" style="font-size:28px;letter-spacing:2px;color:var(--green)">INSCRIPCIÓN ENVIADA</h2>
+    <p style="color:var(--muted);margin-top:12px;font-size:14px;line-height:1.6">
+      Tu inscripción ha sido recibida exitosamente.<br>
+      Será revisada por el equipo de FECHIPO y aparecerá en la nómina oficial una vez aprobada.
+    </p>
+    <div class="card" style="margin-top:24px;text-align:left">
+      <div style="font-size:12px;display:grid;gap:8px">
+        <div><span style="color:var(--muted)">Atleta:</span> <strong>${state.form.nombre}</strong></div>
+        <div><span style="color:var(--muted)">Evento:</span> ${EVENTS.find(e=>e.id===state.form.evento)?.name}</div>
+        <div><span style="color:var(--muted)">Categoría:</span> ${state.form.categoria} · ${state.form.division}</div>
+      </div>
+    </div>
+    <div style="margin-top:24px;display:flex;gap:10px;justify-content:center">
+      <button class="btn btn-accent" onclick="resetForm()">Nueva Inscripción</button>
+      <a href="index.html" class="btn btn-outline" style="text-decoration:none">Ver Base de Datos</a>
+    </div>
+  </div>`;
+}
+
+function renderAdmin() {
+  if (!state.adminAuth) {
+    return `<div class="fade" style="max-width:400px;margin:80px auto;text-align:center">
+      <h2 class="os" style="font-size:22px;letter-spacing:2px;margin-bottom:20px">🔒 PANEL ADMIN</h2>
+      <div class="field">
+        <label>PIN de Acceso</label>
+        <input class="input" type="password" id="pinInput" placeholder="Ingresa PIN" style="text-align:center;font-size:20px;letter-spacing:6px" onkeydown="if(event.key==='Enter')authAdmin()">
+      </div>
+      <button class="btn btn-accent" onclick="authAdmin()">Acceder</button>
+      <div style="margin-top:12px"><button class="btn btn-outline" onclick="state.view='form';render()" style="font-size:11px">← Volver al formulario</button></div>
+    </div>`;
+  }
+
+  const ins = state.inscripciones;
+  const filtered = ins.filter(i => {
+    if (state.adminFilter !== 'all' && i.status !== state.adminFilter) return false;
+    if (state.adminEvent && i.evento !== state.adminEvent) return false;
+    return true;
+  });
+  const pending = ins.filter(i=>i.status==='pending').length;
+  const approved = ins.filter(i=>i.status==='approved').length;
+
+  let h = `<div class="fade" style="margin-top:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 class="os" style="font-size:22px;letter-spacing:1px">PANEL DE INSCRIPCIONES</h2>
+        <p style="font-size:12px;color:var(--muted)">${ins.length} total · ${pending} pendientes · ${approved} aprobados</p>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-green" onclick="exportNominas()" style="padding:8px 14px;font-size:11px">📥 Exportar Nóminas</button>
+        <button class="btn btn-outline" onclick="loadInscripciones()" style="padding:8px 14px;font-size:11px">↻ Recargar</button>
+      </div>
+    </div>`;
+
+  // Stats cards
+  h += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+    ${[['Pendientes',pending,'var(--gold)'],['Aprobados',approved,'var(--green)'],['Total',ins.length,'var(--blue)']].map(([l,v,c]) => 
+      `<div class="card" style="text-align:center;padding:14px"><div class="os" style="font-size:24px;color:${c};font-weight:700">${v}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:2px">${l}</div></div>`
+    ).join('')}
+  </div>`;
+
+  // Filters
+  h += `<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+    ${[['all','Todos'],['pending','Pendientes'],['approved','Aprobados'],['rejected','Rechazados']].map(([k,l]) => 
+      `<button class="btn ${state.adminFilter===k?'btn-accent':'btn-outline'}" onclick="state.adminFilter='${k}';render()" style="padding:6px 12px;font-size:11px">${l}</button>`
+    ).join('')}
+    <select class="input" style="width:auto;padding:6px 10px;font-size:11px" onchange="state.adminEvent=this.value;render()">
+      <option value="">Todos los eventos</option>
+      ${EVENTS.map(e => `<option value="${e.id}" ${state.adminEvent===e.id?'selected':''}>${e.name}</option>`).join('')}
+    </select>
+  </div>`;
+
+  // Table
+  if (filtered.length === 0) {
+    h += `<div class="card" style="text-align:center;padding:40px;color:var(--muted)">No hay inscripciones ${state.adminFilter!=='all'?state.adminFilter:''}</div>`;
+  } else {
+    h += `<div class="card" style="padding:0;overflow-x:auto"><table class="tbl">
+      <thead><tr><th>#</th><th>Atleta</th><th>RUT</th><th>Evento</th><th>Cat.</th><th>Club</th><th>Docs</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>`;
+    filtered.forEach((i, idx) => {
+      const evName = EVENTS.find(e=>e.id===i.evento)?.name || i.evento;
+      h += `<tr>
+        <td style="color:var(--muted)">${idx+1}</td>
+        <td style="font-weight:600;white-space:nowrap">${i.nombre}</td>
+        <td style="font-size:11px">${i.rut}</td>
+        <td style="font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${evName}</td>
+        <td><span class="tag" style="background:rgba(212,168,67,.12);color:var(--gold)">${i.categoria}</span></td>
+        <td style="font-size:11px">${i.club==='Otro'?i.clubOtro:i.club}</td>
+        <td>${i.carnetName?'📷':'❌'} ${i.wadeName?'📄':''}</td>
+        <td><span class="status-${i.status}" style="font-weight:700;font-size:11px;text-transform:uppercase">${i.status==='pending'?'⏳ Pendiente':i.status==='approved'?'✅ Aprobado':'❌ Rechazado'}</span></td>
+        <td style="white-space:nowrap">
+          ${i.status!=='approved'?`<button class="btn btn-green" style="padding:4px 8px;font-size:10px" onclick="updateStatus('${i.id}','approved')">✓</button>`:''} 
+          ${i.status!=='rejected'?`<button class="btn" style="padding:4px 8px;font-size:10px;background:var(--red);color:#fff" onclick="updateStatus('${i.id}','rejected')">✗</button>`:''}
+          ${i.status!=='pending'?`<button class="btn btn-outline" style="padding:4px 8px;font-size:10px" onclick="updateStatus('${i.id}','pending')">↺</button>`:''}
+        </td>
+      </tr>`;
+    });
+    h += `</tbody></table></div>`;
+  }
+  
+  h += `</div>`;
+  return h;
+}
+
+// ══════════════════════════════════════════════
+// HANDLERS
+// ══════════════════════════════════════════════
+function upd(key, val) { state.form[key] = val; render(); }
+
+function selectEvent(id) { state.form.evento = id; render(); }
+
+function nextStep() {
+  state.error = '';
+  // Validate current step
+  const f = state.form;
+  if (state.step === 0 && !f.evento) { state.error = 'Selecciona un evento'; render(); return; }
+  if (state.step === 1) {
+    if (!f.nombre || !f.rut || !f.sexo || !f.fechaNac || !f.club) { state.error = 'Completa todos los campos obligatorios'; render(); return; }
+  }
+  if (state.step === 2) {
+    if (!f.division || !f.categoria || !f.modalidad) { state.error = 'Completa todos los campos obligatorios'; render(); return; }
+  }
+  state.step = Math.min(state.step + 1, 3);
+  render();
+  window.scrollTo(0, 0);
+}
+
+function prevStep() { state.step = Math.max(state.step - 1, 0); render(); window.scrollTo(0, 0); }
+
+function handleFile(input, type) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { state.error = 'Archivo demasiado grande (máx 5MB)'; render(); return; }
+  if (type === 'carnet') { state.carnetFile = file; state.carnetName = file.name; }
+  else { state.wadeFile = file; state.wadeName = file.name; }
+  render();
+}
+
+async function submitForm() {
+  state.submitting = true;
+  state.error = '';
+  render();
+
+  try {
+    const f = state.form;
+    const entry = {
+      evento: f.evento,
+      nombre: f.nombre.trim(),
+      rut: f.rut.trim(),
+      codigo: f.codigo.trim(),
+      sexo: f.sexo,
+      fechaNac: f.fechaNac,
+      division: f.division,
+      categoria: f.categoria,
+      modalidad: f.modalidad,
+      club: f.club,
+      clubOtro: f.clubOtro,
+      comuna: f.comuna,
+      universidad: f.universidad || '',
+      carnetName: state.carnetName,
+      wadeName: state.wadeName,
+      status: 'pending',
+    };
+
+    if (firebaseReady) {
+      // Upload files to Firebase Storage
+      const ts = Date.now();
+      const rutClean = f.rut.replace(/[^0-9kK]/g, '');
+      
+      if (state.carnetFile) {
+        const carnetRef = window.FB.ref(storage, `inscripciones/${f.evento}/${rutClean}_carnet_${ts}`);
+        await window.FB.uploadBytes(carnetRef, state.carnetFile);
+        entry.carnetURL = await window.FB.getDownloadURL(carnetRef);
+      }
+      if (state.wadeFile) {
+        const wadeRef = window.FB.ref(storage, `inscripciones/${f.evento}/${rutClean}_wada_${ts}`);
+        await window.FB.uploadBytes(wadeRef, state.wadeFile);
+        entry.wadeURL = await window.FB.getDownloadURL(wadeRef);
+      }
+      
+      entry.timestamp = window.FB.serverTimestamp();
+      await window.FB.addDoc(window.FB.collection(db, 'inscripciones'), entry);
+    } else {
+      // Demo mode
+      demoSave(entry);
+    }
+
+    state.view = 'confirm';
+    state.submitting = false;
+    render();
+    window.scrollTo(0, 0);
+  } catch(e) {
+    state.error = 'Error al enviar: ' + e.message;
+    state.submitting = false;
+    render();
+  }
+}
+
+function resetForm() {
+  state = {...state, view:'form', step:0, form:{evento:'',nombre:'',rut:'',codigo:'',sexo:'',fechaNac:'',division:'',categoria:'',modalidad:'',club:'',clubOtro:'',comuna:''}, carnetFile:null, carnetName:'', wadeFile:null, wadeName:'', submitting:false, error:'', success:''};
+  render();
+}
+
+function toggleAdmin() {
+  if (state.view === 'admin') { state.view = 'form'; render(); return; }
+  state.view = 'admin';
+  render();
+}
+
+function authAdmin() {
+  const pin = document.getElementById('pinInput')?.value || '';
+  if (pin === ADMIN_PIN) {
+    state.adminAuth = true;
+    loadInscripciones();
+  } else {
+    state.error = 'PIN incorrecto';
+    render();
+  }
+}
+
+async function loadInscripciones() {
+  if (firebaseReady) {
+    try {
+      const q = window.FB.query(window.FB.collection(db, 'inscripciones'), window.FB.orderBy('timestamp', 'desc'));
+      const snap = await window.FB.getDocs(q);
+      state.inscripciones = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    } catch(e) { console.error(e); }
+  } else {
+    state.inscripciones = demoGetAll().reverse();
+  }
+  render();
+}
+
+async function updateStatus(id, newStatus) {
+  if (firebaseReady) {
+    try {
+      await window.FB.updateDoc(window.FB.doc(db, 'inscripciones', id), {status: newStatus});
+    } catch(e) { console.error(e); }
+  } else {
+    demoUpdate(id, {status: newStatus});
+  }
+  await loadInscripciones();
+}
+
+function exportNominas() {
+  const approved = state.inscripciones.filter(i => i.status === 'approved');
+  const byEvent = {};
+  approved.forEach(i => {
+    if (!byEvent[i.evento]) byEvent[i.evento] = [];
+    byEvent[i.evento].push({
+      nombre: i.nombre,
+      rut: i.rut,
+      sexo: i.sexo,
+      dob: i.fechaNac,
+      division: i.division,
+      categoria: i.categoria,
+      modalidad: i.modalidad,
+      club: i.club === 'Otro' ? i.clubOtro : i.club,
+      universidad: i.universidad || '',
+    });
+  });
+
+  // Generate nominas.json format
+  const nominas = { events: EVENTS.map(ev => ({
+    name: ev.name,
+    short: ev.name.replace('Campeonato ','').replace('Primer ',''),
+    date: ev.date,
+    closeDate: ev.closeDate,
+    location: ev.location,
+    organizer: ev.org,
+    days: ev.date.split('-').reverse().join(' de '),
+    athletes: byEvent[ev.id] || [],
+    extraCols: ev.id.includes('universitario') ? ['universidad'] : ['modalidad'],
+  }))};
+
+  const blob = new Blob([JSON.stringify(nominas, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'nominas.json';
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+// ══════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════
+initFirebase().then(() => render());
+</script>
+</body>
+</html>
