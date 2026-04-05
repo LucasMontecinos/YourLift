@@ -248,6 +248,9 @@ function renderSB(){
 }
 
 // INIT
+// Auto-clean old localStorage keys
+try{localStorage.removeItem('fechipo_lc2');localStorage.removeItem('fechipo_livecast')}catch(e){}
+
 const loaded=load();
 fetch('nominas.json').then(r=>r.json()).then(n=>{DATA.events=n.events||[];if(!loaded)R()}).catch(()=>{});
 if(loaded){R();Object.keys(DATA.changeTimers).forEach(k=>{const ct=DATA.changeTimers[k];if(ct&&!ct.expired&&ct.remaining>0)startCT(k)})}
