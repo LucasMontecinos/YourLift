@@ -67,13 +67,18 @@ function totalOf(a){const s=bestOf(a,'sq'),b=bestOf(a,'bp'),d=bestOf(a,'dl');ret
 function rankings(){return DATA.athletes.map(a=>({...a,total:totalOf(a),gl:calcGL(totalOf(a),a.bw,a.sex)})).filter(a=>a.total>0).sort((a,b)=>b.gl-a.gl)}
 function liftQueue(){return DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed).filter(a=>{const at=a.att[DATA.lift][DATA.round];return at.r===null&&at.w>0}).sort((a,b)=>{const wa=a.att[DATA.lift][DATA.round].w,wb=b.att[DATA.lift][DATA.round].w;return wa!==wb?wa-wb:a.lot-b.lot})}
 function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers}))}catch(e){}}
-function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){Object.assign(DATA,d);return true}}}catch(e){}return false}
+function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);return true}}}catch(e){}return false}
 
 function calcPlates(w){const ps=(w-BAR-COLLARS)/2;if(ps<=0)return[];let rem=ps;const r=[];for(const p of PLATES){while(rem>=p-0.001){r.push(p);rem-=p}}return r}
 function renderPlates(w){
-  const pl=calcPlates(w);if(!pl.length)return'<span style="color:var(--muted);font-size:10px">Solo barra</span>';
-  return pl.map(p=>{const h=p>=15?28:p>=5?22:p>=2.5?18:14;const wd=p>=15?8:6;const bg=PLATE_C[p]||'#888';const dk=p===5;
-    return'<span class="plate" style="height:'+h+'px;width:'+wd+'px;background:'+bg+';font-size:'+(p<5?6:7)+'px;color:'+(dk?'#000':'#fff')+'">'+p+'</span>'}).join('')+'<span style="font-size:9px;color:var(--muted);margin-left:4px">x2</span>';
+  const pl=calcPlates(w);if(!pl.length)return'<span style="color:var(--muted);font-size:16px">Solo barra</span>';
+  let out='<span style="background:#555;color:#fff;padding:4px 10px;border-radius:4px;font-size:13px;font-family:Oswald;font-weight:700;margin-right:4px">BARRA 20kg</span>';
+  out+='<span style="background:var(--border);color:var(--text);padding:3px 6px;border-radius:3px;font-size:11px;font-family:Oswald;margin-right:2px">2.5</span>';
+  out+=pl.map(p=>{const h=p>=15?52:p>=5?42:p>=2.5?34:26;const wd=p>=15?16:p>=5?12:10;const bg=PLATE_C[p]||'#888';const dk=p===5;
+    return'<span class="plate" style="height:'+h+'px;width:'+wd+'px;background:'+bg+';font-size:'+(p<5?9:11)+'px;color:'+(dk?'#000':'#fff')+'">'+p+'</span>'}).join('');
+  out+='<span style="background:var(--border);color:var(--text);padding:3px 6px;border-radius:3px;font-size:11px;font-family:Oswald;margin-left:2px">2.5</span>';
+  out+='<span style="font-size:12px;color:var(--muted);margin-left:8px;font-family:Oswald">\u00d72 lados</span>';
+  return out;
 }
 
 function go(p){DATA.phase=p;save();R()}
@@ -88,7 +93,7 @@ function pickEvent(i){
 function setAtt(id,l,r,val){const a=DATA.athletes.find(x=>x.id===id);if(!a)return;a.att[l][r].w=parseFloat(val)||0;save()}
 function setResult(id,l,r,res){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;a.att[l][r].r=res;
-  if(res==='g'&&r<2){const key=id+'_'+l+'_'+(r+1);DATA.changeTimers[key]={remaining:60,expired:false};startCT(key);if(!a.att[l][r+1].w)a.att[l][r+1].w=a.att[l][r].w+2.5}
+  if(res==='g'&&r<2){const key=id+'_'+l+'_'+(r+1);DATA.changeTimers[key]={remaining:60,expired:false};startCT(key)}
   if(a.att[l].every(x=>x.r==='n'))a.bombed=true;
   DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);save();R();
 }
@@ -178,8 +183,6 @@ function renderCompete(){
   if(cur){
     h+='<div class="card" style="border-left:4px solid '+LIFT_C[DATA.lift]+';margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div><div class="os" style="font-size:20px;font-weight:700">'+cur.name+'</div><div style="font-size:11px;color:var(--muted)">'+cur.club+' \u00b7 Lot #'+cur.lot+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+'</div></div><div style="display:flex;gap:6px;align-items:center">'+(rack?'<span style="background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:5px;font-size:10px">\uD83D\uDD27 '+rack+'</span>':'')+'<span class="flight-badge" style="background:'+(FL_C[cur.flight]||'#666')+'">'+cur.flight+'</span><span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:3px 10px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:12px">'+LIFT_S[DATA.lift]+(DATA.round+1)+'</span></div></div>';
     h+='<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px"><input type="number" step="2.5" class="inp" value="'+(cw||'')+'" onchange="setAtt('+cur.id+',\''+DATA.lift+'\','+DATA.round+',this.value);R()" style="font-size:22px;font-weight:700;font-family:Oswald;text-align:center;letter-spacing:2px;border-color:'+LIFT_C[DATA.lift]+';padding:12px"><span class="os" style="color:var(--muted);font-size:15px">KG</span></div>';
-    // Plates
-    if(cw)h+='<div style="margin-bottom:12px;padding:8px;background:var(--bg);border-radius:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:10px;color:var(--muted)">Discos:</span><span style="background:var(--border);color:var(--text);padding:2px 6px;border-radius:3px;font-size:9px;font-family:Oswald">BARRA 20</span>'+renderPlates(cw)+'<span style="background:var(--border);color:var(--text);padding:2px 6px;border-radius:3px;font-size:9px;font-family:Oswald">SEG 2.5\u00d72</span></div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button onclick="setResult('+cur.id+',\''+DATA.lift+'\','+DATA.round+',\'g\')" style="padding:14px;border-radius:10px;border:3px solid var(--green);background:rgba(34,197,94,.08);color:var(--green);font-size:16px;font-weight:700;font-family:Oswald;letter-spacing:2px;cursor:pointer">\u2713 GOOD LIFT</button><button onclick="setResult('+cur.id+',\''+DATA.lift+'\','+DATA.round+',\'n\')" style="padding:14px;border-radius:10px;border:3px solid var(--red);background:rgba(239,68,68,.08);color:var(--red);font-size:16px;font-weight:700;font-family:Oswald;letter-spacing:2px;cursor:pointer">\u2717 NO LIFT</button></div></div>';
   }else{h+='<div class="card" style="text-align:center;padding:20px"><p class="os" style="font-size:15px;color:var(--gold);margin-bottom:10px">RONDA COMPLETADA</p><button class="btn btn-r" onclick="advanceLift()">Siguiente \u2192</button></div>'}
   // Queue
@@ -235,7 +238,7 @@ function renderSB(){
     h+='<div class="os" style="font-size:clamp(28px,5vw,48px);font-weight:700;letter-spacing:2px;text-align:center;margin-bottom:6px">'+cur.name+'</div>';
     h+='<div style="color:var(--muted);font-size:14px;margin-bottom:20px">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+(rack?' \u00b7 \uD83D\uDD27 '+rack:'')+'</div>';
     h+='<div class="os" style="font-size:70px;font-weight:700;color:'+LIFT_C[DATA.lift]+';letter-spacing:4px">'+(cw||'\u2014')+' <span style="font-size:30px;color:var(--muted)">KG</span></div>';
-    if(cw)h+='<div style="margin-top:14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center"><span style="font-size:11px;color:var(--muted)">Discos:</span>'+renderPlates(cw)+'</div>';
+    if(cw)h+='<div style="margin-top:20px;padding:14px 20px;background:rgba(17,34,59,.6);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center">'+renderPlates(cw)+'</div>';
     h+='<div style="display:flex;gap:14px;margin-top:24px">';
     cur.att[DATA.lift].forEach((at,j)=>{h+='<div style="text-align:center;opacity:'+(j===DATA.round?1:.5)+'"><div style="font-size:9px;color:var(--muted);margin-bottom:3px;font-family:Oswald;letter-spacing:1px">INT '+(j+1)+'</div><div class="os" style="font-size:26px;font-weight:700;color:'+(at.r==='g'?'var(--green)':at.r==='n'?'var(--red)':'var(--muted)')+';text-decoration:'+(at.r==='n'?'line-through':'none')+'">'+(at.w||'\u2014')+'</div></div>'});
     h+='</div>';
