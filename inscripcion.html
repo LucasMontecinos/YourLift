@@ -175,6 +175,74 @@ function formatRut(val) {
 }
 
 // ══════════════════════════════════════════════
+// ATHLETE DB & AUTO-CODE
+// ══════════════════════════════════════════════
+let athleteDB = [];
+fetch('data.json').then(r => r.json()).then(d => { athleteDB = d; }).catch(() => {});
+
+function findAthleteByRut(rut) {
+  if (!rut) return null;
+  const clean = rut.replace(/[^0-9kK]/g, '').toUpperCase();
+  if (clean.length < 5) return null;
+  return athleteDB.find(a => {
+    const dbRut = (a.rut || '').replace(/[^0-9kK]/g, '').toUpperCase();
+    return dbRut && dbRut === clean;
+  }) || null;
+}
+
+function generateCode(rut, nombre) {
+  if (!rut || !nombre) return '';
+  const rutDigits = rut.replace(/[^0-9]/g, '');
+  if (rutDigits.length < 4) return '';
+  const prefix = rutDigits.slice(0, 4);
+  const parts = nombre.trim().split(/\s+/).filter(w => w.length > 0);
+  // First name + apellidos (skip second name if 4+ words)
+  let initials = '';
+  if (parts.length >= 3) {
+    initials = parts[0].charAt(0) + parts[parts.length - 2].charAt(0) + parts[parts.length - 1].charAt(0);
+  } else if (parts.length === 2) {
+    initials = parts[0].charAt(0) + parts[1].charAt(0);
+  } else {
+    initials = parts[0].charAt(0);
+  }
+  initials = initials.toUpperCase();
+  const year = new Date().getFullYear();
+  return prefix + initials + '-' + year;
+}
+
+function autoFillCode() {
+  const f = state.form;
+  const rut = formatRut(f.rut);
+  const nombre = formatName(f.nombre);
+  if (!rut || !nombre) return;
+
+  // Search DB
+  const found = findAthleteByRut(rut);
+  if (found && found.codigo) {
+    f.codigo = found.codigo;
+    f._codigoSource = 'db';
+  } else {
+    // Not in DB — generate new code
+    const code = generateCode(rut, nombre);
+    if (code) {
+      f.codigo = code;
+      f._codigoSource = 'new';
+    }
+  }
+  // Update DOM directly
+  const el = document.getElementById('codigoInput');
+  const lb = document.getElementById('codigoLabel');
+  if (el) {
+    el.value = f.codigo;
+    el.style.borderColor = f.codigo ? 'var(--gold)' : 'var(--border)';
+  }
+  if (lb) {
+    lb.textContent = f._codigoSource === 'db' ? '✓ Atleta encontrado en base de datos' : f._codigoSource === 'new' ? 'Nuevo atleta — código generado automáticamente' : '';
+    lb.style.color = f._codigoSource === 'db' ? 'var(--green)' : 'var(--orange, #f59e0b)';
+  }
+}
+
+// ══════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════
 let state = {
@@ -264,16 +332,17 @@ function renderForm() {
     h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Datos del Atleta</h3>
     <div class="field">
       <label>Nombre Completo <span class="req">*</span></label>
-      <input class="input ${f.nombre?'ok':''}" type="text" placeholder="Nombre Apellido Apellido" value="${f.nombre}" oninput="upd('nombre',this.value)" onblur="upd('nombre',formatName(this.value));this.value=state.form.nombre">
+      <input class="input ${f.nombre?'ok':''}" type="text" placeholder="Nombre Apellido Apellido" value="${f.nombre}" oninput="upd('nombre',this.value)" onblur="upd('nombre',formatName(this.value));autoFillCode();this.value=state.form.nombre">
     </div>
     <div class="row">
       <div class="field">
         <label>RUT <span class="req">*</span></label>
-        <input class="input ${f.rut?'ok':''}" type="text" placeholder="12345678-9" value="${f.rut}" oninput="upd('rut',this.value)" onblur="upd('rut',formatRut(this.value));this.value=state.form.rut">
+        <input class="input ${f.rut?'ok':''}" type="text" placeholder="12345678-9" value="${f.rut}" oninput="upd('rut',this.value)" onblur="upd('rut',formatRut(this.value));autoFillCode();this.value=state.form.rut">
       </div>
       <div class="field">
-        <label>Código de Atleta FECHIPO</label>
-        <input class="input" type="text" placeholder="ej: 2044IAR-2023 (si tienes)" value="${f.codigo}" oninput="upd('codigo',this.value)">
+        <label>Código de Atleta FECHIPO <span style="font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0">(auto)</span></label>
+        <input class="input ${f.codigo?'ok':''}" type="text" id="codigoInput" value="${f.codigo}" readonly style="background:rgba(212,168,67,.06);cursor:default;${f.codigo?'border-color:var(--gold)':''}">
+        <div id="codigoLabel" style="font-size:10px;margin-top:4px;min-height:14px;color:${f._codigoSource==='db'?'var(--green)':'var(--orange, #f59e0b)'}">${f._codigoSource==='db'?'✓ Atleta encontrado en base de datos':f._codigoSource==='new'?'Nuevo atleta — código generado':''}</div>
       </div>
     </div>
     <div class="row">
@@ -556,7 +625,7 @@ function renderEdit() {
         </div>
         <div class="field">
           <label>Código FECHIPO</label>
-          <input class="input" type="text" value="${f.codigo}" oninput="upd('codigo',this.value)">
+          <input class="input" type="text" value="${f.codigo}" readonly style="background:rgba(212,168,67,.06);cursor:default;${f.codigo?'border-color:var(--gold)':''}">
         </div>
       </div>
       <div class="row">
