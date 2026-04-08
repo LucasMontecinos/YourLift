@@ -405,6 +405,14 @@ function renderSB(){
 try{localStorage.removeItem('fechipo_lc2');localStorage.removeItem('fechipo_livecast')}catch(e){}
 
 const loaded=load();
+let DB_FULL=[];
+function nrm(s){return(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
+function findInDB(name,rut){
+  if(rut){const rc=rut.replace(/[^0-9kK]/g,'').toUpperCase();const m=DB_FULL.find(a=>{const dr=(a.rut||'').replace(/[^0-9kK]/g,'').toUpperCase();return dr&&dr===rc});if(m)return m}
+  const nn=nrm(name);const parts=nn.split(/\s+/);
+  return DB_FULL.find(a=>{const dn=nrm(a.nombre);return dn===nn})||DB_FULL.find(a=>{const dn=nrm(a.nombre);return parts.length>=2&&parts.every(p=>dn.includes(p))})||null;
+}
+fetch('data.json').then(r=>r.json()).then(d=>{DB_FULL=d}).catch(()=>{});
 fetch('nominas.json').then(r=>r.json()).then(n=>{DATA.events=n.events||[];if(!loaded)R()}).catch(()=>{});
 if(loaded){R()}
 else if(!DATA.events.length)R();
@@ -422,38 +430,83 @@ function showLogin(){
 function renderAtletaInfo(){
   const ath=DATA.athletes;
   let h='<div class="fade"><h2 class="os" style="font-size:22px;letter-spacing:1px;margin-bottom:16px">ATLETAS DEL CAMPEONATO</h2>';
-  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">';
   ath.forEach(a=>{
-    const total=totalOf(a);const gl=calcGL(total,a.bw,a.sex);
-    const bsq=bestOf(a,'sq'),bbp=bestOf(a,'bp'),bdl=bestOf(a,'dl');
+    // Cross-reference with data.json
+    const db=findInDB(a.name,a.rut);
+    const bl=db?.bestLifts||{};
+    const comps=db?.competencias||[];
+    const debut=db?.debut||'';
+    const codigo=db?.codigo||'';
+    const compCount=comps.length;
+    const compWithResults=comps.filter(c=>c.resultado).length;
+    
+    // Current competition lifts
+    const curSq=bestOf(a,'sq'),curBp=bestOf(a,'bp'),curDl=bestOf(a,'dl');
+    const curTotal=totalOf(a);const curGL=calcGL(curTotal,a.bw,a.sex);
+    
+    // Career PRs from DB
+    const prSq=bl.sq||0,prBp=bl.bp||0,prDl=bl.dl||0,prTotal=bl.total||0;
+    
     const initials=(a.name||'').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const matched=!!db;
     
     h+='<div class="card" style="padding:16px">';
+    
+    // Header: photo + name
     h+='<div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">';
-    // Photo placeholder
     h+='<div style="width:64px;height:64px;border-radius:12px;background:var(--bg);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;overflow:hidden">';
     h+='<span style="font-family:Oswald;font-size:22px;font-weight:700;color:var(--border)">'+initials+'</span>';
     h+='<span style="position:absolute;bottom:2px;font-size:7px;color:var(--border);font-family:Oswald;letter-spacing:1px;opacity:.6">FOTO</span>';
     h+='</div>';
-    // Name & info
     h+='<div style="flex:1;min-width:0">';
     h+='<div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+a.name+'</div>';
+    if(codigo)h+='<div style="font-size:10px;color:var(--gold);font-family:Oswald;letter-spacing:.5px">'+codigo+'</div>';
     h+='<div style="font-size:11px;color:var(--muted);margin-top:2px">'+a.div+' · '+a.cat+'</div>';
-    h+='<div style="font-size:10px;color:var(--muted)">'+a.club+'</div>';
+    h+='<div style="font-size:10px;color:var(--muted)">'+a.club+(debut?' · Debut '+debut:'')+'</div>';
     h+='<span class="flight-badge" style="background:'+(FL_C[a.flight]||'#666')+';margin-top:4px;display:inline-block">Vuelo '+a.flight+'</span>';
     h+='</div></div>';
     
-    // Best lifts
-    if(bsq||bbp||bdl){
-      h+='<div style="display:flex;gap:6px;margin-bottom:8px">';
-      if(bsq)h+='<div style="flex:1;text-align:center;padding:6px 4px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:6px"><div style="font-size:9px;color:#3b82f6;font-family:Oswald">SQ</div><div class="os" style="font-size:16px;font-weight:700">'+bsq+'</div></div>';
-      if(bbp)h+='<div style="flex:1;text-align:center;padding:6px 4px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:6px"><div style="font-size:9px;color:#f59e0b;font-family:Oswald">BP</div><div class="os" style="font-size:16px;font-weight:700">'+bbp+'</div></div>';
-      if(bdl)h+='<div style="flex:1;text-align:center;padding:6px 4px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:6px"><div style="font-size:9px;color:#ef4444;font-family:Oswald">DL</div><div class="os" style="font-size:16px;font-weight:700">'+bdl+'</div></div>';
-      h+='</div>';
-      if(total)h+='<div style="text-align:center;padding:4px;background:rgba(212,168,67,.08);border:1px solid rgba(212,168,67,.2);border-radius:6px"><span class="os" style="font-size:14px;font-weight:700;color:var(--gold)">TOTAL '+total+'kg</span><span style="font-size:10px;color:var(--muted);margin-left:6px">GL '+gl+'</span></div>';
-    }else{
-      h+='<div style="text-align:center;padding:12px;color:var(--muted);font-size:11px;font-style:italic">Sin levantamientos registrados</div>';
+    // Career PR section (from DB)
+    if(prSq||prBp||prDl){
+      h+='<div style="margin-bottom:8px"><div style="font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:4px">MEJORES MARCAS (CARRERA)</div>';
+      h+='<div style="display:flex;gap:6px">';
+      if(prSq)h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:6px"><div style="font-size:8px;color:#3b82f6;font-family:Oswald">SQ</div><div class="os" style="font-size:15px;font-weight:700">'+prSq+'</div></div>';
+      if(prBp)h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:6px"><div style="font-size:8px;color:#f59e0b;font-family:Oswald">BP</div><div class="os" style="font-size:15px;font-weight:700">'+prBp+'</div></div>';
+      if(prDl)h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:6px"><div style="font-size:8px;color:#ef4444;font-family:Oswald">DL</div><div class="os" style="font-size:15px;font-weight:700">'+prDl+'</div></div>';
+      if(prTotal)h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(212,168,67,.08);border:1px solid rgba(212,168,67,.2);border-radius:6px"><div style="font-size:8px;color:var(--gold);font-family:Oswald">TOTAL</div><div class="os" style="font-size:15px;font-weight:700">'+prTotal+'</div></div>';
+      h+='</div></div>';
     }
+    
+    // Current competition lifts
+    if(curSq||curBp||curDl){
+      h+='<div style="margin-bottom:8px"><div style="font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:4px">HOY</div>';
+      h+='<div style="display:flex;gap:6px">';
+      if(curSq){const isPR=prSq&&curSq>=prSq;h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);border-radius:6px"><div style="font-size:8px;color:#3b82f6;font-family:Oswald">SQ'+(isPR?' ⭐':'')+'</div><div class="os" style="font-size:15px;font-weight:700">'+curSq+'</div></div>';}
+      if(curBp){const isPR=prBp&&curBp>=prBp;h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:6px"><div style="font-size:8px;color:#f59e0b;font-family:Oswald">BP'+(isPR?' ⭐':'')+'</div><div class="os" style="font-size:15px;font-weight:700">'+curBp+'</div></div>';}
+      if(curDl){const isPR=prDl&&curDl>=prDl;h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:6px"><div style="font-size:8px;color:#ef4444;font-family:Oswald">DL'+(isPR?' ⭐':'')+'</div><div class="os" style="font-size:15px;font-weight:700">'+curDl+'</div></div>';}
+      if(curTotal)h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(212,168,67,.15);border:1px solid rgba(212,168,67,.4);border-radius:6px"><div style="font-size:8px;color:var(--gold);font-family:Oswald">TOTAL</div><div class="os" style="font-size:15px;font-weight:700">'+curTotal+'</div></div>';
+      h+='</div></div>';
+    }
+    
+    // Competition history from DB
+    if(compCount>0){
+      h+='<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">';
+      h+='<div style="font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:4px">HISTORIAL · '+compCount+' competencias</div>';
+      const recent=comps.filter(c=>c.resultado).slice(-4).reverse();
+      recent.forEach(c=>{
+        const r=c.resultado||{};
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:10px">';
+        h+='<span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+(c.internacional?'🌎 ':'')+c.evento+'</span>';
+        h+='<span class="os" style="color:var(--gold);font-weight:700;margin-left:8px;flex-shrink:0">'+(r.total?r.total+'kg':'—')+'</span>';
+        h+='</div>';
+      });
+      if(compWithResults>4)h+='<div style="font-size:9px;color:var(--muted);text-align:center;margin-top:2px">+'+(compWithResults-4)+' más</div>';
+      h+='</div>';
+    }else if(!matched){
+      h+='<div style="text-align:center;padding:8px;color:var(--muted);font-size:10px;font-style:italic;border-top:1px solid var(--border);margin-top:4px">Atleta nuevo — sin historial</div>';
+    }
+    
     h+='</div>';
   });
   h+='</div></div>';
