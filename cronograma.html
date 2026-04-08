@@ -97,49 +97,41 @@ function generateFlights(){
       groups[key].athletes.push(a);
     });
     const sorted=Object.values(groups).sort((a,b)=>a.catW-b.catW);
+    const remFrom=gi=>sorted.slice(gi).reduce((s,x)=>s+x.athletes.length,0);
     
-    let current=[],currentGroups=[];
+    let cur=[],curG=[];
     for(let gi=0;gi<sorted.length;gi++){
-      const g=sorted[gi];
-      const wouldBe=current.length+g.athletes.length;
+      const g=sorted[gi];const wouldBe=cur.length+g.athletes.length;const rem=remFrom(gi+1);
       
       if(wouldBe>MAX_FLIGHT){
-        if(current.length>=MIN_FLIGHT){
-          // Current is valid flight. Check if g would be orphan alone
-          const remaining=sorted.slice(gi+1).reduce((s,x)=>s+x.athletes.length,0);
-          if(g.athletes.length<MIN_FLIGHT&&(remaining+g.athletes.length)<MIN_FLIGHT){
-            current.push(...g.athletes);currentGroups.push(g);// absorb orphan
-          }else{
-            flights.push({athletes:[...current],groups:[...currentGroups]});
-            current=[...g.athletes];currentGroups=[g];
-          }
+        if(cur.length>=MIN_FLIGHT){
+          flights.push({athletes:[...cur],groups:[...curG]});
+          cur=[...g.athletes];curG=[g];
         }else{
-          // Current is too small to be its own flight
-          if(wouldBe<=MAX_FLIGHT+2){
-            // Slightly over max, acceptable
-            current.push(...g.athletes);currentGroups.push(g);
-          }else{
-            // Way too big. Merge current into previous flight, start fresh with g
-            if(flights.length>0&&flights[flights.length-1].athletes[0]?.sexo===current[0]?.sexo){
-              flights[flights.length-1].athletes.push(...current);
-              flights[flights.length-1].groups.push(...currentGroups);
-            }else if(current.length>0){
-              flights.push({athletes:[...current],groups:[...currentGroups]});
-            }
-            current=[...g.athletes];currentGroups=[g];
+          if(flights.length>0){
+            flights[flights.length-1].athletes.push(...cur);
+            flights[flights.length-1].groups.push(...curG);
+          }else if(cur.length>0){
+            flights.push({athletes:[...cur],groups:[...curG]});
           }
+          cur=[...g.athletes];curG=[g];
         }
       }else{
-        current.push(...g.athletes);currentGroups.push(g);
+        cur.push(...g.athletes);curG.push(g);
+      }
+      
+      if(cur.length>=MIN_FLIGHT&&cur.length<=MAX_FLIGHT&&rem>=MIN_FLIGHT){
+        flights.push({athletes:[...cur],groups:[...curG]});
+        cur=[];curG=[];
       }
     }
-    if(current.length>0){
-      if(current.length<MIN_FLIGHT&&flights.length>0){
-        const prev=flights[flights.length-1];
-        if(prev.athletes[0]?.sexo===current[0]?.sexo){
-          prev.athletes.push(...current);prev.groups.push(...currentGroups);
-        }else flights.push({athletes:current,groups:currentGroups});
-      }else flights.push({athletes:current,groups:currentGroups});
+    if(cur.length>0){
+      if(cur.length<MIN_FLIGHT&&flights.length>0&&flights[flights.length-1].athletes[0]?.sexo===cur[0]?.sexo){
+        flights[flights.length-1].athletes.push(...cur);
+        flights[flights.length-1].groups.push(...curG);
+      }else{
+        flights.push({athletes:cur,groups:curG});
+      }
     }
   });
   flights.forEach((f,i)=>{f.letter=FL_L[i]||'?';f.color=FL_C[i%FL_C.length]});
