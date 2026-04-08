@@ -53,7 +53,7 @@ input,select,button{font-family:inherit;outline:none}
 <div id="R"></div>
 <script>
 
-let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,flight:'A',timer:60,timerOn:false,changeTimers:{}};
+let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,flight:'A',timer:60,timerOn:false,changeTimers:{},lotsGenerated:false};
 
 // ══════════════════════════════════════════════
 // ADMIN CREDENTIALS — Editar aquí para cambiar accesos
@@ -84,7 +84,7 @@ function bestOf(a,l){let b=0;a.att[l].forEach(x=>{if(x.r==='g'&&x.w>b)b=x.w});re
 function totalOf(a){const s=bestOf(a,'sq'),b=bestOf(a,'bp'),d=bestOf(a,'dl');return(s&&b&&d)?s+b+d:0}
 function rankings(){return DATA.athletes.map(a=>({...a,total:totalOf(a),gl:calcGL(totalOf(a),a.bw,a.sex)})).filter(a=>a.total>0).sort((a,b)=>b.gl-a.gl)}
 function liftQueue(){return DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed).filter(a=>{const at=a.att[DATA.lift][DATA.round];return at.r===null&&at.w>0}).sort((a,b)=>{const wa=a.att[DATA.lift][DATA.round].w,wb=b.att[DATA.lift][DATA.round].w;return wa!==wb?wa-wb:a.lot-b.lot})}
-function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers}))}catch(e){}}
+function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated}))}catch(e){}}
 function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);return true}}}catch(e){}return false}
 
 function calcPlates(w){const ps=(w-BAR-COLLARS)/2;if(ps<=0)return[];let rem=ps;const r=[];for(const p of PLATES){while(rem>=p-0.001){r.push(p);rem-=p}}return r}
@@ -213,9 +213,24 @@ function renderShell(){
 
 function sortByCat(){DATA.athletes.sort((a,b)=>{const na=parseFloat(a.cat.replace(/[^0-9.]/g,''))||999;const nb=parseFloat(b.cat.replace(/[^0-9.]/g,''))||999;return na-nb});DATA.athletes.forEach((a,i)=>a.lot=i+1);save();R()}
 function sortByFlight(){DATA.athletes.sort((a,b)=>{if(a.flight!==b.flight)return a.flight.localeCompare(b.flight);const na=parseFloat(a.cat.replace(/[^0-9.]/g,''))||999;const nb=parseFloat(b.cat.replace(/[^0-9.]/g,''))||999;return na-nb});DATA.athletes.forEach((a,i)=>a.lot=i+1);save();R()}
+function generateLots(){
+  if(DATA.lotsGenerated){alert('Los lotes ya fueron generados para esta competencia');return}
+  if(!confirm('¿Generar números de lote aleatorios? Esta acción solo se puede hacer una vez.'))return;
+  // Shuffle within each flight
+  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].sort();
+  let lotNum=1;
+  flights.forEach(fl=>{
+    const group=DATA.athletes.filter(a=>a.flight===fl);
+    // Fisher-Yates shuffle
+    for(let i=group.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[group[i]._rnd,group[j]._rnd]=[group[j]._rnd||Math.random(),group[i]._rnd||Math.random()]}
+    group.sort((a,b)=>(a._rnd||0)-(b._rnd||0));
+    group.forEach(a=>{a.lot=lotNum++;delete a._rnd});
+  });
+  DATA.lotsGenerated=true;save();R();
+}
 
 function renderManage(){
-  const ath=DATA.athletes;let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px"><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Vuelo ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  const ath=DATA.athletes;let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px">'+(DATA.lotsGenerated?'<span style="font-size:10px;color:var(--green);padding:6px 10px;border:1px solid var(--green);border-radius:6px">✓ Lotes generados</span>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="sortByFlight()">Ordenar por Vuelo ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th><th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:38px">VLO</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:56px">BW</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:48px">RkSQ</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:48px">RkBP</th>';
   ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:54px">'+LIFT_S[l]+r+'</th>'})});
