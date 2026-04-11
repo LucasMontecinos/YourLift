@@ -171,6 +171,26 @@ function renderPlates(w){
 }
 
 function go(p){DATA.phase=p;save();R()}
+async function tryLoadFromFB(){
+  if(!fbReady||!DATA.event)return false;
+  const id=fbDocId();if(!id)return false;
+  try{
+    const ref=window._fb.doc(fbDB,'livecast_sync',id);
+    const snap=await window._fb.getDoc(ref);
+    if(!snap.exists())return false;
+    const d=snap.data();
+    DATA.athletes=JSON.parse(d.athletes||'[]');
+    DATA.lift=d.lift||DATA.lift;
+    DATA.round=typeof d.round==='number'?d.round:DATA.round;
+    DATA.flight=d.flight||DATA.flight;
+    DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
+    DATA.lotsGenerated=d.lotsGenerated||false;
+    if(typeof d.timer==='number')DATA.timer=d.timer;
+    DATA.timerOn=false;
+    console.log('[FB] Loaded state from Firebase:',DATA.athletes.length,'athletes');
+    return true;
+  }catch(e){console.warn('[FB] Load failed',e);return false}
+}
 function pickEvent(i){
   const ev=DATA.events[i];
   DATA.event=ev;
@@ -185,9 +205,17 @@ function pickEvent(i){
     return{id:j,lot:j+1,name,rut:a.rut||'',sex:a.sexo||a.sex||'',cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',bw:0,flight:fl,rackSQ:'',rackBP:'',bombed:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}};
   });
-  // Set active flight to first available
   const firstFlight=flightMap?[...new Set(Object.values(flightMap))].sort()[0]:'A';
-  DATA.lift='sq';DATA.round=0;DATA.flight=firstFlight||'A';DATA.changeTimers={};go(isAdmin?'manage':'results');startFBSync();
+  DATA.lift='sq';DATA.round=0;DATA.flight=firstFlight||'A';DATA.changeTimers={};
+  // Non-admin: try to load state from Firebase first
+  if(!isAdmin&&fbReady){
+    tryLoadFromFB().then(ok=>{
+      if(ok)console.log('[FB] Using Firebase state');
+      DATA.phase='results';save();R();startFBSync();
+    });
+  }else{
+    go(isAdmin?'manage':'results');startFBSync();
+  }
 }
 function setAtt(id,l,r,val){const a=DATA.athletes.find(x=>x.id===id);if(!a)return;a.att[l][r].w=parseFloat(val)||0;const key=id+'_'+l+'_'+r;if(DATA.changeTimers[key]){delete DATA.changeTimers[key]}save()}
 function setResult(id,l,r,res){
@@ -486,8 +514,8 @@ function renderTransmision(){
   const evName=DATA.event?.name||DATA.event?.short||'Campeonato';
   let h='<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;display:flex;flex-direction:column;justify-content:flex-end;z-index:999">';
   h+='<div style="position:absolute;top:12px;right:12px;display:flex;gap:6px;z-index:1000">';
-  h+='<button onclick="go(\'compete\')" style="background:rgba(30,50,80,.85);border:1px solid rgba(100,140,200,.3);color:#aac;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:Oswald;font-size:11px;letter-spacing:1px">\u2699 BACK</button>';
-  
+  h+='<button onclick="go(\'compete\')" style="background:rgba(30,50,80,.85);border:1px solid rgba(100,140,200,.3);color:#aac;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:Oswald;font-size:11px;letter-spacing:1px">\u2699 CONTROL</button>';
+  h+='<button onclick="go(\'setup\')" style="background:rgba(30,50,80,.85);border:1px solid rgba(100,140,200,.3);color:#aac;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:Oswald;font-size:11px;letter-spacing:1px">\u2190 VOLVER</button>';
   h+='</div>';
   if(!cur){
     h+='<div style="margin:0 30px 60px;padding:18px 30px;background:linear-gradient(135deg,rgba(20,35,65,.97),rgba(25,40,72,.97));border-radius:8px;max-width:760px;border:1px solid rgba(60,90,140,.3)">';
