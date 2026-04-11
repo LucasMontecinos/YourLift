@@ -65,6 +65,68 @@ const ADMINS=[
 // ══════════════════════════════════════════════
 
 let isAdmin=false;
+// ══════════════════════════════════════════════
+// FIREBASE REAL-TIME SYNC
+// ══════════════════════════════════════════════
+const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
+let fbDB=null,fbReady=false,fbUnsub=null,_fbSyncing=false,_fbLastWrite=0;
+async function initFB(){
+  try{
+    const{initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+    const fb=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const app=initializeApp(FB_CFG);fbDB=fb.getFirestore(app);
+    window._fb=fb;fbReady=true;
+    console.log('[FB] Firebase ready');
+    if(DATA.event)startFBSync();
+  }catch(e){console.warn('[FB] Init failed',e)}
+}
+function fbDocId(){
+  if(!DATA.event)return null;
+  return(DATA.event.name||'comp').replace(/[^a-zA-Z0-9]/g,'_').substring(0,60);
+}
+async function syncToFB(){
+  if(!fbReady||!isAdmin||_fbSyncing)return;
+  const id=fbDocId();if(!id)return;
+  _fbLastWrite=Date.now();
+  try{
+    const ref=window._fb.doc(fbDB,'livecast_sync',id);
+    await window._fb.setDoc(ref,{
+      phase:DATA.phase,event:DATA.event,athletes:JSON.stringify(DATA.athletes),
+      lift:DATA.lift,round:DATA.round,flight:DATA.flight,
+      changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,
+      timer:DATA.timer,timerOn:DATA.timerOn,
+      ts:Date.now()
+    });
+  }catch(e){console.warn('[FB] Sync write error',e)}
+}
+function startFBSync(){
+  if(!fbReady)return;
+  if(fbUnsub){fbUnsub();fbUnsub=null}
+  const id=fbDocId();if(!id)return;
+  const ref=window._fb.doc(fbDB,'livecast_sync',id);
+  fbUnsub=window._fb.onSnapshot(ref,(snap)=>{
+    if(!snap.exists())return;
+    // Skip if we just wrote (within 2s)
+    if(isAdmin&&Date.now()-_fbLastWrite<2000)return;
+    const d=snap.data();
+    _fbSyncing=true;
+    try{
+      DATA.phase=d.phase||DATA.phase;
+      DATA.event=d.event||DATA.event;
+      DATA.athletes=JSON.parse(d.athletes||'[]');
+      DATA.lift=d.lift||DATA.lift;
+      DATA.round=typeof d.round==='number'?d.round:DATA.round;
+      DATA.flight=d.flight||DATA.flight;
+      DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
+      DATA.lotsGenerated=d.lotsGenerated||false;
+      if(!isAdmin&&typeof d.timer==='number'){DATA.timer=d.timer;DATA.timerOn=d.timerOn||false;if(DATA.timerOn&&!mainTI)startTimer();if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}}
+      R();
+    }catch(e){console.warn('[FB] Sync read error',e)}
+    _fbSyncing=false;
+  });
+  console.log('[FB] Listener started for',id);
+}
+initFB();
 function doLogin(){
   const em=(document.getElementById('adminEmail')?.value||'').trim().toLowerCase();
   const pw=document.getElementById('adminPass')?.value||'';
@@ -84,7 +146,7 @@ function bestOf(a,l){let b=0;a.att[l].forEach(x=>{if(x.r==='g'&&x.w>b)b=x.w});re
 function totalOf(a){const s=bestOf(a,'sq'),b=bestOf(a,'bp'),d=bestOf(a,'dl');return(s&&b&&d)?s+b+d:0}
 function rankings(){return DATA.athletes.map(a=>({...a,total:totalOf(a),gl:calcGL(totalOf(a),a.bw,a.sex)})).filter(a=>a.total>0).sort((a,b)=>b.gl-a.gl)}
 function liftQueue(){return DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed).filter(a=>{const at=a.att[DATA.lift][DATA.round];return at.r===null&&at.w>0}).sort((a,b)=>{const wa=a.att[DATA.lift][DATA.round].w,wb=b.att[DATA.lift][DATA.round].w;return wa!==wb?wa-wb:a.lot-b.lot})}
-function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated}))}catch(e){}}
+function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated}))}catch(e){}if(!_fbSyncing)syncToFB()}
 function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);return true}}}catch(e){}return false}
 
 function calcPlates(w){const ps=(w-BAR-COLLARS)/2;if(ps<=0)return[];let rem=ps;const r=[];for(const p of PLATES){while(rem>=p-0.001){r.push(p);rem-=p}}return r}
@@ -125,7 +187,7 @@ function pickEvent(i){
   });
   // Set active flight to first available
   const firstFlight=flightMap?[...new Set(Object.values(flightMap))].sort()[0]:'A';
-  DATA.lift='sq';DATA.round=0;DATA.flight=firstFlight||'A';DATA.changeTimers={};go(isAdmin?'manage':'results');
+  DATA.lift='sq';DATA.round=0;DATA.flight=firstFlight||'A';DATA.changeTimers={};go(isAdmin?'manage':'results');startFBSync();
 }
 function setAtt(id,l,r,val){const a=DATA.athletes.find(x=>x.id===id);if(!a)return;a.att[l][r].w=parseFloat(val)||0;const key=id+'_'+l+'_'+r;if(DATA.changeTimers[key]){delete DATA.changeTimers[key]}save()}
 function setResult(id,l,r,res){
@@ -135,7 +197,7 @@ function setResult(id,l,r,res){
   DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);save();R();
 }
 function updA(id,k,v){const a=DATA.athletes.find(x=>x.id===id);if(!a)return;if(k==='bw')a.bw=parseFloat(v)||0;else a[k]=v;save()}
-function newComp(){localStorage.removeItem(SAVE_KEY);DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};R()}
+function newComp(){localStorage.removeItem(SAVE_KEY);if(fbUnsub){fbUnsub();fbUnsub=null}DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};R()}
 
 const ctIntervals={};
 function startCT(key){/* just mark it active, master tick handles updates */}
@@ -166,9 +228,9 @@ setInterval(()=>{
 },1000);
 
 let mainTI=null;
-function startTimer(){DATA.timerOn=true;mainTI=setInterval(()=>{DATA.timer--;const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI)}},1000)}
-function pauseTimer(){DATA.timerOn=false;clearInterval(mainTI)}
-function resetTimer(){DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);const el=document.getElementById('mainTimer');if(el){el.style.color='var(--green)';el.textContent='1:00';el.style.animation='none'}}
+function startTimer(){DATA.timerOn=true;syncToFB();mainTI=setInterval(()=>{DATA.timer--;const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}if(DATA.timer%5===0||DATA.timer<=10)syncToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}},1000)}
+function pauseTimer(){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}
+function resetTimer(){DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);mainTI=null;const el=document.getElementById('mainTimer');if(el){el.style.color='var(--green)';el.textContent='1:00';el.style.animation='none'}syncToFB()}
 function advanceLift(){const li=LIFTS.indexOf(DATA.lift);if(DATA.round<2)DATA.round++;else if(li<2){DATA.lift=LIFTS[li+1];DATA.round=0}else go('results');save();R()}
 function editAtt(id,l,r){const a=DATA.athletes.find(x=>x.id===id);if(!a)return;const v=prompt(a.name+' \u2014 '+LIFT_S[l]+' Int '+(r+1)+'\nPeso actual: '+(a.att[l][r].w||'\u2014')+'\nNuevo peso (kg):',a.att[l][r].w||'');if(v!==null){a.att[l][r].w=parseFloat(v)||0;save();R()}}
 function exportJSON(){const r=rankings();const blob=new Blob([JSON.stringify(r.map((a,i)=>({rank:i+1,nombre:a.name,rut:a.rut,sexo:a.sex,division:a.div,categoria:a.cat,bw:a.bw,club:a.club,sq:bestOf(a,'sq'),bp:bestOf(a,'bp'),dl:bestOf(a,'dl'),total:a.total,gl:a.gl})),null,2)],{type:'application/json'});const u=URL.createObjectURL(blob);const l=document.createElement('a');l.href=u;l.download='resultados.json';l.click()}
@@ -200,11 +262,13 @@ function renderShell(){
   h+='<div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">';
   h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon">\u2190</span>Volver</button>';
   h+='<div style="font-size:10px;color:var(--green);margin-bottom:6px;padding:0 8px">\uD83D\uDD13 Admin</div>';
+  h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'\uD83D\uDCE1 Sync activo':'\u23F3 Conectando...')+'</div>';
   h+='<button class="side-btn" onclick="newComp()"><span class="icon">\u21BA</span>Nueva Competencia</button>';
   h+='<button class="side-btn" onclick="doLogout()"><span class="icon">\uD83D\uDD12</span>Cerrar sesi\u00f3n</button>';
   h+='<a href="index.html" class="side-btn" style="text-decoration:none;color:var(--muted)"><span class="icon">\u2190</span>YourLift</a></div>';
   }else{
   h+='<div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">';
+  h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'\uD83D\uDCE1 Datos en vivo':'\u23F3 Conectando...')+'</div>';
   h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon">\u2190</span>Volver</button>';
   h+='<button class="side-btn" onclick="showLogin()"><span class="icon">\uD83D\uDD10</span>Admin</button>';
   h+='<a href="index.html" class="side-btn" style="text-decoration:none;color:var(--muted)"><span class="icon">\u2190</span>YourLift</a></div>';
@@ -423,7 +487,7 @@ function renderTransmision(){
   let h='<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;display:flex;flex-direction:column;justify-content:flex-end;z-index:999">';
   h+='<div style="position:absolute;top:12px;right:12px;display:flex;gap:6px;z-index:1000">';
   h+='<button onclick="go(\'compete\')" style="background:rgba(30,50,80,.85);border:1px solid rgba(100,140,200,.3);color:#aac;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:Oswald;font-size:11px;letter-spacing:1px">\u2699 CONTROL</button>';
- 
+  h+='<button onclick="go(\'setup\')" style="background:rgba(30,50,80,.85);border:1px solid rgba(100,140,200,.3);color:#aac;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:Oswald;font-size:11px;letter-spacing:1px">\u2190 VOLVER</button>';
   h+='</div>';
   if(!cur){
     h+='<div style="margin:0 30px 60px;padding:18px 30px;background:linear-gradient(135deg,rgba(20,35,65,.97),rgba(25,40,72,.97));border-radius:8px;max-width:760px;border:1px solid rgba(60,90,140,.3)">';
