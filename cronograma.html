@@ -42,6 +42,44 @@ const LIFTS_NAMES=['SQUAT','BENCH PRESS','DEADLIFT'];
 let NM={events:[]}, DB=[], selectedEvent=null, flights=[];
 let config={morningStart:'09:00',afternoonStart:'14:30',minPerAthlete:3,breakBetweenLifts:10,breakMorningAfternoon:60,adminUnlocked:false};
 
+// Firebase for flight sync
+const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
+let fbDB=null,fbReady=false,fbInscripciones=[];
+async function initCronoFB(){
+  try{
+    const{initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+    const fb=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const authMod=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+    const app=initializeApp(FB_CFG);fbDB=fb.getFirestore(app);
+    window._fb=fb;window._fbAuth=authMod;
+    const auth=authMod.getAuth(app);
+    // Load inscripciones to get IDs for updating flight
+    const snap=await fb.getDocs(fb.collection(fbDB,'inscripciones'));
+    fbInscripciones=[];snap.forEach(d=>fbInscripciones.push({id:d.id,...d.data()}));
+    fbReady=true;
+    console.log('[CronoFB] Ready,',fbInscripciones.length,'inscripciones loaded');
+  }catch(e){console.warn('[CronoFB] Init failed',e)}
+}
+async function syncFlightsToFB(){
+  if(!fbReady||!selectedEvent)return;
+  const map={};
+  flights.forEach(f=>{f.athletes.forEach(a=>{map[a.nombre||a.name||'']=f.letter})});
+  let updated=0;
+  for(const[nombre,flight] of Object.entries(map)){
+    // Find matching inscripcion by name + event
+    const ins=fbInscripciones.find(i=>i.nombre===nombre&&i.evento===selectedEvent.id);
+    if(ins&&ins.flight!==flight){
+      try{
+        await window._fb.updateDoc(window._fb.doc(fbDB,'inscripciones',ins.id),{flight});
+        ins.flight=flight;
+        updated++;
+      }catch(e){console.warn('Flight update failed for',nombre,e)}
+    }
+  }
+  if(updated>0)console.log('[CronoFB] Updated',updated,'flight assignments');
+}
+initCronoFB();
+
 Promise.all([
   fetch('nominas.json').then(r=>r.json()).catch(()=>({events:[]})),
   fetch('data.json').then(r=>r.json()).catch(()=>[])
@@ -83,11 +121,11 @@ function selectEvent(i){selectedEvent=NM.events[i];loadOrGenerateFlights();rende
 function flightKey(){return 'fechipo_crono_'+(selectedEvent?.name||'').replace(/\s+/g,'_')}
 
 function saveFlights(){
-  // Save flight assignments as name→letter map + flight letters array
   const map={};
   flights.forEach(f=>{f.athletes.forEach(a=>{map[a.nombre||a.name||'']=f.letter})});
   const letters=flights.map(f=>f.letter);
   localStorage.setItem(flightKey(),JSON.stringify({map,letters,ts:Date.now()}));
+  syncFlightsToFB();
 }
 
 function loadOrGenerateFlights(){

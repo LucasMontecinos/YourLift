@@ -228,6 +228,15 @@ function pickEvent(i){
   });
   const firstFlight=flightMap?[...new Set(Object.values(flightMap))].sort()[0]:'A';
   DATA.lift='sq';DATA.round=0;DATA.flight=firstFlight||'A';DATA.changeTimers={};
+  // Also load flights from Firebase inscripciones (overrides localStorage if available)
+  if(fbReady){
+    window._fb.getDocs(window._fb.collection(fbDB,'inscripciones')).then(snap=>{
+      const m={};snap.forEach(d=>{const ins=d.data();if(ins.flight)m[ins.nombre]=ins.flight});
+      let changed=false;
+      DATA.athletes.forEach(a=>{if(m[a.name]&&a.flight!==m[a.name]){a.flight=m[a.name];changed=true}});
+      if(changed){const fl=[...new Set(DATA.athletes.map(a=>a.flight))].sort()[0];DATA.flight=fl||DATA.flight;save();R()}
+    }).catch(e=>console.warn('[FB] Flight load error',e));
+  }
   // Non-admin: try to load state from Firebase first
   if(!isAdmin&&fbReady){
     tryLoadFromFB().then(ok=>{
