@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FECHIPO — Admin Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0A1628;--card:#11223B;--border:#1E3A5F;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A;--blue:#1E5BA8;--gold:#D4A843;--green:#22c55e;--red:#ef4444;--orange:#f59e0b}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+.os{font-family:'Oswald',sans-serif}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+input,select,button,textarea{font-family:inherit;outline:none}
+.shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+.side{background:#0d1b30;border-right:1px solid var(--border);padding:18px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.logo{font-family:Oswald;font-size:20px;font-weight:700;letter-spacing:2px;margin-bottom:4px}
+.logo span{color:var(--accent)}
+.user{font-size:11px;color:var(--green);margin-bottom:18px;padding:6px 10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:6px}
+.side-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin:16px 0 6px;font-family:Oswald}
+.side-btn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--muted);font-size:13px;cursor:pointer;text-align:left;transition:all .15s;margin-bottom:2px}
+.side-btn:hover{background:rgba(196,30,58,.08);color:var(--text)}
+.side-btn.active{background:var(--accent);color:#fff}
+.side-btn .icon{font-size:16px;width:22px;text-align:center}
+.main{padding:24px;overflow-y:auto}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+.h1{font-family:Oswald;font-size:24px;font-weight:700;letter-spacing:1px;margin-bottom:6px}
+.h2{font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:1px;margin-bottom:14px}
+.subtitle{color:var(--muted);font-size:13px;margin-bottom:20px}
+.btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;transition:all .15s}
+.btn-p{background:var(--accent);color:#fff}
+.btn-p:hover{background:#a01730}
+.btn-b{background:var(--blue);color:#fff}
+.btn-g{background:var(--green);color:#fff}
+.btn-d{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn-r{background:var(--red);color:#fff}
+.btn-w{background:var(--gold);color:#000}
+.inp{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px}
+.inp:focus{border-color:var(--accent)}
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{text-align:left;padding:10px 8px;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;text-transform:uppercase;border-bottom:2px solid var(--border)}
+.tbl td{padding:8px;border-bottom:1px solid rgba(30,58,95,.3)}
+.tbl tr:hover td{background:rgba(196,30,58,.04)}
+.editable{cursor:pointer;color:var(--text);padding:3px 6px;border-radius:4px;display:inline-block}
+.editable:hover{background:rgba(212,168,67,.15);color:var(--gold)}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;font-family:Oswald;letter-spacing:.5px}
+.b-g{background:rgba(34,197,94,.15);color:var(--green)}
+.b-y{background:rgba(212,168,67,.15);color:var(--gold)}
+.b-r{background:rgba(239,68,68,.15);color:var(--red)}
+.b-b{background:rgba(30,91,168,.15);color:var(--blue)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--green);color:var(--text);padding:14px 22px;border-radius:10px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 24px rgba(0,0,0,.4);z-index:9999;animation:slideUp .3s ease}
+.toast.err{border-color:var(--red)}
+.toast button{background:var(--accent);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-family:Oswald;font-size:11px;cursor:pointer;font-weight:700;letter-spacing:.5px}
+@keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:9998}
+.modal-c{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;max-width:480px;width:90%;max-height:90vh;overflow-y:auto}
+.modal-c h3{font-family:Oswald;font-size:18px;letter-spacing:1px;margin-bottom:16px;color:var(--text)}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.field select,.field input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px}
+.modal-btns{display:flex;gap:8px;margin-top:20px;justify-content:flex-end}
+.login{display:flex;align-items:center;justify-content:center;min-height:100vh}
+.login-c{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:36px;max-width:400px;width:90%}
+.login-c h1{font-family:Oswald;font-size:26px;text-align:center;letter-spacing:2px;margin-bottom:6px}
+.login-c h1 span{color:var(--accent)}
+.login-c p{text-align:center;color:var(--muted);font-size:13px;margin-bottom:24px}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.stat .v{font-family:Oswald;font-size:26px;font-weight:700}
+.stat .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+.tag{display:inline-block;padding:3px 9px;border-radius:6px;font-size:10px;font-weight:600;font-family:Oswald;letter-spacing:.5px;margin-right:4px}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:30px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty{text-align:center;padding:40px;color:var(--muted);font-size:13px}
+.search-box{display:flex;gap:8px;margin-bottom:14px}
+.search-box input{flex:1}
+@media(max-width:768px){.shell{grid-template-columns:1fr}.side{position:static;height:auto}.stat-grid{grid-template-columns:repeat(2,1fr)}.tbl{font-size:10px}.tbl th,.tbl td{padding:5px 4px}}
+</style>
+</head>
+<body>
+<div id="app"><div class="login"><div class="login-c"><div class="spinner"></div><p style="text-align:center">Cargando...</p></div></div></div>
+
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import {getFirestore,collection,getDocs,getDoc,doc,setDoc,updateDoc,deleteDoc,addDoc,query,where,orderBy,limit,onSnapshot,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
+const app=initializeApp(FB_CFG);
+const auth=getAuth(app);
+const db=getFirestore(app);
+
+// Estado global
+const ST={user:null,adminInfo:null,view:'dashboard',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],filterEv:'',search:''};
+window.ST=ST;
+
+// ═══════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════
+onAuthStateChanged(auth,async(u)=>{
+  if(!u){ST.user=null;ST.adminInfo=null;render();return}
+  try{
+    const adminDoc=await getDoc(doc(db,'admins',u.uid));
+    if(!adminDoc.exists()){
+      await signOut(auth);
+      ST.user=null;ST.adminInfo=null;
+      alert('Acceso denegado: tu cuenta no está autorizada como admin.\nContacta al super admin para que agregue tu UID a la colección admins/');
+      render();return;
+    }
+    ST.user=u;
+    ST.adminInfo=adminDoc.data();
+    sessionStorage.setItem('fechipo_admin_session','1');
+    await loadAll();
+    render();
+  }catch(e){console.error('Auth error',e);alert('Error verificando admin: '+e.message)}
+});
+
+window.doLogin=async function(){
+  const em=document.getElementById('lEm').value.trim();
+  const pw=document.getElementById('lPw').value;
+  if(!em||!pw){alert('Completa email y contraseña');return}
+  try{
+    await signInWithEmailAndPassword(auth,em,pw);
+  }catch(e){
+    console.error(e);
+    let msg='Error de autenticación';
+    if(e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found')msg='Email o contraseña incorrectos';
+    if(e.code==='auth/too-many-requests')msg='Demasiados intentos. Espera unos minutos.';
+    alert(msg);
+  }
+}
+
+window.doLogout=async function(){
+  if(!confirm('¿Cerrar sesión?'))return;
+  await signOut(auth);
+  sessionStorage.removeItem('fechipo_admin_session');
+  ST.user=null;ST.adminInfo=null;render();
+}
+
+// ═══════════════════════════════════════════
+// DATA LOADING
+// ═══════════════════════════════════════════
+async function loadAll(){
+  try{
+    const [dRes,nRes]=await Promise.all([
+      fetch('data.json').then(r=>r.json()),
+      fetch('nominas.json').then(r=>r.json()).catch(()=>({events:[]}))
+    ]);
+    ST.data=dRes;
+    ST.nominas=nRes;
+    
+    // Load athlete_edits and apply
+    const editsSnap=await getDocs(collection(db,'athlete_edits'));
+    editsSnap.forEach(d=>{
+      const ed=d.data();
+      const a=ST.data.find(x=>x.codigo===ed.codigo);
+      if(a){
+        if(ed.nombre)a.nombre=ed.nombre;
+        if(ed.club!==undefined)a.club=ed.club;
+        if(ed.debut!==undefined)a.debut=ed.debut;
+      }
+    });
+    
+    // Load inscripciones
+    const inscSnap=await getDocs(query(collection(db,'inscripciones'),orderBy('timestamp','desc')));
+    ST.inscripciones=[];
+    inscSnap.forEach(d=>ST.inscripciones.push({id:d.id,...d.data()}));
+    
+    // Real-time listener for inscripciones
+    if(!window._inscListener){
+      window._inscListener=onSnapshot(collection(db,'inscripciones'),(snap)=>{
+        ST.inscripciones=[];
+        snap.forEach(d=>ST.inscripciones.push({id:d.id,...d.data()}));
+        if(ST.view==='nominas'||ST.view==='dashboard'||ST.view==='approvals')render();
+      });
+    }
+    
+    // Load audit log (last 100)
+    try{
+      const logSnap=await getDocs(query(collection(db,'audit_log'),orderBy('ts','desc'),limit(100)));
+      ST.auditLog=[];
+      logSnap.forEach(d=>ST.auditLog.push({id:d.id,...d.data()}));
+    }catch(e){console.warn('No audit log access',e)}
+    
+  }catch(e){console.error('Load error',e);alert('Error cargando datos: '+e.message)}
+}
+
+// ═══════════════════════════════════════════
+// AUDIT LOG
+// ═══════════════════════════════════════════
+async function logAction(action,target,oldValue,newValue,extra={}){
+  try{
+    await addDoc(collection(db,'audit_log'),{
+      user:ST.user.email,
+      uid:ST.user.uid,
+      action,target,
+      oldValue:oldValue==null?null:String(oldValue).substring(0,200),
+      newValue:newValue==null?null:String(newValue).substring(0,200),
+      ts:Date.now(),
+      ...extra
+    });
+  }catch(e){console.warn('Audit log failed',e)}
+}
+
+// ═══════════════════════════════════════════
+// TOAST WITH UNDO
+// ═══════════════════════════════════════════
+let toastTimer=null,pendingUndo=null;
+function showToast(msg,undoFn=null,isError=false){
+  if(toastTimer)clearTimeout(toastTimer);
+  document.getElementById('toast')?.remove();
+  const t=document.createElement('div');
+  t.id='toast';t.className='toast'+(isError?' err':'');
+  t.innerHTML=`<span>${isError?'⚠️':'✓'} ${msg}</span>`;
+  if(undoFn){
+    pendingUndo=undoFn;
+    const b=document.createElement('button');b.textContent='DESHACER';b.onclick=()=>{pendingUndo();document.getElementById('toast')?.remove();pendingUndo=null};
+    t.appendChild(b);
+  }
+  document.body.appendChild(t);
+  toastTimer=setTimeout(()=>{t.remove();pendingUndo=null},5500);
+}
+window.showToast=showToast;
+
+// ═══════════════════════════════════════════
+// EDIT MODAL (universal)
+// ═══════════════════════════════════════════
+const FIELD_OPTS={
+  sexo:['Hombre','Mujer'],
+  division:['Sub Junior','Junior','Open','Master I','Master II','Master III','Master IV','Universitario','Debutantes'],
+  modalidad:['Classic','Equipped','Bench Only Classic','Bench Only Equipped'],
+  status:['pending','approved','rejected']
+};
+
+window.openEditModal=function(title,field,currentValue,onSave){
+  const opts=FIELD_OPTS[field];
+  const m=document.createElement('div');m.className='modal';
+  let inner=`<div class="modal-c"><h3>${title}</h3><div class="field"><label>${field}</label>`;
+  if(opts){
+    inner+=`<select id="emInp">${opts.map(o=>`<option value="${o}" ${o===currentValue?'selected':''}>${o}</option>`).join('')}</select>`;
+  }else{
+    inner+=`<input type="text" id="emInp" value="${(currentValue||'').replace(/"/g,'&quot;')}">`;
+  }
+  inner+=`</div><div class="modal-btns"><button class="btn btn-d" onclick="this.closest('.modal').remove()">CANCELAR</button><button class="btn btn-p" id="emSave">GUARDAR</button></div></div>`;
+  m.innerHTML=inner;
+  document.body.appendChild(m);
+  setTimeout(()=>document.getElementById('emInp').focus(),50);
+  document.getElementById('emSave').onclick=async()=>{
+    const v=document.getElementById('emInp').value;
+    if(v===currentValue){m.remove();return}
+    m.remove();
+    await onSave(v);
+  };
+  m.onclick=(e)=>{if(e.target===m)m.remove()};
+}
+
+// ═══════════════════════════════════════════
+// EDIT INSCRIPCIONES
+// ═══════════════════════════════════════════
+window.editInsc=async function(insId,field){
+  const ins=ST.inscripciones.find(x=>x.id===insId);if(!ins)return;
+  const cur=ins[field]||'';
+  openEditModal(`Editar ${field} de ${ins.nombre}`,field,cur,async(nv)=>{
+    if(nv===cur)return;
+    const old=cur;
+    try{
+      await updateDoc(doc(db,'inscripciones',insId),{[field]:nv});
+      await logAction('edit_inscripcion',`${insId}.${field}`,old,nv,{nombre:ins.nombre});
+      showToast(`${field} actualizado: ${ins.nombre}`,async()=>{
+        await updateDoc(doc(db,'inscripciones',insId),{[field]:old});
+        await logAction('undo_edit_inscripcion',`${insId}.${field}`,nv,old,{nombre:ins.nombre});
+        showToast('Cambio revertido');
+      });
+    }catch(e){console.error(e);showToast('Error: '+e.message,null,true)}
+  });
+}
+
+// ═══════════════════════════════════════════
+// EDIT ATHLETES (data.json)
+// ═══════════════════════════════════════════
+window.editAthlete=async function(cod,field){
+  const a=ST.data.find(x=>x.codigo===cod);if(!a)return;
+  const cur=a[field]||'';
+  openEditModal(`Editar ${field} de ${a.nombre}`,field,cur,async(nv)=>{
+    if(nv===cur)return;
+    const old=cur;
+    a[field]=nv;
+    try{
+      const docId=cod.replace(/[^a-zA-Z0-9_-]/g,'_');
+      await setDoc(doc(db,'athlete_edits',docId),{codigo:cod,nombre:a.nombre,club:a.club||'',debut:a.debut||'',ts:Date.now()});
+      await logAction('edit_athlete',`${cod}.${field}`,old,nv,{nombre:a.nombre});
+      render();
+      showToast(`${field} actualizado: ${a.nombre}`,async()=>{
+        a[field]=old;
+        await setDoc(doc(db,'athlete_edits',docId),{codigo:cod,nombre:a.nombre,club:a.club||'',debut:a.debut||'',ts:Date.now()});
+        await logAction('undo_edit_athlete',`${cod}.${field}`,nv,old,{nombre:a.nombre});
+        render();showToast('Cambio revertido');
+      });
+    }catch(e){console.error(e);a[field]=old;render();showToast('Error: '+e.message,null,true)}
+  });
+}
+
+// ═══════════════════════════════════════════
+// APPROVE / REJECT INSCRIPCIONES
+// ═══════════════════════════════════════════
+window.setStatus=async function(insId,status){
+  const ins=ST.inscripciones.find(x=>x.id===insId);if(!ins)return;
+  const old=ins.status;
+  try{
+    await updateDoc(doc(db,'inscripciones',insId),{status});
+    await logAction('change_status',insId,old,status,{nombre:ins.nombre});
+    showToast(`${ins.nombre}: ${status}`,async()=>{
+      await updateDoc(doc(db,'inscripciones',insId),{status:old});
+      await logAction('undo_status',insId,status,old,{nombre:ins.nombre});
+      showToast('Estado revertido');
+    });
+  }catch(e){showToast('Error: '+e.message,null,true)}
+}
+
+// ═══════════════════════════════════════════
+// SORT NOMINA
+// ═══════════════════════════════════════════
+window.sortNominaByEvent=async function(eventoId){
+  const list=ST.inscripciones.filter(i=>i.evento===eventoId&&i.status!=='rejected');
+  if(!list.length){showToast('No hay atletas',null,true);return}
+  if(!confirm('Esto reordenará la nómina (hombres por categoría, luego mujeres). ¿Continuar?'))return;
+  const wt=a=>parseFloat(String(a.categoria||'999').replace(/[^0-9.]/g,''))||999;
+  const isM=a=>a.sexo==='Hombre'||a.sexo==='Masculino'||a.sexo==='M';
+  list.sort((a,b)=>{
+    const ma=isM(a),mb=isM(b);
+    if(ma!==mb)return ma?-1:1;
+    return wt(a)-wt(b);
+  });
+  // Update sortOrder field for each
+  let order=1;
+  for(const ins of list){
+    try{
+      await updateDoc(doc(db,'inscripciones',ins.id),{sortOrder:order});
+      order++;
+    }catch(e){console.warn('sort update fail',e)}
+  }
+  await logAction('sort_nomina',eventoId,null,`${list.length} athletes`);
+  showToast(`Nómina ordenada: ${list.length} atletas`);
+}
+
+// ═══════════════════════════════════════════
+// EXPORT / IMPORT
+// ═══════════════════════════════════════════
+window.exportData=function(){
+  const blob=new Blob([JSON.stringify(ST.data,null,2)],{type:'application/json'});
+  const u=URL.createObjectURL(blob);
+  const l=document.createElement('a');l.href=u;l.download='data.json';l.click();
+  URL.revokeObjectURL(u);
+  logAction('export','data.json',null,`${ST.data.length} athletes`);
+}
+
+window.exportNominas=function(){
+  const blob=new Blob([JSON.stringify(ST.nominas,null,2)],{type:'application/json'});
+  const u=URL.createObjectURL(blob);
+  const l=document.createElement('a');l.href=u;l.download='nominas.json';l.click();
+  URL.revokeObjectURL(u);
+  logAction('export','nominas.json',null,`${ST.nominas.events?.length||0} events`);
+}
+
+window.exportInscripciones=function(){
+  const blob=new Blob([JSON.stringify(ST.inscripciones,null,2)],{type:'application/json'});
+  const u=URL.createObjectURL(blob);
+  const l=document.createElement('a');l.href=u;l.download='inscripciones.json';l.click();
+  URL.revokeObjectURL(u);
+  logAction('export','inscripciones',null,`${ST.inscripciones.length} entries`);
+}
+
+// ═══════════════════════════════════════════
+// LIVECAST RESET
+// ═══════════════════════════════════════════
+window.resetLivecast=async function(eventName){
+  if(!confirm(`¿Borrar TODOS los datos de LiveCast del campeonato "${eventName}"?\n\nEsto NO se puede deshacer.`))return;
+  if(!confirm('Última confirmación: ¿estás seguro?'))return;
+  try{
+    const id=eventName.replace(/[^a-zA-Z0-9]/g,'_').substring(0,60);
+    await deleteDoc(doc(db,'livecast_sync',id));
+    await logAction('reset_livecast',eventName,'data','deleted');
+    showToast(`LiveCast reseteado: ${eventName}`);
+    render();
+  }catch(e){showToast('Error: '+e.message,null,true)}
+}
+
+// ═══════════════════════════════════════════
+// CRONOGRAMA / FLIGHTS
+// ═══════════════════════════════════════════
+window.assignFlight=async function(insId,flight){
+  const ins=ST.inscripciones.find(x=>x.id===insId);if(!ins)return;
+  const old=ins.flight||'';
+  try{
+    await updateDoc(doc(db,'inscripciones',insId),{flight});
+    await logAction('assign_flight',insId,old,flight,{nombre:ins.nombre});
+    showToast(`${ins.nombre} → Vuelo ${flight}`,async()=>{
+      await updateDoc(doc(db,'inscripciones',insId),{flight:old});
+      await logAction('undo_flight',insId,flight,old,{nombre:ins.nombre});
+      showToast('Vuelo revertido');
+    });
+  }catch(e){showToast('Error: '+e.message,null,true)}
+}
+
+// ═══════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════
+window.go=function(view){ST.view=view;render()}
+
+// ═══════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════
+function render(){
+  const app=document.getElementById('app');
+  if(!ST.user){
+    app.innerHTML=`
+      <div class="login"><div class="login-c">
+        <h1><span>FECHIPO</span> ADMIN</h1>
+        <p>Panel de administración</p>
+        <div class="field"><label>Email</label><input type="email" id="lEm" placeholder="admin@ejemplo.cl" onkeydown="if(event.key==='Enter')document.getElementById('lPw').focus()"></div>
+        <div class="field"><label>Contraseña</label><input type="password" id="lPw" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+        <button class="btn btn-p" style="width:100%;padding:12px" onclick="doLogin()">INGRESAR</button>
+        <p style="margin-top:18px;font-size:11px"><a href="index.html" style="color:var(--muted);text-decoration:none">← Volver al sitio</a></p>
+      </div></div>`;
+    return;
+  }
+  if(!ST.data){
+    app.innerHTML='<div class="login"><div class="login-c"><div class="spinner"></div><p style="text-align:center;margin-top:12px">Cargando datos...</p></div></div>';
+    return;
+  }
+  
+  const sidebar=`
+    <div class="side">
+      <div class="logo"><span>FECHIPO</span> ADMIN</div>
+      <div class="user">👤 ${ST.adminInfo?.name||ST.user.email}<br><span style="opacity:.7;font-size:9px">${ST.adminInfo?.role||'admin'}</span></div>
+      <div class="side-label">Principal</div>
+      <button class="side-btn ${ST.view==='dashboard'?'active':''}" onclick="go('dashboard')"><span class="icon">📊</span>Dashboard</button>
+      <div class="side-label">Datos</div>
+      <button class="side-btn ${ST.view==='athletes'?'active':''}" onclick="go('athletes')"><span class="icon">🏋️</span>Atletas (DB)</button>
+      <button class="side-btn ${ST.view==='nominas'?'active':''}" onclick="go('nominas')"><span class="icon">📋</span>Nóminas</button>
+      <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')"><span class="icon">✓</span>Aprobaciones</button>
+      <button class="side-btn ${ST.view==='cronograma'?'active':''}" onclick="go('cronograma')"><span class="icon">✈️</span>Cronograma</button>
+      <div class="side-label">Sistema</div>
+      <button class="side-btn ${ST.view==='livecast'?'active':''}" onclick="go('livecast')"><span class="icon">📡</span>LiveCast</button>
+      <button class="side-btn ${ST.view==='exports'?'active':''}" onclick="go('exports')"><span class="icon">💾</span>Exports</button>
+      <button class="side-btn ${ST.view==='audit'?'active':''}" onclick="go('audit')"><span class="icon">📜</span>Audit Log</button>
+      <div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">
+        <a href="index.html" class="side-btn" style="text-decoration:none"><span class="icon">←</span>Volver al sitio</a>
+        <button class="side-btn" onclick="doLogout()" style="color:var(--red)"><span class="icon">🔒</span>Cerrar sesión</button>
+      </div>
+    </div>`;
+  
+  let content='';
+  if(ST.view==='dashboard')content=renderDashboard();
+  else if(ST.view==='athletes')content=renderAthletes();
+  else if(ST.view==='nominas')content=renderNominas();
+  else if(ST.view==='approvals')content=renderApprovals();
+  else if(ST.view==='cronograma')content=renderCronograma();
+  else if(ST.view==='livecast')content=renderLivecast();
+  else if(ST.view==='exports')content=renderExports();
+  else if(ST.view==='audit')content=renderAudit();
+  
+  app.innerHTML=`<div class="shell">${sidebar}<div class="main">${content}</div></div>`;
+}
+
+function renderDashboard(){
+  const totalAthletes=ST.data.length;
+  const totalInsc=ST.inscripciones.length;
+  const pending=ST.inscripciones.filter(i=>i.status==='pending').length;
+  const events=[...new Set(ST.inscripciones.map(i=>i.evento))].length;
+  return `
+    <div class="h1">Dashboard</div>
+    <p class="subtitle">Panel de control general</p>
+    <div class="stat-grid">
+      <div class="stat"><div class="v" style="color:var(--blue)">${totalAthletes}</div><div class="l">Atletas DB</div></div>
+      <div class="stat"><div class="v" style="color:var(--green)">${totalInsc}</div><div class="l">Inscripciones</div></div>
+      <div class="stat"><div class="v" style="color:var(--gold)">${pending}</div><div class="l">Pendientes</div></div>
+      <div class="stat"><div class="v" style="color:var(--accent)">${events}</div><div class="l">Eventos</div></div>
+    </div>
+    <div class="card">
+      <div class="h2">Actividad reciente</div>
+      ${ST.auditLog.length===0?'<div class="empty">Sin actividad registrada</div>':
+        '<table class="tbl"><tr><th>Hora</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr>'+
+        ST.auditLog.slice(0,10).map(l=>{
+          const d=new Date(l.ts);
+          return `<tr><td style="font-size:10px;color:var(--muted)">${d.toLocaleString('es-CL')}</td><td style="font-size:11px">${l.user||''}</td><td><span class="tag b-b">${l.action}</span></td><td style="font-size:11px">${l.target||''}<br><span style="color:var(--muted);font-size:10px">${l.oldValue||''} → ${l.newValue||''}</span></td></tr>`;
+        }).join('')+'</table>'}
+    </div>`;
+}
+
+function renderAthletes(){
+  const s=ST.search.toLowerCase();
+  const list=ST.data.filter(a=>!s||a.nombre.toLowerCase().includes(s)||(a.club||'').toLowerCase().includes(s)||a.codigo.toLowerCase().includes(s)).slice(0,100);
+  return `
+    <div class="h1">Atletas (Base de Datos)</div>
+    <p class="subtitle">${ST.data.length} atletas · Click en cualquier campo para editar</p>
+    <div class="search-box">
+      <input class="inp" placeholder="Buscar nombre, club o código..." value="${ST.search}" oninput="ST.search=this.value;render()">
+    </div>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="tbl">
+        <tr><th>Código</th><th>Nombre</th><th>Club</th><th>Debut</th><th>Comp.</th></tr>
+        ${list.map(a=>`<tr>
+          <td style="font-size:10px;color:var(--muted);font-family:Oswald">${a.codigo}</td>
+          <td><span class="editable" onclick="editAthlete('${a.codigo.replace(/'/g,"\\'")}','nombre')">${a.nombre}</span></td>
+          <td><span class="editable" onclick="editAthlete('${a.codigo.replace(/'/g,"\\'")}','club')">${a.club||'—'}</span></td>
+          <td><span class="editable" onclick="editAthlete('${a.codigo.replace(/'/g,"\\'")}','debut')">${a.debut||'—'}</span></td>
+          <td style="text-align:center"><span class="badge b-y">${a.competencias?.length||0}</span></td>
+        </tr>`).join('')}
+      </table>
+    </div>
+    ${list.length===100?'<p style="text-align:center;color:var(--muted);font-size:12px;padding:14px">Mostrando primeros 100 — refina tu búsqueda para ver más</p>':''}`;
+}
+
+function renderNominas(){
+  const events=[...new Set(ST.inscripciones.map(i=>i.evento))].filter(Boolean);
+  if(!ST.filterEv&&events.length)ST.filterEv=events[0];
+  const filtered=ST.inscripciones.filter(i=>i.evento===ST.filterEv&&i.status!=='rejected');
+  filtered.sort((a,b)=>(a.sortOrder||999)-(b.sortOrder||999));
+  return `
+    <div class="h1">Nóminas</div>
+    <p class="subtitle">Edita inscripciones en tiempo real · ${filtered.length} atletas en evento seleccionado</p>
+    <div class="search-box">
+      <select class="inp" onchange="ST.filterEv=this.value;render()">
+        ${events.map(e=>`<option value="${e}" ${ST.filterEv===e?'selected':''}>${e}</option>`).join('')}
+      </select>
+      <button class="btn btn-b" onclick="sortNominaByEvent('${ST.filterEv}')">⇅ ORDENAR</button>
+    </div>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="tbl">
+        <tr><th>#</th><th>Nombre</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Modalidad</th><th>Club</th><th>Estado</th></tr>
+        ${filtered.map((i,idx)=>`<tr>
+          <td style="color:var(--muted);font-family:Oswald">${idx+1}</td>
+          <td>${i.nombre}<br><span style="font-size:9px;color:var(--muted)">${i.rut||''}</span></td>
+          <td><span class="editable" onclick="editInsc('${i.id}','sexo')">${i.sexo||'?'}</span></td>
+          <td><span class="editable" onclick="editInsc('${i.id}','division')">${i.division||'—'}</span></td>
+          <td><span class="editable" onclick="editInsc('${i.id}','categoria')">${i.categoria||'—'}</span></td>
+          <td><span class="editable" onclick="editInsc('${i.id}','modalidad')">${i.modalidad||'—'}</span></td>
+          <td><span class="editable" onclick="editInsc('${i.id}','club')">${i.club||'—'}</span></td>
+          <td><span class="badge ${i.status==='approved'?'b-g':i.status==='pending'?'b-y':'b-r'}">${i.status||'?'}</span></td>
+        </tr>`).join('')}
+      </table>
+      ${filtered.length===0?'<div class="empty">Sin atletas en este evento</div>':''}
+    </div>`;
+}
+
+function renderApprovals(){
+  const pend=ST.inscripciones.filter(i=>i.status==='pending');
+  return `
+    <div class="h1">Aprobaciones pendientes</div>
+    <p class="subtitle">${pend.length} inscripciones esperando revisión</p>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="tbl">
+        <tr><th>Fecha</th><th>Nombre</th><th>Evento</th><th>Cat.</th><th>Club</th><th>Acción</th></tr>
+        ${pend.map(i=>{
+          const d=i.timestamp?new Date(i.timestamp.seconds?i.timestamp.seconds*1000:i.timestamp):null;
+          return `<tr>
+            <td style="font-size:10px;color:var(--muted)">${d?d.toLocaleDateString('es-CL'):'—'}</td>
+            <td>${i.nombre}<br><span style="font-size:9px;color:var(--muted)">${i.sexo||''} · ${i.division||''}</span></td>
+            <td style="font-size:10px">${i.evento||''}</td>
+            <td><span class="badge b-y">${i.categoria||'?'}</span></td>
+            <td style="font-size:11px">${i.club||'—'}</td>
+            <td><button class="btn btn-g" style="padding:5px 10px;font-size:10px" onclick="setStatus('${i.id}','approved')">✓ APROBAR</button> <button class="btn btn-r" style="padding:5px 10px;font-size:10px" onclick="setStatus('${i.id}','rejected')">✗ RECHAZAR</button></td>
+          </tr>`;
+        }).join('')}
+      </table>
+      ${pend.length===0?'<div class="empty">No hay pendientes 🎉</div>':''}
+    </div>`;
+}
+
+function renderCronograma(){
+  const events=[...new Set(ST.inscripciones.map(i=>i.evento))].filter(Boolean);
+  if(!ST.filterEv&&events.length)ST.filterEv=events[0];
+  const filtered=ST.inscripciones.filter(i=>i.evento===ST.filterEv&&i.status==='approved');
+  const flights=['A','B','C','D','E','F'];
+  return `
+    <div class="h1">Cronograma — Asignación de vuelos</div>
+    <p class="subtitle">Asigna atletas a vuelos · ${filtered.length} aprobados en evento</p>
+    <div class="search-box">
+      <select class="inp" onchange="ST.filterEv=this.value;render()">
+        ${events.map(e=>`<option value="${e}" ${ST.filterEv===e?'selected':''}>${e}</option>`).join('')}
+      </select>
+    </div>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="tbl">
+        <tr><th>#</th><th>Nombre</th><th>Cat.</th><th>Sexo</th><th>Vuelo asignado</th></tr>
+        ${filtered.map((i,idx)=>`<tr>
+          <td style="color:var(--muted)">${idx+1}</td>
+          <td>${i.nombre}</td>
+          <td><span class="badge b-y">${i.categoria||'?'}</span></td>
+          <td>${(i.sexo||'?').substring(0,1)}</td>
+          <td>${flights.map(f=>`<button onclick="assignFlight('${i.id}','${f}')" style="background:${i.flight===f?'var(--accent)':'transparent'};color:${i.flight===f?'#fff':'var(--muted)'};border:1px solid var(--border);padding:4px 9px;border-radius:5px;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">${f}</button>`).join('')}</td>
+        </tr>`).join('')}
+      </table>
+      ${filtered.length===0?'<div class="empty">Sin atletas aprobados</div>':''}
+    </div>`;
+}
+
+function renderLivecast(){
+  const events=[...new Set(ST.inscripciones.map(i=>i.evento))].filter(Boolean);
+  return `
+    <div class="h1">LiveCast — Gestión</div>
+    <p class="subtitle">Resetea datos de LiveCast por campeonato</p>
+    <div class="card">
+      <div class="h2">Resetear LiveCast</div>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:14px">Borra TODOS los datos en vivo (pesos, intentos, vuelos) de un campeonato. Útil cuando termina la competencia o si hubo un error grave.</p>
+      ${events.map(e=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border)"><span>${e}</span><button class="btn btn-r" onclick="resetLivecast('${e.replace(/'/g,"\\'")}')">🗑️ RESETEAR</button></div>`).join('')}
+    </div>`;
+}
+
+function renderExports(){
+  return `
+    <div class="h1">Exports / Backups</div>
+    <p class="subtitle">Descargar respaldos de los datos</p>
+    <div class="card">
+      <div class="h2">Descargas disponibles</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-b" onclick="exportData()" style="text-align:left;padding:14px">📥 data.json (${ST.data.length} atletas)</button>
+        <button class="btn btn-b" onclick="exportNominas()" style="text-align:left;padding:14px">📥 nominas.json (${ST.nominas.events?.length||0} eventos)</button>
+        <button class="btn btn-b" onclick="exportInscripciones()" style="text-align:left;padding:14px">📥 inscripciones.json (${ST.inscripciones.length} entradas)</button>
+      </div>
+      <p style="color:var(--muted);font-size:11px;margin-top:14px">⚠️ Los archivos descargados incluyen las ediciones de admin aplicadas.</p>
+    </div>`;
+}
+
+function renderAudit(){
+  return `
+    <div class="h1">Audit Log</div>
+    <p class="subtitle">Historial inmutable de acciones (últimas 100)</p>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="tbl">
+        <tr><th>Hora</th><th>Usuario</th><th>Acción</th><th>Target</th><th>Cambio</th></tr>
+        ${ST.auditLog.map(l=>{
+          const d=new Date(l.ts);
+          return `<tr>
+            <td style="font-size:10px;color:var(--muted);white-space:nowrap">${d.toLocaleString('es-CL')}</td>
+            <td style="font-size:11px">${l.user||''}</td>
+            <td><span class="tag b-b">${l.action}</span></td>
+            <td style="font-size:11px">${l.target||''}<br><span style="color:var(--muted);font-size:10px">${l.nombre||''}</span></td>
+            <td style="font-size:10px"><span style="color:var(--red)">${l.oldValue||''}</span> → <span style="color:var(--green)">${l.newValue||''}</span></td>
+          </tr>`;
+        }).join('')}
+      </table>
+      ${ST.auditLog.length===0?'<div class="empty">Sin registros</div>':''}
+    </div>`;
+}
+
+window.render=render;
+render();
+</script>
+</body>
+</html>
