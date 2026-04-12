@@ -91,7 +91,7 @@ const auth=getAuth(app);
 const db=getFirestore(app);
 
 // Estado global
-const ST={user:null,adminInfo:null,view:'dashboard',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],filterEv:'',search:''};
+const ST={user:null,adminInfo:null,view:'dashboard',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],filterEv:'',search:'',filterLetter:''};
 window.ST=ST;
 
 // ═══════════════════════════════════════════
@@ -322,19 +322,52 @@ window.editAthlete=async function(cod,field){
   openEditModal(`Editar ${field} de ${a.nombre}`,field,cur,async(nv)=>{
     if(nv===cur)return;
     const old=cur;
+    const oldCod=a.codigo;
     a[field]=nv;
     try{
-      const docId=cod.replace(/[^a-zA-Z0-9_-]/g,'_');
-      await setDoc(doc(db,'athlete_edits',docId),{codigo:cod,nombre:a.nombre,club:a.club||'',debut:a.debut||'',ts:Date.now()});
-      await logAction('edit_athlete',`${cod}.${field}`,old,nv,{nombre:a.nombre});
+      // If codigo changed, delete old doc and create new one
+      if(field==='codigo'){
+        const oldDocId=oldCod.replace(/[^a-zA-Z0-9_-]/g,'_');
+        try{await deleteDoc(doc(db,'athlete_edits',oldDocId))}catch(e){}
+      }
+      const docId=a.codigo.replace(/[^a-zA-Z0-9_-]/g,'_');
+      await setDoc(doc(db,'athlete_edits',docId),{codigo:a.codigo,nombre:a.nombre,club:a.club||'',debut:a.debut||'',ts:Date.now()});
+      await logAction('edit_athlete',`${oldCod}.${field}`,old,nv,{nombre:a.nombre});
       render();
       showToast(`${field} actualizado: ${a.nombre}`,async()=>{
         a[field]=old;
-        await setDoc(doc(db,'athlete_edits',docId),{codigo:cod,nombre:a.nombre,club:a.club||'',debut:a.debut||'',ts:Date.now()});
-        await logAction('undo_edit_athlete',`${cod}.${field}`,nv,old,{nombre:a.nombre});
+        if(field==='codigo'){
+          const newDocId=nv.replace(/[^a-zA-Z0-9_-]/g,'_');
+          try{await deleteDoc(doc(db,'athlete_edits',newDocId))}catch(e){}
+        }
+        const rDocId=a.codigo.replace(/[^a-zA-Z0-9_-]/g,'_');
+        await setDoc(doc(db,'athlete_edits',rDocId),{codigo:a.codigo,nombre:a.nombre,club:a.club||'',debut:a.debut||'',ts:Date.now()});
+        await logAction('undo_edit_athlete',`${a.codigo}.${field}`,nv,old,{nombre:a.nombre});
         render();showToast('Cambio revertido');
       });
     }catch(e){console.error(e);a[field]=old;render();showToast('Error: '+e.message,null,true)}
+  });
+}
+
+window.deleteAthlete=async function(cod){
+  const a=ST.data.find(x=>x.codigo===cod);if(!a)return;
+  if(!confirm(`¿Eliminar a ${a.nombre} (${cod})?\n\nEsto lo quita de data.json en memoria.\nPara hacerlo permanente, exporta data.json después.`))return;
+  const idx=ST.data.indexOf(a);
+  ST.data.splice(idx,1);
+  try{
+    const docId=cod.replace(/[^a-zA-Z0-9_-]/g,'_');
+    await setDoc(doc(db,'athlete_edits',docId),{codigo:cod,deleted:true,nombre:a.nombre,ts:Date.now()});
+    await logAction('delete_athlete',cod,a.nombre,'deleted',{club:a.club||''});
+  }catch(e){console.warn('Delete log failed',e)}
+  render();
+  showToast(`${a.nombre} eliminado`,async()=>{
+    ST.data.splice(idx,0,a);
+    try{
+      const docId=cod.replace(/[^a-zA-Z0-9_-]/g,'_');
+      await setDoc(doc(db,'athlete_edits',docId),{codigo:cod,nombre:a.nombre,club:a.club||'',debut:a.debut||'',ts:Date.now()});
+      await logAction('undo_delete_athlete',cod,'deleted',a.nombre);
+    }catch(e){}
+    render();showToast('Restaurado');
   });
 }
 
@@ -528,26 +561,41 @@ function renderDashboard(){
 
 function renderAthletes(){
   const s=ST.search.toLowerCase();
-  const list=ST.data.filter(a=>!s||a.nombre.toLowerCase().includes(s)||(a.club||'').toLowerCase().includes(s)||a.codigo.toLowerCase().includes(s)).slice(0,100);
+  const fl=ST.filterLetter;
+  let sorted=[...ST.data].sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+  let list=sorted.filter(a=>{
+    if(fl&&!a.nombre.toUpperCase().startsWith(fl))return false;
+    if(s&&!a.nombre.toLowerCase().includes(s)&&!(a.club||'').toLowerCase().includes(s)&&!a.codigo.toLowerCase().includes(s)&&!(a.rut||'').includes(s))return false;
+    return true;
+  }).slice(0,100);
+  const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
   return `
     <div class="h1">Atletas (Base de Datos)</div>
-    <p class="subtitle">${ST.data.length} atletas · Click en cualquier campo para editar</p>
+    <p class="subtitle">${ST.data.length} atletas · Ordenados A-Z · Click en cualquier campo para editar</p>
     <div class="search-box">
-      <input class="inp" placeholder="Buscar nombre, club o código..." value="${ST.search}" oninput="ST.search=this.value;render()">
+      <input class="inp" placeholder="Buscar nombre, club, código o RUT..." value="${ST.search}" oninput="ST.search=this.value;render()">
     </div>
-    <div class="card" style="padding:0;overflow-x:auto">
-      <table class="tbl">
-        <tr><th>Código</th><th>Nombre</th><th>Club</th><th>Debut</th><th>Comp.</th></tr>
-        ${list.map(a=>`<tr>
-          <td style="font-size:10px;color:var(--muted);font-family:Oswald">${a.codigo}</td>
-          <td><span class="editable" onclick="editAthlete('${a.codigo.replace(/'/g,"\\'")}','nombre')">${a.nombre}</span></td>
-          <td><span class="editable" onclick="editAthlete('${a.codigo.replace(/'/g,"\\'")}','club')">${a.club||'—'}</span></td>
-          <td><span class="editable" onclick="editAthlete('${a.codigo.replace(/'/g,"\\'")}','debut')">${a.debut||'—'}</span></td>
-          <td style="text-align:center"><span class="badge b-y">${a.competencias?.length||0}</span></td>
-        </tr>`).join('')}
-      </table>
+    <div style="display:flex;gap:12px">
+      <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
+        <button onclick="ST.filterLetter='';render()" style="padding:4px 8px;border-radius:4px;border:1px solid ${!fl?'var(--accent)':'var(--border)'};background:${!fl?'var(--accent)':'transparent'};color:${!fl?'#fff':'var(--muted)'};font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">ALL</button>
+        ${letters.map(l=>`<button onclick="ST.filterLetter='${l}';render()" style="padding:3px 8px;border-radius:4px;border:1px solid ${fl===l?'var(--accent)':'var(--border)'};background:${fl===l?'var(--accent)':'transparent'};color:${fl===l?'#fff':'var(--muted)'};font-family:Oswald;font-size:10px;font-weight:700;cursor:pointer;min-width:30px">${l}</button>`).join('')}
+      </div>
+      <div class="card" style="padding:0;overflow-x:auto;flex:1">
+        <table class="tbl">
+          <tr><th>Código</th><th>RUT</th><th>Nombre</th><th>Club</th><th>Debut</th><th>Comp.</th><th></th></tr>
+          ${list.map(a=>{const esc=a.codigo.replace(/'/g,"\\'");return `<tr>
+            <td><span class="editable" onclick="editAthlete('${esc}','codigo')" style="font-size:10px;font-family:Oswald;color:var(--accent)">${a.codigo}</span></td>
+            <td style="font-size:10px;color:var(--muted)">${a.rut||'—'}</td>
+            <td><span class="editable" onclick="editAthlete('${esc}','nombre')">${a.nombre}</span></td>
+            <td><span class="editable" onclick="editAthlete('${esc}','club')">${a.club||'—'}</span></td>
+            <td><span class="editable" onclick="editAthlete('${esc}','debut')">${a.debut||'—'}</span></td>
+            <td style="text-align:center"><span class="badge b-y">${a.competencias?.length||0}</span></td>
+            <td><button onclick="deleteAthlete('${esc}')" style="background:transparent;border:1px solid rgba(239,68,68,.3);color:var(--red);padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald" title="Eliminar">✕</button></td>
+          </tr>`}).join('')}
+        </table>
+      </div>
     </div>
-    ${list.length===100?'<p style="text-align:center;color:var(--muted);font-size:12px;padding:14px">Mostrando primeros 100 — refina tu búsqueda para ver más</p>':''}`;
+    ${list.length===100?'<p style="text-align:center;color:var(--muted);font-size:12px;padding:14px">Mostrando primeros 100 — refina tu búsqueda</p>':''}`;
 }
 
 function renderNominas(){
