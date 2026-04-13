@@ -224,7 +224,9 @@ function pickEvent(i){
   DATA.athletes=ev.athletes.map((a,j)=>{
     const name=a.nombre||'';
     const fl=flightMap&&flightMap[name]?flightMap[name]:'A';
-    return{id:j,lot:j+1,name,rut:a.rut||'',sex:a.sexo||a.sex||'',cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',bw:0,flight:fl,rackSQ:'',rackBP:'',bombed:false,
+    const rawMod=(a.modalidad||a.mod||'').toLowerCase();
+    const mod=rawMod.includes('equipado')||rawMod.includes('equipped')?'equipped':'classic';
+    return{id:j,lot:j+1,name,rut:a.rut||'',sex:a.sexo||a.sex||'',cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,bw:0,flight:fl,rackSQ:'',rackBP:'',bombed:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}};
   });
   const firstFlight=flightMap?[...new Set(Object.values(flightMap))].sort()[0]:'A';
@@ -248,7 +250,55 @@ function pickEvent(i){
     go(isAdmin?'manage':'results');startFBSync();
   }
 }
-let judgeMode=false,judgeLights={izq:null,central:null,der:null},judgeUnsub=null;
+let judgeMode=false,judgeLights={izq:null,central:null,der:null},judgeUnsub=null,_lastTimerSignal=0;
+let RECORDS=null;
+
+function _normCat(s){const m=(s||'').match(/(\d+\+?)/);return m?m[1]:s;}
+function _normDiv(d){
+  const v=(d||'').toLowerCase().replace(/[\s\-_]/g,'');
+  if(v.startsWith('sub'))return 'Sub-Junior';
+  if(v.startsWith('junior'))return 'Junior';
+  if(v.startsWith('open'))return 'Open';
+  if(v.includes('master4')||v.includes('masteriv'))return 'Master IV';
+  if(v.includes('master3')||v.includes('masteriii'))return 'Master III';
+  if(v.includes('master2')||(v.includes('masterii')&&!v.includes('iii')))return 'Master II';
+  if(v.includes('master1')||(v.includes('masteri')&&!v.includes('ii')))return 'Master I';
+  return d;
+}
+function checkRecord(athlete,lift,round){
+  if(!RECORDS)return;
+  const weight=athlete.att[lift][round].w;if(!weight)return;
+  const mod=athlete.mod||'classic';
+  const cat=_normCat(athlete.cat||'');
+  const div=_normDiv(athlete.div||'');
+  const recs=(RECORDS[mod]&&RECORDS[mod][lift])||[];
+  const match=recs.find(rec=>rec.categoria===cat&&_normDiv(rec.division)===div);
+  if(match&&weight>match.marca)showRecordAlert(athlete.name,lift,round,weight,match.marca,match.nombre,cat,div,mod);
+}
+function showRecordAlert(athName,lift,round,newMark,oldMark,holder,cat,div,mod){
+  const ex=document.getElementById('recAlert');if(ex)ex.remove();
+  const LL={sq:'SQUAT',bp:'BENCH PRESS',dl:'DEADLIFT'};
+  const el=document.createElement('div');el.id='recAlert';
+  el.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:99999';
+  el.innerHTML='<div style="background:#0D1F38;border:3px solid #C41E3A;border-radius:20px;padding:36px 44px;max-width:540px;width:90%;text-align:center;box-shadow:0 0 80px rgba(196,30,58,.45)">'
+    +'<div style="font-size:48px;margin-bottom:6px">&#127942;</div>'
+    +'<div style="font-family:Oswald;font-size:13px;letter-spacing:4px;color:#C41E3A;margin-bottom:10px">POSIBLE RÉCORD NACIONAL</div>'
+    +'<div style="font-family:Oswald;font-size:28px;font-weight:700;color:#fff;margin-bottom:4px">'+athName+'</div>'
+    +'<div style="font-family:Oswald;font-size:16px;color:#D4A843;margin-bottom:20px">'+LL[lift]+' &middot; -'+cat+'kg &middot; '+div+' &middot; '+(mod==='equipped'?'Equipado':'Classic')+'</div>'
+    +'<div style="display:flex;justify-content:center;gap:28px;align-items:center;margin-bottom:24px">'
+    +'<div><div style="font-size:10px;color:#7A8FA6;letter-spacing:2px;margin-bottom:4px">NUEVA MARCA</div>'
+    +'<div style="font-family:Oswald;font-size:52px;font-weight:700;color:#22c55e">'+newMark+'<span style="font-size:22px"> kg</span></div></div>'
+    +'<div style="font-size:28px;color:#7A8FA6">&rarr;</div>'
+    +'<div><div style="font-size:10px;color:#7A8FA6;letter-spacing:2px;margin-bottom:4px">RÉCORD ANTERIOR</div>'
+    +'<div style="font-family:Oswald;font-size:38px;font-weight:700;color:#7A8FA6">'+oldMark+' kg</div>'
+    +'<div style="font-size:10px;color:#7A8FA6;margin-top:2px">'+holder+'</div></div>'
+    +'</div>'
+    +'<button onclick="document.getElementById('recAlert').remove()" style="padding:10px 30px;border-radius:10px;border:2px solid #C41E3A;background:transparent;color:#fff;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;cursor:pointer">CONFIRMAR &amp; CERRAR</button>'
+    +'<div style="font-size:10px;color:#7A8FA6;margin-top:10px">&#9888;&#65039; Sujeto a confirmación del intento por los jueces &mdash; se cierra en 15s</div>'
+    +'</div>';
+  document.body.appendChild(el);
+  setTimeout(()=>{const e=document.getElementById('recAlert');if(e)e.remove();},15000);
+}
 
 function setAtt(id,l,r,val){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
@@ -269,17 +319,36 @@ function setResult(id,l,r,res){
   if(r<2){const key=id+'_'+l+'_'+(r+1);DATA.changeTimers[key]={remaining:60,expired:false};startCT(key)}
   if(a.att[l].every(x=>x.r==='n'))a.bombed=true;
   DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);mainTI=null;
+  // Record alert: check if this good lift breaks a national record
+  if(res==='g')checkRecord(a,l,r);
   // Reset judge lights for next athlete
   if(judgeMode)resetJudgeLights();
   saveNow();R();
+  // Auto-advance: if liftQueue is now empty, round is done
+  const snapLift=DATA.lift,snapRound=DATA.round;
+  if(liftQueue().length===0){
+    showToastLC('✅ Ronda completada — avanzando en 3s…');
+    setTimeout(()=>{if(DATA.lift===snapLift&&DATA.round===snapRound)advanceLift();},3000);
+  }
 }
 
 // Judge mode functions
 async function toggleJudgeMode(){
   judgeMode=!judgeMode;
   if(judgeMode){
-    startJudgeListener();
-    showToastLC('Modo Jueces ACTIVADO — las decisiones vienen del panel de jueces');
+    if(!fbReady){
+      showToastLC('⚠️ Firebase no conectado — esperando conexión para activar panel de jueces');
+      // Retry when fbReady becomes true (poll every 500ms, max 20s)
+      let attempts=0;
+      const waitFB=setInterval(()=>{
+        attempts++;
+        if(fbReady){clearInterval(waitFB);startJudgeListener();showToastLC('✅ Modo Jueces ACTIVADO — Firebase conectado');}
+        else if(attempts>=40){clearInterval(waitFB);judgeMode=false;showToastLC('❌ Firebase no disponible — usa modo manual');R();}
+      },500);
+    }else{
+      startJudgeListener();
+      showToastLC('Modo Jueces ACTIVADO — las decisiones vienen del panel de jueces');
+    }
   }else{
     if(judgeUnsub){judgeUnsub();judgeUnsub=null}
     showToastLC('Modo Jueces DESACTIVADO — decisiones manuales');
@@ -293,6 +362,15 @@ function showToastLC(msg){
 function startJudgeListener(){
   if(!fbReady)return;
   if(judgeUnsub){judgeUnsub();judgeUnsub=null}
+  // Also listen for timer-start signals from judge panel
+  window._fb.onSnapshot(window._fb.doc(fbDB,'timer_control','current'),(snap)=>{
+    if(!snap.exists())return;
+    const d=snap.data();
+    if(d.action==='start'&&d.ts&&d.ts>(_lastTimerSignal||0)){
+      _lastTimerSignal=d.ts;
+      if(!DATA.timerOn)startTimer();
+    }
+  });
   judgeUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions','current'),(snap)=>{
     if(!snap.exists())return;
     const d=snap.data();
@@ -478,22 +556,32 @@ function renderCompete(){
     if(!judgeMode){
       h+='<button onclick="setResult('+cur.id+',\''+DATA.lift+'\','+DATA.round+',\'g\')" style="padding:14px;border-radius:10px;border:3px solid var(--green);background:rgba(34,197,94,.08);color:var(--green);font-size:16px;font-weight:700;font-family:Oswald;letter-spacing:2px;cursor:pointer">\u2713 GOOD LIFT</button><button onclick="setResult('+cur.id+',\''+DATA.lift+'\','+DATA.round+',\'n\')" style="padding:14px;border-radius:10px;border:3px solid var(--red);background:rgba(239,68,68,.08);color:var(--red);font-size:16px;font-weight:700;font-family:Oswald;letter-spacing:2px;cursor:pointer">\u2717 NO LIFT</button>';
     }else{
-      // Judge lights display
-      const jc={white:'#f0f0f0',red:'#ef4444',yellow:'#f59e0b',blue:'#3b82f6'};
+      // Judge lights display — big=outcome(white/red), small=infraction color
+      const jcSmall={white:'#f0f0f0',red:'#ef4444',yellow:'#f59e0b',blue:'#3b82f6'};
       const jl=['izq','central','der'];const jn={izq:'IZQ',central:'CENTRAL',der:'DER'};
-      h+='<div style="grid-column:span 2;display:flex;justify-content:center;gap:16px;padding:14px">';
+      h+='<div style="grid-column:span 2;display:flex;justify-content:center;gap:20px;padding:10px 14px 4px">';
       jl.forEach(j=>{
         const v=judgeLights[j];
-        const col=v?jc[v]:'var(--border)';
-        h+='<div style="text-align:center"><div style="width:50px;height:50px;border-radius:50%;background:'+col+';border:3px solid '+(v?col:'var(--border)')+';margin:0 auto 4px;box-shadow:'+(v?'0 0 20px '+col:'none')+'"></div><div style="font-family:Oswald;font-size:10px;color:'+(v?'#fff':'var(--muted)')+';letter-spacing:1px">'+jn[j]+'</div></div>';
+        const bigCol=v?(v==='white'?'#f0f0f0':'#ef4444'):'var(--border)';
+        const bigGlow=v?(v==='white'?'0 0 22px rgba(240,240,240,.6)':'0 0 22px rgba(239,68,68,.6)'):'none';
+        const smallCol=v?jcSmall[v]:'var(--border)';
+        h+='<div style="text-align:center">'
+          +'<div style="width:54px;height:54px;border-radius:50%;background:'+bigCol+';border:3px solid '+(v?bigCol:'var(--border)')+';margin:0 auto 5px;box-shadow:'+bigGlow+'"></div>'
+          +'<div style="width:16px;height:16px;border-radius:50%;background:'+smallCol+';border:2px solid '+(v?smallCol:'var(--border)')+';margin:0 auto 4px"></div>'
+          +'<div style="font-family:Oswald;font-size:10px;color:'+(v?'#fff':'var(--muted)')+';letter-spacing:1px">'+jn[j]+'</div>'
+          +'</div>';
       });
       h+='</div>';
       const votes=[judgeLights.izq,judgeLights.central,judgeLights.der].filter(Boolean);
       if(votes.length===3){
         const goods=votes.filter(v=>v==='white').length;
-        h+='<div style="grid-column:span 2;text-align:center;font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:3px;color:'+(goods>=2?'var(--green)':'var(--red)')+';padding:8px">'+(goods>=2?'✓ GOOD LIFT':'✗ NO LIFT')+'</div>';
+        h+='<div style="grid-column:span 2;text-align:center;font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:3px;color:'+(goods>=2?'var(--green)':'var(--red)')+';padding:6px">'+(goods>=2?'✓ GOOD LIFT':'✗ NO LIFT')+'</div>';
+        h+='<div style="grid-column:span 2;text-align:center;margin-top:2px"><button onclick="resetJudgeLights()" style="padding:5px 16px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;cursor:pointer">↺ LIMPIAR LUCES</button></div>';
+      }else if(votes.length>0){
+        h+='<div style="grid-column:span 2;text-align:center;font-family:Oswald;font-size:13px;color:var(--muted);padding:6px">Esperando jueces ('+votes.length+'/3)…</div>';
+        h+='<div style="grid-column:span 2;text-align:center"><button onclick="resetJudgeLights()" style="padding:5px 16px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;cursor:pointer">↺ LIMPIAR LUCES</button></div>';
       }else{
-        h+='<div style="grid-column:span 2;text-align:center;font-family:Oswald;font-size:13px;color:var(--muted);padding:8px">Esperando jueces ('+votes.length+'/3)...</div>';
+        h+='<div style="grid-column:span 2;text-align:center;font-family:Oswald;font-size:13px;color:var(--muted);padding:6px">Esperando jueces (0/3)…</div>';
       }
     }
     h+='</div>';
@@ -696,13 +784,17 @@ function txEnVivo(cur,evName){
   if(judgeMode){
     const votes=[judgeLights.izq,judgeLights.central,judgeLights.der].filter(Boolean);
     if(votes.length>0){
-      const jc={white:'#f0f0f0',red:'#ef4444',yellow:'#f59e0b',blue:'#3b82f6'};
-      h+='<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:24px;z-index:100">';
+      const jcSmallSB={white:'#f0f0f0',red:'#ef4444',yellow:'#f59e0b',blue:'#3b82f6'};
+      h+='<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:28px;z-index:100;align-items:flex-end">';
       ['izq','central','der'].forEach(j=>{
         const v=judgeLights[j];
-        const col=v?jc[v]:'rgba(40,60,100,.4)';
-        const size=v?'70px':'50px';
-        h+='<div style="width:'+size+';height:'+size+';border-radius:50%;background:'+col+';border:4px solid '+(v?'rgba(255,255,255,.3)':'rgba(60,90,140,.3)')+';box-shadow:'+(v?'0 0 30px '+col+',0 0 60px '+col+'33':'none')+';transition:all .3s"></div>';
+        const bigCol=v?(v==='white'?'#f0f0f0':'#ef4444'):'rgba(40,60,100,.4)';
+        const bigGlow=v?(v==='white'?'0 0 40px rgba(240,240,240,.7),0 0 80px rgba(240,240,240,.3)':'0 0 40px rgba(239,68,68,.7),0 0 80px rgba(239,68,68,.3)'):'none';
+        const smallCol=v?jcSmallSB[v]:'rgba(40,60,100,.4)';
+        h+='<div style="text-align:center">'
+          +'<div style="width:70px;height:70px;border-radius:50%;background:'+bigCol+';border:4px solid rgba(255,255,255,.2);box-shadow:'+bigGlow+';transition:all .3s;margin:0 auto 8px"></div>'
+          +'<div style="width:22px;height:22px;border-radius:50%;background:'+smallCol+';border:2px solid rgba(255,255,255,.2);margin:0 auto;box-shadow:'+(v?'0 0 12px '+smallCol:'none')+'"></div>'
+          +'</div>';
       });
       h+='</div>';
     }
@@ -1000,6 +1092,7 @@ function findInDB(name,rut){
   return DB_FULL.find(a=>{const dn=nrm(a.nombre);return dn===nn})||DB_FULL.find(a=>{const dn=nrm(a.nombre);return parts.length>=2&&parts.every(p=>dn.includes(p))})||null;
 }
 fetch('data.json').then(r=>r.json()).then(d=>{DB_FULL=d}).catch(()=>{});
+fetch('records.json').then(r=>r.json()).then(d=>{RECORDS=d}).catch(()=>console.warn('[FECHIPO] records.json no cargado'));
 fetch('nominas.json').then(r=>r.json()).then(n=>{DATA.events=n.events||[];if(!loaded)R()}).catch(()=>{});
 if(loaded){R()}
 else if(!DATA.events.length)R();

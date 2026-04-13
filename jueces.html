@@ -3,143 +3,297 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>YourLift - Panel de Jueces</title>
+<title>YourLift — Panel de Jueces</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0A1628;--card:#11223B;--border:#1E3A5F;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A}
-body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;-webkit-font-smoothing:antialiased;overflow:hidden}
-.pick{text-align:center;padding:20px}
-.pick h1{font-size:28px;letter-spacing:3px;margin-bottom:8px}
-.pick p{color:var(--muted);font-size:14px;margin-bottom:30px}
-.pick-btn{display:block;width:280px;margin:10px auto;padding:20px;border-radius:12px;border:2px solid var(--border);background:var(--card);color:var(--text);font-family:Oswald;font-size:20px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .2s}
-.pick-btn:hover{border-color:var(--accent);transform:scale(1.02)}
-.panel{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;width:100vw;gap:16px;padding:16px}
-.judge-title{font-size:18px;letter-spacing:3px;color:var(--muted)}
-.judge-pos{font-size:36px;font-weight:700;letter-spacing:4px;margin-bottom:8px}
-.athlete-info{font-size:16px;color:var(--muted);text-align:center;margin-bottom:12px;min-height:44px}
-.athlete-name{font-size:22px;color:#fff;font-weight:700}
-.athlete-weight{font-size:18px;color:#D4A843}
-.lights{display:grid;grid-template-columns:1fr 1fr;gap:16px;width:90%;max-width:400px}
-.light-btn{padding:0;border:4px solid rgba(255,255,255,.1);border-radius:20px;cursor:pointer;font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;transition:all .15s;height:120px;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;user-select:none}
-.light-btn:active{transform:scale(.95)}
-.light-btn.selected{border-width:6px;transform:scale(1.05);box-shadow:0 0 30px rgba(255,255,255,.2)}
-.l-white{background:linear-gradient(135deg,#f0f0f0,#d4d4d4);color:#111}
-.l-white.selected{border-color:#fff;box-shadow:0 0 40px rgba(255,255,255,.5)}
-.l-red{background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff}
-.l-red.selected{border-color:#fca5a5;box-shadow:0 0 40px rgba(239,68,68,.5)}
-.l-yellow{background:linear-gradient(135deg,#f59e0b,#d97706);color:#111}
-.l-yellow.selected{border-color:#fde68a;box-shadow:0 0 40px rgba(245,158,11,.5)}
-.l-blue{background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff}
-.l-blue.selected{border-color:#93c5fd;box-shadow:0 0 40px rgba(59,130,246,.5)}
-.status{text-align:center;padding:12px;border-radius:10px;font-size:14px;letter-spacing:1px;min-height:50px;display:flex;align-items:center;justify-content:center;width:90%;max-width:400px}
-.status.waiting{background:rgba(30,58,95,.5);color:var(--muted)}
-.status.sent{background:rgba(34,197,94,.15);color:#22c55e}
-.status.locked{background:rgba(212,168,67,.15);color:#D4A843}
-.reset-btn{padding:10px 24px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:12px;cursor:pointer;letter-spacing:1px}
-.reset-btn:hover{border-color:var(--accent);color:var(--text)}
-@media(max-width:400px){.light-btn{height:90px;font-size:14px;border-radius:14px}.judge-pos{font-size:28px}}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{--bg:#0A1628;--card:#0f1e35;--border:#1E3A5F;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A;--green:#22c55e;--gold:#D4A843}
+body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;align-items:center;justify-content:center;overflow:hidden;user-select:none}
+
+/* ── Screens ─────────────────────────────────────── */
+.screen{display:none;width:100%;height:100dvh;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:16px}
+.screen.active{display:flex}
+
+/* ── Pick screen ──────────────────────────────────── */
+.logo{font-size:28px;font-weight:700;letter-spacing:3px;text-align:center;margin-bottom:8px}
+.logo span{color:var(--accent)}
+.subtitle{font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px}
+.pick-btn{width:min(320px,88vw);padding:22px;border-radius:14px;border:2px solid var(--border);background:var(--card);color:var(--text);font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:3px;cursor:pointer;transition:border-color .15s,transform .1s;text-align:center}
+.pick-btn:active{transform:scale(.97)}
+.pick-btn.izq:hover{border-color:#3b82f6}
+.pick-btn.cen:hover{border-color:#f0f0f0}
+.pick-btn.der:hover{border-color:#3b82f6}
+
+/* ── Panel screen ─────────────────────────────────── */
+#panel{padding:16px;justify-content:space-between}
+.panel-header{width:100%;display:flex;justify-content:space-between;align-items:center}
+.pos-badge{font-size:13px;font-weight:700;letter-spacing:3px;padding:6px 14px;border-radius:8px;border:2px solid var(--border);color:var(--muted)}
+.fb-dot{width:8px;height:8px;border-radius:50%;background:#ef4444}
+.fb-dot.on{background:var(--green)}
+.athlete-info{text-align:center;flex:0}
+.ath-name{font-size:clamp(20px,5vw,32px);font-weight:700;letter-spacing:1px;line-height:1.1}
+.ath-meta{font-size:13px;color:var(--muted);margin-top:4px}
+.ath-weight{font-size:clamp(44px,12vw,72px);font-weight:700;color:var(--gold);letter-spacing:2px;line-height:1}
+.ath-lift{font-size:14px;color:var(--muted);letter-spacing:2px;margin-top:2px}
+
+/* ── Preview lights ───────────────────────────────── */
+.preview{display:flex;flex-direction:column;align-items:center;gap:8px}
+.preview-big{width:72px;height:72px;border-radius:50%;background:var(--border);border:4px solid var(--border);transition:all .2s}
+.preview-small{width:22px;height:22px;border-radius:50%;background:var(--border);border:3px solid var(--border);transition:all .2s}
+.preview-label{font-size:11px;color:var(--muted);letter-spacing:2px;margin-top:2px}
+
+/* ── Vote buttons ─────────────────────────────────── */
+.vote-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:360px}
+.vote-btn{padding:20px 12px;border-radius:16px;border:3px solid transparent;background:var(--card);font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;align-items:center;gap:6px}
+.vote-btn:active{transform:scale(.95)}
+.vote-btn .dot-big{width:36px;height:36px;border-radius:50%}
+.vote-btn .dot-small{width:12px;height:12px;border-radius:50%}
+
+.vote-btn.white-btn{border-color:#f0f0f0;color:#f0f0f0}
+.vote-btn.white-btn .dot-big{background:#f0f0f0}
+.vote-btn.white-btn .dot-small{background:#f0f0f0}
+.vote-btn.white-btn:active,.vote-btn.white-btn.selected{background:rgba(240,240,240,.12)}
+
+.vote-btn.red-btn{border-color:#ef4444;color:#ef4444}
+.vote-btn.red-btn .dot-big{background:#ef4444}
+.vote-btn.red-btn .dot-small{background:#ef4444}
+.vote-btn.red-btn:active,.vote-btn.red-btn.selected{background:rgba(239,68,68,.12)}
+
+.vote-btn.blue-btn{border-color:#3b82f6;color:#3b82f6}
+.vote-btn.blue-btn .dot-big{background:#ef4444}  /* big = red = no lift */
+.vote-btn.blue-btn .dot-small{background:#3b82f6}
+.vote-btn.blue-btn:active,.vote-btn.blue-btn.selected{background:rgba(59,130,246,.12)}
+
+.vote-btn.yellow-btn{border-color:#f59e0b;color:#f59e0b}
+.vote-btn.yellow-btn .dot-big{background:#ef4444}  /* big = red = no lift */
+.vote-btn.yellow-btn .dot-small{background:#f59e0b}
+.vote-btn.yellow-btn:active,.vote-btn.yellow-btn.selected{background:rgba(245,158,11,.12)}
+
+.vote-btn.selected{box-shadow:0 0 0 4px rgba(255,255,255,.15)}
+
+/* ── Action bar ───────────────────────────────────── */
+.action-bar{display:flex;gap:10px;width:100%;max-width:360px}
+.btn-timer{flex:2;padding:14px;border-radius:12px;border:2px solid var(--green);background:rgba(34,197,94,.1);color:var(--green);font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .15s}
+.btn-timer:active{transform:scale(.97);background:rgba(34,197,94,.2)}
+.btn-clear{flex:1;padding:14px;border-radius:12px;border:2px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:1px;cursor:pointer;transition:all .15s}
+.btn-clear:active{transform:scale(.97);border-color:var(--accent);color:var(--accent)}
+.btn-clear.has-vote{border-color:#ef4444;color:#ef4444}
 </style>
 </head>
 <body>
-<div id="app"></div>
+
+<!-- ══ PICK SCREEN ══════════════════════════════════════════ -->
+<div id="pick" class="screen active">
+  <div>
+    <div class="logo">YOUR<span>LIFT</span></div>
+    <div class="subtitle">Panel de Jueces</div>
+  </div>
+  <p style="font-size:13px;color:var(--muted)">Selecciona tu posición</p>
+  <button class="pick-btn izq" onclick="selectPos('izq')">◀ JUEZ IZQ</button>
+  <button class="pick-btn cen" onclick="selectPos('central')">● JUEZ CENTRAL</button>
+  <button class="pick-btn der" onclick="selectPos('der')">JUEZ DER ▶</button>
+</div>
+
+<!-- ══ PANEL SCREEN ═════════════════════════════════════════ -->
+<div id="panel" class="screen">
+
+  <!-- Header -->
+  <div class="panel-header">
+    <div class="pos-badge" id="posBadge">—</div>
+    <div style="text-align:center;font-size:11px;color:var(--muted)" id="liftBadge">—</div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted)">
+      <div class="fb-dot" id="fbDot"></div><span id="fbLabel">Conectando</span>
+    </div>
+  </div>
+
+  <!-- Athlete info -->
+  <div class="athlete-info">
+    <div class="ath-name" id="athName">Esperando…</div>
+    <div class="ath-meta" id="athMeta">—</div>
+    <div class="ath-weight" id="athWeight">—</div>
+    <div class="ath-lift" id="athLiftLabel">—</div>
+  </div>
+
+  <!-- Preview lights -->
+  <div class="preview">
+    <div class="preview-big" id="prevBig"></div>
+    <div class="preview-small" id="prevSmall"></div>
+    <div class="preview-label" id="prevLabel">SIN VOTO</div>
+  </div>
+
+  <!-- Vote buttons -->
+  <div class="vote-grid">
+    <button class="vote-btn white-btn" onclick="castVote('white')">
+      <div class="dot-big"></div>
+      <div class="dot-small"></div>
+      BLANCO
+    </button>
+    <button class="vote-btn red-btn" onclick="castVote('red')">
+      <div class="dot-big"></div>
+      <div class="dot-small"></div>
+      ROJO
+    </button>
+    <button class="vote-btn blue-btn" onclick="castVote('blue')">
+      <div class="dot-big" style="background:#ef4444"></div>
+      <div class="dot-small"></div>
+      AZUL
+    </button>
+    <button class="vote-btn yellow-btn" onclick="castVote('yellow')">
+      <div class="dot-big" style="background:#ef4444"></div>
+      <div class="dot-small"></div>
+      AMARILLO
+    </button>
+  </div>
+
+  <!-- Action bar: timer + limpiar -->
+  <div class="action-bar">
+    <button class="btn-timer" onclick="sendStartTimer()">▶ INICIAR TIMER</button>
+    <button class="btn-clear" id="btnClear" onclick="clearVote()">✕ LIMPIAR</button>
+  </div>
+
+</div>
+
 <script type="module">
-import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import{getFirestore,doc,setDoc,onSnapshot,getDoc}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-
+// ══ Firebase ═══════════════════════════════════════════════
 const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
-const app=initializeApp(FB_CFG);
-const db=getFirestore(app);
 
-let position=sessionStorage.getItem('judge_position')||'';
-let selected='';
-let status='waiting'; // waiting|sent|locked
-let athleteInfo={name:'',weight:0,lift:'',round:0};
-let judgeLocked=false;
+let fbDB=null,fbReady=false;
 
-function render(){
-  const el=document.getElementById('app');
-  if(!position){
-    el.innerHTML=`<div class="pick">
-      <img src="YourLift_logo.png" style="height:40px;margin-bottom:12px" onerror="this.style.display='none'">
-      <h1>PANEL DE JUECES</h1>
-      <p>Selecciona tu posición</p>
-      <button class="pick-btn" onclick="pickPos('izq')">⬅️ JUEZ IZQUIERDO</button>
-      <button class="pick-btn" onclick="pickPos('central')">⬆️ JUEZ CENTRAL</button>
-      <button class="pick-btn" onclick="pickPos('der')">➡️ JUEZ DERECHO</button>
-      <p style="margin-top:24px;font-size:11px"><a href="index.html" style="color:var(--muted);text-decoration:none">← Volver al sitio</a></p>
-    </div>`;
-    return;
-  }
-  const posLabel={izq:'IZQUIERDO',central:'CENTRAL',der:'DERECHO'}[position];
-  const statusHTML=status==='sent'?'<div class="status sent">✓ DECISIÓN ENVIADA</div>':
-    status==='locked'?'<div class="status locked">🔒 ESPERANDO SIGUIENTE ATLETA</div>':
-    '<div class="status waiting">ESPERANDO TU DECISIÓN</div>';
-  
-  el.innerHTML=`<div class="panel">
-    <div class="judge-title">JUEZ</div>
-    <div class="judge-pos">${posLabel}</div>
-    <div class="athlete-info">
-      ${athleteInfo.name?`<div class="athlete-name">${athleteInfo.name}</div><div class="athlete-weight">${athleteInfo.weight} kg · ${athleteInfo.lift} · Int ${athleteInfo.round+1}</div>`:'<span style="color:var(--muted)">Esperando atleta...</span>'}
-    </div>
-    <div class="lights">
-      <button class="light-btn l-white ${selected==='white'?'selected':''}" onclick="vote('white')" ${judgeLocked?'disabled':''}>BUENO</button>
-      <button class="light-btn l-red ${selected==='red'?'selected':''}" onclick="vote('red')" ${judgeLocked?'disabled':''}>NULO</button>
-      <button class="light-btn l-yellow ${selected==='yellow'?'selected':''}" onclick="vote('yellow')" ${judgeLocked?'disabled':''}>AMARILLA</button>
-      <button class="light-btn l-blue ${selected==='blue'?'selected':''}" onclick="vote('blue')" ${judgeLocked?'disabled':''}>AZUL</button>
-    </div>
-    ${statusHTML}
-    <button class="reset-btn" onclick="changePos()">Cambiar posición</button>
-  </div>`;
-}
-
-window.pickPos=function(pos){
-  position=pos;
-  sessionStorage.setItem('judge_position',pos);
-  startListener();
-  render();
-}
-
-window.changePos=function(){
-  position='';selected='';status='waiting';judgeLocked=false;
-  sessionStorage.removeItem('judge_position');
-  render();
-}
-
-window.vote=async function(color){
-  if(judgeLocked||!position)return;
-  selected=color;
-  status='sent';
-  judgeLocked=true;
-  render();
+(async()=>{
   try{
-    await setDoc(doc(db,'judge_decisions','current'),{
-      [position]:color,
-      [`${position}_ts`]:Date.now()
-    },{merge:true});
-  }catch(e){console.error('Vote error',e);status='waiting';judgeLocked=false;render()}
+    const{initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+    const fb=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const app=initializeApp(FB_CFG);
+    fbDB=fb.getFirestore(app);
+    window._fb=fb;
+    fbReady=true;
+    setFBStatus(true);
+    startAthleteListener();
+  }catch(e){
+    console.error('Firebase error',e);
+    setFBStatus(false);
+  }
+})();
+
+function setFBStatus(ok){
+  document.getElementById('fbDot').className='fb-dot'+(ok?' on':'');
+  document.getElementById('fbLabel').textContent=ok?'En vivo':'Sin conexión';
 }
 
-function startListener(){
-  // Listen for resets (new athlete) from livecast
-  onSnapshot(doc(db,'judge_decisions','current'),(snap)=>{
+// ══ State ══════════════════════════════════════════════════
+let myPos=null;     // 'izq' | 'central' | 'der'
+let myVote=null;    // 'white' | 'red' | 'blue' | 'yellow' | null
+const POS_LABEL={izq:'◀ JUEZ IZQ',central:'● CENTRAL',der:'JUEZ DER ▶'};
+const LIFT_LABEL={sq:'SQUAT',bp:'BENCH PRESS',dl:'DEADLIFT'};
+const VOTE_COLOR={white:'#f0f0f0',red:'#ef4444',blue:'#3b82f6',yellow:'#f59e0b'};
+
+// ══ Position selection ═════════════════════════════════════
+window.selectPos=function(pos){
+  myPos=pos;
+  document.getElementById('posBadge').textContent=POS_LABEL[pos];
+  document.getElementById('pick').classList.remove('active');
+  document.getElementById('panel').classList.add('active');
+};
+
+// ══ Athlete listener (shows current athlete from Firebase) ═
+function startAthleteListener(){
+  if(!fbReady)return;
+  // Listen to judge_decisions/current for athlete info
+  window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions','current'),(snap)=>{
     if(!snap.exists())return;
     const d=snap.data();
-    // If reset flag changed, unlock
-    if(d.reset_ts&&d.reset_ts>Date.now()-5000){
-      selected='';status='waiting';judgeLocked=false;
+    // If reset signal, clear local vote UI
+    if(d.reset_ts&&d.reset_ts>(_lastReset||0)){
+      _lastReset=d.reset_ts;
+      myVote=null;
+      updatePreview();
+      updateButtons();
     }
-    // Update athlete info
-    if(d.athlete_name!==undefined)athleteInfo.name=d.athlete_name;
-    if(d.athlete_weight!==undefined)athleteInfo.weight=d.athlete_weight;
-    if(d.athlete_lift!==undefined)athleteInfo.lift=d.athlete_lift;
-    if(d.athlete_round!==undefined)athleteInfo.round=d.athlete_round;
-    render();
+    if(d.athlete_name)document.getElementById('athName').textContent=d.athlete_name;
+    if(d.athlete_weight)document.getElementById('athWeight').textContent=d.athlete_weight+'  kg';
+    if(d.athlete_lift)document.getElementById('liftBadge').textContent=(LIFT_LABEL[d.athlete_lift]||d.athlete_lift)+' · Int.'+(d.athlete_round!=null?d.athlete_round+1:'—');
+    if(d.athlete_lift)document.getElementById('athLiftLabel').textContent=(LIFT_LABEL[d.athlete_lift]||d.athlete_lift)+' · Intento '+(d.athlete_round!=null?d.athlete_round+1:'—');
   });
 }
+let _lastReset=0;
 
-if(position)startListener();
-render();
+// ══ Vote ════════════════════════════════════════════════════
+window.castVote=async function(color){
+  if(!myPos){alert('Selecciona tu posición primero');return;}
+  myVote=color;
+  updatePreview();
+  updateButtons();
+  if(!fbReady){showPulse('Sin Firebase — voto solo local','#ef4444');return;}
+  try{
+    await window._fb.updateDoc(window._fb.doc(fbDB,'judge_decisions','current'),{[myPos]:color});
+    showPulse('Voto enviado','#22c55e');
+  }catch(e){
+    // Doc might not exist yet, create it
+    try{
+      await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions','current'),{izq:null,central:null,der:null,[myPos]:color,reset_ts:0,athlete_name:'',athlete_weight:0,athlete_lift:'',athlete_round:0});
+      showPulse('Voto enviado','#22c55e');
+    }catch(e2){showPulse('Error al enviar','#ef4444');console.error(e2);}
+  }
+};
+
+window.clearVote=async function(){
+  myVote=null;
+  updatePreview();
+  updateButtons();
+  if(!fbReady||!myPos)return;
+  try{
+    await window._fb.updateDoc(window._fb.doc(fbDB,'judge_decisions','current'),{[myPos]:null});
+    showPulse('Voto limpiado','#7A8FA6');
+  }catch(e){console.warn('Clear vote error',e);}
+};
+
+// ══ Timer signal ════════════════════════════════════════════
+window.sendStartTimer=async function(){
+  if(!fbReady){showPulse('Sin Firebase','#ef4444');return;}
+  try{
+    await window._fb.setDoc(window._fb.doc(fbDB,'timer_control','current'),{action:'start',ts:Date.now(),by:myPos||'judge'});
+    showPulse('Timer iniciado','#22c55e');
+  }catch(e){showPulse('Error','#ef4444');console.error(e);}
+};
+
+// ══ UI updates ══════════════════════════════════════════════
+function updatePreview(){
+  const bigEl=document.getElementById('prevBig');
+  const smallEl=document.getElementById('prevSmall');
+  const labelEl=document.getElementById('prevLabel');
+  if(!myVote){
+    bigEl.style.background='var(--border)';bigEl.style.borderColor='var(--border)';bigEl.style.boxShadow='none';
+    smallEl.style.background='var(--border)';smallEl.style.borderColor='var(--border)';smallEl.style.boxShadow='none';
+    labelEl.textContent='SIN VOTO';labelEl.style.color='var(--muted)';
+    return;
+  }
+  const bigCol=myVote==='white'?'#f0f0f0':'#ef4444';
+  const smallCol=VOTE_COLOR[myVote];
+  const bigGlow=myVote==='white'?'0 0 28px rgba(240,240,240,.7)':'0 0 28px rgba(239,68,68,.7)';
+  bigEl.style.background=bigCol;bigEl.style.borderColor=bigCol;bigEl.style.boxShadow=bigGlow;
+  smallEl.style.background=smallCol;smallEl.style.borderColor=smallCol;smallEl.style.boxShadow='0 0 10px '+smallCol;
+  const labels={white:'BUENO ✓',red:'NO LIFT ✗',blue:'NO LIFT ✗',yellow:'NO LIFT ✗'};
+  labelEl.textContent=labels[myVote];
+  labelEl.style.color=myVote==='white'?'#22c55e':'#ef4444';
+}
+
+function updateButtons(){
+  document.querySelectorAll('.vote-btn').forEach(b=>b.classList.remove('selected'));
+  if(myVote){
+    const map={white:'.white-btn',red:'.red-btn',blue:'.blue-btn',yellow:'.yellow-btn'};
+    const btn=document.querySelector(map[myVote]);
+    if(btn)btn.classList.add('selected');
+  }
+  const clearBtn=document.getElementById('btnClear');
+  if(myVote)clearBtn.classList.add('has-vote');
+  else clearBtn.classList.remove('has-vote');
+}
+
+function showPulse(msg,color){
+  const t=document.createElement('div');
+  t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0D1F38;border:1px solid '+color+';color:'+color+';padding:10px 20px;border-radius:10px;z-index:9999;font-size:13px;letter-spacing:1px;font-family:Oswald;font-weight:700';
+  t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2000);
+}
 </script>
 </body>
 </html>
