@@ -546,28 +546,217 @@ function render(){
 }
 
 function renderDashboard(){
-  const totalAthletes=ST.data.length;
-  const totalInsc=ST.inscripciones.length;
-  const pending=ST.inscripciones.filter(i=>i.status==='pending').length;
-  const events=[...new Set(ST.inscripciones.map(i=>i.evento))].length;
-  return `
-    <div class="h1">Dashboard</div>
-    <p class="subtitle">Panel de control general</p>
-    <div class="stat-grid">
-      <div class="stat"><div class="v" style="color:var(--blue)">${totalAthletes}</div><div class="l">Atletas DB</div></div>
-      <div class="stat"><div class="v" style="color:var(--green)">${totalInsc}</div><div class="l">Inscripciones</div></div>
-      <div class="stat"><div class="v" style="color:var(--gold)">${pending}</div><div class="l">Pendientes</div></div>
-      <div class="stat"><div class="v" style="color:var(--accent)">${events}</div><div class="l">Eventos</div></div>
+  const D=ST.data,I=ST.inscripciones;
+  // ── BASIC COUNTS ──
+  const totalAthletes=D.length;
+  const withComp=D.filter(a=>a.competencias?.length>0).length;
+  const withPR=D.filter(a=>a.bestLifts?.total).length;
+  const totalInsc=I.length;
+  const pending=I.filter(i=>i.status==='pending').length;
+  const approved=I.filter(i=>i.status==='approved').length;
+  const rejected=I.filter(i=>i.status==='rejected').length;
+  const fbEvents=[...new Set(I.map(i=>i.evento))].filter(Boolean);
+  const allEvents=[...new Set(D.flatMap(a=>(a.competencias||[]).map(c=>c.evento)))];
+  const clubs=[...new Set(D.map(a=>a.club).filter(Boolean))];
+
+  // ── GENDER ──
+  const sexCount={M:0,F:0,unknown:0};
+  D.forEach(a=>{
+    let sex='';
+    (a.competencias||[]).forEach(c=>{if(c.sexo)sex=c.sexo});
+    if(!sex){const ins=I.find(i=>i.nombre===a.nombre);if(ins)sex=ins.sexo||''}
+    if(sex==='Hombre'||sex==='Masculino'||sex==='M')sexCount.M++;
+    else if(sex==='Mujer'||sex==='Femenino'||sex==='F')sexCount.F++;
+    else sexCount.unknown++;
+  });
+  const totalKnown=sexCount.M+sexCount.F||1;
+  const pctF=Math.round(sexCount.F/totalKnown*100);
+
+  // ── DEBUTS BY YEAR (growth) ──
+  const debutYears={};
+  D.forEach(a=>{
+    const deb=String(a.debut||'').match(/20\d\d/);
+    if(deb)debutYears[deb[0]]=(debutYears[deb[0]]||0)+1;
+  });
+  const yearKeys=Object.keys(debutYears).sort();
+  const maxDebut=Math.max(...Object.values(debutYears),1);
+  const growth2025=debutYears['2025']||0;
+  const growth2024=debutYears['2024']||0;
+  const growthPct=growth2024?Math.round((growth2025-growth2024)/growth2024*100):0;
+
+  // ── RETENTION ──
+  const athletes2024=new Set();const athletes2025=new Set();const athletes2026=new Set();
+  D.forEach(a=>{(a.competencias||[]).forEach(c=>{
+    const yr=(c.evento.match(/20\d\d/)||[])[0];
+    if(yr==='2024')athletes2024.add(a.codigo);
+    if(yr==='2025')athletes2025.add(a.codigo);
+    if(yr==='2026')athletes2026.add(a.codigo);
+  })});
+  const retained25=[...athletes2024].filter(c=>athletes2025.has(c)).length;
+  const retentionRate=athletes2024.size?Math.round(retained25/athletes2024.size*100):0;
+  const retained26=[...athletes2025].filter(c=>athletes2026.has(c)).length;
+  const retentionRate26=athletes2025.size?Math.round(retained26/athletes2025.size*100):0;
+
+  // ── ACTIVE (competed in last 12 months) ──
+  const active2025=athletes2025.size+athletes2026.size;
+  const inactive=totalAthletes-active2025;
+
+  // ── AVG COMPETITIONS PER ATHLETE ──
+  const totalComps=D.reduce((s,a)=>s+(a.competencias?.length||0),0);
+  const avgComps=(withComp?totalComps/withComp:0).toFixed(1);
+
+  // ── CLUB CONCENTRATION ──
+  const clubCounts={};D.forEach(a=>{if(a.club)clubCounts[a.club]=(clubCounts[a.club]||0)+1});
+  const clubSorted=Object.entries(clubCounts).sort((a,b)=>b[1]-a[1]);
+  const top5Sum=clubSorted.slice(0,5).reduce((s,c)=>s+c[1],0);
+  const concPct=totalAthletes?Math.round(top5Sum/totalAthletes*100):0;
+
+  // ── DIVISION DISTRIBUTION ──
+  const divCounts={};
+  D.forEach(a=>{(a.competencias||[]).forEach(c=>{if(c.division){divCounts[c.division]=(divCounts[c.division]||0)+1}})});
+  const divSorted=Object.entries(divCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const maxDiv=divSorted.length?divSorted[0][1]:1;
+
+  // ── INSCRIPTIONS SPEED (pending > 48h) ──
+  const now=Date.now();
+  const stale=I.filter(i=>{
+    if(i.status!=='pending')return false;
+    const ts=i.timestamp?.seconds?i.timestamp.seconds*1000:(i.timestamp||now);
+    return now-ts>48*3600000;
+  }).length;
+
+  // ── BOMB OUT RATE (from data.json results) ──
+  let totalResults=0,bombOuts=0;
+  D.forEach(a=>{(a.competencias||[]).forEach(c=>{
+    if(c.resultado&&c.resultado.total!==undefined){totalResults++;if(c.resultado.total===0)bombOuts++}
+  })});
+  const bombRate=totalResults?((bombOuts/totalResults)*100).toFixed(1):'0';
+
+  // ── PR RATE (athletes who improved in Nacional 2026) ──
+  let prCount=0,nacCount=0;
+  D.forEach(a=>{
+    const nac=(a.competencias||[]).find(c=>c.evento==='Campeonato Nacional FECHIPO 2026');
+    if(!nac||!nac.resultado||!nac.resultado.total)return;
+    nacCount++;
+    const prev=(a.competencias||[]).filter(c=>c.evento!=='Campeonato Nacional FECHIPO 2026'&&c.resultado&&c.resultado.total>0);
+    if(!prev.length){prCount++;return}
+    const bestPrev=Math.max(...prev.map(c=>c.resultado.total));
+    if(nac.resultado.total>bestPrev)prCount++;
+  });
+  const prRate=nacCount?Math.round(prCount/nacCount*100):0;
+
+  // ── BUILD HTML ──
+  let h=`<div class="h1">Dashboard KPI</div><p class="subtitle">Indicadores auto-calculados desde data.json (${D.length} atletas) + Firebase (${I.length} inscripciones)</p>`;
+
+  // Row 1: Main stats
+  h+=`<div class="stat-grid" style="grid-template-columns:repeat(6,1fr)">
+    <div class="stat"><div class="v" style="color:var(--blue)">${totalAthletes}</div><div class="l">Atletas DB</div></div>
+    <div class="stat"><div class="v" style="color:var(--green)">${withComp}</div><div class="l">Con Competencias</div></div>
+    <div class="stat"><div class="v" style="color:var(--gold)">${withPR}</div><div class="l">Con PRs</div></div>
+    <div class="stat"><div class="v" style="color:var(--accent)">${allEvents.length}</div><div class="l">Eventos Históricos</div></div>
+    <div class="stat"><div class="v" style="color:var(--blue)">${clubs.length}</div><div class="l">Clubes</div></div>
+    <div class="stat"><div class="v" style="color:var(--green)">${avgComps}</div><div class="l">Prom. Comp/Atleta</div></div>
+  </div>`;
+
+  // Row 2: Operacional
+  h+=`<div class="stat-grid" style="grid-template-columns:repeat(5,1fr)">
+    <div class="stat"><div class="v" style="color:var(--green)">${approved}</div><div class="l">Aprobados</div></div>
+    <div class="stat"><div class="v" style="color:${pending>0?'var(--gold)':'var(--muted)'}">${pending}</div><div class="l">Pendientes</div></div>
+    <div class="stat"><div class="v" style="color:${stale>0?'var(--red)':'var(--green)'}">${stale}</div><div class="l">Pendientes +48h</div></div>
+    <div class="stat"><div class="v" style="color:var(--red)">${rejected}</div><div class="l">Rechazados</div></div>
+    <div class="stat"><div class="v" style="color:var(--blue)">${fbEvents.length}</div><div class="l">Eventos Firebase</div></div>
+  </div>`;
+
+  // Cards row
+  h+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">`;
+
+  // Card: Gender
+  h+=`<div class="card"><div class="h2">Género</div>
+    <div style="display:flex;gap:16px;align-items:center">
+      <div style="position:relative;width:80px;height:80px;flex-shrink:0">
+        <svg viewBox="0 0 36 36" style="width:80px;height:80px;transform:rotate(-90deg)">
+          <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(30,91,168,.2)" stroke-width="3"/>
+          <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--blue)" stroke-width="3" stroke-dasharray="${100-pctF} ${pctF}" stroke-linecap="round"/>
+          <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--accent)" stroke-width="3" stroke-dasharray="${pctF} ${100-pctF}" stroke-dashoffset="-${100-pctF}" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div><div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span style="width:10px;height:10px;background:var(--blue);border-radius:50%;display:inline-block"></span><span style="font-size:12px">Hombres: <strong>${sexCount.M}</strong> (${100-pctF}%)</span></div>
+      <div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:var(--accent);border-radius:50%;display:inline-block"></span><span style="font-size:12px">Mujeres: <strong>${sexCount.F}</strong> (${pctF}%)</span></div>
+      ${sexCount.unknown?`<div style="font-size:10px;color:var(--muted);margin-top:4px">${sexCount.unknown} sin dato</div>`:''}</div>
+    </div></div>`;
+
+  // Card: Retention
+  h+=`<div class="card"><div class="h2">Retención</div>
+    <div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span>2024→2025</span><span style="font-weight:700;color:${retentionRate>=50?'var(--green)':'var(--red)'}">${retentionRate}%</span></div>
+    <div style="background:var(--bg);border-radius:4px;height:8px;overflow:hidden"><div style="background:${retentionRate>=50?'var(--green)':'var(--red)'};height:100%;width:${retentionRate}%;border-radius:4px"></div></div>
+    <div style="font-size:10px;color:var(--muted);margin-top:2px">${retained25} de ${athletes2024.size} volvieron</div></div>
+    <div><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span>2025→2026</span><span style="font-weight:700;color:${retentionRate26>=50?'var(--green)':'var(--orange)'}">${retentionRate26}%</span></div>
+    <div style="background:var(--bg);border-radius:4px;height:8px;overflow:hidden"><div style="background:${retentionRate26>=50?'var(--green)':'var(--orange)'};height:100%;width:${retentionRate26}%;border-radius:4px"></div></div>
+    <div style="font-size:10px;color:var(--muted);margin-top:2px">${retained26} de ${athletes2025.size} activos</div></div></div>`;
+
+  // Card: Performance
+  h+=`<div class="card"><div class="h2">Rendimiento</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg);border-radius:8px"><span style="font-size:12px">Bomb Out Rate</span><span class="os" style="font-size:18px;color:${parseFloat(bombRate)>10?'var(--red)':'var(--green)'}">${bombRate}%</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg);border-radius:8px"><span style="font-size:12px">PR Rate (Nacional 2026)</span><span class="os" style="font-size:18px;color:var(--gold)">${prRate}%</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg);border-radius:8px"><span style="font-size:12px">Atletas activos (12m)</span><span class="os" style="font-size:18px;color:var(--green)">${active2025}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg);border-radius:8px"><span style="font-size:12px">Inactivos</span><span class="os" style="font-size:18px;color:var(--muted)">${inactive}</span></div>
+    </div></div>`;
+  h+=`</div>`;
+
+  // Row: Growth chart + Club concentration
+  h+=`<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">`;
+
+  // Growth chart (bar chart)
+  h+=`<div class="card"><div class="h2">Crecimiento por año (nuevos atletas)</div>
+    <div style="display:flex;align-items:flex-end;gap:6px;height:120px;padding-top:8px">
+    ${yearKeys.filter(y=>parseInt(y)>=2017).map(y=>{
+      const v=debutYears[y];const pct=Math.round(v/maxDebut*100);
+      const isThisYear=y==='2025'||y==='2026';
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+        <span style="font-family:Oswald;font-size:11px;color:${isThisYear?'var(--gold)':'var(--muted)'};font-weight:700">${v}</span>
+        <div style="width:100%;background:${isThisYear?'var(--gold)':'var(--blue)'};height:${pct}%;min-height:4px;border-radius:4px 4px 0 0;transition:height .3s"></div>
+        <span style="font-size:9px;color:var(--muted);font-family:Oswald">${y.slice(2)}</span>
+      </div>`;
+    }).join('')}
     </div>
-    <div class="card">
-      <div class="h2">Actividad reciente</div>
-      ${ST.auditLog.length===0?'<div class="empty">Sin actividad registrada</div>':
-        '<table class="tbl"><tr><th>Hora</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr>'+
-        ST.auditLog.slice(0,10).map(l=>{
-          const d=new Date(l.ts);
-          return `<tr><td style="font-size:10px;color:var(--muted)">${d.toLocaleString('es-CL')}</td><td style="font-size:11px">${l.user||''}</td><td><span class="tag b-b">${l.action}</span></td><td style="font-size:11px">${l.target||''}<br><span style="color:var(--muted);font-size:10px">${l.oldValue||''} → ${l.newValue||''}</span></td></tr>`;
-        }).join('')+'</table>'}
-    </div>`;
+    <div style="margin-top:10px;font-size:11px;color:var(--muted)">Crecimiento 2024→2025: <span style="color:${growthPct>=0?'var(--green)':'var(--red)'}; font-weight:700">${growthPct>=0?'+':''}${growthPct}%</span> (${growth2024}→${growth2025})</div></div>`;
+
+  // Club concentration
+  h+=`<div class="card"><div class="h2">Top Clubes</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Concentración top 5: <span style="font-weight:700;color:${concPct>70?'var(--orange)':'var(--green)'}">${concPct}%</span></div>
+    ${clubSorted.slice(0,8).map(([c,n],i)=>{
+      const pct=Math.round(n/totalAthletes*100);
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="font-size:10px;color:var(--muted);width:16px;font-family:Oswald">${i+1}</span>
+        <div style="flex:1"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px"><span>${c}</span><span style="color:var(--muted)">${n} (${pct}%)</span></div>
+        <div style="background:var(--bg);border-radius:3px;height:5px;overflow:hidden"><div style="background:var(--blue);height:100%;width:${pct*3}%;border-radius:3px"></div></div></div></div>`;
+    }).join('')}</div>`;
+  h+=`</div>`;
+
+  // Division distribution
+  h+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">`;
+  h+=`<div class="card"><div class="h2">Distribución por División</div>
+    ${divSorted.map(([d,n])=>{
+      const pct=Math.round(n/maxDiv*100);
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:11px;min-width:80px">${d}</span>
+        <div style="flex:1;background:var(--bg);border-radius:3px;height:8px;overflow:hidden"><div style="background:var(--accent);height:100%;width:${pct}%;border-radius:3px"></div></div>
+        <span style="font-size:11px;color:var(--muted);font-family:Oswald;min-width:30px">${n}</span></div>`;
+    }).join('')}</div>`;
+
+  // Audit log
+  h+=`<div class="card"><div class="h2">Actividad reciente</div>
+    ${ST.auditLog.length===0?'<div class="empty">Sin actividad registrada</div>':
+      '<table class="tbl"><tr><th>Hora</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr>'+
+      ST.auditLog.slice(0,8).map(l=>{
+        const dt=new Date(l.ts);
+        return `<tr><td style="font-size:10px;color:var(--muted)">${dt.toLocaleString('es-CL')}</td><td style="font-size:11px">${(l.user||'').split('@')[0]}</td><td><span class="tag b-b">${l.action}</span></td><td style="font-size:10px">${l.target||''} <span style="color:var(--muted)">${l.oldValue||''} → ${l.newValue||''}</span></td></tr>`;
+      }).join('')+'</table>'}
+  </div>`;
+  h+=`</div>`;
+
+  return h;
 }
 
 function renderAthletes(){
