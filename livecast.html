@@ -442,6 +442,16 @@ async function resetJudgeLights(){
 }
 // Update judge info when timer starts
 
+function overrideResult(id,l,r,res){
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  // Toggle: clicking same result clears it
+  a.att[l][r].r=(a.att[l][r].r===res)?null:res;
+  // Recalculate bomb-out: bombed only if ALL 3 attempts are 'n'
+  a.bombed=a.att.sq.every(x=>x.r==='n')&&a.att.bp.every(x=>x.r==='n')&&a.att.dl.every(x=>x.r==='n');
+  // Lighter bomb-out: if all attempts of a single lift are 'n' → bombed
+  a.bombed=a.att.sq.every(x=>x.r==='n')||a.att.bp.every(x=>x.r==='n')||a.att.dl.every(x=>x.r==='n');
+  saveNow();R();
+}
 function updA(id,k,v){const a=DATA.athletes.find(x=>x.id===id);if(!a)return;if(k==='bw')a.bw=parseFloat(v)||0;else a[k]=v;save()}
 function newComp(){localStorage.removeItem(SAVE_KEY);if(fbUnsub){fbUnsub();fbUnsub=null}DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};R()}
 
@@ -546,7 +556,7 @@ function renderManage(){
   const ath=DATA.athletes;let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px">'+(DATA.lotsGenerated?'<span style="font-size:10px;color:var(--green);padding:6px 10px;border:1px solid var(--green);border-radius:6px">✓ Lotes generados</span>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="sortByFlight()">Ordenar por Vuelo ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th><th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:38px">VLO</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:56px">BW</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:48px">RkSQ</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:48px">RkBP</th>';
-  ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:54px">'+LIFT_S[l]+r+'</th>'})});
+  ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:62px">'+LIFT_S[l]+r+'</th>'})});
   h+='</tr></thead><tbody>';
   ath.forEach(a=>{
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3);'+(a.bombed?'opacity:.4':'')+'">';
@@ -562,7 +572,14 @@ function renderManage(){
       if(ct&&!ct.expired&&ct.remaining>0){cls='inp-sm countdown';ph=ct.remaining+'s'}
       else if(ct&&ct.expired&&!at.w){cls='inp-sm expired';ph='\u23F0'}
       const bc=at.r==='g'?'var(--green)':at.r==='n'?'var(--red)':at.w>0?LIFT_C[l]:'var(--border)';
-      h+='<td style="padding:3px 2px"><input type="number" step="2.5" class="'+cls+'" id="ct_'+ctKey+'" value="'+(at.w||'')+'" placeholder="'+ph+'" onchange="setAtt('+a.id+',\''+l+'\','+r+',this.value)" style="border-color:'+bc+';'+(at.r==='n'?'text-decoration:line-through':'')+'"></td>';
+      const gActive=at.r==='g';const nActive=at.r==='n';
+      h+='<td style="padding:2px">'
+        +'<input type="number" step="2.5" class="'+cls+'" id="ct_'+ctKey+'" value="'+(at.w||'')+'" placeholder="'+ph+'" onchange="setAtt('+a.id+',\''+l+'\','+r+',this.value)" style="border-color:'+bc+';'+(at.r==='n'?'text-decoration:line-through':'')+';width:100%;margin-bottom:2px">'
+        +'<div style="display:flex;gap:2px">'
+        +'<button onclick="overrideResult('+a.id+',\''+l+'\','+r+',\'g\')" title="Marcar v\u00e1lido" style="flex:1;padding:2px 0;border-radius:3px;border:1px solid '+(gActive?'var(--green)':'rgba(34,197,94,.3)')+';background:'+(gActive?'rgba(34,197,94,.2)':'transparent')+';color:'+(gActive?'var(--green)':'rgba(34,197,94,.5)')+';font-size:9px;font-weight:700;cursor:pointer;line-height:1">\u2713</button>'
+        +'<button onclick="overrideResult('+a.id+',\''+l+'\','+r+',\'n\')" title="Marcar nulo" style="flex:1;padding:2px 0;border-radius:3px;border:1px solid '+(nActive?'var(--red)':'rgba(239,68,68,.3)')+';background:'+(nActive?'rgba(239,68,68,.2)':'transparent')+';color:'+(nActive?'var(--red)':'rgba(239,68,68,.5)')+';font-size:9px;font-weight:700;cursor:pointer;line-height:1">\u2717</button>'
+        +'</div>'
+        +'</td>';
     })});
     h+='</tr>';
   });
