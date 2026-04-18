@@ -98,14 +98,35 @@ window.ST=ST;
 // ═══════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════
+// Fallback: if Firebase auth never fires (import error, timeout), show login
+setTimeout(()=>{
+  const app=document.getElementById('app');
+  if(app&&app.innerHTML.includes('Cargando')){ST.user=null;render();}
+},6000);
+
 onAuthStateChanged(auth,async(u)=>{
   if(!u){ST.user=null;ST.adminInfo=null;render();return}
   try{
     const adminDoc=await getDoc(doc(db,'admins',u.uid));
     if(!adminDoc.exists()){
+      // First-time setup: if NO admins exist at all, allow this user to become admin
+      const allAdmins=await getDocs(collection(db,'admins'));
+      if(allAdmins.empty){
+        // Bootstrap: create admin document for this first user
+        await setDoc(doc(db,'admins',u.uid),{
+          email:u.email,uid:u.uid,role:'superadmin',
+          createdAt:new Date().toISOString(),bootstrap:true
+        });
+        ST.user=u;
+        ST.adminInfo={email:u.email,role:'superadmin'};
+        sessionStorage.setItem('fechipo_admin_session','1');
+        await loadAll();
+        render();
+        return;
+      }
       await signOut(auth);
       ST.user=null;ST.adminInfo=null;
-      alert('Acceso denegado: tu cuenta no está autorizada como admin.\nContacta al super admin para que agregue tu UID a la colección admins/');
+      alert('Acceso denegado: tu cuenta no está autorizada.\nUID: '+u.uid+'\nContacta al super admin para agregar tu UID a la colección admins/');
       render();return;
     }
     ST.user=u;
@@ -113,7 +134,12 @@ onAuthStateChanged(auth,async(u)=>{
     sessionStorage.setItem('fechipo_admin_session','1');
     await loadAll();
     render();
-  }catch(e){console.error('Auth error',e);alert('Error verificando admin: '+e.message)}
+  }catch(e){
+    console.error('Auth error',e);
+    ST.user=null;
+    render();
+    alert('Error de conexión: '+e.message+'\nVerifica las Firestore Rules y que exista la colección admins/');
+  }
 });
 
 window.doLogin=async function(){
@@ -577,7 +603,7 @@ function render(){
     </div>`;
   
   let content='';
-  if(ST.view==='dashboard')content=renderDashboard();
+  if(ST.view==='dashboard'){try{content=renderDashboard();}catch(e){console.error('Dashboard error:',e);content='<div class="h1">Dashboard</div><div class="card" style="color:var(--red)">Error al cargar el dashboard: '+e.message+'<br><small>Revisa la consola del navegador (F12) para más detalles.</small></div>';}}
   else if(ST.view==='athletes')content=renderAthletes();
   else if(ST.view==='nominas')content=renderNominas();
   else if(ST.view==='approvals')content=renderApprovals();
