@@ -79,8 +79,32 @@ input,select,button,textarea{font-family:inherit;outline:none}
 </style>
 </head>
 <body>
-<div id="app"><div class="login"><div class="login-c"><div class="spinner"></div><p style="text-align:center">Cargando...</p></div></div></div>
+<div id="app"><div class="login"><div class="login-c"><div class="spinner"></div><p style="text-align:center" id="loadingMsg">Cargando...</p><p id="loadingBtn" style="text-align:center;margin-top:12px;display:none"><button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #C41E3A;background:transparent;color:#C41E3A;cursor:pointer;font-size:13px">↻ Reintentar</button></p></div></div></div>
 
+<script>
+(function(){
+  setTimeout(function(){
+    var msg = document.getElementById('loadingMsg');
+    var btn = document.getElementById('loadingBtn');
+    if(msg && msg.textContent === 'Cargando...'){
+      msg.textContent = 'Verificando sesión...';
+    }
+    if(btn) btn.style.display = 'block';
+  }, 5000);
+
+  setTimeout(function(){
+    var app = document.getElementById('app');
+    if(app && app.innerHTML.indexOf('Cargando') !== -1){
+      app.innerHTML = '<div style="text-align:center;padding:60px;color:#C41E3A;font-family:Oswald">'
+        + '<div style="font-size:32px;margin-bottom:12px">⚠️</div>'
+        + '<div style="font-size:18px;letter-spacing:1px;margin-bottom:8px">Error al cargar</div>'
+        + '<div style="font-size:13px;color:#7A8FA6;margin-bottom:20px">Prueba limpiar el caché del navegador (Ctrl+Shift+R).</div>'
+        + '<button onclick="location.reload()" style="padding:10px 24px;border-radius:8px;border:none;background:#C41E3A;color:#fff;font-family:Oswald;font-size:14px;cursor:pointer">↻ Recargar</button>'
+        + '</div>';
+    }
+  }, 12000);
+})();
+</script>
 <script type="module">
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged,createUserWithEmailAndPassword} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
@@ -1650,15 +1674,5 @@ window.refreshAdmins = async function(){
 
 </script>
 </body>
-</html>// Safety net: show login if auth doesn't fire in 8s
-let _authFired=false;
-setTimeout(()=>{
-  if(!_authFired){
-    console.warn('[admin] Auth timeout — forcing login screen');
-    const app=document.getElementById('app');
-    if(app)app.innerHTML='';
-    ST.user=null;render();
-  }
-},8000);
-
+</html>let _authFired=false;
 
