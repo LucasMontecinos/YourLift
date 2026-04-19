@@ -99,47 +99,32 @@ window.ST=ST;
 // ═══════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════
-// Fallback: if Firebase auth never fires (import error, timeout), show login
+
+// Safety net — always show something after 5s
 setTimeout(()=>{
   const app=document.getElementById('app');
-  if(app&&app.innerHTML.includes('Cargando')){ST.user=null;render();}
-},6000);
+  if(app&&(app.innerHTML.includes('Cargando')||app.innerHTML.trim()===''))
+    {ST.user=null;render();}
+},5000);
 
-onAuthStateChanged(auth,async(u)=>{
+onAuthStateChanged(auth,async(u)=>{_authFired=true;
   if(!u){ST.user=null;ST.adminInfo=null;render();return}
   try{
     const adminDoc=await getDoc(doc(db,'admins',u.uid));
     if(!adminDoc.exists()){
-      // First-time setup: if NO admins exist at all, allow this user to become admin
-      const allAdmins=await getDocs(collection(db,'admins'));
-      if(allAdmins.empty){
-        // Bootstrap: create admin document for this first user
-        await setDoc(doc(db,'admins',u.uid),{
-          email:u.email,uid:u.uid,role:'superadmin',
-          createdAt:new Date().toISOString(),bootstrap:true
-        });
-        ST.user=u;
-        ST.adminInfo={email:u.email,role:'superadmin'};
-        sessionStorage.setItem('fechipo_admin_session','1');
-        await loadAll();
-        render();
-        return;
-      }
       await signOut(auth);
       ST.user=null;ST.adminInfo=null;
-      alert('Acceso denegado: tu cuenta no está autorizada.\nUID: '+u.uid+'\nContacta al super admin para agregar tu UID a la colección admins/');
+      alert('Acceso denegado.\nUID: '+u.uid+'\n\nAgrega este UID a Firestore → admins/'+u.uid+' con campo role:"superadmin"');
       render();return;
     }
     ST.user=u;
     ST.adminInfo=adminDoc.data();
     sessionStorage.setItem('fechipo_admin_session','1');
-    await loadAll();
-    render();
+    loadAll(); // intentional: no await — render() called inside
   }catch(e){
     console.error('Auth error',e);
     ST.user=null;
     render();
-    alert('Error de conexión: '+e.message+'\nVerifica las Firestore Rules y que exista la colección admins/');
   }
 });
 
@@ -169,59 +154,78 @@ window.doLogout=async function(){
 // DATA LOADING
 // ═══════════════════════════════════════════
 async function loadAll(){
+  // Load data.json — non-blocking, dashboard degrades gracefully if missing
   try{
     const [dRes,nRes]=await Promise.all([
-      fetch('data.json').then(r=>r.json()),
+      fetch('data.json').then(r=>r.json()).catch(()=>[]),
       fetch('nominas.json').then(r=>r.json()).catch(()=>({events:[]}))
     ]);
-    ST.data=dRes;
-    ST.nominas=nRes;
-    
-    // Load athlete_edits and apply
+    ST.data=Array.isArray(dRes)?dRes:[];
+    ST.nominas=nRes||{events:[]};
+  }catch(e){
+    console.warn('[loadAll] JSON fetch failed:',e.message);
+    ST.data=ST.data||[];
+    ST.nominas=ST.nominas||{events:[]};
+  }
+
+  // Apply athlete_edits non-blocking
+  try{
     const editsSnap=await getDocs(collection(db,'athlete_edits'));
     editsSnap.forEach(d=>{
       const ed=d.data();
-      const a=ST.data.find(x=>x.codigo===ed.codigo);
+      const a=(ST.data||[]).find(x=>x.codigo===ed.codigo);
       if(a){
         if(ed.nombre)a.nombre=ed.nombre;
         if(ed.club!==undefined)a.club=ed.club;
         if(ed.debut!==undefined)a.debut=ed.debut;
       }
     });
-    
-    // Load inscripciones
-    const inscSnap=await getDocs(query(collection(db,'inscripciones'),orderBy('timestamp','desc')));
+  }catch(e){console.warn('[loadAll] athlete_edits:',e.message);}
+
+  // Load inscripciones — no orderBy to avoid index requirement
+  try{
+    const inscSnap=await getDocs(collection(db,'inscripciones'));
     ST.inscripciones=[];
     inscSnap.forEach(d=>ST.inscripciones.push({id:d.id,...d.data()}));
-    
-    // Real-time listener for inscripciones
-    if(!window._inscListener){
+    ST.inscripciones.sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0));
+  }catch(e){console.warn('[loadAll] inscripciones:',e.message);ST.inscripciones=[];}
+
+  // Real-time listeners (non-blocking, set up once)
+  if(!window._inscListener){
+    try{
       window._inscListener=onSnapshot(collection(db,'inscripciones'),(snap)=>{
-        ST.inscripciones=[];
-        snap.forEach(d=>ST.inscripciones.push({id:d.id,...d.data()}));
+        ST.inscripciones=snap.docs.map(d=>({id:d.id,...d.data()}))
+          .sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0));
         if(ST.view==='nominas'||ST.view==='dashboard'||ST.view==='approvals')render();
-      });
-    }
-    // Real-time listener for eventos
-    if(!window._eventosListener){
+      },(e)=>console.warn('[listener] inscripciones:',e.message));
+    }catch(e){console.warn('[loadAll] insc listener:',e.message);}
+  }
+  if(!window._eventosListener){
+    try{
       window._eventosListener=onSnapshot(collection(db,'eventos'),(snap)=>{
         ST.eventos=snap.docs.map(d=>({...d.data(),id:d.id}))
           .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-        if(ST.view==='campeonatos')render();
-      });
-    }
-    
-    // Load audit log (last 100)
-    try{
-      const logSnap=await getDocs(query(collection(db,'audit_log'),orderBy('ts','desc'),limit(100)));
-      ST.auditLog=[];
-      logSnap.forEach(d=>ST.auditLog.push({id:d.id,...d.data()}));
-    }catch(e){console.warn('No audit log access',e)}
-    
-    // Auto-close overdue nominations (non-blocking)
-    setTimeout(()=>autoCloseOverdueEventos(),2000);
-    
-  }catch(e){console.error('Load error',e);alert('Error cargando datos: '+e.message)}
+        if(ST.view==='campeonatos'||ST.view==='dashboard')render();
+      },(e)=>console.warn('[listener] eventos:',e.message));
+    }catch(e){console.warn('[loadAll] eventos listener:',e.message);}
+  }
+
+  // Load eventos snapshot for campeonatos view
+  try{
+    const evSnap=await getDocs(collection(db,'eventos'));
+    ST.eventos=evSnap.docs.map(d=>({...d.data(),id:d.id}))
+      .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  }catch(e){console.warn('[loadAll] eventos:',e.message);ST.eventos=[];}
+
+  // Audit log — non-blocking, no ordering (avoids index requirement)
+  try{
+    const logSnap=await getDocs(collection(db,'audit_log'));
+    ST.auditLog=logSnap.docs.map(d=>({id:d.id,...d.data()}))
+      .sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,100);
+  }catch(e){console.warn('[loadAll] audit_log:',e.message);ST.auditLog=[];}
+
+  // Auto-close overdue nominations (non-blocking)
+  setTimeout(()=>{try{autoCloseOverdueEventos();}catch(e){}},3000);
 }
 
 // ═══════════════════════════════════════════
@@ -1647,4 +1651,15 @@ window.refreshAdmins = async function(){
 
 </script>
 </body>
-</html>
+</html>// Safety net: show login if auth doesn't fire in 8s
+let _authFired=false;
+setTimeout(()=>{
+  if(!_authFired){
+    console.warn('[admin] Auth timeout — forcing login screen');
+    const app=document.getElementById('app');
+    if(app)app.innerHTML='';
+    ST.user=null;render();
+  }
+},8000);
+
+
