@@ -84,7 +84,14 @@ const PEERS={"M|93|Open|classic":{"n":44,"avg":589.5,"top":740,"p75":680,"p50":5
     DB=await fetch('data.json').then(r=>r.json());
     const params=new URLSearchParams(location.search);
     const cod=params.get('codigo');
-    if(cod)showProfile(cod.toUpperCase());
+    const q=params.get('q');
+    if(cod){
+      showProfile(cod.toUpperCase());
+    } else if(q){
+      // Name search from ranking — auto-search and show best match
+      document.getElementById('sInput').value=q;
+      onSearch(q);
+    }
   }catch(e){console.warn('data.json unavailable',e)}
 })();
 

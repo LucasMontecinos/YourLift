@@ -84,6 +84,14 @@ a{color:var(--gold);text-decoration:none}
     <p>Ranking oficial — Campeonato Nacional FECHIPO 2026</p>
   </div>
   <div class="tabs" id="tabs"></div>
+  <div style="margin-bottom:12px">
+    <input id="searchRanking" type="text" placeholder="🔍 Buscar atleta..." 
+      oninput="filterRanking(this.value)"
+      style="width:100%;background:#12121a;border:1px solid #1e1e2e;border-radius:8px;color:#e8e6e3;
+             padding:10px 14px;font-size:14px;font-family:Source Sans 3,sans-serif;outline:none;
+             transition:border-color .15s"
+      onfocus="this.style.borderColor='#c41e3a'" onblur="this.style.borderColor='#1e1e2e'">
+  </div>
   <div id="st"></div>
   <div id="ct"></div>
 </div>
@@ -135,7 +143,7 @@ K.forEach(function(key){
   arr.forEach(function(e){
     var cl=e.p===1?'p1':e.p===2?'p2':e.p===3?'p3':'';
     h+='<tr class="'+cl+'"><td class="c">'+e.p+'</td>';
-    h+='<td><strong>'+e.n+'</strong><span class="cl">'+e.t+'</span></td>';
+    h+='<td><a href="atleta.html?q='+encodeURIComponent(e.n)+'" style="color:var(--text);text-decoration:none" onmouseenter="this.style.color=\'var(--gold)\'" onmouseleave="this.style.color=\'var(--text)\'"><strong>'+e.n+'</strong></a><span class="cl">'+e.t+'</span></td>';
     h+='<td class="n">'+e.bw+'</td>';
     if(!ib){h+='<td class="n">'+e.sq+'</td><td class="n">'+e.bp+'</td><td class="n">'+e.dl+'</td>'}
     else{h+='<td class="n">'+e.bp+'</td>'}
@@ -147,8 +155,36 @@ K.forEach(function(key){
 document.getElementById('ct').innerHTML=h;
 }
 
+var _allRows=null;
+function filterRanking(q){
+  if(!q){
+    if(_allRows){
+      document.querySelectorAll('.rt tbody tr').forEach((tr,i)=>{tr.style.display=_allRows[i]||''});
+      _allRows=null;
+    }
+    return;
+  }
+  const qq=q.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const rows=[...document.querySelectorAll('.rt tbody tr')];
+  if(!_allRows)_allRows=rows.map(tr=>tr.style.display);
+  // Also show/hide category headers
+  document.querySelectorAll('.cs').forEach(cs=>{
+    const trs=[...cs.querySelectorAll('tbody tr')];
+    let anyVisible=false;
+    trs.forEach(tr=>{
+      const name=(tr.querySelector('strong,a')?.textContent||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      const club=(tr.querySelector('.cl')?.textContent||'').toLowerCase();
+      const show=name.includes(qq)||club.includes(qq);
+      tr.style.display=show?'':'none';
+      if(show)anyVisible=true;
+    });
+    cs.style.display=anyVisible?'':'none';
+  });
+}
+
 function setTab(id){
-  CUR=id;
+  CUR=id;_allRows=null;
+  const si=document.getElementById('searchRanking');if(si)si.value='';
   document.querySelectorAll('.tb').forEach(function(b){b.classList.toggle('act',b.dataset.t===id)});
   R();
 }

@@ -130,7 +130,7 @@ function _getPeerKey(a){
 }
 function _peerPerc(myTotal,key){const g=PEERS[key];if(!g)return null;const all=[...g.members.map(m=>m.total),myTotal].sort((a,b)=>b-a);const rank=all.indexOf(myTotal)+1;return{rank,n:all.length,pct:Math.round((1-rank/all.length)*100),g};}
 
-const ST={user:null,adminInfo:null,view:'dashboard',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null};
+const ST={user:null,adminInfo:null,view:'dashboard',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[]};
 window.ST=ST;
 
 // ═══════════════════════════════════════════
@@ -255,6 +255,18 @@ async function loadAll(){
         if(ST.view==='campeonatos'||ST.view==='dashboard')render();
       },(e)=>console.warn('[listener] eventos:',e.message));
     }catch(e){console.warn('[loadAll] eventos listener:',e.message);}
+  }
+  if(!window._resultsListener){
+    try{
+      window._resultsListener=onSnapshot(
+        query(collection(db,'competition_results'),where('status','==','pending_merge')),
+        (snap)=>{
+          ST.pendingResults=snap.size;
+          ST.competitionResults=snap.docs.map(d=>({id:d.id,...d.data()}));
+          if(ST.pendingResults>0||ST.view==='mergeResults')render();
+        },(e)=>console.warn('[listener] results:',e.message)
+      );
+    }catch(e){console.warn('[loadAll] results listener:',e.message);}
   }
 
   // Load eventos snapshot for campeonatos view
@@ -652,6 +664,7 @@ function render(){
       <button class="side-btn ${ST.view==='campeonatos'?'active':''}" onclick="go('campeonatos')"><span class="icon">🏆</span>Campeonatos</button>
       <button class="side-btn ${ST.view==='exports'?'active':''}" onclick="go('exports')"><span class="icon">💾</span>Exports</button>
       <button class="side-btn ${ST.view==='audit'?'active':''}" onclick="go('audit')"><span class="icon">📜</span>Audit Log</button>
+      ${ST.pendingResults?`<button class="side-btn ${ST.view==='mergeResults'?'active':''}" onclick="go('mergeResults')" style="border-color:var(--green);color:var(--green)"><span class="icon">🏁</span>Resultados Pendientes <span style="background:var(--green);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.pendingResults}</span></button>`:''}
       ${(ST.adminInfo?.role==='superadmin'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='admins'?'active':''}" onclick="go('admins')"><span class="icon">🔑</span>Gestión Admin</button>`:''}
       <div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">
         <a href="index.html" class="side-btn" style="text-decoration:none"><span class="icon">←</span>Volver al sitio</a>
@@ -669,6 +682,7 @@ function render(){
   else if(ST.view==='exports')content=renderExports();
   else if(ST.view==='audit')content=renderAudit();
   else if(ST.view==='admins')content=renderAdmins();
+  else if(ST.view==='mergeResults')content=renderMergeResults();
   else if(ST.view==='athleteProfile')content=renderAthleteProfile();
   
   app.innerHTML=`<div class="shell">${sidebar}<div class="main">${content}</div></div>`;
@@ -1934,7 +1948,364 @@ function renderAthleteProfile(){
   return h;
 }
 
+
+// ═══════════════════════════════════════════════════════════
+// MERGE RESULTADOS — Procesar competencia → data.json + records.json
+// ═══════════════════════════════════════════════════════════
+
+// IPF GL coefficients (same as livecast)
+const _GL_COEFS = {
+  'cl_M':[1236.25115,1449.21864,0.01644],'cl_F':[758.63878,949.31382,0.02435],
+  'eq_M':[1734.77461,2016.88442,0.01513],'eq_F':[1082.96783,1483.20778,0.02097],
+  'bench_cl_M':[327.89535,586.52174,0.02564],'bench_cl_F':[225.04394,330.66667,0.02694],
+  'bench_eq_M':[588.86016,755.03316,0.02239],'bench_eq_F':[260.66000,391.00000,0.02800],
+};
+function _glKey(m,s){const eq=(m||'').toLowerCase().includes('equip');const bench=(m||'').toLowerCase().includes('bench')&&!(m||'').toLowerCase().includes('powerlifting');const sex=(s||'').match(/mujer|fem|f/i)?'F':'M';return(bench?(eq?'bench_eq_':'bench_cl_'):(eq?'eq_':'cl_'))+sex;}
+function _calcGL(total,bw,m,s){if(!total||!bw)return 0;const c=_GL_COEFS[_glKey(m,s)];if(!c)return 0;const d=c[0]-c[1]*Math.exp(-c[2]*bw);return d>0?Math.round(total*100/d*100)/100:0;}
+
+let RECORDS_DATA={"classic":{"sq":[{"nombre":"Valentina Marin Puelles","division":"Open","categoria":"47","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":133.0},{"nombre":"Antonella Pérez","division":"Sub-Junior","categoria":"47","campeonato":"IX FESUPO Cameponato Sudamericano 2022","marca":103.0},{"nombre":"Francisca Molina Briones","division":"Junior","categoria":"47","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":105.0},{"nombre":"Keily Rojas Peraza","division":"Junior","categoria":"52","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":125.0},{"nombre":"Valeria Quiroz Valenzuela","division":"Open","categoria":"52","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":145.0},{"nombre":"Sofia Olave Vega","division":"Sub-Junior","categoria":"52","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":112.5},{"nombre":"Alfredo Cortes Piñones","division":"Junior","categoria":"53","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":135.5},{"nombre":"Lucas Vidal Calisto","division":"Sub-Junior","categoria":"53","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2018","marca":85.0},{"nombre":"Josefa Soto Arcos","division":"Junior","categoria":"57","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":170.5},{"nombre":"Josefa Soto Arcos","division":"Open","categoria":"57","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":170.5},{"nombre":"Josefa Ignacia Soto Arcos","division":"Sub-Junior","categoria":"57","campeonato":"IX FESUPO Cameponato Sudamericano 2022","marca":122.5},{"nombre":"Fabiola Alejandra Aldana Obreque","division":"Master I","categoria":"57","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":100.0},{"nombre":"Felix Soto Monares","division":"Junior","categoria":"59","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":190.0},{"nombre":"Valentín Froilán Endo Domínguez","division":"Open","categoria":"59","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":183.0},{"nombre":"Martín Gangas Pavez","division":"Sub-Junior","categoria":"59","campeonato":"Campeonato Mundial Junior y Sub-junior Classic 2025","marca":160.0},{"nombre":"Yassmin Arias Navarrete","division":"Open","categoria":"63","campeonato":"XI Campeonato Sudamericano de Powerlifting 2024","marca":183.5},{"nombre":"Rocio Ramírez Martínez","division":"Junior","categoria":"63","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":158.0},{"nombre":"Francisca Nuñez Pastore","division":"Sub-Junior","categoria":"63","campeonato":"XI Campeonato Sudamericaco de Powerlifting Classic 2024","marca":132.5},{"nombre":"Nataly Martínez Rosas","division":"Master I","categoria":"63","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":155.0},{"nombre":"Lukas Valdés Palazuelos","division":"Junior","categoria":"66","campeonato":"XII Campeonato Sudamericano 2025","marca":222.5},{"nombre":"José Merino Herrera","division":"Open","categoria":"66","campeonato":"Juegos Bolivarianos del Bicentenario Ayacucho 2024","marca":230.0},{"nombre":"Joaquín Cocio Loaiza","division":"Sub-Junior","categoria":"66","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":208.5},{"nombre":"Cristobal Mena Aballay","division":"Master I","categoria":"66","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":165.0},{"nombre":"Cristaleen Castillo Sepúlveda","division":"Junior","categoria":"69","campeonato":"Campeonato Mundial Junior y Sub-junior Classic 2025","marca":175.0},{"nombre":"Cristaleen Castillo Sepúlveda","division":"Open","categoria":"69","campeonato":"Campeonato Mundial Junior y Sub-junior Classic 2025","marca":175.0},{"nombre":"Constanza Araya Valdés","division":"Sub-Junior","categoria":"69","campeonato":"Campeonato Sudamericano de Powerlifting Classic 2023","marca":135.0},{"nombre":"Gloria Vera Tapia","division":"Master I","categoria":"69","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":157.5},{"nombre":"Sicely Valetto","division":"Junior","categoria":"72","campeonato":"Campeonato Zona Centro SBC 2019","marca":122.5},{"nombre":"Paulina Contreras Cuevas","division":"Open","categoria":"72","campeonato":"Campeonato Zona Centro SBC 2019","marca":122.5},{"nombre":"Francisca Perez Nadeau","division":"Sub-Junior","categoria":"72","campeonato":"Campeonato Zona Centro SBC 2019","marca":95.0},{"nombre":"Hernán Elías Gómez Rivera","division":"Junior","categoria":"74","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":250.0},{"nombre":"Pablo Perez Anderson","division":"Open","categoria":"74","campeonato":"X Campeonato Sudamericano de Powerlifting Classic 2023","marca":260.0},{"nombre":"Sebastian Villa Alvarez","division":"Sub-Junior","categoria":"74","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":226.0},{"nombre":"Andrea Santana Navarrete","division":"Open","categoria":"76","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":177.5},{"nombre":"Josefa Isabella Basáez Lagos","division":"Junior","categoria":"76","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":170.0},{"nombre":"Bárbara Valenzuela Muñoz","division":"Master I","categoria":"76","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":157.5},{"nombre":"Bárbara Muñoz Inzunza","division":"Sub-Junior","categoria":"76","campeonato":"XII Campeonato Sudamericano 2025","marca":170.0},{"nombre":"Francia Rivero Hurtado","division":"Master II","categoria":"76","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":125.5},{"nombre":"José Matías Figueroa Contreras","division":"Open","categoria":"83","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":300.0},{"nombre":"Jose Manuel Garrido Salazar","division":"Junior","categoria":"83","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":260.5},{"nombre":"Martin Gamboa Contreras","division":"Sub-Junior","categoria":"83","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":255.0},{"nombre":"Arnaldo Salinas Sepúlveda","division":"Master I","categoria":"83","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":230.0},{"nombre":"Juan Carlos Contreras Vega","division":"Master II","categoria":"83","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":183.0},{"nombre":"Romy Echeverría Ortega","division":"Junior","categoria":"84","campeonato":"XII Campeonato Sudamericano 2025","marca":170.0},{"nombre":"Paula Castro Muñoz","division":"Open","categoria":"84","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":185.0},{"nombre":"Martina Ahumada","division":"Sub-Junior","categoria":"84","campeonato":"VI Campeonato Nacional Fechipo 2022","marca":95.0},{"nombre":"Francia Rivero Hurtado","division":"Master I","categoria":"84","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":135.5},{"nombre":"Francia Rivero Hurtado","division":"Master II","categoria":"84","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":135.5},{"nombre":"Benjamín Osses Contreras","division":"Junior","categoria":"93","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":275.0},{"nombre":"Oscar Celis","division":"Master I","categoria":"93","campeonato":"VI Campeonato Nacional Fechipo 2022","marca":230.0},{"nombre":"Benjamin Osses Contreras","division":"Open","categoria":"93","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":285.0},{"nombre":"Alonzo Parraguez Rivas","division":"Sub-Junior","categoria":"93","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":235.0},{"nombre":"Ricardo Carrillo Castro","division":"Master II","categoria":"93","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":157.5},{"nombre":"Bastian Arevalo Peña","division":"Junior","categoria":"105","campeonato":"XII Campeonato Sudamericano 2025","marca":305.0},{"nombre":"Moisés Contreras","division":"Master II","categoria":"105","campeonato":"Campeonato Panamericano de Powerlifting Classic 2019","marca":245.0},{"nombre":"Bernardo Ibañez Pawathon","division":"Open","categoria":"105","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":315.0},{"nombre":"Nicolás Figueroa","division":"Sub-Junior","categoria":"105","campeonato":"Campeonato Zona Centro SBC 2019","marca":230.0},{"nombre":"Moisés Contreras","division":"Master I","categoria":"105","campeonato":"Campeonato Panamericano de Powerlifting Classic 2019","marca":245.0},{"nombre":"Jesús Navarrete Saavedra","division":"Junior","categoria":"120","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":310.0},{"nombre":"Manuel Alejandro Fuentes","division":"Master I","categoria":"120","campeonato":"Campeonato Oficial Zona Sur y Nacional Equipado Osorno 2022","marca":250.0},{"nombre":"Hector Vasquez Ramirez","division":"Open","categoria":"120","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":320.0},{"nombre":"Álvaro Nicanor Araya Peñaloza","division":"Sub-Junior","categoria":"120","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":215.5},{"nombre":"Sergio Mardones Meza","division":"Open","categoria":"120+","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":375.0},{"nombre":"Benjamín Meza Aguilar","division":"Junior","categoria":"120+","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":300.0},{"nombre":"Francisco Martínez Soto","division":"Sub-Junior","categoria":"120+","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":165.0},{"nombre":"Ricardo Guzmán","division":"Master I","categoria":"120+","campeonato":"Campeonato Oficial Zona Sur y Nacional Equipado Osorno 2022","marca":260.0},{"nombre":"Marcela De La Barra Zelaya","division":"Open","categoria":"84+","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":190.5},{"nombre":"Stefania Sandoval Carrillo","division":"Junior","categoria":"84+","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":150.0},{"nombre":"Mónica Fuentes Arredondo","division":"Master I","categoria":"84+","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":95.0},{"nombre":"Mónica Fuentes Arredondo","division":"Master II","categoria":"84+","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":95.0},{"nombre":"Mónica Fuentes Arredondo","division":"Master III","categoria":"84+","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":95.0}],"bp":[{"nombre":"Valentina Marín Puelles","division":"Open","categoria":"47","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":66.0},{"nombre":"Francisca Molina Briones","division":"Junior","categoria":"47","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":65.0},{"nombre":"Sofía Olave Vega","division":"Sub Junior","categoria":"47","campeonato":"XII Campeonato Sudamericano 2025","marca":55.0},{"nombre":"Francisca Yañez Salgado","division":"Open","categoria":"52","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":70.0},{"nombre":"Francisca Yañez Salgado","division":"Junior","categoria":"52","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":70.0},{"nombre":"Sofia Olave Vega","division":"Sub-Junior","categoria":"52","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":65.0},{"nombre":"Alfredo Cortes Piñones","division":"Junior","categoria":"53","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":90.5},{"nombre":"Lucas Vidal Calisto","division":"Sub-Junior","categoria":"53","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2018","marca":50.0},{"nombre":"María Paz Sáez Soto","division":"Junior","categoria":"57","campeonato":"Campeonato Mundial Junior y Sub-junior Classic 2025","marca":92.5},{"nombre":"María Paz Sáez Soto","division":"Junior","categoria":"57","campeonato":"Campeonato Mundial Junior y Sub-junior Classic 2025","marca":92.5},{"nombre":"Josefa Soto","division":"Sub-Junior","categoria":"57","campeonato":"IX FESUPO Cameponato Sudamericano 2022","marca":66.0},{"nombre":"Fabiola Alejandra Aldana Obreque","division":"Master I","categoria":"57","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":53.0},{"nombre":"Valentin Endo","division":"Open","categoria":"59","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":120.0},{"nombre":"Martín Gangas Pavez","division":"Junior","categoria":"59","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":120.0},{"nombre":"Martín Gangas Pavez","division":"Sub-Junior","categoria":"59","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":120.0},{"nombre":"Yasmin Arias Navarrete","division":"Open","categoria":"63","campeonato":"XII Campeonato Sudamericano 2025","marca":95.0},{"nombre":"Angela Vega Plaza","division":"Junior","categoria":"63","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":92.5},{"nombre":"Leticia Oviedo Castro","division":"Sub-Junior","categoria":"63","campeonato":"Sudamericano de Powerlifting Classic 2017","marca":80.0},{"nombre":"Nataly Martínez Rosas","division":"Master I","categoria":"63","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":65.0},{"nombre":"Joaquín Arce Pinilla","division":"Junior","categoria":"66","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":145.5},{"nombre":"Joaquín Arce Pinilla","division":"Open","categoria":"66","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":145.5},{"nombre":"Cristobal Muñoz Droguett","division":"Sub Junior","categoria":"66","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":115.0},{"nombre":"Cristobal Mena Aballay","division":"Master I","categoria":"66","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":130.0},{"nombre":"Antonia Madrid Toro","division":"Open","categoria":"69","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":96.5},{"nombre":"May-ling Gallardo Pivet","division":"Junior","categoria":"69","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":93.0},{"nombre":"Ema Gallardo Haverbeck","division":"Sub-Junior","categoria":"69","campeonato":"XI Campeonato Sudamericaco de Powerlifting Classic 2024","marca":84.0},{"nombre":"Gloria Vera Tapia","division":"Master I","categoria":"69","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":68.0},{"nombre":"Jeniffer Fre","division":"Open","categoria":"72","campeonato":"Campeonato Zona Centro SBC 2019","marca":77.5},{"nombre":"Sicely Valetto","division":"Junior","categoria":"72","campeonato":"Campeonato Zona Centro SBC 2019","marca":52.5},{"nombre":"Francisca Perez Nadeau","division":"Sub-Junior","categoria":"72","campeonato":"Campeonato Zona Centro SBC 2019","marca":50.0},{"nombre":"Anderson Perez Pablo Roberto","division":"Open","categoria":"74","campeonato":"IPF World Men's Classic Open Powerlifting Championships 2024","marca":175.0},{"nombre":"David Sanchez","division":"Junior","categoria":"74","campeonato":"VI Campeonato Nacional Fechipo 2022","marca":161.0},{"nombre":"Martín Aguilera Perez","division":"Sub Junior","categoria":"74","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":138.5},{"nombre":"Guillermo Cisternas Aguilar","division":"Master I","categoria":"74","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":120.0},{"nombre":"Andrea Santana Navarrete","division":"Open","categoria":"76","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":97.5},{"nombre":"Javiera Orellana","division":"Junior","categoria":"76","campeonato":"II Campeonato Oficial Zona Centro 2022","marca":90.0},{"nombre":"Bárbara Muñoz Inzunza","division":"Sub Junior","categoria":"76","campeonato":"XII Campeonato Sudamericano 2025","marca":90.0},{"nombre":"Bárbara Valenzuela Muñoz","division":"Master I","categoria":"76","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":80.5},{"nombre":"Francia Rivero Hurtado","division":"Master II","categoria":"76","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":60.0},{"nombre":"José Matías Figueroa Contreras","division":"Open","categoria":"83","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":200.5},{"nombre":"Jose Manuel Garrido Salazar","division":"Junior","categoria":"83","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":176.0},{"nombre":"Arturo Godoy Cerda","division":"Sub-Junior","categoria":"83","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":144.0},{"nombre":"Luis Alarcón Ramírez","division":"Master I","categoria":"83","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":140.0},{"nombre":"Juan Carlos Contreras Vega","division":"Master II","categoria":"83","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":113.0},{"nombre":"Paula Castro Muñoz","division":"Open","categoria":"84","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":100.5},{"nombre":"Andrea Fabregas Schliewe","division":"Junior","categoria":"84","campeonato":"VIII Campeonato Nacional FECHIPO 2024","marca":82.5},{"nombre":"Francia Rivero Hurtado","division":"Master I","categoria":"84","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":78.0},{"nombre":"Francia Rivero Hurtado","division":"Master II","categoria":"84","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":78.0},{"nombre":"Martina Ahumada","division":"Sub-Junior","categoria":"84","campeonato":"VI Campeonato Nacional Fechipo 2022","marca":60.0},{"nombre":"Bernardo Joaquín Ibañez Pawalthon","division":"Open","categoria":"93","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":186.0},{"nombre":"Benjamín Osses Contreras","division":"Junior","categoria":"93","campeonato":"Campeonato Mundial Junior y Sub-junior Classic 2025","marca":175.0},{"nombre":"German Quintanilla","division":"Sub-Junior","categoria":"93","campeonato":"X Campeonato Sudamericano de Powerlifting Classic 2023","marca":145.0},{"nombre":"Gustavo Tapia Hidalgo","division":"Master I","categoria":"93","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":133.0},{"nombre":"Ricardo Carrillo Castro","division":"Master II","categoria":"93","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":92.5},{"nombre":"Yohan Perez Coñiñir","division":"Open","categoria":"105","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":200.5},{"nombre":"Yohan Perez Coñiñir","division":"Junior","categoria":"105","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":200.5},{"nombre":"Moisés Contreras","division":"Master I","categoria":"105","campeonato":"Campeonato Panamericano de Powerlifting Classic 2019","marca":135.0},{"nombre":"Moisés Contreras","division":"Master II","categoria":"105","campeonato":"Campeonato Panamericano de Powerlifting Classic 2019","marca":135.0},{"nombre":"Nicolás Figueroa","division":"Sub-Junior","categoria":"105","campeonato":"Campeonato Zona Centro SBC 2019","marca":120.0},{"nombre":"Manuel Alejandro Fuentes","division":"Open","categoria":"120","campeonato":"Campeonato Oficial Zona Sur y Nacional Equipado Osorno 2022","marca":205.5},{"nombre":"Manuel Alejandro Fuentes","division":"Master I","categoria":"120","campeonato":"Campeonato Oficial Zona Sur y Nacional Equipado Osorno 2022","marca":205.5},{"nombre":"Jesús Navarrete Saavedra","division":"Junior","categoria":"120","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":184.0},{"nombre":"Benjamin Ramirez","division":"Sub-Junior","categoria":"120","campeonato":"IX Campeonato Sudamericano FESUPO 2022","marca":137.5},{"nombre":"Sergio Mardones Meza","division":"Open","categoria":"120+","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":225.0},{"nombre":"Ricardo Guzman Alvarado","division":"Master I","categoria":"120+","campeonato":"VIII Campeonato Nacional FECHIPO 2024","marca":180.0},{"nombre":"Benjamin Meza Aguilar","division":"Junior","categoria":"120+","campeonato":"XII Campeonato Sudamericano 2025","marca":150.0},{"nombre":"Francisco Martínez Soto","division":"Sub-Junior","categoria":"120+","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":100.0},{"nombre":"Marcela De La Barra Zelaya","division":"Open","categoria":"84+","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":101.0},{"nombre":"Stefania Sandoval Carrillo","division":"Junior","categoria":"84+","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":70.0},{"nombre":"Mónica Fuentes Arredondo","division":"Master I","categoria":"84+","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":65.0},{"nombre":"Mónica Fuentes Arredondo","division":"Master II","categoria":"84+","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":65.0},{"nombre":"Mónica Fuentes Arredondo","division":"Master III","categoria":"84+","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":65.0}],"dl":[{"nombre":"Valentina Marin Puelles","division":"Open","categoria":"47","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":150.0},{"nombre":"Francisca Molina Briones","division":"Junior","categoria":"47","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":145.0},{"nombre":"Sofía Olave Vega","division":"Sub-Junior","categoria":"47","campeonato":"XII Campeonato Sudamericano 2025","marca":135.0},{"nombre":"Keily Rojas Peraza","division":"Junior","categoria":"52","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":155.0},{"nombre":"Criss Contreras Calderón","division":"Open","categoria":"52","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":155.0},{"nombre":"Sofia Olave Vega","division":"Sub-Junior","categoria":"52","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":145.0},{"nombre":"Lucas Vidal Calisto","division":"Sub-Junior","categoria":"53","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2018","marca":120.0},{"nombre":"Alfredo Cortes Piñones","division":"Junior","categoria":"53","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":173.0},{"nombre":"Tais Gomez Sanzana","division":"Open","categoria":"57","campeonato":"XII Campeonato Sudamericano 2025","marca":197.5},{"nombre":"María Paz Sáez Soto","division":"Junior","categoria":"57","campeonato":"Campeonato Mundial Junior y Sub-junior Classic 2025","marca":190.0},{"nombre":"Antonia Moraga Muñoz","division":"Sub-Junior","categoria":"57","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":144.0},{"nombre":"Fabiola Alejandra Aldana Obreque","division":"Master I","categoria":"57","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":142.0},{"nombre":"Felix Soto Monares","division":"Open","categoria":"59","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":240.0},{"nombre":"Felix Soto Monares","division":"Junior","categoria":"59","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":240.0},{"nombre":"Martín Gangas Pavez","division":"Sub-Junior","categoria":"59","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":235.0},{"nombre":"Angela Vega Plaza","division":"Open","categoria":"63","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":185.0},{"nombre":"Angela Vega Plaza","division":"Junior","categoria":"63","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":185.0},{"nombre":"Montserrat Vera Arrano","division":"Sub-Junior","categoria":"63","campeonato":"XII Campeonato Sudamericano 2025","marca":170.0},{"nombre":"Nataly Martínez Rosas","division":"Master I","categoria":"63","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":160.0},{"nombre":"Diego Duran Araya","division":"Open","categoria":"66","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":260.5},{"nombre":"Maximiliano Chamorro Arenas","division":"Junior","categoria":"66","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":250.5},{"nombre":"Felipe Sotomayor Sanhueza","division":"Sub-Junior","categoria":"66","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":237.5},{"nombre":"Cristobal Mena Aballay","division":"Master I","categoria":"66","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":205.0},{"nombre":"Antonia Madrid Toro","division":"Junior","categoria":"69","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":187.5},{"nombre":"Paola Fuentes Ulloa","division":"Open","categoria":"69","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":202.5},{"nombre":"Ema Gallardo Haverbeck","division":"Sub-Junior","categoria":"69","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":160.0},{"nombre":"Gloria Vera Tapia","division":"Master I","categoria":"69","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":160.0},{"nombre":"Paulina Contreras Cuevas","division":"Open","categoria":"72","campeonato":"Campeonato Zona Centro SBC 2019","marca":150.0},{"nombre":"Sicely Valetto","division":"Junior","categoria":"72","campeonato":"Campeonato Zona Centro SBC 2019","marca":132.5},{"nombre":"Francisca Perez Nadeau","division":"Sub-Junior","categoria":"72","campeonato":"Campeonato Zona Centro SBC 2019","marca":95.0},{"nombre":"Felipe Rieutord Lira","division":"Open","categoria":"74","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":315.0},{"nombre":"Felipe Rieutord Lira","division":"Junior","categoria":"74","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":315.0},{"nombre":"Felipe Rieutord Lira","division":"Sub-Junior","categoria":"74","campeonato":"Campeonato Panamericano de Powerlifting Classic 2019","marca":261.5},{"nombre":"Guillermo Cisternas Aguilar","division":"Master I","categoria":"74","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":200.0},{"nombre":"Javiera Orellana","division":"Open","categoria":"76","campeonato":"IX FESUPO Cameponato Sudamericano 2022","marca":205.0},{"nombre":"Javiera Orellana","division":"Junior","categoria":"76","campeonato":"IX FESUPO Cameponato Sudamericano 2022","marca":205.0},{"nombre":"Bárbara Muñoz Inzunza","division":"Sub-Junior","categoria":"76","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":183.0},{"nombre":"Francia Rivero Hurtado","division":"Master II","categoria":"76","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":142.0},{"nombre":"Bárbara Valenzuela Muñoz","division":"Master I","categoria":"76","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":170.5},{"nombre":"Pablo Anderson","division":"Open","categoria":"83","campeonato":"Juegos Bolivarianos del Bicentenario Ayacucho 2024","marca":320.0},{"nombre":"Jose Manuel Garrido Salazar","division":"Junior","categoria":"83","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":300.0},{"nombre":"Vicente Palacios Passicot","division":"Sub-Junior","categoria":"83","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":260.0},{"nombre":"Arnaldo Salinas Sepúlveda","division":"Master I","categoria":"83","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":245.0},{"nombre":"Juan Carlos Contreras Vega","division":"Master II","categoria":"83","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":206.0},{"nombre":"Paula Castro Muñoz","division":"Open","categoria":"84","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":200.0},{"nombre":"Romy Echeverría Ortega","division":"Junior","categoria":"84","campeonato":"XII Campeonato Sudamericano 2025","marca":177.5},{"nombre":"Francia Rivero Hurtado","division":"Master I","categoria":"84","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":157.5},{"nombre":"Francia Rivero Hurtado","division":"Master II","categoria":"84","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":157.5},{"nombre":"Martina Ahumada","division":"Sub-Junior","categoria":"84","campeonato":"VI Campeonato Nacional Fechipo 2022","marca":117.5},{"nombre":"Esteban Sebastian Navarro Escobar","division":"Open","categoria":"93","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":305.0},{"nombre":"Oscar Celis","division":"Master I","categoria":"93","campeonato":"VI Campeonato Nacional Fechipo 2022","marca":300.0},{"nombre":"Esteban Sebastian Navarro Escobar","division":"Junior","categoria":"93","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":305.0},{"nombre":"Cristian Farfán Aldana","division":"Sub-Junior","categoria":"93","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":275.5},{"nombre":"Ricardo Carrillo Castro","division":"Master II","categoria":"93","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":165.0},{"nombre":"Bastian Arevalo Peña","division":"Open","categoria":"105","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":335.0},{"nombre":"Bastian Arevalo Peña","division":"Junior","categoria":"105","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":335.0},{"nombre":"Mauricio Henriquez Tobar","division":"Master I","categoria":"105","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":250.5},{"nombre":"Moisés Contreras","division":"Master II","categoria":"105","campeonato":"Campeonato Panamericano de Powerlifting Classic 2019","marca":250.0},{"nombre":"Nicolás Figueroa","division":"Sub-Junior","categoria":"105","campeonato":"IV Campeonato Nacional Classic Fechipo 2019","marca":252.5},{"nombre":"Fabian Valencia Cofre","division":"Open","categoria":"120","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":325.0},{"nombre":"Lucas Ayala Medina","division":"Junior","categoria":"120","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":310.5},{"nombre":"Manuel Alejandro Fuentes","division":"Master I","categoria":"120","campeonato":"Campeonato Oficial Zona Sur y Nacional Equipado Osorno 2022","marca":250.0},{"nombre":"Álvaro Nicanor Araya Peñaloza","division":"Sub-Junior","categoria":"120","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":230.0},{"nombre":"Jean Gutierrez Nahuelpan","division":"Open","categoria":"120+","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":295.5},{"nombre":"Ricardo Guzman Alvarado","division":"Master I","categoria":"120+","campeonato":"Campeonato Oficial Zona Sur y Nacional Equipado Osorno 2022","marca":270.0},{"nombre":"Lucas Iñaki Ortiz Farias","division":"Sub-Junior","categoria":"120+","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":180.0},{"nombre":"Benjamín Meza Aguilar","division":"Junior","categoria":"120+","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":250.0},{"nombre":"Mónica Fuentes Arredondo","division":"Master I","categoria":"84+","campeonato":"XII Campeonato Sudamericano 2025","marca":127.0},{"nombre":"Mónica Fuentes Arredondo","division":"Master II","categoria":"84+","campeonato":"XII Campeonato Sudamericano 2025","marca":127.0},{"nombre":"Mónica Fuentes Arredondo","division":"Master III","categoria":"84+","campeonato":"XII Campeonato Sudamericano 2025","marca":127.0},{"nombre":"Sorena González Gil","division":"Open","categoria":"84+","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":192.5},{"nombre":"Stefania Sandoval Carrillo","division":"Junior","categoria":"84+","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":142.5}],"total":[{"nombre":"Valentina Marin Puelles","division":"Open","categoria":"47","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":344.0},{"nombre":"Francisca Molina Briones","division":"Junior","categoria":"47","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":315.0},{"nombre":"Sofia Olave Vega","division":"Sub-Junior","categoria":"52","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":322.5},{"nombre":"Keily Rojas Peraza","division":"Junior","categoria":"52","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":348.0},{"nombre":"Valeria Quiroz","division":"Open","categoria":"52","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":360.0},{"nombre":"Sofia Olave Vega","division":"Sub-Junior","categoria":"52","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":322.5},{"nombre":"Alfredo Cortes Piñones","division":"Junior","categoria":"53","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":399.0},{"nombre":"Lucas Vidal Calisto","division":"Sub-Junior","categoria":"53","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2018","marca":255.0},{"nombre":"Javiera Contador González","division":"Open","categoria":"57","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":405.0},{"nombre":"María Paz Sáez Soto","division":"Junior","categoria":"57","campeonato":"Campeonato Mundial Junior y Sub-junior Classic 2025","marca":452.5},{"nombre":"Antonia Moraga Muñoz","division":"Sub-Junior","categoria":"57","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":314.0},{"nombre":"Fabiola Alejandra Aldana Obreque","division":"Master I","categoria":"57","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":295.0},{"nombre":"Felix Soto Monares","division":"Open","categoria":"59","campeonato":"Campeonato Mundial Junior y Sub-junior Classic 2025","marca":537.5},{"nombre":"Felix Soto Monares","division":"Junior","categoria":"59","campeonato":"Campeonato Mundial Junior y Sub-junior Classic 2025","marca":537.5},{"nombre":"Martín Gangas","division":"Sub-Junior","categoria":"59","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":512.5},{"nombre":"Angela Vega Plaza","division":"Junior","categoria":"63","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":435.0},{"nombre":"Yassmin Arias Navarrete","division":"Open","categoria":"63","campeonato":"XI Campeonato Sudamericano de Powerlifting 2024","marca":446.0},{"nombre":"Francisca Nuñez Pastore","division":"Sub-Junior","categoria":"63","campeonato":"XI Campeonato Sudamericaco de Powerlifting Classic 2024","marca":368.5},{"nombre":"Nataly Martínez Rosas","division":"Master I","categoria":"63","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":375.0},{"nombre":"José Merino Herrera","division":"Open","categoria":"66","campeonato":"Juegos Bolivarianos del Bicentenario Ayacucho 2024","marca":615.0},{"nombre":"Javier Cornejo Salfate","division":"Junior","categoria":"66","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":593.0},{"nombre":"Joaquín Cocio Loaiza","division":"Sub-Junior","categoria":"66","campeonato":"XII Campeonato Sudamericano 2025","marca":542.5},{"nombre":"Cristobal Mena Aballay","division":"Master I","categoria":"66","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":500.0},{"nombre":"Cristaleen Castillo Sepúlveda","division":"Junior","categoria":"69","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":447.5},{"nombre":"Paola Fuentes Ulloa","division":"Open","categoria":"69","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":455.0},{"nombre":"Ema Gallardo Haverbeck","division":"Sub-Junior","categoria":"69","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":362.5},{"nombre":"Gloria Vera Tapia","division":"Master I","categoria":"69","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":385.5},{"nombre":"Paulina Contreras Cuevas","division":"Open","categoria":"72","campeonato":"Campeonato Zona Centro SBC 2019","marca":340.0},{"nombre":"Sicely Valetto","division":"Junior","categoria":"72","campeonato":"Campeonato Zona Centro SBC 2019","marca":307.5},{"nombre":"Francisca Perez Nadeau","division":"Sub-Junior","categoria":"72","campeonato":"Campeonato Zona Centro SBC 2019","marca":240.0},{"nombre":"Anderson Perez Pablo Roberto","division":"Open","categoria":"74","campeonato":"IPF World Men's Classic Open Powerlifting Championships 2024","marca":740.0},{"nombre":"Felipe Rieutord Lira","division":"Junior","categoria":"74","campeonato":"Campeonato Sudamericano de Powerlifting Classic 2023","marca":683.5},{"nombre":"Benjamin Alvarado","division":"Sub-Junior","categoria":"74","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":572.5},{"nombre":"Guillermo Cisternas Aguilar","division":"Master I","categoria":"74","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":521.0},{"nombre":"Javiera Orellana","division":"Junior","categoria":"76","campeonato":"IX FESUPO Cameponato Sudamericano 2022","marca":452.5},{"nombre":"Emily Skogen Aguilera","division":"Open","categoria":"76","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":460.0},{"nombre":"Bárbara Muñoz Inzunza","division":"Sub-Junior","categoria":"76","campeonato":"XII Campeonato Sudamericano 2025","marca":440.5},{"nombre":"Bárbara Valenzuela Muñoz","division":"Master I","categoria":"76","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":407.0},{"nombre":"Francia Rivero Hurtado","division":"Master II","categoria":"76","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":327.5},{"nombre":"José Matías Figueroa Contreras","division":"Open","categoria":"83","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":785.0},{"nombre":"Jose Manuel Garrido Salazar","division":"Junior","categoria":"83","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":736.5},{"nombre":"Martin Gamboa Contreras","division":"Sub-Junior","categoria":"83","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":632.5},{"nombre":"Arnaldo Salinas Sepúlveda","division":"Master I","categoria":"83","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":612.5},{"nombre":"Juan Carlos Contreras Vega","division":"Master II","categoria":"83","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":502.0},{"nombre":"Paula Castro Muñoz","division":"Open","categoria":"84","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":470.5},{"nombre":"Romy Echeverría Ortega","division":"Junior","categoria":"84","campeonato":"XII Campeonato Sudamericano 2025","marca":417.5},{"nombre":"Francia Rivero Hurtado","division":"Master I","categoria":"84","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":371.0},{"nombre":"Francia Rivero Hurtado","division":"Master II","categoria":"84","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":371.0},{"nombre":"Martina Ahumada","division":"Sub-Junior","categoria":"84","campeonato":"VI Campeonato Nacional Fechipo 2022","marca":272.5},{"nombre":"Bernardo Joaquín Ibañez Pawalthon","division":"Open","categoria":"93","campeonato":"VII Campeonato Nacional Fechipo 2023","marca":754.5},{"nombre":"Benjamín Osses Contreras","division":"Junior","categoria":"93","campeonato":"XII Campeonato Sudamericano 2025","marca":737.5},{"nombre":"Oscar Celis","division":"Master I","categoria":"93","campeonato":"VI Campeonato Nacional Fechipo 2022","marca":660.0},{"nombre":"German Cristobal Quintanilla Pardo","division":"Sub-Junior","categoria":"93","campeonato":"Campeonato Sudamericano de Powerlifting Classic 2023","marca":645.0},{"nombre":"Ricardo Carrillo Castro","division":"Master II","categoria":"93","campeonato":"VII Campeonato Nacional FECHIPO 2024","marca":415.0},{"nombre":"Bastian Arevalo Peña","division":"Open","categoria":"105","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":822.5},{"nombre":"Bastian Arevalo Peña","division":"Junior","categoria":"105","campeonato":"XII Campeonato Sudamericano 2025","marca":813.0},{"nombre":"Moisés Contreras","division":"Master I","categoria":"105","campeonato":"Campeonato Panamericano de Powerlifting Classic 2019","marca":630.0},{"nombre":"Moisés Contreras","division":"Master II","categoria":"105","campeonato":"Campeonato Panamericano de Powerlifting Classic 2019","marca":630.0},{"nombre":"Nicolás Figueroa","division":"Sub-Junior","categoria":"105","campeonato":"Campeonato Zona Centro SBC 2019","marca":590.0},{"nombre":"Jesús Navarrete Saavedra","division":"Open","categoria":"120","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":801.5},{"nombre":"Manuel Alejandro Fuentes","division":"Master I","categoria":"120","campeonato":"Campeonato Oficial Zona Sur y Nacional Equipado Osorno 2022","marca":705.5},{"nombre":"Jesús Navarrete Saavedra","division":"Junior","categoria":"120","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":801.5},{"nombre":"Álvaro Nicanor Araya Peñaloza","division":"Sub-Junior","categoria":"120","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":550.5},{"nombre":"Sergio Mardones Meza","division":"Open","categoria":"120+","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":860.0},{"nombre":"Ricardo Guzmán","division":"Master I","categoria":"120+","campeonato":"Campeonato Oficial Zona Sur y Nacional Equipado Osorno 2022","marca":702.5},{"nombre":"Benjamín Meza Aguilar","division":"Junior","categoria":"120+","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":690.0},{"nombre":"Francisco Martínez Soto","division":"Sub-Junior","categoria":"120+","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":430.0},{"nombre":"Marcela De La Barra Zelaya","division":"Open","categoria":"84+","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":471.5},{"nombre":"Florencia Mora Salas","division":"Junior","categoria":"84+","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":357.5},{"nombre":"Mónica Fuentes Arredondo","division":"Master I","categoria":"84+","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":285.0},{"nombre":"Mónica Fuentes Arredondo","division":"Master II","categoria":"84+","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":285.0},{"nombre":"Mónica Fuentes Arredondo","division":"Master III","categoria":"84+","campeonato":"IX Campeonato Nacional FECHIPO 2025","marca":285.0}]},"equipped":{"sq":[{"nombre":"Constanza Muñoz Muñoz","division":"Open","categoria":"47","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":120.0},{"nombre":"Constanza Muñoz Muñoz","division":"Junior","categoria":"47","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":120.0},{"nombre":"Alejandra Gonzalez","division":"Open","categoria":"52","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2016","marca":105.0},{"nombre":"María Luisa Carmona Rauque","division":"Open","categoria":"57","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":105.0},{"nombre":"Rocío Jesús Aghemio Nuñez","division":"Open","categoria":"63","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":142.5},{"nombre":"Francisca Javiera Altamirano Paredes","division":"Open","categoria":"84+","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":112.5},{"nombre":"Jonathan Esteban Vargas Filun","division":"Open","categoria":"66","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":180.0},{"nombre":"Nelson San Martin Leiva","division":"Open","categoria":"74","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":210.0},{"nombre":"Jaime Nicolás oporto Alarcón","division":"SubJunior","categoria":"74","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":155.0},{"nombre":"Jaime Nicolás oporto Alarcón","division":"Junior","categoria":"74","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":155.0},{"nombre":"Alvaro Andres Quevedo","division":"Open","categoria":"83","campeonato":"XXXV Campeonato Sudamericano","marca":285.0},{"nombre":"Jhonny Joel Martínez Rosas","division":"Master 1","categoria":"83","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":185.0},{"nombre":"Alejandro Ignacio Diaz Salamanca","division":"Junior","categoria":"83","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":180.0},{"nombre":"Lucas Andrés Montecinos Alarcón","division":"Junior","categoria":"93","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":280.0},{"nombre":"Lucas Andrés Montecinos Alarcón","division":"Open","categoria":"93","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":280.0},{"nombre":"Oscar Celis","division":"Master 1","categoria":"93","campeonato":"Campeonato Oficial Zona Sur y Nacional Equipado Osorno 2022","marca":265.0},{"nombre":"Felipe Rios Sotomayor","division":"Open","categoria":"105","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":315.0},{"nombre":"Nehemias Rivera","division":"Open","categoria":"120","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2016","marca":280.0},{"nombre":"Ronald Tejeda Soto","division":"Open","categoria":"120+","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":215.0}],"bp":[{"nombre":"Constanza Muñoz Muñoz","division":"Junior","categoria":"47","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":50.0},{"nombre":"Constanza Muñoz Muñoz","division":"Open","categoria":"47","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":50.0},{"nombre":"Alejandra Gonzalez","division":"Open","categoria":"52","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2016","marca":55.0},{"nombre":"Dayani Michelle Garcés Pérez","division":"Open","categoria":"57","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":60.0},{"nombre":"Rocío Jesús Aghemio Núñez","division":"Open","categoria":"63","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":95.0},{"nombre":"Francisca Javiera Altamirano Paredes","division":"Open","categoria":"84+","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":62.5},{"nombre":"Jonathan Esteban Vargas Filun","division":"Open","categoria":"66","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":125.0},{"nombre":"Martin Andrés Nuñez Rodríguez","division":"Open","categoria":"74","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":145.0},{"nombre":"Guillermo Molina Araneda","division":"Junior","categoria":"74","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":90.0},{"nombre":"Jaime Nicolás oporto Alarcón","division":"SubJunior","categoria":"74","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":72.5},{"nombre":"Alvaro Andres Quevedo","division":"Open","categoria":"83","campeonato":"XXXV Campeonato Sudamericano","marca":170.0},{"nombre":"Jhonny Joel Martínez Rosas","division":"Master 1","categoria":"83","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":117.5},{"nombre":"Alejandro Ignacio Diaz Salamanca","division":"Junior","categoria":"83","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":90.0},{"nombre":"Lucas Andrés Montecinos Alarcón","division":"Junior","categoria":"93","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":127.5},{"nombre":"FELIPE PIZARRO ARROYO","division":"Open","categoria":"93","campeonato":"Campeonato Oficial Zona Sur y Nacional Equipado Osorno 2022","marca":182.5},{"nombre":"Patricio Palma Lafourcade","division":"Master 1","categoria":"93","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":150.0},{"nombre":"Felipe Pizarro","division":"Open","categoria":"105","campeonato":"Campeonato Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":200.0},{"nombre":"Nehemias Rivera","division":"Open","categoria":"120","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2016","marca":202.5},{"nombre":"Ronald Tejeda Soto","division":"Open","categoria":"120+","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":120.0}],"dl":[{"nombre":"Constanza Muñoz Muñoz","division":"Junior","categoria":"47","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":120.0},{"nombre":"Constanza Muñoz Muñoz","division":"Open","categoria":"47","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":120.0},{"nombre":"Loreto Andrea Muñoz Muñoz","division":"Open","categoria":"52","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":110.0},{"nombre":"Franchesca Andrea Perez Lobos","division":"Open","categoria":"57","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":125.0},{"nombre":"Rocío Jesús Aghemio Núñez","division":"Open","categoria":"63","campeonato":"Campeonaro Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":160.0},{"nombre":"Francisca Javiera Alramirano Paredes","division":"Open","categoria":"84+","campeonato":"Campeonaro Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":140.0},{"nombre":"Guillermo Arturo Briones Basoalto","division":"Open","categoria":"66","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":205.0},{"nombre":"Martín Andrés Núñez Rodríguez","division":"Open","categoria":"74","campeonato":"Campeonaro Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":235.0},{"nombre":"Guillermo Molina Araneda","division":"Junior","categoria":"74","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":200.0},{"nombre":"Jaime Nicolás oporto Alarcón","division":"SubJunior","categoria":"74","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":180.0},{"nombre":"Guillermo Arturo Briones Basoalto","division":"Open","categoria":"83","campeonato":"Campeonaro Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":277.5},{"nombre":"Jhonny Joel Martínez Rosas","division":"Master 1","categoria":"83","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":200.0},{"nombre":"Abraham Ricardo González Riquelme","division":"Junior","categoria":"83","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":190.0},{"nombre":"Lucas Andrés Montecinos Alarcón","division":"Junior","categoria":"93","campeonato":"Campeonaro Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":270.0},{"nombre":"Oscar Celis","division":"Open","categoria":"93","campeonato":"Campeonato Oficial Zona Sur y Nacinal Equipado Osorno 2022","marca":300.0},{"nombre":"Oscar Celis","division":"Master 1","categoria":"93","campeonato":"Campeonato Oficial Zona Sur y Nacinal Equipado Osorno 2022","marca":300.0},{"nombre":"Felipe Pizarro","division":"Open","categoria":"105","campeonato":"Campeonato Sudamericano de Powerlifting y Bench Press 2023","marca":280.0},{"nombre":"Patricio Waldemar Palma Lafourcade","division":"Open","categoria":"120","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":285.0},{"nombre":"Ronald Tejeda Soto","division":"Open","categoria":"120+","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":230.0}],"total":[{"nombre":"Constanza Muñoz Muñoz","division":"Junior","categoria":"47","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":290.0},{"nombre":"Constanza Muñoz Muñoz","division":"Open","categoria":"47","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":290.0},{"nombre":"Alejandra Gonzalez","division":"Open","categoria":"52","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2016","marca":250.0},{"nombre":"Franchesca Andrea Perez Lobos","division":"Open","categoria":"57","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":280.0},{"nombre":"Rocío Jesús Aghemio Núñez","division":"Open","categoria":"63","campeonato":"Campeonaro Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":397.5},{"nombre":"Francisca Jaciera Altamirano Paredes","division":"Open","categoria":"84+","campeonato":"Campeonaro Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":315.0},{"nombre":"Jonathan Esteban Vargas Filun","division":"Open","categoria":"66","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":505.0},{"nombre":"Martín Andrés Núñez Rodríguez","division":"Open","categoria":"74","campeonato":"Campeonaro Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":580.0},{"nombre":"Guillermo Molina Araneda","division":"Junior","categoria":"74","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":425.0},{"nombre":"Jaime Nicolás oporto Alarcón","division":"SubJunior","categoria":"74","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":407.5},{"nombre":"Alvaro Andres Quevedo","division":"Open","categoria":"83","campeonato":"XXXV Campeonato Sudamericano","marca":695.0},{"nombre":"Jhonny Joel Martínez Rosas","division":"Master 1","categoria":"83","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":502.5},{"nombre":"Alejandro Ignacio Diaz Salamanca","division":"Junior","categoria":"83","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2017","marca":450.0},{"nombre":"Lucas Andrés Montecinos Alarcón","division":"Junior","categoria":"93","campeonato":"Campeonaro Nacional Powelifting Raw, Equipado y OE San Vicente 2026","marca":677.5},{"nombre":"Oscar Celis","division":"Open","categoria":"93","campeonato":"Campeonato Oficial Zona Sur y Nacional Equipado Osorno 2022","marca":712.5},{"nombre":"Oscar Celis","division":"Master 1","categoria":"93","campeonato":"Campeonato Oficial Zona Sur y Nacional Equipado Osorno 2022","marca":712.5},{"nombre":"Felipe Pizarro","division":"Open","categoria":"105","campeonato":"Campeonato Sudamericano de Powerlifting y Bench Press 2023","marca":772.5},{"nombre":"Nehemias Rivera","division":"Open","categoria":"120","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2016","marca":702.5},{"nombre":"Ronald Tejeda Soto","division":"Open","categoria":"120+","campeonato":"Campeonato Powerlifting Raw y Equipado Osorno 2019","marca":565.0}]}};
+
+function nrmName(s){return(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,' ');}
+
+function findAthleteInDB(nombre,rut){
+  const nn=nrmName(nombre);
+  const rutClean=(rut||'').replace(/[^0-9kK]/gi,'').toUpperCase();
+  // Match by RUT first (most reliable)
+  if(rutClean.length>3){
+    const byRut=ST.data.find(a=>(a.rut||'').replace(/[^0-9kK]/gi,'').toUpperCase()===rutClean);
+    if(byRut)return byRut;
+  }
+  // Match by normalized name
+  return ST.data.find(a=>nrmName(a.nombre)===nn)
+    ||ST.data.find(a=>{
+      const parts=nn.split(' ').filter(p=>p.length>2);
+      return parts.length>=2&&parts.every(p=>nrmName(a.nombre).includes(p));
+    });
+}
+
+function checkRecord(total,bw,categoria,division,modalidad,sexo,lift){
+  if(!total||!lift)return null;
+  const mod=(modalidad||'').toLowerCase().includes('equip')?'equipped':'classic';
+  const sex=(sexo||'').match(/mujer|fem|f/i)?'F':'M';
+  // Find matching record entry
+  const matches=(RECORDS_DATA.records||[]).filter(r=>{
+    return r.categoria===categoria&&r.division===division&&
+      (r.modalidad||'').toLowerCase().includes(mod==='equipped'?'equip':'classic')&&
+      r.sexo===sexo&&r.levantamiento===lift;
+  });
+  if(!matches.length)return null;
+  const rec=matches[0];
+  if(total>rec.marca)return{...rec,newMarca:total};
+  return null;
+}
+
+function renderMergeResults(){
+  const pending=ST.competitionResults;
+  if(!pending.length){
+    return `<div class="h1">Resultados de Competencia</div>
+      <p class="subtitle">No hay competencias pendientes de procesar.</p>
+      <div class="card" style="text-align:center;padding:40px;color:var(--muted)">
+        🏁 Cuando finalices una competencia desde LiveCast aparecerá aquí para procesar.
+      </div>`;
+  }
+
+  let h=`<div class="h1">Resultados de Competencia</div>
+    <p class="subtitle">Procesa los resultados directamente al sistema — actualiza data.json, records.json y los perfiles de atletas</p>`;
+
+  pending.forEach(comp=>{
+    const results=comp.results||[];
+    const withTotal=results.filter(r=>r.resultado?.total>0);
+    const bombed=results.filter(r=>!r.resultado?.total||r.resultado?.total===0);
+
+    // Pre-check records
+    const newRecords=[];
+    withTotal.forEach(r=>{
+      const res=r.resultado;
+      ['sq','bp','dl','total'].forEach(lift=>{
+        const val=lift==='total'?res.total:res[lift];
+        const rec=checkRecord(val,res.bw,res.categoria||r.categoria,res.division||r.division,r.modalidad,r.sexo,lift);
+        if(rec)newRecords.push({atleta:r.nombre,lift,val,prev:rec.marca,...rec});
+      });
+    });
+
+    // Check which athletes are already in DB
+    const matched=withTotal.filter(r=>findAthleteInDB(r.nombre,r.rut));
+    const notFound=withTotal.filter(r=>!findAthleteInDB(r.nombre,r.rut));
+
+    h+=`<div class="card" style="border-left:4px solid var(--green);margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <div>
+          <div class="os" style="font-size:18px;font-weight:700">${comp.eventoName}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px">${comp.fecha} · Guardado por ${comp.savedBy||'—'}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div style="text-align:center;background:var(--bg);padding:8px 14px;border-radius:8px">
+            <div class="os" style="font-size:20px;color:var(--green)">${withTotal.length}</div>
+            <div style="font-size:9px;color:var(--muted)">Con total</div>
+          </div>
+          <div style="text-align:center;background:var(--bg);padding:8px 14px;border-radius:8px">
+            <div class="os" style="font-size:20px;color:var(--red)">${bombed.length}</div>
+            <div style="font-size:9px;color:var(--muted)">Bomb-out</div>
+          </div>
+          <div style="text-align:center;background:var(--bg);padding:8px 14px;border-radius:8px">
+            <div class="os" style="font-size:20px;color:${newRecords.length?'var(--gold)':'var(--muted)'}">${newRecords.length}</div>
+            <div style="font-size:9px;color:var(--muted)">Records</div>
+          </div>
+        </div>
+      </div>
+
+      ${newRecords.length?`<div style="background:rgba(212,168,67,.08);border:1px solid rgba(212,168,67,.3);border-radius:8px;padding:12px;margin-bottom:14px">
+        <div style="font-family:Oswald;font-size:11px;letter-spacing:1px;color:var(--gold);margin-bottom:8px">🏆 NUEVOS RECORDS NACIONALES</div>
+        ${newRecords.map(r=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid rgba(212,168,67,.1)">
+          <strong>${r.atleta}</strong> — ${r.lift.toUpperCase()} ${r.val} kg 
+          <span style="color:var(--muted)">(anterior: ${r.prev} kg)</span>
+          <span style="font-size:10px;color:var(--muted)"> · ${r.categoria} ${r.division}</span>
+        </div>`).join('')}
+      </div>`:''}
+
+      ${notFound.length?`<div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:var(--gold)">
+        ⚠️ ${notFound.length} atletas no encontrados en data.json — se agregarán como nuevos:<br>
+        ${notFound.map(r=>r.nombre).join(', ')}
+      </div>`:''}
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-g" onclick="procesarMerge('${comp.id}')" style="font-size:12px">
+          ⚡ Procesar y descargar data.json + records.json
+        </button>
+        <button class="btn" onclick="verDetalleComp('${comp.id}')" 
+          style="font-size:12px;background:transparent;border:1px solid var(--border);color:var(--muted)">
+          Ver detalle
+        </button>
+        <button class="btn" onclick="descartarResultados('${comp.id}')"
+          style="font-size:12px;background:transparent;border:1px solid rgba(239,68,68,.3);color:var(--red)">
+          Descartar
+        </button>
+      </div>
+    </div>`;
+  });
+  return h;
+}
+
+window.procesarMerge = async function(compId){
+  const comp=ST.competitionResults.find(c=>c.id===compId);
+  if(!comp){showToast('Competencia no encontrada',null,true);return;}
+
+  const btn=document.querySelector(`[onclick="procesarMerge('${compId}')"]`);
+  if(btn){btn.disabled=true;btn.textContent='⏳ Procesando...';}
+
+  const results=comp.results||[];
+  const withTotal=results.filter(r=>r.resultado?.total>0);
+  
+  // Deep copy data to avoid mutating ST.data in place yet
+  const newData=JSON.parse(JSON.stringify(ST.data));
+  const newRecords=JSON.parse(JSON.stringify(RECORDS_DATA));
+  let added=0,updated=0,recordsUpdated=0;
+
+  withTotal.forEach(r=>{
+    const res=r.resultado;
+    // Recalculate GL with correct formula
+    const glp=_calcGL(res.total,res.bw,r.modalidad,r.sexo);
+    res.glp=glp;
+
+    let athlete=findAthleteInDB(r.nombre,r.rut);
+
+    if(!athlete){
+      // Create new athlete
+      const newCodigo='FCP-NEW-'+Date.now()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
+      athlete={
+        nombre:r.nombre,rut:r.rut||'',codigo:newCodigo,
+        club:r.club||'',debut:comp.fecha?.slice(0,4)||'',
+        competencias:[],bestLifts:{}
+      };
+      newData.push(athlete);
+      added++;
+    }else{
+      // Ensure we modify the copy
+      athlete=newData.find(a=>a.codigo===athlete.codigo);
+      updated++;
+    }
+
+    // Remove duplicate entry for same event
+    athlete.competencias=(athlete.competencias||[]).filter(c=>c.evento!==r.evento);
+
+    // Add competition result
+    const compEntry={
+      evento:r.evento,fecha:comp.fecha||r.fecha,
+      division:r.division||res.division||'',
+      categoria:r.categoria||res.categoria||'',
+      modalidad:r.modalidad||'',
+      sexo:r.sexo||'',
+      resultado:{
+        bw:res.bw,sq:res.sq||0,bp:res.bp||0,dl:res.dl||0,
+        total:res.total,glp,
+        intentos:res.intentos||{},
+        pesoCorporal:res.bw,
+        categoria:res.categoria||r.categoria,
+        division:res.division||r.division
+      }
+    };
+    athlete.competencias.push(compEntry);
+
+    // Update bestLifts (only if same modality or better)
+    const bl=athlete.bestLifts||{};
+    const mod=(r.modalidad||'').toLowerCase().includes('equip')?'eq':'cl';
+    if(res.sq&&res.sq>(bl.sq||0))bl.sq=res.sq;
+    if(res.bp&&res.bp>(bl.bp||0))bl.bp=res.bp;
+    if(res.dl&&res.dl>(bl.dl||0))bl.dl=res.dl;
+    if(res.total&&res.total>(bl.total||0)){bl.total=res.total;bl.glp=glp;}
+    athlete.bestLifts=bl;
+
+    // Check and update records
+    ['sq','bp','dl','total'].forEach(lift=>{
+      const val=lift==='total'?res.total:res[lift];
+      if(!val)return;
+      const rec=checkRecord(val,res.bw,res.categoria||r.categoria,res.division||r.division,r.modalidad,r.sexo,lift);
+      if(rec){
+        const idx=(newRecords.records||[]).findIndex(x=>x.categoria===rec.categoria&&x.division===rec.division&&x.sexo===rec.sexo&&x.levantamiento===lift);
+        if(idx>=0){
+          newRecords.records[idx]={...newRecords.records[idx],marca:val,atleta:r.nombre,fecha:comp.fecha,evento:comp.eventoName};
+          recordsUpdated++;
+        }
+      }
+    });
+  });
+
+  // Download data.json
+  const dataBlob=new Blob([JSON.stringify(newData,null,2)],{type:'application/json'});
+  const dataUrl=URL.createObjectURL(dataBlob);
+  const a1=document.createElement('a');a1.href=dataUrl;a1.download='data.json';a1.click();
+  
+  // Download records.json if updated
+  if(recordsUpdated>0){
+    setTimeout(()=>{
+      const recBlob=new Blob([JSON.stringify(newRecords,null,2)],{type:'application/json'});
+      const recUrl=URL.createObjectURL(recBlob);
+      const a2=document.createElement('a');a2.href=recUrl;a2.download='records.json';a2.click();
+    },500);
+  }
+
+  // Mark as processed in Firestore
+  try{
+    await setDoc(doc(db,'competition_results',compId),
+      {status:'processed',processedAt:new Date().toISOString(),processedBy:ST.user.email,
+       summary:{added,updated,recordsUpdated}},
+      {merge:true}
+    );
+    await logAction('merge_results',comp.eventoName,null,`${added} new, ${updated} updated, ${recordsUpdated} records`);
+  }catch(e){console.warn('Mark processed error',e);}
+
+  // Update local ST.data for immediate effect
+  ST.data=newData;
+  RECORDS_DATA=newRecords;
+
+  showToast(`✅ Procesado: ${added} atletas nuevos, ${updated} actualizados, ${recordsUpdated} records. Sube data.json y records.json a GitHub.`);
+  if(btn){btn.disabled=false;btn.textContent='✅ Descargado — sube a GitHub';}
+};
+
+window.descartarResultados = async function(compId){
+  if(!confirm('¿Descartar estos resultados? No se aplicará ningún cambio al sistema.'))return;
+  try{
+    await setDoc(doc(db,'competition_results',compId),{status:'discarded'},{merge:true});
+    showToast('Resultados descartados');
+  }catch(e){showToast('Error: '+e.message,null,true);}
+};
+
+window.verDetalleComp = function(compId){
+  const comp=ST.competitionResults.find(c=>c.id===compId);
+  if(!comp)return;
+  const r=comp.results||[];
+  const rows=r.map(x=>`<tr><td>${x.nombre}</td><td style="text-align:center">${x.resultado?.sq||0}</td><td style="text-align:center">${x.resultado?.bp||0}</td><td style="text-align:center">${x.resultado?.dl||0}</td><td style="font-family:Oswald;font-weight:700;color:var(--gold);text-align:center">${x.resultado?.total||'—'}</td><td style="color:var(--green);text-align:center">${x.resultado?.glp||'—'}</td></tr>`).join('');
+  const m=document.createElement('div');
+  m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);z-index:9999;overflow-y:auto;padding:20px';
+  m.innerHTML=`<div style="max-width:800px;margin:0 auto;background:#0f1e35;border:1px solid #1E3A5F;border-radius:14px;padding:24px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:16px">
+      <div class="os" style="font-size:18px">${comp.eventoName}</div>
+      <button onclick="this.closest('[style]').remove()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 12px;border-radius:6px;cursor:pointer">✕</button>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl"><tr><th>Atleta</th><th>SQ</th><th>BP</th><th>DL</th><th>Total</th><th>GL Pts</th></tr>${rows}</table></div>
+  </div>`;
+  document.body.appendChild(m);
+  m.onclick=e=>{if(e.target===m)m.remove();};
+};
+
 </script>
 </body>
 </html>window._authFired=false;
 
+
+  // ── SECTION 7: KPIs por Club ─────────────────────────────
+  h+=`<div style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:var(--muted);margin:4px 0 8px;text-transform:uppercase">KPIs por Club</div>`;
+  
+  // Build club stats from ST.data
+  const clubStats={};
+  (ST.data||[]).forEach(a=>{
+    const club=(a.club||'').trim();
+    if(!club)return;
+    if(!clubStats[club])clubStats[club]={n:0,active26:0,active25:0,glps:[],bombed:0,results:0,new26:0,new25:0};
+    const cs=clubStats[club];
+    cs.n++;
+    const debut=String(a.debut||'');
+    if(debut.includes('2026'))cs.new26++;
+    else if(debut.includes('2025'))cs.new25++;
+    const years=new Set();
+    (a.competencias||[]).forEach(c=>{
+      for(const y of ['2026','2025']){if((c.evento||'').includes(y)){years.add(y);break;}}
+      const r=c.resultado||{};
+      if(r.total>0){cs.results++;const g=r.glp||0;if(g>0)cs.glps.push(g);}
+      else if(r&&r.total===0)cs.bombed++;
+    });
+    if(years.has('2026'))cs.active26++;
+    if(years.has('2025'))cs.active25++;
+  });
+
+  const clubArr=Object.entries(clubStats)
+    .map(([name,d])=>({
+      name,n:d.n,active26:d.active26,active25:d.active25,
+      avgGL:d.glps.length?Math.round(d.glps.reduce((s,v)=>s+v,0)/d.glps.length*10)/10:0,
+      topGL:d.glps.length?Math.round(Math.max(...d.glps)*10)/10:0,
+      bombRate:d.bombed+d.results>0?Math.round(d.bombed/(d.bombed+d.results)*100*10)/10:0,
+      retention:d.active25>0?Math.round(d.active26/d.active25*100):0,
+      new26:d.new26,new25:d.new25
+    }))
+    .filter(d=>d.n>=3)
+    .sort((a,b)=>b.n-a.n);
+
+  h+=`<div class="card" style="margin-bottom:16px;padding:0;overflow-x:auto">
+    <table class="tbl">
+      <tr>
+        <th style="padding:10px 12px;text-align:left">Club</th>
+        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">Atletas</th>
+        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">Activos '26</th>
+        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">GL Avg</th>
+        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">GL Top</th>
+        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">Bomb-out</th>
+        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">Retención</th>
+        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">Nuevos '26</th>
+      </tr>
+      ${clubArr.map((c,i)=>{
+        const rankColor=i===0?'var(--gold)':i===1?'#c0c0c0':i===2?'#cd7f32':'var(--muted)';
+        const retColor=c.retention>=70?'var(--green)':c.retention>=40?'var(--gold)':'var(--red)';
+        const bombColor=c.bombRate>5?'var(--red)':c.bombRate>2?'var(--gold)':'var(--green)';
+        const maxN=clubArr[0].n||1;
+        const barW=Math.round(c.n/maxN*100);
+        return `<tr style="border-bottom:1px solid rgba(30,58,95,.3)">
+          <td style="padding:8px 12px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="os" style="font-size:11px;color:${rankColor};min-width:18px">${i+1}</span>
+              <div>
+                <div style="font-size:13px;font-weight:600">${c.name}</div>
+                <div style="background:rgba(30,58,95,.3);border-radius:2px;height:3px;width:${barW}%;margin-top:3px"></div>
+              </div>
+            </div>
+          </td>
+          <td style="text-align:center;font-family:Oswald;font-size:15px">${c.n}</td>
+          <td style="text-align:center;font-family:Oswald;font-size:15px;color:var(--blue)">${c.active26}</td>
+          <td style="text-align:center;font-family:Oswald;font-size:15px;color:var(--gold)">${c.avgGL||'—'}</td>
+          <td style="text-align:center;font-family:Oswald;font-size:13px;color:var(--muted)">${c.topGL||'—'}</td>
+          <td style="text-align:center;font-family:Oswald;font-size:15px;color:${bombColor}">${c.bombRate}%</td>
+          <td style="text-align:center;font-family:Oswald;font-size:15px;color:${retColor}">${c.retention>0?c.retention+'%':'—'}</td>
+          <td style="text-align:center;font-family:Oswald;font-size:15px;color:${c.new26>0?'var(--green)':'var(--muted)'}">${c.new26||'—'}</td>
+        </tr>`;
+      }).join('')}
+    </table>
+  </div>`;
