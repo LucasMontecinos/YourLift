@@ -37,7 +37,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 const FL_C=['#3b82f6','#f59e0b','#22c55e','#a855f7','#ec4899','#06b6d4','#ef4444','#84cc16','#f97316','#6366f1'];
 const FL_L='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const MIN_FLIGHT=8, MAX_FLIGHT=14;
-// ── Firebase Auth for admin ──────────────────────────────────
+// Firebase Auth replaces PIN — admin detected from session
 let fbAuthUser = null;
 let fbAuthMod  = null;
 let fbAuthInst = null;
@@ -45,8 +45,8 @@ const LIFTS_NAMES=['SQUAT','BENCH PRESS','DEADLIFT'];
 
 let NM={events:[]}, DB=[], selectedEvent=null, flights=[];
 let config={morningStart:'09:00',afternoonStart:'14:30',minPerAthlete:3,breakBetweenLifts:10,breakMorningAfternoon:60,adminUnlocked:false};
-let coachUser=null; // {email, nombre, grado, rut} when coach is logged in
-let ACCRED={}; // {nombreAtleta_eventoId: {entrenador, handler}} cached from Firestore
+let coachUser=null;
+let ACCRED={};
 
 // Firebase for flight sync
 const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
@@ -57,34 +57,25 @@ async function initCronoFB(){
     const fb=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     const authMod=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
     const app=initializeApp(FB_CFG);fbDB=fb.getFirestore(app);
+    window._fb=fb;window._fbAuth=authMod;
+    window._fb.getDoc=fb.getDoc;window._fb.where=fb.where;window._fb.query=fb.query;
     fbAuthMod=authMod;fbAuthInst=authMod.getAuth(app);
-    window._fb=fb;window._fbAuth=authMod;window._fb.getDoc=fb.getDoc;window._fb.where=fb.where;window._fb.query=fb.query;
-    // Auth state listener
     authMod.onAuthStateChanged(fbAuthInst,user=>{
       if(user){
-        // Verify admin in Firestore
         fb.getDoc(fb.doc(fbDB,'admins',user.uid)).then(snap=>{
           fbAuthUser=snap.exists()?user:null;
           config.adminUnlocked=snap.exists();
           render();
         }).catch(()=>{fbAuthUser=user;config.adminUnlocked=true;render();});
       } else {
-        fbAuthUser=null;
-        config.adminUnlocked=false;
-        render();
+        fbAuthUser=null;config.adminUnlocked=false;render();
       }
     });
-    // Load inscripciones once (for flight sync lookups)
+    const auth=authMod.getAuth(app);
+    // Load inscripciones to get IDs for updating flight
     const snap=await fb.getDocs(fb.collection(fbDB,'inscripciones'));
     fbInscripciones=[];snap.forEach(d=>fbInscripciones.push({id:d.id,...d.data()}));
     fbReady=true;
-    // Sync NOM_EVENTS from Firestore eventos collection
-    fb.onSnapshot(fb.collection(fbDB,'eventos'),(snap)=>{
-      const evs=snap.docs.map(d=>({...d.data(),id:d.id}))
-        .filter(e=>e.status!=='archived'&&e.status!=='draft')
-        .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-      if(evs.length){NOM_EVENTS=evs;render();}
-    });
     console.log('[CronoFB] Ready,',fbInscripciones.length,'inscripciones loaded');
   }catch(e){console.warn('[CronoFB] Init failed',e)}
 }
@@ -106,14 +97,45 @@ async function syncFlightsToFB(){
   }
   if(updated>0)console.log('[CronoFB] Updated',updated,'flight assignments');
 }
-// NOM_EVENTS loaded from Firestore — seeded as fallback
-let NOM_EVENTS=[
-  {id:'regional_centro_2026',name:'Campeonato Regional Centro FECHIPO 2026',date:'2026-05-09',closeDate:'2026-04-09',location:'Santiago, RM',org:'Athor Powerlifting',days:'09 y 10 de Mayo',status:'open'},
-  {id:'universitario_2026',name:'Primer Campeonato Nacional Universitario FECHIPO 2026',date:'2026-05-23',closeDate:'2026-04-23',location:'Talca',org:'Club Bushido Lifting',days:'23 de Mayo',status:'open'},
-  {id:'Campeonato_de_debutantes',name:'Campeonato de Debutantes',date:'2026-XX-XX',closeDate:'2026-XX-XX',location:'Santiago, Ñuñoa',org:'All Power',days:'Por definir',status:'open'},
-];
+initCronoFB();
 
-// ── COACH AUTH ────────────────────────────────────────────
+Promise.all([
+  fetch('nominas.json').then(r=>r.json()).catch(()=>({events:[]})),
+  fetch('data.json').then(r=>r.json()).catch(()=>[])
+]).then(([n,d])=>{NM=n;DB=d;render()});
+
+function render(){
+  if(!selectedEvent){renderEventList();return}
+  renderCronograma();
+}
+
+function checkAdmin(){
+  if(config.adminUnlocked)return true;
+  if(fbAuthUser){config.adminUnlocked=true;return true;}
+  if(confirm('Para acceder al modo Admin del Cronograma inicia sesión en el panel de administración.\n\n¿Ir a admin.html?')){
+    sessionStorage.setItem('cronograma_return','1');
+    window.location.href='admin.html';
+  }
+  return false;
+}
+
+function _canEditAccred(){return coachUser!==null||config.adminUnlocked;}
+
+function renderAccredCell(nombre,field,borderColor,textColor){
+  const val=(ACCRED[nombre]||{})[field]||'';
+  const safeName=nombre.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  if(_canEditAccred()){
+    return '<input type="text" value="'+val.replace(/"/g,'&quot;')+'" placeholder="—" '
+      +'style="width:100%;background:var(--bg);border:1px solid '+borderColor+';color:var(--text);'
+      +'padding:4px 6px;border-radius:5px;font-size:11px;" '
+      +'onchange="saveAccredField(\''+safeName+'\',\''+field+'\',this.value)">';
+  }
+  return val
+    ?'<span style="font-size:11px;color:'+textColor+'">'+val+'</span>'
+    :'<span style="font-size:11px;opacity:.3">—</span>';
+}
+
+// Coach login modal
 function showCoachLogin(){
   const ex=document.getElementById('coachModal');if(ex)ex.remove();
   const m=document.createElement('div');m.id='coachModal';
@@ -143,19 +165,18 @@ async function doCoachLogin(){
   try{
     const id=email.replace(/[.@]/g,'_');
     const snap=await window._fb.getDoc(window._fb.doc(fbDB,'coaches',id));
-    if(!snap.exists()){err.style.display='block';err.textContent='Correo no registrado como entrenador acreditado';return;}
+    if(!snap.exists()){err.style.display='block';err.textContent='Correo no registrado como entrenador';return;}
     const data=snap.data();
     if(data.password!==pass){err.style.display='block';err.textContent='Contraseña incorrecta — usa tu RUT sin puntos ni guión';return;}
     coachUser={email:data.email,nombre:data.nombre,grado:data.grado,rut:data.rut};
     document.getElementById('coachModal')?.remove();
     if(selectedEvent)await loadAccreditations();
     render();
-  }catch(e){err.style.display='block';err.textContent='Error: '+e.message;console.error(e);}
+  }catch(e){err.style.display='block';err.textContent='Error: '+e.message;}
 }
 
 function doCoachLogout(){coachUser=null;render();}
 
-// ── ACREDITACIONES ────────────────────────────────────────
 async function loadAccreditations(){
   if(!fbReady||!selectedEvent)return;
   try{
@@ -181,92 +202,342 @@ async function saveAccredField(atletaNombre,field,value){
   }catch(e){console.warn('[Crono] Save accred error',e);}
 }
 
-function _canEditAccred(){return coachUser!==null||config.adminUnlocked;}
-
-function renderAccredCell(nombre,field,borderColor,textColor){
-  const val=(ACCRED[nombre]||{})[field]||'';
-  const safeName=nombre.replace(/\\/g,'\\\\').replace(/'/g,'\\\'');
-  if(_canEditAccred()){
-    return '<input type="text" value="'+val.replace(/"/g,'&quot;')+'" placeholder="—" '
-      +'style="width:100%;background:var(--bg);border:1px solid '+borderColor+';color:var(--text);'
-      +'padding:4px 6px;border-radius:5px;font-size:11px;" '
-      +'onchange="saveAccredField(\''+safeName+'\',\''+field+'\',this.value)">';
-  }
-  return val
-    ?'<span style="font-size:11px;color:'+textColor+'">'+val+'</span>'
-    :'<span style="font-size:11px;opacity:.3">—</span>';
+async function doLogout(){
+  try{if(fbAuthMod&&fbAuthInst)await fbAuthMod.signOut(fbAuthInst);}catch(e){}
+  fbAuthUser=null;config.adminUnlocked=false;selectedEvent=null;render();
 }
 
+function updateConfig(key,val){
+  if(!checkAdmin())return;
+  config[key]=val;render();
+}
 
-function _cronoApplyNominas(all){
-  const visible=all.filter(i=>i.status==='approved'||i.status==='pending');
-  const byEvent={};
-  visible.forEach(i=>{if(!byEvent[i.evento])byEvent[i.evento]=[];byEvent[i.evento].push(i)});
-  const fbEvents=NOM_EVENTS.map(ev=>{
-    const athletes=(byEvent[ev.id]||[])
-      .sort((a,b)=>(a.timestamp?.seconds||0)-(b.timestamp?.seconds||0))
-      .map(i=>({
-        nombre:i.nombre,rut:i.rut||'',sexo:i.sexo||'',
-        dob:i.fechaNac||'',division:i.division||'',categoria:i.categoria||'',
-        modalidad:i.modalidad||'',club:i.club==='Otro'?i.clubOtro:i.club||'',
-        universidad:i.universidad||'',status:i.status,id:i.id,flight:i.flight||''
-      }));
-    return{...ev,athletes,fromFirebase:true};
-  }).filter(ev=>ev.athletes.length>0);
-  // Merge with static nominas.json (Firestore wins for matching event names)
-  if(fbEvents.length>0){
-    const fbNames=new Set(fbEvents.map(e=>e.name));
-    NM.events=[...(NM.events||[]).filter(e=>!fbNames.has(e.name)),...fbEvents];
-    // If current event updated, refresh flights from new athlete list
-    if(selectedEvent){
-      const updated=NM.events.find(e=>e.name===selectedEvent.name);
-      if(updated){
-        selectedEvent=updated;
-        // Reload flight assignments preserving manual overrides
-        loadOrGenerateFlights();
+function renderEventList(){
+  let h='<div class="fade"><h2 class="os" style="font-size:20px;letter-spacing:1px;margin-bottom:16px">Selecciona un Campeonato</h2>';
+  if(!NM.events||!NM.events.length){h+='<div class="card" style="text-align:center;padding:30px;color:var(--muted)">No hay eventos</div></div>';document.getElementById('content').innerHTML=h;return}
+  NM.events.forEach((ev,i)=>{
+    h+=`<div class="card" style="cursor:pointer;transition:all .2s" onclick="selectEvent(${i})" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
+      <div style="display:flex;justify-content:space-between;align-items:center"><div>
+        <div class="os" style="font-size:18px;font-weight:700">${ev.name}</div>
+        <p style="color:var(--muted);font-size:12px;margin-top:4px">${ev.organizer||ev.org||''} · ${ev.location||''} · ${ev.days||ev.date||''}</p>
+      </div><div style="background:var(--accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;font-family:Oswald">${ev.athletes.length}</div></div>
+    </div>`;
+  });
+  h+='</div>';document.getElementById('content').innerHTML=h;
+}
+
+function selectEvent(i){selectedEvent=NM.events[i];loadOrGenerateFlights();if(fbReady)loadAccreditations().then(()=>render());else render();}
+
+function flightKey(){return 'fechipo_crono_'+(selectedEvent?.name||'').replace(/\s+/g,'_')}
+
+function saveFlights(){
+  const map={};
+  flights.forEach(f=>{f.athletes.forEach(a=>{map[a.nombre||a.name||'']=f.letter})});
+  const letters=flights.map(f=>f.letter);
+  localStorage.setItem(flightKey(),JSON.stringify({map,letters,ts:Date.now()}));
+  syncFlightsToFB();
+}
+
+function loadOrGenerateFlights(){
+  const saved=localStorage.getItem(flightKey());
+  if(saved){
+    try{
+      const d=JSON.parse(saved);
+      if(d.map&&d.letters){
+        // Rebuild flights from saved map
+        generateFlights();// first generate to get groups structure
+        const newFlights=d.letters.map((l,i)=>({letter:l,color:FL_C[i%FL_C.length],athletes:[],groups:[]}));
+        const allAthletes=selectedEvent.athletes.map((a,i)=>({...a,idx:i}));
+        allAthletes.forEach(a=>{
+          const assignedLetter=d.map[a.nombre||''];
+          const fi=newFlights.findIndex(f=>f.letter===assignedLetter);
+          if(fi>=0)newFlights[fi].athletes.push(a);
+          else if(newFlights.length>0)newFlights[newFlights.length-1].athletes.push(a);
+        });
+        // Remove empty flights
+        flights=newFlights.filter(f=>f.athletes.length>0);
+        flights.forEach((f,i)=>{f.color=FL_C[i%FL_C.length]});
+        return;
+      }
+    }catch(e){}
+  }
+  generateFlights();
+  saveFlights();
+}
+
+function moveAthlete(fIdx,aIdx,toLetter){
+  if(!config.adminUnlocked)return;
+  const fromF=flights[fIdx];
+  const toF=flights.find(f=>f.letter===toLetter);
+  if(!fromF||!toF||fromF.letter===toLetter)return;
+  const athlete=fromF.athletes.splice(aIdx,1)[0];
+  toF.athletes.push(athlete);
+  flights=flights.filter(f=>f.athletes.length>0);
+  flights.forEach((f,i)=>{f.color=FL_C[i%FL_C.length]});
+  saveFlights();render();
+}
+
+function addFlight(){
+  if(!config.adminUnlocked){checkAdmin();if(!config.adminUnlocked)return}
+  const nextLetter=FL_L[flights.length]||'?';
+  flights.push({letter:nextLetter,color:FL_C[flights.length%FL_C.length],athletes:[],groups:[]});
+  saveFlights();render();
+}
+
+function resetFlights(){
+  if(!config.adminUnlocked){checkAdmin();if(!config.adminUnlocked)return}
+  if(!confirm('¿Regenerar vuelos? Se perderán los cambios manuales.'))return;
+  localStorage.removeItem(flightKey());
+  generateFlights();saveFlights();render();
+}
+
+function catWeight(cat){const m=(cat||'').match(/(\d+)/);return m?parseInt(m[1]):999}
+
+function generateFlights(){
+  const athletes=selectedEvent.athletes.map((a,i)=>({...a,idx:i}));
+  const women=athletes.filter(a=>(a.sexo||'').match(/fem|mujer/i));
+  const men=athletes.filter(a=>!(a.sexo||'').match(/fem|mujer/i));
+  
+  flights=[];
+  [women,men].forEach(group=>{
+    if(!group.length)return;
+    const groups={};
+    group.forEach(a=>{
+      const div=a.division||'Open';const cat=a.categoria||'?';const key=div+'|'+cat;
+      if(!groups[key])groups[key]={div,cat,athletes:[],catW:catWeight(cat),sex:a.sexo||''};
+      groups[key].athletes.push(a);
+    });
+    const sorted=Object.values(groups).sort((a,b)=>a.catW-b.catW);
+    const remFrom=gi=>sorted.slice(gi).reduce((s,x)=>s+x.athletes.length,0);
+    
+    let cur=[],curG=[];
+    for(let gi=0;gi<sorted.length;gi++){
+      const g=sorted[gi];const wouldBe=cur.length+g.athletes.length;const rem=remFrom(gi+1);
+      
+      if(wouldBe>MAX_FLIGHT){
+        if(cur.length>=MIN_FLIGHT){
+          flights.push({athletes:[...cur],groups:[...curG]});
+          cur=[...g.athletes];curG=[g];
+        }else{
+          if(flights.length>0){
+            flights[flights.length-1].athletes.push(...cur);
+            flights[flights.length-1].groups.push(...curG);
+          }else if(cur.length>0){
+            flights.push({athletes:[...cur],groups:[...curG]});
+          }
+          cur=[...g.athletes];curG=[g];
+        }
+      }else{
+        cur.push(...g.athletes);curG.push(g);
+      }
+      
+      if(cur.length>=MIN_FLIGHT&&cur.length<=MAX_FLIGHT&&rem>=MIN_FLIGHT){
+        flights.push({athletes:[...cur],groups:[...curG]});
+        cur=[];curG=[];
       }
     }
-    render();
-  }
+    if(cur.length>0){
+      if(cur.length<MIN_FLIGHT&&flights.length>0&&flights[flights.length-1].athletes[0]?.sexo===cur[0]?.sexo){
+        flights[flights.length-1].athletes.push(...cur);
+        flights[flights.length-1].groups.push(...curG);
+      }else{
+        flights.push({athletes:cur,groups:curG});
+      }
+    }
+  });
+  flights.forEach((f,i)=>{f.letter=FL_L[i]||'?';f.color=FL_C[i%FL_C.length]});
 }
 
-initCronoFB().then(()=>{
-  if(fbReady&&window._fb){
-    // Real-time listener for inscripciones
-    window._fb.onSnapshot(window._fb.collection(fbDB,'inscripciones'),(snap)=>{
-      const all=[];snap.forEach(d=>all.push({id:d.id,...d.data()}));
-      _cronoApplyNominas(all);
+function renderCronograma(){
+  const ev=selectedEvent;const total=ev.athletes.length;
+  const nFlights=flights.length;
+  
+  // Split morning/afternoon: max 3 morning, rest afternoon. If 4 → 2+2
+  let morningCount;
+  if(nFlights<=3)morningCount=nFlights;
+  else if(nFlights===4)morningCount=2;
+  else morningCount=3;
+  const afternoonCount=nFlights-morningCount;
+  
+  const morningFlights=flights.slice(0,morningCount);
+  const afternoonFlights=flights.slice(morningCount);
+  
+  let h='<div class="fade">';
+  // Header
+  h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+    <div><h2 class="os" style="font-size:22px;letter-spacing:1px">${ev.name}</h2>
+    <p style="color:var(--muted);font-size:12px">${ev.organizer||ev.org||''} · ${ev.location||''} · ${ev.days||ev.date||''}</p></div>
+    <div style="display:flex;gap:8px"><button class="btn btn-o" onclick="selectedEvent=null;config.adminUnlocked=false;render()">← Volver</button>
+    <button class="btn btn-o" onclick="resetFlights()">↺ Regenerar</button>
+    <button class="btn btn-o" onclick="addFlight()">+ Vuelo</button>
+    ${coachUser?`<button class="btn" onclick="doCoachLogout()" style="background:rgba(212,168,67,.15);border:1px solid var(--gold);color:var(--gold);font-size:11px;padding:6px 12px">🏋️ ${coachUser.nombre.split(' ')[0]} · Salir</button>`:`<button class="btn" onclick="showCoachLogin()" style="background:rgba(212,168,67,.1);border:1px solid rgba(212,168,67,.4);color:var(--gold);font-size:11px;padding:6px 12px">🏋️ Entrenador / Handler</button>`}
+    ${config.adminUnlocked?`<button class="btn btn-g" onclick="doLogout()" style="font-size:11px">🔓 ${fbAuthUser?.email?.split('@')[0]||'Admin'} · Cerrar sesión</button>`:''}</div>
+  </div>`;
+  
+  // Config (password protected)
+  h+=`<div class="card" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:12px 16px">
+    <div style="display:flex;align-items:center;gap:6px">
+      <label style="font-size:11px;color:var(--muted)">🌅 Mañana:</label>
+      <input type="time" class="inp-t" value="${config.morningStart}" onchange="updateConfig('morningStart',this.value)" ${config.adminUnlocked?'':'disabled'} style="width:90px;${config.adminUnlocked?'':'opacity:.5'}">
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <label style="font-size:11px;color:var(--muted)">🌆 Tarde:</label>
+      <input type="time" class="inp-t" value="${config.afternoonStart}" onchange="updateConfig('afternoonStart',this.value)" ${config.adminUnlocked?'':'disabled'} style="width:90px;${config.adminUnlocked?'':'opacity:.5'}">
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <label style="font-size:11px;color:var(--muted)">⏱ Min/atleta:</label>
+      <input type="number" class="inp-t" value="${config.minPerAthlete}" min="8" max="20" onchange="updateConfig('minPerAthlete',parseInt(this.value))" ${config.adminUnlocked?'':'disabled'} style="width:55px;${config.adminUnlocked?'':'opacity:.5'}">
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <label style="font-size:11px;color:var(--muted)">☕ Receso lifts (min):</label>
+      <input type="number" class="inp-t" value="${config.breakBetweenLifts}" min="0" max="30" onchange="updateConfig('breakBetweenLifts',parseInt(this.value))" ${config.adminUnlocked?'':'disabled'} style="width:55px;${config.adminUnlocked?'':'opacity:.5'}">
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <label style="font-size:11px;color:var(--muted)">🍽 Receso mañana/tarde (min):</label>
+      <input type="number" class="inp-t" value="${config.breakMorningAfternoon}" min="0" max="120" onchange="updateConfig('breakMorningAfternoon',parseInt(this.value))" ${config.adminUnlocked?'':'disabled'} style="width:55px;${config.adminUnlocked?'':'opacity:.5'}">
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-left:auto">${total} atletas · ${nFlights} vuelos · ${morningCount} mañana + ${afternoonCount} tarde</div>
+  </div>`;
+  
+  // Flight overview
+  h+=`<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">`;
+  flights.forEach((f,i)=>{
+    const sex=(f.athletes[0]?.sexo||'').match(/fem|mujer/i)?'♀':'♂';
+    const session=i<morningCount?'AM':'PM';
+    const warn=f.athletes.length<MIN_FLIGHT?'⚠️ ':'';
+    h+=`<div style="flex:1;min-width:75px;background:${f.color}15;border:2px solid ${f.color};border-radius:8px;padding:8px 10px;text-align:center">
+      <div class="os" style="font-size:20px;font-weight:700;color:${f.color}">${warn}${f.letter}</div>
+      <div style="font-size:10px;color:var(--muted)">${sex} ${f.athletes.length} · ${session}</div>
+    </div>`;
+  });
+  h+=`</div>`;
+  
+  // Render sessions
+  function renderSession(sessionFlights,startTime,label,emoji){
+    const [startH,startM]=startTime.split(':').map(Number);
+    
+    h+=`<div class="session-hdr" style="background:${label==='MAÑANA'?'rgba(245,158,11,.1);border:2px solid var(--orange)':'rgba(99,102,241,.1);border:2px solid #6366f1'}">${emoji} SESIÓN ${label} — ${startTime}</div>`;
+    
+    // For each lift (SQ, BP, DL), all flights do it in sequence
+    let timeAccum=0;
+    
+    LIFTS_NAMES.forEach((liftName,li)=>{
+      const liftColor=li===0?'#3b82f6':li===1?'#f59e0b':'#ef4444';
+      h+=`<div style="margin:12px 0 8px;display:flex;align-items:center;gap:8px">
+        <span style="background:${liftColor};color:#fff;padding:4px 12px;border-radius:6px;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px">${liftName}</span>
+        <div style="flex:1;height:1px;background:${liftColor}40"></div>
+      </div>`;
+      
+      sessionFlights.forEach((f,fi)=>{
+        const flightMin=f.athletes.length*config.minPerAthlete;
+        const totalMin=startH*60+startM+timeAccum;
+        const hh=String(Math.floor(totalMin/60)%24).padStart(2,'0');
+        const mm=String(totalMin%60).padStart(2,'0');
+        const endMin=totalMin+flightMin;
+        const ehh=String(Math.floor(endMin/60)%24).padStart(2,'0');
+        const emm=String(endMin%60).padStart(2,'0');
+        
+        const sex=(f.athletes[0]?.sexo||'').match(/fem|mujer/i)?'♀':'♂';
+        const cats=[...new Set(f.groups.map(g=>g.cat))].join(', ');
+        const divs=[...new Set(f.groups.map(g=>g.div))].join(', ');
+        const warn=f.athletes.length<MIN_FLIGHT?`<span style="color:var(--orange);font-size:10px;margin-left:4px">⚠️ ${f.athletes.length} atletas (mín ${MIN_FLIGHT})</span>`:f.athletes.length>MAX_FLIGHT?`<span style="color:var(--orange);font-size:10px;margin-left:4px">⚠️ ${f.athletes.length} atletas (máx ${MAX_FLIGHT})</span>`:'';
+        
+        h+=`<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:${f.color}08;border-left:3px solid ${f.color};border-radius:0 8px 8px 0;margin-bottom:4px">
+          <span class="os" style="font-size:22px;font-weight:700;color:${f.color};min-width:28px">${f.letter}</span>
+          <div style="flex:1">
+            <span style="font-size:13px;font-weight:600">${sex} ${cats}</span>
+            <span style="font-size:10px;color:var(--muted);margin-left:6px">(${divs})</span>${warn}
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span class="os" style="font-size:15px;font-weight:700">${hh}:${mm}</span>
+            <span style="color:var(--border)">→</span>
+            <span class="os" style="font-size:15px;color:var(--muted)">${ehh}:${emm}</span>
+            <span style="background:${f.color}20;border:1px solid ${f.color};padding:3px 8px;border-radius:5px;font-family:Oswald;font-size:12px;font-weight:700;color:${f.color}">${f.athletes.length}</span>
+          </div>
+        </div>`;
+        
+        timeAccum+=flightMin;
+      });
+      
+      // Break between lifts (except after last lift)
+      if(li<2){
+        timeAccum+=config.breakBetweenLifts;
+        const breakEnd=startH*60+startM+timeAccum;
+        const bh=String(Math.floor(breakEnd/60)%24).padStart(2,'0');
+        const bm=String(breakEnd%60).padStart(2,'0');
+        h+=`<div style="text-align:center;padding:6px;color:var(--muted);font-size:11px;font-style:italic">☕ Receso ${config.breakBetweenLifts} min — reinicio ${bh}:${bm}</div>`;
+      }
     });
+    
+    const endTotal=startH*60+startM+timeAccum;
+    const fh=String(Math.floor(endTotal/60)%24).padStart(2,'0');
+    const fm=String(endTotal%60).padStart(2,'0');
+    h+=`<div style="text-align:center;padding:10px;font-family:Oswald;font-size:14px;color:var(--green);letter-spacing:1px">✓ FIN SESIÓN ${label}: ~${fh}:${fm}</div>`;
   }
-});
-
-Promise.all([
-  fetch('nominas.json').then(r=>r.json()).catch(()=>({events:[]})),
-  fetch('data.json').then(r=>r.json()).catch(()=>[])
-]).then(([n,d])=>{
-  NM=n;DB=d;
-  render();
-});
-
-function render(){
-  if(!selectedEvent){renderEventList();return}
-  renderCronograma();
-}
-
-function checkAdmin(){
-  if(config.adminUnlocked)return true;
-  // Already logged in via Firebase?
-  if(fbAuthUser){config.adminUnlocked=true;return true;}
-  // Show login modal
-  showLoginModal();
-  return false;
-}
-
-function showLoginModal(){
-  // Admin login centralized in admin.html
-  if(confirm('Para acceder al modo Admin del Cronograma debes iniciar sesión en el panel de administración.\n\n¿Ir a admin.html?')){
-    sessionStorage.setItem('cronograma_return','1');
-    window.location.href='admin.html';
+  
+  // Morning session
+  if(morningFlights.length) renderSession(morningFlights,config.morningStart,'MAÑANA','🌅');
+  
+  // Break
+  if(morningFlights.length&&afternoonFlights.length){
+    h+=`<div style="text-align:center;padding:16px;margin:8px 0">
+      <div style="display:inline-block;background:rgba(99,102,241,.1);border:2px dashed #6366f1;border-radius:10px;padding:12px 24px">
+        <span style="font-size:14px">🍽</span>
+        <span class="os" style="font-size:14px;color:#6366f1;letter-spacing:1px"> RECESO ${config.breakMorningAfternoon} MIN</span>
+      </div>
+    </div>`;
   }
+  
+  // Afternoon session
+  if(afternoonFlights.length) renderSession(afternoonFlights,config.afternoonStart,'TARDE','🌆');
+  
+  // Detailed roster per flight
+  h+=`<h2 class="os" style="font-size:18px;letter-spacing:1px;margin:24px 0 12px;color:var(--gold)">📋 NÓMINA POR VUELO</h2>`;
+  flights.forEach((f,fi)=>{
+    const sex=(f.athletes[0]?.sexo||'').match(/fem|mujer/i)?'♀ Femenino':'♂ Masculino';
+    const cats=[...new Set(f.groups.map(g=>g.cat))].join(', ');
+    const divs=[...new Set(f.groups.map(g=>g.div))].join(', ');
+    const session=fi<morningCount?'Mañana':'Tarde';
+    
+    h+=`<div class="card" style="border-left:4px solid ${f.color}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="os" style="font-size:26px;font-weight:700;color:${f.color}">${f.letter}</span>
+          <div><div class="os" style="font-size:14px">${sex} · ${cats}</div>
+          <div style="font-size:10px;color:var(--muted)">${divs} · ${session}</div></div>
+        </div>
+        <span style="background:${f.color}20;border:1px solid ${f.color};padding:4px 12px;border-radius:6px;font-family:Oswald;font-size:16px;font-weight:700;color:${f.color}">${f.athletes.length}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+          <th class="os" style="padding:6px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th>
+          <th style="padding:6px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th>
+          <th style="padding:6px 4px;text-align:center;color:var(--muted);font-size:9px">DIVISIÓN</th>
+          <th style="padding:6px 4px;text-align:center;color:var(--muted);font-size:9px">CATEGORÍA</th>
+          <th style="padding:6px 4px;text-align:left;color:var(--muted);font-size:9px">CLUB</th>
+          <th style="padding:6px 4px;text-align:left;color:var(--gold);font-size:9px;min-width:110px">ENTRENADOR</th>
+          <th style="padding:6px 4px;text-align:left;color:var(--blue);font-size:9px;min-width:100px">HANDLER</th>
+          ${config.adminUnlocked?'<th style="padding:6px 4px;text-align:center;color:var(--muted);font-size:9px">MOVER</th>':''}
+        </tr></thead><tbody>`;
+    f.athletes.forEach((a,ai)=>{
+      const flightOptions=config.adminUnlocked?flights.map(ff=>`<option value="${ff.letter}" ${ff.letter===f.letter?'selected':''}>${ff.letter}</option>`).join(''):'';
+      h+=`<tr style="border-bottom:1px solid rgba(30,58,95,.25)">
+        <td class="os" style="padding:5px 4px;text-align:center;color:var(--gold);font-weight:700">${ai+1}</td>
+        <td style="padding:5px 4px;font-weight:600">${a.nombre||''}</td>
+        <td style="padding:5px 4px;text-align:center;font-size:11px">${a.division||''}</td>
+        <td style="padding:5px 4px;text-align:center;font-size:11px">${a.categoria||''}</td>
+        <td style="padding:5px 4px;font-size:11px;color:var(--muted)">${a.club||''}</td>
+        <td style="padding:3px 2px">${renderAccredCell(a.nombre||'','entrenador','rgba(212,168,67,.3)','var(--gold)')}</td>
+        <td style="padding:3px 2px">${renderAccredCell(a.nombre||'','handler','rgba(59,130,246,.3)','var(--blue)')}</td>
+        ${config.adminUnlocked?`<td style="padding:5px 4px;text-align:center"><select style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:4px;font-family:Oswald;font-size:11px;cursor:pointer" onchange="moveAthlete(${fi},${ai},this.value)">${flightOptions}</select></td>`:''}
+      </tr>`;
+    });
+    h+=`</tbody></table></div>`;
+  });
+  
+  h+='</div>';
+  document.getElementById('content').innerHTML=h;
 }
-async function doLogin(){showLoginModal();}
+</script>
+</body>
+</html>
