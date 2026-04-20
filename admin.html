@@ -1124,6 +1124,63 @@ function renderDashboard(){
   </div>`;
   h+=`</div>`;
 
+
+  // ── SECTION 7: KPIs por Club ─────────────────────────────
+  h+=`<div class="os" style="font-size:11px;letter-spacing:2px;color:var(--muted);margin:20px 0 8px;text-transform:uppercase">KPIs por Club</div>`;
+  const _cS={};
+  (ST.data||[]).forEach(a=>{
+    const cl=(a.club||'').trim();if(!cl)return;
+    if(!_cS[cl])_cS[cl]={n:0,a26:0,a25:0,glps:[],bd:0,rs:0,n26:0};
+    const d=_cS[cl];d.n++;
+    const debut=String(a.debut||'');
+    if(debut.includes('2026'))d.n26++;
+    const yrs=new Set();
+    (a.competencias||[]).forEach(c=>{
+      for(const y of ['2026','2025']){if((c.evento||'').includes(y)){yrs.add(y);break;}}
+      const r=c.resultado||{};
+      if(r.total>0){d.rs++;const g=r.glp||0;if(g>0)d.glps.push(g);}
+      else if(r&&r.total===0)d.bd++;
+    });
+    if(yrs.has('2026'))d.a26++;if(yrs.has('2025'))d.a25++;
+  });
+  const _cArr=Object.entries(_cS)
+    .map(([name,d])=>({name,n:d.n,a26:d.a26,
+      avg:d.glps.length?Math.round(d.glps.reduce((s,v)=>s+v,0)/d.glps.length*10)/10:0,
+      top:d.glps.length?Math.round(Math.max(...d.glps)*10)/10:0,
+      bomb:d.bd+d.rs>0?Math.round(d.bd/(d.bd+d.rs)*100*10)/10:0,
+      ret:d.a25>0?Math.round(d.a26/d.a25*100):0,n26:d.n26}))
+    .filter(d=>d.n>=3).sort((a,b)=>b.n-a.n);
+  h+=`<div class="card" style="padding:0;overflow-x:auto;margin-bottom:16px">
+  <table class="tbl"><thead><tr>
+    <th style="padding:10px 12px;text-align:left">Club</th>
+    <th class="os" style="text-align:center;font-size:10px;padding:10px 8px">Atletas</th>
+    <th class="os" style="text-align:center;font-size:10px;padding:10px 8px">Activos '26</th>
+    <th class="os" style="text-align:center;font-size:10px;padding:10px 8px">GL Avg</th>
+    <th class="os" style="text-align:center;font-size:10px;padding:10px 8px">GL Top</th>
+    <th class="os" style="text-align:center;font-size:10px;padding:10px 8px">Bomb-out</th>
+    <th class="os" style="text-align:center;font-size:10px;padding:10px 8px">Retención</th>
+    <th class="os" style="text-align:center;font-size:10px;padding:10px 8px">Nuevos '26</th>
+  </tr></thead><tbody>
+  ${_cArr.map((c,i)=>{
+    const rc=i===0?'var(--gold)':i===1?'#c0c0c0':i===2?'#cd7f32':'var(--muted)';
+    const rtc=c.ret>=70?'var(--green)':c.ret>=40?'var(--gold)':'var(--red)';
+    const bc=c.bomb>5?'var(--red)':c.bomb>2?'var(--gold)':'var(--green)';
+    const bw=Math.round(c.n/(_cArr[0]?.n||1)*100);
+    return '<tr style="border-bottom:1px solid rgba(30,58,95,.3)">'
+      +'<td style="padding:8px 12px"><div style="display:flex;align-items:center;gap:8px">'
+      +'<span class="os" style="font-size:11px;color:'+rc+';min-width:18px">'+(i+1)+'</span>'
+      +'<div><div style="font-size:13px;font-weight:600">'+c.name+'</div>'
+      +'<div style="background:rgba(30,58,95,.3);border-radius:2px;height:3px;width:'+bw+'%;margin-top:3px"></div></div></div></td>'
+      +'<td style="text-align:center;font-family:Oswald;font-size:15px">'+c.n+'</td>'
+      +'<td style="text-align:center;font-family:Oswald;font-size:15px;color:var(--blue)">'+c.a26+'</td>'
+      +'<td style="text-align:center;font-family:Oswald;font-size:15px;color:var(--gold)">'+(c.avg||'—')+'</td>'
+      +'<td style="text-align:center;font-family:Oswald;font-size:13px;color:var(--muted)">'+(c.top||'—')+'</td>'
+      +'<td style="text-align:center;font-family:Oswald;font-size:15px;color:'+bc+'">'+c.bomb+'%</td>'
+      +'<td style="text-align:center;font-family:Oswald;font-size:15px;color:'+rtc+'">'+(c.ret>0?c.ret+'%':'—')+'</td>'
+      +'<td style="text-align:center;font-family:Oswald;font-size:15px;color:'+(c.n26>0?'var(--green)':'var(--muted)')+'">'+(c.n26||'—')+'</td>'
+      +'</tr>';
+  }).join('')}
+  </tbody></table></div>`;
   } else {
     h+=`<div class="card" style="background:rgba(212,168,67,.05);border:1px solid rgba(212,168,67,.2);padding:20px;text-align:center"><div style="font-family:Oswald;font-size:13px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">📊 ANÁLISIS AVANZADO</div><div style="font-size:13px;color:var(--muted)">El análisis de crecimiento, cohorte, divisiones y concentración de mercado está disponible solo para <strong style="color:var(--gold)">Superadmin</strong>.</div></div>`;
   }
@@ -2230,82 +2287,4 @@ window.verDetalleComp = function(compId){
 
 </script>
 </body>
-</html>window._authFired=false;
-
-
-  // ── SECTION 7: KPIs por Club ─────────────────────────────
-  h+=`<div style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:var(--muted);margin:4px 0 8px;text-transform:uppercase">KPIs por Club</div>`;
-  
-  // Build club stats from ST.data
-  const clubStats={};
-  (ST.data||[]).forEach(a=>{
-    const club=(a.club||'').trim();
-    if(!club)return;
-    if(!clubStats[club])clubStats[club]={n:0,active26:0,active25:0,glps:[],bombed:0,results:0,new26:0,new25:0};
-    const cs=clubStats[club];
-    cs.n++;
-    const debut=String(a.debut||'');
-    if(debut.includes('2026'))cs.new26++;
-    else if(debut.includes('2025'))cs.new25++;
-    const years=new Set();
-    (a.competencias||[]).forEach(c=>{
-      for(const y of ['2026','2025']){if((c.evento||'').includes(y)){years.add(y);break;}}
-      const r=c.resultado||{};
-      if(r.total>0){cs.results++;const g=r.glp||0;if(g>0)cs.glps.push(g);}
-      else if(r&&r.total===0)cs.bombed++;
-    });
-    if(years.has('2026'))cs.active26++;
-    if(years.has('2025'))cs.active25++;
-  });
-
-  const clubArr=Object.entries(clubStats)
-    .map(([name,d])=>({
-      name,n:d.n,active26:d.active26,active25:d.active25,
-      avgGL:d.glps.length?Math.round(d.glps.reduce((s,v)=>s+v,0)/d.glps.length*10)/10:0,
-      topGL:d.glps.length?Math.round(Math.max(...d.glps)*10)/10:0,
-      bombRate:d.bombed+d.results>0?Math.round(d.bombed/(d.bombed+d.results)*100*10)/10:0,
-      retention:d.active25>0?Math.round(d.active26/d.active25*100):0,
-      new26:d.new26,new25:d.new25
-    }))
-    .filter(d=>d.n>=3)
-    .sort((a,b)=>b.n-a.n);
-
-  h+=`<div class="card" style="margin-bottom:16px;padding:0;overflow-x:auto">
-    <table class="tbl">
-      <tr>
-        <th style="padding:10px 12px;text-align:left">Club</th>
-        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">Atletas</th>
-        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">Activos '26</th>
-        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">GL Avg</th>
-        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">GL Top</th>
-        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">Bomb-out</th>
-        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">Retención</th>
-        <th class="os" style="padding:10px 8px;text-align:center;font-size:10px;letter-spacing:.5px">Nuevos '26</th>
-      </tr>
-      ${clubArr.map((c,i)=>{
-        const rankColor=i===0?'var(--gold)':i===1?'#c0c0c0':i===2?'#cd7f32':'var(--muted)';
-        const retColor=c.retention>=70?'var(--green)':c.retention>=40?'var(--gold)':'var(--red)';
-        const bombColor=c.bombRate>5?'var(--red)':c.bombRate>2?'var(--gold)':'var(--green)';
-        const maxN=clubArr[0].n||1;
-        const barW=Math.round(c.n/maxN*100);
-        return `<tr style="border-bottom:1px solid rgba(30,58,95,.3)">
-          <td style="padding:8px 12px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="os" style="font-size:11px;color:${rankColor};min-width:18px">${i+1}</span>
-              <div>
-                <div style="font-size:13px;font-weight:600">${c.name}</div>
-                <div style="background:rgba(30,58,95,.3);border-radius:2px;height:3px;width:${barW}%;margin-top:3px"></div>
-              </div>
-            </div>
-          </td>
-          <td style="text-align:center;font-family:Oswald;font-size:15px">${c.n}</td>
-          <td style="text-align:center;font-family:Oswald;font-size:15px;color:var(--blue)">${c.active26}</td>
-          <td style="text-align:center;font-family:Oswald;font-size:15px;color:var(--gold)">${c.avgGL||'—'}</td>
-          <td style="text-align:center;font-family:Oswald;font-size:13px;color:var(--muted)">${c.topGL||'—'}</td>
-          <td style="text-align:center;font-family:Oswald;font-size:15px;color:${bombColor}">${c.bombRate}%</td>
-          <td style="text-align:center;font-family:Oswald;font-size:15px;color:${retColor}">${c.retention>0?c.retention+'%':'—'}</td>
-          <td style="text-align:center;font-family:Oswald;font-size:15px;color:${c.new26>0?'var(--green)':'var(--muted)'}">${c.new26||'—'}</td>
-        </tr>`;
-      }).join('')}
-    </table>
-  </div>`;
+</html>
