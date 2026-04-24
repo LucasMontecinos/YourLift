@@ -1936,9 +1936,34 @@ function findInDB(name,rut){
 }
 fetch('data.json').then(r=>r.json()).then(d=>{DB_FULL=d}).catch(()=>{});
 fetch('records.json').then(r=>r.json()).then(d=>{RECORDS=d}).catch(()=>console.warn('[FECHIPO] records.json no cargado'));
-fetch('nominas.json').then(r=>r.json()).then(n=>{DATA.events=n.events||[];if(!loaded)R()}).catch(()=>{});
+fetch('nominas.json').then(r=>r.json()).then(n=>{DATA.events=n.events||[];applyEventURLParam();if(!loaded)R()}).catch(()=>{});
 if(loaded){R()}
 else if(!DATA.events.length)R();
+
+// ── Accept ?evento=<id|name> URL param ──
+// If the URL asks for a specific event and it differs from the saved session,
+// force phase back to 'setup' so the user picks again (or auto-pick if match).
+function applyEventURLParam(){
+  try{
+    const p=new URLSearchParams(location.search).get('evento');
+    if(!p||!DATA.events?.length)return;
+    const want=decodeURIComponent(p);
+    const i=DATA.events.findIndex(e=>e.id===want||e.name===want);
+    if(i<0)return;
+    const wanted=DATA.events[i];
+    // If already on this event with an active session, keep it.
+    if(DATA.event&&(DATA.event.id===wanted.id||DATA.event.name===wanted.name)){R();return}
+    // If there is an active session for a different event, do NOT auto-wipe it.
+    // Send the user to setup so they can explicitly pick and see the picker.
+    if(DATA.phase!=='setup'&&DATA.athletes?.length){
+      DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};
+      try{localStorage.removeItem(SAVE_KEY)}catch(e){}
+      R();return;
+    }
+    // Fresh state: pick requested event directly.
+    pickEvent(i);
+  }catch(e){console.warn('[LC] preselect err',e)}
+}
 
 
 function showLogin(){

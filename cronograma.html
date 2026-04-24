@@ -116,7 +116,18 @@ initCronoFB();
 Promise.all([
   fetch('nominas.json').then(r=>r.json()).catch(()=>({events:[]})),
   fetch('data.json').then(r=>r.json()).catch(()=>[])
-]).then(([n,d])=>{NM=n;DB=d;render();syncEventsWithFirestore()});
+]).then(([n,d])=>{NM=n;DB=d;preselectFromURL();render();syncEventsWithFirestore()});
+
+// ── Accept ?evento=<id|name> URL param to pre-select an event ──
+function preselectFromURL(){
+  try{
+    const p=new URLSearchParams(location.search).get('evento');
+    if(!p||!NM.events)return;
+    const decoded=decodeURIComponent(p);
+    const i=NM.events.findIndex(e=>e.id===decoded||e.name===decoded);
+    if(i>=0)selectEvent(i);
+  }catch(e){console.warn('[Crono] preselect err',e)}
+}
 
 // ── Merge Firestore eventos metadata over nominas.json ──────
 // Firestore `eventos/{id}` is the source of truth for date/closeDate/location/org/days.

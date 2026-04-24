@@ -1579,17 +1579,28 @@ function renderEditRequests(){
 }
 
 function renderCronograma(){
-  const events=[...new Set(ST.inscripciones.map(i=>i.evento))].filter(Boolean);
+  // Source events from BOTH eventos/ collection and inscripciones, so that
+  // events imported to Firebase but without inscripciones still appear.
+  const evNames=new Set();
+  (ST.eventos||[]).filter(e=>e.status!=='archived').forEach(e=>evNames.add(e.name||e.id));
+  ST.inscripciones.forEach(i=>i.evento&&evNames.add(i.evento));
+  const events=[...evNames];
   if(!ST.filterEv&&events.length)ST.filterEv=events[0];
+  if(events.length&&!events.includes(ST.filterEv))ST.filterEv=events[0];
   const filtered=ST.inscripciones.filter(i=>i.evento===ST.filterEv&&i.status==='approved');
   const flights=['A','B','C','D','E','F'];
+  // Find event ID for public cronograma.html link
+  const evObj=(ST.eventos||[]).find(e=>e.name===ST.filterEv||e.id===ST.filterEv);
+  const publicLinkId=encodeURIComponent(evObj?.id||ST.filterEv||'');
   return `
     <div class="h1">Cronograma — Asignación de vuelos</div>
     <p class="subtitle">Asigna atletas a vuelos · ${filtered.length} aprobados en evento</p>
-    <div class="search-box">
-      <select class="inp" onchange="ST.filterEv=this.value;render()">
-        ${events.map(e=>`<option value="${e}" ${ST.filterEv===e?'selected':''}>${e}</option>`).join('')}
+    <div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <label style="font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px">CAMPEONATO:</label>
+      <select class="inp" onchange="ST.filterEv=this.value;render()" style="min-width:260px;flex:1">
+        ${events.length===0?'<option>— Sin campeonatos —</option>':events.map(e=>`<option value="${esc(e)}" ${ST.filterEv===e?'selected':''}>${esc(e)}</option>`).join('')}
       </select>
+      ${publicLinkId?`<a href="cronograma.html?evento=${publicLinkId}" target="_blank" class="btn btn-o" style="padding:6px 12px;font-size:11px;text-decoration:none">📅 Abrir vista pública</a>`:''}
     </div>
     <div class="card" style="padding:0;overflow-x:auto">
       <table class="tbl">
@@ -1602,19 +1613,41 @@ function renderCronograma(){
           <td>${flights.map(f=>`<button onclick="assignFlight('${sid}','${f}')" style="background:${i.flight===f?'var(--accent)':'transparent'};color:${i.flight===f?'#fff':'var(--muted)'};border:1px solid var(--border);padding:4px 9px;border-radius:5px;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">${f}</button>`).join('')}</td>
         </tr>`;}).join('')}
       </table>
-      ${filtered.length===0?'<div class="empty">Sin atletas aprobados</div>':''}
+      ${filtered.length===0?'<div class="empty">Sin atletas aprobados en este campeonato</div>':''}
     </div>`;
 }
 
 function renderLivecast(){
-  const events=[...new Set(ST.inscripciones.map(i=>i.evento))].filter(Boolean);
+  // Source events from BOTH eventos/ collection and inscripciones.
+  const evMap=new Map();
+  (ST.eventos||[]).filter(e=>e.status!=='archived').forEach(e=>{
+    const label=e.name||e.id;
+    evMap.set(label,{label,id:e.id,name:e.name});
+  });
+  ST.inscripciones.forEach(i=>{
+    if(i.evento&&!evMap.has(i.evento)){
+      const m=(ST.eventos||[]).find(e=>e.id===i.evento||e.name===i.evento);
+      evMap.set(i.evento,{label:i.evento,id:m?.id||i.evento,name:m?.name||i.evento});
+    }
+  });
+  const events=[...evMap.values()];
   return `
     <div class="h1">LiveCast — Gestión</div>
-    <p class="subtitle">Resetea datos de LiveCast por campeonato</p>
+    <p class="subtitle">Abre el LiveCast de un campeonato o resetea sus datos en vivo</p>
     <div class="card">
-      <div class="h2">Resetear LiveCast</div>
-      <p style="color:var(--muted);font-size:12px;margin-bottom:14px">Borra TODOS los datos en vivo (pesos, intentos, vuelos) de un campeonato. Útil cuando termina la competencia o si hubo un error grave.</p>
-      ${events.map(e=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border)"><span>${e}</span><button class="btn btn-r" onclick="resetLivecast('${e.replace(/'/g,"\\'")}')">🗑️ RESETEAR</button></div>`).join('')}
+      <div class="h2">Campeonatos</div>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:14px">Elegí el campeonato que querés abrir en LiveCast, o resetealo si terminó la competencia.</p>
+      ${events.length===0?'<div class="empty">Sin campeonatos</div>':events.map(ev=>{
+        const safeLabel=ev.label.replace(/'/g,"\\'");
+        const urlEv=encodeURIComponent(ev.id||ev.name||ev.label);
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+          <span style="flex:1;min-width:180px">${esc(ev.label)}</span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <a href="livecast.html?evento=${urlEv}" target="_blank" class="btn btn-b" style="padding:6px 12px;font-size:11px;text-decoration:none">📡 Abrir LiveCast</a>
+            <button class="btn btn-r" onclick="resetLivecast('${safeLabel}')" style="padding:6px 12px;font-size:11px">🗑️ Resetear</button>
+          </div>
+        </div>`;
+      }).join('')}
     </div>`;
 }
 
@@ -1796,8 +1829,8 @@ function renderCampeonatos(){
         </div>
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
           <a href="inscripcion.html" target="_blank" style="font-size:10px;color:var(--blue);text-decoration:none;padding:3px 8px;border:1px solid rgba(59,130,246,.3);border-radius:4px">🔗 Formulario público</a>
-          <a href="cronograma.html" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">📅 Cronograma</a>
-          <a href="livecast.html" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">📡 LiveCast</a>
+          <a href="cronograma.html?evento=${encodeURIComponent(ev.id)}" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">📅 Cronograma</a>
+          <a href="livecast.html?evento=${encodeURIComponent(ev.id)}" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">📡 LiveCast</a>
         </div>
       </div>`;
     }).join('')}
