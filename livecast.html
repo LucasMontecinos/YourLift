@@ -58,6 +58,50 @@ input,select,button{font-family:inherit;outline:none}
 let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,flight:'A',timer:60,timerOn:false,changeTimers:{},lotsGenerated:false};
 
 // ══════════════════════════════════════════════
+// TRANSMISSION WIDGETS (?tx=<widget>)
+// Standalone widgets for OBS Browser Sources. Read-only.
+// ══════════════════════════════════════════════
+const TX_URL=new URLSearchParams(location.search);
+const TX_MODE=TX_URL.get('tx')||null; // 'profile' | 'scoreboard' | 'leaderboard' | null
+if(TX_MODE){
+  const css=document.createElement('style');
+  css.textContent=`
+    html,body{background:transparent!important;overflow:hidden!important;margin:0}
+    body.tx-opaque{background:linear-gradient(135deg,#0A1628 0%,#0E1F3A 50%,#0A1628 100%)!important}
+    #R{display:none!important}
+    #txWidget{position:fixed;inset:0;font-family:'Oswald',sans-serif;color:#fff}
+    @keyframes txSlideRight{from{transform:translateX(-40px);opacity:0}to{transform:translateX(0);opacity:1}}
+    @keyframes txSlideUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}
+    @keyframes txSlideDown{from{transform:translateY(-40px);opacity:0}to{transform:translateY(0);opacity:1}}
+    @keyframes txFade{from{opacity:0}to{opacity:1}}
+    @keyframes txScaleIn{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
+    @keyframes txGrowLine{from{transform:scaleY(0);transform-origin:top}to{transform:scaleY(1);transform-origin:top}}
+    @keyframes txGrowLineH{from{transform:scaleX(0);transform-origin:left}to{transform:scaleX(1);transform-origin:left}}
+    .txCascade>*{animation:txSlideRight .55s cubic-bezier(.2,.8,.2,1) backwards}
+    .txCascade>*:nth-child(1){animation-delay:.15s}
+    .txCascade>*:nth-child(2){animation-delay:.32s}
+    .txCascade>*:nth-child(3){animation-delay:.49s}
+    .txCascade>*:nth-child(4){animation-delay:.66s}
+    .txCascade>*:nth-child(5){animation-delay:.83s}
+    .txCascade>*:nth-child(6){animation-delay:1.0s}
+    .txCascade>*:nth-child(7){animation-delay:1.17s}
+    .txCascade>*:nth-child(8){animation-delay:1.34s}
+    .txCascade>*:nth-child(9){animation-delay:1.51s}
+    .txCascade>*:nth-child(10){animation-delay:1.68s}
+    .txCascade>*:nth-child(11){animation-delay:1.85s}
+    .txCascade>*:nth-child(12){animation-delay:2.02s}
+  `;
+  document.head.appendChild(css);
+  const ready=()=>{
+    if(TX_MODE==='profile'||TX_MODE==='leaderboard')document.body.classList.add('tx-opaque');
+    const d=document.createElement('div');d.id='txWidget';document.body.appendChild(d);
+    // Placeholder until data arrives
+    d.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(212,168,67,.35);font-size:13px;letter-spacing:2px">ESPERANDO DATOS…</div>';
+  };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ready);else ready();
+}
+
+// ══════════════════════════════════════════════
 // ADMIN CREDENTIALS — Editar aquí para cambiar accesos
 // ══════════════════════════════════════════════
 // Admin credentials managed via Firebase Auth (admin.html → Firebase Console)
@@ -1099,7 +1143,270 @@ async function generateActaPDF(){
 
 function exportJSON(){const r=rankings();const blob=new Blob([JSON.stringify(r.map((a,i)=>({rank:i+1,nombre:a.name,rut:a.rut,sexo:a.sex,division:a.div,categoria:a.cat,bw:a.bw,club:a.club,sq:bestOf(a,'sq'),bp:bestOf(a,'bp'),dl:bestOf(a,'dl'),total:a.total,gl:a.gl})),null,2)],{type:'application/json'});const u=URL.createObjectURL(blob);const l=document.createElement('a');l.href=u;l.download='resultados.json';l.click()}
 
-function R(){const el=document.getElementById('R');if(DATA.phase==='scoreboard'){el.innerHTML=renderSB();return}if(DATA.phase==='transmision'){el.innerHTML=renderTransmision();setTimeout(initTxWidgets,0);return}if(DATA.phase==='setup'){el.innerHTML=renderSetup();return}el.innerHTML=renderShell()}
+function renderObsTx(){
+  const evId=DATA.event?.id||DATA.event?.name||'';
+  const base=location.origin+location.pathname.replace(/[^/]+$/,'');
+  const enc=encodeURIComponent(evId);
+  const widgets=[
+    {id:'profile',icon:'🪪',title:'Perfil del atleta',desc:'Pantalla completa con foto placeholder, nombre, club, categoría, edad, años compitiendo y PB. Animación cascada al entrar. Mostrar ~10s antes de la tarima.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
+    {id:'scoreboard',icon:'📊',title:'Scoreboard (lower-third)',desc:'Barra inferior con categoría, rank, timer, nombre, club e intentos. Fondo transparente. Overlay sobre cámara de tarima.',obsBg:'Transparente (superpuesto sobre cámara).',size:'1920×320 (parte inferior)'},
+    {id:'leaderboard',icon:'🏆',title:'Tabla de clasificación',desc:'Ranking completo de la categoría actual con nombre, total, forecast, posición. Cascada fila por fila. Pantalla completa entre rondas.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
+  ];
+  let h='<div class="fade"><h2 class="os" style="font-size:22px;letter-spacing:1px;margin-bottom:6px">🎬 WIDGETS PARA OBS</h2>';
+  h+='<p style="color:var(--muted);font-size:12px;margin-bottom:18px">Cada widget es una URL que se agrega como Browser Source en OBS. Actualiza en tiempo real desde Firestore — no necesita login.</p>';
+  if(!evId){
+    h+='<div class="card" style="background:rgba(239,68,68,.1);border-color:var(--red);color:var(--red);padding:16px">⚠️ Primero elegí un campeonato (Nueva Competencia). Los widgets necesitan saber qué evento mostrar.</div></div>';
+    return h;
+  }
+  h+='<div class="card" style="margin-bottom:14px;padding:12px 16px;background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.3);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
+  h+='<div><span style="font-size:10px;color:var(--green);letter-spacing:1px;font-family:Oswald">CAMPEONATO ACTIVO</span><div style="font-family:Oswald;font-size:15px;font-weight:700;margin-top:2px">'+(DATA.event?.name||evId)+'</div></div>';
+  h+='</div>';
+  h+='<div style="display:grid;gap:14px">';
+  widgets.forEach(w=>{
+    const url=base+'livecast.html?tx='+w.id+'&evento='+enc;
+    h+='<div class="card" style="padding:0;overflow:hidden">';
+    h+='<div style="padding:14px 18px;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">';
+    h+='<div style="font-size:28px">'+w.icon+'</div>';
+    h+='<div style="flex:1;min-width:240px">';
+    h+='<div style="font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px">'+w.title+'</div>';
+    h+='<div style="color:var(--muted);font-size:12px;margin-top:4px;line-height:1.5">'+w.desc+'</div>';
+    h+='<div style="display:flex;gap:14px;margin-top:8px;font-size:10px;color:var(--muted);flex-wrap:wrap">';
+    h+='<span>🎨 Fondo: <span style="color:var(--text)">'+w.obsBg+'</span></span>';
+    h+='<span>📐 Tamaño: <span style="color:var(--text)">'+w.size+'</span></span>';
+    h+='</div>';
+    h+='</div>';
+    h+='<div style="display:flex;gap:6px;flex-wrap:wrap">';
+    h+='<a href="'+url+'" target="_blank" class="btn btn-o" style="text-decoration:none;font-size:11px;padding:7px 12px">👁 Preview</a>';
+    h+='<button class="btn btn-g" onclick="navigator.clipboard.writeText(\''+url+'\').then(()=>{this.textContent=\'✓ Copiado\';setTimeout(()=>this.textContent=\'📋 Copiar URL\',1500)})" style="font-size:11px;padding:7px 12px">📋 Copiar URL</button>';
+    h+='</div>';
+    h+='</div>';
+    h+='<div style="background:rgba(10,22,40,.6);padding:8px 18px;font-family:monospace;font-size:10px;color:rgba(200,215,240,.6);word-break:break-all;border-top:1px solid var(--border)">'+url+'</div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  // OBS setup guide
+  h+='<div class="card" style="margin-top:20px;padding:16px 20px">';
+  h+='<div class="os" style="font-size:14px;letter-spacing:2px;color:var(--gold);margin-bottom:10px">⚙ SETUP EN OBS</div>';
+  h+='<ol style="color:var(--muted);font-size:12px;line-height:1.9;padding-left:20px;margin:0">';
+  h+='<li>En OBS: <b style="color:var(--text)">Sources → +  → Browser</b> → pegá la URL del widget.</li>';
+  h+='<li>Width/Height según el widget (Profile y Leaderboard: 1920×1080 · Scoreboard: 1920×1080 también, ya queda posicionado abajo).</li>';
+  h+='<li>Marcá <b style="color:var(--text)">"Refresh browser when scene becomes active"</b> para que la animación cascada se vuelva a disparar.</li>';
+  h+='<li>Creá <b style="color:var(--text)">escenas separadas</b>: "Cámara + Scoreboard" (cámara de fondo + browser source scoreboard encima), "Profile fullscreen", "Leaderboard fullscreen".</li>';
+  h+='<li>Transiciones de OBS (Stinger/Fade) entre escenas — la animación de salida la maneja OBS, no la página.</li>';
+  h+='<li>Los widgets leen el estado en vivo: lifter actual, intento, peso, timer. Cuando marcás ✓/✗ en "Control en Vivo", todos los widgets se actualizan en tiempo real.</li>';
+  h+='</ol></div>';
+  h+='</div>';
+  return h;
+}
+
+// ══════════════════════════════════════════════
+// TRANSMISSION WIDGET RENDERERS
+// ══════════════════════════════════════════════
+function txLookupFull(a){
+  if(!a||!DB_FULL?.length)return null;
+  const r=(a.rut||'').replace(/[.\s]/g,'');
+  if(r)return DB_FULL.find(x=>(x.rut||'').replace(/[.\s]/g,'')===r)||null;
+  const nrm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const n=nrm(a.name);
+  return DB_FULL.find(x=>nrm(x.nombre)===n)||null;
+}
+function txAge(dob){
+  if(!dob)return null;
+  let y,m,d;
+  if(/^\d{4}-\d{2}-\d{2}/.test(dob)){[y,m,d]=dob.slice(0,10).split('-').map(Number)}
+  else if(/^\d{2}\/\d{2}\/\d{4}/.test(dob)){const p=dob.split('/');d=+p[0];m=+p[1];y=+p[2]}
+  else return null;
+  const now=new Date();let age=now.getFullYear()-y;
+  if(now.getMonth()+1<m||(now.getMonth()+1===m&&now.getDate()<d))age--;
+  return age>0&&age<100?age:null;
+}
+function txYearsCompeting(full){
+  if(!full?.competencias?.length)return null;
+  const years=full.competencias.map(c=>{
+    const f=c.fecha||c.evento||'';
+    const m=f.match(/20\d{2}/);return m?+m[0]:null;
+  }).filter(Boolean);
+  if(!years.length&&full.debut){const m=(full.debut+'').match(/20\d{2}/);if(m)years.push(+m[0])}
+  if(!years.length)return null;
+  const min=Math.min(...years);const cur=new Date().getFullYear();
+  return Math.max(1,cur-min+1);
+}
+function txPB(full,lift){
+  if(!full?.competencias?.length)return null;
+  const key=lift==='sq'?'sq':lift==='bp'?'bp':lift==='dl'?'dl':'total';
+  let best=0;
+  full.competencias.forEach(c=>{const v=+(c.resultado?.[key]||0);if(v>best)best=v});
+  return best||null;
+}
+function txDivShort(div){return(div||'').replace('Sub Junior','SJR').replace('Sub-Junior','SJR').replace('Subjunior','SJR').replace('Junior','JR').replace('Open','OPN').replace('Master I','M1').replace('Master II','M2').replace('Master III','M3').replace('Master IV','M4')}
+function txCatNum(cat){const m=(cat||'').match(/([+\-]?\d+\.?\d*)/);return m?m[1]:''}
+
+let _txLastLifter=null;
+function renderTxWidget(){
+  if(!TX_MODE)return false;
+  const c=document.getElementById('txWidget');if(!c)return true;
+  const cur=liftQueue()[0];
+  if(!cur&&TX_MODE!=='leaderboard'){
+    c.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:22px;color:#d4a843;letter-spacing:3px">RONDA COMPLETADA</div>';
+    return true;
+  }
+  const lifterChanged=(cur?.id||null)!==_txLastLifter;
+  _txLastLifter=cur?.id||null;
+  let html='';
+  if(TX_MODE==='profile')html=renderTxProfile(cur);
+  else if(TX_MODE==='scoreboard')html=renderTxScoreboard(cur,lifterChanged);
+  else if(TX_MODE==='leaderboard')html=renderTxLeaderboard(cur,lifterChanged);
+  else html='<div style="color:#fff;padding:40px;font-family:Oswald">Widget desconocido: '+TX_MODE+'. Valores: profile | scoreboard | leaderboard</div>';
+  c.innerHTML=html;
+  return true;
+}
+
+function renderTxProfile(cur){
+  const full=txLookupFull(cur);
+  const parts=(cur.name||'').trim().split(/\s+/);
+  const firstName=parts.slice(0,-2).join(' ')||parts[0]||'';
+  const lastName=parts.slice(-2).join(' ').toUpperCase();
+  const club=cur.club||full?.club||'';
+  const cat=txCatNum(cur.cat)+'kg';
+  const divS=txDivShort(cur.div);
+  const age=txAge(full?.fechaNac);
+  const years=txYearsCompeting(full);
+  const liftKey=DATA.lift;
+  const pb=txPB(full,liftKey);
+  const pbLabel={sq:'PERSONAL BEST SQ',bp:'PERSONAL BEST BP',dl:'PERSONAL BEST DL'}[liftKey]||'PERSONAL BEST';
+  const rows=[
+    ['CATEGORY',cat+' '+divS],
+    ['CLUB',club||'—'],
+  ];
+  if(age!==null)rows.push(['AGE',age+'']);
+  if(years!==null)rows.push(['YEARS COMPETING',years+'']);
+  if(pb)rows.push([pbLabel,pb.toFixed(1)]);
+  const initials=parts.map(p=>p[0]||'').slice(0,2).join('').toUpperCase();
+  return `
+    <div style="position:absolute;inset:0;padding:clamp(40px,5vw,80px);display:flex;flex-direction:column">
+      <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(8px,1.5vh,22px);max-width:1400px;width:100%;margin:auto">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:clamp(6px,1vh,16px)">
+          <div style="background:#D4A843;padding:clamp(10px,1.6vw,18px) clamp(18px,2.2vw,28px);border-radius:6px;display:flex;align-items:center;gap:clamp(10px,1.5vw,18px);box-shadow:0 4px 20px rgba(212,168,67,.35)">
+            <div style="background:rgba(0,0,0,.15);padding:4px 10px;border-radius:4px;font-family:Oswald;font-size:clamp(11px,1.1vw,14px);letter-spacing:2px;color:#0A1628">CHI 🇨🇱</div>
+            <div style="font-family:Oswald;font-size:clamp(26px,3.2vw,44px);font-weight:700;letter-spacing:2px;color:#0A1628">
+              <span style="font-weight:400">${firstName}</span> ${lastName}
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:clamp(30px,4vw,70px);align-items:center;margin-top:clamp(10px,2vh,30px)">
+          <div style="width:clamp(180px,18vw,280px);aspect-ratio:3/4;background:linear-gradient(135deg,#1a2e4f,#0e1f3a);border:3px solid #D4A843;border-radius:4px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(0,0,0,.5);position:relative;overflow:hidden">
+            <span style="font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px">${initials}</span>
+          </div>
+          <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(10px,1.8vh,24px)">
+            ${rows.map(r=>`
+              <div style="display:grid;grid-template-columns:1fr auto;gap:40px;align-items:center;border-bottom:1px solid rgba(212,168,67,.2);padding-bottom:clamp(6px,1vh,12px)">
+                <div style="font-family:Oswald;font-size:clamp(14px,1.4vw,20px);color:rgba(220,230,245,.7);letter-spacing:3px">${r[0]}</div>
+                <div style="font-family:Oswald;font-size:clamp(22px,2.4vw,36px);font-weight:700;color:#D4A843;letter-spacing:1px">${r[1]}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+        <div style="position:absolute;top:clamp(20px,2.5vw,40px);right:clamp(20px,2.5vw,40px);font-family:Oswald;font-size:clamp(14px,1.4vw,20px);letter-spacing:3px;color:rgba(212,168,67,.5);border:2px solid rgba(212,168,67,.4);padding:6px 14px;border-radius:6px">⚡ YourLift</div>
+      </div>
+    </div>`;
+}
+
+function renderTxScoreboard(cur,lifterChanged){
+  if(!cur)return '';
+  const parts=(cur.name||'').trim().split(/\s+/);
+  const firstName=parts.length>2?parts.slice(0,-2).join(' '):parts.slice(0,-1).join(' ');
+  const lastName=(parts.length>2?parts.slice(-2).join(' '):parts[parts.length-1]).toUpperCase();
+  const divS=txDivShort(cur.div);
+  const catLabel=(cur.cat?'-'+txCatNum(cur.cat)+'kg ':'')+divS;
+  const rk=catRankBySub(cur);
+  const st=subTotal(cur,DATA.lift);
+  const cw=cur.att[DATA.lift][DATA.round].w;
+  const simBest=Math.max(bestOf(cur,DATA.lift),cw);
+  let newSub;
+  if(DATA.lift==='sq')newSub=simBest;
+  else if(DATA.lift==='bp')newSub=bestOf(cur,'sq')+simBest;
+  else newSub=bestOf(cur,'sq')+bestOf(cur,'bp')+simBest;
+  const sameCat=DATA.athletes.filter(a=>a.cat===cur.cat&&a.flight===DATA.flight&&!a.bombed);
+  const simRanked=sameCat.map(a=>{
+    if(a.id===cur.id)return{id:a.id,sub:newSub};
+    return{id:a.id,sub:subTotal(a,DATA.lift)};
+  }).filter(x=>x.sub>0).sort((a,b)=>b.sub-a.sub);
+  const simPos=simRanked.findIndex(x=>x.id===cur.id)+1;
+  const timerStr=DATA.timerOn?String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0'):'';
+  const rankTxt=(rk.pos&&simPos&&rk.pos!==simPos)?'RANK '+rk.pos+' to '+simPos:'RANK '+(rk.pos||simPos||'—');
+  return `
+    <div style="position:absolute;bottom:0;left:0;right:0;${lifterChanged?'animation:txSlideUp .6s cubic-bezier(.2,.8,.2,1)':''}">
+      <div style="display:grid;grid-template-columns:180px 1fr 130px;background:linear-gradient(90deg,rgba(28,50,90,.96),rgba(35,60,105,.96));border-top:2px solid #D4A843;padding:10px 22px;align-items:center">
+        <div style="font-family:Oswald;font-size:15px;color:rgba(200,215,240,.85);letter-spacing:1px">${catLabel}</div>
+        <div style="text-align:center;font-family:Oswald;font-size:17px;letter-spacing:2px">${rankTxt.split(' ').map((w,i)=>/^\d+$/.test(w)?'<span style="color:#D4A843;font-weight:700">'+w+'</span>':w).join(' ')}</div>
+        <div style="font-family:Oswald;font-size:22px;font-weight:700;color:${DATA.timerOn&&DATA.timer<=10?'#ef4444':'#fff'};letter-spacing:2px;text-align:right">${timerStr||'—:—'}</div>
+      </div>
+      <div style="background:linear-gradient(90deg,#D4A843,#c19735);padding:6px 22px;display:flex;align-items:center;gap:14px">
+        <div style="background:rgba(10,22,40,.9);color:#D4A843;padding:4px 12px;border-radius:4px;font-family:Oswald;font-size:12px;letter-spacing:2px;font-weight:700">CHI 🇨🇱</div>
+        <div style="flex:1;font-family:Oswald;color:#0A1628;letter-spacing:1px">
+          ${firstName?'<div style="font-size:13px;font-weight:400;line-height:1;opacity:.75">'+firstName+'</div>':''}
+          <div style="font-size:22px;font-weight:700;line-height:1.05">${lastName}</div>
+        </div>
+        <div style="font-family:Oswald;font-size:11px;color:rgba(10,22,40,.75);letter-spacing:1px;text-align:right;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cur.club||''}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr) 140px;background:rgba(10,22,40,.94)">
+        ${cur.att[DATA.lift].map((at,j)=>{
+          let bg,clr,td='none';
+          if(at.r==='g'){bg='#22c55e';clr='#0A1628'}
+          else if(at.r==='n'){bg='#ef4444';clr='#fff';td='line-through'}
+          else if(j===DATA.round&&at.w>0){bg='rgba(45,65,105,.6)';clr='#fff'}
+          else{bg='rgba(30,48,78,.3)';clr='rgba(140,160,190,.45)'}
+          const isCur=j===DATA.round&&at.r===null&&at.w>0;
+          return '<div style="padding:9px 18px;text-align:center;background:'+bg+';border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:22px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+(isCur?'box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';':'')+'">'+(at.w||'—')+'</div>';
+        }).join('')}
+        <div style="padding:9px 14px;text-align:center;background:#D4A843;color:#0A1628;font-family:Oswald;font-size:24px;font-weight:700;letter-spacing:1px">${(st||newSub||0).toFixed(1)}</div>
+      </div>
+    </div>`;
+}
+
+function renderTxLeaderboard(cur,lifterChanged){
+  // Determine category to show: current lifter's, or first athlete of current flight if none
+  const ref=cur||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
+  if(!ref)return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:22px;color:#d4a843;letter-spacing:3px">SIN DATOS</div>';
+  const sameCat=DATA.athletes.filter(a=>a.cat===ref.cat&&a.flight===DATA.flight&&!a.bombed);
+  const ranked=sameCat.map(a=>({...a,total:totalOf(a),fTotal:forecastTotal(a),fPlace:0}));
+  ranked.sort((a,b)=>b.fTotal-a.fTotal);
+  ranked.forEach((a,i)=>a.fPlace=i+1);
+  const divS=txDivShort(ref.div);
+  const sexLabel=(ref.sex==='Femenino'||ref.sex==='Mujer'||ref.sex==='F')?'Mujer':'Hombre';
+  const curBest={sq:bestOf(ref,'sq'),bp:bestOf(ref,'bp'),dl:bestOf(ref,'dl')};
+  return `
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:clamp(30px,5vh,80px)">
+      <div class="txCascade" style="width:min(1100px,95%);background:linear-gradient(135deg,rgba(16,28,52,.97),rgba(22,36,66,.97));border:1px solid rgba(212,168,67,.3);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+        <div style="padding:clamp(14px,2vh,22px) clamp(20px,2.5vw,32px);background:linear-gradient(90deg,rgba(30,48,82,.98),rgba(38,58,98,.98));border-bottom:2px solid #D4A843;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-family:Oswald;font-size:clamp(11px,1.1vw,14px);color:rgba(160,180,210,.55);letter-spacing:3px">LEADERBOARD</div>
+            <div style="font-family:Oswald;font-size:clamp(20px,2.2vw,30px);font-weight:700;color:#fff;letter-spacing:2px;margin-top:2px">${divS} • ${ref.cat} (${sexLabel})</div>
+          </div>
+          <div style="font-family:Oswald;font-size:clamp(12px,1.2vw,16px);color:rgba(212,168,67,.6);letter-spacing:2px">⚡ YourLift</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 120px 120px 80px;padding:10px clamp(20px,2.5vw,32px);background:rgba(10,22,40,.6);border-bottom:1px solid rgba(60,90,140,.25);font-family:Oswald;font-size:clamp(10px,1vw,13px);color:rgba(160,180,210,.5);letter-spacing:2px">
+          <div>NOMBRE</div><div style="text-align:center">TOTAL</div><div style="text-align:center">F.TOT</div><div style="text-align:center">POS</div>
+        </div>
+        ${ranked.map(a=>{
+          const isCur=a.id===ref.id;
+          return `<div style="display:grid;grid-template-columns:1fr 120px 120px 80px;padding:clamp(10px,1.6vh,18px) clamp(20px,2.5vw,32px);background:${isCur?'linear-gradient(90deg,rgba(196,30,58,.35),rgba(212,168,67,.25))':'transparent'};border-bottom:1px solid rgba(50,80,120,.2);align-items:center">
+            <div style="font-family:Oswald;font-size:clamp(14px,1.5vw,20px);font-weight:${isCur?'700':'500'};color:${isCur?'#fff':'rgba(220,230,245,.85)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name}</div>
+            <div style="font-family:Oswald;font-size:clamp(14px,1.5vw,20px);text-align:center;color:rgba(200,215,240,.6)">${(a.total||0).toFixed(1)}</div>
+            <div style="font-family:Oswald;font-size:clamp(15px,1.6vw,22px);text-align:center;font-weight:700;color:${isCur?'#D4A843':'rgba(220,230,245,.85)'}">${a.fTotal||'—'}</div>
+            <div style="font-family:Oswald;font-size:clamp(16px,1.7vw,24px);text-align:center;font-weight:700;color:${isCur?'#D4A843':'rgba(200,215,240,.6)'}">${a.fPlace}</div>
+          </div>`;
+        }).join('')}
+        <div style="padding:clamp(10px,1.5vh,16px) clamp(20px,2.5vw,32px);background:rgba(196,30,58,.18);display:flex;gap:clamp(18px,2.5vw,40px);justify-content:center;align-items:center">
+          ${['sq','bp','dl'].map(l=>{
+            const b=curBest[l];
+            return '<div style="display:flex;gap:8px;align-items:center"><span style="font-family:Oswald;font-size:clamp(11px,1.1vw,14px);color:rgba(160,180,210,.5);letter-spacing:2px">'+LIFT_S[l]+'</span><span style="font-family:Oswald;font-size:clamp(16px,1.8vw,24px);font-weight:700;color:'+(b?LIFT_C[l]:'rgba(100,130,160,.3)')+'">'+(b?b.toFixed(1):'—')+'</span></div>';
+          }).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
+function R(){if(TX_MODE){renderTxWidget();return}const el=document.getElementById('R');if(DATA.phase==='scoreboard'){el.innerHTML=renderSB();return}if(DATA.phase==='transmision'){el.innerHTML=renderTransmision();setTimeout(initTxWidgets,0);return}if(DATA.phase==='setup'){el.innerHTML=renderSetup();return}el.innerHTML=renderShell()}
 
 function renderSetup(){
   // Check for backup
@@ -1131,6 +1438,7 @@ function renderShell(){
   h+='<div class="side-label">Competencia</div><button class="side-btn '+(p==='compete'?'active':'')+'" onclick="go(\'compete\')"><span class="icon">\uD83C\uDFCB\uFE0F</span>Control en Vivo</button>';
   h+='<button class="side-btn '+(p==='scoreboard'?'active':'')+'" onclick="go(\'scoreboard\')"><span class="icon">\uD83D\uDCFA</span>Scoreboard</button>';
   h+='<button class="side-btn '+(p==='transmision'?'active':'')+'" onclick="go(\'transmision\')"><span class="icon">\uD83D\uDCE1</span>Transmisi\u00f3n</button>';
+  h+='<button class="side-btn '+(p==='obsTx'?'active':'')+'" onclick="go(\'obsTx\')"><span class="icon">\uD83C\uDFAC</span>Widgets OBS</button>';
   }
   h+='<div class="side-label">P\u00fablico</div>';
   h+='<button class="side-btn '+(p==='results'?'active':'')+'" onclick="go(\'results\')"><span class="icon">\uD83C\uDFC6</span>Resultados</button>';
@@ -1155,7 +1463,7 @@ function renderShell(){
   h+='<a href="index.html" class="side-btn" style="text-decoration:none;color:var(--muted)"><span class="icon">\u2190</span>YourLift</a></div>';
   }
   h+='</div><div class="main">';
-  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='results')h+=renderResults();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision')){DATA.phase='results';h+=renderResults();}
+  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='results')h+=renderResults();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision'||p==='obsTx')){DATA.phase='results';h+=renderResults();}
   h+='</div></div>';return h;
 }
 
@@ -1951,6 +2259,14 @@ function applyEventURLParam(){
     const i=DATA.events.findIndex(e=>e.id===want||e.name===want);
     if(i<0)return;
     const wanted=DATA.events[i];
+    // TX widget mode: read-only. Just set DATA.event and subscribe to livecast_sync.
+    if(TX_MODE){
+      DATA.event=wanted;
+      // Subscribe to Firestore livecast_sync as soon as FB is ready.
+      const tryStart=()=>{if(!fbReady){setTimeout(tryStart,300);return}startFBSync();R();};
+      tryStart();
+      return;
+    }
     // If already on this event with an active session, keep it.
     if(DATA.event&&(DATA.event.id===wanted.id||DATA.event.name===wanted.name)){R();return}
     // If there is an active session for a different event, do NOT auto-wipe it.
