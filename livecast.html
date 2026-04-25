@@ -1324,7 +1324,7 @@ function renderTxWidget(){
   // Widgets que NO dependen del lifter actual (pero sí de athletes)
   if(TX_MODE==='slam'){c.innerHTML=renderTxSlam();return true}
   if(TX_MODE==='lbauto'){c.innerHTML=renderTxLbAuto();return true}
-  if(TX_MODE==='ceremony'){c.innerHTML=renderTxCeremony();return true}
+  if(TX_MODE==='ceremony'){renderTxCeremony(c);return true}
   // Widgets que dependen del lifter actual
   const cur=liftQueue()[0];
   if(!cur&&TX_MODE!=='leaderboard'){
@@ -1366,32 +1366,55 @@ function renderTxLbAuto(){
 
 // ─── CEREMONY (widget orquestador todo-en-uno) ─────────────────
 // Flujo:
-//   1) Detecta nuevo levantador → PROFILE fullscreen 5s
-//   2) → SCOREBOARD bottom-left 10s (con SLAM top-left siempre activo)
-//   3) Operador marca ✓/✗ → SLAM flash + LEADERBOARD fullscreen 5s
+//   1) Detecta nuevo levantador → PROFILE fullscreen (profileMs)
+//   2) → SCOREBOARD bottom-left + TIMER top-right (scoreboardMs)
+//      • SLAM top-left por slamMs cuando llega resultado (no cambia de estado)
+//   3) Cuando termina un BLOQUE completo (cambio de lift o flight) →
+//      LEADERBOARD-CYCLE: pasa por cada categoría del flight terminado,
+//      leaderboardMs por cada una.
 //   4) → IDLE (transparente) hasta el próximo levantador
-const TX_CEREMONY={profileMs:5000,scoreboardMs:10000,leaderboardMs:5000,slamMs:2000};
-let _txCerState='idle';            // idle | profile | scoreboard | leaderboard
+//
+// 🛠 PARA MODIFICAR LOS TIEMPOS, edita la línea de abajo (en milisegundos):
+//    profileMs:     duración del perfil fullscreen
+//    scoreboardMs:  duración del scoreboard bottom-left ← acá lo subís
+//    leaderboardMs: duración de cada categoría del leaderboard cycle
+//    slamMs:        duración del flash GOOD/NO LIFT en la esquina
+const TX_CEREMONY={profileMs:5000,scoreboardMs:30000,leaderboardMs:6000,slamMs:2000};
+let _txCerState='idle';            // idle | profile | scoreboard | lbcycle
 let _txCerStateAt=0;
 let _txCerLastLifter=null;
-let _txCerSeenResults=null;        // Set<athleteId-lift-round-result>
+let _txCerSeenResults=null;
 let _txCerSlamUntil=0;
 let _txCerSlamType=null;
-let _txCerLastLifterSnap=null;     // snapshot del último que terminó (para leaderboard)
-function _txCerSetState(s){_txCerStateAt=Date.now();_txCerState=s;
-  // tx-opaque para fullscreen, transparente para overlay
-  const opaque=(s==='profile'||s==='leaderboard');
+let _txCerLastLiftFlight=null;     // 'sq-A' → detecta cambio de bloque
+let _txCerLbCycle=null;            // {flight, cats:[], idx, startedAt}
+let _txCerLastSig=null;            // signature p/ saltarse re-renders innecesarios
+function _txCerSetState(s){
+  _txCerStateAt=Date.now();_txCerState=s;
+  const opaque=(s==='profile'||s==='lbcycle');
   document.body.classList.toggle('tx-opaque',opaque);
+  _txCerLastSig=null; // forzar re-render al cambiar de estado
 }
-function renderTxCeremony(){
+function _txCerUpdateTimer(){
+  const tm=document.getElementById('cerTimer');
+  if(!tm)return;
+  const t=Math.max(0,DATA.timer||0);
+  tm.textContent=String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');
+  tm.style.color=DATA.timerOn&&t<=10?'#ef4444':DATA.timerOn&&t<=30?'#f59e0b':'#fff';
+}
+function renderTxCeremony(container){
+  const c=container||document.getElementById('txWidget');
+  if(!c)return;
   const cur=liftQueue()[0];
-  // Detectar nuevo levantador → PROFILE
-  if(cur && cur.id!==_txCerLastLifter && _txCerState!=='leaderboard'){
+
+  // ── Detectar nuevo levantador → PROFILE ───────────────────
+  if(cur && cur.id!==_txCerLastLifter && _txCerState!=='lbcycle'){
     _txCerLastLifter=cur.id;
     _txCerSetState('profile');
     setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.profileMs+200);
   }
-  // Detectar resultado nuevo (transición null → g/n) → SLAM + LEADERBOARD
+
+  // ── Detectar resultado nuevo (transición null → g/n) → SLAM corner ─
   if(_txCerSeenResults===null){
     _txCerSeenResults={};
     DATA.athletes.forEach(a=>LIFTS.forEach(l=>(a.att&&a.att[l]||[]).forEach((att,i)=>{_txCerSeenResults[a.id+'-'+l+'-'+i]=att.r||null;})));
@@ -1403,40 +1426,91 @@ function renderTxCeremony(){
       if((prev==null)&&(now==='g'||now==='n')){
         _txCerSlamUntil=Date.now()+TX_CEREMONY.slamMs;
         _txCerSlamType=now;
-        _txCerLastLifterSnap=a;
-        _txCerSetState('leaderboard');
-        setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.leaderboardMs+200);
+        setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.slamMs+100);
       }
       _txCerSeenResults[k]=now;
     })));
   }
-  // Transiciones por tiempo
+
+  // ── Detectar cambio de BLOQUE (lift o flight) → LBCYCLE ───
+  const liftFlight=DATA.lift+'-'+DATA.flight;
+  if(_txCerLastLiftFlight===null){
+    _txCerLastLiftFlight=liftFlight;
+  } else if(liftFlight!==_txCerLastLiftFlight){
+    const prevFlight=_txCerLastLiftFlight.split('-')[1];
+    const cats=[...new Set(DATA.athletes.filter(a=>a.flight===prevFlight&&!a.bombed).map(a=>a.cat))]
+      .filter(Boolean).sort((a,b)=>(parseFloat(a)||999)-(parseFloat(b)||999));
+    _txCerLastLiftFlight=liftFlight;
+    if(cats.length){
+      _txCerLbCycle={flight:prevFlight,cats:cats,idx:0,startedAt:Date.now()};
+      _txCerSetState('lbcycle');
+      setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.leaderboardMs+200);
+    }
+  }
+
+  // ── Transiciones por tiempo ───────────────────────────────
   const elapsed=Date.now()-_txCerStateAt;
   if(_txCerState==='profile'&&elapsed>TX_CEREMONY.profileMs){
     _txCerSetState('scoreboard');
     setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.scoreboardMs+200);
   } else if(_txCerState==='scoreboard'&&elapsed>TX_CEREMONY.scoreboardMs){
     _txCerSetState('idle');
-  } else if(_txCerState==='leaderboard'&&elapsed>TX_CEREMONY.leaderboardMs){
-    _txCerSetState('idle');
-    _txCerLastLifter=null; // permitir que el próximo levantador dispare PROFILE de nuevo
+  } else if(_txCerState==='lbcycle'&&_txCerLbCycle){
+    if(elapsed>TX_CEREMONY.leaderboardMs){
+      _txCerLbCycle.idx++;
+      if(_txCerLbCycle.idx>=_txCerLbCycle.cats.length){
+        _txCerLbCycle=null;
+        _txCerSetState('idle');
+        _txCerLastLifter=null;
+      } else {
+        _txCerStateAt=Date.now();
+        _txCerLastSig=null;
+        setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.leaderboardMs+200);
+      }
+    }
   }
-  // Render según estado
+
+  // ── Signature para evitar re-render por timer (anti-flicker) ─
+  // El timer se actualiza in-place via #cerTimer, NO disparar re-render por DATA.timer.
+  const slamActive=Date.now()<_txCerSlamUntil;
+  const sig=_txCerState+'|'+(cur?cur.id+'|'+cur.cat+'|'+(cur.att?.[DATA.lift]||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
+    +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
+    +'|'+(slamActive?_txCerSlamType+'-'+_txCerSlamUntil:'_')
+    +'|'+(_txCerLbCycle?_txCerLbCycle.idx+'/'+_txCerLbCycle.cats.length:'_');
+  if(sig===_txCerLastSig){
+    _txCerUpdateTimer(); // solo actualizar el timer si no cambió nada estructural
+    return;
+  }
+  _txCerLastSig=sig;
+
+  // ── Build HTML según estado ───────────────────────────────
   let html='';
   if(_txCerState==='profile'&&cur){
     html+='<div style="position:fixed;inset:0">'+renderTxProfile(cur)+'</div>';
   } else if(_txCerState==='scoreboard'&&cur){
-    // Scoreboard variante BOTTOM-LEFT (más angosto, no fullwidth)
     html+=_renderTxCerScoreboardBL(cur);
-  } else if(_txCerState==='leaderboard'){
-    const ref=_txCerLastLifterSnap||cur;
-    html+='<div style="position:fixed;inset:0;animation:txLbCycle '+(TX_CEREMONY.leaderboardMs/1000)+'s ease-in-out forwards">'+renderTxLeaderboard(ref,false)+'</div>';
+    html+=_renderTxCerTimerCorner();
+  } else if(_txCerState==='lbcycle'&&_txCerLbCycle){
+    const cat=_txCerLbCycle.cats[_txCerLbCycle.idx];
+    const flight=_txCerLbCycle.flight;
+    const ref=DATA.athletes.find(a=>a.cat===cat&&a.flight===flight);
+    if(ref){
+      html+='<div style="position:fixed;inset:0;animation:txLbCycle '+(TX_CEREMONY.leaderboardMs/1000)+'s ease-in-out forwards">'+renderTxLeaderboard(ref,false)+'</div>';
+      html+='<div style="position:fixed;top:18px;left:50%;transform:translateX(-50%);background:rgba(10,22,40,.72);border:1px solid rgba(212,168,67,.45);padding:6px 18px;border-radius:6px;font-family:Oswald;font-size:13px;letter-spacing:3px;color:#D4A843;z-index:5">VUELO '+flight+' · '+(_txCerLbCycle.idx+1)+'/'+_txCerLbCycle.cats.length+'</div>';
+    }
   }
-  // SLAM top-left (overlay independiente, encima de todo)
-  if(Date.now()<_txCerSlamUntil&&_txCerSlamType){
+  // SLAM top-left (overlay encima de todo)
+  if(slamActive&&_txCerSlamType){
     html+=_renderTxCerSlamCorner(_txCerSlamType);
   }
-  return html;
+  c.innerHTML=html;
+  _txCerUpdateTimer();
+}
+function _renderTxCerTimerCorner(){
+  const t=Math.max(0,DATA.timer||0);
+  const txt=String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');
+  const color=DATA.timerOn&&t<=10?'#ef4444':DATA.timerOn&&t<=30?'#f59e0b':'#fff';
+  return '<div id="cerTimer" style="position:fixed;top:24px;right:24px;font-family:Oswald,sans-serif;font-size:clamp(48px,5vw,72px);font-weight:900;color:'+color+';letter-spacing:3px;text-shadow:0 4px 20px rgba(0,0,0,.85);background:rgba(10,22,40,.6);padding:8px 22px;border-radius:10px;border:2px solid rgba(212,168,67,.4);-webkit-text-stroke:1px rgba(0,0,0,.35)">'+txt+'</div>';
 }
 function _renderTxCerScoreboardBL(cur){
   // Variante compacta del scoreboard, posicionada abajo-izquierda
