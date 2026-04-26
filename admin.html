@@ -2404,6 +2404,271 @@ function checkRecord(total,bw,categoria,division,modalidad,sexo,lift){
   return null;
 }
 
+// ─── IMPORTADOR LiftingCast (CSV → inscripciones) ─────────────
+let _impState = {evento:'', csvText:'', parsed:null, status:'', preview:null};
+
+// Parser de CSV con soporte para campos entre comillas y delimitador auto
+function _impParseCsv(text){
+  if(!text) return {headers:[], rows:[]};
+  text = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').trim();
+  // Auto-detectar delimitador: , o ; o tab
+  const firstLine = text.split('\n')[0];
+  const delim = (firstLine.split('\t').length > firstLine.split(',').length && firstLine.split('\t').length > firstLine.split(';').length) ? '\t'
+              : (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
+  const lines = text.split('\n').filter(l=>l.trim());
+  const parseLine = (line) => {
+    const out = []; let cur = ''; let q = false;
+    for(let i=0;i<line.length;i++){
+      const c = line[i];
+      if(c === '"'){
+        if(q && line[i+1] === '"'){ cur += '"'; i++; }
+        else q = !q;
+      } else if(c === delim && !q){
+        out.push(cur); cur = '';
+      } else cur += c;
+    }
+    out.push(cur);
+    return out.map(s=>s.trim());
+  };
+  const headers = parseLine(lines[0]).map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,''));
+  const rows = lines.slice(1).map(parseLine);
+  return {headers, rows, delim};
+}
+
+// Mapeo de columnas LiftingCast (acepta varias variantes) → campos LiveCast
+function _impMap(headers){
+  const find = (...cands)=>{
+    for(const c of cands){
+      const norm = c.toLowerCase().replace(/[^a-z0-9]/g,'');
+      const idx = headers.indexOf(norm);
+      if(idx>=0) return idx;
+    }
+    return -1;
+  };
+  return {
+    nombre: find('lifter','liftername','name','nombre','fullname'),
+    rut:    find('rut','memberid','memberno','lifterid','usapl','member','license'),
+    sexo:   find('sex','gender','sexo','gen'),
+    edad:   find('age','edad'),
+    bw:     find('bwkg','bw','bodyweight','bodyweightkg','weight','bweight'),
+    cat:    find('bwclass','weightclass','class','wtclass','categoria','category','divisionclass'),
+    div:    find('division','agedivision','agedivisn','divname','divisn'),
+    mod:    find('equipment','eq','equip','modalidad','modality','rawequiped','tested'),
+    club:   find('team','club','gym','equipo'),
+    flight: find('flight','vuelo','session','sessionletter','platform','day'),
+    lot:    find('lot','lotnumber','lotno','platformorder','order','sessionorder'),
+    s1: find('squat1kg','s1','squat1','sq1','squatopener'),
+    s2: find('squat2kg','s2','squat2','sq2'),
+    s3: find('squat3kg','s3','squat3','sq3'),
+    b1: find('bench1kg','b1','bench1','bp1','benchopener'),
+    b2: find('bench2kg','b2','bench2','bp2'),
+    b3: find('bench3kg','b3','bench3','bp3'),
+    d1: find('deadlift1kg','d1','dead1','deadlift1','dl1','deadliftopener'),
+    d2: find('deadlift2kg','d2','dead2','deadlift2','dl2'),
+    d3: find('deadlift3kg','d3','dead3','deadlift3','dl3'),
+  };
+}
+
+function _impNormalize(row, m){
+  const get = i => i>=0 && i<row.length ? (row[i]||'').trim() : '';
+  const nombre = get(m.nombre);
+  if(!nombre) return null;
+  // Sexo
+  let sexo = get(m.sexo).toUpperCase();
+  if(sexo==='M'||sexo==='MALE'||sexo==='MAN'||sexo==='HOMBRE') sexo='Hombre';
+  else if(sexo==='F'||sexo==='FEMALE'||sexo==='WOMAN'||sexo==='MUJER') sexo='Mujer';
+  else sexo='';
+  // Modalidad
+  const modRaw = get(m.mod).toLowerCase();
+  let modalidad = 'Powerlifting Classic';
+  if(modRaw.includes('eq')||modRaw.includes('single')||modRaw.includes('multi')||modRaw.includes('equipped')||modRaw.includes('equipado')){
+    modalidad = 'Powerlifting Equipped';
+  }
+  // Categoría: extraer el número y formatear "-83 kg (Hombre)"
+  let catRaw = get(m.cat);
+  let categoria = catRaw;
+  const catMatch = catRaw.match(/([+\-]?\d+\.?\d*)/);
+  if(catMatch && sexo){
+    const num = catMatch[1];
+    const isPlus = catRaw.includes('+') || /\d+\+/.test(catRaw);
+    categoria = (isPlus?'':'-') + num + (isPlus?'+':'') + ' kg ('+sexo+')';
+  }
+  // División: normalizar a Open/Junior/Subjunior/Master I-IV
+  const divRaw = get(m.div).toLowerCase();
+  let division = get(m.div);
+  if(divRaw.includes('open')) division='Open';
+  else if(divRaw.includes('subjun')||divRaw.includes('sub-jun')||divRaw.includes('sub jun')||divRaw.includes('teen')) division='Sub Junior';
+  else if(divRaw.includes('jun')) division='Junior';
+  else if(divRaw.includes('master 4')||divRaw.includes('master iv')||divRaw.includes('m4')) division='Master IV';
+  else if(divRaw.includes('master 3')||divRaw.includes('master iii')||divRaw.includes('m3')) division='Master III';
+  else if(divRaw.includes('master 2')||divRaw.includes('master ii')||divRaw.includes('m2')) division='Master II';
+  else if(divRaw.includes('master')||divRaw.includes('m1')) division='Master I';
+  // Flight: tomar la primera letra A-F si existe
+  let flight = get(m.flight).toUpperCase().match(/^[A-F]/)?.[0] || 'A';
+  // Lot
+  const lotRaw = get(m.lot);
+  const lot = parseInt(lotRaw,10) || 0;
+  // BW
+  const bw = parseFloat(get(m.bw)) || 0;
+  // Pesos de intentos (si vienen)
+  const num = i => { const v = parseFloat(get(i)); return Number.isFinite(v)&&v>0 ? v : 0; };
+  const att = {
+    sq:[{w:num(m.s1),r:null},{w:num(m.s2),r:null},{w:num(m.s3),r:null}],
+    bp:[{w:num(m.b1),r:null},{w:num(m.b2),r:null},{w:num(m.b3),r:null}],
+    dl:[{w:num(m.d1),r:null},{w:num(m.d2),r:null},{w:num(m.d3),r:null}],
+  };
+  return {
+    nombre,
+    rut: get(m.rut),
+    sexo, division, categoria, modalidad,
+    club: get(m.club),
+    flight, lot, bw,
+    edad: parseInt(get(m.edad),10)||null,
+    att,
+  };
+}
+
+window.impLoadFile = function(input){
+  const f = input.files && input.files[0];
+  if(!f) return;
+  const r = new FileReader();
+  r.onload = (e)=>{
+    _impState.csvText = String(e.target.result||'');
+    _impParseAndPreview();
+  };
+  r.readAsText(f, 'utf-8');
+};
+window.impLoadPaste = function(textarea){
+  _impState.csvText = textarea.value || '';
+  _impParseAndPreview();
+};
+window.impSelectEvento = function(sel){
+  _impState.evento = sel.value;
+  render();
+};
+function _impParseAndPreview(){
+  const parsed = _impParseCsv(_impState.csvText);
+  if(!parsed.rows.length){ _impState.parsed=null; _impState.preview=null; render(); return; }
+  const m = _impMap(parsed.headers);
+  const items = parsed.rows.map(r=>_impNormalize(r,m)).filter(Boolean);
+  _impState.parsed = {parsed, mapping:m, items};
+  render();
+}
+
+window.impDoImport = async function(btn){
+  if(!_impState.parsed || !_impState.evento){
+    alert('Faltan datos: cargá un CSV y elegí un campeonato destino.');
+    return;
+  }
+  const items = _impState.parsed.items;
+  if(!items.length){ alert('No hay filas para importar.'); return; }
+  if(!confirm('Importar '+items.length+' atletas al campeonato "'+_impState.evento+'"?\n\nSe crearán como inscripciones APROBADAS (status:approved). Si querés revisarlas, podés editarlas después en Nóminas.')) return;
+  if(btn){btn.disabled=true; btn.textContent='Importando...';}
+  let ok=0, err=0;
+  for(const a of items){
+    try{
+      const id = 'lc_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+      const data = {
+        evento: _impState.evento,
+        nombre: a.nombre,
+        rut: a.rut || '',
+        sexo: a.sexo || '',
+        division: a.division || '',
+        categoria: a.categoria || '',
+        modalidad: a.modalidad || 'Powerlifting Classic',
+        club: a.club || '',
+        status: 'approved',
+        timestamp: Date.now(),
+        importedFromLiftingCast: true,
+        sortOrder: a.lot || 0,
+      };
+      // Si vienen attempts pre-cargados, los guardamos para que LiveCast los levante
+      const hasAttempts = ['sq','bp','dl'].some(k => a.att[k].some(x=>x.w>0));
+      if(hasAttempts) data.attempts = a.att;
+      if(a.flight) data.flight = a.flight;
+      if(a.bw>0) data.bw = a.bw;
+      await setDoc(doc(db,'inscripciones',id), data);
+      ok++;
+    }catch(e){ console.error('Import row failed:', a.nombre, e); err++; }
+  }
+  if(btn){btn.disabled=false; btn.textContent='📥 Importar a Firestore';}
+  alert('Importación terminada.\n✓ Importados: '+ok+'\n✗ Errores: '+err+(err?'\n\nRevisá la consola (F12) para detalles.':''));
+  _impState = {evento:_impState.evento, csvText:'', parsed:null, status:'', preview:null};
+  render();
+};
+
+function renderImportar(){
+  const evs = (ST.eventos||[]).filter(e=>e.status!=='archived');
+  let h = '<div class="h1">📥 Importar desde LiftingCast</div>';
+  h += '<p class="subtitle">Subí el CSV exportado desde LiftingCast (Meet Director → Export). Detecta automáticamente columnas comunes (Lifter, Team, Division, BWClass, Squat1Kg, Bench1Kg, Deadlift1Kg, etc.) y crea inscripciones aprobadas en el campeonato que elijas.</p>';
+
+  // Step 1: evento destino
+  h += '<div class="card" style="margin-bottom:14px"><div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;align-items:center">';
+  h += '<div><div style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px">1 · CAMPEONATO DESTINO</div><div style="font-size:11px;color:var(--muted);margin-top:2px">Las inscripciones se asocian a este evento.</div></div>';
+  h += '<select class="inp" onchange="impSelectEvento(this)"><option value="">-- elegí un campeonato --</option>';
+  evs.forEach(e=>{ h += '<option value="'+esc(e.name)+'" '+(e.name===_impState.evento?'selected':'')+'>'+esc(e.name)+'</option>'; });
+  h += '</select></div></div>';
+
+  // Step 2: cargar CSV
+  h += '<div class="card" style="margin-bottom:14px"><div style="margin-bottom:10px"><span style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px">2 · CARGAR CSV</span></div>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">';
+  h += '<div><label style="font-size:11px;color:var(--muted);margin-bottom:5px;display:block">Subir archivo (.csv)</label><input type="file" accept=".csv,text/csv" onchange="impLoadFile(this)" style="font-size:12px"></div>';
+  h += '<div><label style="font-size:11px;color:var(--muted);margin-bottom:5px;display:block">…o pegar acá</label><textarea oninput="impLoadPaste(this)" placeholder="Lifter,Sex,Team,BWClass,Division,Squat1Kg,...\nJohn Doe,M,My Club,83,Open,180,..." style="width:100%;min-height:100px;font-family:monospace;font-size:11px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text)"></textarea></div>';
+  h += '</div></div>';
+
+  // Step 3: preview
+  if(_impState.parsed){
+    const items = _impState.parsed.items;
+    const m = _impState.parsed.mapping;
+    const headers = _impState.parsed.parsed.headers;
+    const mappedCount = Object.values(m).filter(v=>v>=0).length;
+    const totalFields = Object.keys(m).length;
+    h += '<div class="card" style="margin-bottom:14px"><div style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
+    h += '<span style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px">3 · PREVIEW</span>';
+    h += '<span style="font-size:11px;color:var(--muted)">'+items.length+' atletas detectados · '+mappedCount+'/'+totalFields+' columnas mapeadas · '+headers.length+' columnas en CSV</span></div>';
+    if(!items.length){
+      h += '<div style="padding:18px;text-align:center;color:var(--red);font-size:12px">⚠️ No se detectó ninguna fila válida. Revisá que la primera línea del CSV sean los encabezados (Lifter, Team, etc.) y que cada atleta tenga al menos el nombre.</div>';
+    } else {
+      h += '<div style="overflow-x:auto;max-height:380px;overflow-y:auto"><table class="tbl" style="font-size:10px">';
+      h += '<tr><th>#</th><th>Nombre</th><th>Sexo</th><th>Categoría</th><th>División</th><th>Mod.</th><th>Club</th><th>Vuelo</th><th>Lot</th><th>BW</th><th>SQ1·2·3</th><th>BP1·2·3</th><th>DL1·2·3</th></tr>';
+      items.slice(0,30).forEach((a,i)=>{
+        const att = (l)=> a.att[l].map(x=>x.w||'—').join(' · ');
+        h += '<tr><td>'+(i+1)+'</td><td>'+esc(a.nombre)+'</td><td>'+esc(a.sexo||'?')+'</td><td>'+esc(a.categoria||'?')+'</td><td>'+esc(a.division||'?')+'</td><td>'+(a.modalidad==='Powerlifting Equipped'?'EQ':'CL')+'</td><td>'+esc(a.club)+'</td><td>'+esc(a.flight)+'</td><td>'+(a.lot||'—')+'</td><td>'+(a.bw||'—')+'</td><td>'+att('sq')+'</td><td>'+att('bp')+'</td><td>'+att('dl')+'</td></tr>';
+      });
+      h += '</table></div>';
+      if(items.length>30) h += '<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:right">…mostrando primeros 30 de '+items.length+'</div>';
+      // Diagnóstico de campos no mapeados
+      const missing = Object.entries(m).filter(([k,v])=>v<0).map(([k])=>k);
+      if(missing.length){
+        h += '<div style="margin-top:12px;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:6px;font-size:11px;color:var(--muted)">⚠️ Columnas no encontradas: <code>'+missing.join(', ')+'</code>. Esos campos quedan vacíos. Si el CSV las tiene con otro nombre, renombrá los headers manualmente o avisame y le agrego el alias.</div>';
+      }
+    }
+    h += '</div>';
+  }
+
+  // Step 4: import
+  if(_impState.parsed && _impState.parsed.items.length){
+    h += '<div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">';
+    h += '<div style="font-size:12px;color:var(--muted)">'+(_impState.evento?'Listo para importar a <b style="color:var(--gold)">'+esc(_impState.evento)+'</b>':'⚠️ Falta elegir el campeonato destino arriba')+'</div>';
+    h += '<button class="btn btn-g" onclick="impDoImport(this)" '+(!_impState.evento?'disabled style="opacity:.4;cursor:not-allowed"':'')+'>📥 Importar a Firestore</button>';
+    h += '</div>';
+  }
+
+  h += '<div class="card" style="margin-top:14px;padding:12px 16px;background:rgba(30,58,95,.3);font-size:11px;color:var(--muted);line-height:1.7">';
+  h += '<div style="color:var(--text);font-weight:600;margin-bottom:6px">💡 Cómo exportar desde LiftingCast</div>';
+  h += '1. Ingresá a tu meet en liftingcast.com como Meet Director.<br>';
+  h += '2. Settings (⚙) → Export → "Roster CSV" o "Full Export".<br>';
+  h += '3. Descargá el .csv y subilo acá.<br><br>';
+  h += '<div style="color:var(--text);font-weight:600;margin-bottom:6px">Columnas que reconoce</div>';
+  h += '• Identidad: <code>Lifter, Team, Sex, Age, MemberID</code><br>';
+  h += '• Categoría: <code>BWClass, Division, Equipment</code><br>';
+  h += '• Logística: <code>Flight/Session, Lot, BW</code><br>';
+  h += '• Intentos: <code>Squat1Kg/2Kg/3Kg, Bench1Kg/2Kg/3Kg, Deadlift1Kg/2Kg/3Kg</code><br>';
+  h += '</div>';
+
+  return h;
+}
+
 // ─── Entrenadores: importación desde entrenadores_<evento>.json ─
 let _entrenadoresData = null;
 let _entrenadoresLoading = false;
