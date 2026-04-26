@@ -85,6 +85,9 @@ if(TX_MODE){
     @keyframes txTimerPulse{0%,100%{opacity:1}50%{opacity:.55}}
     @keyframes txScoreboardCycle{0%{transform:translateY(110%);opacity:0}3%{transform:translateY(0);opacity:1}97%{transform:translateY(0);opacity:1}100%{transform:translateY(110%);opacity:0}}
     @keyframes txLbCycle{0%{transform:scale(.92);opacity:0}5%{transform:scale(1);opacity:1}95%{transform:scale(1);opacity:1}100%{transform:scale(1.04);opacity:0;filter:blur(4px)}}
+    @keyframes txRecordSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+    @keyframes txRecordIn{0%{transform:scale(0) rotate(-180deg);opacity:0}60%{transform:scale(1.15) rotate(20deg);opacity:1}100%{transform:scale(1) rotate(0);opacity:1}}
+    @keyframes txRecordOut{from{transform:scale(1);opacity:1}to{transform:scale(.6);opacity:0}}
     .txCascade>*{animation:txSlideRight .55s cubic-bezier(.2,.8,.2,1) backwards}
     .txCascade>*:nth-child(1){animation-delay:.15s}
     .txCascade>*:nth-child(2){animation-delay:.32s}
@@ -144,9 +147,22 @@ async function initFB(){
     // Keep LIVE_EVENTS in sync with Firestore eventos
     fb.onSnapshot(fb.collection(fbDB,'eventos'),(snap)=>{
       const evs={};
-      snap.docs.forEach(d=>{const e=d.data();if(e.status!=='archived')evs[d.id]=e.name;});
+      window.LIVE_EVENT_META=window.LIVE_EVENT_META||{};
+      snap.docs.forEach(d=>{
+        const e=d.data();
+        if(e.status==='archived')return;
+        evs[d.id]=e.name;
+        // Default récords activos; en "Universitario" arrancan apagados.
+        const recordsEnabled=(typeof e.recordsEnabled==='boolean')
+          ? e.recordsEnabled
+          : !/universitar/i.test(e.name||'');
+        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled};
+        // Sync flag al evento activo
+        if(DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
+          DATA.event.recordsEnabled=recordsEnabled;
+        }
+      });
       if(Object.keys(evs).length)LIVE_EVENTS=evs;
-      // Refresh setup screen if visible (new event appeared)
       if(DATA.phase==='setup'&&DATA.events.length>0)R();
     });
     // Check if already logged in (session persists)
@@ -369,13 +385,29 @@ function _normDiv(d){
 }
 function checkRecord(athlete,lift,round){
   if(!RECORDS)return;
+  // Bypass si el evento tiene records desactivados (ej. Universitario)
+  if(DATA.event && DATA.event.recordsEnabled===false)return;
   const weight=athlete.att[lift][round].w;if(!weight)return;
   const mod=athlete.mod||'classic';
   const cat=_normCat(athlete.cat||'');
   const div=_normDiv(athlete.div||'');
   const recs=(RECORDS[mod]&&RECORDS[mod][lift])||[];
   const match=recs.find(rec=>rec.categoria===cat&&_normDiv(rec.division)===div);
-  if(match&&weight>match.marca)showRecordAlert(athlete.name,lift,round,weight,match.marca,match.nombre,cat,div,mod);
+  if(match&&weight>match.marca){
+    showRecordAlert(athlete.name,lift,round,weight,match.marca,match.nombre,cat,div,mod);
+    // Push al doc livecast_record/current para que los widgets OBS muestren el badge
+    pushRecordToFB({
+      athName:athlete.name,lift,round,
+      newMark:weight,oldMark:match.marca,holder:match.nombre,
+      cat,div,mod,ts:Date.now()
+    });
+  }
+}
+async function pushRecordToFB(rec){
+  if(!fbReady||!isAdmin||!window._fb)return;
+  try{
+    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_record','current'),rec);
+  }catch(e){console.warn('[FB] pushRecord',e)}
 }
 function closeRecAlert(){const e=document.getElementById('recAlert');if(e)e.remove();}
 function showRecordAlert(athName,lift,round,newMark,oldMark,holder,cat,div,mod){
@@ -1375,14 +1407,34 @@ function renderTxLbAuto(){
 //    profileMs:     duración del perfil fullscreen
 //    scoreboardMs:  duración del scoreboard bottom-left ← acá lo subís
 //    slamMs:        duración del flash GOOD/NO LIFT en la esquina
-const TX_CEREMONY={profileMs:5000,scoreboardMs:30000,slamMs:2000};
+const TX_CEREMONY={profileMs:5000,scoreboardMs:30000,slamMs:2000,recordMs:7000};
 let _txCerState='idle';            // idle | profile | scoreboard
 let _txCerStateAt=0;
 let _txCerLastLifter=null;
 let _txCerSeenResults=null;
 let _txCerSlamUntil=0;
 let _txCerSlamType=null;
+let _txCerRecordUntil=0;
+let _txCerRecordData=null;
+let _txCerRecordUnsub=null;
+let _txCerRecordSeenTs=0;
 let _txCerLastSig=null;            // signature p/ saltarse re-renders innecesarios
+function _txCerStartRecordListener(){
+  if(_txCerRecordUnsub||!fbReady||!window._fb)return;
+  try{
+    _txCerRecordUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_record','current'),(snap)=>{
+      if(!snap.exists())return;
+      const d=snap.data();if(!d||!d.ts)return;
+      if(d.ts===_txCerRecordSeenTs)return;
+      _txCerRecordSeenTs=d.ts;
+      _txCerRecordUntil=Date.now()+TX_CEREMONY.recordMs;
+      _txCerRecordData=d;
+      _txCerLastSig=null;
+      if(typeof renderTxWidget==='function')renderTxWidget();
+      setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.recordMs+200);
+    });
+  }catch(e){console.warn('[TX] record listener',e)}
+}
 function _txCerSetState(s){
   _txCerStateAt=Date.now();_txCerState=s;
   const opaque=(s==='profile');
@@ -1399,6 +1451,7 @@ function _txCerUpdateTimer(){
 function renderTxCeremony(container){
   const c=container||document.getElementById('txWidget');
   if(!c)return;
+  _txCerStartRecordListener();
   const cur=liftQueue()[0];
 
   // ── Detectar nuevo levantador → PROFILE ───────────────────
@@ -1438,9 +1491,11 @@ function renderTxCeremony(container){
   // ── Signature para evitar re-render por timer (anti-flicker) ─
   // El timer se actualiza in-place via #cerTimer, NO disparar re-render por DATA.timer.
   const slamActive=Date.now()<_txCerSlamUntil;
+  const recordActive=Date.now()<_txCerRecordUntil&&_txCerRecordData;
   const sig=_txCerState+'|'+(cur?cur.id+'|'+cur.cat+'|'+(cur.att?.[DATA.lift]||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
     +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
-    +'|'+(slamActive?_txCerSlamType+'-'+_txCerSlamUntil:'_');
+    +'|'+(slamActive?_txCerSlamType+'-'+_txCerSlamUntil:'_')
+    +'|'+(recordActive?'rec-'+_txCerRecordUntil:'_');
   if(sig===_txCerLastSig){
     _txCerUpdateTimer(); // solo actualizar el timer si no cambió nada estructural
     return;
@@ -1459,8 +1514,38 @@ function renderTxCeremony(container){
   if(slamActive&&_txCerSlamType){
     html+=_renderTxCerSlamCorner(_txCerSlamType);
   }
+  // RECORD NACIONAL badge — top-left, gira mientras dura
+  if(recordActive){
+    html+=_renderTxCerRecordBadge(_txCerRecordData);
+  }
   c.innerHTML=html;
   _txCerUpdateTimer();
+}
+function _renderTxCerRecordBadge(d){
+  const LL={sq:'SQUAT',bp:'BENCH',dl:'DEADLIFT'};
+  const liftName=LL[d.lift]||(d.lift||'').toUpperCase();
+  // Posición top-left, debajo del slam para que no se pisen.
+  // El wrapper externo controla in/out; el círculo interno gira continuamente.
+  return '<div style="position:fixed;top:120px;left:24px;z-index:60;animation:txRecordIn .65s cubic-bezier(.2,.9,.2,1) backwards,txRecordOut .45s ease-in '+((TX_CEREMONY.recordMs-450)/1000)+'s forwards">'
+    +'<div style="position:relative;width:clamp(160px,16vw,220px);height:clamp(160px,16vw,220px)">'
+      +'<div style="position:absolute;inset:0;animation:txRecordSpin 5s linear infinite">'
+        +'<svg viewBox="0 0 200 200" style="width:100%;height:100%;display:block;filter:drop-shadow(0 6px 24px rgba(212,168,67,.6))">'
+          +'<defs><path id="txRecCircle" d="M100,100 m-78,0 a78,78 0 1,1 156,0 a78,78 0 1,1 -156,0"/></defs>'
+          +'<circle cx="100" cy="100" r="92" fill="#0A1628" stroke="#D4A843" stroke-width="3"/>'
+          +'<circle cx="100" cy="100" r="78" fill="none" stroke="rgba(212,168,67,.35)" stroke-width="1" stroke-dasharray="4 4"/>'
+          +'<text fill="#D4A843" font-family="Oswald,sans-serif" font-size="17" font-weight="700" letter-spacing="3">'
+            +'<textPath href="#txRecCircle" startOffset="0%">RÉCORD NACIONAL · RÉCORD NACIONAL · </textPath>'
+          +'</text>'
+        +'</svg>'
+      +'</div>'
+      +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none">'
+        +'<div style="font-family:Oswald,sans-serif;font-size:11px;letter-spacing:3px;color:rgba(212,168,67,.85);margin-bottom:2px">'+liftName+'</div>'
+        +'<div style="font-family:Oswald,sans-serif;font-size:clamp(34px,3.6vw,52px);font-weight:900;color:#D4A843;line-height:1">'+(d.newMark||'')+'</div>'
+        +'<div style="font-family:Oswald,sans-serif;font-size:11px;color:rgba(255,255,255,.6);margin-top:2px">kg</div>'
+        +(d.cat?'<div style="font-family:Oswald,sans-serif;font-size:10px;color:rgba(255,255,255,.55);letter-spacing:1px;margin-top:6px">-'+d.cat+'kg · '+(d.div||'')+'</div>':'')
+      +'</div>'
+    +'</div>'
+  +'</div>';
 }
 function _renderTxCerTimerCorner(){
   const t=Math.max(0,DATA.timer||0);
@@ -1852,8 +1937,10 @@ function renderShell(){
 function sortByCat(){DATA.athletes.sort((a,b)=>{const na=parseFloat(a.cat.replace(/[^0-9.]/g,''))||999;const nb=parseFloat(b.cat.replace(/[^0-9.]/g,''))||999;return na-nb});DATA.athletes.forEach((a,i)=>a.lot=i+1);save();R()}
 function sortByFlight(){DATA.athletes.sort((a,b)=>{if(a.flight!==b.flight)return a.flight.localeCompare(b.flight);const na=parseFloat(a.cat.replace(/[^0-9.]/g,''))||999;const nb=parseFloat(b.cat.replace(/[^0-9.]/g,''))||999;return na-nb});DATA.athletes.forEach((a,i)=>a.lot=i+1);save();R()}
 function generateLots(){
-  if(DATA.lotsGenerated){alert('Los lotes ya fueron generados para esta competencia');return}
-  if(!confirm('¿Generar números de lote aleatorios? Esta acción solo se puede hacer una vez.'))return;
+  const msg=DATA.lotsGenerated
+    ? '⚠️ Los lotes YA fueron sorteados.\n\n¿Re-sortear y reemplazar todos los números actuales?\n\nLas ediciones manuales se perderán.'
+    : '¿Generar números de lote aleatorios?';
+  if(!confirm(msg))return;
   // Shuffle within each flight
   const flights=[...new Set(DATA.athletes.map(a=>a.flight))].sort();
   let lotNum=1;
@@ -1867,15 +1954,36 @@ function generateLots(){
   DATA.lotsGenerated=true;save();R();
 }
 
+// Editar el lote a mano. Si el número nuevo ya lo tenía otro atleta,
+// hace un swap (intercambia los lotes entre los dos).
+window.setLot=function(id,val){
+  const n=parseInt(val,10);
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  if(!Number.isFinite(n)||n<1){
+    showToastLC('⚠️ Lote inválido — debe ser un número entero ≥ 1');
+    R();return;
+  }
+  if(n===a.lot){R();return}
+  const other=DATA.athletes.find(x=>x.lot===n&&x.id!==id);
+  if(other){
+    // Swap: el otro recibe el lote anterior
+    other.lot=a.lot;
+    a.lot=n;
+  } else {
+    a.lot=n;
+  }
+  save();R();
+};
+
 function renderManage(){
-  const ath=DATA.athletes;let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px">'+(DATA.lotsGenerated?'<span style="font-size:10px;color:var(--green);padding:6px 10px;border:1px solid var(--green);border-radius:6px">✓ Lotes generados</span>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="sortByFlight()">Ordenar por Vuelo ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  const ath=DATA.athletes;let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">🎲 Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="sortByFlight()">Ordenar por Vuelo ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th><th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:38px">VLO</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:56px">BW</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:48px">RkSQ</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:48px">RkBP</th>';
   ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:62px">'+LIFT_S[l]+r+'</th>'})});
   h+='</tr></thead><tbody>';
   ath.forEach(a=>{
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3);'+(a.bombed?'opacity:.4':'')+'">';
-    h+='<td class="os" style="padding:6px 4px;text-align:center;color:var(--gold);font-weight:700">'+a.lot+'</td>';
+    h+='<td style="padding:3px 2px;text-align:center"><input type="number" min="1" value="'+a.lot+'" onchange="setLot('+a.id+',this.value)" title="Editá el número de lote — si ya existe se hace swap" style="width:42px;padding:3px 2px;font-family:Oswald;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:13px"></td>';
     h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+a.name+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
     h+='<td style="padding:3px 2px"><select class="inp-sm" onchange="updA('+a.id+',\'flight\',this.value);R()" style="width:38px;padding:4px 1px;font-size:11px">'+['A','B','C','D','E','F'].map(f=>'<option '+(a.flight===f?'selected':'')+'>'+f+'</option>').join('')+'</select></td>';
     h+='<td style="padding:3px 2px;text-align:center">';
