@@ -1218,7 +1218,7 @@ function renderObsTx(){
     {id:'slam',icon:'⚡',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT) cuando marcás ✓/✗ en Control en Vivo. Se dispara automáticamente. Overlay sobre la cámara de tarima.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
     {id:'timer',icon:'⏱',title:'Timer independiente',desc:'Reloj 1:00 → 0:00 en grande. Verde/ámbar/rojo según se acerca a 0. Pulsa cuando quedan ≤10s. Sincronizado con el timer del operador.',obsBg:'Transparente. Posicionalo donde quieras (esquina, banner, etc).',size:'1920×1080 (autoescala)'},
     {id:'lights',icon:'💡',title:'Luces de jueces',desc:'3 círculos para izq / central / der. Se prenden blanco (good) o rojo (no lift) cuando los jueces votan en su panel. Ideal arriba de la cámara o en pantalla aparte.',obsBg:'Transparente. Funciona solo si activás "Modo Jueces" en Control en Vivo.',size:'1920×1080 (autoescala)'},
-    {id:'ceremony',icon:'🎭',title:'Ceremonia (TODO-EN-UNO)',desc:'Widget orquestador. Detecta nuevo levantador → PROFILE fullscreen 5s → SCOREBOARD bottom-left 10s + SLAM top-left al marcar resultado → LEADERBOARD fullscreen 5s → cicla. UNA sola escena en OBS, este widget hace toda la ceremonia.',obsBg:'Mixto: fullscreen opaco durante PROFILE/LEADERBOARD, transparente sobre cámara durante SCOREBOARD. Una sola escena con cámara de fondo + este browser source encima.',size:'1920×1080'},
+    {id:'ceremony',icon:'🎭',title:'Ceremonia (TODO-EN-UNO)',desc:'Widget orquestador. Detecta nuevo levantador → PROFILE fullscreen 5s → SCOREBOARD bottom-left + TIMER top-right (30s) → SLAM top-left flash al marcar resultado → IDLE hasta el próximo. Sin tabla de clasificación: ese ciclo lo manejás aparte con el widget Leaderboard fijo.',obsBg:'Mixto: fullscreen opaco durante PROFILE, transparente sobre cámara durante SCOREBOARD/IDLE. Una sola escena con cámara de fondo + este browser source encima.',size:'1920×1080'},
   ];
   let h='<div class="fade"><h2 class="os" style="font-size:22px;letter-spacing:1px;margin-bottom:6px">🎬 WIDGETS PARA OBS</h2>';
   h+='<p style="color:var(--muted);font-size:12px;margin-bottom:18px">Cada widget es una URL que se agrega como Browser Source en OBS. Actualiza en tiempo real desde Firestore — no necesita login.</p>';
@@ -1369,30 +1369,23 @@ function renderTxLbAuto(){
 //   1) Detecta nuevo levantador → PROFILE fullscreen (profileMs)
 //   2) → SCOREBOARD bottom-left + TIMER top-right (scoreboardMs)
 //      • SLAM top-left por slamMs cuando llega resultado (no cambia de estado)
-//   3) Cuando termina un BLOQUE completo (cambio de lift o flight) →
-//      LEADERBOARD-CYCLE: pasa por cada categoría del flight terminado,
-//      leaderboardMs por cada una.
-//   4) → IDLE (transparente) hasta el próximo levantador
+//   3) → IDLE (transparente) hasta el próximo levantador
 //
 // 🛠 PARA MODIFICAR LOS TIEMPOS, edita la línea de abajo (en milisegundos):
 //    profileMs:     duración del perfil fullscreen
 //    scoreboardMs:  duración del scoreboard bottom-left ← acá lo subís
-//    leaderboardMs: duración de cada categoría del leaderboard cycle
 //    slamMs:        duración del flash GOOD/NO LIFT en la esquina
-const TX_CEREMONY={profileMs:5000,scoreboardMs:30000,leaderboardMs:6000,slamMs:2000};
-let _txCerState='idle';            // idle | profile | scoreboard | lbcycle
+const TX_CEREMONY={profileMs:5000,scoreboardMs:30000,slamMs:2000};
+let _txCerState='idle';            // idle | profile | scoreboard
 let _txCerStateAt=0;
 let _txCerLastLifter=null;
 let _txCerSeenResults=null;
 let _txCerSlamUntil=0;
 let _txCerSlamType=null;
-let _txCerLastLift=null;           // 'sq'|'bp'|'dl' → detecta cambio de lift
-let _txCerDlClosed=false;          // ya disparé el cycle de DL final
-let _txCerLbCycle=null;            // {liftLabel, cats:[], idx, startedAt}
 let _txCerLastSig=null;            // signature p/ saltarse re-renders innecesarios
 function _txCerSetState(s){
   _txCerStateAt=Date.now();_txCerState=s;
-  const opaque=(s==='profile'||s==='lbcycle');
+  const opaque=(s==='profile');
   document.body.classList.toggle('tx-opaque',opaque);
   _txCerLastSig=null; // forzar re-render al cambiar de estado
 }
@@ -1409,7 +1402,7 @@ function renderTxCeremony(container){
   const cur=liftQueue()[0];
 
   // ── Detectar nuevo levantador → PROFILE ───────────────────
-  if(cur && cur.id!==_txCerLastLifter && _txCerState!=='lbcycle'){
+  if(cur && cur.id!==_txCerLastLifter){
     _txCerLastLifter=cur.id;
     _txCerSetState('profile');
     setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.profileMs+200);
@@ -1433,32 +1426,6 @@ function renderTxCeremony(container){
     })));
   }
 
-  // ── Detectar fin de LIFT completo → LBCYCLE ───────────────
-  // Trigger 1: cambia DATA.lift (operador avanzó al siguiente lift = SQ→BP, BP→DL)
-  // Trigger 2: terminado DL round 2 (3er intento) para todos los no-bombed
-  let liftJustEnded=null;
-  if(_txCerLastLift===null){
-    _txCerLastLift=DATA.lift;
-  } else if(DATA.lift!==_txCerLastLift){
-    liftJustEnded=_txCerLastLift;
-    _txCerLastLift=DATA.lift;
-    _txCerDlClosed=false;
-  } else if(DATA.lift==='dl'&&DATA.round===2&&!_txCerDlClosed){
-    const allDone=DATA.athletes.filter(a=>!a.bombed)
-      .every(a=>a.att?.dl?.[2]?.r==='g'||a.att?.dl?.[2]?.r==='n');
-    if(allDone){liftJustEnded='dl';_txCerDlClosed=true;}
-  }
-  if(liftJustEnded){
-    // Categorías = únicas de TODOS los flights (cubre el lift entero)
-    const cats=[...new Set(DATA.athletes.filter(a=>!a.bombed).map(a=>a.cat))]
-      .filter(Boolean).sort((a,b)=>(parseFloat(a)||999)-(parseFloat(b)||999));
-    if(cats.length){
-      _txCerLbCycle={liftLabel:liftJustEnded,cats:cats,idx:0,startedAt:Date.now()};
-      _txCerSetState('lbcycle');
-      setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.leaderboardMs+200);
-    }
-  }
-
   // ── Transiciones por tiempo ───────────────────────────────
   const elapsed=Date.now()-_txCerStateAt;
   if(_txCerState==='profile'&&elapsed>TX_CEREMONY.profileMs){
@@ -1466,19 +1433,6 @@ function renderTxCeremony(container){
     setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.scoreboardMs+200);
   } else if(_txCerState==='scoreboard'&&elapsed>TX_CEREMONY.scoreboardMs){
     _txCerSetState('idle');
-  } else if(_txCerState==='lbcycle'&&_txCerLbCycle){
-    if(elapsed>TX_CEREMONY.leaderboardMs){
-      _txCerLbCycle.idx++;
-      if(_txCerLbCycle.idx>=_txCerLbCycle.cats.length){
-        _txCerLbCycle=null;
-        _txCerSetState('idle');
-        _txCerLastLifter=null;
-      } else {
-        _txCerStateAt=Date.now();
-        _txCerLastSig=null;
-        setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.leaderboardMs+200);
-      }
-    }
   }
 
   // ── Signature para evitar re-render por timer (anti-flicker) ─
@@ -1486,8 +1440,7 @@ function renderTxCeremony(container){
   const slamActive=Date.now()<_txCerSlamUntil;
   const sig=_txCerState+'|'+(cur?cur.id+'|'+cur.cat+'|'+(cur.att?.[DATA.lift]||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
     +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
-    +'|'+(slamActive?_txCerSlamType+'-'+_txCerSlamUntil:'_')
-    +'|'+(_txCerLbCycle?_txCerLbCycle.idx+'/'+_txCerLbCycle.cats.length:'_');
+    +'|'+(slamActive?_txCerSlamType+'-'+_txCerSlamUntil:'_');
   if(sig===_txCerLastSig){
     _txCerUpdateTimer(); // solo actualizar el timer si no cambió nada estructural
     return;
@@ -1501,14 +1454,6 @@ function renderTxCeremony(container){
   } else if(_txCerState==='scoreboard'&&cur){
     html+=_renderTxCerScoreboardBL(cur);
     html+=_renderTxCerTimerCorner();
-  } else if(_txCerState==='lbcycle'&&_txCerLbCycle){
-    const cat=_txCerLbCycle.cats[_txCerLbCycle.idx];
-    const ref=DATA.athletes.find(a=>a.cat===cat&&!a.bombed);
-    if(ref){
-      const liftName={sq:'SQUAT',bp:'BENCH PRESS',dl:'DEADLIFT'}[_txCerLbCycle.liftLabel]||_txCerLbCycle.liftLabel.toUpperCase();
-      html+='<div style="position:fixed;inset:0;animation:txLbCycle '+(TX_CEREMONY.leaderboardMs/1000)+'s ease-in-out forwards">'+renderTxLeaderboard(ref,false,{allFlights:true})+'</div>';
-      html+='<div style="position:fixed;top:18px;left:50%;transform:translateX(-50%);background:rgba(10,22,40,.78);border:1px solid rgba(212,168,67,.45);padding:6px 22px;border-radius:6px;font-family:Oswald;font-size:13px;letter-spacing:3px;color:#D4A843;z-index:5">RANKING '+liftName+' · '+(_txCerLbCycle.idx+1)+'/'+_txCerLbCycle.cats.length+'</div>';
-    }
   }
   // SLAM top-left (overlay encima de todo)
   if(slamActive&&_txCerSlamType){
