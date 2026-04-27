@@ -36,6 +36,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 </style>
 </head>
 <body>
+<script src="clubs.js"></script>
 
 <div class="nav">
   <a href="index.html" style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--text)">YOUR<span style="color:var(--accent)">LIFT</span></a>
@@ -127,12 +128,12 @@ window.onSearch=function(val){
     return n.includes(q)||c.includes(q)||q.split(' ').filter(w=>w.length>1).every(w=>n.includes(w));
   }).slice(0,8);
   document.getElementById('sResults').innerHTML=hits.length
-    ? hits.map(a=>'<div class="result-item" onclick="showProfile(\''+a.codigo+'\')">'
+    ? hits.map(a=>{const lg=window.clubLogoImg?window.clubLogoImg(a.club,22,'background:var(--bg);padding:1px;flex-shrink:0;'):'';return '<div class="result-item" onclick="showProfile(\''+a.codigo+'\')">'
         +'<div><div style="font-weight:600;font-size:14px">'+a.nombre+'</div>'
-        +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+(a.club||'—')+' · '+(a.competencias||[]).length+' competencias</div></div>'
+        +'<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:2px">'+lg+'<span>'+(a.club||'—')+' · '+(a.competencias||[]).length+' competencias</span></div></div>'
         +'<div style="text-align:right"><div style="font-family:Oswald;font-size:12px;color:var(--gold)">'+a.codigo+'</div>'
         +'<div style="font-size:10px;color:var(--muted)">'+(a.debut||'—')+'</div></div>'
-      +'</div>').join('')
+      +'</div>'}).join('')
     : '<p style="color:var(--muted);font-size:13px">Sin resultados.</p>';
 }
 window.doSearch=function(){onSearch(document.getElementById('sInput').value)}
@@ -190,14 +191,16 @@ window.showProfile=function(codigo){
   let h='<button onclick="backToSearch()" style="display:flex;align-items:center;gap:6px;background:transparent;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:14px;padding:0">← Volver</button>';
 
   // ── Header ──────────────────────────────────────────────
+  const clubBadge=window.clubLogoImg?window.clubLogoImg(a.club,32,'background:var(--card);padding:2px;border:2px solid var(--card);position:absolute;bottom:-6px;right:-6px;border-radius:50%;'):'';
+  const clubInline=window.clubLogoImg?window.clubLogoImg(a.club,16,'background:var(--bg);padding:1px;vertical-align:middle;margin-right:4px;'):'';
   h+='<div class="card card-accent"><div style="display:flex;gap:14px;align-items:flex-start">'
-    +'<div style="width:68px;height:68px;border-radius:12px;background:var(--bg);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+    +'<div style="position:relative;flex-shrink:0"><div style="width:68px;height:68px;border-radius:12px;background:var(--bg);border:2px solid var(--border);display:flex;align-items:center;justify-content:center">'
       +'<span class="os" style="font-size:26px;font-weight:700;color:var(--muted)">'+initials+'</span>'
-    +'</div>'
+    +'</div>'+clubBadge+'</div>'
     +'<div style="flex:1;min-width:0">'
       +'<div class="os" style="font-size:clamp(16px,4vw,24px);font-weight:700;letter-spacing:1px">'+a.nombre+'</div>'
       +'<div style="font-family:Oswald;font-size:12px;color:var(--gold);margin-top:2px">'+a.codigo+'</div>'
-      +'<div style="font-size:12px;color:var(--muted);margin-top:3px">'+(a.club||'—')+(a.debut?' · Debut '+a.debut:'')+'</div>'
+      +'<div style="font-size:12px;color:var(--muted);margin-top:3px">'+clubInline+(a.club||'—')+(a.debut?' · Debut '+a.debut:'')+'</div>'
       +(churnRisk?'<div style="margin-top:8px;padding:7px 11px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:7px;font-size:11px;color:var(--gold)">⚡ '+monthsSince+' meses sin competir — ¡te esperamos pronto!</div>':'')
       +'<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">'
         +(sexRaw?'<span class="badge '+sexBadge+'">'+sexLabel+'</span>':'')
@@ -233,10 +236,13 @@ window.showProfile=function(codigo){
     const W=340,H=80,PX=8,PY=8;
     const gls=glHistory.map(c=>c.resultado.glp||c.resultado.gl||0);
     const maxG=Math.max(...gls),minG=Math.min(...gls.filter(v=>v>0));
+    const catPalette=['#D4A843','#3B82F6','#22C55E','#F59E0B','#C41E3A','#A78BFA','#F472B6'];
+    const uniqueCats=[...new Set(glHistory.map(c=>(c.categoria||'').trim()).filter(Boolean))];
+    const catColor=c=>{const i=uniqueCats.indexOf((c||'').trim());return i>=0?catPalette[i%catPalette.length]:'#D4A843'};
     const pts=glHistory.map((c,i)=>{
       const x=PX+i*(W-PX*2)/(glHistory.length-1);
       const y=PY+(H-PY*2)*(1-(gls[i]-minG)/Math.max(maxG-minG,1));
-      return {x,y,v:gls[i],ev:c.evento||''};
+      return {x,y,v:gls[i],ev:c.evento||'',cat:(c.categoria||'').trim()};
     });
     const poly=pts.map(p=>p.x+','+p.y).join(' ');
     const area=PX+','+H+' '+poly+' '+pts[pts.length-1].x+','+H;
@@ -245,11 +251,15 @@ window.showProfile=function(codigo){
       +'<defs><linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#D4A843" stop-opacity="0.3"/><stop offset="100%" stop-color="#D4A843" stop-opacity="0.02"/></linearGradient></defs>'
       +'<polygon points="'+area+'" fill="url(#gg)"/>'
       +'<polyline points="'+poly+'" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
-      +pts.map(p=>'<circle cx="'+p.x+'" cy="'+p.y+'" r="4" fill="var(--gold)" stroke="var(--bg)" stroke-width="2"/>'
+      +pts.map(p=>'<circle cx="'+p.x+'" cy="'+p.y+'" r="4.5" fill="'+catColor(p.cat)+'" stroke="var(--bg)" stroke-width="2"/>'
         +'<text x="'+p.x+'" y="'+(p.y-8)+'" text-anchor="middle" font-size="9" fill="rgba(212,168,67,.9)" font-family="Oswald" font-weight="700">'+p.v+'</text>'
         +'<text x="'+p.x+'" y="'+(H+16)+'" text-anchor="middle" font-size="8" fill="rgba(120,143,166,.7)">'+((p.ev.match(/20\d\d/)||[''])[0])+'</text>'
       ).join('')
-      +'</svg></div>';
+      +'</svg>'
+      +(uniqueCats.length>1?'<div style="display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:center;font-size:10px;color:var(--muted);margin-top:6px;padding-top:8px;border-top:1px solid rgba(30,58,95,.3)">'
+        +uniqueCats.map(cat=>'<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:'+catColor(cat)+'"></span>'+cat+'</span>').join('')
+      +'</div>':'')
+      +'</div>';
   }
 
   // ── Peer comparison ─────────────────────────────────────
@@ -316,10 +326,11 @@ window.showProfile=function(codigo){
       const ev=NOM_EVENTS.find(e=>e.id===i.evento);
       const evName=ev?.name||i.evento;
       const ok=i.status==='approved';
+      const ilg=window.clubLogoImg?window.clubLogoImg(i.club,18,'background:var(--bg);padding:1px;vertical-align:middle;margin-right:5px;'):'';
       h+='<div class="comp-row" style="align-items:center">'
         +'<div><div style="font-weight:600;font-size:13px">'+evName+'</div>'
         +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+(i.division||'—')+' · '+(i.categoria||'—')+' · '+(i.modalidad||'—')+'</div>'
-        +'<div style="font-size:11px;color:var(--muted)">'+(i.club||'—')+'</div></div>'
+        +'<div style="font-size:11px;color:var(--muted)">'+ilg+(i.club||'—')+'</div></div>'
         +'<span class="badge '+(ok?'b-g':'b-y')+'" style="flex-shrink:0;margin-left:12px">'+(ok?'✓ Confirmado':'⏳ Pendiente')+'</span>'
       +'</div>';
     });

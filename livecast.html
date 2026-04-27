@@ -53,9 +53,72 @@ input,select,button{font-family:inherit;outline:none}
 </head>
 <body>
 <div id="R"></div>
+<script src="clubs.js"></script>
 <script>
 
 let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,flight:'A',timer:60,timerOn:false,changeTimers:{},lotsGenerated:false};
+
+// ══════════════════════════════════════════════
+// TRANSMISSION WIDGETS (?tx=<widget>)
+// Standalone widgets for OBS Browser Sources. Read-only.
+// ══════════════════════════════════════════════
+const TX_URL=new URLSearchParams(location.search);
+const TX_MODE=TX_URL.get('tx')||null; // 'profile' | 'scoreboard' | 'leaderboard' | 'lbauto' | 'slam' | 'timer' | 'lights' | 'ceremony' | null
+if(TX_MODE){
+  const css=document.createElement('style');
+  css.textContent=`
+    html,body{background:transparent!important;overflow:hidden!important;margin:0}
+    body.tx-opaque{background:linear-gradient(135deg,#0A1628 0%,#0E1F3A 50%,#0A1628 100%)!important}
+    #R{display:none!important}
+    #txWidget{position:fixed;inset:0;font-family:'Oswald',sans-serif;color:#fff}
+    @keyframes txSlideRight{from{transform:translateX(-40px);opacity:0}to{transform:translateX(0);opacity:1}}
+    @keyframes txSlideUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}
+    @keyframes txSlideDown{from{transform:translateY(-40px);opacity:0}to{transform:translateY(0);opacity:1}}
+    @keyframes txFade{from{opacity:0}to{opacity:1}}
+    @keyframes txScaleIn{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
+    @keyframes txGrowLine{from{transform:scaleY(0);transform-origin:top}to{transform:scaleY(1);transform-origin:top}}
+    @keyframes txGrowLineH{from{transform:scaleX(0);transform-origin:left}to{transform:scaleX(1);transform-origin:left}}
+    @keyframes txSlamIn{0%{transform:scale(.4) rotate(-8deg);opacity:0;letter-spacing:30px}55%{transform:scale(1.15) rotate(0);opacity:1;letter-spacing:8px}75%{transform:scale(.95)}100%{transform:scale(1);letter-spacing:8px}}
+    @keyframes txSlamOut{from{transform:scale(1);opacity:1}to{transform:scale(1.6);opacity:0;filter:blur(8px)}}
+    @keyframes txSlamFlash{0%,100%{background:rgba(0,0,0,0)}40%{background:rgba(0,0,0,.45)}}
+    @keyframes txLightOn{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+    @keyframes txTimerPulse{0%,100%{opacity:1}50%{opacity:.55}}
+    @keyframes txScoreboardCycle{0%{transform:translateY(110%);opacity:0}3%{transform:translateY(0);opacity:1}97%{transform:translateY(0);opacity:1}100%{transform:translateY(110%);opacity:0}}
+    @keyframes txLbCycle{0%{transform:scale(.92);opacity:0}5%{transform:scale(1);opacity:1}95%{transform:scale(1);opacity:1}100%{transform:scale(1.04);opacity:0;filter:blur(4px)}}
+    @keyframes txRecordSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+    @keyframes txRecordIn{0%{transform:scale(0) rotate(-180deg);opacity:0}60%{transform:scale(1.15) rotate(20deg);opacity:1}100%{transform:scale(1) rotate(0);opacity:1}}
+    @keyframes txRecordOut{from{transform:scale(1);opacity:1}to{transform:scale(.6);opacity:0}}
+    .txCascade>*{animation:txSlideRight .55s cubic-bezier(.2,.8,.2,1) backwards}
+    .txCascade>*:nth-child(1){animation-delay:.15s}
+    .txCascade>*:nth-child(2){animation-delay:.32s}
+    .txCascade>*:nth-child(3){animation-delay:.49s}
+    .txCascade>*:nth-child(4){animation-delay:.66s}
+    .txCascade>*:nth-child(5){animation-delay:.83s}
+    .txCascade>*:nth-child(6){animation-delay:1.0s}
+    .txCascade>*:nth-child(7){animation-delay:1.17s}
+    .txCascade>*:nth-child(8){animation-delay:1.34s}
+    .txCascade>*:nth-child(9){animation-delay:1.51s}
+    .txCascade>*:nth-child(10){animation-delay:1.68s}
+    .txCascade>*:nth-child(11){animation-delay:1.85s}
+    .txCascade>*:nth-child(12){animation-delay:2.02s}
+  `;
+  document.head.appendChild(css);
+  const ready=()=>{
+    if(TX_MODE==='profile'||TX_MODE==='leaderboard')document.body.classList.add('tx-opaque');
+    const d=document.createElement('div');d.id='txWidget';document.body.appendChild(d);
+    // Sin placeholder: queda transparente hasta que llegan los datos.
+  };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ready);else ready();
+  // Replay de animación cuando la escena de OBS se activa (sin recargar).
+  // Funciona con OBS Browser Source y al volver al tab en navegador normal.
+  window.txReplay=function(){
+    if(typeof _txLastLifter!=='undefined')_txLastLifter=null;
+    if(typeof renderTxWidget==='function')renderTxWidget();
+  };
+  window.addEventListener('obsSourceActiveChanged',e=>{if(e&&e.detail&&e.detail.active)window.txReplay()});
+  window.addEventListener('obsSourceVisibleChanged',e=>{if(e&&e.detail&&e.detail.visible)window.txReplay()});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)window.txReplay()});
+}
 
 // ══════════════════════════════════════════════
 // ADMIN CREDENTIALS — Editar aquí para cambiar accesos
@@ -84,9 +147,22 @@ async function initFB(){
     // Keep LIVE_EVENTS in sync with Firestore eventos
     fb.onSnapshot(fb.collection(fbDB,'eventos'),(snap)=>{
       const evs={};
-      snap.docs.forEach(d=>{const e=d.data();if(e.status!=='archived')evs[d.id]=e.name;});
+      window.LIVE_EVENT_META=window.LIVE_EVENT_META||{};
+      snap.docs.forEach(d=>{
+        const e=d.data();
+        if(e.status==='archived')return;
+        evs[d.id]=e.name;
+        // Default récords activos; en "Universitario" arrancan apagados.
+        const recordsEnabled=(typeof e.recordsEnabled==='boolean')
+          ? e.recordsEnabled
+          : !/universitar/i.test(e.name||'');
+        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled};
+        // Sync flag al evento activo
+        if(DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
+          DATA.event.recordsEnabled=recordsEnabled;
+        }
+      });
       if(Object.keys(evs).length)LIVE_EVENTS=evs;
-      // Refresh setup screen if visible (new event appeared)
       if(DATA.phase==='setup'&&DATA.events.length>0)R();
     });
     // Check if already logged in (session persists)
@@ -133,6 +209,18 @@ async function syncToFB(){
       ts:Date.now()
     });
   }catch(e){console.warn('[FB] Sync write error',e)}
+}
+// Sync liviano solo del timer — corre cada 1s mientras el timer está activo,
+// así los widgets de OBS ven el countdown segundo a segundo sin reescribir
+// el doc completo (athletes incluido).
+async function syncTimerOnlyToFB(){
+  if(!fbReady||!isAdmin)return;
+  const id=fbDocId();if(!id)return;
+  _fbLastWrite=Date.now();
+  try{
+    const ref=window._fb.doc(fbDB,'livecast_sync',id);
+    await window._fb.updateDoc(ref,{timer:DATA.timer,timerOn:DATA.timerOn,ts:Date.now()});
+  }catch(e){/* silencioso: si el doc no existe el setDoc completo lo crea */}
 }
 function startFBSync(){
   if(!fbReady)return;
@@ -297,13 +385,29 @@ function _normDiv(d){
 }
 function checkRecord(athlete,lift,round){
   if(!RECORDS)return;
+  // Bypass si el evento tiene records desactivados (ej. Universitario)
+  if(DATA.event && DATA.event.recordsEnabled===false)return;
   const weight=athlete.att[lift][round].w;if(!weight)return;
   const mod=athlete.mod||'classic';
   const cat=_normCat(athlete.cat||'');
   const div=_normDiv(athlete.div||'');
   const recs=(RECORDS[mod]&&RECORDS[mod][lift])||[];
   const match=recs.find(rec=>rec.categoria===cat&&_normDiv(rec.division)===div);
-  if(match&&weight>match.marca)showRecordAlert(athlete.name,lift,round,weight,match.marca,match.nombre,cat,div,mod);
+  if(match&&weight>match.marca){
+    showRecordAlert(athlete.name,lift,round,weight,match.marca,match.nombre,cat,div,mod);
+    // Push al doc livecast_record/current para que los widgets OBS muestren el badge
+    pushRecordToFB({
+      athName:athlete.name,lift,round,
+      newMark:weight,oldMark:match.marca,holder:match.nombre,
+      cat,div,mod,ts:Date.now()
+    });
+  }
+}
+async function pushRecordToFB(rec){
+  if(!fbReady||!isAdmin||!window._fb)return;
+  try{
+    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_record','current'),rec);
+  }catch(e){console.warn('[FB] pushRecord',e)}
 }
 function closeRecAlert(){const e=document.getElementById('recAlert');if(e)e.remove();}
 function showRecordAlert(athName,lift,round,newMark,oldMark,holder,cat,div,mod){
@@ -372,7 +476,18 @@ function setAtt(id,l,r,val){
 
 function setResult(id,l,r,res){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;a.att[l][r].r=res;
-  if(r<2){const key=id+'_'+l+'_'+(r+1);DATA.changeTimers[key]={remaining:60,expired:false};startCT(key)}
+  if(r<2){
+    const key=id+'_'+l+'_'+(r+1);
+    // Solo arrancar el change timer si el próximo intento NO tiene peso declarado.
+    // Si el operador ya cargó el peso antes de marcar este intento, no hay que
+    // pedirle que lo declare otra vez ni hacer sonar la alarma a los 60s.
+    if(!a.att[l][r+1]||!a.att[l][r+1].w){
+      DATA.changeTimers[key]={remaining:60,expired:false};
+      startCT(key);
+    } else if(DATA.changeTimers[key]){
+      delete DATA.changeTimers[key];
+    }
+  }
   if(a.att[l].every(x=>x.r==='n'))a.bombed=true;
   DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);mainTI=null;
   // Record alert: check if this good lift breaks a national record
@@ -694,7 +809,31 @@ function recoverBackup(){
     R();
   }catch(e){showToastLC('Error al recuperar: '+e.message);}
 }
-function newComp(){localStorage.removeItem(SAVE_KEY);if(fbUnsub){fbUnsub();fbUnsub=null}DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};R()}
+function resetLiveData(){
+  if(!isAdmin){alert('Solo admin puede reiniciar');return}
+  if(!DATA.event){alert('No hay competencia activa');return}
+  const ev=DATA.event;
+  const msg='⚠️ REINICIAR datos en vivo de:\n"'+ev.name+'"\n\nSE BORRAN:\n• Intentos (squat / bench / deadlift)\n• Pesos cargados y resultados (✓ / ✗)\n• Timer y cursores (lift, ronda)\n• Bombed (atletas eliminados)\n\nSE CONSERVAN:\n• Tandas, vuelos, lots\n• Pesaje (BW), racks\n• Listado de atletas\n\nEsto sobreescribe Firestore para TODOS los dispositivos y widgets de OBS.';
+  if(!confirm(msg))return;
+  if(!confirm('¿CONFIRMÁS el reinicio? Esta acción no se puede deshacer.'))return;
+  // Reset por atleta: solo intentos y bombed
+  DATA.athletes.forEach(a=>{
+    a.att={sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]};
+    a.bombed=false;
+  });
+  // Reset cursores y timer
+  DATA.lift='sq';
+  DATA.round=0;
+  DATA.changeTimers={};
+  DATA.timer=60;
+  DATA.timerOn=false;
+  if(typeof mainTI!=='undefined'&&mainTI){clearInterval(mainTI);mainTI=null}
+  const tEl=document.getElementById('mainTimer');if(tEl){tEl.style.color='var(--green)';tEl.textContent='1:00';tEl.style.animation='none'}
+  // Persistir local + push inmediato a Firestore
+  saveNow();
+  R();
+  alert('✓ Datos en vivo reiniciados. Tandas, vuelos y pesaje se conservaron.');
+}
 
 const ctIntervals={};
 function startCT(key){/* just mark it active, master tick handles updates */}
@@ -745,7 +884,7 @@ function showChangeExpiredAlert(name,lift,rnd){
 }
 
 let mainTI=null;
-function startTimer(){DATA.timerOn=true;syncToFB();mainTI=setInterval(()=>{DATA.timer--;const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}const txp=document.getElementById('txTimerPanel');if(txp){txp.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');txp.style.color=DATA.timer<=10?'#ef4444':DATA.timer<=30?'#f59e0b':'#ffffff'}if(DATA.timer%5===0||DATA.timer<=10)syncToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}},1000)}
+function startTimer(){DATA.timerOn=true;syncToFB();mainTI=setInterval(()=>{DATA.timer--;const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}const txp=document.getElementById('txTimerPanel');if(txp){txp.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');txp.style.color=DATA.timer<=10?'#ef4444':DATA.timer<=30?'#f59e0b':'#ffffff'}syncTimerOnlyToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}},1000)}
 function pauseTimer(){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}
 function resetTimer(){DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);mainTI=null;const el=document.getElementById('mainTimer');if(el){el.style.color='var(--green)';el.textContent='1:00';el.style.animation='none'}syncToFB()}
 function advanceLift(){const li=LIFTS.indexOf(DATA.lift);if(DATA.round<2)DATA.round++;else if(li<2){DATA.lift=LIFTS[li+1];DATA.round=0}else go('results');saveNow();R()}
@@ -1099,7 +1238,769 @@ async function generateActaPDF(){
 
 function exportJSON(){const r=rankings();const blob=new Blob([JSON.stringify(r.map((a,i)=>({rank:i+1,nombre:a.name,rut:a.rut,sexo:a.sex,division:a.div,categoria:a.cat,bw:a.bw,club:a.club,sq:bestOf(a,'sq'),bp:bestOf(a,'bp'),dl:bestOf(a,'dl'),total:a.total,gl:a.gl})),null,2)],{type:'application/json'});const u=URL.createObjectURL(blob);const l=document.createElement('a');l.href=u;l.download='resultados.json';l.click()}
 
-function R(){const el=document.getElementById('R');if(DATA.phase==='scoreboard'){el.innerHTML=renderSB();return}if(DATA.phase==='transmision'){el.innerHTML=renderTransmision();setTimeout(initTxWidgets,0);return}if(DATA.phase==='setup'){el.innerHTML=renderSetup();return}el.innerHTML=renderShell()}
+function renderObsTx(){
+  const evId=DATA.event?.id||DATA.event?.name||'';
+  const base=location.origin+location.pathname.replace(/[^/]+$/,'');
+  const enc=encodeURIComponent(evId);
+  const widgets=[
+    {id:'profile',icon:'🪪',title:'Perfil del atleta',desc:'Pantalla completa con foto placeholder, nombre, club, categoría, edad, años compitiendo y PB. Animación cascada al entrar. Mostrar ~10s antes de la tarima.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
+    {id:'scoreboard',icon:'📊',title:'Scoreboard (lower-third)',desc:'Barra inferior con categoría, rank, timer, nombre, club e intentos. Aparece al cambiar levantador / intento / peso, queda 20s en pantalla y se va con animación. Hasta el próximo cambio queda oculto.',obsBg:'Transparente (superpuesto sobre cámara).',size:'1920×320 (parte inferior)'},
+    {id:'leaderboard',icon:'🏆',title:'Tabla de clasificación (FIJO)',desc:'Ranking completo de la categoría actual. Cascada fila por fila. SIEMPRE visible mientras la escena esté activa — usalo para escenas de pausa entre rondas que vos manejás manualmente.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
+    {id:'lbauto',icon:'🔁',title:'Tabla de clasificación (AUTO)',desc:'Igual al leaderboard fijo, pero APARECE SOLO al detectar fin de ronda (cuando cambia lift/round/flight). Queda 10s en pantalla y se va. Ideal como overlay siempre activo en una escena de cámara.',obsBg:'Transparente (overlay sobre cámara).',size:'1920×1080 (overlay fullscreen)'},
+    {id:'slam',icon:'⚡',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT) cuando marcás ✓/✗ en Control en Vivo. Se dispara automáticamente. Overlay sobre la cámara de tarima.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
+    {id:'timer',icon:'⏱',title:'Timer independiente',desc:'Reloj 1:00 → 0:00 en grande. Verde/ámbar/rojo según se acerca a 0. Pulsa cuando quedan ≤10s. Sincronizado con el timer del operador.',obsBg:'Transparente. Posicionalo donde quieras (esquina, banner, etc).',size:'1920×1080 (autoescala)'},
+    {id:'lights',icon:'💡',title:'Luces de jueces',desc:'3 círculos para izq / central / der. Se prenden blanco (good) o rojo (no lift) cuando los jueces votan en su panel. Ideal arriba de la cámara o en pantalla aparte.',obsBg:'Transparente. Funciona solo si activás "Modo Jueces" en Control en Vivo.',size:'1920×1080 (autoescala)'},
+    {id:'ceremony',icon:'🎭',title:'Ceremonia (TODO-EN-UNO automático)',desc:'Widget orquestador. Detecta nuevo levantador → PROFILE fullscreen 5s → SCOREBOARD bottom-left + TIMER top-right (30s) → SLAM top-left flash al marcar resultado → IDLE hasta el próximo. Sin tabla de clasificación: ese ciclo lo manejás aparte con el widget Leaderboard fijo.',obsBg:'Mixto: fullscreen opaco durante PROFILE, transparente sobre cámara durante SCOREBOARD/IDLE. Una sola escena con cámara de fondo + este browser source encima.',size:'1920×1080'},
+    {id:'director',icon:'🎮',title:'Director (control 100% MANUAL)',desc:'NO se activa solo. Lee comandos desde Firestore (livecast_director/current) que pusheás vos desde la sidebar "🎮 Control TX". Cada componente (perfil, marcador, tabla, timer, slam) se muestra/esconde con un botón. Ideal si querés controlar todo a mano sin tocar OBS.',obsBg:'Mixto. Una sola escena con cámara de fondo + este browser source encima. Vos elegís qué se ve y por cuánto desde el panel Control TX.',size:'1920×1080'},
+  ];
+  let h='<div class="fade"><h2 class="os" style="font-size:22px;letter-spacing:1px;margin-bottom:6px">🎬 WIDGETS PARA OBS</h2>';
+  h+='<p style="color:var(--muted);font-size:12px;margin-bottom:18px">Cada widget es una URL que se agrega como Browser Source en OBS. Actualiza en tiempo real desde Firestore — no necesita login.</p>';
+  if(!evId){
+    h+='<div class="card" style="background:rgba(239,68,68,.1);border-color:var(--red);color:var(--red);padding:16px">⚠️ Primero elegí un campeonato. Los widgets necesitan saber qué evento mostrar.</div></div>';
+    return h;
+  }
+  h+='<div class="card" style="margin-bottom:14px;padding:12px 16px;background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.3);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
+  h+='<div><span style="font-size:10px;color:var(--green);letter-spacing:1px;font-family:Oswald">CAMPEONATO ACTIVO</span><div style="font-family:Oswald;font-size:15px;font-weight:700;margin-top:2px">'+(DATA.event?.name||evId)+'</div></div>';
+  h+='</div>';
+  h+='<div style="display:grid;gap:14px">';
+  widgets.forEach(w=>{
+    const url=base+'livecast.html?tx='+w.id+'&evento='+enc;
+    h+='<div class="card" style="padding:0;overflow:hidden">';
+    h+='<div style="padding:14px 18px;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">';
+    h+='<div style="font-size:28px">'+w.icon+'</div>';
+    h+='<div style="flex:1;min-width:240px">';
+    h+='<div style="font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px">'+w.title+'</div>';
+    h+='<div style="color:var(--muted);font-size:12px;margin-top:4px;line-height:1.5">'+w.desc+'</div>';
+    h+='<div style="display:flex;gap:14px;margin-top:8px;font-size:10px;color:var(--muted);flex-wrap:wrap">';
+    h+='<span>🎨 Fondo: <span style="color:var(--text)">'+w.obsBg+'</span></span>';
+    h+='<span>📐 Tamaño: <span style="color:var(--text)">'+w.size+'</span></span>';
+    h+='</div>';
+    h+='</div>';
+    h+='<div style="display:flex;gap:6px;flex-wrap:wrap">';
+    h+='<a href="'+url+'" target="_blank" class="btn btn-o" style="text-decoration:none;font-size:11px;padding:7px 12px">👁 Preview</a>';
+    h+='<button class="btn btn-g" onclick="navigator.clipboard.writeText(\''+url+'\').then(()=>{this.textContent=\'✓ Copiado\';setTimeout(()=>this.textContent=\'📋 Copiar URL\',1500)})" style="font-size:11px;padding:7px 12px">📋 Copiar URL</button>';
+    h+='</div>';
+    h+='</div>';
+    h+='<div style="background:rgba(10,22,40,.6);padding:8px 18px;font-family:monospace;font-size:10px;color:rgba(200,215,240,.6);word-break:break-all;border-top:1px solid var(--border)">'+url+'</div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  // OBS setup guide
+  h+='<div class="card" style="margin-top:20px;padding:16px 20px">';
+  h+='<div class="os" style="font-size:14px;letter-spacing:2px;color:var(--gold);margin-bottom:10px">⚙ SETUP EN OBS</div>';
+  h+='<ol style="color:var(--muted);font-size:12px;line-height:1.9;padding-left:20px;margin:0">';
+  h+='<li>En OBS: <b style="color:var(--text)">Sources → +  → Browser</b> → pegá la URL del widget.</li>';
+  h+='<li>Width/Height según el widget (Profile y Leaderboard: 1920×1080 · Scoreboard: 1920×1080 también, ya queda posicionado abajo).</li>';
+  h+='<li><b style="color:#ff6b6b">DESMARCAR</b> <b style="color:var(--text)">"Refresh browser when scene becomes active"</b>. La animación se reproduce automáticamente cuando OBS activa la escena (vía evento <code>obsSourceActiveChanged</code>), así nunca se ve el flash de carga.</li>';
+  h+='<li>Tampoco marqués <b style="color:var(--text)">"Shutdown source when not visible"</b> — mantené el browser source siempre cargado en memoria para que el replay sea instantáneo.</li>';
+  h+='<li>Creá <b style="color:var(--text)">escenas separadas</b>: "Cámara + Scoreboard" (cámara de fondo + browser source scoreboard encima), "Profile fullscreen", "Leaderboard fullscreen".</li>';
+  h+='<li>Transiciones de OBS (Stinger/Fade/Cut) entre escenas — la animación de entrada la maneja la página al activarse la escena.</li>';
+  h+='<li>Los widgets leen el estado en vivo: lifter actual, intento, peso, timer. Cuando marcás ✓/✗ en "Control en Vivo", todos los widgets se actualizan en tiempo real.</li>';
+  h+='<li>Si una escena no se anima al activarse (versiones viejas de OBS), recargá manualmente el browser source con click derecho → "Refresh".</li>';
+  h+='</ol></div>';
+  h+='</div>';
+  return h;
+}
+
+// ══════════════════════════════════════════════
+// TRANSMISSION WIDGET RENDERERS
+// ══════════════════════════════════════════════
+function txLookupFull(a){
+  if(!a||!DB_FULL?.length)return null;
+  const r=(a.rut||'').replace(/[.\s]/g,'');
+  if(r)return DB_FULL.find(x=>(x.rut||'').replace(/[.\s]/g,'')===r)||null;
+  const nrm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const n=nrm(a.name);
+  return DB_FULL.find(x=>nrm(x.nombre)===n)||null;
+}
+function txAge(dob){
+  if(!dob)return null;
+  let y,m,d;
+  if(/^\d{4}-\d{2}-\d{2}/.test(dob)){[y,m,d]=dob.slice(0,10).split('-').map(Number)}
+  else if(/^\d{2}\/\d{2}\/\d{4}/.test(dob)){const p=dob.split('/');d=+p[0];m=+p[1];y=+p[2]}
+  else return null;
+  const now=new Date();let age=now.getFullYear()-y;
+  if(now.getMonth()+1<m||(now.getMonth()+1===m&&now.getDate()<d))age--;
+  return age>0&&age<100?age:null;
+}
+function txYearsCompeting(full){
+  if(!full?.competencias?.length)return null;
+  const years=full.competencias.map(c=>{
+    const f=c.fecha||c.evento||'';
+    const m=f.match(/20\d{2}/);return m?+m[0]:null;
+  }).filter(Boolean);
+  if(!years.length&&full.debut){const m=(full.debut+'').match(/20\d{2}/);if(m)years.push(+m[0])}
+  if(!years.length)return null;
+  const min=Math.min(...years);const cur=new Date().getFullYear();
+  return Math.max(1,cur-min+1);
+}
+function txPB(full,lift){
+  if(!full?.competencias?.length)return null;
+  const key=lift==='sq'?'sq':lift==='bp'?'bp':lift==='dl'?'dl':'total';
+  let best=0;
+  full.competencias.forEach(c=>{const v=+(c.resultado?.[key]||0);if(v>best)best=v});
+  return best||null;
+}
+function txDivShort(div){return(div||'').replace('Sub Junior','SJR').replace('Sub-Junior','SJR').replace('Subjunior','SJR').replace('Junior','JR').replace('Open','OPN').replace('Master I','M1').replace('Master II','M2').replace('Master III','M3').replace('Master IV','M4')}
+function txCatNum(cat){const m=(cat||'').match(/([+\-]?\d+\.?\d*)/);return m?m[1]:''}
+
+let _txLastLifter=null;
+function renderTxWidget(){
+  if(!TX_MODE)return false;
+  const c=document.getElementById('txWidget');if(!c)return true;
+  // Widgets que NO dependen de DATA.athletes
+  if(TX_MODE==='timer'){c.innerHTML=renderTxTimer();return true}
+  if(TX_MODE==='lights'){c.innerHTML=renderTxLights();return true}
+  // Boot gate: el resto de widgets necesitan que llegue el snapshot de Firestore.
+  // Hasta entonces, transparente — evita el "pestañeo" (render vacío → render con datos).
+  if(!DATA.athletes||DATA.athletes.length===0){c.innerHTML='';return true}
+  // Widgets que NO dependen del lifter actual (pero sí de athletes)
+  if(TX_MODE==='slam'){c.innerHTML=renderTxSlam();return true}
+  if(TX_MODE==='lbauto'){c.innerHTML=renderTxLbAuto();return true}
+  if(TX_MODE==='ceremony'){renderTxCeremony(c);return true}
+  if(TX_MODE==='director'){renderTxDirector(c);return true}
+  // Widgets que dependen del lifter actual
+  const cur=liftQueue()[0];
+  if(!cur&&TX_MODE!=='leaderboard'){
+    c.innerHTML='';
+    return true;
+  }
+  const lifterChanged=(cur?.id||null)!==_txLastLifter;
+  _txLastLifter=cur?.id||null;
+  let html='';
+  if(TX_MODE==='profile')html=renderTxProfile(cur);
+  else if(TX_MODE==='scoreboard')html=renderTxScoreboard(cur,lifterChanged);
+  else if(TX_MODE==='leaderboard')html=renderTxLeaderboard(cur,lifterChanged);
+  else html='<div style="color:#fff;padding:40px;font-family:Oswald">Widget desconocido: '+TX_MODE+'. Valores: profile | scoreboard | leaderboard | lbauto | slam | timer | lights</div>';
+  c.innerHTML=html;
+  return true;
+}
+
+// ─── LBAUTO (leaderboard que aparece 10s al terminar cada ronda) ─
+let _txLbAutoLastKey=null;
+let _txLbAutoShownAt=0;
+const TX_LBAUTO_DURATION=10000;
+function renderTxLbAuto(){
+  // La ronda cambia cuando se mueve (lift, round, flight). En el primer
+  // render solo registramos la clave actual (sin disparar el show).
+  const key=DATA.lift+'-'+DATA.round+'-'+DATA.flight;
+  if(_txLbAutoLastKey===null){_txLbAutoLastKey=key;return ''}
+  if(key!==_txLbAutoLastKey){
+    _txLbAutoLastKey=key;
+    _txLbAutoShownAt=Date.now();
+    setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_LBAUTO_DURATION+400);
+  }
+  if(Date.now()-_txLbAutoShownAt>TX_LBAUTO_DURATION)return '';
+  // Re-usá el render de leaderboard fijo, envolviéndolo en el ciclo de animación.
+  const cur=liftQueue()[0];
+  const inner=renderTxLeaderboard(cur,false);
+  if(!inner)return '';
+  return '<div style="position:fixed;inset:0;animation:txLbCycle '+(TX_LBAUTO_DURATION/1000)+'s ease-in-out forwards">'+inner+'</div>';
+}
+
+// ─── CEREMONY (widget orquestador todo-en-uno) ─────────────────
+// Flujo:
+//   1) Detecta nuevo levantador → PROFILE fullscreen (profileMs)
+//   2) → SCOREBOARD bottom-left + TIMER top-right (scoreboardMs)
+//      • SLAM top-left por slamMs cuando llega resultado (no cambia de estado)
+//   3) → IDLE (transparente) hasta el próximo levantador
+//
+// 🛠 PARA MODIFICAR LOS TIEMPOS, edita la línea de abajo (en milisegundos):
+//    profileMs:     duración del perfil fullscreen
+//    scoreboardMs:  duración del scoreboard bottom-left ← acá lo subís
+//    slamMs:        duración del flash GOOD/NO LIFT en la esquina
+const TX_CEREMONY={profileMs:5000,scoreboardMs:30000,slamMs:2000,recordMs:7000};
+let _txCerState='idle';            // idle | profile | scoreboard
+let _txCerStateAt=0;
+let _txCerLastLifter=null;
+let _txCerSeenResults=null;
+let _txCerSlamUntil=0;
+let _txCerSlamType=null;
+let _txCerRecordUntil=0;
+let _txCerRecordData=null;
+let _txCerRecordUnsub=null;
+let _txCerRecordSeenTs=0;
+let _txCerLastSig=null;            // signature p/ saltarse re-renders innecesarios
+function _txCerStartRecordListener(){
+  if(_txCerRecordUnsub||!fbReady||!window._fb)return;
+  try{
+    _txCerRecordUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_record','current'),(snap)=>{
+      if(!snap.exists())return;
+      const d=snap.data();if(!d||!d.ts)return;
+      if(d.ts===_txCerRecordSeenTs)return;
+      _txCerRecordSeenTs=d.ts;
+      _txCerRecordUntil=Date.now()+TX_CEREMONY.recordMs;
+      _txCerRecordData=d;
+      _txCerLastSig=null;
+      if(typeof renderTxWidget==='function')renderTxWidget();
+      setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.recordMs+200);
+    });
+  }catch(e){console.warn('[TX] record listener',e)}
+}
+function _txCerSetState(s){
+  _txCerStateAt=Date.now();_txCerState=s;
+  const opaque=(s==='profile');
+  document.body.classList.toggle('tx-opaque',opaque);
+  _txCerLastSig=null; // forzar re-render al cambiar de estado
+}
+function _txCerUpdateTimer(){
+  const tm=document.getElementById('cerTimer');
+  if(!tm)return;
+  const t=Math.max(0,DATA.timer||0);
+  tm.textContent=String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');
+  tm.style.color=DATA.timerOn&&t<=10?'#ef4444':DATA.timerOn&&t<=30?'#f59e0b':'#fff';
+}
+function renderTxCeremony(container){
+  const c=container||document.getElementById('txWidget');
+  if(!c)return;
+  _txCerStartRecordListener();
+  const cur=liftQueue()[0];
+
+  // ── Detectar nuevo levantador → PROFILE ───────────────────
+  if(cur && cur.id!==_txCerLastLifter){
+    _txCerLastLifter=cur.id;
+    _txCerSetState('profile');
+    setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.profileMs+200);
+  }
+
+  // ── Detectar resultado nuevo (transición null → g/n) → SLAM corner ─
+  if(_txCerSeenResults===null){
+    _txCerSeenResults={};
+    DATA.athletes.forEach(a=>LIFTS.forEach(l=>(a.att&&a.att[l]||[]).forEach((att,i)=>{_txCerSeenResults[a.id+'-'+l+'-'+i]=att.r||null;})));
+  } else {
+    DATA.athletes.forEach(a=>LIFTS.forEach(l=>(a.att&&a.att[l]||[]).forEach((att,i)=>{
+      const k=a.id+'-'+l+'-'+i;
+      const prev=_txCerSeenResults[k];
+      const now=att.r||null;
+      if((prev==null)&&(now==='g'||now==='n')){
+        _txCerSlamUntil=Date.now()+TX_CEREMONY.slamMs;
+        _txCerSlamType=now;
+        setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.slamMs+100);
+      }
+      _txCerSeenResults[k]=now;
+    })));
+  }
+
+  // ── Transiciones por tiempo ───────────────────────────────
+  const elapsed=Date.now()-_txCerStateAt;
+  if(_txCerState==='profile'&&elapsed>TX_CEREMONY.profileMs){
+    _txCerSetState('scoreboard');
+    setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_CEREMONY.scoreboardMs+200);
+  } else if(_txCerState==='scoreboard'&&elapsed>TX_CEREMONY.scoreboardMs){
+    _txCerSetState('idle');
+  }
+
+  // ── Signature para evitar re-render por timer (anti-flicker) ─
+  // El timer se actualiza in-place via #cerTimer, NO disparar re-render por DATA.timer.
+  const slamActive=Date.now()<_txCerSlamUntil;
+  const recordActive=Date.now()<_txCerRecordUntil&&_txCerRecordData;
+  const sig=_txCerState+'|'+(cur?cur.id+'|'+cur.cat+'|'+(cur.att?.[DATA.lift]||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
+    +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
+    +'|'+(slamActive?_txCerSlamType+'-'+_txCerSlamUntil:'_')
+    +'|'+(recordActive?'rec-'+_txCerRecordUntil:'_');
+  if(sig===_txCerLastSig){
+    _txCerUpdateTimer(); // solo actualizar el timer si no cambió nada estructural
+    return;
+  }
+  _txCerLastSig=sig;
+
+  // ── Build HTML según estado ───────────────────────────────
+  let html='';
+  if(_txCerState==='profile'&&cur){
+    html+='<div style="position:fixed;inset:0">'+renderTxProfile(cur)+'</div>';
+  } else if(_txCerState==='scoreboard'&&cur){
+    html+=_renderTxCerScoreboardBL(cur);
+    html+=_renderTxCerTimerCorner();
+  }
+  // SLAM top-left (overlay encima de todo)
+  if(slamActive&&_txCerSlamType){
+    html+=_renderTxCerSlamCorner(_txCerSlamType);
+  }
+  // RECORD NACIONAL badge — top-left, gira mientras dura
+  if(recordActive){
+    html+=_renderTxCerRecordBadge(_txCerRecordData);
+  }
+  c.innerHTML=html;
+  _txCerUpdateTimer();
+}
+function _renderTxCerRecordBadge(d){
+  const LL={sq:'SQUAT',bp:'BENCH',dl:'DEADLIFT'};
+  const liftName=LL[d.lift]||(d.lift||'').toUpperCase();
+  // Posición top-left, debajo del slam para que no se pisen.
+  // El wrapper externo controla in/out; el círculo interno gira continuamente.
+  return '<div style="position:fixed;top:120px;left:24px;z-index:60;animation:txRecordIn .65s cubic-bezier(.2,.9,.2,1) backwards,txRecordOut .45s ease-in '+((TX_CEREMONY.recordMs-450)/1000)+'s forwards">'
+    +'<div style="position:relative;width:clamp(160px,16vw,220px);height:clamp(160px,16vw,220px)">'
+      +'<div style="position:absolute;inset:0;animation:txRecordSpin 5s linear infinite">'
+        +'<svg viewBox="0 0 200 200" style="width:100%;height:100%;display:block;filter:drop-shadow(0 6px 24px rgba(212,168,67,.6))">'
+          +'<defs><path id="txRecCircle" d="M100,100 m-78,0 a78,78 0 1,1 156,0 a78,78 0 1,1 -156,0"/></defs>'
+          +'<circle cx="100" cy="100" r="92" fill="#0A1628" stroke="#D4A843" stroke-width="3"/>'
+          +'<circle cx="100" cy="100" r="78" fill="none" stroke="rgba(212,168,67,.35)" stroke-width="1" stroke-dasharray="4 4"/>'
+          +'<text fill="#D4A843" font-family="Oswald,sans-serif" font-size="17" font-weight="700" letter-spacing="3">'
+            +'<textPath href="#txRecCircle" startOffset="0%">RÉCORD NACIONAL · RÉCORD NACIONAL · </textPath>'
+          +'</text>'
+        +'</svg>'
+      +'</div>'
+      +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none">'
+        +'<div style="font-family:Oswald,sans-serif;font-size:11px;letter-spacing:3px;color:rgba(212,168,67,.85);margin-bottom:2px">'+liftName+'</div>'
+        +'<div style="font-family:Oswald,sans-serif;font-size:clamp(34px,3.6vw,52px);font-weight:900;color:#D4A843;line-height:1">'+(d.newMark||'')+'</div>'
+        +'<div style="font-family:Oswald,sans-serif;font-size:11px;color:rgba(255,255,255,.6);margin-top:2px">kg</div>'
+        +(d.cat?'<div style="font-family:Oswald,sans-serif;font-size:10px;color:rgba(255,255,255,.55);letter-spacing:1px;margin-top:6px">-'+d.cat+'kg · '+(d.div||'')+'</div>':'')
+      +'</div>'
+    +'</div>'
+  +'</div>';
+}
+function _renderTxCerTimerCorner(){
+  const t=Math.max(0,DATA.timer||0);
+  const txt=String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');
+  const color=DATA.timerOn&&t<=10?'#ef4444':DATA.timerOn&&t<=30?'#f59e0b':'#fff';
+  return '<div id="cerTimer" style="position:fixed;top:24px;right:24px;font-family:Oswald,sans-serif;font-size:clamp(48px,5vw,72px);font-weight:900;color:'+color+';letter-spacing:3px;text-shadow:0 4px 20px rgba(0,0,0,.85);background:rgba(10,22,40,.6);padding:8px 22px;border-radius:10px;border:2px solid rgba(212,168,67,.4);-webkit-text-stroke:1px rgba(0,0,0,.35)">'+txt+'</div>';
+}
+function _renderTxCerScoreboardBL(cur){
+  // Variante compacta del scoreboard, posicionada abajo-izquierda
+  const parts=(cur.name||'').trim().split(/\s+/);
+  const firstName=parts.length>2?parts.slice(0,-2).join(' '):parts.slice(0,-1).join(' ');
+  const lastName=(parts.length>2?parts.slice(-2).join(' '):parts[parts.length-1]).toUpperCase();
+  const divS=txDivShort(cur.div);
+  const catLabel=(cur.cat?'-'+txCatNum(cur.cat)+'kg ':'')+divS;
+  const cw=cur.att[DATA.lift][DATA.round].w;
+  const timerStr=DATA.timerOn?String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0'):'';
+  const logo=window.clubLogoImg?window.clubLogoImg(cur.club,28,'background:rgba(10,22,40,.85);padding:2px;flex-shrink:0;'):'';
+  return '<div style="position:fixed;bottom:24px;left:24px;width:min(640px,55vw);animation:txScoreboardCycle '+(TX_CEREMONY.scoreboardMs/1000)+'s ease-in-out forwards;border-radius:8px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.6)">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;background:linear-gradient(90deg,rgba(28,50,90,.96),rgba(35,60,105,.96));border-top:2px solid #D4A843;padding:6px 14px">'
+      +'<div style="font-family:Oswald;font-size:12px;color:rgba(200,215,240,.85);letter-spacing:1px">'+catLabel+'</div>'
+      +'<div style="font-family:Oswald;font-size:18px;font-weight:700;color:'+(DATA.timerOn&&DATA.timer<=10?'#ef4444':'#fff')+';letter-spacing:2px">'+(timerStr||'—:—')+'</div>'
+    +'</div>'
+    +'<div style="background:linear-gradient(90deg,#D4A843,#c19735);padding:5px 14px;display:flex;align-items:center;gap:10px">'
+      +'<div style="background:rgba(10,22,40,.9);color:#D4A843;padding:3px 9px;border-radius:3px;font-family:Oswald;font-size:10px;letter-spacing:2px;font-weight:700">CHI</div>'
+      +'<div style="flex:1;font-family:Oswald;color:#0A1628;letter-spacing:1px;overflow:hidden">'
+        +(firstName?'<div style="font-size:11px;font-weight:400;line-height:1;opacity:.75">'+firstName+'</div>':'')
+        +'<div style="font-size:18px;font-weight:700;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lastName+'</div>'
+      +'</div>'
+      +logo
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr) 100px;background:rgba(10,22,40,.94)">'
+      +cur.att[DATA.lift].map((at,j)=>{
+        let bg,clr,td='none';
+        if(at.r==='g'){bg='#22c55e';clr='#0A1628'}
+        else if(at.r==='n'){bg='#ef4444';clr='#fff';td='line-through'}
+        else if(j===DATA.round&&at.w>0){bg='rgba(45,65,105,.6)';clr='#fff'}
+        else{bg='rgba(30,48,78,.3)';clr='rgba(140,160,190,.45)'}
+        const isCur=j===DATA.round&&at.r===null&&at.w>0;
+        return '<div style="padding:7px 10px;text-align:center;background:'+bg+';border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:18px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+(isCur?'box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';':'')+'">'+(at.w||'—')+'</div>';
+      }).join('')
+      +'<div style="padding:7px 10px;text-align:center;background:#D4A843;color:#0A1628;font-family:Oswald;font-size:20px;font-weight:700;letter-spacing:1px">'+(subTotal(cur,DATA.lift)||0).toFixed(1)+'</div>'
+    +'</div>'
+  +'</div>';
+}
+function _renderTxCerSlamCorner(type){
+  const isGood=type==='g';
+  const text=isGood?'GOOD LIFT':'NO LIFT';
+  const color=isGood?'#22c55e':'#ef4444';
+  const glow=isGood?'rgba(34,197,94,.85)':'rgba(239,68,68,.85)';
+  return '<div style="position:fixed;top:24px;left:24px;animation:txSlamIn .45s cubic-bezier(.2,.9,.2,1) backwards,txSlamOut .35s ease-in 1.55s forwards">'
+    +'<div style="font-family:Oswald,sans-serif;font-size:clamp(40px,5vw,68px);font-weight:900;letter-spacing:4px;color:'+color+';text-shadow:0 0 30px '+glow+',0 4px 20px rgba(0,0,0,.85);-webkit-text-stroke:2px rgba(0,0,0,.4);background:rgba(10,22,40,.55);padding:10px 22px;border-radius:8px;border:2px solid '+color+'">'
+      +text
+    +'</div>'
+  +'</div>';
+}
+
+// ─── DIRECTOR (control 100% manual desde panel admin) ──────────
+// Lee comandos desde Firestore livecast_director/current.
+// Cada componente tiene {active, until?} independiente; el panel del
+// admin pushea cambios y este widget renderiza lo que esté activo.
+const TX_DIR_DEFAULT={profile:{active:false,until:0},scoreboard:{active:false,until:0},leaderboard:{active:false,until:0,cat:''},timer:{active:false,until:0},slam:{active:false,until:0,type:'g'},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0}};
+let _txDirState=null;
+let _txDirUnsub=null;
+let _txDirPoll=null;
+let _txDirLastSig=null;
+function _txStartDirectorListener(){
+  if(_txDirUnsub)return;
+  if(!fbReady||!window._fb){
+    if(!_txDirPoll)_txDirPoll=setInterval(()=>{if(fbReady&&window._fb){clearInterval(_txDirPoll);_txDirPoll=null;_txStartDirectorListener()}},300);
+    return;
+  }
+  try{
+    _txDirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director','current'),(snap)=>{
+      if(snap.exists()){
+        const d=snap.data();
+        _txDirState=Object.assign({},TX_DIR_DEFAULT,d.show||{});
+      } else {
+        _txDirState={...TX_DIR_DEFAULT};
+      }
+      _txDirLastSig=null;
+      if(typeof renderTxWidget==='function')renderTxWidget();
+    });
+  }catch(e){console.warn('[TX] director listen',e)}
+}
+function _txDirActive(comp){
+  const c=_txDirState&&_txDirState[comp];
+  if(!c||!c.active)return false;
+  if(c.until>0&&Date.now()>=c.until)return false;
+  return true;
+}
+function _txDirScheduleHide(){
+  // Re-render automático cuando el componente con menor `until` expire
+  if(!_txDirState)return;
+  const now=Date.now();
+  let next=Infinity;
+  Object.values(_txDirState).forEach(c=>{
+    if(c&&c.active&&c.until>0&&c.until>now&&c.until<next)next=c.until;
+  });
+  if(next!==Infinity){setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},next-now+50);}
+}
+function renderTxDirector(container){
+  const c=container||document.getElementById('txWidget');
+  if(!c)return;
+  _txStartDirectorListener();
+  if(!_txDirState){c.innerHTML='';return}
+  const cur=liftQueue()[0];
+  const showProf=_txDirActive('profile');
+  const showSb=_txDirActive('scoreboard');
+  const showLb=_txDirActive('leaderboard');
+  const showTm=_txDirActive('timer');
+  const showSlam=_txDirActive('slam');
+  // Break timer: activo si tiene `active=true` y aún hay tiempo (o pausado)
+  const bt=_txDirState.breakTimer||{};
+  const showBreak=!!bt.active&&bt.startedAt>0&&bt.durationSec>0;
+  // Signature p/ evitar flicker por timer cada 1s
+  const sig=[showProf,showSb,showLb,showTm,showSlam,showBreak].join('|')
+    +'|'+(cur?cur.id+'|'+(cur.att?.[DATA.lift]||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
+    +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
+    +'|'+(_txDirState.leaderboard?.cat||'')+'|'+(_txDirState.slam?.type||'')
+    +'|'+(_txDirState.profile?.until||0)+'|'+(_txDirState.scoreboard?.until||0)+'|'+(_txDirState.leaderboard?.until||0)+'|'+(_txDirState.slam?.until||0)
+    +'|bt-'+(bt.startedAt||0)+'-'+(bt.durationSec||0)+'-'+(bt.pausedAt||0)+'-'+(bt.label||'');
+  if(sig===_txDirLastSig){
+    // Updates in-place sin re-render para evitar flicker
+    const tm=document.getElementById('cerTimer');
+    if(tm){
+      const t=Math.max(0,DATA.timer||0);
+      tm.textContent=String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');
+      tm.style.color=DATA.timerOn&&t<=10?'#ef4444':DATA.timerOn&&t<=30?'#f59e0b':'#fff';
+    }
+    // Break timer: actualizar el conteo cada segundo sin tocar innerHTML
+    const btEl=document.getElementById('dirBreakDisplay');
+    if(btEl&&showBreak){
+      const elapsed=bt.pausedAt?(bt.pausedAt-bt.startedAt):(Date.now()-bt.startedAt);
+      const rem=Math.max(0,Math.ceil((bt.durationSec*1000-elapsed)/1000));
+      const m=Math.floor(rem/60),s=rem%60;
+      btEl.textContent=m+':'+(s<10?'0':'')+s;
+      btEl.style.color=rem<=10?'#ef4444':rem<=30?'#f59e0b':'#fff';
+      // Si terminó, forzar re-render para que se vacíe (fin de break)
+      if(rem<=0){_txDirLastSig=null;renderTxDirector(c);return}
+    }
+    return;
+  }
+  _txDirLastSig=sig;
+  // Stack: leaderboard tiene prioridad fullscreen, profile fullscreen, scoreboard/timer corners
+  // Break timer también es fullscreen — gana sobre todo si está activo
+  document.body.classList.toggle('tx-opaque', showLb||showProf||showBreak);
+  let html='';
+  if(showBreak){
+    html+=_renderTxBreakTimer(bt);
+  } else if(showLb){
+    const cat=_txDirState.leaderboard.cat;
+    const ref=cat?DATA.athletes.find(a=>a.cat===cat&&!a.bombed):cur;
+    if(ref)html+='<div style="position:fixed;inset:0">'+renderTxLeaderboard(ref,false,{allFlights:true})+'</div>';
+  } else if(showProf&&cur){
+    html+='<div style="position:fixed;inset:0">'+renderTxProfile(cur)+'</div>';
+  }
+  if(showSb&&cur)html+=_renderTxCerScoreboardBL(cur);
+  if(showTm)html+=_renderTxCerTimerCorner();
+  if(showSlam)html+=_renderTxCerSlamCorner(_txDirState.slam.type||'g');
+  c.innerHTML=html;
+  _txDirScheduleHide();
+  // Programar tick cada 1s para el break timer (re-update via signature skip)
+  if(showBreak){
+    setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},1000);
+  }
+}
+function _renderTxBreakTimer(bt){
+  const elapsed=bt.pausedAt?(bt.pausedAt-bt.startedAt):(Date.now()-bt.startedAt);
+  const rem=Math.max(0,Math.ceil((bt.durationSec*1000-elapsed)/1000));
+  const m=Math.floor(rem/60),s=rem%60;
+  const txt=m+':'+(s<10?'0':'')+s;
+  const color=rem<=10?'#ef4444':rem<=30?'#f59e0b':'#fff';
+  const labelText=(bt.label||'DESCANSO').toUpperCase();
+  const pausedBadge=bt.pausedAt?'<div style="margin-top:18px;display:inline-block;padding:6px 18px;background:rgba(245,158,11,.18);border:2px solid #f59e0b;border-radius:8px;font-family:Oswald;font-size:18px;letter-spacing:6px;color:#f59e0b">⏸ PAUSADO</div>':'';
+  return '<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'
+    +'<div style="font-family:Oswald,sans-serif;font-size:clamp(28px,4vw,56px);letter-spacing:12px;color:#D4A843;margin-bottom:20px;animation:txFade .6s ease backwards">'+labelText+'</div>'
+    +'<div id="dirBreakDisplay" style="font-family:Oswald,sans-serif;font-size:clamp(160px,22vw,340px);font-weight:900;color:'+color+';line-height:.95;letter-spacing:6px;text-shadow:0 8px 40px rgba(0,0,0,.85);-webkit-text-stroke:3px rgba(0,0,0,.35)">'+txt+'</div>'
+    +pausedBadge
+  +'</div>';
+}
+
+// ─── SLAM (GOOD LIFT / NO LIFT flash) ──────────────────────────
+let _txSlamSeen=null;          // Map<key, 'g'|'r'|null>
+let _txSlamUntil=0;            // timestamp until which to show
+let _txSlamType=null;          // 'g' | 'r'
+let _txSlamLifterName='';
+function _txSlamScan(){
+  // Detecta nueva transición null → g/r en cualquier intento.
+  // Primera pasada: solo poblar el set, no disparar nada.
+  const isFirst=(_txSlamSeen===null);
+  if(isFirst)_txSlamSeen={};
+  let fired=null;
+  DATA.athletes.forEach(a=>{
+    LIFTS.forEach(l=>{
+      (a.att&&a.att[l]||[]).forEach((att,i)=>{
+        const k=a.id+'-'+l+'-'+i;
+        const prev=_txSlamSeen[k];
+        const now=att.r||null;
+        if(!isFirst&&(prev==null||prev===undefined)&&(now==='g'||now==='r')){
+          fired={type:now,name:a.name||'',lift:l,round:i};
+        }
+        _txSlamSeen[k]=now;
+      });
+    });
+  });
+  if(fired){
+    _txSlamUntil=Date.now()+2200;
+    _txSlamType=fired.type;
+    _txSlamLifterName=fired.name;
+    setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},2300);
+  }
+}
+function renderTxSlam(){
+  _txSlamScan();
+  if(!_txSlamType||Date.now()>=_txSlamUntil){
+    return '';
+  }
+  const isGood=_txSlamType==='g';
+  const text=isGood?'GOOD LIFT':'NO LIFT';
+  const color=isGood?'#22c55e':'#ef4444';
+  const glow=isGood?'rgba(34,197,94,.85)':'rgba(239,68,68,.85)';
+  return '<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;animation:txSlamFlash 2.1s ease-in-out forwards">'
+    +'<div style="font-family:Oswald,sans-serif;font-size:clamp(80px,14vw,200px);font-weight:900;letter-spacing:8px;color:'+color+';text-shadow:0 0 60px '+glow+',0 0 120px '+glow+',0 8px 30px rgba(0,0,0,.9);animation:txSlamIn .55s cubic-bezier(.2,.9,.2,1) backwards,txSlamOut .35s ease-in 1.75s forwards;-webkit-text-stroke:3px rgba(0,0,0,.4)">'+text+'</div>'
+    +(_txSlamLifterName?'<div style="margin-top:18px;font-family:Oswald,sans-serif;font-size:clamp(18px,2vw,28px);letter-spacing:6px;color:#fff;text-shadow:0 4px 16px rgba(0,0,0,.9);animation:txFade .8s ease .35s backwards">'+_txSlamLifterName.toUpperCase()+'</div>':'')
+    +'</div>';
+}
+
+// ─── TIMER (1:00 → 0:00 standalone) ────────────────────────────
+function renderTxTimer(){
+  const t=Math.max(0,DATA.timer||0);
+  const m=Math.floor(t/60),s=t%60;
+  const txt=m+':'+(s<10?'0':'')+s;
+  const low=t<=10;
+  const color=low?'#ef4444':(t<=20?'#f59e0b':'#22c55e');
+  const pulse=low&&DATA.timerOn?'animation:txTimerPulse .55s ease-in-out infinite;':'';
+  return '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center">'
+    +'<div style="font-family:Oswald,sans-serif;font-size:clamp(120px,18vw,280px);font-weight:900;color:'+color+';text-shadow:0 0 40px '+color+'88,0 8px 30px rgba(0,0,0,.85);letter-spacing:6px;-webkit-text-stroke:2px rgba(0,0,0,.35);'+pulse+'">'+txt+'</div>'
+    +'</div>';
+}
+
+// ─── LIGHTS (3 luces de jueces) ────────────────────────────────
+let _txLightsUnsub=null;
+let _txLights={izq:null,central:null,der:null};
+let _txLightsResetTs=0;
+let _txLightsPoll=null;
+function _txStartLightsListener(){
+  if(_txLightsUnsub)return;
+  if(!fbReady||!window._fb){
+    if(!_txLightsPoll){
+      _txLightsPoll=setInterval(()=>{
+        if(fbReady&&window._fb){clearInterval(_txLightsPoll);_txLightsPoll=null;_txStartLightsListener()}
+      },300);
+    }
+    return;
+  }
+  try{
+    _txLightsUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions','current'),(snap)=>{
+      if(!snap.exists())return;
+      const d=snap.data();
+      _txLights={izq:d.izq||null,central:d.central||null,der:d.der||null};
+      _txLightsResetTs=d.reset_ts||0;
+      if(typeof renderTxWidget==='function')renderTxWidget();
+    });
+  }catch(e){console.warn('[TX] lights subscribe fail',e)}
+}
+function renderTxLights(){
+  if(TX_MODE==='lights')_txStartLightsListener();
+  const order=['izq','central','der'];
+  let h='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;gap:clamp(20px,3vw,60px)">';
+  order.forEach((j,i)=>{
+    const v=_txLights[j];
+    const lit=v==='white'||v==='red';
+    const bg=v==='white'?'#fff':(v==='red'?'#ef4444':'rgba(255,255,255,.08)');
+    const border=v==='white'?'#fff':(v==='red'?'#ef4444':'rgba(255,255,255,.25)');
+    const glow=v==='white'?'0 0 60px rgba(255,255,255,.85),0 0 120px rgba(255,255,255,.45)':(v==='red'?'0 0 60px rgba(239,68,68,.85),0 0 120px rgba(239,68,68,.45)':'none');
+    h+='<div style="width:clamp(120px,14vw,220px);height:clamp(120px,14vw,220px);border-radius:50%;background:'+bg+';border:6px solid '+border+';box-shadow:'+glow+',inset 0 0 30px rgba(0,0,0,'+(lit?'.15':'.5')+');'+(lit?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards;animation-delay:'+(i*0.08)+'s':'')+'"></div>';
+  });
+  h+='</div>';
+  return h;
+}
+
+function renderTxProfile(cur){
+  const full=txLookupFull(cur);
+  const parts=(cur.name||'').trim().split(/\s+/);
+  const firstName=parts.slice(0,-2).join(' ')||parts[0]||'';
+  const lastName=parts.slice(-2).join(' ').toUpperCase();
+  const club=cur.club||full?.club||'';
+  const cat=txCatNum(cur.cat)+'kg';
+  const divS=txDivShort(cur.div);
+  const age=txAge(full?.fechaNac);
+  const years=txYearsCompeting(full);
+  const liftKey=DATA.lift;
+  const pb=txPB(full,liftKey);
+  const pbLabel={sq:'PERSONAL BEST SQ',bp:'PERSONAL BEST BP',dl:'PERSONAL BEST DL'}[liftKey]||'PERSONAL BEST';
+  const clubLogoHtml=(window.clubLogoImg?window.clubLogoImg(club,38,'background:rgba(10,22,40,.6);padding:3px;margin-right:14px;vertical-align:middle;'):'');
+  const clubCell=clubLogoHtml?('<span style="display:inline-flex;align-items:center;gap:0;justify-content:flex-end">'+clubLogoHtml+'<span>'+(club||'—')+'</span></span>'):(club||'—');
+  const rows=[
+    ['CATEGORY',cat+' '+divS],
+    ['CLUB',clubCell],
+  ];
+  if(age!==null)rows.push(['AGE',age+'']);
+  if(years!==null)rows.push(['YEARS COMPETING',years+'']);
+  if(pb)rows.push([pbLabel,pb.toFixed(1)]);
+  const initials=parts.map(p=>p[0]||'').slice(0,2).join('').toUpperCase();
+  return `
+    <div style="position:absolute;inset:0;padding:clamp(40px,5vw,80px);display:flex;flex-direction:column">
+      <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(8px,1.5vh,22px);max-width:1400px;width:100%;margin:auto">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:clamp(6px,1vh,16px)">
+          <div style="background:#D4A843;padding:clamp(10px,1.6vw,18px) clamp(18px,2.2vw,28px);border-radius:6px;display:flex;align-items:center;gap:clamp(10px,1.5vw,18px);box-shadow:0 4px 20px rgba(212,168,67,.35)">
+            <div style="background:rgba(0,0,0,.15);padding:4px 10px;border-radius:4px;font-family:Oswald;font-size:clamp(11px,1.1vw,14px);letter-spacing:2px;color:#0A1628">CHI 🇨🇱</div>
+            <div style="font-family:Oswald;font-size:clamp(26px,3.2vw,44px);font-weight:700;letter-spacing:2px;color:#0A1628">
+              <span style="font-weight:400">${firstName}</span> ${lastName}
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:clamp(30px,4vw,70px);align-items:center;margin-top:clamp(10px,2vh,30px)">
+          <div style="width:clamp(180px,18vw,280px);aspect-ratio:3/4;background:linear-gradient(135deg,#1a2e4f,#0e1f3a);border:3px solid #D4A843;border-radius:4px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(0,0,0,.5);position:relative;overflow:hidden">
+            <span style="font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px">${initials}</span>
+          </div>
+          <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(10px,1.8vh,24px)">
+            ${rows.map(r=>`
+              <div style="display:grid;grid-template-columns:1fr auto;gap:40px;align-items:center;border-bottom:1px solid rgba(212,168,67,.2);padding-bottom:clamp(6px,1vh,12px)">
+                <div style="font-family:Oswald;font-size:clamp(14px,1.4vw,20px);color:rgba(220,230,245,.7);letter-spacing:3px">${r[0]}</div>
+                <div style="font-family:Oswald;font-size:clamp(22px,2.4vw,36px);font-weight:700;color:#D4A843;letter-spacing:1px">${r[1]}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+        <div style="position:absolute;top:clamp(20px,2.5vw,40px);right:clamp(20px,2.5vw,40px);font-family:Oswald;font-size:clamp(14px,1.4vw,20px);letter-spacing:3px;color:rgba(212,168,67,.5);border:2px solid rgba(212,168,67,.4);padding:6px 14px;border-radius:6px">⚡ YourLift</div>
+      </div>
+    </div>`;
+}
+
+let _txSbSig=null;
+let _txSbShownAt=0;
+const TX_SCOREBOARD_DURATION=20000; // 20s visible
+function renderTxScoreboard(cur,lifterChanged){
+  if(!cur)return '';
+  // Auto-hide: el marcador aparece al cambiar levantador / intento / peso / lift,
+  // queda 20s en pantalla y se va con animación. Hasta el próximo cambio: oculto.
+  // En modo widget (?tx=scoreboard), el render que importa es éste.
+  if(TX_MODE==='scoreboard'){
+    const sig=cur.id+'-'+DATA.lift+'-'+DATA.round+'-'+(cur.att[DATA.lift][DATA.round].w||0);
+    if(sig!==_txSbSig){
+      _txSbSig=sig;
+      _txSbShownAt=Date.now();
+      setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_SCOREBOARD_DURATION+400);
+    }
+    if(Date.now()-_txSbShownAt>TX_SCOREBOARD_DURATION)return '';
+  }
+  const parts=(cur.name||'').trim().split(/\s+/);
+  const firstName=parts.length>2?parts.slice(0,-2).join(' '):parts.slice(0,-1).join(' ');
+  const lastName=(parts.length>2?parts.slice(-2).join(' '):parts[parts.length-1]).toUpperCase();
+  const divS=txDivShort(cur.div);
+  const catLabel=(cur.cat?'-'+txCatNum(cur.cat)+'kg ':'')+divS;
+  const rk=catRankBySub(cur);
+  const st=subTotal(cur,DATA.lift);
+  const cw=cur.att[DATA.lift][DATA.round].w;
+  const simBest=Math.max(bestOf(cur,DATA.lift),cw);
+  let newSub;
+  if(DATA.lift==='sq')newSub=simBest;
+  else if(DATA.lift==='bp')newSub=bestOf(cur,'sq')+simBest;
+  else newSub=bestOf(cur,'sq')+bestOf(cur,'bp')+simBest;
+  const sameCat=DATA.athletes.filter(a=>a.cat===cur.cat&&a.flight===DATA.flight&&!a.bombed);
+  const simRanked=sameCat.map(a=>{
+    if(a.id===cur.id)return{id:a.id,sub:newSub};
+    return{id:a.id,sub:subTotal(a,DATA.lift)};
+  }).filter(x=>x.sub>0).sort((a,b)=>b.sub-a.sub);
+  const simPos=simRanked.findIndex(x=>x.id===cur.id)+1;
+  const timerStr=DATA.timerOn?String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0'):'';
+  const rankTxt=(rk.pos&&simPos&&rk.pos!==simPos)?'RANK '+rk.pos+' to '+simPos:'RANK '+(rk.pos||simPos||'—');
+  return `
+    <div style="position:absolute;bottom:0;left:0;right:0;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':(lifterChanged?'animation:txSlideUp .6s cubic-bezier(.2,.8,.2,1)':'')}">
+      <div style="display:grid;grid-template-columns:180px 1fr 130px;background:linear-gradient(90deg,rgba(28,50,90,.96),rgba(35,60,105,.96));border-top:2px solid #D4A843;padding:10px 22px;align-items:center">
+        <div style="font-family:Oswald;font-size:15px;color:rgba(200,215,240,.85);letter-spacing:1px">${catLabel}</div>
+        <div style="text-align:center;font-family:Oswald;font-size:17px;letter-spacing:2px">${rankTxt.split(' ').map((w,i)=>/^\d+$/.test(w)?'<span style="color:#D4A843;font-weight:700">'+w+'</span>':w).join(' ')}</div>
+        <div style="font-family:Oswald;font-size:22px;font-weight:700;color:${DATA.timerOn&&DATA.timer<=10?'#ef4444':'#fff'};letter-spacing:2px;text-align:right">${timerStr||'—:—'}</div>
+      </div>
+      <div style="background:linear-gradient(90deg,#D4A843,#c19735);padding:6px 22px;display:flex;align-items:center;gap:14px">
+        <div style="background:rgba(10,22,40,.9);color:#D4A843;padding:4px 12px;border-radius:4px;font-family:Oswald;font-size:12px;letter-spacing:2px;font-weight:700">CHI 🇨🇱</div>
+        <div style="flex:1;font-family:Oswald;color:#0A1628;letter-spacing:1px">
+          ${firstName?'<div style="font-size:13px;font-weight:400;line-height:1;opacity:.75">'+firstName+'</div>':''}
+          <div style="font-size:22px;font-weight:700;line-height:1.05">${lastName}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-family:Oswald;font-size:11px;color:rgba(10,22,40,.75);letter-spacing:1px;text-align:right;max-width:240px">
+          ${(window.clubLogoImg?window.clubLogoImg(cur.club,28,'background:rgba(10,22,40,.85);padding:2px;flex-shrink:0;'):'')}
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cur.club||''}</span>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr) 140px;background:rgba(10,22,40,.94)">
+        ${cur.att[DATA.lift].map((at,j)=>{
+          let bg,clr,td='none';
+          if(at.r==='g'){bg='#22c55e';clr='#0A1628'}
+          else if(at.r==='n'){bg='#ef4444';clr='#fff';td='line-through'}
+          else if(j===DATA.round&&at.w>0){bg='rgba(45,65,105,.6)';clr='#fff'}
+          else{bg='rgba(30,48,78,.3)';clr='rgba(140,160,190,.45)'}
+          const isCur=j===DATA.round&&at.r===null&&at.w>0;
+          return '<div style="padding:9px 18px;text-align:center;background:'+bg+';border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:22px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+(isCur?'box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';':'')+'">'+(at.w||'—')+'</div>';
+        }).join('')}
+        <div style="padding:9px 14px;text-align:center;background:#D4A843;color:#0A1628;font-family:Oswald;font-size:24px;font-weight:700;letter-spacing:1px">${(st||newSub||0).toFixed(1)}</div>
+      </div>
+    </div>`;
+}
+
+function renderTxLeaderboard(cur,lifterChanged,opts){
+  opts=opts||{};
+  // Determine category to show: current lifter's, or first athlete of current flight if none
+  const ref=cur||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
+  if(!ref)return '';
+  // allFlights: ranking de TODA la categoría (cubre todos los vuelos), usado en cycle de fin de lift
+  const sameCat=DATA.athletes.filter(a=>a.cat===ref.cat&&(opts.allFlights||a.flight===DATA.flight)&&!a.bombed);
+  const ranked=sameCat.map(a=>({...a,total:totalOf(a),fTotal:forecastTotal(a),fPlace:0}));
+  ranked.sort((a,b)=>b.fTotal-a.fTotal);
+  ranked.forEach((a,i)=>a.fPlace=i+1);
+  const divS=txDivShort(ref.div);
+  const sexLabel=(ref.sex==='Femenino'||ref.sex==='Mujer'||ref.sex==='F')?'Mujer':'Hombre';
+  const curBest={sq:bestOf(ref,'sq'),bp:bestOf(ref,'bp'),dl:bestOf(ref,'dl')};
+  return `
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:clamp(30px,5vh,80px)">
+      <div class="txCascade" style="width:min(1100px,95%);background:linear-gradient(135deg,rgba(16,28,52,.97),rgba(22,36,66,.97));border:1px solid rgba(212,168,67,.3);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+        <div style="padding:clamp(14px,2vh,22px) clamp(20px,2.5vw,32px);background:linear-gradient(90deg,rgba(30,48,82,.98),rgba(38,58,98,.98));border-bottom:2px solid #D4A843;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-family:Oswald;font-size:clamp(11px,1.1vw,14px);color:rgba(160,180,210,.55);letter-spacing:3px">LEADERBOARD</div>
+            <div style="font-family:Oswald;font-size:clamp(20px,2.2vw,30px);font-weight:700;color:#fff;letter-spacing:2px;margin-top:2px">${divS} • ${ref.cat} (${sexLabel})</div>
+          </div>
+          <div style="font-family:Oswald;font-size:clamp(12px,1.2vw,16px);color:rgba(212,168,67,.6);letter-spacing:2px">⚡ YourLift</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 120px 120px 80px;padding:10px clamp(20px,2.5vw,32px);background:rgba(10,22,40,.6);border-bottom:1px solid rgba(60,90,140,.25);font-family:Oswald;font-size:clamp(10px,1vw,13px);color:rgba(160,180,210,.5);letter-spacing:2px">
+          <div>NOMBRE</div><div style="text-align:center">TOTAL</div><div style="text-align:center">F.TOT</div><div style="text-align:center">POS</div>
+        </div>
+        ${ranked.map(a=>{
+          const isCur=a.id===ref.id;
+          const logo=window.clubLogoImg?window.clubLogoImg(a.club,28,'background:rgba(10,22,40,.6);padding:2px;flex-shrink:0;'):'';
+          return `<div style="display:grid;grid-template-columns:1fr 120px 120px 80px;padding:clamp(10px,1.6vh,18px) clamp(20px,2.5vw,32px);background:${isCur?'linear-gradient(90deg,rgba(196,30,58,.35),rgba(212,168,67,.25))':'transparent'};border-bottom:1px solid rgba(50,80,120,.2);align-items:center">
+            <div style="display:flex;align-items:center;gap:10px;overflow:hidden">
+              ${logo||'<div style="width:28px;height:28px;flex-shrink:0"></div>'}
+              <span style="font-family:Oswald;font-size:clamp(14px,1.5vw,20px);font-weight:${isCur?'700':'500'};color:${isCur?'#fff':'rgba(220,230,245,.85)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name}</span>
+            </div>
+            <div style="font-family:Oswald;font-size:clamp(14px,1.5vw,20px);text-align:center;color:rgba(200,215,240,.6)">${(a.total||0).toFixed(1)}</div>
+            <div style="font-family:Oswald;font-size:clamp(15px,1.6vw,22px);text-align:center;font-weight:700;color:${isCur?'#D4A843':'rgba(220,230,245,.85)'}">${a.fTotal||'—'}</div>
+            <div style="font-family:Oswald;font-size:clamp(16px,1.7vw,24px);text-align:center;font-weight:700;color:${isCur?'#D4A843':'rgba(200,215,240,.6)'}">${a.fPlace}</div>
+          </div>`;
+        }).join('')}
+        <div style="padding:clamp(10px,1.5vh,16px) clamp(20px,2.5vw,32px);background:rgba(196,30,58,.18);display:flex;gap:clamp(18px,2.5vw,40px);justify-content:center;align-items:center">
+          ${['sq','bp','dl'].map(l=>{
+            const b=curBest[l];
+            return '<div style="display:flex;gap:8px;align-items:center"><span style="font-family:Oswald;font-size:clamp(11px,1.1vw,14px);color:rgba(160,180,210,.5);letter-spacing:2px">'+LIFT_S[l]+'</span><span style="font-family:Oswald;font-size:clamp(16px,1.8vw,24px);font-weight:700;color:'+(b?LIFT_C[l]:'rgba(100,130,160,.3)')+'">'+(b?b.toFixed(1):'—')+'</span></div>';
+          }).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
+function R(){if(TX_MODE){renderTxWidget();return}const el=document.getElementById('R');if(DATA.phase==='scoreboard'){el.innerHTML=renderSB();return}if(DATA.phase==='transmision'){el.innerHTML=renderTransmision();setTimeout(initTxWidgets,0);return}if(DATA.phase==='setup'){el.innerHTML=renderSetup();return}el.innerHTML=renderShell()}
 
 function renderSetup(){
   // Check for backup
@@ -1131,6 +2032,8 @@ function renderShell(){
   h+='<div class="side-label">Competencia</div><button class="side-btn '+(p==='compete'?'active':'')+'" onclick="go(\'compete\')"><span class="icon">\uD83C\uDFCB\uFE0F</span>Control en Vivo</button>';
   h+='<button class="side-btn '+(p==='scoreboard'?'active':'')+'" onclick="go(\'scoreboard\')"><span class="icon">\uD83D\uDCFA</span>Scoreboard</button>';
   h+='<button class="side-btn '+(p==='transmision'?'active':'')+'" onclick="go(\'transmision\')"><span class="icon">\uD83D\uDCE1</span>Transmisi\u00f3n</button>';
+  h+='<button class="side-btn '+(p==='obsTx'?'active':'')+'" onclick="go(\'obsTx\')"><span class="icon">\uD83C\uDFAC</span>Widgets OBS</button>';
+  h+='<button class="side-btn '+(p==='director'?'active':'')+'" onclick="go(\'director\')"><span class="icon">🎮</span>Control TX</button>';
   }
   h+='<div class="side-label">P\u00fablico</div>';
   h+='<button class="side-btn '+(p==='results'?'active':'')+'" onclick="go(\'results\')"><span class="icon">\uD83C\uDFC6</span>Resultados</button>';
@@ -1144,7 +2047,7 @@ function renderShell(){
   h+='<div style="font-size:10px;color:var(--green);margin-bottom:6px;padding:0 8px">\uD83D\uDD13 Admin</div>';
   h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'\uD83D\uDCE1 Sync activo':'\u23F3 Conectando...')+'</div>';
   h+='<button class="side-btn" onclick="exportBackupJSON()"><span class="icon">\uD83D\uDCBE</span>Exportar Backup</button>';
-  h+='<button class="side-btn" onclick="newComp()"><span class="icon">\u21BA</span>Nueva Competencia</button>';
+  h+='<button class="side-btn" onclick="resetLiveData()" style="color:#ff8a8a"><span class="icon">🧹</span>Reiniciar datos en vivo</button>';
   h+='<button class="side-btn" onclick="doLogout()"><span class="icon">\uD83D\uDD12</span>Cerrar sesi\u00f3n</button>';
   h+='<a href="index.html" class="side-btn" style="text-decoration:none;color:var(--muted)"><span class="icon">\u2190</span>YourLift</a></div>';
   }else{
@@ -1155,15 +2058,17 @@ function renderShell(){
   h+='<a href="index.html" class="side-btn" style="text-decoration:none;color:var(--muted)"><span class="icon">\u2190</span>YourLift</a></div>';
   }
   h+='</div><div class="main">';
-  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='results')h+=renderResults();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision')){DATA.phase='results';h+=renderResults();}
+  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='results')h+=renderResults();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director')){DATA.phase='results';h+=renderResults();}
   h+='</div></div>';return h;
 }
 
 function sortByCat(){DATA.athletes.sort((a,b)=>{const na=parseFloat(a.cat.replace(/[^0-9.]/g,''))||999;const nb=parseFloat(b.cat.replace(/[^0-9.]/g,''))||999;return na-nb});DATA.athletes.forEach((a,i)=>a.lot=i+1);save();R()}
 function sortByFlight(){DATA.athletes.sort((a,b)=>{if(a.flight!==b.flight)return a.flight.localeCompare(b.flight);const na=parseFloat(a.cat.replace(/[^0-9.]/g,''))||999;const nb=parseFloat(b.cat.replace(/[^0-9.]/g,''))||999;return na-nb});DATA.athletes.forEach((a,i)=>a.lot=i+1);save();R()}
 function generateLots(){
-  if(DATA.lotsGenerated){alert('Los lotes ya fueron generados para esta competencia');return}
-  if(!confirm('¿Generar números de lote aleatorios? Esta acción solo se puede hacer una vez.'))return;
+  const msg=DATA.lotsGenerated
+    ? '⚠️ Los lotes YA fueron sorteados.\n\n¿Re-sortear y reemplazar todos los números actuales?\n\nLas ediciones manuales se perderán.'
+    : '¿Generar números de lote aleatorios?';
+  if(!confirm(msg))return;
   // Shuffle within each flight
   const flights=[...new Set(DATA.athletes.map(a=>a.flight))].sort();
   let lotNum=1;
@@ -1177,16 +2082,238 @@ function generateLots(){
   DATA.lotsGenerated=true;save();R();
 }
 
+// Editar el lote a mano. Si el número nuevo ya lo tenía otro atleta,
+// hace un swap (intercambia los lotes entre los dos).
+window.setLot=function(id,val){
+  const n=parseInt(val,10);
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  if(!Number.isFinite(n)||n<1){
+    showToastLC('⚠️ Lote inválido — debe ser un número entero ≥ 1');
+    R();return;
+  }
+  if(n===a.lot){R();return}
+  const other=DATA.athletes.find(x=>x.lot===n&&x.id!==id);
+  if(other){
+    // Swap: el otro recibe el lote anterior
+    other.lot=a.lot;
+    a.lot=n;
+  } else {
+    a.lot=n;
+  }
+  save();R();
+};
+
+// ─── DIRECTOR PANEL (control manual del widget ?tx=director) ───
+let _dirState=null;
+let _dirUnsub=null;
+function _dirEnsureListener(){
+  if(_dirUnsub||!fbReady||!window._fb)return;
+  try{
+    _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director','current'),(snap)=>{
+      const DEFAULT={profile:{active:false,until:0},scoreboard:{active:false,until:0},leaderboard:{active:false,until:0,cat:''},timer:{active:false,until:0},slam:{active:false,until:0,type:'g'},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0}};
+      if(snap.exists()){
+        const d=snap.data();
+        _dirState=Object.assign({},DEFAULT,d.show||{});
+      } else {
+        _dirState={...DEFAULT};
+      }
+      if(DATA.phase==='director')R();
+    });
+  }catch(e){console.warn('[DIR] listen',e)}
+}
+async function _dirPush(){
+  if(!fbReady||!isAdmin||!window._fb)return;
+  try{
+    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director','current'),{show:_dirState,ts:Date.now()});
+  }catch(e){alert('Error pusheando comando: '+(e.message||e))}
+}
+window.dirShow=async function(comp,seconds,opts){
+  if(!_dirState)_dirState={};
+  const until=seconds>0?Date.now()+seconds*1000:0;
+  _dirState[comp]=Object.assign({},_dirState[comp]||{},{active:true,until},opts||{});
+  await _dirPush();R();
+};
+window.dirHide=async function(comp){
+  if(!_dirState)return;
+  _dirState[comp]=Object.assign({},_dirState[comp]||{},{active:false,until:0});
+  await _dirPush();R();
+};
+window.dirHideAll=async function(){
+  ['profile','scoreboard','leaderboard','timer','slam'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
+  await _dirPush();R();
+};
+window.dirShowLb=async function(cat,seconds){
+  await window.dirShow('leaderboard',seconds,{cat:cat||''});
+};
+window.dirShowSlam=async function(type){
+  await window.dirShow('slam',2,{type});
+};
+// ── Break timer (descanso configurable) ─────────────────────
+window.dirBreakStart=async function(){
+  const m=parseInt(document.getElementById('dirBreakMin')?.value||'0',10)||0;
+  const s=parseInt(document.getElementById('dirBreakSec')?.value||'0',10)||0;
+  const label=(document.getElementById('dirBreakLabel')?.value||'').trim();
+  const durationSec=m*60+s;
+  if(durationSec<=0){alert('Ingresá al menos 1 segundo');return}
+  if(!_dirState)_dirState={};
+  _dirState.breakTimer={active:true,startedAt:Date.now(),durationSec,label,pausedAt:0};
+  await _dirPush();R();
+};
+window.dirBreakPause=async function(){
+  if(!_dirState?.breakTimer?.active)return;
+  if(_dirState.breakTimer.pausedAt)return; // ya pausado
+  _dirState.breakTimer.pausedAt=Date.now();
+  await _dirPush();R();
+};
+window.dirBreakResume=async function(){
+  const bt=_dirState?.breakTimer;
+  if(!bt?.active||!bt.pausedAt)return;
+  // Compensar el tiempo de pausa: empujar startedAt por el tiempo pausado
+  bt.startedAt+=Date.now()-bt.pausedAt;
+  bt.pausedAt=0;
+  await _dirPush();R();
+};
+window.dirBreakHide=async function(){
+  if(!_dirState)return;
+  _dirState.breakTimer={active:false,startedAt:0,durationSec:0,label:'',pausedAt:0};
+  await _dirPush();R();
+};
+window.dirBreakAdd=async function(secs){
+  // Sumar/restar segundos al descanso en curso (útil para extender o acortar)
+  const bt=_dirState?.breakTimer;
+  if(!bt?.active)return;
+  bt.durationSec=Math.max(1,(bt.durationSec||0)+secs);
+  await _dirPush();R();
+};
+function renderDirector(){
+  _dirEnsureListener();
+  if(!_dirState){_dirState={profile:{active:false,until:0},scoreboard:{active:false,until:0},leaderboard:{active:false,until:0,cat:''},timer:{active:false,until:0},slam:{active:false,until:0,type:'g'}};}
+  const cur=liftQueue()[0];
+  const cats=[...new Set(DATA.athletes.filter(a=>!a.bombed).map(a=>a.cat))].filter(Boolean).sort((a,b)=>(parseFloat(a)||999)-(parseFloat(b)||999));
+  const fmtTime=t=>{if(!t||t<=Date.now())return '';const s=Math.ceil((t-Date.now())/1000);return s+'s restantes'};
+  const widgetUrl=location.origin+location.pathname.replace(/[^/]+$/,'')+'livecast.html?tx=director&evento='+encodeURIComponent(DATA.event?.id||DATA.event?.name||'');
+  const compRow=(key,icon,title,desc,extra)=>{
+    const c=_dirState[key]||{};
+    const isOn=c.active&&(!c.until||c.until>Date.now());
+    return '<div class="card" style="padding:14px 18px;border-left:4px solid '+(isOn?'var(--green)':'var(--border)')+'">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">'
+      +'<div style="flex:1;min-width:200px">'
+        +'<div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">'+icon+' '+title+'</div>'
+        +'<div style="font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5">'+desc+'</div>'
+        +(isOn&&c.until?'<div style="font-size:10px;color:var(--green);margin-top:4px;font-family:Oswald;letter-spacing:1px">⏱ '+fmtTime(c.until)+'</div>':'')
+        +(isOn&&!c.until?'<div style="font-size:10px;color:var(--green);margin-top:4px;font-family:Oswald;letter-spacing:1px">🔵 EN PANTALLA</div>':'')
+      +'</div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:flex-end">'+extra+'</div>'
+      +'</div></div>';
+  };
+  let h='<div class="fade">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;flex-wrap:wrap;gap:12px">';
+  h+='<div><h2 class="os" style="font-size:22px;letter-spacing:1px">🎮 CONTROL DE TRANSMISIÓN</h2><p style="color:var(--muted);font-size:12px">Botones para mostrar/esconder componentes en pantalla en vivo. Sin tocar OBS.</p></div>';
+  h+='<button class="btn btn-r" onclick="dirHideAll()" style="padding:10px 18px;font-size:13px">🙈 ESCONDER TODO</button>';
+  h+='</div>';
+  // Setup card
+  h+='<div class="card" style="margin-bottom:14px;padding:12px 16px;background:rgba(212,168,67,.06);border-color:rgba(212,168,67,.3)">';
+  h+='<div style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px;margin-bottom:6px">📡 SETUP EN OBS (UNA SOLA VEZ)</div>';
+  h+='<div style="font-size:12px;color:var(--muted);line-height:1.6">En OBS: Sources → + → Browser → pegá esta URL → 1920×1080 → DESMARCAR "Refresh on activate" y "Shutdown when not visible".</div>';
+  h+='<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><code style="flex:1;background:rgba(10,22,40,.6);padding:8px 12px;border-radius:6px;font-size:10px;color:rgba(200,215,240,.8);word-break:break-all">'+widgetUrl+'</code>';
+  h+='<button class="btn btn-g" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent).then(()=>{this.textContent=\'✓ Copiado\';setTimeout(()=>this.textContent=\'📋 Copiar\',1500)})" style="padding:7px 14px;font-size:11px;flex-shrink:0">📋 Copiar</button></div>';
+  h+='</div>';
+  // Status del lifter actual
+  if(cur){
+    h+='<div class="card" style="margin-bottom:14px;padding:10px 14px;background:rgba(34,197,94,.05);border-color:rgba(34,197,94,.3);font-size:12px">';
+    h+='👤 <b>Levantador actual:</b> <span style="color:var(--gold);font-family:Oswald">'+cur.name+'</span> · '+cur.cat+' · '+cur.div+' · Vuelo '+cur.flight+' · '+LIFT_S[DATA.lift]+(DATA.round+1);
+    h+='</div>';
+  }
+  // Componentes
+  h+='<div style="display:grid;gap:12px">';
+  h+=compRow('profile','🪪','Perfil del atleta','Pantalla completa con foto placeholder, nombre, categoría, club, edad, PB. Mostrá antes de que suba a la tarima.',
+    '<button class="btn btn-g" onclick="dirShow(\'profile\',5)" style="padding:8px 14px;font-size:11px">▶ 5s</button>'
+    +'<button class="btn btn-g" onclick="dirShow(\'profile\',10)" style="padding:8px 14px;font-size:11px">▶ 10s</button>'
+    +'<button class="btn btn-g" onclick="dirShow(\'profile\',0)" style="padding:8px 14px;font-size:11px">▶ Permanente</button>'
+    +'<button class="btn" onclick="dirHide(\'profile\')" style="padding:8px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">⏸ Esconder</button>'
+  );
+  h+=compRow('scoreboard','📊','Marcador (lower-third)','Barra inferior izquierda con nombre, categoría, intentos cargados.',
+    '<button class="btn btn-g" onclick="dirShow(\'scoreboard\',15)" style="padding:8px 14px;font-size:11px">▶ 15s</button>'
+    +'<button class="btn btn-g" onclick="dirShow(\'scoreboard\',30)" style="padding:8px 14px;font-size:11px">▶ 30s</button>'
+    +'<button class="btn btn-g" onclick="dirShow(\'scoreboard\',60)" style="padding:8px 14px;font-size:11px">▶ 60s</button>'
+    +'<button class="btn btn-g" onclick="dirShow(\'scoreboard\',0)" style="padding:8px 14px;font-size:11px">▶ Permanente</button>'
+    +'<button class="btn" onclick="dirHide(\'scoreboard\')" style="padding:8px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">⏸ Esconder</button>'
+  );
+  // Leaderboard con selector de categoría
+  const curCat=_dirState.leaderboard?.cat||(cur?cur.cat:'');
+  let lbExtra='<select id="dirLbCat" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:11px"><option value="">— Auto (cat actual) —</option>';
+  cats.forEach(c=>{lbExtra+='<option value="'+c+'" '+(c===curCat?'selected':'')+'>'+c+'</option>'});
+  lbExtra+='</select>';
+  lbExtra+='<button class="btn btn-g" onclick="dirShowLb(document.getElementById(\'dirLbCat\').value,10)" style="padding:8px 14px;font-size:11px">▶ 10s</button>';
+  lbExtra+='<button class="btn btn-g" onclick="dirShowLb(document.getElementById(\'dirLbCat\').value,30)" style="padding:8px 14px;font-size:11px">▶ 30s</button>';
+  lbExtra+='<button class="btn btn-g" onclick="dirShowLb(document.getElementById(\'dirLbCat\').value,0)" style="padding:8px 14px;font-size:11px">▶ Permanente</button>';
+  lbExtra+='<button class="btn" onclick="dirHide(\'leaderboard\')" style="padding:8px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">⏸ Esconder</button>';
+  h+=compRow('leaderboard','🏆','Tabla de clasificación','Ranking de la categoría elegida (si "Auto", usa la del lifter actual). Pantalla completa.',lbExtra);
+  h+=compRow('timer','⏱','Timer grande','Reloj 1:00 → 0:00 en la esquina superior derecha. Sincronizado con el timer del operador.',
+    '<button class="btn btn-g" onclick="dirShow(\'timer\',0)" style="padding:8px 14px;font-size:11px">▶ Permanente</button>'
+    +'<button class="btn" onclick="dirHide(\'timer\')" style="padding:8px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">⏸ Esconder</button>'
+  );
+  h+=compRow('slam','⚡','Slam manual GOOD/NO LIFT','Cartel de 2s en la esquina superior izquierda. Lo disparás vos cuando los jueces dictaminen.',
+    '<button class="btn btn-g" onclick="dirShowSlam(\'g\')" style="padding:8px 16px;font-size:12px;background:#22c55e;border-color:#22c55e">✓ GOOD LIFT</button>'
+    +'<button class="btn btn-r" onclick="dirShowSlam(\'n\')" style="padding:8px 16px;font-size:12px">✗ NO LIFT</button>'
+  );
+  // Break timer — sección con inputs propios
+  const bt=_dirState.breakTimer||{active:false};
+  let btStatus='';
+  if(bt.active){
+    const elapsed=bt.pausedAt?(bt.pausedAt-bt.startedAt):(Date.now()-bt.startedAt);
+    const rem=Math.max(0,Math.ceil((bt.durationSec*1000-elapsed)/1000));
+    const m=Math.floor(rem/60),s=rem%60;
+    btStatus='<div style="font-size:11px;color:'+(bt.pausedAt?'var(--orange,#f59e0b)':'var(--green)')+';margin-top:6px;font-family:Oswald;letter-spacing:1px">'
+      +(bt.pausedAt?'⏸ PAUSADO':'🔵 EN PANTALLA')+' · '+m+':'+(s<10?'0':'')+s+(bt.label?' · '+bt.label:'')+'</div>';
+  }
+  h+='<div class="card" style="padding:14px 18px;border-left:4px solid '+(bt.active?'var(--green)':'var(--border)')+'">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">';
+  h+='<div style="flex:1;min-width:240px">';
+  h+='<div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">⏲ Timer de descanso</div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5">Reloj configurable para break entre lifts/vuelos/almuerzo. Aparece en grande al centro de la pantalla con cuenta regresiva.</div>';
+  h+=btStatus;
+  h+='</div></div>';
+  // Inputs duración + label
+  h+='<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">';
+  h+='<div><label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">MIN</label><input id="dirBreakMin" type="number" min="0" max="60" value="'+(bt.active?Math.floor((bt.durationSec||0)/60):10)+'" style="width:70px;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:Oswald;font-size:18px;text-align:center"></div>';
+  h+='<div><label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">SEG</label><input id="dirBreakSec" type="number" min="0" max="59" value="'+(bt.active?(bt.durationSec||0)%60:0)+'" style="width:70px;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:Oswald;font-size:18px;text-align:center"></div>';
+  h+='<div style="flex:1;min-width:160px"><label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">LABEL (opcional)</label><input id="dirBreakLabel" type="text" placeholder="ej. DESCANSO, ALMUERZO, CAMBIO BARRA" value="'+(bt.label||'').replace(/"/g,'&quot;')+'" style="width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px"></div>';
+  h+='</div>';
+  // Botones
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">';
+  if(!bt.active){
+    h+='<button class="btn btn-g" onclick="dirBreakStart()" style="padding:9px 18px;font-size:12px">▶ INICIAR</button>';
+    // Presets rápidos
+    h+='<button class="btn" onclick="document.getElementById(\'dirBreakMin\').value=5;document.getElementById(\'dirBreakSec\').value=0;dirBreakStart()" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">5 min</button>';
+    h+='<button class="btn" onclick="document.getElementById(\'dirBreakMin\').value=10;document.getElementById(\'dirBreakSec\').value=0;dirBreakStart()" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">10 min</button>';
+    h+='<button class="btn" onclick="document.getElementById(\'dirBreakMin\').value=15;document.getElementById(\'dirBreakSec\').value=0;dirBreakStart()" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">15 min</button>';
+    h+='<button class="btn" onclick="document.getElementById(\'dirBreakMin\').value=20;document.getElementById(\'dirBreakSec\').value=0;dirBreakStart()" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">20 min</button>';
+  } else {
+    if(bt.pausedAt){
+      h+='<button class="btn btn-g" onclick="dirBreakResume()" style="padding:9px 18px;font-size:12px">▶ REANUDAR</button>';
+    } else {
+      h+='<button class="btn btn-o" onclick="dirBreakPause()" style="padding:9px 18px;font-size:12px">⏸ PAUSAR</button>';
+    }
+    h+='<button class="btn" onclick="dirBreakAdd(60)" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">+1 min</button>';
+    h+='<button class="btn" onclick="dirBreakAdd(-60)" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">−1 min</button>';
+    h+='<button class="btn btn-r" onclick="dirBreakHide()" style="padding:9px 18px;font-size:12px">⏹ DETENER</button>';
+  }
+  h+='</div></div>';
+  h+='</div>';
+  return h;
+}
+
 function renderManage(){
-  const ath=DATA.athletes;let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px">'+(DATA.lotsGenerated?'<span style="font-size:10px;color:var(--green);padding:6px 10px;border:1px solid var(--green);border-radius:6px">✓ Lotes generados</span>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="sortByFlight()">Ordenar por Vuelo ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  const ath=DATA.athletes;let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">🎲 Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="sortByFlight()">Ordenar por Vuelo ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th><th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:38px">VLO</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:56px">BW</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:48px">RkSQ</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:48px">RkBP</th>';
   ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:62px">'+LIFT_S[l]+r+'</th>'})});
   h+='</tr></thead><tbody>';
   ath.forEach(a=>{
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3);'+(a.bombed?'opacity:.4':'')+'">';
-    h+='<td class="os" style="padding:6px 4px;text-align:center;color:var(--gold);font-weight:700">'+a.lot+'</td>';
-    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+a.name+'</div><div style="font-size:9px;color:var(--muted)">'+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</div></td>';
+    h+='<td style="padding:3px 2px;text-align:center"><input type="number" min="1" value="'+a.lot+'" onchange="setLot('+a.id+',this.value)" title="Editá el número de lote — si ya existe se hace swap" style="width:42px;padding:3px 2px;font-family:Oswald;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:13px"></td>';
+    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+a.name+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
     h+='<td style="padding:3px 2px"><select class="inp-sm" onchange="updA('+a.id+',\'flight\',this.value);R()" style="width:38px;padding:4px 1px;font-size:11px">'+['A','B','C','D','E','F'].map(f=>'<option '+(a.flight===f?'selected':'')+'>'+f+'</option>').join('')+'</select></td>';
     h+='<td style="padding:3px 2px;text-align:center">';
     if(a.weighedIn){
@@ -1365,7 +2492,7 @@ function renderResults(){
     const pos=catPos[a.id]||'\u2014';
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.25);'+(a.bombed?'opacity:.4':'')+'">';
     h+='<td class="os" style="padding:6px 4px;text-align:center;color:'+(typeof pos==="number"&&pos<=3?'var(--gold)':'var(--muted)')+';font-weight:700;font-size:14px">'+pos+'</td>';
-    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+a.name+'</div><div style="font-size:9px;color:var(--muted)">'+a.club+'</div></td>';
+    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+a.name+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+'</span></div></td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:11px">'+(a.bw||'\u2014')+'</td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:10px">'+(a.div||'\u2014')+'</td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:10px">'+(a.cat||'\u2014')+'</td>';
@@ -1936,9 +3063,42 @@ function findInDB(name,rut){
 }
 fetch('data.json').then(r=>r.json()).then(d=>{DB_FULL=d}).catch(()=>{});
 fetch('records.json').then(r=>r.json()).then(d=>{RECORDS=d}).catch(()=>console.warn('[FECHIPO] records.json no cargado'));
-fetch('nominas.json').then(r=>r.json()).then(n=>{DATA.events=n.events||[];if(!loaded)R()}).catch(()=>{});
+fetch('nominas.json').then(r=>r.json()).then(n=>{DATA.events=n.events||[];applyEventURLParam();if(!loaded)R()}).catch(()=>{});
 if(loaded){R()}
 else if(!DATA.events.length)R();
+
+// ── Accept ?evento=<id|name> URL param ──
+// If the URL asks for a specific event and it differs from the saved session,
+// force phase back to 'setup' so the user picks again (or auto-pick if match).
+function applyEventURLParam(){
+  try{
+    const p=new URLSearchParams(location.search).get('evento');
+    if(!p||!DATA.events?.length)return;
+    const want=decodeURIComponent(p);
+    const i=DATA.events.findIndex(e=>e.id===want||e.name===want);
+    if(i<0)return;
+    const wanted=DATA.events[i];
+    // TX widget mode: read-only. Just set DATA.event and subscribe to livecast_sync.
+    if(TX_MODE){
+      DATA.event=wanted;
+      // Subscribe to Firestore livecast_sync as soon as FB is ready.
+      const tryStart=()=>{if(!fbReady){setTimeout(tryStart,300);return}startFBSync();R();};
+      tryStart();
+      return;
+    }
+    // If already on this event with an active session, keep it.
+    if(DATA.event&&(DATA.event.id===wanted.id||DATA.event.name===wanted.name)){R();return}
+    // If there is an active session for a different event, do NOT auto-wipe it.
+    // Send the user to setup so they can explicitly pick and see the picker.
+    if(DATA.phase!=='setup'&&DATA.athletes?.length){
+      DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};
+      try{localStorage.removeItem(SAVE_KEY)}catch(e){}
+      R();return;
+    }
+    // Fresh state: pick requested event directly.
+    pickEvent(i);
+  }catch(e){console.warn('[LC] preselect err',e)}
+}
 
 
 function showLogin(){
@@ -1988,7 +3148,7 @@ function renderAtletaInfo(){
     h+='<div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+a.name+'</div>';
     if(codigo)h+='<div style="font-size:10px;color:var(--gold);font-family:Oswald;letter-spacing:.5px">'+codigo+'</div>';
     h+='<div style="font-size:11px;color:var(--muted);margin-top:2px">'+a.div+' · '+a.cat+'</div>';
-    h+='<div style="font-size:10px;color:var(--muted)">'+a.club+(debut?' · Debut '+debut:'')+'</div>';
+    h+='<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,16,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+(debut?' · Debut '+debut:'')+'</span></div>';
     h+='<span class="flight-badge" style="background:'+(FL_C[a.flight]||'#666')+';margin-top:4px;display:inline-block">Vuelo '+a.flight+'</span>';
     h+='</div></div>';
     

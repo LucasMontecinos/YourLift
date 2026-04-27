@@ -79,6 +79,7 @@ input,select,button,textarea{font-family:inherit;outline:none}
 </style>
 </head>
 <body>
+<script src="clubs.js"></script>
 <div id="app"><div class="login"><div class="login-c"><div class="spinner"></div><p style="text-align:center" id="loadingMsg">Cargando...</p><p id="loadingBtn" style="text-align:center;margin-top:12px;display:none"><button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #C41E3A;background:transparent;color:#C41E3A;cursor:pointer;font-size:13px">↻ Reintentar</button></p></div></div></div>
 
 <script>
@@ -109,7 +110,7 @@ input,select,button,textarea{font-family:inherit;outline:none}
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged,createUserWithEmailAndPassword} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {initializeApp as initSecondaryApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import {getFirestore,collection,getDocs,getDoc,doc,setDoc,updateDoc,deleteDoc,addDoc,query,where,orderBy,limit,onSnapshot,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import {getFirestore,collection,getDocs,getDoc,doc,setDoc,updateDoc,deleteDoc,deleteField,addDoc,query,where,orderBy,limit,onSnapshot,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
 const app=initializeApp(FB_CFG);
@@ -130,8 +131,17 @@ function _getPeerKey(a){
 }
 function _peerPerc(myTotal,key){const g=PEERS[key];if(!g)return null;const all=[...g.members.map(m=>m.total),myTotal].sort((a,b)=>b-a);const rank=all.indexOf(myTotal)+1;return{rank,n:all.length,pct:Math.round((1-rank/all.length)*100),g};}
 
-const ST={user:null,adminInfo:null,view:'dashboard',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[]};
+const ST={user:null,adminInfo:null,view:'dashboard',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{}};
 window.ST=ST;
+
+// HTML-escape helper — defensa contra XSS al inyectar datos en innerHTML
+function esc(s){
+  if(s==null)return'';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+window.esc=esc;
 
 // ═══════════════════════════════════════════
 // AUTH
@@ -197,6 +207,37 @@ window.doLogout=async function(){
   ST.user=null;ST.adminInfo=null;render();
 }
 
+// Crea una cuenta de entrenador: Firebase Auth user + doc coaches/{uid}.
+// Usa una "secondary app" para no cerrar la sesión del admin actual.
+// Uso desde la consola del navegador (tras login admin):
+//   await createCoach('coach@yourlift.cl', 'Passw0rd!', 'Nombre Apellido', 'Nacional', '12345678')
+window.createCoach=async function(email,password,nombre,grado,rut){
+  if(!ST.user) throw new Error('Debes estar autenticado como admin.');
+  if(!email||!password||!nombre) throw new Error('email, password y nombre son obligatorios.');
+  if(password.length<8) throw new Error('La contraseña debe tener al menos 8 caracteres.');
+  const secondary=initSecondaryApp(FB_CFG,'coachCreate_'+Date.now());
+  const secondaryAuth=getAuth(secondary);
+  try{
+    const cred=await createUserWithEmailAndPassword(secondaryAuth,email,password);
+    const uid=cred.user.uid;
+    await setDoc(doc(db,'coaches',uid),{
+      email:email.toLowerCase(),
+      nombre,
+      grado:grado||'',
+      rut:rut||'',
+      createdAt:serverTimestamp(),
+      createdBy:ST.user.email
+    });
+    try{await signOut(secondaryAuth);}catch(_){}
+    await logAction('coach_create','coaches/'+uid,null,{email,nombre,grado,rut});
+    console.log('✓ Coach creado:',email,'UID:',uid);
+    return uid;
+  }catch(e){
+    console.error('createCoach falló:',e.code||'',e.message);
+    throw e;
+  }
+}
+
 // ═══════════════════════════════════════════
 // DATA LOADING
 // ═══════════════════════════════════════════
@@ -237,6 +278,21 @@ async function loadAll(){
     ST.inscripciones.sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0));
   }catch(e){console.warn('[loadAll] inscripciones:',e.message);ST.inscripciones=[];}
 
+  // Load inscripciones_private (campos sensibles: pin, carnetURL, wadeURL).
+  // Solo admin puede leer. Se indexa por docId para merge rápido.
+  try{
+    const privSnap=await getDocs(collection(db,'inscripciones_private'));
+    ST.inscripcionesPrivate={};
+    privSnap.forEach(d=>{ST.inscripcionesPrivate[d.id]=d.data();});
+  }catch(e){console.warn('[loadAll] inscripciones_private:',e.message);ST.inscripcionesPrivate={};}
+
+  // Load edit_requests (solicitudes de edición pendientes de atletas).
+  try{
+    const reqSnap=await getDocs(collection(db,'edit_requests'));
+    ST.editRequests=reqSnap.docs.map(d=>({id:d.id,...d.data()}))
+      .sort((a,b)=>(b.ts?.seconds||0)-(a.ts?.seconds||0));
+  }catch(e){console.warn('[loadAll] edit_requests:',e.message);ST.editRequests=[];}
+
   // Real-time listeners (non-blocking, set up once)
   if(!window._inscListener){
     try{
@@ -247,11 +303,34 @@ async function loadAll(){
       },(e)=>console.warn('[listener] inscripciones:',e.message));
     }catch(e){console.warn('[loadAll] insc listener:',e.message);}
   }
+  if(!window._privListener){
+    try{
+      window._privListener=onSnapshot(collection(db,'inscripciones_private'),(snap)=>{
+        ST.inscripcionesPrivate={};
+        snap.forEach(d=>{ST.inscripcionesPrivate[d.id]=d.data();});
+      },(e)=>console.warn('[listener] inscripciones_private:',e.message));
+    }catch(e){console.warn('[loadAll] priv listener:',e.message);}
+  }
+  if(!window._editReqListener){
+    try{
+      window._editReqListener=onSnapshot(collection(db,'edit_requests'),(snap)=>{
+        ST.editRequests=snap.docs.map(d=>({id:d.id,...d.data()}))
+          .sort((a,b)=>(b.ts?.seconds||0)-(a.ts?.seconds||0));
+        if(ST.view==='editRequests'||ST.view==='dashboard')render();
+      },(e)=>console.warn('[listener] edit_requests:',e.message));
+    }catch(e){console.warn('[loadAll] edit_req listener:',e.message);}
+  }
   if(!window._eventosListener){
     try{
       window._eventosListener=onSnapshot(collection(db,'eventos'),(snap)=>{
-        ST.eventos=snap.docs.map(d=>({...d.data(),id:d.id}))
-          .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+        ST.eventos=snap.docs.map(d=>{
+          const e={...d.data(),id:d.id};
+          // Default: récords activos. En "Universitario" arrancan apagados.
+          if(typeof e.recordsEnabled!=='boolean'){
+            e.recordsEnabled=!/universitar/i.test(e.name||'');
+          }
+          return e;
+        }).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
         if(ST.view==='campeonatos'||ST.view==='dashboard')render();
       },(e)=>console.warn('[listener] eventos:',e.message));
     }catch(e){console.warn('[loadAll] eventos listener:',e.message);}
@@ -366,11 +445,37 @@ window.importNominaToFB=async function(eventName){
   const ev=ST.nominas.events?.find(e=>e.name===eventName);
   if(!ev){showToast('Evento no encontrado',null,true);return}
   if(!confirm(`Importar ${ev.athletes.length} atletas de "${eventName}" a Firebase?\n\nEsto los hará editables. Los duplicados (mismo RUT) se omiten.`))return;
-  
+
+  // Ensure the event doc exists in Firestore `eventos/` so public pages (index.html)
+  // can show it. Use the event name as the doc id (same convention as inscripciones.evento).
+  try{
+    const existingEv=ST.eventos.find(e=>e.id===eventName||e.name===eventName);
+    if(!existingEv){
+      await setDoc(doc(db,'eventos',eventName),{
+        id:eventName,
+        name:eventName,
+        date:ev.date||'',
+        closeDate:ev.closeDate||'',
+        location:ev.location||'',
+        org:ev.organizer||'',
+        days:ev.days||'',
+        status:'open',
+        extraCols:ev.extraCols||['modalidad'],
+        createdAt:serverTimestamp(),
+        updatedAt:serverTimestamp()
+      },{merge:true});
+      console.log('[import] Evento creado en Firestore:',eventName);
+    }
+  }catch(e){
+    console.error('Error creando evento:',e);
+    showToast('Error creando evento: '+(e.code||e.message),null,true);
+    return;
+  }
+
   // Get existing RUTs in Firebase for this event
   const existing=new Set(ST.inscripciones.filter(i=>i.evento===eventName).map(i=>(i.rut||'').replace(/[^0-9kK]/gi,'').toUpperCase()));
   
-  let imported=0,skipped=0;
+  let imported=0,skipped=0,errors=0,lastErr=null;
   for(const a of ev.athletes){
     const rutClean=(a.rut||'').replace(/[^0-9kK]/gi,'').toUpperCase();
     if(rutClean&&existing.has(rutClean)){skipped++;continue}
@@ -391,10 +496,53 @@ window.importNominaToFB=async function(eventName){
         importedFromJson:true
       });
       imported++;
-    }catch(e){console.warn('Error importing',a.nombre,e)}
+    }catch(e){
+      errors++; lastErr=e;
+      console.warn('Error importing',a.nombre,e);
+    }
   }
-  await logAction('import_nomina',eventName,null,`${imported} imported, ${skipped} skipped`);
-  showToast(`Importado: ${imported} atletas (${skipped} duplicados omitidos)`);
+  await logAction('import_nomina',eventName,null,`${imported} imported, ${skipped} skipped, ${errors} errors`);
+  if(errors){
+    showToast(`⚠️ ${imported} OK · ${skipped} dup · ${errors} ERR (${lastErr?.code||lastErr?.message||'desconocido'})`,null,true);
+  } else {
+    showToast(`Importado: ${imported} atletas (${skipped} duplicados omitidos)`);
+  }
+}
+
+// Crea (o actualiza) el doc en `eventos/{eventName}` a partir de la metadata
+// que vive en nominas.json. Útil para eventos cuyas inscripciones ya están en
+// Firebase pero que nunca tuvieron doc de evento (ej. cargados antes de que
+// existiera esta herramienta).
+window.syncEventoFromJson=async function(eventName){
+  const ev=ST.nominas.events?.find(e=>e.name===eventName);
+  if(!ev){showToast('Evento no encontrado en nominas.json',null,true);return}
+  const existing=ST.eventos.find(e=>e.id===eventName||e.name===eventName);
+  const msg=existing
+    ? `Actualizar metadata de "${eventName}" desde nominas.json?`
+    : `Crear el evento "${eventName}" en Firestore con la metadata de nominas.json?\n\nDespués vas a poder editar fechas/ubicación/organizador desde Campeonatos.`;
+  if(!confirm(msg))return;
+  try{
+    const docId=existing?.id||eventName;
+    const data={
+      id:docId,
+      name:eventName,
+      date:ev.date||'',
+      closeDate:ev.closeDate||'',
+      location:ev.location||'',
+      org:ev.organizer||ev.org||'',
+      days:ev.days||'',
+      status:existing?.status||'open',
+      extraCols:ev.extraCols||['modalidad'],
+      updatedAt:serverTimestamp()
+    };
+    if(!existing)data.createdAt=serverTimestamp();
+    await setDoc(doc(db,'eventos',docId),data,{merge:true});
+    await logAction(existing?'sync_evento_meta':'create_evento_from_json',docId,null,eventName);
+    showToast(existing?'✓ Metadata actualizada':'✅ Evento creado — ya editable en Campeonatos');
+  }catch(e){
+    console.error(e);
+    showToast('Error: '+(e.code||e.message),null,true);
+  }
 }
 
 window.editInsc=async function(insId,field){
@@ -477,6 +625,7 @@ window.deleteAthlete=async function(cod){
 // APPROVE / REJECT INSCRIPCIONES
 // ═══════════════════════════════════════════
 window.setStatus=async function(insId,status){
+  insId=decodeURIComponent(insId);
   const ins=ST.inscripciones.find(x=>x.id===insId);if(!ins)return;
   const old=ins.status;
   try{
@@ -491,13 +640,87 @@ window.setStatus=async function(insId,status){
 }
 
 window.deleteInsc=async function(insId){
+  insId=decodeURIComponent(insId);
   const ins=ST.inscripciones.find(x=>x.id===insId);if(!ins)return;
   if(!confirm(`¿Eliminar a ${ins.nombre} de la nómina?`))return;
   try{
     await deleteDoc(doc(db,'inscripciones',insId));
+    // Borrar también el doc privado asociado (pin, carnetURL, wadeURL).
+    // No falla si no existe.
+    try{await deleteDoc(doc(db,'inscripciones_private',insId));}catch(_){}
     await logAction('delete_inscripcion',insId,ins.nombre,'deleted',{evento:ins.evento,club:ins.club||''});
     showToast(`${ins.nombre} eliminado de nómina`);
   }catch(e){showToast('Error: '+e.message,null,true)}
+}
+
+// ═══════════════════════════════════════════
+// EDIT REQUESTS (solicitudes de edición de atletas)
+// ═══════════════════════════════════════════
+// El atleta crea un doc en edit_requests con RUT+PIN+cambios. Acá el admin
+// valida el PIN contra inscripciones_private y aplica los cambios.
+window.approveEditRequest=async function(reqId){
+  reqId=decodeURIComponent(reqId);
+  const req=ST.editRequests.find(r=>r.id===reqId);if(!req)return;
+  const priv=ST.inscripcionesPrivate[req.inscripcionId];
+  if(!priv){
+    if(!confirm(`No encontramos el doc privado para ${req.inscripcionId}. ¿Aplicar los cambios SIN validar el PIN? (úsalo solo si verificaste la identidad por otro medio)`))return;
+  }else if(priv.pin!==req.pin){
+    if(!confirm(`El PIN enviado (${req.pin}) NO coincide con el registrado. ¿Aplicar igual los cambios? (úsalo solo si verificaste la identidad por otro medio)`))return;
+  }
+  try{
+    // Aplicar cambios al doc público (solo campos permitidos).
+    const allowed=['nombre','codigo','sexo','fechaNac','division','categoria','modalidad','club','clubOtro','comuna','universidad'];
+    const updates={};
+    for(const k of allowed){if(req.changes&&req.changes[k]!==undefined)updates[k]=req.changes[k];}
+    if(Object.keys(updates).length){
+      await updateDoc(doc(db,'inscripciones',req.inscripcionId),updates);
+    }
+    await deleteDoc(doc(db,'edit_requests',reqId));
+    await logAction('approve_edit_request',req.inscripcionId,JSON.stringify(updates).substring(0,200),'applied',{rut:req.rut});
+    showToast('✓ Solicitud aplicada');
+  }catch(e){showToast('Error: '+e.message,null,true)}
+}
+
+window.rejectEditRequest=async function(reqId){
+  reqId=decodeURIComponent(reqId);
+  const req=ST.editRequests.find(r=>r.id===reqId);if(!req)return;
+  if(!confirm(`¿Rechazar la solicitud de edición de ${req.rut}?`))return;
+  try{
+    await deleteDoc(doc(db,'edit_requests',reqId));
+    await logAction('reject_edit_request',req.inscripcionId,req.rut,'rejected');
+    showToast('Solicitud rechazada');
+  }catch(e){showToast('Error: '+e.message,null,true)}
+}
+
+// Helper de migración one-shot: copia pin/carnetURL/wadeURL de inscripciones
+// viejas a inscripciones_private y limpia el doc público. Correr UNA VEZ
+// desde consola tras deploy de reglas nuevas:
+//   await migrateToPrivateCollection()
+window.migrateToPrivateCollection=async function(){
+  if(!ST.user) throw new Error('Debes estar autenticado como admin.');
+  let migrated=0,skipped=0,errors=0;
+  for(const ins of ST.inscripciones){
+    const priv={};
+    if(ins.pin)priv.pin=String(ins.pin);
+    if(ins.carnetURL)priv.carnetURL=ins.carnetURL;
+    if(ins.wadeURL)priv.wadeURL=ins.wadeURL;
+    if(!Object.keys(priv).length){skipped++;continue;}
+    priv.ts=serverTimestamp();
+    try{
+      // Escribir doc privado (merge para no pisar si ya existe).
+      await setDoc(doc(db,'inscripciones_private',ins.id),priv,{merge:true});
+      // Limpiar campos sensibles del doc público.
+      const cleanup={};
+      if(ins.pin!==undefined)cleanup.pin=deleteField();
+      if(ins.carnetURL!==undefined)cleanup.carnetURL=deleteField();
+      if(ins.wadeURL!==undefined)cleanup.wadeURL=deleteField();
+      await updateDoc(doc(db,'inscripciones',ins.id),cleanup);
+      migrated++;
+    }catch(e){errors++;console.warn('migrate fail',ins.id,e.message);}
+  }
+  await logAction('migrate_private',null,null,`migrated=${migrated} skipped=${skipped} errors=${errors}`);
+  console.log(`Migración: ${migrated} movidos, ${skipped} omitidos (sin campos sensibles), ${errors} errores.`);
+  return {migrated,skipped,errors};
 }
 
 // ═══════════════════════════════════════════
@@ -603,6 +826,7 @@ window.resetLivecast=async function(eventName){
 // CRONOGRAMA / FLIGHTS
 // ═══════════════════════════════════════════
 window.assignFlight=async function(insId,flight){
+  insId=decodeURIComponent(insId);
   const ins=ST.inscripciones.find(x=>x.id===insId);if(!ins)return;
   const old=ins.flight||'';
   try{
@@ -657,6 +881,9 @@ function render(){
       <button class="side-btn ${ST.view==='athletes'?'active':''}" onclick="go('athletes')"><span class="icon">🏋️</span>Atletas (DB)</button>
       <button class="side-btn ${ST.view==='nominas'?'active':''}" onclick="go('nominas')"><span class="icon">📋</span>Nóminas</button>
       <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')"><span class="icon">✓</span>Aprobaciones</button>
+      <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')"><span class="icon">✏️</span>Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
+      <button class="side-btn ${ST.view==='entrenadores'?'active':''}" onclick="go('entrenadores')"><span class="icon">👥</span>Entrenadores</button>
+      <button class="side-btn ${ST.view==='importar'?'active':''}" onclick="go('importar')"><span class="icon">📥</span>Importar LiftingCast</button>
       <button class="side-btn ${ST.view==='cronograma'?'active':''}" onclick="go('cronograma')"><span class="icon">✈️</span>Cronograma</button>
       <div class="side-label">Sistema</div>
       <a href="cronograma.html" target="_blank" class="side-btn" style="text-decoration:none"><span class="icon">📅</span>Cronograma</a>
@@ -677,6 +904,9 @@ function render(){
   else if(ST.view==='athletes')content=renderAthletes();
   else if(ST.view==='nominas')content=renderNominas();
   else if(ST.view==='approvals')content=renderApprovals();
+  else if(ST.view==='editRequests')content=renderEditRequests();
+  else if(ST.view==='entrenadores')content=renderEntrenadores();
+  else if(ST.view==='importar')content=renderImportar();
   else if(ST.view==='cronograma')content=renderCronograma();
   else if(ST.view==='campeonatos')content=renderCampeonatos();
   else if(ST.view==='exports')content=renderExports();
@@ -1236,6 +1466,8 @@ function renderNominas(){
   
   const inFirebase=fbEvents.includes(ST.filterEv);
   const jsonEv=ST.nominas.events?.find(e=>e.name===ST.filterEv);
+  const hasEventoDoc=ST.eventos.some(e=>e.id===ST.filterEv||e.name===ST.filterEv);
+  const needsMetaSync=!!jsonEv && !hasEventoDoc;
   
   let filtered;
   if(inFirebase){
@@ -1259,8 +1491,10 @@ function renderNominas(){
       </select>
       ${inFirebase?`<button class="btn btn-b" onclick="sortNominaByEvent('${ST.filterEv}')">⇅ ORDENAR</button>`:''}
       ${!inFirebase&&jsonEv?`<button class="btn btn-g" onclick="importNominaToFB('${ST.filterEv.replace(/'/g,"\\'")}')">📥 IMPORTAR A FIREBASE</button>`:''}
+      ${inFirebase&&needsMetaSync?`<button class="btn btn-g" onclick="syncEventoFromJson('${ST.filterEv.replace(/'/g,"\\'")}')" title="Crea el doc en eventos/ con la metadata de nominas.json — habilita la edición de fechas desde Campeonatos">📌 SINCRONIZAR METADATA</button>`:''}
     </div>
     ${!inFirebase&&jsonEv?'<div class="card" style="background:rgba(212,168,67,.08);border-color:rgba(212,168,67,.3);padding:12px 16px;margin-bottom:12px"><span style="color:var(--gold);font-size:12px">⚠️ Esta nómina viene de nominas.json (estática). Para editarla en tiempo real, importarla a Firebase.</span></div>':''}
+    ${inFirebase&&needsMetaSync?'<div class="card" style="background:rgba(212,168,67,.08);border-color:rgba(212,168,67,.3);padding:12px 16px;margin-bottom:12px"><span style="color:var(--gold);font-size:12px">⚠️ Las inscripciones están en Firebase pero falta el doc de evento en <code>eventos/</code>. Sin eso no podés editar fecha/cierre/ubicación desde <b>Campeonatos</b>. Tocá <b>📌 SINCRONIZAR METADATA</b>.</span></div>':''}
     <div class="card" style="padding:0;overflow-x:auto">
       <table class="tbl">
         <tr><th>#</th><th>Nombre</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Modalidad</th><th>Club</th><th>Estado</th><th></th></tr>
@@ -1268,16 +1502,17 @@ function renderNominas(){
           const editable=!i._json;
           const click=(f)=>editable?`onclick="editInsc('${i.id}','${f}')"`:'';
           const cls=editable?'editable':'';
+          const sid=encodeURIComponent(i.id||'');
           return `<tr>
             <td style="color:var(--muted);font-family:Oswald">${idx+1}</td>
-            <td>${i.nombre}<br><span style="font-size:9px;color:var(--muted)">${i.rut||''}</span></td>
-            <td><span class="${cls}" ${click('sexo')}>${i.sexo||'?'}</span></td>
-            <td><span class="${cls}" ${click('division')}>${i.division||'—'}</span></td>
-            <td><span class="${cls}" ${click('categoria')}>${i.categoria||'—'}</span></td>
-            <td><span class="${cls}" ${click('modalidad')}>${i.modalidad||'—'}</span></td>
-            <td><span class="${cls}" ${click('club')}>${i.club||'—'}</span></td>
-            <td><span class="badge ${i.status==='approved'?'b-g':i.status==='pending'?'b-y':'b-r'}">${i.status||'approved'}</span></td>
-            <td>${editable?`<button onclick="deleteInsc('${i.id}')" style="background:transparent;border:1px solid rgba(239,68,68,.3);color:var(--red);padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald" title="Eliminar">✕</button>`:''}</td>
+            <td>${esc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${esc(i.rut||'')}</span></td>
+            <td><span class="${cls}" ${click('sexo')}>${esc(i.sexo||'?')}</span></td>
+            <td><span class="${cls}" ${click('division')}>${esc(i.division||'—')}</span></td>
+            <td><span class="${cls}" ${click('categoria')}>${esc(i.categoria||'—')}</span></td>
+            <td><span class="${cls}" ${click('modalidad')}>${esc(i.modalidad||'—')}</span></td>
+            <td><span class="${cls}" ${click('club')} style="display:inline-flex;align-items:center;gap:5px">${window.clubLogoImg?window.clubLogoImg(i.club,18,'background:var(--bg);padding:1px;'):''}${esc(i.club||'—')}</span></td>
+            <td><span class="badge ${i.status==='approved'?'b-g':i.status==='pending'?'b-y':'b-r'}">${esc(i.status||'approved')}</span></td>
+            <td>${editable?`<button onclick="deleteInsc('${sid}')" style="background:transparent;border:1px solid rgba(239,68,68,.3);color:var(--red);padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald" title="Eliminar">✕</button>`:''}</td>
           </tr>`;
         }).join('')}
       </table>
@@ -1295,13 +1530,14 @@ function renderApprovals(){
         <tr><th>Fecha</th><th>Nombre</th><th>Evento</th><th>Cat.</th><th>Club</th><th>Acción</th></tr>
         ${pend.map(i=>{
           const d=i.timestamp?new Date(i.timestamp.seconds?i.timestamp.seconds*1000:i.timestamp):null;
+          const sid=encodeURIComponent(i.id||'');
           return `<tr>
             <td style="font-size:10px;color:var(--muted)">${d?d.toLocaleDateString('es-CL'):'—'}</td>
-            <td>${i.nombre}<br><span style="font-size:9px;color:var(--muted)">${i.sexo||''} · ${i.division||''}</span></td>
-            <td style="font-size:10px">${i.evento||''}</td>
-            <td><span class="badge b-y">${i.categoria||'?'}</span></td>
-            <td style="font-size:11px">${i.club||'—'}</td>
-            <td><button class="btn btn-g" style="padding:5px 10px;font-size:10px" onclick="setStatus('${i.id}','approved')">✓ APROBAR</button> <button class="btn btn-r" style="padding:5px 10px;font-size:10px" onclick="setStatus('${i.id}','rejected')">✗ RECHAZAR</button></td>
+            <td>${esc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${esc(i.sexo||'')} · ${esc(i.division||'')}</span></td>
+            <td style="font-size:10px">${esc(i.evento||'')}</td>
+            <td><span class="badge b-y">${esc(i.categoria||'?')}</span></td>
+            <td style="font-size:11px"><span style="display:inline-flex;align-items:center;gap:5px">${window.clubLogoImg?window.clubLogoImg(i.club,18,'background:var(--bg);padding:1px;'):''}${esc(i.club||'—')}</span></td>
+            <td><button class="btn btn-g" style="padding:5px 10px;font-size:10px" onclick="setStatus('${sid}','approved')">✓ APROBAR</button> <button class="btn btn-r" style="padding:5px 10px;font-size:10px" onclick="setStatus('${sid}','rejected')">✗ RECHAZAR</button></td>
           </tr>`;
         }).join('')}
       </table>
@@ -1309,43 +1545,120 @@ function renderApprovals(){
     </div>`;
 }
 
+function renderEditRequests(){
+  const reqs=ST.editRequests||[];
+  const rows=reqs.map(r=>{
+    const ins=ST.inscripciones.find(x=>x.id===r.inscripcionId);
+    const priv=ST.inscripcionesPrivate[r.inscripcionId];
+    const rid=encodeURIComponent(r.id);
+    const pinOK=priv?(priv.pin===r.pin):null;
+    const pinBadge=pinOK===true
+      ?`<span style="background:rgba(34,197,94,.15);color:#22c55e;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700">PIN ✓</span>`
+      :pinOK===false
+        ?`<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700">PIN ✗</span>`
+        :`<span style="background:rgba(160,160,160,.15);color:var(--muted);padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700">sin privado</span>`;
+    const d=r.ts?new Date(r.ts.seconds?r.ts.seconds*1000:r.ts):null;
+    const changes=r.changes||{};
+    const changesHtml=Object.keys(changes).map(k=>{
+      const cur=ins?ins[k]:undefined;
+      const nv=changes[k];
+      const same=String(cur||'')===String(nv||'');
+      return `<div style="padding:2px 0;${same?'opacity:.5':''}"><span style="color:var(--muted);font-size:10px">${esc(k)}:</span> <span style="text-decoration:${same?'none':'line-through'};color:var(--muted);font-size:11px">${esc(String(cur||'—'))}</span> → <span style="color:${same?'var(--muted)':'var(--gold)'};font-size:11px;font-weight:600">${esc(String(nv||'—'))}</span></div>`;
+    }).join('');
+    return `<tr>
+      <td style="font-size:10px;color:var(--muted)">${d?d.toLocaleString('es-CL'):'—'}</td>
+      <td>${esc(ins?ins.nombre:'(?)')}<br><span style="font-size:9px;color:var(--muted)">${esc(r.rut||'')}</span></td>
+      <td style="font-size:10px">${esc(ins?ins.evento:r.inscripcionId)}</td>
+      <td>${pinBadge}<div style="font-size:10px;color:var(--muted);margin-top:2px">enviado: ${esc(r.pin||'')}</div></td>
+      <td style="font-size:11px;max-width:340px">${changesHtml||'<span style="color:var(--muted);font-size:10px">sin cambios</span>'}</td>
+      <td>
+        <button class="btn btn-g" style="padding:5px 10px;font-size:10px" onclick="approveEditRequest('${rid}')">✓ APROBAR</button>
+        <button class="btn btn-r" style="padding:5px 10px;font-size:10px;margin-top:4px" onclick="rejectEditRequest('${rid}')">✗ RECHAZAR</button>
+      </td>
+    </tr>`;
+  }).join('');
+  return `
+    <div class="h1">Solicitudes de edición</div>
+    <p class="subtitle">${reqs.length} solicitudes pendientes · el PIN se valida contra inscripciones_private</p>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="tbl">
+        <tr><th>Fecha</th><th>Atleta</th><th>Evento</th><th>PIN</th><th>Cambios propuestos</th><th>Acción</th></tr>
+        ${rows}
+      </table>
+      ${reqs.length===0?'<div class="empty">No hay solicitudes pendientes 🎉</div>':''}
+    </div>`;
+}
+
 function renderCronograma(){
-  const events=[...new Set(ST.inscripciones.map(i=>i.evento))].filter(Boolean);
+  // Source events from BOTH eventos/ collection and inscripciones, so that
+  // events imported to Firebase but without inscripciones still appear.
+  const evNames=new Set();
+  (ST.eventos||[]).filter(e=>e.status!=='archived').forEach(e=>evNames.add(e.name||e.id));
+  ST.inscripciones.forEach(i=>i.evento&&evNames.add(i.evento));
+  const events=[...evNames];
   if(!ST.filterEv&&events.length)ST.filterEv=events[0];
+  if(events.length&&!events.includes(ST.filterEv))ST.filterEv=events[0];
   const filtered=ST.inscripciones.filter(i=>i.evento===ST.filterEv&&i.status==='approved');
   const flights=['A','B','C','D','E','F'];
+  // Find event ID for public cronograma.html link
+  const evObj=(ST.eventos||[]).find(e=>e.name===ST.filterEv||e.id===ST.filterEv);
+  const publicLinkId=encodeURIComponent(evObj?.id||ST.filterEv||'');
   return `
     <div class="h1">Cronograma — Asignación de vuelos</div>
     <p class="subtitle">Asigna atletas a vuelos · ${filtered.length} aprobados en evento</p>
-    <div class="search-box">
-      <select class="inp" onchange="ST.filterEv=this.value;render()">
-        ${events.map(e=>`<option value="${e}" ${ST.filterEv===e?'selected':''}>${e}</option>`).join('')}
+    <div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <label style="font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px">CAMPEONATO:</label>
+      <select class="inp" onchange="ST.filterEv=this.value;render()" style="min-width:260px;flex:1">
+        ${events.length===0?'<option>— Sin campeonatos —</option>':events.map(e=>`<option value="${esc(e)}" ${ST.filterEv===e?'selected':''}>${esc(e)}</option>`).join('')}
       </select>
+      ${publicLinkId?`<a href="cronograma.html?evento=${publicLinkId}" target="_blank" class="btn btn-o" style="padding:6px 12px;font-size:11px;text-decoration:none">📅 Abrir vista pública</a>`:''}
     </div>
     <div class="card" style="padding:0;overflow-x:auto">
       <table class="tbl">
         <tr><th>#</th><th>Nombre</th><th>Cat.</th><th>Sexo</th><th>Vuelo asignado</th></tr>
-        ${filtered.map((i,idx)=>`<tr>
+        ${filtered.map((i,idx)=>{const sid=encodeURIComponent(i.id||'');return `<tr>
           <td style="color:var(--muted)">${idx+1}</td>
-          <td>${i.nombre}</td>
-          <td><span class="badge b-y">${i.categoria||'?'}</span></td>
-          <td>${(i.sexo||'?').substring(0,1)}</td>
-          <td>${flights.map(f=>`<button onclick="assignFlight('${i.id}','${f}')" style="background:${i.flight===f?'var(--accent)':'transparent'};color:${i.flight===f?'#fff':'var(--muted)'};border:1px solid var(--border);padding:4px 9px;border-radius:5px;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">${f}</button>`).join('')}</td>
-        </tr>`).join('')}
+          <td>${esc(i.nombre)}</td>
+          <td><span class="badge b-y">${esc(i.categoria||'?')}</span></td>
+          <td>${esc((i.sexo||'?').substring(0,1))}</td>
+          <td>${flights.map(f=>`<button onclick="assignFlight('${sid}','${f}')" style="background:${i.flight===f?'var(--accent)':'transparent'};color:${i.flight===f?'#fff':'var(--muted)'};border:1px solid var(--border);padding:4px 9px;border-radius:5px;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">${f}</button>`).join('')}</td>
+        </tr>`;}).join('')}
       </table>
-      ${filtered.length===0?'<div class="empty">Sin atletas aprobados</div>':''}
+      ${filtered.length===0?'<div class="empty">Sin atletas aprobados en este campeonato</div>':''}
     </div>`;
 }
 
 function renderLivecast(){
-  const events=[...new Set(ST.inscripciones.map(i=>i.evento))].filter(Boolean);
+  // Source events from BOTH eventos/ collection and inscripciones.
+  const evMap=new Map();
+  (ST.eventos||[]).filter(e=>e.status!=='archived').forEach(e=>{
+    const label=e.name||e.id;
+    evMap.set(label,{label,id:e.id,name:e.name});
+  });
+  ST.inscripciones.forEach(i=>{
+    if(i.evento&&!evMap.has(i.evento)){
+      const m=(ST.eventos||[]).find(e=>e.id===i.evento||e.name===i.evento);
+      evMap.set(i.evento,{label:i.evento,id:m?.id||i.evento,name:m?.name||i.evento});
+    }
+  });
+  const events=[...evMap.values()];
   return `
     <div class="h1">LiveCast — Gestión</div>
-    <p class="subtitle">Resetea datos de LiveCast por campeonato</p>
+    <p class="subtitle">Abre el LiveCast de un campeonato o resetea sus datos en vivo</p>
     <div class="card">
-      <div class="h2">Resetear LiveCast</div>
-      <p style="color:var(--muted);font-size:12px;margin-bottom:14px">Borra TODOS los datos en vivo (pesos, intentos, vuelos) de un campeonato. Útil cuando termina la competencia o si hubo un error grave.</p>
-      ${events.map(e=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border)"><span>${e}</span><button class="btn btn-r" onclick="resetLivecast('${e.replace(/'/g,"\\'")}')">🗑️ RESETEAR</button></div>`).join('')}
+      <div class="h2">Campeonatos</div>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:14px">Elegí el campeonato que querés abrir en LiveCast, o resetealo si terminó la competencia.</p>
+      ${events.length===0?'<div class="empty">Sin campeonatos</div>':events.map(ev=>{
+        const safeLabel=ev.label.replace(/'/g,"\\'");
+        const urlEv=encodeURIComponent(ev.id||ev.name||ev.label);
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+          <span style="flex:1;min-width:180px">${esc(ev.label)}</span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <a href="livecast.html?evento=${urlEv}" target="_blank" class="btn btn-b" style="padding:6px 12px;font-size:11px;text-decoration:none">📡 Abrir LiveCast</a>
+            <button class="btn btn-r" onclick="resetLivecast('${safeLabel}')" style="padding:6px 12px;font-size:11px">🗑️ Resetear</button>
+          </div>
+        </div>`;
+      }).join('')}
     </div>`;
 }
 
@@ -1470,6 +1783,13 @@ function renderCampeonatos(){
             <option value="universidad" ${(editing.extraCols||[]).includes('universidad')?'selected':''}>Universidad</option>
           </select>
         </label>
+        <label class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(212,168,67,.05);border:1px solid rgba(212,168,67,.3);border-radius:8px">
+          <input type="checkbox" id="ef_recordsEnabled" ${(editing.recordsEnabled!==false)?'checked':''} style="width:18px;height:18px;cursor:pointer">
+          <div>
+            <div style="font-weight:600;color:var(--text)">🏆 Detectar récords nacionales</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Si está activo, en cada good lift se compara contra <code>records.json</code> y se muestra alerta + badge giratorio en OBS. <b>Desactivá para Universitario u otros torneos sin récords oficiales.</b></div>
+          </div>
+        </label>
       </div>
       ${!isNew?`<div style="margin-top:14px;padding:10px 14px;background:rgba(30,58,95,.3);border-radius:8px;font-size:12px;color:var(--muted)">
         <span style="color:var(--text)">📊 Estado actual:</span>
@@ -1527,8 +1847,9 @@ function renderCampeonatos(){
         </div>
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
           <a href="inscripcion.html" target="_blank" style="font-size:10px;color:var(--blue);text-decoration:none;padding:3px 8px;border:1px solid rgba(59,130,246,.3);border-radius:4px">🔗 Formulario público</a>
-          <a href="cronograma.html" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">📅 Cronograma</a>
-          <a href="livecast.html" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">📡 LiveCast</a>
+          <a href="cronograma.html?evento=${encodeURIComponent(ev.id)}" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">📅 Cronograma</a>
+          <a href="livecast.html?evento=${encodeURIComponent(ev.id)}" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">📡 LiveCast (operador)</a>
+          <button onclick="copyPublicLink('${ev.id}',this)" style="font-size:10px;color:var(--gold);background:transparent;text-decoration:none;padding:3px 8px;border:1px solid rgba(212,168,67,.4);border-radius:4px;cursor:pointer;font-family:inherit">🔗 Link público en vivo</button>
         </div>
       </div>`;
     }).join('')}
@@ -1537,7 +1858,7 @@ function renderCampeonatos(){
 
 // ── CRUD helpers ────────────────────────────────────────────
 window.newEvento = function(){
-  ST.eventoForm = {id:'',name:'',date:'',closeDate:'',location:'',org:'',days:'',status:'open',extraCols:['modalidad']};
+  ST.eventoForm = {id:'',name:'',date:'',closeDate:'',location:'',org:'',days:'',status:'open',extraCols:['modalidad'],recordsEnabled:true};
   ST.eventoFormMode = 'create';
   render();
 };
@@ -1561,12 +1882,13 @@ window.saveEvento = async function(){
   const org       = document.getElementById('ef_org').value.trim();
   const days      = document.getElementById('ef_days').value.trim();
   const extra     = document.getElementById('ef_extra').value;
+  const recordsEnabled = document.getElementById('ef_recordsEnabled').checked;
 
   if(!id || !name){ showToast('ID y nombre son obligatorios', null, true); return; }
   if(isNew && ST.eventos.find(e=>e.id===id)){ showToast('Ya existe un campeonato con ese ID', null, true); return; }
 
   const data = {id, name, date, closeDate, location, org, days, status,
-    extraCols: [extra], updatedAt: serverTimestamp()};
+    extraCols: [extra], recordsEnabled, updatedAt: serverTimestamp()};
   if(isNew) data.createdAt = serverTimestamp();
 
   try{
@@ -1576,6 +1898,25 @@ window.saveEvento = async function(){
     ST.eventoForm = null;
     render();
   }catch(e){ showToast('Error: '+e.message, null, true); console.error(e); }
+};
+
+window.copyPublicLink = function(id, btn){
+  const base = location.origin + location.pathname.replace(/[^/]+$/, '');
+  const url = base + 'livecast.html?evento=' + encodeURIComponent(id);
+  const ok = ()=>{
+    if(btn){
+      const t=btn.textContent;
+      btn.textContent='✓ Copiado — pegalo en WhatsApp';
+      btn.style.color='var(--green)';
+      btn.style.borderColor='var(--green)';
+      setTimeout(()=>{btn.textContent=t;btn.style.color='var(--gold)';btn.style.borderColor='rgba(212,168,67,.4)'},2200);
+    }
+  };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(ok).catch(()=>prompt('Copia este link:',url));
+  } else {
+    prompt('Copia este link:',url);
+  }
 };
 
 window.closeNomina = async function(id){
@@ -1880,10 +2221,13 @@ function renderAthleteProfile(){
     const W=460,H=90,PX=8,PY=8;
     const gls=glHistory.map(c=>c.resultado.glp||c.resultado.gl||0);
     const maxG=Math.max(...gls),minG=Math.min(...gls.filter(v=>v>0));
+    const catPalette=['#D4A843','#3B82F6','#22C55E','#F59E0B','#C41E3A','#A78BFA','#F472B6'];
+    const uniqueCats=[...new Set(glHistory.map(c=>(c.categoria||'').trim()).filter(Boolean))];
+    const catColor=c=>{const i=uniqueCats.indexOf((c||'').trim());return i>=0?catPalette[i%catPalette.length]:'#D4A843'};
     const pts=glHistory.map((c,i)=>{
       const x=PX+i*(W-PX*2)/(glHistory.length-1);
       const y=PY+(H-PY*2)*(1-(gls[i]-minG)/Math.max(maxG-minG,1));
-      return{x,y,v:gls[i],ev:c.evento||'',fecha:c.fecha||''};
+      return{x,y,v:gls[i],ev:c.evento||'',fecha:c.fecha||'',cat:(c.categoria||'').trim()};
     });
     const poly=pts.map(p=>p.x+','+p.y).join(' ');
     const area=PX+','+H+' '+poly+' '+pts[pts.length-1].x+','+H;
@@ -1895,10 +2239,14 @@ function renderAthleteProfile(){
         </linearGradient></defs>
         <polygon points="${area}" fill="url(#gg2)"/>
         <polyline points="${poly}" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-        ${pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="4" fill="var(--gold)" stroke="var(--card)" stroke-width="2"/>
+        ${pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="${catColor(p.cat)}" stroke="var(--card)" stroke-width="2"/>
           <text x="${p.x}" y="${p.y-8}" text-anchor="middle" font-size="9" fill="rgba(212,168,67,.9)" font-family="Oswald" font-weight="700">${p.v}</text>
           <text x="${p.x}" y="${H+16}" text-anchor="middle" font-size="8" fill="rgba(120,143,166,.7)">${(p.ev.match(/20\d\d/)||[''])[0]}</text>`).join('')}
-      </svg></div>`;
+      </svg>
+      ${uniqueCats.length>1?`<div style="display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:center;font-size:10px;color:var(--muted);margin-top:6px;padding-top:8px;border-top:1px solid rgba(30,58,95,.3)">
+        ${uniqueCats.map(cat=>`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:${catColor(cat)};display:inline-block"></span>${cat}</span>`).join('')}
+      </div>`:''}
+    </div>`;
   }
 
   // ── Peer comparison ───────────────────────────────────────
@@ -1965,7 +2313,7 @@ function renderAthleteProfile(){
       h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(30,58,95,.3)">
         <div>
           <div style="font-weight:600;font-size:13px">${evName}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">${i.division||'—'} · ${i.categoria||'—'} · ${i.modalidad||'—'} · ${i.club||'—'}</div>
+          <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-top:2px"><span>${i.division||'—'} · ${i.categoria||'—'} · ${i.modalidad||'—'} · </span>${window.clubLogoImg?window.clubLogoImg(i.club,16,'background:var(--bg);padding:1px;'):''}<span>${i.club||'—'}</span></div>
         </div>
         <span class="badge ${ok?'b-g':'b-y'}" style="flex-shrink:0;margin-left:12px">${ok?'✓ Confirmado':'⏳ Pendiente'}</span>
       </div>`;
@@ -2054,6 +2402,381 @@ function checkRecord(total,bw,categoria,division,modalidad,sexo,lift){
   const rec=matches[0];
   if(total>rec.marca)return{...rec,newMarca:total};
   return null;
+}
+
+// ─── IMPORTADOR LiftingCast (CSV → inscripciones) ─────────────
+let _impState = {evento:'', csvText:'', parsed:null, status:'', preview:null};
+
+// Parser de CSV con soporte para campos entre comillas y delimitador auto
+function _impParseCsv(text){
+  if(!text) return {headers:[], rows:[]};
+  text = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').trim();
+  // Auto-detectar delimitador: , o ; o tab
+  const firstLine = text.split('\n')[0];
+  const delim = (firstLine.split('\t').length > firstLine.split(',').length && firstLine.split('\t').length > firstLine.split(';').length) ? '\t'
+              : (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
+  const lines = text.split('\n').filter(l=>l.trim());
+  const parseLine = (line) => {
+    const out = []; let cur = ''; let q = false;
+    for(let i=0;i<line.length;i++){
+      const c = line[i];
+      if(c === '"'){
+        if(q && line[i+1] === '"'){ cur += '"'; i++; }
+        else q = !q;
+      } else if(c === delim && !q){
+        out.push(cur); cur = '';
+      } else cur += c;
+    }
+    out.push(cur);
+    return out.map(s=>s.trim());
+  };
+  const headers = parseLine(lines[0]).map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,''));
+  const rows = lines.slice(1).map(parseLine);
+  return {headers, rows, delim};
+}
+
+// Mapeo de columnas LiftingCast (acepta varias variantes) → campos LiveCast
+function _impMap(headers){
+  const find = (...cands)=>{
+    for(const c of cands){
+      const norm = c.toLowerCase().replace(/[^a-z0-9]/g,'');
+      const idx = headers.indexOf(norm);
+      if(idx>=0) return idx;
+    }
+    return -1;
+  };
+  return {
+    nombre: find('lifter','liftername','name','nombre','fullname'),
+    rut:    find('rut','memberid','memberno','lifterid','usapl','member','license'),
+    sexo:   find('sex','gender','sexo','gen'),
+    edad:   find('age','edad'),
+    bw:     find('bwkg','bw','bodyweight','bodyweightkg','weight','bweight'),
+    cat:    find('bwclass','weightclass','class','wtclass','categoria','category','divisionclass'),
+    div:    find('division','agedivision','agedivisn','divname','divisn'),
+    mod:    find('equipment','eq','equip','modalidad','modality','rawequiped','tested'),
+    club:   find('team','club','gym','equipo'),
+    flight: find('flight','vuelo','session','sessionletter','platform','day'),
+    lot:    find('lot','lotnumber','lotno','platformorder','order','sessionorder'),
+    s1: find('squat1kg','s1','squat1','sq1','squatopener'),
+    s2: find('squat2kg','s2','squat2','sq2'),
+    s3: find('squat3kg','s3','squat3','sq3'),
+    b1: find('bench1kg','b1','bench1','bp1','benchopener'),
+    b2: find('bench2kg','b2','bench2','bp2'),
+    b3: find('bench3kg','b3','bench3','bp3'),
+    d1: find('deadlift1kg','d1','dead1','deadlift1','dl1','deadliftopener'),
+    d2: find('deadlift2kg','d2','dead2','deadlift2','dl2'),
+    d3: find('deadlift3kg','d3','dead3','deadlift3','dl3'),
+  };
+}
+
+function _impNormalize(row, m){
+  const get = i => i>=0 && i<row.length ? (row[i]||'').trim() : '';
+  const nombre = get(m.nombre);
+  if(!nombre) return null;
+  // Sexo
+  let sexo = get(m.sexo).toUpperCase();
+  if(sexo==='M'||sexo==='MALE'||sexo==='MAN'||sexo==='HOMBRE') sexo='Hombre';
+  else if(sexo==='F'||sexo==='FEMALE'||sexo==='WOMAN'||sexo==='MUJER') sexo='Mujer';
+  else sexo='';
+  // Modalidad
+  const modRaw = get(m.mod).toLowerCase();
+  let modalidad = 'Powerlifting Classic';
+  if(modRaw.includes('eq')||modRaw.includes('single')||modRaw.includes('multi')||modRaw.includes('equipped')||modRaw.includes('equipado')){
+    modalidad = 'Powerlifting Equipped';
+  }
+  // Categoría: extraer el número y formatear "-83 kg (Hombre)"
+  let catRaw = get(m.cat);
+  let categoria = catRaw;
+  const catMatch = catRaw.match(/([+\-]?\d+\.?\d*)/);
+  if(catMatch && sexo){
+    const num = catMatch[1];
+    const isPlus = catRaw.includes('+') || /\d+\+/.test(catRaw);
+    categoria = (isPlus?'':'-') + num + (isPlus?'+':'') + ' kg ('+sexo+')';
+  }
+  // División: normalizar a Open/Junior/Subjunior/Master I-IV
+  const divRaw = get(m.div).toLowerCase();
+  let division = get(m.div);
+  if(divRaw.includes('open')) division='Open';
+  else if(divRaw.includes('subjun')||divRaw.includes('sub-jun')||divRaw.includes('sub jun')||divRaw.includes('teen')) division='Sub Junior';
+  else if(divRaw.includes('jun')) division='Junior';
+  else if(divRaw.includes('master 4')||divRaw.includes('master iv')||divRaw.includes('m4')) division='Master IV';
+  else if(divRaw.includes('master 3')||divRaw.includes('master iii')||divRaw.includes('m3')) division='Master III';
+  else if(divRaw.includes('master 2')||divRaw.includes('master ii')||divRaw.includes('m2')) division='Master II';
+  else if(divRaw.includes('master')||divRaw.includes('m1')) division='Master I';
+  // Flight: tomar la primera letra A-F si existe
+  let flight = get(m.flight).toUpperCase().match(/^[A-F]/)?.[0] || 'A';
+  // Lot
+  const lotRaw = get(m.lot);
+  const lot = parseInt(lotRaw,10) || 0;
+  // BW
+  const bw = parseFloat(get(m.bw)) || 0;
+  // Pesos de intentos (si vienen)
+  const num = i => { const v = parseFloat(get(i)); return Number.isFinite(v)&&v>0 ? v : 0; };
+  const att = {
+    sq:[{w:num(m.s1),r:null},{w:num(m.s2),r:null},{w:num(m.s3),r:null}],
+    bp:[{w:num(m.b1),r:null},{w:num(m.b2),r:null},{w:num(m.b3),r:null}],
+    dl:[{w:num(m.d1),r:null},{w:num(m.d2),r:null},{w:num(m.d3),r:null}],
+  };
+  return {
+    nombre,
+    rut: get(m.rut),
+    sexo, division, categoria, modalidad,
+    club: get(m.club),
+    flight, lot, bw,
+    edad: parseInt(get(m.edad),10)||null,
+    att,
+  };
+}
+
+window.impLoadFile = function(input){
+  const f = input.files && input.files[0];
+  if(!f) return;
+  const r = new FileReader();
+  r.onload = (e)=>{
+    _impState.csvText = String(e.target.result||'');
+    _impParseAndPreview();
+  };
+  r.readAsText(f, 'utf-8');
+};
+window.impLoadPaste = function(textarea){
+  _impState.csvText = textarea.value || '';
+  _impParseAndPreview();
+};
+window.impSelectEvento = function(sel){
+  _impState.evento = sel.value;
+  render();
+};
+function _impParseAndPreview(){
+  const parsed = _impParseCsv(_impState.csvText);
+  if(!parsed.rows.length){ _impState.parsed=null; _impState.preview=null; render(); return; }
+  const m = _impMap(parsed.headers);
+  const items = parsed.rows.map(r=>_impNormalize(r,m)).filter(Boolean);
+  _impState.parsed = {parsed, mapping:m, items};
+  render();
+}
+
+window.impDoImport = async function(btn){
+  if(!_impState.parsed || !_impState.evento){
+    alert('Faltan datos: cargá un CSV y elegí un campeonato destino.');
+    return;
+  }
+  const items = _impState.parsed.items;
+  if(!items.length){ alert('No hay filas para importar.'); return; }
+  if(!confirm('Importar '+items.length+' atletas al campeonato "'+_impState.evento+'"?\n\nSe crearán como inscripciones APROBADAS (status:approved). Si querés revisarlas, podés editarlas después en Nóminas.')) return;
+  if(btn){btn.disabled=true; btn.textContent='Importando...';}
+  let ok=0, err=0;
+  for(const a of items){
+    try{
+      const id = 'lc_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+      const data = {
+        evento: _impState.evento,
+        nombre: a.nombre,
+        rut: a.rut || '',
+        sexo: a.sexo || '',
+        division: a.division || '',
+        categoria: a.categoria || '',
+        modalidad: a.modalidad || 'Powerlifting Classic',
+        club: a.club || '',
+        status: 'approved',
+        timestamp: Date.now(),
+        importedFromLiftingCast: true,
+        sortOrder: a.lot || 0,
+      };
+      // Si vienen attempts pre-cargados, los guardamos para que LiveCast los levante
+      const hasAttempts = ['sq','bp','dl'].some(k => a.att[k].some(x=>x.w>0));
+      if(hasAttempts) data.attempts = a.att;
+      if(a.flight) data.flight = a.flight;
+      if(a.bw>0) data.bw = a.bw;
+      await setDoc(doc(db,'inscripciones',id), data);
+      ok++;
+    }catch(e){ console.error('Import row failed:', a.nombre, e); err++; }
+  }
+  if(btn){btn.disabled=false; btn.textContent='📥 Importar a Firestore';}
+  alert('Importación terminada.\n✓ Importados: '+ok+'\n✗ Errores: '+err+(err?'\n\nRevisá la consola (F12) para detalles.':''));
+  _impState = {evento:_impState.evento, csvText:'', parsed:null, status:'', preview:null};
+  render();
+};
+
+function renderImportar(){
+  const evs = (ST.eventos||[]).filter(e=>e.status!=='archived');
+  let h = '<div class="h1">📥 Importar desde LiftingCast</div>';
+  h += '<p class="subtitle">Subí el CSV exportado desde LiftingCast (Meet Director → Export). Detecta automáticamente columnas comunes (Lifter, Team, Division, BWClass, Squat1Kg, Bench1Kg, Deadlift1Kg, etc.) y crea inscripciones aprobadas en el campeonato que elijas.</p>';
+
+  // Step 1: evento destino
+  h += '<div class="card" style="margin-bottom:14px"><div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;align-items:center">';
+  h += '<div><div style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px">1 · CAMPEONATO DESTINO</div><div style="font-size:11px;color:var(--muted);margin-top:2px">Las inscripciones se asocian a este evento.</div></div>';
+  h += '<select class="inp" onchange="impSelectEvento(this)"><option value="">-- elegí un campeonato --</option>';
+  evs.forEach(e=>{ h += '<option value="'+esc(e.name)+'" '+(e.name===_impState.evento?'selected':'')+'>'+esc(e.name)+'</option>'; });
+  h += '</select></div></div>';
+
+  // Step 2: cargar CSV
+  h += '<div class="card" style="margin-bottom:14px"><div style="margin-bottom:10px"><span style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px">2 · CARGAR CSV</span></div>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">';
+  h += '<div><label style="font-size:11px;color:var(--muted);margin-bottom:5px;display:block">Subir archivo (.csv)</label><input type="file" accept=".csv,text/csv" onchange="impLoadFile(this)" style="font-size:12px"></div>';
+  h += '<div><label style="font-size:11px;color:var(--muted);margin-bottom:5px;display:block">…o pegar acá</label><textarea oninput="impLoadPaste(this)" placeholder="Lifter,Sex,Team,BWClass,Division,Squat1Kg,...\nJohn Doe,M,My Club,83,Open,180,..." style="width:100%;min-height:100px;font-family:monospace;font-size:11px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text)"></textarea></div>';
+  h += '</div></div>';
+
+  // Step 3: preview
+  if(_impState.parsed){
+    const items = _impState.parsed.items;
+    const m = _impState.parsed.mapping;
+    const headers = _impState.parsed.parsed.headers;
+    const mappedCount = Object.values(m).filter(v=>v>=0).length;
+    const totalFields = Object.keys(m).length;
+    h += '<div class="card" style="margin-bottom:14px"><div style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
+    h += '<span style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px">3 · PREVIEW</span>';
+    h += '<span style="font-size:11px;color:var(--muted)">'+items.length+' atletas detectados · '+mappedCount+'/'+totalFields+' columnas mapeadas · '+headers.length+' columnas en CSV</span></div>';
+    if(!items.length){
+      h += '<div style="padding:18px;text-align:center;color:var(--red);font-size:12px">⚠️ No se detectó ninguna fila válida. Revisá que la primera línea del CSV sean los encabezados (Lifter, Team, etc.) y que cada atleta tenga al menos el nombre.</div>';
+    } else {
+      h += '<div style="overflow-x:auto;max-height:380px;overflow-y:auto"><table class="tbl" style="font-size:10px">';
+      h += '<tr><th>#</th><th>Nombre</th><th>Sexo</th><th>Categoría</th><th>División</th><th>Mod.</th><th>Club</th><th>Vuelo</th><th>Lot</th><th>BW</th><th>SQ1·2·3</th><th>BP1·2·3</th><th>DL1·2·3</th></tr>';
+      items.slice(0,30).forEach((a,i)=>{
+        const att = (l)=> a.att[l].map(x=>x.w||'—').join(' · ');
+        h += '<tr><td>'+(i+1)+'</td><td>'+esc(a.nombre)+'</td><td>'+esc(a.sexo||'?')+'</td><td>'+esc(a.categoria||'?')+'</td><td>'+esc(a.division||'?')+'</td><td>'+(a.modalidad==='Powerlifting Equipped'?'EQ':'CL')+'</td><td>'+esc(a.club)+'</td><td>'+esc(a.flight)+'</td><td>'+(a.lot||'—')+'</td><td>'+(a.bw||'—')+'</td><td>'+att('sq')+'</td><td>'+att('bp')+'</td><td>'+att('dl')+'</td></tr>';
+      });
+      h += '</table></div>';
+      if(items.length>30) h += '<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:right">…mostrando primeros 30 de '+items.length+'</div>';
+      // Diagnóstico de campos no mapeados
+      const missing = Object.entries(m).filter(([k,v])=>v<0).map(([k])=>k);
+      if(missing.length){
+        h += '<div style="margin-top:12px;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:6px;font-size:11px;color:var(--muted)">⚠️ Columnas no encontradas: <code>'+missing.join(', ')+'</code>. Esos campos quedan vacíos. Si el CSV las tiene con otro nombre, renombrá los headers manualmente o avisame y le agrego el alias.</div>';
+      }
+    }
+    h += '</div>';
+  }
+
+  // Step 4: import
+  if(_impState.parsed && _impState.parsed.items.length){
+    h += '<div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">';
+    h += '<div style="font-size:12px;color:var(--muted)">'+(_impState.evento?'Listo para importar a <b style="color:var(--gold)">'+esc(_impState.evento)+'</b>':'⚠️ Falta elegir el campeonato destino arriba')+'</div>';
+    h += '<button class="btn btn-g" onclick="impDoImport(this)" '+(!_impState.evento?'disabled style="opacity:.4;cursor:not-allowed"':'')+'>📥 Importar a Firestore</button>';
+    h += '</div>';
+  }
+
+  h += '<div class="card" style="margin-top:14px;padding:12px 16px;background:rgba(30,58,95,.3);font-size:11px;color:var(--muted);line-height:1.7">';
+  h += '<div style="color:var(--text);font-weight:600;margin-bottom:6px">💡 Cómo exportar desde LiftingCast</div>';
+  h += '1. Ingresá a tu meet en liftingcast.com como Meet Director.<br>';
+  h += '2. Settings (⚙) → Export → "Roster CSV" o "Full Export".<br>';
+  h += '3. Descargá el .csv y subilo acá.<br><br>';
+  h += '<div style="color:var(--text);font-weight:600;margin-bottom:6px">Columnas que reconoce</div>';
+  h += '• Identidad: <code>Lifter, Team, Sex, Age, MemberID</code><br>';
+  h += '• Categoría: <code>BWClass, Division, Equipment</code><br>';
+  h += '• Logística: <code>Flight/Session, Lot, BW</code><br>';
+  h += '• Intentos: <code>Squat1Kg/2Kg/3Kg, Bench1Kg/2Kg/3Kg, Deadlift1Kg/2Kg/3Kg</code><br>';
+  h += '</div>';
+
+  return h;
+}
+
+// ─── Entrenadores: importación desde entrenadores_<evento>.json ─
+let _entrenadoresData = null;
+let _entrenadoresLoading = false;
+let _entrenadoresError = null;
+async function loadEntrenadoresData(){
+  if(_entrenadoresData||_entrenadoresLoading) return _entrenadoresData;
+  _entrenadoresLoading = true;
+  _entrenadoresError = null;
+  try {
+    const url = 'entrenadores_centro_2026.json?v='+Date.now();
+    const r = await fetch(url);
+    if(!r.ok) throw new Error('HTTP '+r.status+' al pedir '+url+' (¿lo subiste a hosting?)');
+    _entrenadoresData = await r.json();
+  } catch(e){
+    _entrenadoresError = e.message || String(e);
+    console.error('[Entrenadores] error:', e);
+  }
+  _entrenadoresLoading = false;
+  return _entrenadoresData;
+}
+function genTempPassword(nombre){
+  // Slug + 4 dígitos. Ejemplo: "Andrea Garcés" → "andrea2026!4827"
+  const slug = (nombre||'coach').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z]/g,'').slice(0,12) || 'coach';
+  const n = Math.floor(1000 + Math.random()*9000);
+  return slug + '2026!' + n;
+}
+window.coachExists = async function(email){
+  if(!email) return false;
+  try {
+    const q = window.FB.query(window.FB.collection(db,'coaches'), window.FB.where('email','==',email.toLowerCase()));
+    const snap = await window.FB.getDocs(q);
+    return !snap.empty;
+  } catch(e){ return false; }
+};
+window.importCoach = async function(idx, btn){
+  if(!_entrenadoresData) return;
+  const c = _entrenadoresData.entrenadores[idx];
+  if(!c) return;
+  const email = (c.emails[0]||'').trim().toLowerCase();
+  if(!email){ alert('Sin email — no se puede crear cuenta. Pedile el email primero.'); return; }
+  if(await window.coachExists(email)){ alert('Ya existe un coach con este email: '+email); if(btn){btn.textContent='Ya existe'; btn.disabled=true;} return; }
+  const pwd = genTempPassword(c.nombre);
+  const grado = c.roles.includes('head_coach')?'Head Coach':(c.roles.includes('head_coach_suplente')?'Head Coach Suplente':'Handler');
+  if(!confirm('Crear cuenta para "'+c.nombre+'"?\n\nEmail: '+email+'\nClave temporal: '+pwd+'\nGrado: '+grado+'\nClubs: '+c.clubs.join(', ')+'\n\nGuardá la clave antes de aceptar — solo se muestra una vez.')) return;
+  if(btn){btn.disabled=true; btn.textContent='Creando...';}
+  try {
+    await window.createCoach(email, pwd, c.nombre, grado, '');
+    if(btn){btn.textContent='✓ Creado'; btn.style.color='var(--green)';}
+    alert('✓ Cuenta creada.\n\nCredenciales para entregar al entrenador:\nEmail: '+email+'\nClave: '+pwd+'\n\n(Recordale que la cambie en su primer login.)');
+  } catch(e){
+    if(btn){btn.disabled=false; btn.textContent='Reintentar';}
+    alert('Error: '+(e.message||e));
+  }
+};
+function renderEntrenadores(){
+  // Solo disparar el fetch en la PRIMERA llamada — sin esto el .then re-renderiza
+  // y entra en loop infinito (page-not-responding).
+  if(!_entrenadoresData && !_entrenadoresLoading && !_entrenadoresError){
+    loadEntrenadoresData().then(()=>{ if(ST.view==='entrenadores') render(); });
+  }
+  let h='<div class="h1">👥 Entrenadores</div>';
+  h+='<p class="subtitle">Lista importada desde <code>entrenadores_centro_2026.json</code>. Crea cuentas Firebase para los que tienen email — se les enviará una clave temporal que deben cambiar en su primer login.</p>';
+  if(!_entrenadoresData){
+    if(_entrenadoresError){
+      h+='<div class="card" style="padding:24px;background:rgba(239,68,68,.08);border-color:var(--red);color:var(--red)">';
+      h+='<div style="font-weight:600;margin-bottom:6px">⚠️ No pude cargar <code>entrenadores_centro_2026.json</code></div>';
+      h+='<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Detalle: '+esc(_entrenadoresError)+'</div>';
+      h+='<div style="font-size:12px;color:var(--text);line-height:1.6"><b>Causas comunes:</b><br>';
+      h+='• El archivo está en <code>YourLift/entrenadores_centro_2026.json</code> en local pero NO se subió al hosting (Firebase / Vercel / etc).<br>';
+      h+='• El URL del admin está en otro path y el fetch relativo apunta mal.<br>';
+      h+='• Bloqueo CORS por servir desde otro dominio.</div>';
+      h+='<button class="btn btn-g" onclick="_entrenadoresData=null;_entrenadoresError=null;render()" style="margin-top:12px">↻ Reintentar</button>';
+      h+='</div>';
+      return h;
+    }
+    h+='<div class="card" style="padding:30px;text-align:center;color:var(--muted)">Cargando lista de entrenadores...</div>';
+    return h;
+  }
+  const list = _entrenadoresData.entrenadores;
+  const conEmail = list.filter(c=>c.emails.length).length;
+  const sinEmail = list.length - conEmail;
+  h+='<div class="card" style="margin-bottom:14px;padding:14px 18px;display:flex;gap:24px;flex-wrap:wrap;align-items:center">';
+  h+='<div><span style="font-size:11px;color:var(--muted);letter-spacing:1px;font-family:Oswald">EVENTO</span><div style="font-family:Oswald;font-size:15px;font-weight:700">'+_entrenadoresData.evento+'</div></div>';
+  h+='<div><span style="font-size:11px;color:var(--muted);letter-spacing:1px;font-family:Oswald">TOTAL</span><div style="font-family:Oswald;font-size:18px;font-weight:700;color:var(--gold)">'+list.length+'</div></div>';
+  h+='<div><span style="font-size:11px;color:var(--green);letter-spacing:1px;font-family:Oswald">CON EMAIL</span><div style="font-family:Oswald;font-size:18px;font-weight:700;color:var(--green)">'+conEmail+'</div></div>';
+  h+='<div><span style="font-size:11px;color:var(--orange,#f59e0b);letter-spacing:1px;font-family:Oswald">SIN EMAIL</span><div style="font-family:Oswald;font-size:18px;font-weight:700;color:var(--orange,#f59e0b)">'+sinEmail+'</div></div>';
+  h+='</div>';
+  h+='<div class="card" style="padding:0;overflow-x:auto"><table class="tbl"><tr><th>Nombre</th><th>Email</th><th>Roles</th><th>Clubs</th><th>Atletas</th><th>Acción</th></tr>';
+  list.forEach((c,i)=>{
+    const hasEmail = c.emails.length>0;
+    const rolesPretty = c.roles.map(r=>({entrenador_acreditado:'Acreditado',handler_1:'Handler 1',handler_2:'Handler 2',head_coach:'Head Coach',head_coach_suplente:'HC Suplente'}[r]||r)).join(', ');
+    h+='<tr>';
+    h+='<td><div style="font-weight:600">'+c.nombre+'</div></td>';
+    h+='<td style="font-size:11px">'+(c.emails.join('<br>')||'<span style="color:var(--muted)">—</span>')+'</td>';
+    h+='<td style="font-size:11px">'+rolesPretty+'</td>';
+    h+='<td style="font-size:11px">'+(c.clubs.join(', ')||'<span style="color:var(--muted)">—</span>')+'</td>';
+    h+='<td style="font-size:11px;color:var(--muted)">'+(c.atletas.length?c.atletas.length+' atleta'+(c.atletas.length!==1?'s':''):'—')+'</td>';
+    h+='<td>'+(hasEmail
+      ? '<button onclick="importCoach('+i+',this)" style="padding:5px 12px;border-radius:6px;border:1px solid var(--green);background:rgba(34,197,94,.1);color:var(--green);cursor:pointer;font-size:11px;font-family:Oswald;font-weight:700">Crear cuenta</button>'
+      : '<span style="font-size:10px;color:var(--muted)">Sin email</span>'
+    )+'</td>';
+    h+='</tr>';
+  });
+  h+='</table></div>';
+  h+='<div class="card" style="margin-top:14px;padding:14px 18px;background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.3);font-size:12px;color:var(--muted)">';
+  h+='💡 <b style="color:var(--text)">Tip</b>: Para los <b>'+sinEmail+' entrenadores sin email</b>, podés contactar al club o pedir el dato directo. Una vez que tengas el email, editá <code>entrenadores_centro_2026.json</code> a mano y recargá esta vista.';
+  h+='</div>';
+  return h;
 }
 
 function renderMergeResults(){

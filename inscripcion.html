@@ -30,6 +30,7 @@ input,select,button,textarea{font-family:inherit;outline:none}
 .input{width:100%;padding:12px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;transition:border-color .2s}
 .input:focus{border-color:var(--accent)}
 .input.ok{border-color:var(--green)}
+.input.err{border-color:#ef4444;background:rgba(239,68,68,.04)}
 select.input{cursor:pointer}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:600px){.row{grid-template-columns:1fr}}
@@ -93,32 +94,68 @@ const FIREBASE_CONFIG = {
 // ══════════════════════════════════════════════
 let db = null, storage = null, firebaseReady = false;
 
+let authInstance = null;
+
 async function initFirebase() {
   try {
     const {initializeApp} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
-    const {getFirestore, collection, addDoc, getDocs, doc, updateDoc, setDoc, deleteDoc, query, orderBy, where, serverTimestamp, onSnapshot} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const {getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, setDoc, deleteDoc, query, orderBy, where, serverTimestamp, onSnapshot, runTransaction} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     const {getStorage, ref, uploadBytes, getDownloadURL} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js');
-    
+    const {getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+
     if (FIREBASE_CONFIG.apiKey === "TU_API_KEY_AQUI") {
       console.warn("Firebase no configurado. Usando modo demo.");
       return false;
     }
-    
+
     const app = initializeApp(FIREBASE_CONFIG);
     db = getFirestore(app);
     storage = getStorage(app);
-    
+    authInstance = getAuth(app);
+
     // Expose functions globally
-    window.FB = {collection, addDoc, getDocs, doc, updateDoc, setDoc, deleteDoc, query, orderBy, where, serverTimestamp, onSnapshot, ref, uploadBytes, getDownloadURL};
+    window.FB = {collection, addDoc, getDocs, getDoc, doc, updateDoc, setDoc, deleteDoc, query, orderBy, where, serverTimestamp, onSnapshot, runTransaction, ref, uploadBytes, getDownloadURL, signInWithEmailAndPassword, signOut, onAuthStateChanged};
     firebaseReady = true;
     loadEventos();
-    if (!window.FB.setDoc) window.FB.setDoc = fb.setDoc;
-    if (!window.FB.onSnapshot) window.FB.onSnapshot = fb.onSnapshot;
+
+    // React to auth changes — only users in `admins/{uid}` unlock the panel
+    onAuthStateChanged(authInstance, async (user) => {
+      if (!user) { state.adminAuth = false; if (state.view === 'admin') render(); return; }
+      try {
+        const adminDoc = await getDoc(doc(db, 'admins', user.uid));
+        state.adminAuth = adminDoc.exists();
+        if (!adminDoc.exists()) {
+          await signOut(authInstance);
+          alert('Acceso denegado: tu cuenta no está registrada como admin.');
+        } else {
+          loadInscripciones();
+        }
+      } catch(e) { console.error('[auth check]', e); state.adminAuth = false; }
+      if (state.view === 'admin') render();
+    });
+
     return true;
   } catch(e) {
     console.error("Firebase init error:", e);
     return false;
   }
+}
+
+// ══════════════════════════════════════════════
+// HTML escape helper — defensa contra XSS en innerHTML
+// ══════════════════════════════════════════════
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Sanitiza un string para guardar en DB: elimina caracteres HTML peligrosos
+// y colapsa espacios. No reemplaza a esc() al renderizar; es defensa en capas.
+function sanitizeInput(s) {
+  if (s == null) return '';
+  return String(s).replace(/[<>"'`]/g,'').replace(/\s+/g,' ').trim();
 }
 
 // ══════════════════════════════════════════════
@@ -176,6 +213,27 @@ function formatRut(val) {
     r = r.slice(0, -1) + '-' + r.slice(-1);
   }
   return r;
+}
+// ── Validador RUT chileno (módulo 11) ──────────────────────────
+// Devuelve {valid, dv, expected, msg}. Si valid=false, msg dice por qué.
+function validateRut(val){
+  if(!val) return {valid:false, msg:'RUT vacío'};
+  const clean = val.replace(/[^0-9kK]/g,'').toUpperCase();
+  if(clean.length < 2) return {valid:false, msg:'RUT muy corto'};
+  if(clean.length > 9) return {valid:false, msg:'RUT muy largo'};
+  const body = clean.slice(0,-1);
+  const dv = clean.slice(-1);
+  if(!/^\d+$/.test(body)) return {valid:false, msg:'Solo dígitos antes del DV'};
+  // Cálculo módulo 11
+  let sum = 0, mul = 2;
+  for(let i = body.length - 1; i >= 0; i--){
+    sum += parseInt(body[i],10) * mul;
+    mul = mul === 7 ? 2 : mul + 1;
+  }
+  const r = 11 - (sum % 11);
+  const expected = r === 11 ? '0' : (r === 10 ? 'K' : String(r));
+  if(dv !== expected) return {valid:false, dv, expected, msg:'Dígito verificador incorrecto (esperado: '+expected+')'};
+  return {valid:true, dv, expected};
 }
 
 // ══════════════════════════════════════════════
@@ -300,7 +358,7 @@ function openEventsFromFirebase() {
   return EVENTS.filter(e => e.status === 'open');
 }
 
-const ADMIN_PIN = '2026';
+// Admin auth: handled by Firebase Auth + admins/{uid} doc (see initFirebase)
 
 // ══════════════════════════════════════════════
 // RENDER
@@ -383,7 +441,8 @@ function renderForm() {
     <div class="row">
       <div class="field">
         <label>RUT <span class="req">*</span></label>
-        <input class="input ${f.rut?'ok':''}" type="text" placeholder="12345678-9" value="${f.rut}" oninput="upd('rut',this.value)" onblur="upd('rut',formatRut(this.value));autoFillCode();this.value=state.form.rut">
+        <input class="input ${f.rut?(validateRut(f.rut).valid?'ok':'err'):''}" type="text" placeholder="12345678-9" value="${f.rut}" oninput="upd('rut',this.value)" onblur="upd('rut',formatRut(this.value));autoFillCode();this.value=state.form.rut">
+        ${f.rut&&!validateRut(f.rut).valid?`<div style="font-size:10px;color:var(--red,#ef4444);margin-top:3px">⚠️ ${validateRut(f.rut).msg}</div>`:''}
       </div>
       <div class="field">
         <label>Código de Atleta FECHIPO <span style="font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0">(auto)</span></label>
@@ -542,12 +601,15 @@ function renderAdmin() {
   if (!state.adminAuth) {
     return `<div class="fade" style="max-width:400px;margin:80px auto;text-align:center">
       <h2 class="os" style="font-size:22px;letter-spacing:2px;margin-bottom:20px">🔒 PANEL ADMIN</h2>
-      <div class="field">
-        <label>PIN de Acceso</label>
-        <input class="input" type="password" id="pinInput" placeholder="Ingresa PIN" style="text-align:center;font-size:20px;letter-spacing:6px" onkeydown="if(event.key==='Enter')authAdmin()">
+      <div class="field"><label>Email</label>
+        <input class="input" type="email" id="adminEmail" placeholder="admin@yourlift.cl" autocomplete="email">
       </div>
+      <div class="field"><label>Contraseña</label>
+        <input class="input" type="password" id="adminPass" autocomplete="current-password" onkeydown="if(event.key==='Enter')authAdmin()">
+      </div>
+      ${state.error ? `<div class="alert alert-error" style="margin:8px 0">${state.error}</div>` : ''}
       <button class="btn btn-accent" onclick="authAdmin()">Acceder</button>
-      <div style="margin-top:12px"><button class="btn btn-outline" onclick="state.view='form';render()" style="font-size:11px">← Volver al formulario</button></div>
+      <div style="margin-top:12px"><button class="btn btn-outline" onclick="state.view='form';state.error='';render()" style="font-size:11px">← Volver al formulario</button></div>
     </div>`;
   }
 
@@ -599,19 +661,20 @@ function renderAdmin() {
       <tbody>`;
     filtered.forEach((i, idx) => {
       const evName = EVENTS.find(e=>e.id===i.evento)?.name || i.evento;
+      const safeId = encodeURIComponent(i.id);
       h += `<tr>
         <td style="color:var(--muted)">${idx+1}</td>
-        <td style="font-weight:600;white-space:nowrap">${i.nombre}</td>
-        <td style="font-size:11px">${i.rut}</td>
-        <td style="font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${evName}</td>
-        <td><span class="tag" style="background:rgba(212,168,67,.12);color:var(--gold)">${i.categoria}</span></td>
-        <td style="font-size:11px">${i.club==='Otro'?i.clubOtro:i.club}</td>
+        <td style="font-weight:600;white-space:nowrap">${esc(i.nombre)}</td>
+        <td style="font-size:11px">${esc(i.rut)}</td>
+        <td style="font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(evName)}</td>
+        <td><span class="tag" style="background:rgba(212,168,67,.12);color:var(--gold)">${esc(i.categoria)}</span></td>
+        <td style="font-size:11px">${esc(i.club==='Otro'?i.clubOtro:i.club)}</td>
         <td>${i.carnetName?'📷':'❌'} ${i.wadeName?'📄':''}</td>
-        <td><span class="status-${i.status}" style="font-weight:700;font-size:11px;text-transform:uppercase">${i.status==='pending'?'⏳ Pendiente':i.status==='approved'?'✅ Aprobado':'❌ Rechazado'}</span></td>
+        <td><span class="status-${esc(i.status)}" style="font-weight:700;font-size:11px;text-transform:uppercase">${i.status==='pending'?'⏳ Pendiente':i.status==='approved'?'✅ Aprobado':'❌ Rechazado'}</span></td>
         <td style="white-space:nowrap">
-          ${i.status!=='approved'?`<button class="btn btn-green" style="padding:4px 8px;font-size:10px" onclick="updateStatus('${i.id}','approved')">✓</button>`:''} 
-          ${i.status!=='rejected'?`<button class="btn" style="padding:4px 8px;font-size:10px;background:var(--red);color:#fff" onclick="updateStatus('${i.id}','rejected')">✗</button>`:''}
-          ${i.status!=='pending'?`<button class="btn btn-outline" style="padding:4px 8px;font-size:10px" onclick="updateStatus('${i.id}','pending')">↺</button>`:''}
+          ${i.status!=='approved'?`<button class="btn btn-green" style="padding:4px 8px;font-size:10px" onclick="updateStatus('${safeId}','approved')">✓</button>`:''}
+          ${i.status!=='rejected'?`<button class="btn" style="padding:4px 8px;font-size:10px;background:var(--red);color:#fff" onclick="updateStatus('${safeId}','rejected')">✗</button>`:''}
+          ${i.status!=='pending'?`<button class="btn btn-outline" style="padding:4px 8px;font-size:10px" onclick="updateStatus('${safeId}','pending')">↺</button>`:''}
         </td>
       </tr>`;
     });
@@ -731,8 +794,8 @@ function renderEdit() {
       </div>
     </div>
     <div style="text-align:right;margin-top:12px">
-      <button class="btn btn-g" onclick="saveEdit()" ${state.submitting?'disabled':''}>
-        ${state.submitting?'Guardando...':'💾 Guardar Cambios'}
+      <button class="btn btn-g" onclick="saveEdit()" ${state.submitting||state.success?'disabled':''}>
+        ${state.submitting?'Enviando solicitud...':(state.success?'✓ Solicitud enviada':'📨 Enviar solicitud de edición')}
       </button>
     </div>
   </div>`;
@@ -742,26 +805,37 @@ function renderEdit() {
 // ══════════════════════════════════════════════
 // EDIT HANDLERS
 // ══════════════════════════════════════════════
+// La edición ya no es directa — el atleta envía una solicitud a
+// `edit_requests` y el admin la revisa (valida el PIN contra
+// `inscripciones_private`). Esto evita exponer el PIN en la colección
+// pública de inscripciones.
 async function lookupEdit() {
   const rut = formatRut(document.getElementById('editRut')?.value || '');
   const pin = document.getElementById('editPin')?.value || '';
   if (!rut || !pin) { state.error = 'Ingresa RUT y PIN'; render(); return; }
-  
+  const rutCheck = validateRut(rut);
+  if (!rutCheck.valid) { state.error = 'RUT inválido: ' + rutCheck.msg; render(); return; }
+  if (!/^\d{4}$/.test(pin)) { state.error = 'El PIN debe ser de 4 dígitos'; render(); return; }
+
   state.error = '';
   try {
-    let found = null;
+    // Busca por RUT en la colección pública. El PIN ya no vive acá, así
+    // que no validamos aquí — el admin lo verifica al aprobar.
+    let candidates = [];
     if (firebaseReady) {
       const q = window.FB.query(window.FB.collection(db, 'inscripciones'), window.FB.where('rut', '==', rut));
       const snap = await window.FB.getDocs(q);
-      snap.forEach(d => { if (d.data().pin === pin) found = {id: d.id, ...d.data()}; });
+      snap.forEach(d => candidates.push({id: d.id, ...d.data()}));
     } else {
-      const all = demoGetAll();
-      found = all.find(i => formatRut(i.rut) === rut && i.pin === pin);
+      candidates = demoGetAll().filter(i => formatRut(i.rut) === rut);
     }
-    
-    if (!found) { state.error = 'No se encontró inscripción con ese RUT y PIN'; render(); return; }
-    
-    // Load into form for editing
+    // Solo inscripciones activas (no rechazadas).
+    candidates = candidates.filter(c => c.status !== 'rejected');
+    if (!candidates.length) { state.error = 'No se encontró inscripción activa con ese RUT'; render(); return; }
+    // Si hay varias, elegimos la más reciente por timestamp.
+    candidates.sort((a,b) => (b.timestamp?.seconds||0) - (a.timestamp?.seconds||0));
+    const found = candidates[0];
+
     state.editId = found.id;
     state.editDoc = found;
     state.form = {
@@ -777,7 +851,7 @@ async function lookupEdit() {
       club: found.club || '',
       clubOtro: found.clubOtro || '',
       comuna: found.comuna || '',
-      pin: found.pin || '',
+      pin: pin, // del input, se usará al enviar la solicitud
       universidad: found.universidad || '',
     };
     state.view = 'edit';
@@ -795,34 +869,44 @@ async function saveEdit() {
   state.error = '';
   state.success = '';
   render();
-  
+
   try {
     const f = state.form;
-    const updates = {
-      nombre: f.nombre.trim(),
-      codigo: f.codigo.trim(),
+    // Solo campos editables por el atleta. NO evento, status, flight,
+    // sortOrder, rut, carnetURL, wadeURL, pin.
+    const changes = {
+      nombre: sanitizeInput(f.nombre.trim()),
+      codigo: sanitizeInput(f.codigo.trim()),
       sexo: f.sexo,
       fechaNac: f.fechaNac,
       division: f.division,
       categoria: f.categoria,
       modalidad: f.modalidad,
-      club: f.club,
-      clubOtro: f.clubOtro,
-      comuna: f.comuna,
-      universidad: f.universidad || '',
+      club: sanitizeInput(f.club),
+      clubOtro: sanitizeInput(f.clubOtro),
+      comuna: sanitizeInput(f.comuna),
+      universidad: sanitizeInput(f.universidad || ''),
     };
-    
+
     if (firebaseReady) {
-      await window.FB.updateDoc(window.FB.doc(db, 'inscripciones', state.editId), updates);
+      // Crea una solicitud de edición. El admin la revisa y aplica.
+      await window.FB.addDoc(window.FB.collection(db, 'edit_requests'), {
+        inscripcionId: state.editId,
+        rut: f.rut,
+        pin: f.pin,
+        changes: changes,
+        status: 'pending',
+        ts: window.FB.serverTimestamp(),
+      });
     } else {
-      demoUpdate(state.editId, updates);
+      demoUpdate(state.editId, changes);
     }
-    
+
     state.submitting = false;
-    state.success = 'Inscripción actualizada correctamente';
+    state.success = 'Tu solicitud de edición fue enviada. El organizador la revisará y se aplicarán los cambios si el PIN es correcto.';
     render();
   } catch(e) {
-    state.error = 'Error al guardar: ' + e.message;
+    state.error = 'Error al enviar solicitud: ' + e.message;
     state.submitting = false;
     render();
   }
@@ -870,7 +954,14 @@ async function submitForm() {
 
   try {
     const f = state.form;
-    
+
+    // ── Validación RUT (módulo 11) ──────────────────────
+    const rutCheck = validateRut(f.rut);
+    if(!rutCheck.valid){
+      state.error = 'RUT inválido: ' + rutCheck.msg + '. Revisá el dígito verificador antes de enviar.';
+      state.submitting = false; render(); return;
+    }
+
     // ── Duplicate check ─────────────────────────────────
     if (firebaseReady) {
       const rutCleanCheck = f.rut.replace(/[^0-9kK]/gi,'').toUpperCase();
@@ -895,47 +986,74 @@ async function submitForm() {
     }
     // ────────────────────────────────────────────────────
     
-    const entry = {
+    // Datos PÚBLICOS (inscripciones): legibles por cualquiera en la nómina live.
+    const publicEntry = {
       evento: f.evento,
-      nombre: f.nombre.trim(),
-      rut: f.rut.trim(),
-      codigo: f.codigo.trim(),
+      nombre: sanitizeInput(f.nombre),
+      rut: sanitizeInput(f.rut),
+      codigo: sanitizeInput(f.codigo),
       sexo: f.sexo,
       fechaNac: f.fechaNac,
       division: f.division,
       categoria: f.categoria,
       modalidad: f.modalidad,
-      club: f.club,
-      clubOtro: f.clubOtro,
-      comuna: f.comuna,
-      universidad: f.universidad || '',
+      club: sanitizeInput(f.club),
+      clubOtro: sanitizeInput(f.clubOtro),
+      comuna: sanitizeInput(f.comuna),
+      universidad: sanitizeInput(f.universidad || ''),
       carnetName: state.carnetName,
       wadeName: state.wadeName,
-      pin: f.pin,
       status: 'pending',
+    };
+
+    // Datos PRIVADOS (inscripciones_private): solo admin.
+    const privateEntry = {
+      pin: f.pin,
     };
 
     if (firebaseReady) {
       // Upload files to Firebase Storage
       const ts = Date.now();
-      const rutClean = f.rut.replace(/[^0-9kK]/g, '');
-      
+      const rutClean = f.rut.replace(/[^0-9kK]/g, '').toUpperCase();
+
       if (state.carnetFile) {
         const carnetRef = window.FB.ref(storage, `inscripciones/${f.evento}/${rutClean}_carnet_${ts}`);
         await window.FB.uploadBytes(carnetRef, state.carnetFile);
-        entry.carnetURL = await window.FB.getDownloadURL(carnetRef);
+        privateEntry.carnetURL = await window.FB.getDownloadURL(carnetRef);
       }
       if (state.wadeFile) {
         const wadeRef = window.FB.ref(storage, `inscripciones/${f.evento}/${rutClean}_wada_${ts}`);
         await window.FB.uploadBytes(wadeRef, state.wadeFile);
-        entry.wadeURL = await window.FB.getDownloadURL(wadeRef);
+        privateEntry.wadeURL = await window.FB.getDownloadURL(wadeRef);
       }
-      
-      entry.timestamp = window.FB.serverTimestamp();
-      await window.FB.addDoc(window.FB.collection(db, 'inscripciones'), entry);
+
+      publicEntry.timestamp = window.FB.serverTimestamp();
+      privateEntry.ts = window.FB.serverTimestamp();
+
+      // Transacción atómica: escribe ambos docs o ninguno. ID determinístico
+      // `${evento}_${rutClean}` para pairear public/private y evitar duplicados.
+      const docId = `${f.evento}_${rutClean}`;
+      const inscRef = window.FB.doc(db, 'inscripciones', docId);
+      const privRef = window.FB.doc(db, 'inscripciones_private', docId);
+      try {
+        await window.FB.runTransaction(db, async (tx) => {
+          const existing = await tx.get(inscRef);
+          if (existing.exists() && existing.data().status !== 'rejected') {
+            throw new Error('DUPLICATE_RUT');
+          }
+          tx.set(inscRef, publicEntry);
+          tx.set(privRef, privateEntry);
+        });
+      } catch(txErr) {
+        if (txErr.message === 'DUPLICATE_RUT') {
+          state.error = `Ya existe una inscripción con ese RUT (${f.rut}) para este campeonato. Usa "Editar mi inscripción" si necesitas modificarla.`;
+          state.submitting = false; render(); return;
+        }
+        throw txErr;
+      }
     } else {
-      // Demo mode
-      demoSave(entry);
+      // Demo mode: aplana en un solo objeto para localStorage.
+      demoSave({...publicEntry, ...privateEntry});
     }
 
     state.view = 'confirm';
@@ -960,15 +1078,30 @@ function toggleAdmin() {
   render();
 }
 
-function authAdmin() {
-  const pin = document.getElementById('pinInput')?.value || '';
-  if (pin === ADMIN_PIN) {
-    state.adminAuth = true;
-    loadInscripciones();
-  } else {
-    state.error = 'PIN incorrecto';
+async function authAdmin() {
+  const email = (document.getElementById('adminEmail')?.value || '').trim();
+  const pass = document.getElementById('adminPass')?.value || '';
+  state.error = '';
+  if (!email || !pass) { state.error = 'Completa email y contraseña'; render(); return; }
+  if (!firebaseReady || !authInstance) { state.error = 'Firebase no disponible'; render(); return; }
+  try {
+    await window.FB.signInWithEmailAndPassword(authInstance, email, pass);
+    // onAuthStateChanged handler verifies admins/{uid} and sets state.adminAuth
+  } catch(e) {
+    let msg = 'Error: ' + e.message;
+    if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found') msg = 'Email o contraseña incorrectos';
+    else if (e.code === 'auth/too-many-requests') msg = 'Demasiados intentos. Espera unos minutos.';
+    state.error = msg;
     render();
   }
+}
+
+async function logoutAdmin() {
+  if (!confirm('¿Cerrar sesión de admin?')) return;
+  try { await window.FB.signOut(authInstance); } catch(e) { console.warn(e); }
+  state.adminAuth = false;
+  state.view = 'form';
+  render();
 }
 
 async function loadInscripciones() {
@@ -1012,12 +1145,13 @@ async function approveAllPending() {
   }
 }
 async function updateStatus(id, newStatus) {
+  const realId = decodeURIComponent(id);
   if (firebaseReady) {
     try {
-      await window.FB.updateDoc(window.FB.doc(db, 'inscripciones', id), {status: newStatus});
+      await window.FB.updateDoc(window.FB.doc(db, 'inscripciones', realId), {status: newStatus});
     } catch(e) { console.error(e); }
   } else {
-    demoUpdate(id, {status: newStatus});
+    demoUpdate(realId, {status: newStatus});
   }
   await loadInscripciones();
 }
@@ -1049,7 +1183,7 @@ function exportNominas() {
     location: ev.location,
     organizer: ev.org,
     days: ev.date.split('-').reverse().join(' de '),
-    athletes: byEvent[ev.id] || [],
+    athletes: byEvent[ev.id] || byEvent[ev.name] || [],
     extraCols: ev.id.includes('universitario') ? ['universidad'] : ['modalidad'],
   }))};
 

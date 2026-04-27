@@ -1,0 +1,161 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════════
+// YourLift — Firestore Security Rules
+// ═══════════════════════════════════════════════════════════════════
+// Despliegue:
+//   1) Firebase Console → Firestore → Rules → pegar este archivo, o
+//   2) firebase deploy --only firestore:rules
+//
+// Modelo de confianza:
+//   - `admins/{uid}` define quién es admin (documento creado manualmente).
+//   - La app web es un sitio estático público; cualquiera puede leer la
+//     API key. La seguridad real vive aquí.
+// ═══════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isCoach() {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/coaches/$(request.auth.uid));
+    }
+
+    // ── admins: solo admins pueden leer/escribir ─────────────────────
+    match /admins/{uid} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── eventos: lectura pública (formulario de inscripción) ────────
+    //    escritura solo admin
+    match /eventos/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── inscripciones: lectura pública (la nómina en vivo se muestra
+    //    en index.html sin login). Creación pública para el formulario.
+    //    Update/delete solo admin.
+    //    SOLO campos públicos. Datos sensibles van a inscripciones_private.
+    //    El formulario debe escribir ambos docs en una sola transacción.
+    match /inscripciones/{id} {
+      allow read: if true;
+      // Admin puede crear con cualquier status (import masivo o manual).
+      // Publico solo puede crear inscripciones pendientes y sin campos sensibles.
+      allow create: if isAdmin() || (
+                       request.resource.data.status == 'pending'
+                    && request.resource.data.nombre is string
+                    && request.resource.data.nombre.size() > 2
+                    && request.resource.data.rut is string
+                    && request.resource.data.evento is string
+                    && !request.resource.data.keys().hasAny(['pin','carnetURL','wadeURL'])
+                  );
+      allow update, delete: if isAdmin();
+    }
+
+    // ── inscripciones_private: campos sensibles (pin, carnetURL, wadeURL).
+    //    Solo admin lee/borra. Creación pública pero bloqueada a campos
+    //    permitidos y con PIN de 4 dígitos. Update solo admin.
+    //    El ID debe coincidir con el de inscripciones/{id} (mismo evento_rut).
+    match /inscripciones_private/{id} {
+      allow read: if isAdmin();
+      allow create: if request.resource.data.keys().hasOnly(['pin','carnetURL','wadeURL','ts'])
+                    && request.resource.data.pin is string
+                    && request.resource.data.pin.size() == 4;
+      allow update, delete: if isAdmin();
+    }
+
+    // ── edit_requests: cola de solicitudes de atletas para editar su
+    //    inscripción. El cliente envía RUT+PIN+cambios; admin valida el
+    //    PIN contra inscripciones_private y aplica. Solo admin lee/edita.
+    match /edit_requests/{id} {
+      allow read, update, delete: if isAdmin();
+      allow create: if request.resource.data.keys().hasAll(['inscripcionId','rut','pin','changes','status','ts'])
+                    && request.resource.data.keys().hasOnly(['inscripcionId','rut','pin','changes','status','ts'])
+                    && request.resource.data.inscripcionId is string
+                    && request.resource.data.rut is string
+                    && request.resource.data.pin is string
+                    && request.resource.data.pin.size() == 4
+                    && request.resource.data.changes is map
+                    && request.resource.data.status == 'pending';
+    }
+
+    // ── coaches: doc ID == Firebase Auth UID del coach ──────────────
+    //    El coach autenticado puede leer su propio doc. Los admins
+    //    leen/escriben todos. La creación la hace el admin desde el
+    //    panel (usa createUserWithEmailAndPassword en una secondary app).
+    match /coaches/{uid} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      allow write: if isAdmin();
+    }
+
+    // ── athlete_edits: solo admin ───────────────────────────────────
+    match /athlete_edits/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── audit_log: admins escriben y leen. Nunca delete. ────────────
+    match /audit_log/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // ── acreditaciones: lectura pública (el cronograma muestra el
+    //    estado a todos). Escritura para admin o coach autenticado.
+    match /acreditaciones/{id} {
+      allow read: if true;
+      allow write: if isAdmin() || isCoach();
+    }
+
+    // ── competition_results: admin escribe/lee; lectura pública OK
+    //    si quieres mostrar resultados en vivo (livecast). Ajusta si
+    //    necesitas cerrarlo.
+    match /competition_results/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── livecast_sync: estado en vivo de la competencia (vuelo actual,
+    //    movimiento, ronda, intentos, timer). Lectura pública para que
+    //    los widgets de transmisión en OBS lean sin login. Escritura
+    //    solo admin (operador LiveCast).
+    match /livecast_sync/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── livecast_record: doc 'current' con el último récord nacional
+    //    detectado. Lectura pública (widgets OBS muestran el badge).
+    //    Escritura solo admin (operador del LiveCast lo pushea cuando
+    //    checkRecord detecta marca superada).
+    match /livecast_record/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── livecast_director: doc 'current' con el estado de cada
+    //    componente del widget ?tx=director (perfil, marcador, tabla,
+    //    timer, slam). El admin pushea desde "Control TX" y el widget
+    //    OBS lee y renderiza. Lectura pública, escritura solo admin.
+    match /livecast_director/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Default deny ────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

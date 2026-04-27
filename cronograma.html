@@ -25,6 +25,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 </style>
 </head>
 <body>
+<script src="clubs.js"></script>
 <div id="app" style="max-width:1100px;margin:0 auto;padding:20px">
   <div style="text-align:center;margin-bottom:30px">
     <div class="os" style="font-size:clamp(24px,5vw,36px);font-weight:700;letter-spacing:3px"><span style="color:var(--accent)">FECHIPO</span> CRONOGRAMA</div>
@@ -60,16 +61,30 @@ async function initCronoFB(){
     window._fb=fb;window._fbAuth=authMod;
     window._fb.getDoc=fb.getDoc;window._fb.where=fb.where;window._fb.query=fb.query;
     fbAuthMod=authMod;fbAuthInst=authMod.getAuth(app);
-    authMod.onAuthStateChanged(fbAuthInst,user=>{
-      if(user){
-        fb.getDoc(fb.doc(fbDB,'admins',user.uid)).then(snap=>{
-          fbAuthUser=snap.exists()?user:null;
-          config.adminUnlocked=snap.exists();
-          render();
-        }).catch(()=>{fbAuthUser=user;config.adminUnlocked=true;render();});
-      } else {
-        fbAuthUser=null;config.adminUnlocked=false;render();
+    authMod.onAuthStateChanged(fbAuthInst, async user=>{
+      if(!user){
+        fbAuthUser=null; coachUser=null; config.adminUnlocked=false; render(); return;
       }
+      try{
+        const adminSnap=await fb.getDoc(fb.doc(fbDB,'admins',user.uid));
+        if(adminSnap.exists()){
+          fbAuthUser=user; config.adminUnlocked=true; coachUser=null;
+          render(); return;
+        }
+        const coachSnap=await fb.getDoc(fb.doc(fbDB,'coaches',user.uid));
+        if(coachSnap.exists()){
+          const d=coachSnap.data();
+          coachUser={email:d.email||user.email,nombre:d.nombre||user.email,grado:d.grado||'',rut:d.rut||'',uid:user.uid};
+          fbAuthUser=null; config.adminUnlocked=false;
+          if(selectedEvent) await loadAccreditations();
+          render(); return;
+        }
+        // Signed in but not admin nor coach — sign out
+        try{ await authMod.signOut(fbAuthInst);}catch(_){}
+        fbAuthUser=null; coachUser=null; config.adminUnlocked=false;
+        alert('Cuenta sin rol asignado. Contacta al administrador.');
+        render();
+      }catch(e){ console.warn('[Crono auth]', e); render(); }
     });
     const auth=authMod.getAuth(app);
     // Load inscripciones to get IDs for updating flight
@@ -86,7 +101,7 @@ async function syncFlightsToFB(){
   let updated=0;
   for(const[nombre,flight] of Object.entries(map)){
     // Find matching inscripcion by name + event
-    const ins=fbInscripciones.find(i=>i.nombre===nombre&&i.evento===selectedEvent.id);
+    const ins=fbInscripciones.find(i=>i.nombre===nombre&&(i.evento===selectedEvent.id||i.evento===selectedEvent.name));
     if(ins&&ins.flight!==flight){
       try{
         await window._fb.updateDoc(window._fb.doc(fbDB,'inscripciones',ins.id),{flight});
@@ -102,7 +117,50 @@ initCronoFB();
 Promise.all([
   fetch('nominas.json').then(r=>r.json()).catch(()=>({events:[]})),
   fetch('data.json').then(r=>r.json()).catch(()=>[])
-]).then(([n,d])=>{NM=n;DB=d;render()});
+]).then(([n,d])=>{NM=n;DB=d;preselectFromURL();render();syncEventsWithFirestore()});
+
+// ── Accept ?evento=<id|name> URL param to pre-select an event ──
+function preselectFromURL(){
+  try{
+    const p=new URLSearchParams(location.search).get('evento');
+    if(!p||!NM.events)return;
+    const decoded=decodeURIComponent(p);
+    const i=NM.events.findIndex(e=>e.id===decoded||e.name===decoded);
+    if(i>=0)selectEvent(i);
+  }catch(e){console.warn('[Crono] preselect err',e)}
+}
+
+// ── Merge Firestore eventos metadata over nominas.json ──────
+// Firestore `eventos/{id}` is the source of truth for date/closeDate/location/org/days.
+// nominas.json only provides the athletes list until imported to Firebase.
+function syncEventsWithFirestore(){
+  const tryStart=()=>{
+    if(!fbReady||!window._fb){setTimeout(tryStart,400);return}
+    try{
+      window._fb.onSnapshot(window._fb.collection(fbDB,'eventos'),(snap)=>{
+        const fbEvs={};
+        snap.forEach(d=>{const e=d.data();if(e.status!=='archived')fbEvs[d.id]=e});
+        let changed=false;
+        (NM.events||[]).forEach(ev=>{
+          const fe=fbEvs[ev.id]||fbEvs[ev.name]||Object.values(fbEvs).find(x=>x.name===ev.name);
+          if(!fe)return;
+          ['date','closeDate','location','org','organizer','days','extraCols','status'].forEach(k=>{
+            if(fe[k]!==undefined&&fe[k]!==ev[k]){ev[k]=fe[k];changed=true}
+          });
+        });
+        if(changed){
+          // Update selectedEvent if user is viewing one
+          if(selectedEvent){
+            const fresh=NM.events.find(e=>e.name===selectedEvent.name||e.id===selectedEvent.id);
+            if(fresh)selectedEvent=fresh;
+          }
+          render();
+        }
+      });
+    }catch(e){console.warn('[Crono eventos sync]',e)}
+  };
+  tryStart();
+}
 
 function render(){
   if(!selectedEvent){renderEventList();return}
@@ -142,10 +200,10 @@ function showCoachLogin(){
   m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:9999';
   m.innerHTML=`<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:16px;padding:32px;width:min(380px,90vw);text-align:center">
     <div style="font-family:Oswald;font-size:20px;font-weight:700;letter-spacing:2px;margin-bottom:4px;color:var(--gold)">🏋️ ENTRENADOR / HANDLER</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:20px">Correo electrónico y RUT sin puntos ni guión</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:20px">Ingresa con el email y contraseña que te entregó el administrador</div>
     <div style="display:flex;flex-direction:column;gap:12px">
-      <input id="coachEmail" type="email" placeholder="tu@correo.cl" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;width:100%">
-      <input id="coachPass" type="password" placeholder="RUT sin puntos ni guión (ej: 214543508)" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;width:100%" onkeydown="if(event.key==='Enter')doCoachLogin()">
+      <input id="coachEmail" type="email" autocomplete="email" placeholder="tu@correo.cl" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;width:100%">
+      <input id="coachPass" type="password" autocomplete="current-password" placeholder="Contraseña" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;width:100%" onkeydown="if(event.key==='Enter')doCoachLogin()">
       <div id="coachErr" style="color:var(--red);font-size:12px;display:none"></div>
       <button onclick="doCoachLogin()" style="padding:10px;border-radius:8px;border:none;background:var(--gold);color:#000;font-family:Oswald;font-size:14px;font-weight:700;cursor:pointer">Ingresar</button>
       <button onclick="document.getElementById('coachModal').remove()" style="padding:8px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer">Cancelar</button>
@@ -157,25 +215,27 @@ function showCoachLogin(){
 
 async function doCoachLogin(){
   const email=(document.getElementById('coachEmail').value||'').trim().toLowerCase();
-  const pass=(document.getElementById('coachPass').value||'').trim();
+  const pass=document.getElementById('coachPass').value||'';
   const err=document.getElementById('coachErr');
   err.style.display='none';
   if(!email||!pass){err.style.display='block';err.textContent='Completa ambos campos';return;}
-  if(!fbReady){err.style.display='block';err.textContent='Sin conexión a Firebase';return;}
+  if(!fbAuthInst){err.style.display='block';err.textContent='Sin conexión a Firebase';return;}
   try{
-    const id=email.replace(/[.@]/g,'_');
-    const snap=await window._fb.getDoc(window._fb.doc(fbDB,'coaches',id));
-    if(!snap.exists()){err.style.display='block';err.textContent='Correo no registrado como entrenador';return;}
-    const data=snap.data();
-    if(data.password!==pass){err.style.display='block';err.textContent='Contraseña incorrecta — usa tu RUT sin puntos ni guión';return;}
-    coachUser={email:data.email,nombre:data.nombre,grado:data.grado,rut:data.rut};
+    await fbAuthMod.signInWithEmailAndPassword(fbAuthInst,email,pass);
+    // onAuthStateChanged valida que el UID esté en coaches/{uid} y rellena coachUser
     document.getElementById('coachModal')?.remove();
-    if(selectedEvent)await loadAccreditations();
-    render();
-  }catch(e){err.style.display='block';err.textContent='Error: '+e.message;}
+  }catch(e){
+    let msg='Error: '+e.message;
+    if(e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found')msg='Email o contraseña incorrectos';
+    else if(e.code==='auth/too-many-requests')msg='Demasiados intentos. Espera unos minutos.';
+    err.style.display='block';err.textContent=msg;
+  }
 }
 
-function doCoachLogout(){coachUser=null;render();}
+async function doCoachLogout(){
+  try{ await fbAuthMod.signOut(fbAuthInst); }catch(e){}
+  coachUser=null; render();
+}
 
 async function loadAccreditations(){
   if(!fbReady||!selectedEvent)return;
@@ -526,7 +586,7 @@ function renderCronograma(){
         <td style="padding:5px 4px;font-weight:600">${a.nombre||''}</td>
         <td style="padding:5px 4px;text-align:center;font-size:11px">${a.division||''}</td>
         <td style="padding:5px 4px;text-align:center;font-size:11px">${a.categoria||''}</td>
-        <td style="padding:5px 4px;font-size:11px;color:var(--muted)">${a.club||''}</td>
+        <td style="padding:5px 4px;font-size:11px;color:var(--muted)"><span style="display:inline-flex;align-items:center;gap:4px">${window.clubLogoImg?window.clubLogoImg(a.club,16,'background:rgba(10,22,40,.5);padding:1px;'):''}${a.club||''}</span></td>
         <td style="padding:3px 2px">${renderAccredCell(a.nombre||'','entrenador','rgba(212,168,67,.3)','var(--gold)')}</td>
         <td style="padding:3px 2px">${renderAccredCell(a.nombre||'','handler','rgba(59,130,246,.3)','var(--blue)')}</td>
         ${config.adminUnlocked?`<td style="padding:5px 4px;text-align:center"><select style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:4px;font-family:Oswald;font-size:11px;cursor:pointer" onchange="moveAthlete(${fi},${ai},this.value)">${flightOptions}</select></td>`:''}
