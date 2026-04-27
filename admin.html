@@ -2672,14 +2672,20 @@ function renderImportar(){
 // ─── Entrenadores: importación desde entrenadores_<evento>.json ─
 let _entrenadoresData = null;
 let _entrenadoresLoading = false;
+let _entrenadoresError = null;
 async function loadEntrenadoresData(){
   if(_entrenadoresData||_entrenadoresLoading) return _entrenadoresData;
   _entrenadoresLoading = true;
+  _entrenadoresError = null;
   try {
-    const r = await fetch('entrenadores_centro_2026.json');
-    if(!r.ok) throw new Error('HTTP '+r.status);
+    const url = 'entrenadores_centro_2026.json?v='+Date.now();
+    const r = await fetch(url);
+    if(!r.ok) throw new Error('HTTP '+r.status+' al pedir '+url+' (¿lo subiste a hosting?)');
     _entrenadoresData = await r.json();
-  } catch(e){ console.warn('No pude cargar entrenadores_centro_2026.json:', e.message); }
+  } catch(e){
+    _entrenadoresError = e.message || String(e);
+    console.error('[Entrenadores] error:', e);
+  }
   _entrenadoresLoading = false;
   return _entrenadoresData;
 }
@@ -2722,6 +2728,18 @@ function renderEntrenadores(){
   let h='<div class="h1">👥 Entrenadores</div>';
   h+='<p class="subtitle">Lista importada desde <code>entrenadores_centro_2026.json</code>. Crea cuentas Firebase para los que tienen email — se les enviará una clave temporal que deben cambiar en su primer login.</p>';
   if(!_entrenadoresData){
+    if(_entrenadoresError){
+      h+='<div class="card" style="padding:24px;background:rgba(239,68,68,.08);border-color:var(--red);color:var(--red)">';
+      h+='<div style="font-weight:600;margin-bottom:6px">⚠️ No pude cargar <code>entrenadores_centro_2026.json</code></div>';
+      h+='<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Detalle: '+esc(_entrenadoresError)+'</div>';
+      h+='<div style="font-size:12px;color:var(--text);line-height:1.6"><b>Causas comunes:</b><br>';
+      h+='• El archivo está en <code>YourLift/entrenadores_centro_2026.json</code> en local pero NO se subió al hosting (Firebase / Vercel / etc).<br>';
+      h+='• El URL del admin está en otro path y el fetch relativo apunta mal.<br>';
+      h+='• Bloqueo CORS por servir desde otro dominio.</div>';
+      h+='<button class="btn btn-g" onclick="_entrenadoresData=null;_entrenadoresError=null;render()" style="margin-top:12px">↻ Reintentar</button>';
+      h+='</div>';
+      return h;
+    }
     h+='<div class="card" style="padding:30px;text-align:center;color:var(--muted)">Cargando lista de entrenadores...</div>';
     return h;
   }

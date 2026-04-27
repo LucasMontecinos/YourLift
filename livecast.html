@@ -1608,7 +1608,7 @@ function _renderTxCerSlamCorner(type){
 // Lee comandos desde Firestore livecast_director/current.
 // Cada componente tiene {active, until?} independiente; el panel del
 // admin pushea cambios y este widget renderiza lo que esté activo.
-const TX_DIR_DEFAULT={profile:{active:false,until:0},scoreboard:{active:false,until:0},leaderboard:{active:false,until:0,cat:''},timer:{active:false,until:0},slam:{active:false,until:0,type:'g'}};
+const TX_DIR_DEFAULT={profile:{active:false,until:0},scoreboard:{active:false,until:0},leaderboard:{active:false,until:0,cat:''},timer:{active:false,until:0},slam:{active:false,until:0,type:'g'},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0}};
 let _txDirState=null;
 let _txDirUnsub=null;
 let _txDirPoll=null;
@@ -1659,26 +1659,45 @@ function renderTxDirector(container){
   const showLb=_txDirActive('leaderboard');
   const showTm=_txDirActive('timer');
   const showSlam=_txDirActive('slam');
+  // Break timer: activo si tiene `active=true` y aún hay tiempo (o pausado)
+  const bt=_txDirState.breakTimer||{};
+  const showBreak=!!bt.active&&bt.startedAt>0&&bt.durationSec>0;
   // Signature p/ evitar flicker por timer cada 1s
-  const sig=[showProf,showSb,showLb,showTm,showSlam].join('|')
+  const sig=[showProf,showSb,showLb,showTm,showSlam,showBreak].join('|')
     +'|'+(cur?cur.id+'|'+(cur.att?.[DATA.lift]||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
     +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
     +'|'+(_txDirState.leaderboard?.cat||'')+'|'+(_txDirState.slam?.type||'')
-    +'|'+(_txDirState.profile?.until||0)+'|'+(_txDirState.scoreboard?.until||0)+'|'+(_txDirState.leaderboard?.until||0)+'|'+(_txDirState.slam?.until||0);
+    +'|'+(_txDirState.profile?.until||0)+'|'+(_txDirState.scoreboard?.until||0)+'|'+(_txDirState.leaderboard?.until||0)+'|'+(_txDirState.slam?.until||0)
+    +'|bt-'+(bt.startedAt||0)+'-'+(bt.durationSec||0)+'-'+(bt.pausedAt||0)+'-'+(bt.label||'');
   if(sig===_txDirLastSig){
+    // Updates in-place sin re-render para evitar flicker
     const tm=document.getElementById('cerTimer');
     if(tm){
       const t=Math.max(0,DATA.timer||0);
       tm.textContent=String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');
       tm.style.color=DATA.timerOn&&t<=10?'#ef4444':DATA.timerOn&&t<=30?'#f59e0b':'#fff';
     }
+    // Break timer: actualizar el conteo cada segundo sin tocar innerHTML
+    const btEl=document.getElementById('dirBreakDisplay');
+    if(btEl&&showBreak){
+      const elapsed=bt.pausedAt?(bt.pausedAt-bt.startedAt):(Date.now()-bt.startedAt);
+      const rem=Math.max(0,Math.ceil((bt.durationSec*1000-elapsed)/1000));
+      const m=Math.floor(rem/60),s=rem%60;
+      btEl.textContent=m+':'+(s<10?'0':'')+s;
+      btEl.style.color=rem<=10?'#ef4444':rem<=30?'#f59e0b':'#fff';
+      // Si terminó, forzar re-render para que se vacíe (fin de break)
+      if(rem<=0){_txDirLastSig=null;renderTxDirector(c);return}
+    }
     return;
   }
   _txDirLastSig=sig;
   // Stack: leaderboard tiene prioridad fullscreen, profile fullscreen, scoreboard/timer corners
-  document.body.classList.toggle('tx-opaque', showLb||showProf);
+  // Break timer también es fullscreen — gana sobre todo si está activo
+  document.body.classList.toggle('tx-opaque', showLb||showProf||showBreak);
   let html='';
-  if(showLb){
+  if(showBreak){
+    html+=_renderTxBreakTimer(bt);
+  } else if(showLb){
     const cat=_txDirState.leaderboard.cat;
     const ref=cat?DATA.athletes.find(a=>a.cat===cat&&!a.bombed):cur;
     if(ref)html+='<div style="position:fixed;inset:0">'+renderTxLeaderboard(ref,false,{allFlights:true})+'</div>';
@@ -1690,6 +1709,24 @@ function renderTxDirector(container){
   if(showSlam)html+=_renderTxCerSlamCorner(_txDirState.slam.type||'g');
   c.innerHTML=html;
   _txDirScheduleHide();
+  // Programar tick cada 1s para el break timer (re-update via signature skip)
+  if(showBreak){
+    setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},1000);
+  }
+}
+function _renderTxBreakTimer(bt){
+  const elapsed=bt.pausedAt?(bt.pausedAt-bt.startedAt):(Date.now()-bt.startedAt);
+  const rem=Math.max(0,Math.ceil((bt.durationSec*1000-elapsed)/1000));
+  const m=Math.floor(rem/60),s=rem%60;
+  const txt=m+':'+(s<10?'0':'')+s;
+  const color=rem<=10?'#ef4444':rem<=30?'#f59e0b':'#fff';
+  const labelText=(bt.label||'DESCANSO').toUpperCase();
+  const pausedBadge=bt.pausedAt?'<div style="margin-top:18px;display:inline-block;padding:6px 18px;background:rgba(245,158,11,.18);border:2px solid #f59e0b;border-radius:8px;font-family:Oswald;font-size:18px;letter-spacing:6px;color:#f59e0b">⏸ PAUSADO</div>':'';
+  return '<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">'
+    +'<div style="font-family:Oswald,sans-serif;font-size:clamp(28px,4vw,56px);letter-spacing:12px;color:#D4A843;margin-bottom:20px;animation:txFade .6s ease backwards">'+labelText+'</div>'
+    +'<div id="dirBreakDisplay" style="font-family:Oswald,sans-serif;font-size:clamp(160px,22vw,340px);font-weight:900;color:'+color+';line-height:.95;letter-spacing:6px;text-shadow:0 8px 40px rgba(0,0,0,.85);-webkit-text-stroke:3px rgba(0,0,0,.35)">'+txt+'</div>'
+    +pausedBadge
+  +'</div>';
 }
 
 // ─── SLAM (GOOD LIFT / NO LIFT flash) ──────────────────────────
@@ -2073,11 +2110,12 @@ function _dirEnsureListener(){
   if(_dirUnsub||!fbReady||!window._fb)return;
   try{
     _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director','current'),(snap)=>{
+      const DEFAULT={profile:{active:false,until:0},scoreboard:{active:false,until:0},leaderboard:{active:false,until:0,cat:''},timer:{active:false,until:0},slam:{active:false,until:0,type:'g'},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0}};
       if(snap.exists()){
         const d=snap.data();
-        _dirState=Object.assign({profile:{active:false,until:0},scoreboard:{active:false,until:0},leaderboard:{active:false,until:0,cat:''},timer:{active:false,until:0},slam:{active:false,until:0,type:'g'}},d.show||{});
+        _dirState=Object.assign({},DEFAULT,d.show||{});
       } else {
-        _dirState={profile:{active:false,until:0},scoreboard:{active:false,until:0},leaderboard:{active:false,until:0,cat:''},timer:{active:false,until:0},slam:{active:false,until:0,type:'g'}};
+        _dirState={...DEFAULT};
       }
       if(DATA.phase==='director')R();
     });
@@ -2109,6 +2147,43 @@ window.dirShowLb=async function(cat,seconds){
 };
 window.dirShowSlam=async function(type){
   await window.dirShow('slam',2,{type});
+};
+// ── Break timer (descanso configurable) ─────────────────────
+window.dirBreakStart=async function(){
+  const m=parseInt(document.getElementById('dirBreakMin')?.value||'0',10)||0;
+  const s=parseInt(document.getElementById('dirBreakSec')?.value||'0',10)||0;
+  const label=(document.getElementById('dirBreakLabel')?.value||'').trim();
+  const durationSec=m*60+s;
+  if(durationSec<=0){alert('Ingresá al menos 1 segundo');return}
+  if(!_dirState)_dirState={};
+  _dirState.breakTimer={active:true,startedAt:Date.now(),durationSec,label,pausedAt:0};
+  await _dirPush();R();
+};
+window.dirBreakPause=async function(){
+  if(!_dirState?.breakTimer?.active)return;
+  if(_dirState.breakTimer.pausedAt)return; // ya pausado
+  _dirState.breakTimer.pausedAt=Date.now();
+  await _dirPush();R();
+};
+window.dirBreakResume=async function(){
+  const bt=_dirState?.breakTimer;
+  if(!bt?.active||!bt.pausedAt)return;
+  // Compensar el tiempo de pausa: empujar startedAt por el tiempo pausado
+  bt.startedAt+=Date.now()-bt.pausedAt;
+  bt.pausedAt=0;
+  await _dirPush();R();
+};
+window.dirBreakHide=async function(){
+  if(!_dirState)return;
+  _dirState.breakTimer={active:false,startedAt:0,durationSec:0,label:'',pausedAt:0};
+  await _dirPush();R();
+};
+window.dirBreakAdd=async function(secs){
+  // Sumar/restar segundos al descanso en curso (útil para extender o acortar)
+  const bt=_dirState?.breakTimer;
+  if(!bt?.active)return;
+  bt.durationSec=Math.max(1,(bt.durationSec||0)+secs);
+  await _dirPush();R();
 };
 function renderDirector(){
   _dirEnsureListener();
@@ -2182,6 +2257,49 @@ function renderDirector(){
     '<button class="btn btn-g" onclick="dirShowSlam(\'g\')" style="padding:8px 16px;font-size:12px;background:#22c55e;border-color:#22c55e">✓ GOOD LIFT</button>'
     +'<button class="btn btn-r" onclick="dirShowSlam(\'n\')" style="padding:8px 16px;font-size:12px">✗ NO LIFT</button>'
   );
+  // Break timer — sección con inputs propios
+  const bt=_dirState.breakTimer||{active:false};
+  let btStatus='';
+  if(bt.active){
+    const elapsed=bt.pausedAt?(bt.pausedAt-bt.startedAt):(Date.now()-bt.startedAt);
+    const rem=Math.max(0,Math.ceil((bt.durationSec*1000-elapsed)/1000));
+    const m=Math.floor(rem/60),s=rem%60;
+    btStatus='<div style="font-size:11px;color:'+(bt.pausedAt?'var(--orange,#f59e0b)':'var(--green)')+';margin-top:6px;font-family:Oswald;letter-spacing:1px">'
+      +(bt.pausedAt?'⏸ PAUSADO':'🔵 EN PANTALLA')+' · '+m+':'+(s<10?'0':'')+s+(bt.label?' · '+bt.label:'')+'</div>';
+  }
+  h+='<div class="card" style="padding:14px 18px;border-left:4px solid '+(bt.active?'var(--green)':'var(--border)')+'">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">';
+  h+='<div style="flex:1;min-width:240px">';
+  h+='<div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">⏲ Timer de descanso</div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5">Reloj configurable para break entre lifts/vuelos/almuerzo. Aparece en grande al centro de la pantalla con cuenta regresiva.</div>';
+  h+=btStatus;
+  h+='</div></div>';
+  // Inputs duración + label
+  h+='<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">';
+  h+='<div><label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">MIN</label><input id="dirBreakMin" type="number" min="0" max="60" value="'+(bt.active?Math.floor((bt.durationSec||0)/60):10)+'" style="width:70px;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:Oswald;font-size:18px;text-align:center"></div>';
+  h+='<div><label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">SEG</label><input id="dirBreakSec" type="number" min="0" max="59" value="'+(bt.active?(bt.durationSec||0)%60:0)+'" style="width:70px;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:Oswald;font-size:18px;text-align:center"></div>';
+  h+='<div style="flex:1;min-width:160px"><label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">LABEL (opcional)</label><input id="dirBreakLabel" type="text" placeholder="ej. DESCANSO, ALMUERZO, CAMBIO BARRA" value="'+(bt.label||'').replace(/"/g,'&quot;')+'" style="width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px"></div>';
+  h+='</div>';
+  // Botones
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">';
+  if(!bt.active){
+    h+='<button class="btn btn-g" onclick="dirBreakStart()" style="padding:9px 18px;font-size:12px">▶ INICIAR</button>';
+    // Presets rápidos
+    h+='<button class="btn" onclick="document.getElementById(\'dirBreakMin\').value=5;document.getElementById(\'dirBreakSec\').value=0;dirBreakStart()" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">5 min</button>';
+    h+='<button class="btn" onclick="document.getElementById(\'dirBreakMin\').value=10;document.getElementById(\'dirBreakSec\').value=0;dirBreakStart()" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">10 min</button>';
+    h+='<button class="btn" onclick="document.getElementById(\'dirBreakMin\').value=15;document.getElementById(\'dirBreakSec\').value=0;dirBreakStart()" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">15 min</button>';
+    h+='<button class="btn" onclick="document.getElementById(\'dirBreakMin\').value=20;document.getElementById(\'dirBreakSec\').value=0;dirBreakStart()" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">20 min</button>';
+  } else {
+    if(bt.pausedAt){
+      h+='<button class="btn btn-g" onclick="dirBreakResume()" style="padding:9px 18px;font-size:12px">▶ REANUDAR</button>';
+    } else {
+      h+='<button class="btn btn-o" onclick="dirBreakPause()" style="padding:9px 18px;font-size:12px">⏸ PAUSAR</button>';
+    }
+    h+='<button class="btn" onclick="dirBreakAdd(60)" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">+1 min</button>';
+    h+='<button class="btn" onclick="dirBreakAdd(-60)" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">−1 min</button>';
+    h+='<button class="btn btn-r" onclick="dirBreakHide()" style="padding:9px 18px;font-size:12px">⏹ DETENER</button>';
+  }
+  h+='</div></div>';
   h+='</div>';
   return h;
 }
