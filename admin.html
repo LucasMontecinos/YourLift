@@ -2724,7 +2724,11 @@ window.importCoach = async function(idx, btn){
   }
 };
 function renderEntrenadores(){
-  loadEntrenadoresData().then(()=>{ if(ST.view==='entrenadores') render(); });
+  // Solo disparar el fetch en la PRIMERA llamada — sin esto el .then re-renderiza
+  // y entra en loop infinito (page-not-responding).
+  if(!_entrenadoresData && !_entrenadoresLoading && !_entrenadoresError){
+    loadEntrenadoresData().then(()=>{ if(ST.view==='entrenadores') render(); });
+  }
   let h='<div class="h1">👥 Entrenadores</div>';
   h+='<p class="subtitle">Lista importada desde <code>entrenadores_centro_2026.json</code>. Crea cuentas Firebase para los que tienen email — se les enviará una clave temporal que deben cambiar en su primer login.</p>';
   if(!_entrenadoresData){
