@@ -723,13 +723,13 @@ function _inscToAthlete(ins, j, flightMap){
 }
 
 function _mergeFirebaseAthletes(fbAthletes){
-  // Merge: update existing athletes by name/rut, add new ones
+  // Merge: update existing athletes by name/rut, add new ones, remove deleted
   let changed=false;
+  // Helper: matchea atleta local con uno de Firestore (por RUT primero, luego nombre)
+  const matches=(local,fa)=>(fa.rut&&local.rut&&local.rut.replace(/[^0-9kK]/g,'')===fa.rut.replace(/[^0-9kK]/g,''))||local.name===fa.name;
+
   fbAthletes.forEach((fa,j)=>{
-    const existing=DATA.athletes.find(a=>
-      (fa.rut&&a.rut&&a.rut.replace(/[^0-9kK]/g,'')===fa.rut.replace(/[^0-9kK]/g,''))||
-      a.name===fa.name
-    );
+    const existing=DATA.athletes.find(a=>matches(a,fa));
     if(!existing){
       // New athlete — only add if competition not started
       if(DATA.phase==='manage'||DATA.phase==='setup'){
@@ -742,6 +742,28 @@ function _mergeFirebaseAthletes(fbAthletes){
       if(fa.flight&&fa.flight!==existing.flight){existing.flight=fa.flight;changed=true;}
     }
   });
+
+  // ── DETECCIÓN DE BORRADOS ─────────────────────────────────────
+  // Atletas locales que ya no existen en Firestore (admin los eliminó)
+  const stale=DATA.athletes.filter(local=>!fbAthletes.some(fa=>matches(local,fa)));
+  if(stale.length){
+    // Atletas con datos ya cargados (peso, intentos, resultados) — no auto-borrar
+    const hasData=a=>a.bw>0||['sq','bp','dl'].some(l=>(a.att?.[l]||[]).some(x=>x.w>0||x.r));
+    const safeToRemove=stale.filter(a=>!hasData(a));
+    const withData=stale.filter(hasData);
+    // Borrado automático de los que no tienen datos
+    if(safeToRemove.length){
+      const ids=new Set(safeToRemove.map(a=>a.id));
+      DATA.athletes=DATA.athletes.filter(a=>!ids.has(a.id));
+      changed=true;
+      showToastLC('🗑️ '+safeToRemove.length+' atleta'+(safeToRemove.length>1?'s':'')+' eliminado'+(safeToRemove.length>1?'s':'')+' (borrados desde admin)');
+    }
+    // Aviso sobre los que tienen datos — el operador decide manualmente
+    if(withData.length){
+      console.warn('[LC] Atletas con datos pero borrados del admin:',withData.map(a=>a.name));
+      showToastLC('⚠️ '+withData.length+' atleta'+(withData.length>1?'s':'')+' borrado'+(withData.length>1?'s':'')+' del admin pero con datos cargados acá. Revisá Atletas & Pesaje y borralo'+(withData.length>1?'s':'')+' a mano si corresponde.');
+    }
+  }
   if(changed){save();R();}
 }
 
@@ -2083,6 +2105,35 @@ function generateLots(){
   DATA.lotsGenerated=true;save();R();
 }
 
+// Re-sincroniza la nómina con el admin. Trae todos los atletas aprobados/pendientes
+// desde Firestore y reconcilia: agrega nuevos, elimina los que ya no están (sin datos)
+// y avisa de los borrados que tienen pesos/intentos cargados.
+window.resyncFromAdmin=async function(){
+  if(!fbReady||!window._fb){alert('Firebase no listo todavía. Esperá unos segundos y reintentá.');return}
+  if(!DATA.event){alert('No hay competencia activa');return}
+  if(!confirm('🔄 Re-sincronizar la nómina con el admin?\n\n• Trae atletas nuevos\n• Borra los que ya no están en admin (si NO tienen pesos/intentos cargados acá)\n• Te avisa de los borrados que sí tienen datos para revisar a mano\n\nLas tandas, lots y pesaje se conservan.'))return;
+  const evId=Object.keys(LIVE_EVENTS).find(k=>LIVE_EVENTS[k]===DATA.event.name)||DATA.event.id||DATA.event.name;
+  try{
+    const q=window._fb.query(
+      window._fb.collection(fbDB,'inscripciones'),
+      window._fb.where('evento','==',evId),
+      window._fb.where('status','in',['approved','pending'])
+    );
+    const snap=await window._fb.getDocs(q);
+    const cronoKey='fechipo_crono_'+(DATA.event.name||'').replace(/\s+/g,'_');
+    let flightMap=null;
+    try{const saved=localStorage.getItem(cronoKey);if(saved){const d=JSON.parse(saved);if(d.map)flightMap=d.map}}catch(e){}
+    const fbAthletes=snap.docs
+      .map(d=>({...d.data(),id:d.id}))
+      .sort((a,b)=>(a.timestamp?.seconds||0)-(b.timestamp?.seconds||0))
+      .map((ins,j)=>_inscToAthlete(ins,j,flightMap));
+    if(!fbAthletes.length){alert('No hay inscripciones aprobadas/pendientes en Firestore para este campeonato.');return}
+    _mergeFirebaseAthletes(fbAthletes);
+    // Forzar nuevo render para que los toasts se ordenen
+    showToastLC('✓ Re-sincronización completa: '+fbAthletes.length+' atletas en Firestore');
+  }catch(e){alert('Error sincronizando: '+(e.message||e));console.error(e)}
+};
+
 // Editar el lote a mano. Si el número nuevo ya lo tenía otro atleta,
 // hace un swap (intercambia los lotes entre los dos).
 window.setLot=function(id,val){
@@ -2484,7 +2535,7 @@ function renderDirector(){
 }
 
 function renderManage(){
-  const ath=DATA.athletes;let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">🎲 Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="sortByFlight()">Ordenar por Vuelo ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  const ath=DATA.athletes;let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">🎲 Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">🔄 Re-sincronizar con admin</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Vuelo ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th><th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:38px">VLO</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:56px">BW</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:48px">RkSQ</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:48px">RkBP</th>';
   ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:62px">'+LIFT_S[l]+r+'</th>'})});
