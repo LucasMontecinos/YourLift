@@ -2167,6 +2167,15 @@ window.obsWsSaveAndConnect=function(){
 window.obsWsToggleConnection=function(){
   if(_obsWsConnected)obsWsDisconnect();else obsWsConnect();
 };
+// Envía un CustomEvent a través de OBS para verificar el roundtrip.
+// OBS lo broadcastea, nuestro listener lo recibe → toggle profile.
+window.obsWsTestEvent=async function(){
+  if(!_obsWs||!_obsWsConnected){alert('Conectá primero a OBS WebSocket');return}
+  try{
+    await _obsWs.call('BroadcastCustomEvent',{eventData:{action:'toggle',component:'profile',_test:true}});
+    alert('✓ Evento enviado a OBS. Si la conexión está bien, el perfil debería togglearse en pantalla en 1-2s. Mirá el log abajo "Últimos eventos recibidos".');
+  }catch(e){alert('Error enviando evento: '+(e.message||e))}
+};
 // Auto-conectar al cargar (si está habilitado)
 if(_obsWsSettings.autoConnect){
   // Esperar a que la lib esté lista
@@ -2337,7 +2346,12 @@ function renderDirector(){
   h+='<div><label style="color:var(--muted);display:block;margin-bottom:3px">Password</label><input id="obsWsPass" type="password" value="'+esc(_obsWsSettings.password||'')+'" placeholder="(opcional)" style="width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px"></div>';
   h+='<button class="btn btn-o" onclick="obsWsSaveAndConnect()" style="padding:6px 14px;font-size:11px">Guardar y conectar</button>';
   h+='</div>';
-  h+='<label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--muted);cursor:pointer"><input id="obsWsAuto" type="checkbox" '+(_obsWsSettings.autoConnect?'checked':'')+'> Conectar automáticamente al abrir el panel</label>';
+  h+='<div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap">';
+  h+='<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer"><input id="obsWsAuto" type="checkbox" '+(_obsWsSettings.autoConnect?'checked':'')+'> Conectar automáticamente al abrir el panel</label>';
+  if(_obsWsConnected){
+    h+='<button class="btn" onclick="obsWsTestEvent()" style="padding:6px 14px;font-size:11px;background:transparent;border:1px solid var(--gold);color:var(--gold)">🧪 Probar evento (toggle perfil)</button>';
+  }
+  h+='</div>';
   // Log de eventos recibidos (debug)
   if(_obsWsLog.length){
     h+='<details style="margin-top:10px"><summary style="cursor:pointer;font-size:11px;color:var(--muted)">Últimos eventos recibidos ('+_obsWsLog.length+')</summary>';
