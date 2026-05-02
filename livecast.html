@@ -1798,6 +1798,12 @@ function renderTxDirector(container){
       // Si terminó, forzar re-render para que se vacíe (fin de break)
       if(rem<=0){_txDirLastSig=null;renderTxDirector(c);return}
     }
+    // Re-tick: si el break está activo y NO pausado, agendar próxima
+    // actualización en 1s (el setTimeout del fin del re-render solo
+    // dispara una vez; sin esto el contador se queda pegado).
+    if(showBreak&&!bt.pausedAt){
+      setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},1000);
+    }
     return;
   }
   _txDirLastSig=sig;
