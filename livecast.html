@@ -2140,7 +2140,17 @@ function renderSetup(){
     }
   }catch(e){}
   let h='<div style="max-width:700px;margin:60px auto;padding:0 20px" class="fade">'+backupInfo+'<div style="text-align:center;margin-bottom:40px"><div class="os" style="font-size:clamp(30px,6vw,48px);font-weight:700;letter-spacing:3px"><div style="text-align:center;margin-bottom:40px"><div class="os" style="font-size:clamp(30px,6vw,48px);font-weight:700;letter-spacing:3px"><img src="YourLift_logo.png" style="height:50px;margin-bottom:8px" onerror="this.remove()"><br><span style="color:var(--accent)">LIVE</span>CAST</div><p style="color:var(--muted);font-size:14px;margin-top:6px">Sistema de Gesti\u00f3n de Competencia</p><div style="width:60px;height:3px;background:linear-gradient(90deg,var(--accent),var(--gold));margin:12px auto;border-radius:2px"></div><a href="index.html" style="display:inline-block;margin-top:10px;color:var(--muted);font-size:12px;text-decoration:none;padding:6px 16px;border:1px solid var(--border);border-radius:6px;transition:all .15s" onmouseenter="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--text)\'" onmouseleave="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--muted)\'">← YourLift</a></div>';
-  DATA.events.forEach((ev,i)=>{h+='<div class="card" style="cursor:pointer;transition:all .2s" onclick="pickEvent('+i+')" onmouseenter="this.style.borderColor=\'var(--accent)\'" onmouseleave="this.style.borderColor=\'var(--border)\'"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="os" style="font-size:18px;font-weight:700">'+ev.name+'</div><p style="color:var(--muted);font-size:12px;margin-top:4px">'+(ev.organizer||'')+' \u00b7 '+(ev.location||'')+'</p></div><div style="text-align:right"><div style="background:var(--accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;font-family:Oswald">'+ev.athletes.length+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">atletas</div></div></div></div>'});
+  // Merge: agregar eventos creados desde admin (Firestore) que no est\u00e9n en nominas.json
+  if(window.LIVE_EVENT_META){
+    Object.entries(window.LIVE_EVENT_META).forEach(function(entry){
+      var id=entry[0],meta=entry[1];
+      var exists=DATA.events.some(function(e){return e.id===id||e.name===meta.name});
+      if(!exists){
+        DATA.events.push({id:id,name:meta.name,organizer:meta.org||'',location:meta.location||'',athletes:[],_fromFirestore:true});
+      }
+    });
+  }
+  DATA.events.forEach((ev,i)=>{h+='<div class="card" style="cursor:pointer;transition:all .2s" onclick="pickEvent('+i+')" onmouseenter="this.style.borderColor=\'var(--accent)\'" onmouseleave="this.style.borderColor=\'var(--border)\'"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="os" style="font-size:18px;font-weight:700">'+ev.name+'</div><p style="color:var(--muted);font-size:12px;margin-top:4px">'+(ev.organizer||'')+' \u00b7 '+(ev.location||'')+(ev._fromFirestore?' \u00b7 <span style="color:var(--gold)">creado en admin</span>':'')+'</p></div><div style="text-align:right"><div style="background:var(--accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;font-family:Oswald">'+ev.athletes.length+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">atletas</div></div></div></div>'});
   h+='</div>';return h;
 }
 
