@@ -1,0 +1,67 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════
+// YourLift — Firebase Storage Security Rules
+// ═══════════════════════════════════════════════════════════════
+// Despliegue:
+//   firebase deploy --only storage
+//   o pegar este archivo en Firebase Console → Storage → Rules.
+//
+// Uso esperado de Storage:
+//   - athlete_files/{rut}/{type}.{ext}  → carnet, certificado WADA, etc.
+//     (subido al inscribirse, leído solo por admin para validación)
+//   - logos/{club}.png                  → logos de clubes (público lectura)
+//   - public/*                          → cualquier asset público
+//
+// Modelo:
+//   - admins (definidos en Firestore /admins/{uid}) leen y escriben todo
+//   - usuarios autenticados pueden subir a athlete_files/{su rut}
+//   - lectura pública solo para /logos/* y /public/*
+// ═══════════════════════════════════════════════════════════════
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper: chequea si el usuario actual es admin
+    function isAdmin() {
+      return request.auth != null
+          && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+
+    // ── Logos públicos (clubes, federación, etc.) ─────────────────
+    match /logos/{file} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Public bucket (assets generales como YourLift_logo.png) ──
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Files de atletas (carnet, WADA, fotos) ───────────────────
+    // Solo el atleta dueño (autenticado) puede subir su archivo.
+    // Solo admin puede leer (para validar inscripción).
+    // Limita a 5 MB y a tipos imagen + PDF.
+    match /athlete_files/{rut}/{file} {
+      allow read: if isAdmin();
+      allow write: if request.auth != null
+                    && request.resource.size < 5 * 1024 * 1024
+                    && (request.resource.contentType.matches('image/.*')
+                        || request.resource.contentType == 'application/pdf');
+      allow delete: if isAdmin();
+    }
+
+    // ── Backup admin (exports JSON, logs, etc.) ──────────────────
+    match /backups/{allPaths=**} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Default deny ─────────────────────────────────────────────
+    // Cualquier otro path queda bloqueado.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
