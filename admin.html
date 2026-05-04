@@ -1491,10 +1491,6 @@ function renderNominas(){
       </select>
       ${inFirebase?`<button class="btn btn-b" onclick="sortNominaByEvent('${ST.filterEv}')">⇅ ORDENAR</button>`:''}
       ${!inFirebase&&jsonEv?`<button class="btn btn-g" onclick="importNominaToFB('${ST.filterEv.replace(/'/g,"\\'")}')">📥 IMPORTAR A FIREBASE</button>`:''}
-      ${jsonEv?`<button class="btn" onclick="toggleCronogramaVisible('${ST.filterEv.replace(/'/g,"\\'")}')"
-        style="background:${jsonEv.cronogramaVisible===false?'rgba(239,68,68,.15)':'rgba(34,197,94,.12)'};border:1px solid ${jsonEv.cronogramaVisible===false?'rgba(239,68,68,.4)':'rgba(34,197,94,.4)'};color:${jsonEv.cronogramaVisible===false?'var(--red)':'var(--green)'};font-size:11px">
-        ${jsonEv.cronogramaVisible===false?'👁️‍🗨️ Cronograma oculto':'👁️ Cronograma visible'}
-      </button>`:''}
       ${inFirebase&&needsMetaSync?`<button class="btn btn-g" onclick="syncEventoFromJson('${ST.filterEv.replace(/'/g,"\\'")}')" title="Crea el doc en eventos/ con la metadata de nominas.json — habilita la edición de fechas desde Campeonatos">📌 SINCRONIZAR METADATA</button>`:''}
     </div>
     ${!inFirebase&&jsonEv?'<div class="card" style="background:rgba(212,168,67,.08);border-color:rgba(212,168,67,.3);padding:12px 16px;margin-bottom:12px"><span style="color:var(--gold);font-size:12px">⚠️ Esta nómina viene de nominas.json (estática). Para editarla en tiempo real, importarla a Firebase.</span></div>':''}
@@ -3019,17 +3015,6 @@ window.verDetalleComp = function(compId){
   m.onclick=e=>{if(e.target===m)m.remove();};
 };
 
-window.toggleCronogramaVisible = function(evName){
-  const ev=(ST.nominas.events||[]).find(e=>e.name===evName);
-  if(!ev)return;
-  ev.cronogramaVisible = ev.cronogramaVisible===false ? true : false;
-  const state=ev.cronogramaVisible?'visible':'oculto';
-  const blob=new Blob([JSON.stringify(ST.nominas,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download='nominas.json';a.click();
-  showToast('Cronograma "'+evName+'" ahora '+state+' — sube nominas.json a GitHub');
-  render();
-};
 </script>
 </body>
 </html>
