@@ -133,7 +133,7 @@ function _getPeerKey(a){
 }
 function _peerPerc(myTotal,key){const g=PEERS[key];if(!g)return null;const all=[...g.members.map(m=>m.total),myTotal].sort((a,b)=>b-a);const rank=all.indexOf(myTotal)+1;return{rank,n:all.length,pct:Math.round((1-rank/all.length)*100),g};}
 
-const ST={user:null,adminInfo:null,view:'dashboard',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{}};
+const ST={user:null,adminInfo:null,view:'dashboard',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{},achievementsByCodigo:{},fotosByCodigo:{}};
 window.ST=ST;
 
 // HTML-escape helper — defensa contra XSS al inyectar datos en innerHTML
@@ -311,6 +311,19 @@ async function loadAll(){
       if(ath && data.foto_url && data.status!=='rejected') ath.foto_url = data.foto_url;
     });
   }catch(e){console.warn('[loadAll] atleta_fotos:',e.message);}
+
+  // Load atleta_achievements (logros/medallas). Un doc por atleta (ID = codigo).
+  ST.achievementsByCodigo = {};
+  try{
+    const achSnap=await getDocs(collection(db,'atleta_achievements'));
+    achSnap.forEach(d=>{
+      const data=d.data();
+      const codigo=data.codigo||d.id;
+      ST.achievementsByCodigo[codigo]=data.achievements||[];
+      const ath=(ST.data||[]).find(a=>a.codigo===codigo);
+      if(ath) ath.achievements=data.achievements||[];
+    });
+  }catch(e){console.warn('[loadAll] atleta_achievements:',e.message);}
 
   // Load edit_requests (solicitudes de edición pendientes de atletas).
   try{
@@ -693,6 +706,44 @@ window.deleteAthlete=async function(cod){
     render();showToast('Restaurado');
   });
 }
+
+// ═══════════════════════════════════════════
+// LOGROS / MEDALLAS DE ATLETAS
+// ═══════════════════════════════════════════
+window.addAchievement=async function(codigo){
+  const label=(document.getElementById('achLabel')?.value||'').trim();
+  const evento=(document.getElementById('achEvento')?.value||'').trim();
+  const logo_url=(document.getElementById('achLogoUrl')?.value||'').trim();
+  const anio=parseInt(document.getElementById('achAnio')?.value||'0',10)||null;
+  const color=document.getElementById('achColor')?.value||'#D4A843';
+  const display=document.getElementById('achDisplay')?.value||'medal';
+  if(!label){showToast('Ingresá una etiqueta para el logro',null,true);return;}
+  const existing=ST.achievementsByCodigo?.[codigo]||[];
+  const updated=[...existing,{label,evento,logo_url,anio,color,display}];
+  try{
+    await setDoc(doc(db,'atleta_achievements',codigo),{codigo,achievements:updated});
+    ST.achievementsByCodigo=ST.achievementsByCodigo||{};
+    ST.achievementsByCodigo[codigo]=updated;
+    const ath=(ST.data||[]).find(a=>a.codigo===codigo);
+    if(ath)ath.achievements=updated;
+    showToast('🏅 Logro guardado para '+codigo);
+    render();
+  }catch(e){showToast('Error: '+e.message,null,true);}
+};
+window.removeAchievement=async function(codigo,idx){
+  if(!confirm('¿Eliminar este logro?'))return;
+  const existing=ST.achievementsByCodigo?.[codigo]||[];
+  const updated=existing.filter((_,i)=>i!==idx);
+  try{
+    await setDoc(doc(db,'atleta_achievements',codigo),{codigo,achievements:updated});
+    ST.achievementsByCodigo=ST.achievementsByCodigo||{};
+    ST.achievementsByCodigo[codigo]=updated;
+    const ath=(ST.data||[]).find(a=>a.codigo===codigo);
+    if(ath)ath.achievements=updated;
+    showToast('Logro eliminado');
+    render();
+  }catch(e){showToast('Error: '+e.message,null,true);}
+};
 
 // ═══════════════════════════════════════════
 // APPROVE / REJECT INSCRIPCIONES
@@ -1199,7 +1250,17 @@ function render(){
   const sidebar=`
     <div class="side">
       <div class="logo"><img src="YourLift_logo.png" style="height:24px" onerror="this.outerHTML='<span style=color:var(--accent)>YOUR</span>LIFT'"> ADMIN</div>
-      <div class="user">👤 ${ST.adminInfo?.name||ST.user.email}<br><span style="opacity:.7;font-size:9px">${ST.adminInfo?.role||'admin'}</span></div>
+      ${(()=>{
+        const isOwner=ST.adminInfo?.role==='owner';
+        const nameHtml=(ST.adminInfo?.name||ST.user.email)+(isOwner
+          ?` <img src="YourLift_logo.png" style="height:13px;object-fit:contain;vertical-align:middle;margin-left:4px;filter:drop-shadow(0 0 4px rgba(196,30,58,.9)) brightness(1.2)" title="YourLift Owner" onerror="this.outerHTML='<span style=color:var(--accent);font-family:Oswald;font-size:10px;margin-left:3px>YL</span>'">`
+          :'');
+        const roleHtml=isOwner
+          ?`<span style="font-size:9px;font-family:Oswald;letter-spacing:1px;background:linear-gradient(90deg,#C41E3A,#D4A843);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:700">★ OWNER · YOURLIFT</span>`
+          :`<span style="opacity:.7;font-size:9px">${ST.adminInfo?.role||'admin'}</span>`;
+        const borderStyle=isOwner?'border:1px solid rgba(196,30,58,.45);background:linear-gradient(135deg,rgba(196,30,58,.08),rgba(212,168,67,.08))':'';
+        return `<div class="user" style="${borderStyle}">👤 ${nameHtml}<br>${roleHtml}</div>`;
+      })()}
       <div class="side-label">Principal</div>
       <button class="side-btn ${ST.view==='dashboard'?'active':''}" onclick="go('dashboard')"><span class="icon">📊</span>Dashboard</button>
       <div class="side-label">Datos</div>
@@ -2876,6 +2937,64 @@ function renderAthleteProfile(){
       </div>
       <button onclick="editAthlete('${a.codigo.replace(/'/g,"\\'")}','nombre')" style="padding:6px 12px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer;flex-shrink:0">✏️ Editar</button>
     </div>
+  </div>`;
+
+  // ── Logros / Medallas ────────────────────────────────────
+  const achList=ST.achievementsByCodigo?.[a.codigo]||[];
+  h+=`<div class="card" style="margin-bottom:14px;border-left:4px solid #D4A843">
+    <div style="font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:1px;color:#D4A843;margin-bottom:12px">🏅 LOGROS Y MEDALLAS</div>
+    ${achList.length===0?'<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Sin logros registrados</div>':''}
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      ${achList.map((ach,i)=>{
+        const col=ach.color||'#D4A843';
+        return `<div style="position:relative;background:var(--bg);border:1px solid ${col}55;border-radius:10px;padding:10px 12px;display:flex;gap:10px;align-items:center;min-width:220px">
+          ${ach.logo_url?`<img src="${ach.logo_url}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid ${col}" onerror="this.style.display='none'">`:'<div style="width:48px;height:48px;border-radius:50%;background:rgba(212,168,67,.15);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🏆</div>'}
+          <div style="flex:1;min-width:0">
+            <div style="font-family:Oswald;font-size:12px;color:${col};letter-spacing:.5px">${ach.label||'—'}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">${ach.evento||''} ${ach.anio?'· '+ach.anio:''}</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:2px;opacity:.7">${ach.display==='verified'?'✓ Badge verificado':'🏅 Medalla'}</div>
+          </div>
+          <button onclick="removeAchievement('${a.codigo}',${i})" style="background:transparent;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px 4px;flex-shrink:0" title="Eliminar logro">✕</button>
+        </div>`;
+      }).join('')}
+    </div>
+    <details style="border:1px solid var(--border);border-radius:8px;padding:12px">
+      <summary style="cursor:pointer;font-size:12px;font-family:Oswald;letter-spacing:1px;color:var(--muted)">➕ AGREGAR LOGRO / MEDALLA</summary>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px">
+            <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">ETIQUETA (aparece debajo de la medalla)</label>
+            <input id="achLabel" type="text" placeholder="1ª Campeona Mundial Chile" class="inp" style="font-size:12px">
+          </div>
+          <div style="flex:1;min-width:180px">
+            <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">EVENTO</label>
+            <input id="achEvento" type="text" placeholder="IPF Sub-Junior & Junior Worlds 2025" class="inp" style="font-size:12px">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div style="flex:2;min-width:260px">
+            <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">URL DEL LOGO (Firebase Storage, CDN, etc.)</label>
+            <input id="achLogoUrl" type="text" placeholder="https://firebasestorage.googleapis.com/..." class="inp" style="font-size:12px">
+          </div>
+          <div style="flex:0 0 auto">
+            <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">AÑO</label>
+            <input id="achAnio" type="number" placeholder="2025" class="inp" style="width:80px;font-size:12px">
+          </div>
+          <div style="flex:0 0 auto">
+            <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">COLOR</label>
+            <input id="achColor" type="color" value="#D4A843" style="width:48px;height:36px;padding:2px;border-radius:6px;border:1px solid var(--border);background:var(--bg);cursor:pointer">
+          </div>
+          <div style="flex:1;min-width:180px">
+            <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">TIPO DE VISUALIZACIÓN</label>
+            <select id="achDisplay" class="inp" style="font-size:12px">
+              <option value="medal">🏅 Medalla (colgante a la derecha)</option>
+              <option value="verified">✓ Badge verificado (junto al nombre)</option>
+            </select>
+          </div>
+        </div>
+        <button onclick="addAchievement('${a.codigo}')" class="btn btn-g" style="align-self:flex-start;padding:8px 20px;font-size:12px">🏅 Guardar logro</button>
+      </div>
+    </details>
   </div>`;
 
   // ── PRs ──────────────────────────────────────────────────
