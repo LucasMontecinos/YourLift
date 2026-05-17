@@ -3686,8 +3686,17 @@ window.dirBreakStart=async function(){
   const m=parseInt(document.getElementById('dirBreakMin')?.value||'0',10)||0;
   const s=parseInt(document.getElementById('dirBreakSec')?.value||'0',10)||0;
   const label=(document.getElementById('dirBreakLabel')?.value||'').trim();
-  const videosRaw=document.getElementById('dirBreakVideos')?.value||'';
-  const videos=videosRaw.split('\n').map(u=>u.trim()).filter(u=>u.startsWith('http'));
+  // Videos de fondo — hardcodeados, toggle on/off desde el panel
+  const useVideo=document.getElementById('dirBreakUseVideo')?.checked!==false;
+  const BREAK_VIDEOS=[
+    'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fkaizen_DQ2UQqFAVJJ.mp4?alt=media',
+    'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fkaizen_DQr6qdojt0m.mp4?alt=media',
+    'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fkaizen_DQnYr17EZlU.mp4?alt=media',
+    'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fkaizen_DVXW9KyjlKm.mp4?alt=media',
+    'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fkaizen_DVeZ38LAVT1.mp4?alt=media',
+    'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fyourlift_promo.mp4?alt=media',
+  ];
+  const videos=useVideo?BREAK_VIDEOS:[];
   const durationSec=m*60+s;
   if(durationSec<=0){alert('Ingresá al menos 1 segundo');return}
   if(!_dirState)_dirState={};
@@ -3903,12 +3912,14 @@ function renderDirector(){
   h+='<div><label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">SEG</label><input id="dirBreakSec" type="number" min="0" max="59" value="'+(bt.active?(bt.durationSec||0)%60:0)+'" style="width:70px;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:Oswald;font-size:18px;text-align:center"></div>';
   h+='<div style="flex:1;min-width:160px"><label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">LABEL (opcional)</label><input id="dirBreakLabel" type="text" placeholder="ej. DESCANSO, ALMUERZO, CAMBIO BARRA" value="'+(bt.label||'').replace(/"/g,'&quot;')+'" style="width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px"></div>';
   h+='</div>';
-  // Video URLs
-  const currentVideos=(bt.videos||[]).join('\n');
-  h+='<div style="margin-top:10px">';
-  h+='<label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">📹 VIDEOS DE FONDO (opcional — una URL por línea)</label>';
-  h+='<textarea id="dirBreakVideos" rows="3" placeholder="https://firebasestorage.googleapis.com/.../video.mp4&#10;https://..." style="width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;font-family:\'DM Sans\',sans-serif;resize:vertical;line-height:1.5">'+currentVideos+'</textarea>';
-  h+='<div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.4">URLs directas a mp4/webm (Firebase Storage, CDN, etc). Se reproducen en loop automático. El timer aparece encima del video.</div>';
+  // Toggle video de fondo
+  const videoOn=(bt.videos||[]).length>0;
+  h+='<div style="margin-top:10px;display:flex;align-items:center;gap:10px">';
+  h+='<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text)">';
+  h+='<input type="checkbox" id="dirBreakUseVideo" '+(videoOn||!bt.active?'checked':'')+' style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">';
+  h+='<span>🎬 Video de fondo</span>';
+  h+='</label>';
+  h+='<span style="font-size:10px;color:var(--muted)">(6 clips KaizenMedia + promo YourLift en loop)</span>';
   h+='</div>';
   // Botones
   h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">';
