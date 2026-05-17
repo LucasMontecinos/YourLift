@@ -2705,9 +2705,25 @@ function _btVideoSetup(videos){
     },BT_CLIP_DURATION);
   }
 }
+// Offsets relativos para alternar zona del video: inicio / mitad / final
+const _BT_OFFSETS=[0, 0.33, 0.6];
+let _btOffsetIdx=0;
 function _btSetClip(src){
-  if(_btVideoBgEl){_btVideoBgEl.src=src;_btVideoBgEl.play().catch(()=>{});}
-  if(_btVideoFgEl){_btVideoFgEl.src=src;_btVideoFgEl.play().catch(()=>{});}
+  const offsetFraction=_BT_OFFSETS[_btOffsetIdx%_BT_OFFSETS.length];
+  _btOffsetIdx++;
+  [_btVideoBgEl,_btVideoFgEl].forEach(el=>{
+    if(!el)return;
+    el.src=src;
+    // Cuando el video cargue suficiente metadata, saltar al offset
+    el.onloadedmetadata=function(){
+      if(offsetFraction>0&&el.duration&&isFinite(el.duration)){
+        el.currentTime=el.duration*offsetFraction;
+      }
+      el.play().catch(()=>{});
+      el.onloadedmetadata=null;
+    };
+    el.load();
+  });
 }
 function _btVideoTeardown(){
   if(_btVideoInterval){clearInterval(_btVideoInterval);_btVideoInterval=null;}
@@ -3708,6 +3724,12 @@ window.dirBreakStart=async function(){
     'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fkaizen_DQnYr17EZlU.mp4?alt=media',
     'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fkaizen_DVXW9KyjlKm.mp4?alt=media',
     'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fkaizen_DVeZ38LAVT1.mp4?alt=media',
+    'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fwa_20251112.mp4?alt=media',
+    'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fwa_20260502.mp4?alt=media',
+    'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fwa_20260504a.mp4?alt=media',
+    'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fwa_20260504b.mp4?alt=media',
+    'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fwa_20260516a.mp4?alt=media',
+    'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fwa_20260516b.mp4?alt=media',
     'https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/videos%2Fbreak%2Fyourlift_promo.mp4?alt=media',
   ];
   const videos=useVideo?BREAK_VIDEOS:[];
