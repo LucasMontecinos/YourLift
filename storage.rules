@@ -1,0 +1,103 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════
+// YourLift — Firebase Storage Security Rules
+// ═══════════════════════════════════════════════════════════════
+// Despliegue:
+//   firebase deploy --only storage
+//   o pegar este archivo en Firebase Console → Storage → Rules.
+//
+// Uso esperado de Storage:
+//   - athlete_files/{rut}/{type}.{ext}  → carnet, certificado WADA, etc.
+//     (subido al inscribirse, leído solo por admin para validación)
+//   - logos/{club}.png                  → logos de clubes (público lectura)
+//   - public/*                          → cualquier asset público
+//
+// Modelo:
+//   - admins (definidos en Firestore /admins/{uid}) leen y escriben todo
+//   - usuarios autenticados pueden subir a athlete_files/{su rut}
+//   - lectura pública solo para /logos/* y /public/*
+// ═══════════════════════════════════════════════════════════════
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper: chequea si el usuario actual es admin
+    function isAdmin() {
+      return request.auth != null
+          && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+
+    // ── Logos públicos (clubes, federación, etc.) ─────────────────
+    match /logos/{file} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Public bucket (assets generales como YourLift_logo.png) ──
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Files de atletas (carnet, WADA, fotos) ───────────────────
+    // Escritura PÚBLICA (cualquier atleta puede inscribirse y subir su docu)
+    // pero con validación estricta:
+    //   • Tamaño < 5 MB
+    //   • Solo imágenes o PDF
+    // Lectura SOLO admin (privacidad de los documentos).
+    // El path está estructurado por RUT, así nadie puede sobreescribir
+    // archivos de otro atleta accidentalmente (cada uno usa su path).
+    match /athlete_files/{rut}/{file} {
+      allow read: if isAdmin();
+      allow write: if request.resource.size < 5 * 1024 * 1024
+                    && (request.resource.contentType.matches('image/.*')
+                        || request.resource.contentType == 'application/pdf');
+      allow delete: if isAdmin();
+    }
+
+    // ── Fotos publicas de atletas (perfiles + transmision) ───────
+    // Procesadas con fondo blanco estilo IPF desde admin.html.
+    // Lectura publica (las usan atleta.html, ranking.html, livecast.html).
+    // Escritura solo admin.
+    match /athlete_photos/{file} {
+      allow read: if true;
+      allow write: if isAdmin()
+                    && request.resource.size < 8 * 1024 * 1024
+                    && request.resource.contentType.matches('image/.*');
+      allow delete: if isAdmin();
+    }
+
+    // ── GIFs / videos de atletas (perfil TX en transmision) ──────
+    // Subidos desde admin, reproducidos en el overlay OBS (livecast).
+    // Lectura publica. Escritura y borrado solo admin.
+    // Tamaño máx 100 MB para soportar videos cortos sin comprimir.
+    match /athlete_gifs/{file} {
+      allow read: if true;
+      allow write: if isAdmin()
+                    && request.resource.size < 100 * 1024 * 1024
+                    && (request.resource.contentType.matches('video/.*')
+                        || request.resource.contentType == 'image/gif');
+      allow delete: if isAdmin();
+    }
+
+    // ── Backup admin (exports JSON, logs, etc.) ──────────────────
+    match /backups/{allPaths=**} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Videos de break timer (fondo pantalla de espera) ────────
+    // Lectura pública (el widget OBS los carga sin login).
+    // Escritura solo admin.
+    match /videos/{allPaths=**} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+
+    // ── Default deny ─────────────────────────────────────────────
+    // Cualquier otro path queda bloqueado.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
