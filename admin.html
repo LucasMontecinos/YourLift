@@ -711,6 +711,7 @@ window.deleteAthlete=async function(cod){
 // LOGROS / MEDALLAS DE ATLETAS
 // ═══════════════════════════════════════════
 window.addAchievement=async function(codigo){
+  if(!['superadmin','owner'].includes(ST.adminInfo?.role)){showToast('🔒 Solo superadmin puede agregar logros',null,true);return;}
   const label=(document.getElementById('achLabel')?.value||'').trim();
   const evento=(document.getElementById('achEvento')?.value||'').trim();
   const logo_url=(document.getElementById('achLogoUrl')?.value||'').trim();
@@ -731,6 +732,7 @@ window.addAchievement=async function(codigo){
   }catch(e){showToast('Error: '+e.message,null,true);}
 };
 window.removeAchievement=async function(codigo,idx){
+  if(!['superadmin','owner'].includes(ST.adminInfo?.role)){showToast('🔒 Solo superadmin puede eliminar logros',null,true);return;}
   if(!confirm('¿Eliminar este logro?'))return;
   const existing=ST.achievementsByCodigo?.[codigo]||[];
   const updated=existing.filter((_,i)=>i!==idx);
@@ -2940,6 +2942,7 @@ function renderAthleteProfile(){
   </div>`;
 
   // ── Logros / Medallas ────────────────────────────────────
+  const _canAch=['superadmin','owner'].includes(ST.adminInfo?.role);
   const achList=ST.achievementsByCodigo?.[a.codigo]||[];
   h+=`<div class="card" style="margin-bottom:14px;border-left:4px solid #D4A843">
     <div style="font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:1px;color:#D4A843;margin-bottom:12px">🏅 LOGROS Y MEDALLAS</div>
@@ -2954,47 +2957,50 @@ function renderAthleteProfile(){
             <div style="font-size:10px;color:var(--muted);margin-top:2px">${ach.evento||''} ${ach.anio?'· '+ach.anio:''}</div>
             <div style="font-size:9px;color:var(--muted);margin-top:2px;opacity:.7">${ach.display==='verified'?'✓ Badge verificado':'🏅 Medalla'}</div>
           </div>
-          <button onclick="removeAchievement('${a.codigo}',${i})" style="background:transparent;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px 4px;flex-shrink:0" title="Eliminar logro">✕</button>
+          ${_canAch?`<button onclick="removeAchievement('${a.codigo}',${i})" style="background:transparent;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px 4px;flex-shrink:0" title="Eliminar logro">✕</button>`:''}
         </div>`;
       }).join('')}
     </div>
-    <details style="border:1px solid var(--border);border-radius:8px;padding:12px">
-      <summary style="cursor:pointer;font-size:12px;font-family:Oswald;letter-spacing:1px;color:var(--muted)">➕ AGREGAR LOGRO / MEDALLA</summary>
-      <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <div style="flex:1;min-width:180px">
-            <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">ETIQUETA (aparece debajo de la medalla)</label>
-            <input id="achLabel" type="text" placeholder="1ª Campeona Mundial Chile" class="inp" style="font-size:12px">
+    ${_canAch
+      ? `<details style="border:1px solid var(--border);border-radius:8px;padding:12px">
+          <summary style="cursor:pointer;font-size:12px;font-family:Oswald;letter-spacing:1px;color:var(--muted)">➕ AGREGAR LOGRO / MEDALLA</summary>
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <div style="flex:1;min-width:180px">
+                <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">ETIQUETA (aparece debajo de la medalla)</label>
+                <input id="achLabel" type="text" placeholder="1ª Campeona Mundial Chile" class="inp" style="font-size:12px">
+              </div>
+              <div style="flex:1;min-width:180px">
+                <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">EVENTO</label>
+                <input id="achEvento" type="text" placeholder="IPF Sub-Junior & Junior Worlds 2025" class="inp" style="font-size:12px">
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <div style="flex:2;min-width:260px">
+                <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">URL DEL LOGO (Firebase Storage, CDN, etc.)</label>
+                <input id="achLogoUrl" type="text" placeholder="https://firebasestorage.googleapis.com/..." class="inp" style="font-size:12px">
+              </div>
+              <div style="flex:0 0 auto">
+                <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">AÑO</label>
+                <input id="achAnio" type="number" placeholder="2025" class="inp" style="width:80px;font-size:12px">
+              </div>
+              <div style="flex:0 0 auto">
+                <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">COLOR</label>
+                <input id="achColor" type="color" value="#D4A843" style="width:48px;height:36px;padding:2px;border-radius:6px;border:1px solid var(--border);background:var(--bg);cursor:pointer">
+              </div>
+              <div style="flex:1;min-width:180px">
+                <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">TIPO DE VISUALIZACIÓN</label>
+                <select id="achDisplay" class="inp" style="font-size:12px">
+                  <option value="medal">🏅 Medalla (colgante a la derecha)</option>
+                  <option value="verified">✓ Badge verificado (junto al nombre)</option>
+                </select>
+              </div>
+            </div>
+            <button onclick="addAchievement('${a.codigo}')" class="btn btn-g" style="align-self:flex-start;padding:8px 20px;font-size:12px">🏅 Guardar logro</button>
           </div>
-          <div style="flex:1;min-width:180px">
-            <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">EVENTO</label>
-            <input id="achEvento" type="text" placeholder="IPF Sub-Junior & Junior Worlds 2025" class="inp" style="font-size:12px">
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <div style="flex:2;min-width:260px">
-            <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">URL DEL LOGO (Firebase Storage, CDN, etc.)</label>
-            <input id="achLogoUrl" type="text" placeholder="https://firebasestorage.googleapis.com/..." class="inp" style="font-size:12px">
-          </div>
-          <div style="flex:0 0 auto">
-            <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">AÑO</label>
-            <input id="achAnio" type="number" placeholder="2025" class="inp" style="width:80px;font-size:12px">
-          </div>
-          <div style="flex:0 0 auto">
-            <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">COLOR</label>
-            <input id="achColor" type="color" value="#D4A843" style="width:48px;height:36px;padding:2px;border-radius:6px;border:1px solid var(--border);background:var(--bg);cursor:pointer">
-          </div>
-          <div style="flex:1;min-width:180px">
-            <label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">TIPO DE VISUALIZACIÓN</label>
-            <select id="achDisplay" class="inp" style="font-size:12px">
-              <option value="medal">🏅 Medalla (colgante a la derecha)</option>
-              <option value="verified">✓ Badge verificado (junto al nombre)</option>
-            </select>
-          </div>
-        </div>
-        <button onclick="addAchievement('${a.codigo}')" class="btn btn-g" style="align-self:flex-start;padding:8px 20px;font-size:12px">🏅 Guardar logro</button>
-      </div>
-    </details>
+        </details>`
+      : `<div style="font-size:11px;color:var(--muted);padding:8px 10px;background:rgba(30,58,95,.12);border-radius:6px;border:1px solid var(--border)">🔒 Solo superadmin puede agregar o eliminar logros.</div>`
+    }
   </div>`;
 
   // ── PRs ──────────────────────────────────────────────────
