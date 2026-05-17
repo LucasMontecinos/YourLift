@@ -146,6 +146,8 @@ if(TX_MODE){
   window.txReplay=function(){
     if(typeof _txLastLifter!=='undefined')_txLastLifter=null;
     if(typeof renderTxWidget==='function')renderTxWidget();
+    // Re-conectar listener de Firestore por si OBS lo suspendió al cambiar de escena
+    if(typeof startFBSync==='function'&&typeof fbReady!=='undefined'&&fbReady&&DATA&&DATA.event)startFBSync();
   };
   window.addEventListener('obsSourceActiveChanged',e=>{if(e&&e.detail&&e.detail.active)window.txReplay()});
   window.addEventListener('obsSourceVisibleChanged',e=>{if(e&&e.detail&&e.detail.visible)window.txReplay()});
@@ -268,8 +270,6 @@ function startFBSync(){
   const ref=window._fb.doc(fbDB,'livecast_sync',id);
   fbUnsub=window._fb.onSnapshot(ref,(snap)=>{
     if(!snap.exists())return;
-    // Admin que acaba de escribir: ignorar eco de su propio cambio
-    if(isAdmin&&Date.now()-_fbLastWrite<5000)return;
     // Si hay un input enfocado, no re-renderizar (el usuario está editando)
     const focused=document.activeElement;
     if(focused&&(focused.tagName==='INPUT'||focused.tagName==='SELECT'||focused.tagName==='TEXTAREA'))return;
