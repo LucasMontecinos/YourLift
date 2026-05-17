@@ -353,7 +353,7 @@ async function loadAll(){
       window._inscListener=onSnapshot(collection(db,'inscripciones'),(snap)=>{
         ST.inscripciones=snap.docs.map(d=>({id:d.id,...d.data()}))
           .sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0));
-        if(ST.view==='nominas'||ST.view==='dashboard'||ST.view==='approvals')render();
+        if(ST.view==='nominas'||ST.view==='dashboard'||ST.view==='approvals'||ST.view==='athletes')render();
       },(e)=>console.warn('[listener] inscripciones:',e.message));
     }catch(e){console.warn('[loadAll] insc listener:',e.message);}
   }
@@ -385,7 +385,7 @@ async function loadAll(){
           }
           return e;
         }).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-        if(ST.view==='campeonatos'||ST.view==='dashboard')render();
+        if(ST.view==='campeonatos'||ST.view==='dashboard'||ST.view==='athletes')render();
       },(e)=>console.warn('[listener] eventos:',e.message));
     }catch(e){console.warn('[loadAll] eventos listener:',e.message);}
   }
@@ -418,6 +418,9 @@ async function loadAll(){
 
   // Auto-close overdue nominations (non-blocking)
   setTimeout(()=>{try{autoCloseOverdueEventos();}catch(e){}},3000);
+
+  // Render ahora que tenemos datos
+  render();
 }
 
 // ═══════════════════════════════════════════
