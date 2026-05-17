@@ -133,7 +133,7 @@ function _getPeerKey(a){
 }
 function _peerPerc(myTotal,key){const g=PEERS[key];if(!g)return null;const all=[...g.members.map(m=>m.total),myTotal].sort((a,b)=>b-a);const rank=all.indexOf(myTotal)+1;return{rank,n:all.length,pct:Math.round((1-rank/all.length)*100),g};}
 
-const ST={user:null,adminInfo:null,view:'dashboard',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{},achievementsByCodigo:{},fotosByCodigo:{}};
+const ST={user:null,adminInfo:null,view:'athletes',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{},achievementsByCodigo:{},fotosByCodigo:{}};
 window.ST=ST;
 
 // HTML-escape helper — defensa contra XSS al inyectar datos en innerHTML
@@ -1278,12 +1278,10 @@ function render(){
         const borderStyle=isOwner?'border:1px solid rgba(196,30,58,.45);background:linear-gradient(135deg,rgba(196,30,58,.08),rgba(212,168,67,.08))':'';
         return `<div class="user" style="${borderStyle}">👤 ${nameHtml}<br>${roleHtml}</div>`;
       })()}
-      <div class="side-label">Principal</div>
-      <button class="side-btn ${ST.view==='dashboard'?'active':''}" onclick="go('dashboard')"><span class="icon">📊</span>Dashboard</button>
       <div class="side-label">Datos</div>
       <button class="side-btn ${ST.view==='athletes'?'active':''}" onclick="go('athletes')"><span class="icon">🏋️</span>Atletas (DB)</button>
       <button class="side-btn ${ST.view==='nominas'?'active':''}" onclick="go('nominas')"><span class="icon">📋</span>Nóminas</button>
-      ${(ST.adminInfo?.role==='superadmin'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='stats'?'active':''}" onclick="go('stats')"><span class="icon">📈</span>Estadísticas</button>`:''}
+      ${(['superadmin','owner'].includes(ST.adminInfo?.role)||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='stats'?'active':''}" onclick="go('stats')"><span class="icon">📈</span>Estadísticas</button>`:''}
       <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')"><span class="icon">✓</span>Aprobaciones</button>
       <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')"><span class="icon">✏️</span>Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
       <button class="side-btn ${ST.view==='entrenadores'?'active':''}" onclick="go('entrenadores')"><span class="icon">👥</span>Entrenadores</button>
@@ -1297,7 +1295,7 @@ function render(){
       <button class="side-btn ${ST.view==='exports'?'active':''}" onclick="go('exports')"><span class="icon">💾</span>Exports</button>
       <button class="side-btn ${ST.view==='audit'?'active':''}" onclick="go('audit')"><span class="icon">📜</span>Audit Log</button>
       ${ST.pendingResults?`<button class="side-btn ${ST.view==='mergeResults'?'active':''}" onclick="go('mergeResults')" style="border-color:var(--green);color:var(--green)"><span class="icon">🏁</span>Resultados Pendientes <span style="background:var(--green);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.pendingResults}</span></button>`:''}
-      ${(ST.adminInfo?.role==='superadmin'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='admins'?'active':''}" onclick="go('admins')"><span class="icon">🔑</span>Gestión Admin</button>`:''}
+      ${(['superadmin','owner'].includes(ST.adminInfo?.role)||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='admins'?'active':''}" onclick="go('admins')"><span class="icon">🔑</span>Gestión Admin</button>`:''}
       <div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">
         <a href="index.html" class="side-btn" style="text-decoration:none"><span class="icon">←</span>Volver al sitio</a>
         <button class="side-btn" onclick="doLogout()" style="color:var(--red)"><span class="icon">🔒</span>Cerrar sesión</button>
@@ -1305,8 +1303,7 @@ function render(){
     </div>`;
   
   let content='';
-  if(ST.view==='dashboard'){try{content=renderDashboard();}catch(e){console.error('Dashboard error:',e);content='<div class="h1">Dashboard</div><div class="card" style="color:var(--red)">Error al cargar el dashboard: '+e.message+'<br><small>Revisa la consola del navegador (F12) para más detalles.</small></div>';}}
-  else if(ST.view==='athletes')content=renderAthletes();
+  if(ST.view==='athletes')content=renderAthletes();
   else if(ST.view==='nominas')content=renderNominas();
   else if(ST.view==='stats')content=renderStats();
   else if(ST.view==='approvals')content=renderApprovals();
