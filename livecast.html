@@ -3920,6 +3920,13 @@ function renderDirector(){
       +(_obsWsSettings.password?'&obsPwd='+encodeURIComponent(_obsWsSettings.password):'')
     :'';
   const widgetUrl=location.origin+location.pathname.replace(/[^/]+$/,'')+'livecast.html?tx=director&evento='+encodeURIComponent(DATA.event?.id||DATA.event?.name||'')+_wsParam;
+  const _sdBase=location.origin+location.pathname.replace(/[^/]+$/,'')+'streamdeck.html';
+  const _sdUrl=(action,extra='')=>_sdBase+'?action='+action+(extra?'&'+extra:'');
+  const _sdRow=(label,url,color)=>'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05)">'
+    +'<span style="font-size:11px;color:var(--muted);min-width:100px;flex-shrink:0">'+label+'</span>'
+    +'<input type="text" readonly value="'+url.replace(/"/g,'&quot;')+'" onclick="this.select()" style="flex:1;font-size:9px;font-family:monospace;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:4px;color:rgba(255,255,255,.7);padding:3px 6px;cursor:pointer" title="Clic para seleccionar">'
+    +'<a href="'+url+'" target="_blank" style="padding:3px 8px;border-radius:4px;border:none;background:'+color+';color:#fff;font-size:9px;font-family:Oswald;letter-spacing:1px;text-decoration:none;flex-shrink:0">TEST</a>'
+  +'</div>';
   const kbd=(k)=>'<kbd style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:32px;padding:0 10px;background:#0a1628;border:2px solid #D4A843;border-radius:6px;font-family:Oswald;font-size:16px;font-weight:700;color:#D4A843;letter-spacing:1px;box-shadow:0 2px 0 #D4A84355">'+k+'</kbd>';
   const scaleSlider=(key)=>{
     const c=_dirState[key]||{};
@@ -4206,7 +4213,21 @@ function renderDirector(){
     h+='<button class="btn" onclick="dirBreakAdd(-60)" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">−1 min</button>';
     h+='<button class="btn btn-r" onclick="dirBreakHide()" style="padding:9px 18px;font-size:12px">⏹ DETENER</button>';
   }
-  h+='</div>'+scaleSlider('breakTimer')+'</div>';
+  h+='</div>'+scaleSlider('breakTimer');
+  // ── URLs para Stream Deck ──────────────────────────────────────
+  h+='<details style="margin-top:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+  h+='<summary style="padding:8px 12px;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text);background:var(--card);list-style:none;display:flex;align-items:center;gap:6px">🎮 URLS STREAM DECK <span style="font-size:9px;color:var(--muted);font-weight:400">— copiá la URL al botón "Website" del Stream Deck</span></summary>';
+  h+='<div style="padding:10px 12px;display:flex;flex-direction:column;gap:0">';
+  h+=_sdRow('▶ 10 min',_sdUrl('break','min=10'),'#22c55e');
+  h+=_sdRow('▶ 5 min',_sdUrl('break','min=5'),'#22c55e');
+  h+=_sdRow('▶ 15 min',_sdUrl('break','min=15'),'#22c55e');
+  h+=_sdRow('▶ 20 min',_sdUrl('break','min=20'),'#22c55e');
+  h+=_sdRow('⏸ Pausar',_sdUrl('breakPause'),'#f59e0b');
+  h+=_sdRow('▶ Reanudar',_sdUrl('breakResume'),'#3b82f6');
+  h+=_sdRow('⏹ Detener',_sdUrl('breakStop'),'#ef4444');
+  h+='<div style="margin-top:8px;font-size:10px;color:var(--muted);line-height:1.5">💡 <b>Cómo usarlo:</b> En Stream Deck → agregar botón <b>Website</b> → pegar la URL. Tenés que estar logueado en admin.html en el mismo navegador. Para cambiar minutos editá <code style="background:rgba(255,255,255,.08);padding:1px 4px;border-radius:3px">min=10</code> en la URL.</div>';
+  h+='</div></details>';
+  h+='</div>';
 
   // Color picker panel
   const curColors=(_dirState&&_dirState.colors)||{};
