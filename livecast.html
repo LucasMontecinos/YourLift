@@ -3025,8 +3025,7 @@ function _renderTxBreakTimer(bt,scale){
   const sponsorBar=showLogos
     ?'<div style="position:absolute;bottom:0;left:0;right:0;height:'+barH+';background:rgba(0,0,0,.85);border-top:2px solid '+accentColor+';display:flex;align-items:center;justify-content:center;gap:clamp(18px,3.5vw,55px);padding:0 4vw;z-index:6">'
       +'<img src="YourLift_logo.png" style="height:clamp(22px,3.2vh,40px);width:auto;object-fit:contain;filter:brightness(1.1)" onerror="this.style.display=\'none\'">'
-      +'<div style="width:1px;height:36%;background:rgba(255,255,255,.2)"></div>'
-      +'<img src="promo/assets/fechipo_logo.png" style="height:clamp(22px,3.2vh,40px);width:auto;object-fit:contain;filter:brightness(0) invert(1)" onerror="this.style.display=\'none\'">'
+      +(stl.eventLogoUrl?'<div style="width:1px;height:36%;background:rgba(255,255,255,.2)"></div><img src="'+stl.eventLogoUrl+'" style="height:clamp(22px,3.2vh,40px);width:auto;max-width:clamp(80px,12vw,180px);object-fit:contain;filter:brightness(0) invert(1)" onerror="this.style.display=\'none\'">':'')
       +'<div style="width:1px;height:36%;background:rgba(255,255,255,.2)"></div>'
       +neoSvg+'</div>'
     :'';
@@ -3655,6 +3654,33 @@ window.dirBtUploadVideo=async function(){
   };
   inp.click();
 };
+window.dirBtUploadEventLogo=async function(){
+  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía');return;}
+  const inp=document.createElement('input');inp.type='file';inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
+  inp.onchange=async()=>{
+    const f=inp.files&&inp.files[0];if(!f)return;
+    const btn=document.getElementById('dirBtEvLogoBtn');if(btn)btn.textContent='⏳ Subiendo...';
+    try{
+      const {ref,uploadBytes,getDownloadURL}=window._fbSt;
+      const r=ref(window._fbStInst,'logos/event/'+f.name);
+      await uploadBytes(r,f,{contentType:f.type});
+      const url=await getDownloadURL(r);
+      // Guardar en el estilo inmediatamente
+      if(!_dirState)_dirState={};
+      if(!_dirState.breakTimer)_dirState.breakTimer={};
+      if(!_dirState.breakTimer.style)_dirState.breakTimer.style={};
+      _dirState.breakTimer.style.eventLogoUrl=url;
+      await _dirPush();R();
+    }catch(e){alert('Error subiendo logo: '+e.message);}
+    if(btn)btn.textContent='⬆ SUBIR';
+  };
+  inp.click();
+};
+window.dirBtClearEventLogo=async function(){
+  if(!_dirState?.breakTimer?.style)return;
+  _dirState.breakTimer.style.eventLogoUrl='';
+  await _dirPush();R();
+};
 window.dirBtDeleteVideo=async function(name){
   if(!confirm('¿Eliminar '+name+'?'))return;
   if(!window._fbSt||!window._fbStInst)return;
@@ -3918,6 +3944,7 @@ window.dirBtApplyStyle=async function(){
     blurAmount:Number(document.getElementById('dirBtBlur')?.value??s.blurAmount??24),
     overlayOpacity:Number(document.getElementById('dirBtOv')?.value??s.overlayOpacity??0.65),
     showLogos:document.getElementById('dirBtShowLogos')?.checked!==false,
+    eventLogoUrl:document.getElementById('dirBtEvLogo')?.dataset.url??s.eventLogoUrl??'',
   };
   await _dirPush();R();
 };
@@ -4201,6 +4228,18 @@ function renderDirector(){
   h+='<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)">Fondo <input type="color" id="dirBtBgColor" value="'+_bg+'" onchange="window.dirBtPreviewBg(this.value)" style="width:36px;height:24px;border:1px solid var(--border);border-radius:3px;background:none;cursor:pointer;padding:1px"></div>';
   h+='<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)">Acento <input type="color" id="dirBtAccent" value="'+_ac+'" style="width:36px;height:24px;border:1px solid var(--border);border-radius:3px;background:none;cursor:pointer;padding:1px"></div>';
   h+='<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer"><input type="checkbox" id="dirBtShowLogos" '+(stl.showLogos!==false?'checked':'')+' style="accent-color:var(--accent)"> Logos</label>';
+  h+='</div>';
+  // Logo del evento
+  const _evLogo=stl.eventLogoUrl||'';
+  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid rgba(30,58,95,.3);margin-top:4px">';
+  h+='<span style="font-size:10px;color:var(--muted);white-space:nowrap">Logo evento</span>';
+  if(_evLogo){
+    h+='<img src="'+_evLogo+'" id="dirBtEvLogo" data-url="'+_evLogo+'" style="height:28px;width:auto;max-width:80px;object-fit:contain;background:rgba(255,255,255,.05);border-radius:4px;border:1px solid var(--border);padding:2px" onerror="this.style.opacity=.3">';
+    h+='<button onclick="window.dirBtClearEventLogo()" style="padding:3px 8px;border-radius:4px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;font-size:10px;cursor:pointer">✕ Quitar</button>';
+  } else {
+    h+='<span id="dirBtEvLogo" data-url="" style="font-size:10px;color:var(--muted);font-style:italic">Sin logo</span>';
+  }
+  h+='<button id="dirBtEvLogoBtn" onclick="window.dirBtUploadEventLogo()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:10px;font-family:Oswald;letter-spacing:1px;cursor:pointer">⬆ SUBIR</button>';
   h+='</div>';
   // Tamaños de fuente
   const sl2=(id,lbl,min,max,val)=>'<div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:var(--muted);white-space:nowrap;min-width:90px">'+lbl+'</span><input type="range" id="'+id+'" min="'+min+'" max="'+max+'" value="'+val+'" style="flex:1;accent-color:var(--accent)" oninput="document.getElementById(\''+id+'V\').textContent=this.value"><span id="'+id+'V" style="font-size:10px;color:var(--muted);min-width:18px">'+val+'</span></div>';
