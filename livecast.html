@@ -1560,7 +1560,7 @@ async function generateHojaEquipo(){
     // total = 15+18+58+20+20+20+22+22+22+22+22+20 = 281 ✓
     const totalW=cols.reduce((s,c)=>s+c.w,0);
     const startX=(PW-totalW)/2;
-    const BOX=5; // checkbox size mm
+    const BOX=11; // checkbox size mm — large enough to write/mark
 
     const drawPageHeader=(cont=false)=>{
       doc.setFillColor(...C.bg);doc.rect(0,0,PW,PH,'F');
@@ -1592,7 +1592,7 @@ async function generateHojaEquipo(){
     let rowIndex=0;
 
     athletes.forEach(a=>{
-      const rowH=9;
+      const rowH=15;
       if(curY+rowH>PH-10){
         doc.addPage();
         drawPageHeader(true);
@@ -1612,7 +1612,7 @@ async function generateHojaEquipo(){
 
       let cx=startX;
       cols.forEach((col,ci)=>{
-        const ty=curY+rowH/2+2.5;
+        const ty=curY+rowH/2+1.5;
         if(col.check){
           const bx=cx+col.w/2-BOX/2;
           const by=curY+rowH/2-BOX/2;
@@ -1698,7 +1698,14 @@ async function generateHojaPesaje(){
     const totalW=cols.reduce((s,c)=>s+c.w,0);
     const startX=(PW-totalW)/2;
 
-    const drawPageHeader=(cont=false)=>{
+    // Group athletes by flight, preserving lot order within each flight
+    const flightKeys=[...new Set(athletes.map(a=>a.flight||'').filter(Boolean))].sort();
+    const byFlight=flightKeys.map(fl=>({fl,list:athletes.filter(a=>a.flight===fl)}));
+    // Athletes with no flight go to their own group at the end
+    const noFlight=athletes.filter(a=>!a.flight);
+    if(noFlight.length) byFlight.push({fl:'?',list:noFlight});
+
+    const drawPageHeader=(fl='',cont=false)=>{
       doc.setFillColor(...C.bg);doc.rect(0,0,PW,PH,'F');
       doc.setFillColor(...C.hFill);doc.rect(0,0,PW,14,'F');
       doc.setTextColor(...C.hText);doc.setFont('helvetica','bold');doc.setFontSize(12);
@@ -1708,7 +1715,8 @@ async function generateHojaPesaje(){
       doc.setFontSize(8);doc.text(new Date().toLocaleDateString('es-CL'),PW-8,9.5,{align:'right'});
       doc.setFillColor(...C.sub);doc.rect(0,14,PW,8,'F');
       doc.setTextColor(...C.subTx);doc.setFont('helvetica','bold');doc.setFontSize(9);
-      doc.text('HOJA DE PESAJE'+(cont?' (cont.)':' — '+athletes.length+' atletas'),PW/2,19.5,{align:'center'});
+      const label='HOJA DE PESAJE'+(fl&&fl!=='?'?' — TANDA '+fl:'')+(cont?' (cont.)':'');
+      doc.text(label,PW/2,19.5,{align:'center'});
     };
 
     const drawColHeaders=(y)=>{
@@ -1722,70 +1730,74 @@ async function generateHojaPesaje(){
       doc.setDrawColor(...C.line);doc.setLineWidth(0.4);doc.line(startX,y+7,startX+totalW,y+7);
     };
 
-    drawPageHeader(false);
-    drawColHeaders(26);
-    let curY=33;
-    let rowIndex=0;
+    byFlight.forEach(({fl,list},fi)=>{
+      if(fi>0) doc.addPage();
+      drawPageHeader(fl,false);
+      drawColHeaders(26);
+      let curY=33;
+      let rowIndex=0;
 
-    athletes.forEach(a=>{
-      const rowH=10;
-      if(curY+rowH>PH-12){
-        doc.addPage();
-        drawPageHeader(true);
-        drawColHeaders(26);
-        curY=33;rowIndex=0;
-      }
-
-      doc.setFillColor(...(rowIndex%2===0?C.row0:C.row1));
-      doc.rect(startX,curY,totalW,rowH,'F');
-
-      const vals=[
-        {t:'',        bold:false},
-        {t:a.flight||'', bold:true},
-        {t:String(a.lot||'—'), bold:true},
-        {t:strip(a.name||''), bold:false, align:'left'},
-        {t:a.bw>0?String(a.bw):'', bold:a.bw>0},
-        {t:a.att?.sq?.[0]?.w>0?String(a.att.sq[0].w):'', bold:false},
-        {t:a.att?.bp?.[0]?.w>0?String(a.att.bp[0].w):'', bold:false},
-        {t:a.att?.dl?.[0]?.w>0?String(a.att.dl[0].w):'', bold:false},
-        {t:'', bold:false},
-        {t:'', bold:false},
-      ];
-
-      let cx=startX;
-      vals.forEach((cell,ci)=>{
-        const col=cols[ci];
-        const ty=curY+rowH/2+2.5;
-        doc.setTextColor(...C.text);
-        doc.setFont('helvetica',cell.bold?'bold':'normal');
-        doc.setFontSize(cell.bold?8:7);
-        if(cell.t){
-          const al=(cell.align||col.align)==='center'?'center':'left';
-          const px=al==='center'?cx+col.w/2:cx+2;
-          let txt=cell.t;
-          if(ci===3){const maxW=col.w-4;while(txt.length>1&&doc.getTextWidth(txt)>maxW)txt=txt.slice(0,-1);if(txt!==cell.t)txt+='.';}
-          doc.text(txt,px,ty,{align:al});
+      list.forEach(a=>{
+        const rowH=10;
+        if(curY+rowH>PH-12){
+          doc.addPage();
+          drawPageHeader(fl,true);
+          drawColHeaders(26);
+          curY=33;rowIndex=0;
         }
-        if(col.writable&&!cell.t){
-          doc.setDrawColor(...C.uline);doc.setLineWidth(0.4);
-          doc.line(cx+2,curY+rowH-2,cx+col.w-2,curY+rowH-2);
-        }
-        doc.setDrawColor(...C.line);doc.setLineWidth(0.1);
-        doc.line(cx+col.w,curY,cx+col.w,curY+rowH);
-        cx+=col.w;
+
+        doc.setFillColor(...(rowIndex%2===0?C.row0:C.row1));
+        doc.rect(startX,curY,totalW,rowH,'F');
+
+        const vals=[
+          {t:'',        bold:false},
+          {t:a.flight||'', bold:true},
+          {t:String(a.lot||'—'), bold:true},
+          {t:strip(a.name||''), bold:false, align:'left'},
+          {t:a.bw>0?String(a.bw):'', bold:a.bw>0},
+          {t:a.att?.sq?.[0]?.w>0?String(a.att.sq[0].w):'', bold:false},
+          {t:a.att?.bp?.[0]?.w>0?String(a.att.bp[0].w):'', bold:false},
+          {t:a.att?.dl?.[0]?.w>0?String(a.att.dl[0].w):'', bold:false},
+          {t:'', bold:false},
+          {t:'', bold:false},
+        ];
+
+        let cx=startX;
+        vals.forEach((cell,ci)=>{
+          const col=cols[ci];
+          const ty=curY+rowH/2+2.5;
+          doc.setTextColor(...C.text);
+          doc.setFont('helvetica',cell.bold?'bold':'normal');
+          doc.setFontSize(cell.bold?8:7);
+          if(cell.t){
+            const al=(cell.align||col.align)==='center'?'center':'left';
+            const px=al==='center'?cx+col.w/2:cx+2;
+            let txt=cell.t;
+            if(ci===3){const maxW=col.w-4;while(txt.length>1&&doc.getTextWidth(txt)>maxW)txt=txt.slice(0,-1);if(txt!==cell.t)txt+='.';}
+            doc.text(txt,px,ty,{align:al});
+          }
+          if(col.writable&&!cell.t){
+            doc.setDrawColor(...C.uline);doc.setLineWidth(0.4);
+            doc.line(cx+2,curY+rowH-2,cx+col.w-2,curY+rowH-2);
+          }
+          doc.setDrawColor(...C.line);doc.setLineWidth(0.1);
+          doc.line(cx+col.w,curY,cx+col.w,curY+rowH);
+          cx+=col.w;
+        });
+
+        doc.setDrawColor(...C.line);doc.setLineWidth(0.2);
+        doc.line(startX,curY+rowH,startX+totalW,curY+rowH);
+        curY+=rowH;
+        rowIndex++;
       });
 
-      doc.setDrawColor(...C.line);doc.setLineWidth(0.2);
-      doc.line(startX,curY+rowH,startX+totalW,curY+rowH);
-      curY+=rowH;
-      rowIndex++;
+      // footnote at bottom of last page for this flight
+      curY+=4;
+      if(curY<PH-16){
+        doc.setTextColor(...C.muted);doc.setFont('helvetica','italic');doc.setFontSize(6);
+        doc.text('La firma del atleta confirma conformidad con el pesaje y los primeros intentos declarados.',startX,curY);
+      }
     });
-
-    curY+=4;
-    if(curY<PH-16){
-      doc.setTextColor(...C.muted);doc.setFont('helvetica','italic');doc.setFontSize(6);
-      doc.text('La firma del atleta confirma conformidad con el pesaje y los primeros intentos declarados.',startX,curY);
-    }
 
     const total=doc.internal.getNumberOfPages();
     for(let i=1;i<=total;i++){
