@@ -2375,6 +2375,11 @@ function renderExports(){
           </div>
         </div>
         <button class="btn btn-b" onclick="exportInscripciones()" style="text-align:left;padding:14px">📥 inscripciones.json (${ST.inscripciones.length} entradas)</button>
+        <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-family:Oswald;letter-spacing:1px">BASE DE DATOS HISTÓRICA</div>
+          <button class="btn btn-w" id="btnExportExcel" onclick="exportDataExcel()" style="text-align:left;padding:14px;width:100%">📊 Descargar data.json como Excel (${ST.data.length} atletas)</button>
+          <p style="font-size:10px;color:var(--muted);margin-top:6px">Incluye: base de atletas · histórico de competencias · records por categoría</p>
+        </div>
       </div>
       <p style="color:var(--muted);font-size:11px;margin-top:14px">⚠️ Los archivos descargados incluyen las ediciones de admin aplicadas.</p>
     </div>`;
@@ -2415,6 +2420,97 @@ window.searchDebounced=function(val){
     },10);
   },300);
 }
+
+// ── Exportar data.json como Excel ─────────────────────────────────────────────
+window.exportDataExcel = async function(){
+  const btn = document.getElementById('btnExportExcel');
+  if(btn){ btn.textContent='⏳ Generando Excel...'; btn.disabled=true; }
+  try{
+    // Load SheetJS dynamically
+    if(!window.XLSX){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+        s.onload=res; s.onerror=rej;
+        document.head.appendChild(s);
+      });
+    }
+    const XLSX=window.XLSX;
+    const data=ST.data||[];
+    const wb=XLSX.utils.book_new();
+
+    // ── Hoja 1: Base de Atletas ───────────────────────────────────────────────
+    const athRows=[['CÓDIGO','RUT','NOMBRE COMPLETO','FECHA NAC.','CLUB','AÑO DEBUT',
+      'MEJOR SQ','MEJOR BP','MEJOR DL','TOTAL','GLP','DOTS','Nº COMPETENCIAS']];
+    [...data].sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')).forEach(a=>{
+      const bl=a.bestLifts||{};
+      athRows.push([a.codigo||'',a.rut||'',a.nombre||'',a.fechaNac||'',a.club||'',a.debut||'',
+        bl.sq||'',bl.bp||'',bl.dl||'',bl.total||'',bl.glp||'',bl.dots||'',
+        (a.competencias||[]).length]);
+    });
+    const wsAth=XLSX.utils.aoa_to_sheet(athRows);
+    wsAth['!cols']=[{wch:16},{wch:13},{wch:32},{wch:12},{wch:24},{wch:11},{wch:10},{wch:10},{wch:10},{wch:8},{wch:8},{wch:8},{wch:14}];
+    XLSX.utils.book_append_sheet(wb,wsAth,'Base Atletas');
+
+    // ── Hoja 2: Histórico Competencias ────────────────────────────────────────
+    const histRows=[['NOMBRE','RUT','CLUB','EVENTO','AÑO','FECHA','LUGAR','SEXO','CATEGORÍA','DIVISIÓN','MODALIDAD','BW','SQ','BP','DL','TOTAL','GLP','FUENTE']];
+    data.forEach(a=>{
+      (a.competencias||[]).forEach(c=>{
+        const r=c.resultado||{};
+        histRows.push([a.nombre||'',a.rut||'',a.club||'',
+          c.evento||'',c.año||'',c.fecha||'',c.lugar||'',
+          c.sexo||'',c.categoria||'',c.division||'',c.modalidad||'',
+          r.bw||'',r.sq||'',r.bp||'',r.dl||'',r.total||'',r.glp||'',
+          c.source||'']);
+      });
+    });
+    const wsHist=XLSX.utils.aoa_to_sheet(histRows);
+    wsHist['!cols']=[{wch:30},{wch:13},{wch:22},{wch:52},{wch:6},{wch:12},{wch:22},{wch:7},{wch:10},{wch:14},{wch:12},{wch:7},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:16}];
+    XLSX.utils.book_append_sheet(wb,wsHist,'Histórico');
+
+    // ── Hoja 3: Resumen por Evento ────────────────────────────────────────────
+    const evMap={};
+    data.forEach(a=>(a.competencias||[]).forEach(c=>{
+      const k=c.evento||'Sin nombre';
+      if(!evMap[k])evMap[k]={año:c.año,count:0};
+      evMap[k].count++;
+    }));
+    const evRows=[['EVENTO','AÑO','N° PARTICIPACIONES']];
+    Object.entries(evMap).sort((a,b)=>(a[1].año||0)-(b[1].año||0))
+      .forEach(([ev,v])=>evRows.push([ev,v.año||'',v.count]));
+    const wsEv=XLSX.utils.aoa_to_sheet(evRows);
+    wsEv['!cols']=[{wch:55},{wch:6},{wch:18}];
+    XLSX.utils.book_append_sheet(wb,wsEv,'Eventos');
+
+    // ── Hoja 4: Records por Categoría ─────────────────────────────────────────
+    const recMap={};
+    data.forEach(a=>{
+      (a.competencias||[]).forEach(c=>{
+        const r=c.resultado||{};
+        if(!r.total||r.total<=0)return;
+        const key=`${c.sexo}||${c.categoria}||${c.modalidad}`;
+        if(!recMap[key]||r.total>recMap[key].total)
+          recMap[key]={sexo:c.sexo,cat:c.categoria,mod:c.modalidad,nombre:a.nombre,club:a.club,
+            sq:r.sq||0,bp:r.bp||0,dl:r.dl||0,total:r.total,bw:r.bw||0,glp:r.glp||0,evento:c.evento,fecha:c.fecha};
+      });
+    });
+    const recRows=[['SEXO','CATEGORÍA','MODALIDAD','ATLETA','CLUB','SQ','BP','DL','TOTAL','BW','GLP','EVENTO','FECHA']];
+    Object.values(recMap).sort((a,b)=>(a.sexo||'').localeCompare(b.sexo||'')||(parseFloat(a.cat)||999)-(parseFloat(b.cat)||999))
+      .forEach(r=>recRows.push([r.sexo,r.cat,r.mod,r.nombre,r.club,r.sq||'',r.bp||'',r.dl||'',r.total,r.bw||'',r.glp||'',r.evento,r.fecha||'']));
+    const wsRec=XLSX.utils.aoa_to_sheet(recRows);
+    wsRec['!cols']=[{wch:8},{wch:10},{wch:20},{wch:30},{wch:22},{wch:7},{wch:7},{wch:7},{wch:8},{wch:7},{wch:7},{wch:52},{wch:12}];
+    XLSX.utils.book_append_sheet(wb,wsRec,'Records por Categoría');
+
+    // ── Descargar ─────────────────────────────────────────────────────────────
+    const today=new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb,`FECHIPO_base_datos_${today}.xlsx`);
+  }catch(e){
+    alert('Error generando Excel: '+e.message);
+    console.error(e);
+  }finally{
+    if(btn){ btn.textContent=`📊 Descargar data.json como Excel (${ST.data.length} atletas)`; btn.disabled=false; }
+  }
+};
 
 window.render=render;
 render();
