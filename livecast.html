@@ -3799,6 +3799,13 @@ window.dirApplyPalette=async function(name){
 window.dirToggleBreak=async function(){
   const bt=_dirState&&_dirState.breakTimer;
   if(bt&&bt.active){await window.dirBreakHide();return}
+  // Si los inputs existen y tienen valor los usa; si no, default 10 min
+  const mEl=document.getElementById('dirBreakMin');
+  const sEl=document.getElementById('dirBreakSec');
+  const m=parseInt(mEl?.value||'0',10)||10;
+  const s=parseInt(sEl?.value||'0',10)||0;
+  if(mEl)mEl.value=m;
+  if(sEl)sEl.value=s;
   await window.dirBreakStart();
 };
 // Atajos de teclado para Stream Deck
@@ -4104,7 +4111,12 @@ function renderDirector(){
   h+='<div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">⏲ Timer de descanso</div>';
   h+='<div style="font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5">Reloj configurable para break entre lifts/vuelos/almuerzo. Aparece en grande al centro de la pantalla con cuenta regresiva.</div>';
   h+=btStatus;
-  h+='</div></div>';
+  h+='</div>';
+  h+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px">';
+  h+='<button class="btn '+(bt.active?'btn-r':'btn-g')+'" onclick="dirToggleBreak()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(bt.active?'⏹ DETENER':'▶ INICIAR')+'</button>';
+  h+=kbd('B');
+  h+='</div>';
+  h+='</div>';
   // Inputs duración + label
   h+='<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">';
   h+='<div><label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:3px">MIN</label><input id="dirBreakMin" type="number" min="0" max="60" value="'+(bt.active?Math.floor((bt.durationSec||0)/60):10)+'" style="width:70px;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:Oswald;font-size:18px;text-align:center"></div>';
