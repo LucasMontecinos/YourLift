@@ -1382,11 +1382,11 @@ async function generateActaPDF(){
   const btn=document.getElementById('btnActaPDF');
   if(btn){btn.disabled=true;btn.textContent='⏳ Generando...';}
   // Backup nombres + clubes y normalizar (sin acentos) para el PDF
-  const _pdfBackups=DATA.athletes.map(a=>({ref:a,name:a.name,club:a.club,universidad:a.universidad}));
+  const _pdfBackups=DATA.athletes.map(a=>({ref:a,name:a.name,club:a.club,uni:a.uni}));
   DATA.athletes.forEach(a=>{
     if(a.name)a.name=_stripAccentsForPdf(a.name);
     if(a.club)a.club=_stripAccentsForPdf(a.club);
-    if(a.universidad)a.universidad=_stripAccentsForPdf(a.universidad);
+    if(a.uni)a.uni=_stripAccentsForPdf(a.uni);
   });
   try{
     // Lazy load jsPDF + autoTable
@@ -1801,7 +1801,7 @@ async function generateActaPDF(){
     // ── University Ranking page (solo si hay datos de universidad) ───
     {
       const isUniv=(DATA.event?.name||'').toLowerCase().includes('universitario');
-      const univAthletes=all.filter(a=>a.total>0&&a.universidad&&a.universidad.trim());
+      const univAthletes=all.filter(a=>a.total>0&&a.uni&&a.uni.trim());
       if(isUniv||univAthletes.length>0){
         doc.addPage();
         drawPageBg();
@@ -1819,7 +1819,7 @@ async function generateActaPDF(){
 
         const univStats={};
         univAthletes.forEach(a=>{
-          const u=_stripAccentsForPdf((a.universidad||'').trim()||'Sin Universidad');
+          const u=_stripAccentsForPdf((a.uni||'').trim()||'Sin Universidad');
           if(!univStats[u])univStats[u]={univ:u,athletes:0,gold:0,silver:0,bronze:0,glSum:0};
           univStats[u].athletes++;
           univStats[u].glSum+=a.gl||0;
@@ -1924,7 +1924,7 @@ async function generateActaPDF(){
     alert('Error al generar PDF: '+err.message);
   }finally{
     // Restaurar nombres/clubes originales con acentos (no se pierden datos)
-    _pdfBackups.forEach(b=>{b.ref.name=b.name;b.ref.club=b.club;if(b.universidad!==undefined)b.ref.universidad=b.universidad;});
+    _pdfBackups.forEach(b=>{b.ref.name=b.name;b.ref.club=b.club;if(b.uni!==undefined)b.ref.uni=b.uni;});
     if(btn){btn.disabled=false;btn.textContent='\uD83D\uDCCB Generar Acta PDF';}
   }
 }
