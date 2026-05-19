@@ -630,10 +630,10 @@ function renderForm() {
       </div>
     </div>
     <div class="field">
-      <label>Certificado ADEL/WADA</label>
+      <label>Certificado ADEL/WADA / Carnet SENADIS <span style="color:#ef4444;font-weight:700">*</span></label>
       <div class="upload-zone ${state.wadeName?'done':''}" id="wadeZone">
         <input type="file" accept="image/*,.pdf" onchange="handleFile(this,'wade')">
-        ${state.wadeName ? `<div class="icon">✅</div><div class="fname">${state.wadeName}</div><div class="txt">Click para cambiar</div>` : `<div class="icon">📄</div><div class="txt">Certificado ADEL/WADA (opcional para nivel nacional)</div><div style="font-size:10px;color:var(--muted);margin-top:4px">JPG, PNG o PDF · Máx 5MB</div>`}
+        ${state.wadeName ? `<div class="icon">✅</div><div class="fname">${state.wadeName}</div><div class="txt">Click para cambiar</div>` : `<div class="icon">📄</div><div class="txt">Certificado ADEL/WADA · Carnet SENADIS (atletas OE)</div><div style="font-size:10px;color:var(--muted);margin-top:4px">JPG, PNG o PDF · Máx 5MB</div>`}
       </div>
     </div>
     ${(()=>{
@@ -1125,6 +1125,14 @@ async function submitForm() {
     if(!rutCheck.valid){
       state.error = 'RUT inválido: ' + rutCheck.msg + '. Revisá el dígito verificador antes de enviar.';
       state.submitting = false; render(); return;
+    }
+
+    // ── Certificado ADEL/WADA obligatorio ───────────────
+    if (!state.wadeFile && !state.wadeName) {
+      state.error = 'Debes adjuntar el Certificado ADEL/WADA o Carnet SENADIS (atletas OE) para completar la inscripción.';
+      state.submitting = false; render();
+      document.getElementById('wadeZone')?.scrollIntoView({behavior:'smooth',block:'center'});
+      return;
     }
 
     // ── Duplicate check ─────────────────────────────────
