@@ -6009,22 +6009,21 @@ async function doLogin(){showLogin();}
 function _ytId(url){if(!url)return'';const m=url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|live\/|embed\/))([A-Za-z0-9_-]{11})/);return m?m[1]:'';}
 
 function renderLiveView(){
-  const allFlights = [...new Set(DATA.athletes.map(a=>a.flight))].filter(Boolean).sort();
   const currentFlight = DATA.flight;
-  const liftN = LIFT_N[DATA.lift];
   const liftColor = LIFT_C[DATA.lift];
 
-  // YouTube embed — si el evento tiene URL configurada
+  // YouTube embed
   const evMeta = DATA.event?.id ? (window.LIVE_EVENT_META||{})[DATA.event.id] : null;
   const ytUrl = evMeta?.youtubeUrl || DATA.event?.youtubeUrl || '';
   const ytVid = _ytId(ytUrl);
-  if(!window._ytHidden) window._ytHidden = false;
+  if(window._ytHidden===undefined) window._ytHidden = false;
 
   let h = '<div class="fade">';
 
+  // ── YouTube player ──────────────────────────────────────────
   if(ytVid){
     h += '<div style="margin-bottom:18px;text-align:center">';
-    h += '<button onclick="window._ytHidden=!window._ytHidden;R()" style="margin-bottom:10px;padding:5px 14px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer">'+(window._ytHidden?'▶️ Mostrar transmisión':'🙈 Ocultar transmisión')+'</button>';
+    h += '<button onclick="window._ytHidden=!window._ytHidden;R()" style="margin-bottom:10px;padding:8px 20px;border-radius:8px;border:1px solid '+(window._ytHidden?'var(--green)':'var(--accent)')+';background:'+(window._ytHidden?'rgba(34,197,94,.15)':'rgba(220,38,38,.15)')+';color:'+(window._ytHidden?'var(--green)':'var(--accent)')+';font-size:12px;font-weight:700;font-family:Oswald;letter-spacing:1px;cursor:pointer">'+(window._ytHidden?'▶ MOSTRAR TRANSMISIÓN':'✕ OCULTAR TRANSMISIÓN')+'</button>';
     if(!window._ytHidden){
       h += '<div style="max-width:860px;margin:0 auto;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:16/9;box-shadow:0 8px 32px rgba(0,0,0,.5)">';
       h += '<iframe width="100%" height="100%" src="https://www.youtube.com/embed/'+ytVid+'?autoplay=1&mute=0" frameborder="0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen style="display:block;width:100%;height:100%"></iframe>';
@@ -6033,92 +6032,149 @@ function renderLiveView(){
     h += '</div>';
   }
 
-  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">';
-  h += '<div><h2 class="os" style="font-size:24px;letter-spacing:2px">📺 COMPETENCIA EN VIVO</h2>';
-  h += '<p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+' · '+liftN+' · Ronda '+(DATA.round+1)+'</p></div>';
+  // ── Header ──────────────────────────────────────────────────
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">';
+  h += '<div><h2 class="os" style="font-size:22px;letter-spacing:2px">📺 COMPETENCIA EN VIVO</h2>';
+  h += '<p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+'</p></div>';
   h += '<div style="display:flex;gap:6px;align-items:center">';
-  h += '<span style="font-size:11px;color:var(--muted)">Vuelo activo:</span>';
+  h += '<span style="font-size:11px;color:var(--muted)">Tanda activa:</span>';
   h += '<span style="background:'+(FL_C[currentFlight]||'#666')+';color:#fff;padding:4px 12px;border-radius:6px;font-family:Oswald;font-weight:700">'+(currentFlight||'—')+'</span>';
   h += '</div></div>';
 
-  // Indicador del lift actual
+  // ── Indicadores de levantamiento ─────────────────────────────
   h += '<div style="display:flex;gap:6px;margin-bottom:14px">';
   LIFTS.forEach(l=>{
     const isCur = l===DATA.lift;
-    h += '<div style="flex:1;padding:8px 0;border-radius:6px;text-align:center;border:2px solid '+(isCur?LIFT_C[l]:'var(--border)')+';background:'+(isCur?LIFT_C[l]+'25':'transparent')+';color:'+(isCur?LIFT_C[l]:'var(--muted)')+';font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:2px">'+LIFT_N[l]+(isCur?' · INT '+(DATA.round+1):'')+'</div>';
+    h += '<div style="flex:1;padding:9px 0;border-radius:6px;text-align:center;border:2px solid '+(isCur?LIFT_C[l]:'var(--border)')+';background:'+(isCur?LIFT_C[l]+'25':'transparent')+';color:'+(isCur?LIFT_C[l]:'var(--muted)')+';font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:2px">'+LIFT_N[l]+(isCur?' · INT '+(DATA.round+1):'')+'</div>';
   });
   h += '</div>';
 
-  // Cada vuelo se renderiza apilado verticalmente
-  allFlights.forEach(fl=>{
-    const flAthletes = DATA.athletes.filter(a=>a.flight===fl && !a.bombed);
-    if(!flAthletes.length) return;
-    const isCurFlight = fl===currentFlight;
+  // ── Orden de levantamiento ────────────────────────────────────
+  const flQueue = liftQueue();
+  const queueIds = new Set(flQueue.map(a=>a.id));
+  const curFlightAll  = DATA.athletes.filter(a=>a.flight===currentFlight);
+  const otherAthletes = DATA.athletes.filter(a=>a.flight!==currentFlight);
 
-    // Cola del vuelo actual (sólo)
-    const flQueue = isCurFlight
-      ? flAthletes.filter(a=>{const at=a.att[DATA.lift][DATA.round];return at.r===null && at.w>0})
-                  .sort((a,b)=>{const wa=a.att[DATA.lift][DATA.round].w,wb=b.att[DATA.lift][DATA.round].w;return wa!==wb?wa-wb:a.lot-b.lot})
-      : [];
-    const queueIds = new Set(flQueue.map(a=>a.id));
-    const ordered = [...flQueue, ...flAthletes.filter(a=>!queueIds.has(a.id))];
+  const sortedAthletes = [
+    ...flQueue,
+    ...curFlightAll.filter(a=>!queueIds.has(a.id)&&!a.bombed).sort((a,b)=>a.lot-b.lot),
+    ...curFlightAll.filter(a=>a.bombed),
+    ...otherAthletes.sort((a,b)=>(a.flight||'').localeCompare(b.flight||'')||a.lot-b.lot),
+  ];
 
-    const flColor = FL_C[fl] || '#666';
-    h += '<div class="card" style="margin-bottom:14px;padding:0;overflow:hidden;border:2px solid '+(isCurFlight?flColor:'var(--border)')+'">';
-    h += '<div style="background:linear-gradient(90deg,'+flColor+'22,transparent);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid '+flColor+'">';
-    h += '<div style="display:flex;align-items:center;gap:10px">';
-    h += '<span style="background:'+flColor+';color:#fff;padding:4px 14px;border-radius:6px;font-family:Oswald;font-size:16px;font-weight:800;letter-spacing:2px">TANDA '+fl+'</span>';
-    if(isCurFlight) h += '<span style="background:rgba(34,197,94,.2);color:var(--green);padding:2px 10px;border-radius:4px;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;animation:pulse 2s infinite">● EN VIVO</span>';
-    h += '</div>';
-    h += '<div style="font-size:11px;color:var(--muted)">'+flAthletes.length+' atletas</div>';
-    h += '</div>';
+  // ── Tabla completa de resultados ─────────────────────────────
+  h += '<div class="card" style="padding:0;overflow-x:auto">';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:11px;min-width:780px">';
 
-    // Tabla del vuelo
-    h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">';
-    h += '<thead><tr style="border-bottom:1px solid var(--border)">';
-    h += '<th style="text-align:center;padding:6px 4px;color:var(--muted);font-size:10px;width:30px">#</th>';
-    h += '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px">ATLETA</th>';
-    [1,2,3].forEach(r=>{h += '<th style="text-align:center;padding:6px 4px;color:'+liftColor+';font-size:11px;font-weight:700;width:78px">INT '+r+'</th>'});
-    h += '<th style="text-align:center;padding:6px 4px;color:var(--gold);font-size:10px;width:60px">BEST</th>';
-    h += '</tr></thead><tbody>';
+  // Fila de grupos (SQ / BP / DL)
+  h += '<thead>';
+  h += '<tr style="border-bottom:1px solid rgba(30,58,95,.4)">';
+  h += '<th colspan="2" style="padding:6px 8px;border-right:1px solid var(--border)"></th>';
+  ['sq','bp','dl'].forEach(l=>{
+    const isCur = l===DATA.lift;
+    const c = LIFT_C[l];
+    h += '<th colspan="4" style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:12px;letter-spacing:2px;color:'+c+';border-right:1px solid var(--border);background:'+(isCur?c+'18':'transparent')+'">'+LIFT_N[l]+(isCur?' ▶':'')+'</th>';
+  });
+  h += '<th style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:10px;color:var(--gold)">GLP</th>';
+  h += '</tr>';
 
-    ordered.forEach((a,i)=>{
-      const inQueue = queueIds.has(a.id);
-      const queuePos = inQueue ? flQueue.findIndex(q=>q.id===a.id) : -1;
-      const isCurrentLifter = isCurFlight && queuePos === 0;
-      const b = bestOf(a,DATA.lift);
-      let rowBg='', rowExtra='';
-      if(isCurrentLifter){
-        rowBg = 'background:linear-gradient(90deg,'+liftColor+'35,'+liftColor+'15)';
-        rowExtra = 'box-shadow:inset 4px 0 0 '+liftColor+';';
-      } else if(inQueue && queuePos<3){
-        rowBg = 'background:'+liftColor+'08';
-      }
-      // Anchor id para auto-scroll
-      const rowId = isCurrentLifter ? 'id="liveCurrentLifter"' : '';
-      h += '<tr '+rowId+' style="border-bottom:1px solid rgba(30,58,95,.18);'+rowBg+';'+rowExtra+'">';
-      h += '<td style="text-align:center;padding:8px 4px"><span class="os" style="color:'+(isCurrentLifter?'#fff':inQueue?'var(--gold)':'var(--muted)')+';font-weight:700;font-size:'+(isCurrentLifter?20:13)+'px">'+(inQueue?(queuePos+1):'·')+'</span></td>';
-      h += '<td style="padding:8px"><div style="font-size:'+(isCurrentLifter?16:13)+'px;font-weight:'+(isCurrentLifter?800:500)+';color:'+(isCurrentLifter?'#fff':'var(--text)')+';display:flex;align-items:center;gap:6px">';
-      if(isCurrentLifter) h += '<span style="background:'+liftColor+';color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;font-family:Oswald;letter-spacing:1px">▶ EN TARIMA</span>';
-      h += '<span>'+a.name+'</span></div>';
-      h += '<div style="font-size:10px;color:var(--muted);margin-top:2px">'+a.club+' · '+(a.bw||'—')+'kg · '+a.div+' · '+a.cat+'</div>';
-      h += '</td>';
-      // 3 intentos (sin botones)
-      a.att[DATA.lift].forEach((at,j)=>{
-        const c = at.r==='g'?'att-g':at.r==='n'?'att-n':at.w>0?'att-p':'att-e';
-        const isCurAtt = isCurrentLifter && j===DATA.round;
-        h += '<td style="padding:4px"><div class="'+c+' att" style="font-size:'+(isCurAtt?18:14)+'px;font-weight:700;padding:'+(isCurAtt?'14px 6px':'10px 6px')+';'+(isCurAtt?'box-shadow:inset 0 0 0 3px '+liftColor+';':'')+';cursor:default">'+(at.w||'—')+'</div></td>';
-      });
-      h += '<td style="text-align:center;padding:6px 4px;font-weight:700;font-family:Oswald;color:var(--gold);font-size:14px">'+(b||'—')+'</td>';
-      h += '</tr>';
+  // Fila de columnas
+  h += '<tr style="background:rgba(30,58,95,.35);border-bottom:2px solid var(--border)">';
+  h += '<th style="padding:5px 3px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th>';
+  h += '<th style="padding:5px 8px;text-align:left;color:var(--muted);font-size:9px;border-right:1px solid var(--border)">ATLETA</th>';
+  ['sq','bp','dl'].forEach(l=>{
+    const isCur = l===DATA.lift;
+    const bg = isCur ? LIFT_C[l]+'12' : 'transparent';
+    [1,2,3].forEach(r=>{
+      h += '<th style="padding:5px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:56px;background:'+bg+'">INT '+r+'</th>';
     });
-    h += '</tbody></table></div>';
-    h += '</div>';
+    const subLabel = l==='dl'?'TOTAL':'SUB-TOTAL';
+    h += '<th style="padding:5px 3px;text-align:center;color:var(--gold);font-size:8px;width:54px;border-right:1px solid var(--border)">'+subLabel+'</th>';
+  });
+  h += '<th style="padding:5px 4px;text-align:center;color:var(--gold);font-size:9px;width:52px">GL PTS</th>';
+  h += '</tr></thead><tbody>';
+
+  let lastFlight = currentFlight;
+  sortedAthletes.forEach(a=>{
+    // Separador de tanda
+    if(a.flight !== lastFlight){
+      lastFlight = a.flight;
+      const flC = FL_C[a.flight]||'#666';
+      h += '<tr style="background:rgba(30,58,95,.5)"><td colspan="16" style="padding:5px 12px">';
+      h += '<span style="background:'+flC+';color:#fff;padding:2px 10px;border-radius:4px;font-family:Oswald;font-size:10px;letter-spacing:2px">TANDA '+(a.flight||'—')+'</span>';
+      h += '</td></tr>';
+    }
+
+    const inQueue     = queueIds.has(a.id);
+    const queuePos    = inQueue ? flQueue.findIndex(q=>q.id===a.id) : -1;
+    const isOnPlatform = inQueue && queuePos===0;
+
+    let rowStyle = 'border-bottom:1px solid rgba(30,58,95,.2);';
+    if(isOnPlatform)         rowStyle += 'background:linear-gradient(90deg,'+liftColor+'35,'+liftColor+'12);box-shadow:inset 4px 0 0 '+liftColor+';';
+    else if(inQueue&&queuePos<=2) rowStyle += 'background:'+liftColor+'09;';
+    else if(a.bombed)         rowStyle += 'opacity:.4;';
+
+    const rowId = isOnPlatform ? 'id="liveCurrentLifter"' : '';
+    h += '<tr '+rowId+' style="'+rowStyle+'">';
+
+    // # / posición cola + lote
+    h += '<td style="padding:6px 3px;text-align:center">';
+    if(isOnPlatform){
+      h += '<span style="color:'+liftColor+';font-family:Oswald;font-weight:700;font-size:14px">▶</span>';
+      h += '<div style="color:var(--muted);font-size:8px;margin-top:1px">'+a.lot+'</div>';
+    } else if(inQueue){
+      h += '<span style="color:var(--gold);font-family:Oswald;font-weight:700;font-size:11px">'+(queuePos+1)+'°</span>';
+      h += '<div style="color:var(--muted);font-size:8px;margin-top:1px">'+a.lot+'</div>';
+    } else {
+      h += '<span style="color:var(--muted);font-size:9px;font-family:Oswald">'+a.lot+'</span>';
+    }
+    h += '</td>';
+
+    // Atleta
+    h += '<td style="padding:5px 8px;border-right:1px solid var(--border)">';
+    if(isOnPlatform) h += '<span style="background:'+liftColor+';color:#fff;padding:1px 6px;border-radius:3px;font-size:8px;font-family:Oswald;letter-spacing:1px;display:inline-block;margin-bottom:2px">▶ EN TARIMA</span><br>';
+    h += '<span style="font-weight:'+(isOnPlatform?700:500)+';font-size:'+(isOnPlatform?13:11)+'px;color:'+(isOnPlatform?'#fff':'var(--text)')+'">'+a.name+'</span>';
+    h += '<div style="font-size:9px;color:var(--muted);margin-top:1px">'+a.club+' · '+(a.bw||'—')+'kg · '+a.div+' · '+a.cat+'</div>';
+    h += '</td>';
+
+    // SQ / BP / DL con subtotales
+    ['sq','bp','dl'].forEach(l=>{
+      const isCurLift = l===DATA.lift;
+      const bg = isCurLift ? LIFT_C[l]+'0b' : 'transparent';
+      // 3 intentos
+      a.att[l].forEach((at,j)=>{
+        const isCurAtt = isCurLift && isOnPlatform && j===DATA.round;
+        const cls = at.r==='g'?'att-g':at.r==='n'?'att-n':at.w>0?'att-p':'att-e';
+        h += '<td style="padding:2px;background:'+bg+'">';
+        h += '<div class="'+cls+' att" style="font-size:'+(isCurAtt?15:11)+'px;font-weight:700;padding:'+(isCurAtt?'10px 3px':'6px 3px')+';cursor:default;'+(isCurAtt?'box-shadow:inset 0 0 0 2px '+LIFT_C[l]+';':'')+'min-width:46px;text-align:center">'+(at.w||'—')+'</div>';
+        h += '</td>';
+      });
+      // Subtotal / Total
+      let sub = null;
+      const bSQ=bestOf(a,'sq')||0, bBP=bestOf(a,'bp')||0, bDL=bestOf(a,'dl')||0;
+      if(l==='sq')      sub = bSQ||null;
+      else if(l==='bp') sub = (bSQ||bBP) ? (bSQ+bBP)||null : null;
+      else              sub = (bSQ&&bBP&&bDL) ? bSQ+bBP+bDL : null;
+      const subColor = l==='dl'?'var(--gold)':'var(--muted)';
+      h += '<td style="text-align:center;padding:3px;border-right:1px solid var(--border)">';
+      h += '<span style="font-family:Oswald;font-size:'+(sub?13:10)+'px;font-weight:700;color:'+(sub?(l==='dl'?'var(--gold)':'#ccc'):'rgba(100,120,150,.5)')+';">'+(sub||'—')+'</span>';
+      h += '</td>';
+    });
+
+    // GLP
+    const tot = totalOf(a);
+    const glp = tot ? calcGL(tot,a.bw,a.sex,a.mod) : null;
+    h += '<td style="text-align:center;padding:3px 5px">';
+    h += '<span style="font-family:Oswald;font-size:'+(glp?12:9)+'px;font-weight:700;color:'+(glp?'var(--gold)':'rgba(100,120,150,.5)')+';">'+(glp||'—')+'</span>';
+    h += '</td>';
+
+    h += '</tr>';
   });
 
+  h += '</tbody></table></div>';
   h += '</div>';
-  // Auto-scroll al atleta actual SOLO cuando cambia (evita interrumpir al usuario que esté
-  // mirando otro atleta). Detectamos cambio comparando contra la última posición.
+
+  // Auto-scroll al atleta actual solo cuando cambia
   setTimeout(()=>{
     const el = document.getElementById('liveCurrentLifter');
     if(!el) return;
