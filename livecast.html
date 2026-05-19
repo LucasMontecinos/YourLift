@@ -2742,6 +2742,7 @@ function renderObsTx(){
   const widgets=[
     {id:'profile',icon:'🪪',title:'Perfil del atleta',desc:'Pantalla completa con foto placeholder, nombre, club, categoría, edad, años compitiendo y PB. Animación cascada al entrar. Mostrar ~10s antes de la tarima.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
     {id:'scoreboard',icon:'📊',title:'Scoreboard (lower-third)',desc:'Barra inferior con categoría, rank, timer, nombre, club e intentos. Aparece al cambiar levantador / intento / peso, queda 20s en pantalla y se va con animación. Hasta el próximo cambio queda oculto.',obsBg:'Transparente (superpuesto sobre cámara).',size:'1920×320 (parte inferior)'},
+    {id:'barbell',icon:'🏋️',title:'Barra con discos (lower-third)',desc:'Franja inferior que muestra la barra con discos IPF a color, nombre del atleta, club, categoría, peso del intento en kg/lbs, ronda y pronóstico de posición ("Si es válido pasará del X° al Y° lugar"). Se anima al entrar cuando cambia el levantador.',obsBg:'Transparente (overlay sobre cámara). Fondo se fusiona hacia abajo.',size:'1920×1080 (contenido en el tercio inferior)'},
     {id:'leaderboard',icon:'🏆',title:'Tabla de clasificación (FIJO)',desc:'Ranking completo de la categoría actual. Cascada fila por fila. SIEMPRE visible mientras la escena esté activa — usalo para escenas de pausa entre rondas que vos manejás manualmente.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
     {id:'lbauto',icon:'🔁',title:'Tabla de clasificación (AUTO)',desc:'Igual al leaderboard fijo, pero APARECE SOLO al detectar fin de ronda (cuando cambia lift/round/flight). Queda 10s en pantalla y se va. Ideal como overlay siempre activo en una escena de cámara.',obsBg:'Transparente (overlay sobre cámara).',size:'1920×1080 (overlay fullscreen)'},
     {id:'slam',icon:'⚡',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activá una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcás ✓/✗ en Control en Vivo. Volvé a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
@@ -2869,7 +2870,8 @@ function renderTxWidget(){
   if(TX_MODE==='profile')html=renderTxProfile(cur);
   else if(TX_MODE==='scoreboard')html=renderTxScoreboard(cur,lifterChanged);
   else if(TX_MODE==='leaderboard')html=renderTxLeaderboard(cur,lifterChanged);
-  else html='<div style="color:#fff;padding:40px;font-family:Oswald">Widget desconocido: '+TX_MODE+'. Valores: profile | scoreboard | leaderboard | lbauto | slam | timer | lights</div>';
+  else if(TX_MODE==='barbell')html=renderTxBarbell(cur,lifterChanged);
+  else html='<div style="color:#fff;padding:40px;font-family:Oswald">Widget desconocido: '+TX_MODE+'. Valores: profile | scoreboard | leaderboard | lbauto | slam | timer | lights | barbell</div>';
   c.innerHTML=html;
   // Setup GIF trim loop after DOM insertion
   const _gifVid=c.querySelector('video[data-gif-trim]');
@@ -4006,6 +4008,104 @@ function renderTxLeaderboard(cur,lifterChanged,opts){
         </div>
       </div>
     </div>`;
+}
+
+// ══════════════════════════════════════════════
+// TX: BARBELL WIDGET
+// ══════════════════════════════════════════════
+function renderTxBarbell(cur,lifterChanged){
+  if(!cur)return'';
+  const att=cur.att[DATA.lift][DATA.round];
+  const weight=att?.w||0;
+  if(!weight)return'';
+  const isMale=cur.sex==='Hombre'||cur.sex==='M'||cur.sex==='Masculino';
+  const barW=isMale?20:15;
+  const sideKg=Math.max(0,(weight-barW)/2);
+  // Plate greedy algorithm
+  const PLATE_SIZES=[25,20,15,10,5,2.5,1.25,0.5,0.25];
+  const plates=[];
+  let rem=Math.round(sideKg*100)/100;
+  for(const p of PLATE_SIZES){while(rem>=p-0.001){plates.push(p);rem=Math.round((rem-p)*100)/100;}}
+  // Visual props per plate weight
+  function pp(kg){
+    if(kg>=25) return{h:88,w:24,fill:'#B91C1C',stroke:'#7F1D1D'};
+    if(kg>=20) return{h:80,w:22,fill:'#1E40AF',stroke:'#1E3A8A'};
+    if(kg>=15) return{h:72,w:20,fill:'#B45309',stroke:'#78350F'};
+    if(kg>=10) return{h:62,w:18,fill:'#15803D',stroke:'#14532D'};
+    if(kg>=5)  return{h:50,w:16,fill:'#D1D5DB',stroke:'#9CA3AF'};
+    if(kg>=2.5)return{h:38,w:13,fill:'#EF4444',stroke:'#991B1B'};
+    if(kg>=1.25)return{h:28,w:11,fill:'#9CA3AF',stroke:'#6B7280'};
+    if(kg>=0.5) return{h:20,w:9, fill:'#6B7280',stroke:'#374151'};
+                return{h:16,w:7, fill:'#4B5563',stroke:'#1F2937'};
+  }
+  // Position forecast
+  const peers=DATA.athletes.filter(a=>a.sex===cur.sex&&a.cat===cur.cat&&a.div===cur.div&&a.mod===cur.mod);
+  const curGL=calcGL(totalOf(cur),cur.bw,cur.sex,cur.mod);
+  const hypBest=Math.max(bestOf(cur,DATA.lift),weight);
+  const sqH=DATA.lift==='sq'?hypBest:bestOf(cur,'sq');
+  const bpH=DATA.lift==='bp'?hypBest:bestOf(cur,'bp');
+  const dlH=DATA.lift==='dl'?hypBest:bestOf(cur,'dl');
+  const hypTotal=(sqH&&bpH&&dlH)?sqH+bpH+dlH:0;
+  const hypGL=hypTotal>0?calcGL(hypTotal,cur.bw,cur.sex,cur.mod):0;
+  const othersGL=peers.filter(a=>a.id!==cur.id).map(a=>calcGL(totalOf(a),a.bw,a.sex,a.mod)).filter(g=>g>0).sort((a,b)=>b-a);
+  const curRank=curGL>0?othersGL.filter(g=>g>curGL).length+1:null;
+  const newRank=hypGL>0?othersGL.filter(g=>g>hypGL).length+1:null;
+  let posHtml='';
+  if(newRank!==null){
+    const pc=newRank===1?'#22c55e':newRank<=3?'#D4A843':'#7A8FA6';
+    if(curRank!==null&&curRank!==newRank)posHtml=`<div style="font-family:Oswald;font-size:17px;letter-spacing:1px;color:${pc};text-align:right">Si es válido pasará del <b>${curRank}°</b> al <b style="font-size:22px">${newRank}° lugar</b></div>`;
+    else if(curRank!==null)posHtml=`<div style="font-family:Oswald;font-size:17px;letter-spacing:1px;color:${pc};text-align:right">Mantiene el <b style="font-size:22px">${newRank}° lugar</b> si es válido</div>`;
+    else posHtml=`<div style="font-family:Oswald;font-size:17px;letter-spacing:1px;color:${pc};text-align:right">Si es válido: <b style="font-size:22px">${newRank}° lugar</b></div>`;
+  }
+  const liftName={sq:'SENTADILLA',bp:'PRESS DE BANCA',dl:'PESO MUERTO'}[DATA.lift]||DATA.lift.toUpperCase();
+  const roundLabel=['1er INTENTO','2do INTENTO','3er INTENTO'][DATA.round]||`INTENTO ${DATA.round+1}`;
+  const weightLbs=(weight*2.20462).toFixed(1);
+  // SVG barbell (1920×140)
+  const VW=1920,VH=140,cy=VH/2;
+  const shaftHalf=120,shaftCX=VW/2,shaftThick=10,sleeveThick=16,collarH=30,collarW=18;
+  const barL=40,barR=VW-40;
+  const rightColX=shaftCX+shaftHalf;
+  const leftColX=shaftCX-shaftHalf-collarW;
+  let s=[];
+  // Sleeves
+  s.push(`<rect x="${barL+8}" y="${cy-sleeveThick/2}" width="${leftColX-barL-8}" height="${sleeveThick}" fill="#71717A" rx="2"/>`);
+  s.push(`<rect x="${rightColX+collarW}" y="${cy-sleeveThick/2}" width="${barR-8-(rightColX+collarW)}" height="${sleeveThick}" fill="#71717A" rx="2"/>`);
+  // Central shaft
+  s.push(`<rect x="${shaftCX-shaftHalf}" y="${cy-shaftThick/2}" width="${shaftHalf*2}" height="${shaftThick}" fill="#D4D4D8" rx="2"/>`);
+  // Knurling
+  for(let xi=shaftCX-shaftHalf+12;xi<shaftCX+shaftHalf-8;xi+=13)s.push(`<line x1="${xi}" y1="${cy-shaftThick/2-1}" x2="${xi}" y2="${cy+shaftThick/2+1}" stroke="#A1A1AA" stroke-width="1.5" opacity="0.5"/>`);
+  // End caps
+  s.push(`<rect x="${barL}" y="${cy-collarH/2}" width="10" height="${collarH}" fill="#27272A" rx="2"/>`);
+  s.push(`<rect x="${barR-10}" y="${cy-collarH/2}" width="10" height="${collarH}" fill="#27272A" rx="2"/>`);
+  // Collars
+  s.push(`<rect x="${leftColX}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="2"/>`);
+  s.push(`<rect x="${rightColX}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="2"/>`);
+  // Plates
+  let rxR=rightColX+collarW+2,rxL=leftColX-2;
+  plates.forEach(kg=>{
+    const p=pp(kg);const py=cy-p.h/2;
+    s.push(`<rect x="${rxR}" y="${py}" width="${p.w}" height="${p.h}" fill="${p.fill}" rx="2" stroke="${p.stroke}" stroke-width="1.5"/>`);
+    s.push(`<rect x="${rxR+1}" y="${py+2}" width="3" height="${p.h-4}" fill="rgba(255,255,255,0.2)" rx="1"/>`);
+    s.push(`<rect x="${rxL-p.w}" y="${py}" width="${p.w}" height="${p.h}" fill="${p.fill}" rx="2" stroke="${p.stroke}" stroke-width="1.5"/>`);
+    s.push(`<rect x="${rxL-4}" y="${py+2}" width="3" height="${p.h-4}" fill="rgba(255,255,255,0.2)" rx="1"/>`);
+    rxR+=p.w+1;rxL-=p.w+1;
+  });
+  const bbSvg=`<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:${VH}px;display:block">${s.join('')}</svg>`;
+  const anim=lifterChanged?'animation:txSlideInBottom .7s cubic-bezier(.2,.8,.2,1) both':'';
+  return`<div style="position:fixed;bottom:0;left:0;right:0;${anim};background:linear-gradient(180deg,rgba(10,22,40,0) 0%,rgba(10,22,40,.9) 16%,rgba(10,22,40,.97) 38%,rgba(10,22,40,1) 100%);padding:22px 70px 28px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px">
+      <div style="font-family:Oswald;font-size:15px;letter-spacing:3px;color:rgba(212,225,245,.5)">${liftName} <span style="opacity:.7">·</span> ${roundLabel}</div>
+      <div style="font-family:Oswald;font-size:44px;font-weight:700;color:#fff;line-height:1;letter-spacing:1px">${weight}<span style="font-size:22px;color:rgba(212,225,245,.55);margin-left:6px">KG</span><span style="font-size:16px;color:rgba(212,225,245,.3);margin-left:14px">/ ${weightLbs} LBS</span></div>
+    </div>
+    <div>${bbSvg}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+      <div>
+        <div style="font-family:Oswald;font-size:34px;font-weight:700;letter-spacing:1px;color:#fff;line-height:1">${cur.name||''}</div>
+        <div style="font-family:Oswald;font-size:12px;letter-spacing:2.5px;color:rgba(212,225,245,.45);margin-top:5px">${[cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>
+      </div>
+      ${posHtml}
+    </div>
+  </div>`;
 }
 
 function R(){if(TX_MODE){renderTxWidget();return}const el=document.getElementById('R');if(DATA.phase==='scoreboard'){el.innerHTML=renderSB();return}if(DATA.phase==='transmision'){el.innerHTML=renderTransmision();setTimeout(initTxWidgets,0);return}if(DATA.phase==='setup'){el.innerHTML=renderSetup();return}el.innerHTML=renderShell()}
