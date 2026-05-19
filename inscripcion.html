@@ -1193,17 +1193,20 @@ async function submitForm() {
 
       if (state.carnetFile) {
         const carnetRef = window.FB.ref(storage, `athlete_files/${rutClean}/carnet_${ts}`);
-        await window.FB.uploadBytes(carnetRef, state.carnetFile);
+        const carnetMeta = {contentType: state.carnetFile.type || 'image/jpeg'};
+        await window.FB.uploadBytes(carnetRef, state.carnetFile, carnetMeta);
         privateEntry.carnetURL = await window.FB.getDownloadURL(carnetRef);
       }
       if (state.wadeFile) {
         const wadeRef = window.FB.ref(storage, `athlete_files/${rutClean}/wada_${ts}`);
-        await window.FB.uploadBytes(wadeRef, state.wadeFile);
+        const wadeMeta = {contentType: state.wadeFile.type || 'image/jpeg'};
+        await window.FB.uploadBytes(wadeRef, state.wadeFile, wadeMeta);
         privateEntry.wadeURL = await window.FB.getDownloadURL(wadeRef);
       }
       if (state.carnetPhotoFile) {
         const carnetPhotoRef = window.FB.ref(storage, `athlete_files/${rutClean}/carnetPhoto_${ts}`);
-        await window.FB.uploadBytes(carnetPhotoRef, state.carnetPhotoFile);
+        const photoMeta = {contentType: state.carnetPhotoFile.type || 'image/jpeg'};
+        await window.FB.uploadBytes(carnetPhotoRef, state.carnetPhotoFile, photoMeta);
         privateEntry.carnetPhotoURL = await window.FB.getDownloadURL(carnetPhotoRef);
       }
 
