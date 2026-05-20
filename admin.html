@@ -138,7 +138,7 @@ function _getPeerKey(a){
 }
 function _peerPerc(myTotal,key){const g=PEERS[key];if(!g)return null;const all=[...g.members.map(m=>m.total),myTotal].sort((a,b)=>b-a);const rank=all.indexOf(myTotal)+1;return{rank,n:all.length,pct:Math.round((1-rank/all.length)*100),g};}
 
-const ST={user:null,adminInfo:null,view:'athletes',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{},achievementsByCodigo:{},fotosByCodigo:{}};
+const ST={user:null,adminInfo:null,view:'athletes',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{},achievementsByCodigo:{},fotosByCodigo:{},actas:[]};
 window.ST=ST;
 
 // HTML-escape helper — defensa contra XSS al inyectar datos en innerHTML
@@ -413,6 +413,22 @@ async function loadAll(){
     ST.eventos=evSnap.docs.map(d=>({...d.data(),id:d.id}))
       .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   }catch(e){console.warn('[loadAll] eventos:',e.message);ST.eventos=[];}
+
+  // Actas (PDFs de campeonatos pasados) — real-time listener
+  if(!window._actasListener){
+    try{
+      window._actasListener=onSnapshot(collection(db,'actas'),(snap)=>{
+        ST.actas=snap.docs.map(d=>({id:d.id,...d.data()}))
+          .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+        if(ST.view==='actas')render();
+      },(e)=>console.warn('[listener] actas:',e.message));
+    }catch(e){console.warn('[loadAll] actas listener:',e.message);}
+  }
+  try{
+    const actasSnap=await getDocs(collection(db,'actas'));
+    ST.actas=actasSnap.docs.map(d=>({id:d.id,...d.data()}))
+      .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  }catch(e){console.warn('[loadAll] actas:',e.message);ST.actas=[];}
 
   // Audit log — non-blocking, no ordering (avoids index requirement)
   try{
@@ -1352,6 +1368,7 @@ function render(){
       <a href="cronograma.html" target="_blank" class="side-btn" style="text-decoration:none"><span class="icon">📅</span>Cronograma</a>
       <a href="livecast.html" target="_blank" class="side-btn" style="text-decoration:none"><span class="icon">📡</span>LiveCast</a>
       <button class="side-btn ${ST.view==='campeonatos'?'active':''}" onclick="go('campeonatos')"><span class="icon">🏆</span>Campeonatos</button>
+      <button class="side-btn ${ST.view==='actas'?'active':''}" onclick="go('actas')"><span class="icon">📑</span>Actas PDF</button>
       <button class="side-btn ${ST.view==='exports'?'active':''}" onclick="go('exports')"><span class="icon">💾</span>Exports</button>
       <button class="side-btn ${ST.view==='audit'?'active':''}" onclick="go('audit')"><span class="icon">📜</span>Audit Log</button>
       ${ST.pendingResults?`<button class="side-btn ${ST.view==='mergeResults'?'active':''}" onclick="go('mergeResults')" style="border-color:var(--green);color:var(--green)"><span class="icon">🏁</span>Resultados Pendientes <span style="background:var(--green);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.pendingResults}</span></button>`:''}
@@ -1373,6 +1390,7 @@ function render(){
   else if(ST.view==='importar')content=renderImportar();
   else if(ST.view==='cronograma')content=renderCronograma();
   else if(ST.view==='campeonatos')content=renderCampeonatos();
+  else if(ST.view==='actas')content=renderActas();
   else if(ST.view==='exports')content=renderExports();
   else if(ST.view==='audit')content=renderAudit();
   else if(ST.view==='admins'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderAdmins();else go('athletes');}
@@ -5111,6 +5129,164 @@ window.verDetalleComp = function(compId){
   </div>`;
   document.body.appendChild(m);
   m.onclick=e=>{if(e.target===m)m.remove();};
+};
+
+// ══════════════════════════════════════════════════════════════
+// ACTAS PDF — renderActas + handlers
+// ══════════════════════════════════════════════════════════════
+function renderActas(){
+  const actas = ST.actas || [];
+  // Group by year
+  const byYear = {};
+  actas.forEach(a => {
+    const yr = (a.fecha||'').slice(0,4) || 'Sin fecha';
+    if(!byYear[yr]) byYear[yr] = [];
+    byYear[yr].push(a);
+  });
+  const years = Object.keys(byYear).sort((a,b)=>b.localeCompare(a));
+
+  return `
+  <div class="h1">📑 Actas PDF</div>
+  <p class="subtitle">Resultados oficiales de campeonatos pasados — se publican en <a href="resultados.html" target="_blank" style="color:var(--blue)">resultados.html</a></p>
+
+  <!-- Upload form -->
+  <div class="card" style="max-width:640px;margin-bottom:24px">
+    <div class="h2" style="margin-bottom:16px">Subir nueva acta</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <label class="field" style="grid-column:span 2">
+        <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Nombre del campeonato *</span>
+        <input class="inp" id="acta_nombre" placeholder="ej: Campeonato Nacional FECHIPO 2024" style="margin-top:6px">
+      </label>
+      <label class="field">
+        <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Fecha</span>
+        <input class="inp" id="acta_fecha" type="date" style="margin-top:6px">
+      </label>
+      <label class="field">
+        <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Organización</span>
+        <input class="inp" id="acta_org" placeholder="FECHIPO" value="FECHIPO" style="margin-top:6px">
+      </label>
+      <label class="field" style="grid-column:span 2">
+        <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Lugar</span>
+        <input class="inp" id="acta_lugar" placeholder="ej: Santiago, Chile" style="margin-top:6px">
+      </label>
+      <label class="field" style="grid-column:span 2">
+        <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Archivo PDF *</span>
+        <div id="actaPdfZone" onclick="document.getElementById('actaPdfInput').click()" style="margin-top:6px;border:2px dashed var(--border);border-radius:8px;padding:20px;text-align:center;cursor:pointer;transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div id="actaPdfLabel" style="color:var(--muted);font-size:13px">📄 Click para seleccionar PDF · Máx 50MB</div>
+          <input type="file" id="actaPdfInput" accept=".pdf" style="display:none" onchange="actaPdfSelected(this)">
+        </div>
+      </label>
+    </div>
+    <div id="actaUploadError" style="display:none;color:var(--red);font-size:12px;margin-top:6px"></div>
+    <div style="margin-top:16px;display:flex;justify-content:flex-end">
+      <button class="btn btn-g" id="actaUploadBtn" onclick="actasUpload()">⬆ Subir Acta</button>
+    </div>
+  </div>
+
+  <!-- Lista de actas -->
+  ${years.length === 0 ? `<div class="card" style="text-align:center;padding:40px;color:var(--muted)">No hay actas publicadas aún.</div>` :
+    years.map(yr => `
+    <div style="margin-bottom:24px">
+      <div class="os" style="font-size:13px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">${yr}</div>
+      ${byYear[yr].map(a => `
+      <div class="card" style="padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div style="font-size:20px;flex-shrink:0">📑</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.nombre||'Sin nombre')}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${esc(a.org||'')}${a.lugar?' · '+esc(a.lugar):''}${a.fecha?' · '+a.fecha:''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <span class="badge ${a.visible!==false?'b-g':'b-y'}" style="cursor:pointer" onclick="actasToggle('${a.id}',${a.visible!==false})" title="Click para cambiar visibilidad">${a.visible!==false?'✓ Publicado':'⏸ Oculto'}</span>
+          ${a.pdfURL?`<a href="${esc(a.pdfURL)}" target="_blank" class="btn btn-b" style="padding:5px 10px;font-size:11px;text-decoration:none">Ver PDF</a>`:''}
+          <button class="btn btn-r" style="padding:5px 10px;font-size:11px" onclick="actasDelete('${a.id}','${esc(a.nombre||'')}')">🗑</button>
+        </div>
+      </div>`).join('')}
+    </div>`).join('')
+  }`;
+}
+
+window.actaPdfFile = null;
+window.actaPdfSelected = function(input){
+  const file = input.files[0];
+  if(!file) return;
+  if(file.size > 50 * 1024 * 1024){ document.getElementById('actaUploadError').textContent='El PDF excede 50MB'; document.getElementById('actaUploadError').style.display='block'; window.actaPdfFile=null; return; }
+  window.actaPdfFile = file;
+  document.getElementById('actaPdfLabel').innerHTML = `✅ <strong>${esc(file.name)}</strong> (${(file.size/1024/1024).toFixed(1)}MB)`;
+  document.getElementById('actaPdfLabel').style.color = 'var(--green)';
+  document.getElementById('actaUploadError').style.display = 'none';
+  document.getElementById('actaPdfZone').style.borderColor = 'var(--green)';
+  document.getElementById('actaPdfZone').style.borderStyle = 'solid';
+};
+
+window.actasUpload = async function(){
+  const nombre = document.getElementById('acta_nombre')?.value?.trim();
+  const fecha  = document.getElementById('acta_fecha')?.value || '';
+  const org    = document.getElementById('acta_org')?.value?.trim() || 'FECHIPO';
+  const lugar  = document.getElementById('acta_lugar')?.value?.trim() || '';
+  const errEl  = document.getElementById('actaUploadError');
+  const btn    = document.getElementById('actaUploadBtn');
+
+  if(!nombre){ errEl.textContent='El nombre es obligatorio'; errEl.style.display='block'; return; }
+  if(!window.actaPdfFile){ errEl.textContent='Selecciona un archivo PDF'; errEl.style.display='block'; return; }
+  errEl.style.display='none';
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Subiendo...';
+  try{
+    const ts = Date.now();
+    const safeName = window.actaPdfFile.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const path = `actas/${ts}_${safeName}`;
+    const storage = getStorage(app);
+    const sRef = storageRef(storage, path);
+    await uploadBytes(sRef, window.actaPdfFile, {contentType:'application/pdf'});
+    const pdfURL = await getDownloadURL(sRef);
+
+    await addDoc(collection(db,'actas'),{
+      nombre, fecha, org, lugar, pdfURL,
+      storagePath: path,
+      visible: true,
+      ts: serverTimestamp(),
+    });
+
+    showToast('✅ Acta publicada correctamente');
+    // Reset form
+    document.getElementById('acta_nombre').value='';
+    document.getElementById('acta_fecha').value='';
+    document.getElementById('acta_lugar').value='';
+    document.getElementById('actaPdfLabel').innerHTML='📄 Click para seleccionar PDF · Máx 50MB';
+    document.getElementById('actaPdfLabel').style.color='var(--muted)';
+    document.getElementById('actaPdfZone').style.borderColor='var(--border)';
+    document.getElementById('actaPdfZone').style.borderStyle='dashed';
+    document.getElementById('actaPdfInput').value='';
+    window.actaPdfFile = null;
+  }catch(e){
+    errEl.textContent = 'Error: '+e.message;
+    errEl.style.display='block';
+  }finally{
+    btn.disabled=false;
+    btn.textContent='⬆ Subir Acta';
+  }
+};
+
+window.actasToggle = async function(id, currentlyVisible){
+  try{
+    await updateDoc(doc(db,'actas',id),{visible:!currentlyVisible});
+    showToast(currentlyVisible?'Acta ocultada':'Acta publicada');
+  }catch(e){ showToast('Error: '+e.message,null,true); }
+};
+
+window.actasDelete = async function(id, nombre){
+  if(!confirm(`¿Eliminar el acta "${nombre}"? Se borrará el PDF de Storage.`)) return;
+  try{
+    const snap = await getDoc(doc(db,'actas',id));
+    if(snap.exists() && snap.data().storagePath){
+      try{
+        await deleteObject(storageRef(getStorage(app), snap.data().storagePath));
+      }catch(e){ console.warn('Storage delete failed:', e.message); }
+    }
+    await deleteDoc(doc(db,'actas',id));
+    showToast('🗑 Acta eliminada');
+  }catch(e){ showToast('Error: '+e.message,null,true); }
 };
 
 </script>
