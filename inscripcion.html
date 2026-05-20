@@ -706,6 +706,10 @@ function renderConfirm() {
       Tu inscripción ha sido recibida exitosamente.<br>
       Será revisada por el equipo de FECHIPO y aparecerá en la nómina oficial una vez aprobada.
     </p>
+    ${state.storageWarning ? `<div class="alert" style="margin-top:16px;text-align:left;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:#f59e0b">
+      ⚠️ <strong>Documentos pendientes</strong><br>
+      <span style="font-size:12px">Tu inscripción quedó registrada pero los archivos no pudieron subirse. Envía tu carnet y certificado ADEL/WADA por WhatsApp o correo a FECHIPO para completar el proceso.</span>
+    </div>` : ''}
     <div class="alert alert-info" style="margin-top:16px;text-align:left">
       🔑 <strong>Tu PIN de edición es: ${state.form.pin}</strong><br>
       <span style="font-size:12px">Guárdalo para poder modificar tu inscripción después. Lo necesitarás junto con tu RUT.</span>
@@ -1107,7 +1111,7 @@ function prevStep() { state.step = Math.max(state.step - 1, 0); render(); window
 function handleFile(input, type) {
   const file = input.files[0];
   if (!file) return;
-  if (file.size > 5 * 1024 * 1024) { state.error = 'Archivo demasiado grande (máx 5MB)'; render(); return; }
+  if (file.size > 10 * 1024 * 1024) { state.error = 'Archivo demasiado grande (máx 10MB)'; render(); return; }
   if (type === 'carnet') { state.carnetFile = file; state.carnetName = file.name; }
   else if (type === 'wade') { state.wadeFile = file; state.wadeName = file.name; }
   else if (type === 'carnetPhoto') { state.carnetPhotoFile = file; state.carnetPhotoName = file.name; }
@@ -1193,23 +1197,30 @@ async function submitForm() {
       const ts = Date.now();
       const rutClean = f.rut.replace(/[^0-9kK]/g, '').toUpperCase();
 
+      // Subir archivos — si falla no bloquea la inscripción
+      let storageWarning = false;
+      const tryUpload = async (file, path, meta) => {
+        try {
+          const r = window.FB.ref(storage, path);
+          await window.FB.uploadBytes(r, file, meta);
+          return await window.FB.getDownloadURL(r);
+        } catch(e) {
+          console.warn('Upload falló:', path, e.message);
+          storageWarning = true;
+          return null;
+        }
+      };
       if (state.carnetFile) {
-        const carnetRef = window.FB.ref(storage, `athlete_files/${rutClean}/carnet_${ts}`);
-        const carnetMeta = {contentType: state.carnetFile.type || 'image/jpeg'};
-        await window.FB.uploadBytes(carnetRef, state.carnetFile, carnetMeta);
-        privateEntry.carnetURL = await window.FB.getDownloadURL(carnetRef);
+        const url = await tryUpload(state.carnetFile, `athlete_files/${rutClean}/carnet_${ts}`, {contentType: state.carnetFile.type || 'image/jpeg'});
+        if (url) privateEntry.carnetURL = url;
       }
       if (state.wadeFile) {
-        const wadeRef = window.FB.ref(storage, `athlete_files/${rutClean}/wada_${ts}`);
-        const wadeMeta = {contentType: state.wadeFile.type || 'image/jpeg'};
-        await window.FB.uploadBytes(wadeRef, state.wadeFile, wadeMeta);
-        privateEntry.wadeURL = await window.FB.getDownloadURL(wadeRef);
+        const url = await tryUpload(state.wadeFile, `athlete_files/${rutClean}/wada_${ts}`, {contentType: state.wadeFile.type || 'image/jpeg'});
+        if (url) privateEntry.wadeURL = url;
       }
       if (state.carnetPhotoFile) {
-        const carnetPhotoRef = window.FB.ref(storage, `athlete_files/${rutClean}/carnetPhoto_${ts}`);
-        const photoMeta = {contentType: state.carnetPhotoFile.type || 'image/jpeg'};
-        await window.FB.uploadBytes(carnetPhotoRef, state.carnetPhotoFile, photoMeta);
-        privateEntry.carnetPhotoURL = await window.FB.getDownloadURL(carnetPhotoRef);
+        const url = await tryUpload(state.carnetPhotoFile, `athlete_files/${rutClean}/carnetPhoto_${ts}`, {contentType: state.carnetPhotoFile.type || 'image/jpeg'});
+        if (url) privateEntry.carnetPhotoURL = url;
       }
 
       publicEntry.timestamp = window.FB.serverTimestamp();
@@ -1266,6 +1277,7 @@ async function submitForm() {
 
     state.view = 'confirm';
     state.submitting = false;
+    state.storageWarning = storageWarning || false;
     render();
     window.scrollTo(0, 0);
   } catch(e) {
