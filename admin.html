@@ -788,6 +788,56 @@ window.setStatus=async function(insId,status){
   }catch(e){showToast('Error: '+e.message,null,true)}
 }
 
+// ── Subida manual de documentos desde admin (para inscripciones sin archivos) ──
+window.uploadInscDoc = async function(insId, tipo) {
+  insId = decodeURIComponent(insId);
+  const ins = ST.inscripciones.find(x => x.id === insId);
+  if (!ins) return;
+
+  // Crear input de archivo temporal
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = tipo === 'carnet' ? 'image/*,.pdf' : 'image/*,.pdf';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+
+  input.onchange = async () => {
+    const file = input.files[0];
+    document.body.removeChild(input);
+    if (!file) return;
+
+    const label = tipo === 'carnet' ? 'Carnet' : 'WADA/ADEL';
+    showToast(`Subiendo ${label}...`);
+
+    try {
+      const rutClean = String(ins.rut || '').replace(/[^0-9kK]/g, '').toUpperCase();
+      const ts = Date.now();
+      const path = `athlete_files/${rutClean}/${tipo}_${ts}`;
+      const storage = getStorage(app);
+      const sRef = storageRef(storage, path);
+      await uploadBytes(sRef, file, { contentType: file.type || 'application/octet-stream' });
+      const url = await getDownloadURL(sRef);
+
+      // Actualizar inscripciones_private con la URL
+      const privRef = doc(db, 'inscripciones_private', insId);
+      const field = tipo === 'carnet' ? 'carnetURL' : 'wadeURL';
+      await setDoc(privRef, { [field]: url }, { merge: true });
+
+      // Actualizar estado local
+      if (!ST.inscripcionesPrivate[insId]) ST.inscripcionesPrivate[insId] = {};
+      ST.inscripcionesPrivate[insId][field] = url;
+
+      showToast(`✅ ${label} subido correctamente`);
+      render();
+    } catch (e) {
+      showToast(`Error al subir: ${e.message}`, null, true);
+      console.error('[uploadInscDoc]', e);
+    }
+  };
+
+  input.click();
+};
+
 window.deleteInsc=async function(insId){
   insId=decodeURIComponent(insId);
   const ins=ST.inscripciones.find(x=>x.id===insId);if(!ins)return;
@@ -2243,10 +2293,10 @@ function renderNominas(){
           const wadaUrl = priv.wadeURL || priv.wadaURL || '';
           const carnetCell = carnetUrl
             ? `<a href="${esc(carnetUrl)}" target="_blank" rel="noopener" title="Abrir foto del carnet" style="display:inline-block;padding:4px 8px;background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);border-radius:5px;text-decoration:none;font-size:11px;font-weight:600">🪪 Ver</a>`
-            : `<span style="color:var(--muted);font-size:11px;opacity:.5">—</span>`;
+            : (editable ? `<button onclick="uploadInscDoc('${sid}','carnet')" title="Subir carnet" style="background:transparent;border:1px dashed rgba(34,197,94,.4);color:var(--green);padding:3px 7px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald">⬆ Carnet</button>` : `<span style="color:var(--muted);font-size:11px;opacity:.5">—</span>`);
           const wadaCell = wadaUrl
             ? `<a href="${esc(wadaUrl)}" target="_blank" rel="noopener" title="Abrir certificado WADA" style="display:inline-block;padding:4px 8px;background:rgba(59,130,246,.12);border:1px solid var(--blue);color:var(--blue);border-radius:5px;text-decoration:none;font-size:11px;font-weight:600">📜 Ver</a>`
-            : `<span style="color:var(--muted);font-size:11px;opacity:.5">—</span>`;
+            : (editable ? `<button onclick="uploadInscDoc('${sid}','wada')" title="Subir certificado WADA/ADEL" style="background:transparent;border:1px dashed rgba(30,91,168,.5);color:var(--blue);padding:3px 7px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald">⬆ WADA</button>` : `<span style="color:var(--muted);font-size:11px;opacity:.5">—</span>`);
           return `<tr>
             <td style="color:var(--muted);font-family:Oswald">${idx+1}</td>
             <td>${esc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${esc(i.rut||'')}</span></td>
