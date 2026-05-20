@@ -1220,17 +1220,29 @@ async function submitForm() {
         img.src = url;
       });
 
-      // Subir archivos con reintentos — si falla 3 veces activa storageWarning
+      // Cloud Function proxy — sube el archivo server-side (100% confiable, sin ad-blockers)
+      const CF_UPLOAD = 'https://us-central1-fechipo-db-13148.cloudfunctions.net/uploadAthleteFile';
+
+      // Subir archivos via Cloud Function con reintentos — si falla 3 veces activa storageWarning
       const tryUpload = async (file, path, meta) => {
         const uploadFile = file.type?.startsWith('image/') ? await compressImage(file) : file;
         const contentType = uploadFile.type || meta.contentType || 'application/octet-stream';
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
-            const r = window.FB.ref(storage, path);
-            await window.FB.uploadBytes(r, uploadFile, { contentType });
-            return await window.FB.getDownloadURL(r);
+            const resp = await fetch(`${CF_UPLOAD}?path=${encodeURIComponent(path)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': contentType },
+              body: uploadFile
+            });
+            if (!resp.ok) {
+              const err = await resp.json().catch(() => ({}));
+              throw new Error(err.error || `HTTP ${resp.status}`);
+            }
+            const data = await resp.json();
+            if (!data.url) throw new Error('Sin URL en respuesta');
+            return data.url;
           } catch(e) {
-            console.warn(`Upload intento ${attempt}/3 falló:`, path, e.message);
+            console.warn(`Upload CF intento ${attempt}/3 falló:`, path, e.message);
             if (attempt < 3) await new Promise(res => setTimeout(res, attempt * 1200));
           }
         }
