@@ -2295,7 +2295,7 @@ function renderNominas(){
     ${needsMetaSync?'<div class="card" style="background:rgba(212,168,67,.08);border-color:rgba(212,168,67,.3);padding:12px 16px;margin-bottom:12px"><span style="color:var(--gold);font-size:12px">⚠️ Las inscripciones están en Firebase pero falta el doc de evento en <code>eventos/</code>. Sin eso no podés editar fecha/cierre/ubicación desde <b>Campeonatos</b>. Creá el evento desde el panel de Campeonatos.</span></div>':''}
     <div class="card" style="padding:0;overflow-x:auto">
       <table class="tbl">
-        <tr><th>#</th><th>Nombre</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Modalidad</th><th>Club</th><th title="Comuna / Región">📍 Zona</th><th title="Carnet">🪪 Carnet</th><th title="Certificado WADA / ADEL">📜 WADA</th><th>Estado</th><th></th></tr>
+        <tr><th>#</th><th>Nombre</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Modalidad</th><th>Club</th><th title="Comuna / Región">📍 Zona</th><th title="Carnet">🪪 Carnet</th><th title="Certificado WADA / ADEL">📜 WADA</th><th title="Consentimiento menor de edad">👶 Menor</th><th>Estado</th><th></th></tr>
         ${filtered.map((i,idx)=>{
           const editable=!i._json;
           const click=(f)=>editable?`onclick="editInsc('${i.id}','${f}')"`:'';
@@ -2309,12 +2309,27 @@ function renderNominas(){
           const sinPerfilBtn=editable&&!tienePerfilRow?`<button onclick="crearPerfilDebutante('${sid}')" style="background:transparent;border:1px solid rgba(212,168,67,.5);color:var(--gold);padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald;white-space:nowrap" title="Crear perfil de debutante">★ Perfil</button>`:'';
           const carnetUrl = priv.carnetURL || '';
           const wadaUrl = priv.wadeURL || priv.wadaURL || '';
+          const consentimientoUrl = priv.consentimientoURL || '';
+          // Detectar si es menor de edad
+          const esMinorAdmin = (fechaNac => {
+            if (!fechaNac) return false;
+            const dob = new Date(fechaNac + 'T00:00:00');
+            const hoy = new Date();
+            let age = hoy.getFullYear() - dob.getFullYear();
+            const m = hoy.getMonth() - dob.getMonth();
+            if (m < 0 || (m === 0 && hoy.getDate() < dob.getDate())) age--;
+            return age < 18;
+          })(i.fechaNac);
           const carnetCell = carnetUrl
             ? `<a href="${esc(carnetUrl)}" target="_blank" rel="noopener" title="Abrir foto del carnet" style="display:inline-block;padding:4px 8px;background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);border-radius:5px;text-decoration:none;font-size:11px;font-weight:600">🪪 Ver</a>`
             : (editable ? `<button onclick="uploadInscDoc('${sid}','carnet')" title="Subir carnet" style="background:transparent;border:1px dashed rgba(34,197,94,.4);color:var(--green);padding:3px 7px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald">⬆ Carnet</button>` : `<span style="color:var(--muted);font-size:11px;opacity:.5">—</span>`);
           const wadaCell = wadaUrl
             ? `<a href="${esc(wadaUrl)}" target="_blank" rel="noopener" title="Abrir certificado WADA" style="display:inline-block;padding:4px 8px;background:rgba(59,130,246,.12);border:1px solid var(--blue);color:var(--blue);border-radius:5px;text-decoration:none;font-size:11px;font-weight:600">📜 Ver</a>`
             : (editable ? `<button onclick="uploadInscDoc('${sid}','wada')" title="Subir certificado WADA/ADEL" style="background:transparent;border:1px dashed rgba(30,91,168,.5);color:var(--blue);padding:3px 7px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald">⬆ WADA</button>` : `<span style="color:var(--muted);font-size:11px;opacity:.5">—</span>`);
+          const consentimientoCell = !esMinorAdmin ? `<span style="color:var(--muted);font-size:11px;opacity:.4">—</span>`
+            : consentimientoUrl
+              ? `<a href="${esc(consentimientoUrl)}" target="_blank" rel="noopener" title="Abrir consentimiento" style="display:inline-block;padding:4px 8px;background:rgba(212,168,67,.12);border:1px solid var(--gold);color:var(--gold);border-radius:5px;text-decoration:none;font-size:11px;font-weight:600">📋 Ver</a>`
+              : `<span style="padding:4px 7px;background:rgba(239,68,68,.1);border:1px dashed rgba(239,68,68,.5);color:var(--red);border-radius:5px;font-size:10px;font-weight:600;font-family:Oswald">⚠ Falta</span>`;
           return `<tr>
             <td style="color:var(--muted);font-family:Oswald">${idx+1}</td>
             <td>${esc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${esc(i.rut||'')}</span></td>
@@ -2326,6 +2341,7 @@ function renderNominas(){
             <td style="font-size:11px;color:var(--muted);max-width:160px"><span class="${cls}" ${click('comuna')} title="${esc(i.comuna||'')}">${esc(i.comuna||'—')}</span></td>
             <td style="text-align:center">${carnetCell}</td>
             <td style="text-align:center">${wadaCell}</td>
+            <td style="text-align:center">${consentimientoCell}</td>
             <td><span class="badge ${i.status==='approved'?'b-g':i.status==='pending'?'b-y':'b-r'}">${esc(i.status||'approved')}</span></td>
             <td style="white-space:nowrap">${sinPerfilBtn}${editable?`<button onclick="deleteInsc('${sid}')" style="background:transparent;border:1px solid rgba(239,68,68,.3);color:var(--red);padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald;margin-left:4px" title="Eliminar">✕</button>`:''}</td>
           </tr>`;
