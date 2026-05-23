@@ -646,12 +646,18 @@ function _normDiv(d){
 }
 function checkRecord(athlete,lift,round){
   if(!RECORDS)return;
-  // Bypass si el evento tiene records desactivados (ej. Universitario)
   if(DATA.event && DATA.event.recordsEnabled===false)return;
   const weight=athlete.att[lift][round].w;if(!weight)return;
   const mod=athlete.mod||'classic';
   const cat=_normCat(athlete.cat||'');
   const div=_normDiv(athlete.div||'');
+  // Competencia universitaria → todo buen intento es primer récord (modalidad nueva)
+  const isUniv=(DATA.event?.name||'').toLowerCase().includes('universitario');
+  if(isUniv){
+    showRecordAlert(athlete.name,lift,round,weight,0,'Sin récord previo',cat,div,'universitario');
+    pushRecordToFB({athName:athlete.name,lift,round,newMark:weight,oldMark:0,holder:'Sin récord previo',cat,div,mod:'universitario',ts:Date.now()});
+    return;
+  }
   const recs=(RECORDS[mod]&&RECORDS[mod][lift])||[];
   const match=recs.find(rec=>rec.categoria===cat&&_normDiv(rec.division)===div);
   if(match&&weight>match.marca){
@@ -678,16 +684,16 @@ function showRecordAlert(athName,lift,round,newMark,oldMark,holder,cat,div,mod){
   el.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:99999';
   el.innerHTML='<div style="background:#0D1F38;border:3px solid #C41E3A;border-radius:20px;padding:36px 44px;max-width:540px;width:90%;text-align:center;box-shadow:0 0 80px rgba(196,30,58,.45)">'
     +'<div style="font-size:48px;margin-bottom:6px">&#127942;</div>'
-    +'<div style="font-family:Oswald;font-size:13px;letter-spacing:4px;color:#C41E3A;margin-bottom:10px">POSIBLE RÉCORD NACIONAL</div>'
+    +'<div style="font-family:Oswald;font-size:13px;letter-spacing:4px;color:#C41E3A;margin-bottom:10px">'+(mod==='universitario'?'RÉCORD UNIVERSITARIO':'POSIBLE RÉCORD NACIONAL')+'</div>'
     +'<div style="font-family:Oswald;font-size:28px;font-weight:700;color:#fff;margin-bottom:4px">'+athName+'</div>'
-    +'<div style="font-family:Oswald;font-size:16px;color:#D4A843;margin-bottom:20px">'+LL[lift]+' &middot; -'+cat+'kg &middot; '+div+' &middot; '+(mod==='equipped'?'Equipado':'Classic')+'</div>'
+    +'<div style="font-family:Oswald;font-size:16px;color:#D4A843;margin-bottom:20px">'+LL[lift]+' &middot; -'+cat+'kg &middot; '+div+' &middot; '+(mod==='universitario'?'Universitario':mod==='equipped'?'Equipado':'Classic')+'</div>'
     +'<div style="display:flex;justify-content:center;gap:28px;align-items:center;margin-bottom:24px">'
     +'<div><div style="font-size:10px;color:#7A8FA6;letter-spacing:2px;margin-bottom:4px">NUEVA MARCA</div>'
     +'<div style="font-family:Oswald;font-size:52px;font-weight:700;color:#22c55e">'+newMark+'<span style="font-size:22px"> kg</span></div></div>'
-    +'<div style="font-size:28px;color:#7A8FA6">&rarr;</div>'
+    +(oldMark>0?'<div style="font-size:28px;color:#7A8FA6">&rarr;</div>'
     +'<div><div style="font-size:10px;color:#7A8FA6;letter-spacing:2px;margin-bottom:4px">RÉCORD ANTERIOR</div>'
     +'<div style="font-family:Oswald;font-size:38px;font-weight:700;color:#7A8FA6">'+oldMark+' kg</div>'
-    +'<div style="font-size:10px;color:#7A8FA6;margin-top:2px">'+holder+'</div></div>'
+    +'<div style="font-size:10px;color:#7A8FA6;margin-top:2px">'+holder+'</div></div>':'')
     +'</div>'
     +'<button onclick="closeRecAlert()" style="padding:10px 30px;border-radius:10px;border:2px solid #C41E3A;background:transparent;color:#fff;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;cursor:pointer">CONFIRMAR &amp; CERRAR</button>'
     +'<div style="font-size:10px;color:#7A8FA6;margin-top:10px">&#9888;&#65039; Sujeto a confirmación del intento por los jueces &mdash; se cierra en 15s</div>'
@@ -3643,7 +3649,7 @@ function _renderTxBreakTimer(bt,scale){
   const titleSize=stl.titleSize!=null?Number(stl.titleSize):8;
   const movSize=stl.movSize!=null?Number(stl.movSize):5;
   const timerSz=stl.timerSize!=null?Number(stl.timerSize):12;
-  const showLogos=stl.showLogos===true;
+  const showLogos=false;
   const barH=showLogos?'clamp(52px,7vh,84px)':'0px';
   const titleTop=stl.titleTop!=null?Number(stl.titleTop):10;
   const overlayOp=stl.overlayOpacity!=null?Number(stl.overlayOpacity):0.65;
