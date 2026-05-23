@@ -168,6 +168,21 @@ const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechi
 let fbDB=null,fbReady=false,fbUnsub=null,_fbSyncing=false,_fbLastWrite=0,fbAuth=null;
 
 // ══════════════════════════════════════════════
+// CONTROLLER MODE: solo el PC que tenga ?controller=1 en la URL escribe a Firebase.
+// Los demás (productor, viewers) solo leen. Evita conflictos entre admins.
+window.IS_CONTROLLER=(new URLSearchParams(location.search).get('controller')==='1')||localStorage.getItem('yl_controller')==='1';
+if(window.IS_CONTROLLER){
+  // Badge visible
+  setTimeout(()=>{
+    const b=document.createElement('div');
+    b.style.cssText='position:fixed;top:8px;left:8px;z-index:99999;background:#22c55e;color:#000;font-family:Oswald;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;pointer-events:none;letter-spacing:1px';
+    b.textContent='🎮 CONTROLLER';
+    document.body.appendChild(b);
+  },1500);
+  console.log('[YL] Modo CONTROLLER activo — esta PC escribe a Firebase');
+}else{
+  console.log('[YL] Modo LECTURA — solo lee de Firebase. Agrega ?controller=1 a la URL para escribir.');
+}
 let _lastFbUpdate=0;
 // Event ID → name mapping (must match inscripcion.html EVENTS)
 let LIVE_EVENTS={'regional_centro_2026':'Campeonato Regional Centro FECHIPO 2026','universitario_2026':'Primer Campeonato Nacional Universitario FECHIPO 2026','Campeonato_de_debutantes':'Campeonato de Debutantes'};
@@ -248,6 +263,7 @@ function fbDocId(){
 }
 async function syncToFB(){
   if(!fbReady||!isAdmin||_fbSyncing)return;
+  if(!window.IS_CONTROLLER)return; // Solo el controller escribe — evita conflictos multi-admin
   const id=fbDocId();if(!id)return;
   _fbLastWrite=Date.now();
   const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,ts:Date.now()};
@@ -261,6 +277,7 @@ async function syncToFB(){
 // el doc completo (athletes incluido).
 async function syncTimerOnlyToFB(){
   if(!fbReady||!isAdmin)return;
+  if(!window.IS_CONTROLLER)return; // Solo el controller escribe
   const id=fbDocId();if(!id)return;
   _fbLastWrite=Date.now();
   try{
@@ -276,8 +293,8 @@ function startFBSync(){
   fbUnsub=window._fb.onSnapshot(ref,(snap)=>{
     if(!snap.exists())return;
     _lastFbUpdate=Date.now();
-    // Admin nunca lee datos de Firebase durante competencia (solo escribe)
-    if(isAdmin&&DATA.phase==='compete')return;
+    // El controller nunca lee de Firebase — sus cambios son la fuente de verdad
+    if(window.IS_CONTROLLER)return;
     // Si hay un input enfocado, no re-renderizar (el usuario está editando)
     const focused=document.activeElement;
     if(focused&&(focused.tagName==='INPUT'||focused.tagName==='SELECT'||focused.tagName==='TEXTAREA'))return;
@@ -2324,27 +2341,29 @@ async function generateActaPDF(){
       doc.setFontSize(8);
       doc.text(_stripAccentsForPdf('PUNTUACION POR CLUB — '+(DATA.event?.name||'').toUpperCase()),PW/2,17,{align:'center'});
 
-      // Build club stats — rank medals from category rankings
+      // Build club stats — IPF Country Rules: 1°=12, 2°=9, 3°=8...10°=1
+      const IPF_PTS_CL=[12,9,8,7,6,5,4,3,2,1];
       const clubStats={};
       all.filter(a=>a.total>0).forEach(a=>{
         const cl=_stripAccentsForPdf(a.club||'Sin Club');
-        if(!clubStats[cl])clubStats[cl]={club:cl,athletes:0,gold:0,silver:0,bronze:0,glSum:0};
+        if(!clubStats[cl])clubStats[cl]={club:cl,athletes:0,gold:0,silver:0,bronze:0,ipfPts:0};
         clubStats[cl].athletes++;
-        clubStats[cl].glSum+=a.gl||0;
+        const rk=a._rank||0;
+        if(rk>=1&&rk<=10)clubStats[cl].ipfPts+=IPF_PTS_CL[rk-1];
         if(a._rank===1)clubStats[cl].gold++;
         else if(a._rank===2)clubStats[cl].silver++;
         else if(a._rank===3)clubStats[cl].bronze++;
       });
       const clubArr=Object.values(clubStats).sort((a,b)=>{
+        if(b.ipfPts!==a.ipfPts)return b.ipfPts-a.ipfPts;
         if(b.gold!==a.gold)return b.gold-a.gold;
         if(b.silver!==a.silver)return b.silver-a.silver;
-        if(b.bronze!==a.bronze)return b.bronze-a.bronze;
-        return b.glSum-a.glSum;
+        return b.bronze-a.bronze;
       });
 
       const clCols=[
         {header:'Pos',w:12},{header:'Club',w:80},{header:'Atletas',w:22},
-        {header:'Oro',w:18},{header:'Plata',w:18},{header:'Bronce',w:18},{header:'GL Total',w:22}
+        {header:'Oro',w:18},{header:'Plata',w:18},{header:'Bronce',w:18},{header:'Pts IPF',w:22}
       ];
       const clTotalW=clCols.reduce((s,c)=>s+c.w,0);
       const clX=(PW-clTotalW)/2;
@@ -2372,7 +2391,7 @@ async function generateActaPDF(){
             {text:String(cl.gold),color:[255,215,0],bold:cl.gold>0},
             {text:String(cl.silver),color:[192,192,192],bold:cl.silver>0},
             {text:String(cl.bronze),color:[205,127,50],bold:cl.bronze>0},
-            {text:String(Math.round(cl.glSum*100)/100),color:C.gold,bold:true}
+            {text:String(cl.ipfPts),color:C.gold,bold:true}
           ];
           ccx=clX;
           cells.forEach((cell,ci)=>{
@@ -2403,7 +2422,7 @@ async function generateActaPDF(){
       doc.setTextColor(...C.muted);
       doc.setFont('helvetica','italic');
       doc.setFontSize(6);
-      doc.text(_stripAccentsForPdf('Criterio: Medallas de Oro → Plata → Bronce → GL Points acumulados'),PW/2,clY,{align:'center'});
+      doc.text(_stripAccentsForPdf('Criterio IPF Country Rules: 1°=12 pts · 2°=9 · 3°=8 · 4°=7 · 5°=6 · 6°=5 · 7°=4 · 8°=3 · 9°=2 · 10°=1'),PW/2,clY,{align:'center'});
     }
 
     // ── University Ranking page (solo si hay datos de universidad) ───
@@ -2425,26 +2444,31 @@ async function generateActaPDF(){
         doc.setFontSize(8);
         doc.text(_stripAccentsForPdf('PUNTUACION POR UNIVERSIDAD — '+(DATA.event?.name||'').toUpperCase()),PW/2,17,{align:'center'});
 
+        // IPF Country Rules: puntos por posición en cada categoría
+        // 1°=12, 2°=9, 3°=8, 4°=7, 5°=6, 6°=5, 7°=4, 8°=3, 9°=2, 10°=1
+        const IPF_PTS=[12,9,8,7,6,5,4,3,2,1];
         const univStats={};
         univAthletes.forEach(a=>{
           const u=_stripAccentsForPdf((a.uni||'').trim()||'Sin Universidad');
-          if(!univStats[u])univStats[u]={univ:u,athletes:0,gold:0,silver:0,bronze:0,glSum:0};
+          if(!univStats[u])univStats[u]={univ:u,athletes:0,gold:0,silver:0,bronze:0,ipfPts:0};
           univStats[u].athletes++;
-          univStats[u].glSum+=a.gl||0;
+          // Puntos IPF por posición en su categoría
+          const rk=a._rank||0;
+          if(rk>=1&&rk<=10)univStats[u].ipfPts+=IPF_PTS[rk-1];
           if(a._rank===1)univStats[u].gold++;
           else if(a._rank===2)univStats[u].silver++;
           else if(a._rank===3)univStats[u].bronze++;
         });
         const univArr=Object.values(univStats).sort((a,b)=>{
+          if(b.ipfPts!==a.ipfPts)return b.ipfPts-a.ipfPts;
           if(b.gold!==a.gold)return b.gold-a.gold;
           if(b.silver!==a.silver)return b.silver-a.silver;
-          if(b.bronze!==a.bronze)return b.bronze-a.bronze;
-          return b.glSum-a.glSum;
+          return b.bronze-a.bronze;
         });
 
         const uCols=[
           {header:'Pos',w:12},{header:'Universidad',w:100},{header:'Atletas',w:22},
-          {header:'Oro',w:18},{header:'Plata',w:18},{header:'Bronce',w:18},{header:'GL Total',w:22}
+          {header:'Oro',w:18},{header:'Plata',w:18},{header:'Bronce',w:18},{header:'Pts IPF',w:22}
         ];
         const uTotalW=uCols.reduce((s,c)=>s+c.w,0);
         const uX=(PW-uTotalW)/2;
@@ -2472,7 +2496,7 @@ async function generateActaPDF(){
               {text:String(u.gold),color:[255,215,0],bold:u.gold>0},
               {text:String(u.silver),color:[192,192,192],bold:u.silver>0},
               {text:String(u.bronze),color:[205,127,50],bold:u.bronze>0},
-              {text:String(Math.round(u.glSum*100)/100),color:C.gold,bold:true}
+              {text:String(u.ipfPts),color:C.gold,bold:true}
             ];
             ucx=uX;
             cells.forEach((cell,ci)=>{
@@ -2502,7 +2526,7 @@ async function generateActaPDF(){
         doc.setTextColor(...C.muted);
         doc.setFont('helvetica','italic');
         doc.setFontSize(6);
-        doc.text(_stripAccentsForPdf('Criterio: Medallas de Oro → Plata → Bronce → GL Points acumulados'),PW/2,uY,{align:'center'});
+        doc.text(_stripAccentsForPdf('Criterio IPF Country Rules: 1°=12 pts · 2°=9 · 3°=8 · 4°=7 · 5°=6 · 6°=5 · 7°=4 · 8°=3 · 9°=2 · 10°=1'),PW/2,uY,{align:'center'});
       }
     }
 
