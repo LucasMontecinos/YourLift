@@ -168,41 +168,7 @@ const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechi
 let fbDB=null,fbReady=false,fbUnsub=null,_fbSyncing=false,_fbLastWrite=0,fbAuth=null;
 
 // ══════════════════════════════════════════════
-// RELAY LAN — fallback automático sin internet
-// Corre relay.js en el PC admin: node relay.js
-// TX abre: livecast.html?tx=...&relay=192.168.1.X:3000
-// Admin abre: livecast.html?relay=localhost:3000
-// ══════════════════════════════════════════════
-const _RELAY_HOST=TX_URL.get('relay')||localStorage.getItem('yl_relay_host')||null;
-let _lastFbUpdate=0,_relayFallback=false;
-
-function _relaySend(payload){
-  if(!_RELAY_HOST||!isAdmin)return;
-  fetch('http://'+_RELAY_HOST+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(600)}).catch(()=>{});
-}
-function _relayBadge(on){
-  let b=document.getElementById('_relayBadge');
-  if(on){if(!b){b=document.createElement('div');b.id='_relayBadge';b.style.cssText='position:fixed;top:8px;right:8px;z-index:99999;background:#f59e0b;color:#000;font-family:Oswald;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;pointer-events:none;letter-spacing:1px';document.body.appendChild(b);}b.textContent='📡 LAN';}
-  else{if(b)b.remove();}
-}
-function _relayConnect(){
-  if(!_RELAY_HOST||!TX_MODE)return;
-  const es=new EventSource('http://'+_RELAY_HOST+'/events');
-  es.onmessage=ev=>{
-    if(Date.now()-_lastFbUpdate<2500)return; // Firebase ok → ignorar relay
-    try{
-      const d=JSON.parse(ev.data);if(!d||!d.athletes)return;
-      const prevSig=(DATA.athletes?JSON.stringify(DATA.athletes):'')+DATA.lift+DATA.round+DATA.flight;
-      DATA.event=d.event||DATA.event;DATA.athletes=JSON.parse(d.athletes||'[]');
-      DATA.lift=d.lift||DATA.lift;DATA.round=typeof d.round==='number'?d.round:DATA.round;DATA.flight=d.flight||DATA.flight;
-      if(!_relayFallback){_relayFallback=true;_relayBadge(true);console.log('[Relay] Fallback LAN activo');}
-      const newSig=(DATA.athletes?JSON.stringify(DATA.athletes):'')+DATA.lift+DATA.round+DATA.flight;
-      if(prevSig!==newSig)R();
-    }catch(e){}
-  };
-  es.onerror=()=>console.warn('[Relay] Reconectando...');
-  console.log('[Relay] Listener SSE →',_RELAY_HOST);
-}
+let _lastFbUpdate=0;
 // Event ID → name mapping (must match inscripcion.html EVENTS)
 let LIVE_EVENTS={'regional_centro_2026':'Campeonato Regional Centro FECHIPO 2026','universitario_2026':'Primer Campeonato Nacional Universitario FECHIPO 2026','Campeonato_de_debutantes':'Campeonato de Debutantes'};
 let _liveUnsub=null; // Firestore listener for current event athletes
@@ -285,7 +251,6 @@ async function syncToFB(){
   const id=fbDocId();if(!id)return;
   _fbLastWrite=Date.now();
   const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,ts:Date.now()};
-  _relaySend(payload); // dual-write → relay LAN siempre en paralelo
   try{
     const ref=window._fb.doc(fbDB,'livecast_sync',id);
     await window._fb.setDoc(ref,payload);
@@ -310,8 +275,9 @@ function startFBSync(){
   const ref=window._fb.doc(fbDB,'livecast_sync',id);
   fbUnsub=window._fb.onSnapshot(ref,(snap)=>{
     if(!snap.exists())return;
-    _lastFbUpdate=Date.now(); // marcar que Firebase sigue vivo
-    if(_relayFallback){_relayFallback=false;_relayBadge(false);console.log('[Relay] Firebase restaurado');}
+    _lastFbUpdate=Date.now();
+    // Admin nunca lee datos de Firebase durante competencia (solo escribe)
+    if(isAdmin&&DATA.phase==='compete')return;
     // Si hay un input enfocado, no re-renderizar (el usuario está editando)
     const focused=document.activeElement;
     if(focused&&(focused.tagName==='INPUT'||focused.tagName==='SELECT'||focused.tagName==='TEXTAREA'))return;
@@ -345,7 +311,6 @@ function startFBSync(){
     _fbSyncing=false;
   });
   console.log('[FB] Listener started for',id);
-  _relayConnect(); // iniciar listener relay (TX side)
 }
 initFB();
 async function doLogin(){
@@ -707,15 +672,11 @@ function parseWeight(v){return parseFloat(String(v==null?'':v).replace(',','.'))
 function setAtt(id,l,r,val){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   const w=parseWeight(val);
-  // Block if change timer has expired for this attempt
+  // Warn if change timer expired but still allow entry
   const key=id+'_'+l+'_'+r;
   const ct=DATA.changeTimers[key];
   if(ct&&ct.expired){
-    showToastLC('\u23F0 Tiempo de cambio expirado para '+a.name+' '+LIFT_S[l]+(r+1)+' — requiere aprobación del jurado');
-    // Restore previous value in the input
-    const el=document.getElementById('ct_'+key);
-    if(el)el.value=a.att[l][r].w||'';
-    return;
+    showToastLC('\u23F0 Timer expirado — peso ingresado igual');
   }
   if(w>0){
     // Rule: each attempt must be ≥ all previous attempts (successful or not)
