@@ -611,7 +611,7 @@ function pickEvent(i){
     else if(isBench) mod='onlybench';
     else if(isEq) mod='equipped';
     else mod='classic';
-    return{id:j,lot:j+1,name,rut:a.rut||'',sex:a.sexo||a.sex||'',cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,bw:0,flight:fl,rackSQ:'',rackBP:'',bombed:false,
+    return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:a.sexo||a.sex||'',cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,bw:0,flight:a.flight||fl,rackSQ:'',rackBP:'',bombed:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}};
   });
   const firstFlight=flightMap?[...new Set(Object.values(flightMap))].sort()[0]:'A';
@@ -1159,14 +1159,14 @@ function loadLiveAthletes(ev){
   _liveUnsub=window._fb.onSnapshot(q,(snap)=>{
     const fbAthletes=snap.docs
       .map(d=>({...d.data(),id:d.id}))
-      .sort((a,b)=>(a.timestamp?.seconds||0)-(b.timestamp?.seconds||0))
+      .sort((a,b)=>(a.lot||9999)-(b.lot||9999))
       .map((ins,j)=>_inscToAthlete(ins,j,flightMap));
 
     if(!fbAthletes.length)return; // no Firestore data — keep nominas.json data
 
     if(DATA.phase==='setup'){
       // Full replace: Firestore is source of truth during setup
-      DATA.athletes=fbAthletes.map((a,j)=>({...a,id:j,lot:j+1}));
+      DATA.athletes=fbAthletes.map((a,j)=>({...a,id:j,lot:a.lot||j+1}));
       const firstFlight=[...new Set(DATA.athletes.map(a=>a.flight))].sort()[0]||'A';
       DATA.flight=firstFlight;
       save();R();
@@ -3643,7 +3643,7 @@ function _renderTxBreakTimer(bt,scale){
   const titleSize=stl.titleSize!=null?Number(stl.titleSize):8;
   const movSize=stl.movSize!=null?Number(stl.movSize):5;
   const timerSz=stl.timerSize!=null?Number(stl.timerSize):12;
-  const showLogos=stl.showLogos!==false;
+  const showLogos=stl.showLogos===true;
   const barH=showLogos?'clamp(52px,7vh,84px)':'0px';
   const titleTop=stl.titleTop!=null?Number(stl.titleTop):10;
   const overlayOp=stl.overlayOpacity!=null?Number(stl.overlayOpacity):0.65;
@@ -3691,7 +3691,7 @@ function _renderTxBreakTimer(bt,scale){
 
   return '<div style="position:fixed;inset:0;z-index:3;overflow:hidden;background:'+bgColor+';'+scStyle+'">'
     +'<div style="position:absolute;inset:0;bottom:'+barH+';display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;padding:'+titleTop+'vh 4vw 3vh">'
-      +'<img src="YourLift_logo.png" style="height:clamp(38px,5vh,68px);width:auto;margin-bottom:clamp(10px,1.5vh,20px)" onerror="this.style.display=\'none\'">'
+      +''
       +'<div style="font-family:Oswald,Impact,sans-serif;font-size:'+titleSize+'vw;font-weight:900;color:#ffffff;line-height:.88;letter-spacing:2px;text-transform:uppercase;text-shadow:0 4px 24px rgba(0,0,0,.9)">YA VOLVEMOS</div>'
       +'<div style="width:clamp(50px,6vw,110px);height:3px;background:'+accentColor+';margin:clamp(8px,1.2vh,18px) auto;box-shadow:0 0 10px '+accentColor+'99"></div>'
       +(movement?'<div style="font-family:Oswald,Impact,sans-serif;font-size:'+movSize+'vw;font-weight:700;color:#ffffff;line-height:1;letter-spacing:2px;margin-bottom:clamp(6px,1vh,14px)">'+movement+'</div>':'')
