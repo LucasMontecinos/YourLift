@@ -369,6 +369,32 @@ function resetFlights(){
 function catWeight(cat){const m=(cat||'').match(/(\d+)/);return m?parseInt(m[1]):999}
 
 function generateFlights(){
+  // Si todos (o casi todos) los atletas YA tienen flight asignado en Firestore,
+  // respetar esa asignación en vez de regenerar.
+  const haveFlight=selectedEvent.athletes.filter(a=>a.flight);
+  if(haveFlight.length>=selectedEvent.athletes.length*0.8){
+    const fmap={};
+    selectedEvent.athletes.forEach(a=>{
+      const fl=a.flight||'?';
+      if(!fmap[fl])fmap[fl]={letter:fl,athletes:[],groups:[]};
+      fmap[fl].athletes.push(a);
+    });
+    // Detectar grupos (cat,div) dentro de cada vuelo
+    Object.values(fmap).forEach(f=>{
+      const grpMap={};
+      f.athletes.forEach(a=>{
+        const k=(a.division||'Open')+'|'+(a.categoria||'?');
+        if(!grpMap[k])grpMap[k]={div:a.division||'Open',cat:a.categoria||'?',athletes:[],catW:catWeight(a.categoria||''),sex:a.sexo||''};
+        grpMap[k].athletes.push(a);
+      });
+      f.groups=Object.values(grpMap);
+      // Mantener orden original (sortOrder) dentro del vuelo
+      f.athletes.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+    });
+    flights=Object.values(fmap).sort((a,b)=>a.letter.localeCompare(b.letter));
+    flights.forEach((f,i)=>{f.color=FL_C[i%FL_C.length]});
+    return;
+  }
   const athletes=selectedEvent.athletes.map((a,i)=>({...a,idx:i}));
   const women=athletes.filter(a=>(a.sexo||'').match(/fem|mujer/i));
   const men=athletes.filter(a=>!(a.sexo||'').match(/fem|mujer/i));
