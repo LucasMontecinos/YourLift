@@ -259,8 +259,26 @@ window.showProfile=function(codigo){
   }
   history.replaceState(null,'','?codigo='+codigo);
 
-  const bl=a.bestLifts||{};
   const allComps=a.competencias||[];
+  // Calcular best lifts dinámicamente desde TODAS las competencias (estáticas + Firestore)
+  // Así se actualiza solo cuando el atleta mejora en una compe nueva.
+  const _staticBl=a.bestLifts||{};
+  const bl={
+    sq:_staticBl.sq||0,
+    bp:_staticBl.bp||0,
+    dl:_staticBl.dl||0,
+    total:_staticBl.total||0,
+    glp:_staticBl.glp||0
+  };
+  allComps.forEach(c=>{
+    const r=c.resultado||{};
+    if((r.sq||0)>bl.sq)bl.sq=r.sq;
+    if((r.bp||0)>bl.bp)bl.bp=r.bp;
+    if((r.dl||0)>bl.dl)bl.dl=r.dl;
+    if((r.total||0)>bl.total)bl.total=r.total;
+    const g=r.glp||r.gl||0;
+    if(g>bl.glp)bl.glp=g;
+  });
   const compsWithResults=allComps.filter(c=>c.resultado&&(c.resultado.total>0||c.resultado.status==='DQ'));
   const sorted=[...compsWithResults].sort((x,y)=>(y.fecha||y.evento||'').localeCompare(x.fecha||x.evento||''));
 
