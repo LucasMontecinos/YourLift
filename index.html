@@ -110,14 +110,17 @@ async function initFB(){
     fbReady=true;
     // Load eventos from Firestore and update NOM_EVENTS
     window.FBQ.onSnapshot(window.FBQ.collection(fbDB,'eventos'),(snap)=>{
-      const evs=snap.docs.map(d=>({...d.data(),id:d.id}))
-        .filter(e=>e.status!=='archived')
+      const allEvs=snap.docs.map(d=>({...d.data(),id:d.id}))
         .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+      // Para transmisiones y galería: incluir TODOS los eventos (también archivados)
+      window.ALL_EVENTS=allEvs;
+      const evs=allEvs.filter(e=>e.status!=='archived');
       if(evs.length){
         NOM_EVENTS=evs;
         // Rebuild nóminas with updated event list
         loadFBNominas();
       }
+      if(ST.v==='trans')render();
     });
     await loadEdits();
     startEditsListener();
@@ -300,8 +303,8 @@ function gall(){
 function setGalleryFilter(e){GALLERY_FILTER=e;render()}
 
 function trans(){
-  // Lista de eventos pasados con transmisión YouTube
-  const all=(NM.events||[]).filter(ev=>ev.youtubeUrl);
+  // Lista de eventos con transmisión YouTube — incluye archivados
+  const all=(window.ALL_EVENTS||NM.events||[]).filter(ev=>ev.youtubeUrl);
   // Ordenar por fecha descendente (más reciente primero)
   const sorted=all.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   let h=`<div class="cd2"><div class="ct"><h2 style="color:var(--gold)">📺 Transmisiones pasadas</h2><span class="bg" style="background:var(--gold);color:var(--bg)">${sorted.length}</span></div>`;
