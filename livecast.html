@@ -261,7 +261,10 @@ async function initFB(){
 }
 function fbDocId(){
   if(!DATA.event)return null;
-  return(DATA.event.name||'comp').replace(/[^a-zA-Z0-9]/g,'_').substring(0,60);
+  const base=(DATA.event.name||'comp').replace(/[^a-zA-Z0-9]/g,'_').substring(0,55);
+  // Si está en modo 2 tarimas (?tarima=1 o ?tarima=2), cada tarima usa su propio doc
+  // Así dos PCs (uno por tarima) escriben a docs separados y NO se pisan datos.
+  return TARIMA?`${base}_T${TARIMA}`:base;
 }
 async function syncToFB(){
   if(!fbReady||!isAdmin||_fbSyncing)return;
