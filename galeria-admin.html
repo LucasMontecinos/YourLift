@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>YourLift — Galería Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0A1628;--card:#11223B;--border:#1E3A5F;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A;--gold:#D4A843;--green:#22c55e}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px}
+.os{font-family:Oswald,sans-serif}
+h1{font-family:Oswald;letter-spacing:2px;color:var(--gold);margin-bottom:18px;text-transform:uppercase}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px;max-width:880px}
+label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;font-family:Oswald}
+input,select{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:8px;font-family:Oswald;font-size:14px;margin-bottom:12px}
+input:focus,select:focus{border-color:var(--gold);outline:none}
+button{padding:10px 22px;border-radius:8px;border:none;background:var(--green);color:#fff;font-family:Oswald;font-weight:700;font-size:13px;letter-spacing:2px;cursor:pointer;text-transform:uppercase}
+button:hover{filter:brightness(1.1)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.thumb{display:inline-block;width:140px;margin:6px;background:#000;border-radius:8px;overflow:hidden;position:relative;border:1px solid var(--border)}
+.thumb img{width:100%;height:140px;object-fit:cover;display:block}
+.thumb .meta{padding:6px;font-size:10px;color:var(--muted)}
+.thumb .del{position:absolute;top:4px;right:4px;background:rgba(196,30,58,.9);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:14px;line-height:1;padding:0}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.alert{padding:10px;border-radius:8px;margin-bottom:12px;font-size:12px}
+.alert-ok{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.4)}
+.alert-err{background:rgba(196,30,58,.15);color:var(--accent);border:1px solid rgba(196,30,58,.4)}
+a.back{color:var(--muted);font-family:Oswald;font-size:12px;letter-spacing:1px;text-decoration:none}
+a.back:hover{color:var(--gold)}
+</style>
+</head>
+<body>
+<a href="index.html" class="back">← Volver a YourLift</a>
+<div style="margin-top:14px"></div>
+<h1>🖼 Galería — Admin</h1>
+
+<div class="card" id="loginCard">
+  <label>Email admin</label>
+  <input id="email" type="email" placeholder="admin@fechipo.cl">
+  <label>Contraseña</label>
+  <input id="pwd" type="password">
+  <button onclick="doLogin()">Entrar</button>
+  <div id="loginMsg" style="margin-top:10px;font-size:12px;color:var(--accent)"></div>
+</div>
+
+<div id="mainCard" style="display:none">
+  <div class="card">
+    <label>Evento</label>
+    <select id="evento"></select>
+    <div class="row">
+      <div>
+        <label>Fotógrafo (nombre)</label>
+        <input id="fotografo" placeholder="Juan Pérez">
+      </div>
+      <div>
+        <label>Instagram (sin @)</label>
+        <input id="instagram" placeholder="juanperez_fotos">
+      </div>
+    </div>
+    <label>Fotos (puedes seleccionar varias a la vez)</label>
+    <input id="files" type="file" accept="image/*" multiple>
+    <div style="margin-top:10px"><button id="btnUpload" onclick="upload()">Subir fotos</button></div>
+    <div id="msg"></div>
+  </div>
+
+  <div class="card">
+    <h2 class="os" style="font-size:16px;color:var(--gold);margin-bottom:12px;letter-spacing:1px">Fotos en la galería</h2>
+    <div style="margin-bottom:8px;font-size:11px;color:var(--muted)">Hover sobre una foto y click en × para borrarla</div>
+    <div id="thumbs"></div>
+  </div>
+</div>
+
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import {getAuth, signInWithEmailAndPassword, onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import {getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import {getStorage, ref, uploadBytes, getDownloadURL, deleteObject} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+
+const FB_CFG={apiKey:"AIzaSyC3xWxxxLpkkbz_h9HxOSeg7C25wfh9KQ8",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"841056301810",appId:"1:841056301810:web:f6d62c0d4d22e88f7af2dd"};
+const app=initializeApp(FB_CFG);
+const auth=getAuth(app);
+const db=getFirestore(app);
+const storage=getStorage(app);
+let PHOTOS=[];
+let EVENTS=[];
+
+window.doLogin=async function(){
+  const email=document.getElementById('email').value.trim();
+  const pwd=document.getElementById('pwd').value;
+  try{await signInWithEmailAndPassword(auth,email,pwd);}
+  catch(e){document.getElementById('loginMsg').textContent='Error: '+e.message;}
+};
+
+onAuthStateChanged(auth,async(u)=>{
+  if(u){
+    document.getElementById('loginCard').style.display='none';
+    document.getElementById('mainCard').style.display='block';
+    // Cargar eventos
+    onSnapshot(collection(db,'eventos'),snap=>{
+      EVENTS=snap.docs.map(d=>({id:d.id,...d.data()})).filter(e=>e.status!=='archived');
+      EVENTS.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+      const sel=document.getElementById('evento');
+      sel.innerHTML=EVENTS.map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+    });
+    // Cargar fotos existentes
+    onSnapshot(collection(db,'gallery_photos'),snap=>{
+      PHOTOS=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.ts?.seconds||0)-(a.ts?.seconds||0));
+      renderThumbs();
+    });
+  }
+});
+
+function renderThumbs(){
+  const wrap=document.getElementById('thumbs');
+  if(!PHOTOS.length){wrap.innerHTML='<div style="color:var(--muted);padding:20px;text-align:center">No hay fotos aún</div>';return;}
+  wrap.innerHTML=PHOTOS.map(p=>`
+    <div class="thumb">
+      <button class="del" title="Borrar" onclick="delPhoto('${p.id}','${p.storagePath||''}')">×</button>
+      <img src="${p.url}" loading="lazy">
+      <div class="meta">${p.eventoName||''}<br>📷 ${p.photographer||''} ${p.instagram?'@'+p.instagram:''}</div>
+    </div>
+  `).join('');
+}
+
+window.delPhoto=async function(id,path){
+  if(!confirm('¿Borrar esta foto?'))return;
+  try{
+    await deleteDoc(doc(db,'gallery_photos',id));
+    if(path){try{await deleteObject(ref(storage,path));}catch(e){}}
+  }catch(e){alert('Error borrando: '+e.message);}
+};
+
+window.upload=async function(){
+  const evId=document.getElementById('evento').value;
+  const evObj=EVENTS.find(e=>e.id===evId);
+  const fot=document.getElementById('fotografo').value.trim();
+  const ig=document.getElementById('instagram').value.replace(/^@/,'').trim();
+  const files=document.getElementById('files').files;
+  const msg=document.getElementById('msg');
+  msg.innerHTML='';
+  if(!files.length){msg.innerHTML='<div class="alert alert-err">Selecciona al menos una foto</div>';return;}
+  const btn=document.getElementById('btnUpload');
+  btn.disabled=true;
+  let ok=0,fail=0;
+  for(const f of files){
+    try{
+      const ts=Date.now();
+      const path=`gallery/${evId}/${ts}_${f.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+      const r=ref(storage,path);
+      await uploadBytes(r,f);
+      const url=await getDownloadURL(r);
+      await addDoc(collection(db,'gallery_photos'),{
+        eventoId:evId,eventoName:evObj?.name||'',
+        url,storagePath:path,
+        photographer:fot,instagram:ig,
+        ts:serverTimestamp()
+      });
+      ok++;
+    }catch(e){console.error(e);fail++;}
+  }
+  msg.innerHTML=`<div class="alert ${fail?'alert-err':'alert-ok'}">✅ ${ok} subidas${fail?', '+fail+' fallaron':''}</div>`;
+  document.getElementById('files').value='';
+  btn.disabled=false;
+};
+</script>
+</body>
+</html>
