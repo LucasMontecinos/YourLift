@@ -162,6 +162,8 @@ const PEERS={"M|93|Open|classic":{"n":44,"avg":589.5,"top":740,"p75":680,"p50":5
 
   try{
     DB=await fetch('data.json?v='+Date.now()).then(r=>r.json());
+    // Cargar records.json para mostrar reconocimientos
+    try{window.RECORDS=await fetch('records.json?v='+Date.now()).then(r=>r.json());}catch(e){window.RECORDS={};}
 
     // Merge debutant athletes from Firestore (inscribed but not yet in data.json)
     if(_fbDB && _fbMod){
@@ -392,6 +394,44 @@ window.showProfile=function(codigo){
         +'<div class="os" style="font-size:18px;font-weight:700;color:var(--accent);margin-top:2px">'+bl.glp+'</div>'
       +'</div>';
     }
+    h+='</div></div>';
+  }
+
+  // ── Récords Nacionales / Universitarios ────────────────
+  const records=window.RECORDS||{};
+  const nrmName=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+  const athName=nrmName(a.nombre);
+  const heldRecords=[];
+  const modLabel={classic:'Classic',equipped:'Equipado',universitario:'Universitario'};
+  const liftLabel={sq:'Squat',bp:'Bench Press',dl:'Deadlift',total:'Total'};
+  const liftColor={sq:'#3B82F6',bp:'#F59E0B',dl:'#22C55E',total:'#D4A843'};
+  Object.entries(records).forEach(([mod,lifts])=>{
+    if(!lifts||typeof lifts!=='object')return;
+    Object.entries(lifts).forEach(([lift,recs])=>{
+      if(!Array.isArray(recs))return;
+      recs.forEach(r=>{
+        if(nrmName(r.nombre)===athName){
+          heldRecords.push({mod,lift,...r});
+        }
+      });
+    });
+  });
+  if(heldRecords.length){
+    h+='<div class="card" style="border:1px solid rgba(212,168,67,.4);background:linear-gradient(135deg,rgba(212,168,67,.08),rgba(196,30,58,.05))">';
+    h+='<div class="sec-title" style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">🏆</span>Récords Nacionales <span style="font-size:11px;background:var(--gold);color:var(--bg);padding:2px 8px;border-radius:10px;font-weight:700">'+heldRecords.length+'</span></div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-bottom:12px">Marcas vigentes ostentadas por este atleta</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">';
+    heldRecords.forEach(r=>{
+      const c=liftColor[r.lift]||'var(--gold)';
+      h+='<div style="background:rgba(10,22,40,.5);border:1px solid '+c+'40;border-radius:10px;padding:10px;position:relative;overflow:hidden">';
+      h+='<div style="position:absolute;top:-8px;right:-8px;font-size:36px;opacity:.08">🏆</div>';
+      h+='<div style="font-family:Oswald;font-size:9px;letter-spacing:1.5px;color:'+c+';text-transform:uppercase">'+(modLabel[r.mod]||r.mod)+'</div>';
+      h+='<div style="font-family:Oswald;font-size:14px;font-weight:700;color:var(--text);margin-top:2px">'+liftLabel[r.lift]+'</div>';
+      h+='<div class="os" style="font-size:24px;font-weight:700;color:'+c+';margin-top:4px">'+r.marca+'<span style="font-size:12px;color:var(--muted)"> kg</span></div>';
+      h+='<div style="font-size:10px;color:var(--muted);margin-top:4px">-'+r.categoria+'kg · '+r.division+'</div>';
+      if(r.evento)h+='<div style="font-size:9px;color:var(--muted);margin-top:2px;font-style:italic">'+r.evento.substring(0,40)+(r.evento.length>40?'…':'')+'</div>';
+      h+='</div>';
+    });
     h+='</div></div>';
   }
 
