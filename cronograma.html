@@ -53,7 +53,7 @@ let fbAuthInst = null;
 const LIFTS_NAMES=['SQUAT','BENCH PRESS','DEADLIFT'];
 
 let NM={events:[]}, DB=[], selectedEvent=null, flights=[];
-let config={morningStart:'09:00',afternoonStart:'14:30',minPerAthlete:3,breakBetweenLifts:10,breakMorningAfternoon:60,adminUnlocked:false};
+let config={morningStart:'09:00',afternoonStart:'14:30',minPerAthlete:3,breakBetweenLifts:10,breakMorningAfternoon:60,adminUnlocked:false,dosTarimas:false};
 let coachUser=null;
 let ACCRED={};
 
@@ -278,6 +278,14 @@ function updateConfig(key,val){
   if(!checkAdmin())return;
   config[key]=val;render();
 }
+function toggleDosTarimas(val){
+  if(!checkAdmin())return;
+  config.dosTarimas=val;
+  localStorage.removeItem(flightKey()); // limpiar mapeo guardado
+  generateFlights();
+  saveFlights();
+  render();
+}
 
 function renderEventList(){
   let h='<div class="fade"><h2 class="os" style="font-size:20px;letter-spacing:1px;margin-bottom:16px">Selecciona un Campeonato</h2>';
@@ -412,7 +420,16 @@ function generateFlights(){
       }
     }
   });
-  flights.forEach((f,i)=>{f.letter=FL_L[i]||'?';f.color=FL_C[i%FL_C.length]});
+  if(config.dosTarimas){
+    // Modo 2 tarimas: mujeres → T1, hombres → T2; nombres A1/B1.../A2/B2...
+    const wF=flights.filter(f=>(f.athletes[0]?.sexo||'').match(/fem|mujer/i));
+    const mF=flights.filter(f=>!(f.athletes[0]?.sexo||'').match(/fem|mujer/i));
+    flights=[];
+    wF.forEach((f,i)=>{f.letter=(FL_L[i]||'?')+'1';f.tarima=1;f.color=FL_C[i%FL_C.length];flights.push(f);});
+    mF.forEach((f,i)=>{f.letter=(FL_L[i]||'?')+'2';f.tarima=2;f.color=FL_C[(i+3)%FL_C.length];flights.push(f);});
+  } else {
+    flights.forEach((f,i)=>{f.letter=FL_L[i]||'?';f.color=FL_C[i%FL_C.length]});
+  }
 }
 
 function renderCronograma(){
@@ -462,6 +479,10 @@ function renderCronograma(){
     <div style="display:flex;align-items:center;gap:6px">
       <label style="font-size:11px;color:var(--muted)">🍽 Receso mañana/tarde (min):</label>
       <input type="number" class="inp-t" value="${config.breakMorningAfternoon}" min="0" max="120" onchange="updateConfig('breakMorningAfternoon',parseInt(this.value))" ${config.adminUnlocked?'':'disabled'} style="width:55px;${config.adminUnlocked?'':'opacity:.5'}">
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <label style="font-size:11px;color:var(--muted)">🏗️ 2 Tarimas:</label>
+      <input type="checkbox" ${config.dosTarimas?'checked':''} onchange="toggleDosTarimas(this.checked)" ${config.adminUnlocked?'':'disabled'} style="${config.adminUnlocked?'':'opacity:.5'};cursor:pointer">
     </div>
     <div style="font-size:11px;color:var(--muted);margin-left:auto">${total} atletas · ${nFlights} vuelos · ${morningCount} mañana + ${afternoonCount} tarde</div>
   </div>`;

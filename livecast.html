@@ -78,6 +78,8 @@ let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,fligh
 // ══════════════════════════════════════════════
 const TX_URL=new URLSearchParams(location.search);
 const TX_MODE=TX_URL.get('tx')||null; // 'profile' | 'scoreboard' | 'leaderboard' | 'lbauto' | 'slam' | 'timer' | 'lights' | 'ceremony' | null
+const TARIMA=TX_URL.get('tarima')||null; // '1' o '2' para modo 2 tarimas; null = todas
+function _inTarima(flightLetter){if(!TARIMA)return true;return String(flightLetter||'').endsWith(TARIMA);}
 if(TX_MODE){
   const css=document.createElement('style');
   css.textContent=`
@@ -598,8 +600,9 @@ function pickEvent(i){
     return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:_normSex,cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,bw:0,flight:a.flight||fl,rackSQ:'',rackBP:'',bombed:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}};
   });
-  const firstFlight=flightMap?[...new Set(Object.values(flightMap))].sort()[0]:'A';
-  DATA.lift='sq';DATA.round=0;DATA.flight=firstFlight||'A';DATA.changeTimers={};
+  const allFlights=flightMap?[...new Set(Object.values(flightMap))].filter(_inTarima).sort():[];
+  const firstFlight=allFlights[0]||(TARIMA?'A'+TARIMA:'A');
+  DATA.lift='sq';DATA.round=0;DATA.flight=firstFlight;DATA.changeTimers={};
   // Load athletes from Firestore in real time (overrides nominas.json when available)
   if(fbReady)loadLiveAthletes(ev);
 
@@ -1153,7 +1156,7 @@ function loadLiveAthletes(ev){
     if(DATA.phase==='setup'){
       // Full replace: Firestore is source of truth during setup
       DATA.athletes=fbAthletes.map((a,j)=>({...a,id:j,lot:a.lot||j+1}));
-      const firstFlight=[...new Set(DATA.athletes.map(a=>a.flight))].sort()[0]||'A';
+      const firstFlight=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort()[0]||(TARIMA?'A'+TARIMA:'A');
       DATA.flight=firstFlight;
       save();R();
       showToastLC('\uD83D\uDD34 Nómina en vivo: '+fbAthletes.length+' atletas desde Firestore');
@@ -4153,7 +4156,7 @@ function renderSetup(){
 }
 
 function renderShell(){
-  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].sort();const p=DATA.phase;
+  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort();const p=DATA.phase;
   // El botón "Volver a YourLift" sobre el logo (estilo unificado)
   let h='<div class="shell"><div class="side">';
   h+='<a href="index.html" class="side-back-yl" style="display:flex;align-items:center;gap:6px;padding:8px 12px;margin-bottom:12px;background:rgba(10,22,40,.6);border:1px solid rgba(212,168,67,.4);border-radius:8px;color:rgba(220,230,245,.85);font-family:Oswald,sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-decoration:none;cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap" onmouseenter="this.style.borderColor=\'#D4A843\';this.style.color=\'#D4A843\'" onmouseleave="this.style.borderColor=\'rgba(212,168,67,.4)\';this.style.color=\'rgba(220,230,245,.85)\'">← YourLift</a>';
@@ -4203,7 +4206,7 @@ function generateLots(){
     : '¿Generar números de lote aleatorios?\n\nTanda A → 110, 111, 112…\nTanda B → 210, 211, 212…\netc.';
   if(!confirm(msg))return;
   // Shuffle within each flight, assign lot = flightIndex*100 + 10 + position
-  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].sort();
+  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort();
   flights.forEach((fl,fi)=>{
     const flightNum=fl.charCodeAt(0)-64; // A=1, B=2, C=3…
     const base=flightNum*100+10;

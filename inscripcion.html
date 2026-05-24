@@ -1167,9 +1167,16 @@ async function submitForm() {
       state.submitting = false; render(); return;
     }
 
+    // ── Carnet obligatorio (File object debe estar presente) ─────
+    if (!state.carnetFile) {
+      state.error = 'Debes adjuntar el Carnet de identidad (frontal). Si lo subiste antes y no aparece, volvé a seleccionarlo.';
+      state.submitting = false; render();
+      document.getElementById('carnetZone')?.scrollIntoView({behavior:'smooth',block:'center'});
+      return;
+    }
     // ── Certificado ADEL/WADA obligatorio ───────────────
-    if (!state.wadeFile && !state.wadeName) {
-      state.error = 'Debes adjuntar el Certificado ADEL/WADA o Carnet SENADIS (atletas OE) para completar la inscripción.';
+    if (!state.wadeFile) {
+      state.error = 'Debes adjuntar el Certificado ADEL/WADA o Carnet SENADIS. Si lo subiste antes y no aparece, volvé a seleccionarlo.';
       state.submitting = false; render();
       document.getElementById('wadeZone')?.scrollIntoView({behavior:'smooth',block:'center'});
       return;
@@ -1271,8 +1278,9 @@ async function submitForm() {
         privateEntry.carnetPhotoURL = await window.FB.getDownloadURL(carnetPhotoRef);
       }
       if (state.consentimientoFile) {
-        const url = await tryUpload(state.consentimientoFile, `athlete_files/${rutClean}/consentimiento_${ts}`, {contentType: state.consentimientoFile.type || 'application/pdf'});
-        if (url) privateEntry.consentimientoURL = url;
+        const consRef = window.FB.ref(storage, `athlete_files/${rutClean}/consentimiento_${ts}`);
+        await window.FB.uploadBytes(consRef, state.consentimientoFile);
+        privateEntry.consentimientoURL = await window.FB.getDownloadURL(consRef);
       }
 
       publicEntry.timestamp = window.FB.serverTimestamp();
