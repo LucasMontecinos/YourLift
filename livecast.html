@@ -593,7 +593,9 @@ function pickEvent(i){
     else if(isBench) mod='onlybench';
     else if(isEq) mod='equipped';
     else mod='classic';
-    return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:a.sexo||a.sex||'',cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,bw:0,flight:a.flight||fl,rackSQ:'',rackBP:'',bombed:false,
+    const _rawSex=(a.sexo||a.sex||'').trim();
+    const _normSex=(_rawSex==='Femenino'||_rawSex==='F'||_rawSex==='Mujer')?'Mujer':(_rawSex==='Masculino'||_rawSex==='M'||_rawSex==='Hombre')?'Hombre':_rawSex;
+    return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:_normSex,cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,bw:0,flight:a.flight||fl,rackSQ:'',rackBP:'',bombed:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}};
   });
   const firstFlight=flightMap?[...new Set(Object.values(flightMap))].sort()[0]:'A';
@@ -2250,80 +2252,94 @@ async function generateActaPDF(){
     // Render all categories
     catKeys.forEach(k=>renderCategory(k));
 
-    // ── Best Lifter summary page ─────────────────────────
-    doc.addPage();
-    drawPageBg();
-    doc.setFillColor(...C.header);
-    doc.rect(0,0,PW,12,'F');
-    doc.setTextColor(...C.white);
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(11);
-    doc.text('BEST LIFTER',PW/2,8.5,{align:'center'});
-    doc.setFillColor(...C.rowAlt);
-    doc.rect(0,12,PW,7,'F');
-    doc.setTextColor(...C.gold);
-    doc.setFontSize(8);
-    doc.text(_stripAccentsForPdf('MEJORES ATLETAS POR DIVISION - GL POINTS'),PW/2,17,{align:'center'});
+    // ── Best Lifter — Ranking completo por sexo ──────────
+    function isMaleSex(s){const x=(s||'').trim();return x==='Hombre'||x==='M'||x==='Masculino';}
+    function _drawBLPage(title, athletes){
+      doc.addPage();
+      drawPageBg();
+      doc.setFillColor(...C.header);
+      doc.rect(0,0,PW,12,'F');
+      doc.setTextColor(...C.white);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(11);
+      doc.text('BEST LIFTER · '+title.toUpperCase(),PW/2,8.5,{align:'center'});
+      doc.setFillColor(...C.rowAlt);
+      doc.rect(0,12,PW,7,'F');
+      doc.setTextColor(...C.gold);
+      doc.setFontSize(8);
+      doc.text(_stripAccentsForPdf('RANKING POR GL POINTS — '+(DATA.event?.name||'').toUpperCase()),PW/2,17,{align:'center'});
 
-    let blY=26;
-    const blEntries=Object.entries(divGL).map(([div,info])=>{
-      const a=all.find(x=>x.id===info.id);
-      return{div,a};
-    }).filter(e=>e.a&&e.a.total>0).sort((a,b)=>a.div.localeCompare(b.div));
-
-    if(blEntries.length){
-      const blCols=[
-        {header:'División',w:30},{header:'Atleta',w:50},{header:'Club',w:35},
-        {header:'Cat.',w:20},{header:'SQ',w:18},{header:'BP',w:18},{header:'DL',w:18},
-        {header:'Total',w:18},{header:'GL',w:18}
+      let yy=26;
+      if(!athletes.length){
+        doc.setTextColor(...C.muted);
+        doc.setFontSize(9);
+        doc.text('Sin atletas registrados',PW/2,yy+16,{align:'center'});
+        return;
+      }
+      const cols=[
+        {header:'Pos',w:12},{header:'Atleta',w:55},{header:'Club',w:38},
+        {header:'Cat.',w:14},{header:'Div.',w:28},{header:'SQ',w:16},
+        {header:'BP',w:16},{header:'DL',w:16},{header:'Total',w:18},{header:'GL',w:18}
       ];
-      let bcx=20;
+      const totalW=cols.reduce((s,c)=>s+c.w,0);
+      const x0=(PW-totalW)/2;
+      let cx=x0;
       doc.setFillColor(20,38,68);
-      doc.rect(20,blY,PW-40,6,'F');
+      doc.rect(x0,yy,totalW,6,'F');
       doc.setTextColor(...C.muted);
       doc.setFont('helvetica','bold');
       doc.setFontSize(7);
-      blCols.forEach(col=>{doc.text(col.header,bcx+col.w/2,blY+4,{align:'center'});bcx+=col.w;});
-      blY+=6;
+      cols.forEach(col=>{doc.text(col.header,cx+col.w/2,yy+4,{align:'center'});cx+=col.w;});
+      yy+=6;
 
-      blEntries.forEach((e,ri)=>{
-        const {div,a}=e;
-        const rowH=8;
+      athletes.forEach((a,ri)=>{
+        const rowH=7;
+        if(yy+rowH>PH-12){
+          doc.addPage();drawPageBg();yy=15;
+          doc.setFillColor(20,38,68);
+          doc.rect(x0,yy,totalW,6,'F');
+          doc.setTextColor(...C.muted);
+          doc.setFont('helvetica','bold');
+          doc.setFontSize(7);
+          cx=x0;
+          cols.forEach(col=>{doc.text(col.header,cx+col.w/2,yy+4,{align:'center'});cx+=col.w;});
+          yy+=6;
+        }
         doc.setFillColor(...(ri%2===0?C.bg:C.rowAlt));
-        doc.rect(20,blY,PW-40,rowH,'F');
-        // Gold star glow: draw star background
-        doc.setFillColor(...C.gold);
-        doc.setFontSize(10);
-        bcx=20;
+        doc.rect(x0,yy,totalW,rowH,'F');
+        const pos=ri+1;
         const cells=[
-          {text:div,color:C.gold,bold:true},
-          {text:a.name,color:C.white,bold:true},
-          {text:(a.club||'—').substring(0,22),color:C.muted},
-          {text:a.cat,color:C.muted},
+          {text:String(pos),color:pos<=3?C.gold:C.white,bold:pos<=3},
+          {text:(a.name||'').substring(0,28),color:C.white,bold:pos<=3},
+          {text:(a.club||'—').substring(0,20),color:C.muted},
+          {text:a.cat||'—',color:C.muted},
+          {text:(a.div||'—').substring(0,16),color:C.muted},
           {text:String(bestOf(a,'sq')||'—'),color:C.green},
           {text:String(bestOf(a,'bp')||'—'),color:C.green},
           {text:String(bestOf(a,'dl')||'—'),color:C.green},
           {text:String(a.total),color:C.white,bold:true},
           {text:String(a.gl),color:C.gold,bold:true}
         ];
+        cx=x0;
         cells.forEach((cell,ci)=>{
-          const col=blCols[ci];
+          const col=cols[ci];
           doc.setTextColor(...cell.color);
           doc.setFont('helvetica',cell.bold?'bold':'normal');
-          doc.setFontSize(cell.bold?8:7);
-          doc.text(_stripAccentsForPdf(cell.text),bcx+col.w/2,blY+rowH/2+2,{align:'center'});
-          bcx+=col.w;
+          doc.setFontSize(cell.bold?7.5:6.5);
+          doc.text(_stripAccentsForPdf(cell.text),cx+col.w/2,yy+rowH/2+2,{align:'center'});
+          cx+=col.w;
         });
         doc.setDrawColor(...C.border);
         doc.setLineWidth(0.15);
-        doc.line(20,blY+rowH,PW-20,blY+rowH);
-        blY+=rowH;
+        doc.line(x0,yy+rowH,x0+totalW,yy+rowH);
+        yy+=rowH;
       });
-    }else{
-      doc.setTextColor(...C.muted);
-      doc.setFontSize(9);
-      doc.text('Sin totales registrados',PW/2,blY+16,{align:'center'});
     }
+    const _withTotal=all.filter(a=>a.total>0).sort((a,b)=>b.gl-a.gl);
+    const _males=_withTotal.filter(a=>isMaleSex(a.sex));
+    const _females=_withTotal.filter(a=>!isMaleSex(a.sex));
+    _drawBLPage('Hombres', _males);
+    _drawBLPage('Mujeres', _females);
 
     // ── Club Ranking page ────────────────────────────────
     {
