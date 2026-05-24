@@ -241,11 +241,18 @@ function sts(){const w=D.filter(a=>a.competencias.length>0).length,t=D.reduce((s
 
 function rec(){const ts=[["classic","Classic"],["equipped","Equipado"],["universitario","Universitario"]],ls=[["sq","Sentadilla"],["bp","Press Banca"],["dl","Peso Muerto"],["total","Total"]];
   let h=`<div class="st">${ts.map(([k,l])=>`<button class="sb ${ST.rt===k?'a':''}" onclick="sr('${k}',null)">${l}</button>`).join('')}</div><div class="st" style="margin-bottom:16px">${ls.map(([k,l])=>`<button class="sb ${ST.rl===k?'a':''}" onclick="sr(null,'${k}')">${l}</button>`).join('')}</div>`;
-  const d=R[ST.rt]&&R[ST.rt][ST.rl]||[],ln=ls.find(l=>l[0]===ST.rl)?.[1]||'',tn=ts.find(t=>t[0]===ST.rt)?.[1]||'';
+  const rawD=R[ST.rt]&&R[ST.rt][ST.rl]||[],ln=ls.find(l=>l[0]===ST.rl)?.[1]||'',tn=ts.find(t=>t[0]===ST.rt)?.[1]||'';
+  // Ordenar por categoría de peso (menor a mayor). +84/+120 al final.
+  const catW=c=>{const s=String(c||'');if(s.includes('+'))return 1000+(parseFloat(s.replace(/[^0-9.]/g,''))||0);return parseFloat(s.replace(/[^0-9.]/g,''))||999;};
+  const d=[...rawD].sort((a,b)=>catW(a.categoria)-catW(b.categoria)||(a.sexo||'').localeCompare(b.sexo||''));
   h+=`<div class="cd2"><div class="ct"><h2>Records ${ln} ${tn}</h2><span class="bg" style="background:var(--gold);color:var(--bg)">${d.length}</span></div>`;
   if(!d.length)h+=`<div class="emp">No hay records registrados</div>`;
   else{h+=`<div class="rr rh"><div>#</div><div>Atleta</div><div>División</div><div>Cat.</div><div>Campeonato</div><div>Marca</div></div>`;
-    d.forEach((r,i)=>{h+=`<div class="rr"><div class="rpos">${i+1}</div><div>${r.nombre}</div><div>${r.division}</div><div>${r.categoria}</div><div style="font-size:11px;color:var(--muted)">${(r.campeonato||'').substring(0,35)}</div><div class="rmk">${r.marca} kg</div></div>`})}
+    d.forEach((r,i)=>{
+      const evTxt=(r.campeonato||r.evento||'').substring(0,35);
+      const nameLink=`<a href="atleta.html?q=${encodeURIComponent(r.nombre||'')}" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(212,168,67,.4);transition:color .15s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${r.nombre}</a>`;
+      h+=`<div class="rr"><div class="rpos">${i+1}</div><div>${nameLink}</div><div>${r.division}</div><div>${r.categoria}</div><div style="font-size:11px;color:var(--muted)">${evTxt}</div><div class="rmk">${r.marca} kg</div></div>`;
+    })}
   return h+`</div>`}
 
 function cdStr(target){if(!target||target.includes("X"))return{d:null,h:null,m:null,done:false,unknown:true};const now=new Date(),t=new Date(target+"T00:00:00"),diff=t-now;if(isNaN(diff))return{d:null,h:null,m:null,done:false,unknown:true};if(diff<=0)return{d:0,h:0,m:0,done:true};const d=Math.floor(diff/864e5),h=Math.floor((diff%864e5)/36e5),m=Math.floor((diff%36e5)/6e4);return{d,h,m,done:false}}
