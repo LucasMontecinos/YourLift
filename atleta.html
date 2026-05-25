@@ -397,34 +397,98 @@ window.showProfile=function(codigo){
     h+='</div></div>';
   }
 
-  // ── GL chart ────────────────────────────────────────────
+  // ── GL chart con fechas reales ────────────────────────
   if(glHistory.length>1){
-    const W=340,H=80,PX=8,PY=8;
-    const gls=glHistory.map(c=>c.resultado.glp||c.resultado.gl||0);
+    // Resolver fecha (timestamp ms) por competencia
+    // Prioridad: c.fecha (ISO) > extraer año del nombre del evento > null
+    const MES_NUM={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
+    function parseFecha(c){
+      // 1) fecha explícita ISO
+      if(c.fecha){
+        const m=String(c.fecha).match(/(\d{4})-(\d{2})-(\d{2})/);
+        if(m)return new Date(+m[1],+m[2]-1,+m[3]).getTime();
+        const m2=String(c.fecha).match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+        if(m2)return new Date(+m2[3],+m2[2]-1,+m2[1]).getTime();
+        const m3=String(c.fecha).match(/(\d{4})/);
+        if(m3)return new Date(+m3[1],5,15).getTime(); // mitad de año
+      }
+      // 2) Buscar "Mes 2024" o "2024" en evento
+      const ev=String(c.evento||'');
+      const mesY=ev.toLowerCase().match(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)[^0-9]+(\d{4})/);
+      if(mesY)return new Date(+mesY[2], MES_NUM[mesY[1]]-1, 15).getTime();
+      const y=ev.match(/(20\d\d)/);
+      if(y)return new Date(+y[1],5,15).getTime();
+      return null;
+    }
+    // Asignar fecha a cada punto
+    const items=glHistory.map(c=>({
+      c,gl:c.resultado.glp||c.resultado.gl||0,
+      ts:parseFecha(c)
+    }));
+    // Ordenar por timestamp (los sin fecha al final, en orden actual)
+    items.sort((a,b)=>{
+      if(a.ts!=null&&b.ts!=null)return a.ts-b.ts;
+      if(a.ts!=null)return -1;
+      if(b.ts!=null)return 1;
+      return 0;
+    });
+    const W=360,H=110,PX=20,PY=12;
+    const gls=items.map(x=>x.gl);
     const maxG=Math.max(...gls),minG=Math.min(...gls.filter(v=>v>0));
     const catPalette=['#D4A843','#3B82F6','#22C55E','#F59E0B','#C41E3A','#A78BFA','#F472B6'];
-    const uniqueCats=[...new Set(glHistory.map(c=>(c.categoria||'').trim()).filter(Boolean))];
+    const uniqueCats=[...new Set(items.map(x=>(x.c.categoria||'').trim()).filter(Boolean))];
     const catColor=c=>{const i=uniqueCats.indexOf((c||'').trim());return i>=0?catPalette[i%catPalette.length]:'#D4A843'};
-    const pts=glHistory.map((c,i)=>{
-      const x=PX+i*(W-PX*2)/(glHistory.length-1);
-      const y=PY+(H-PY*2)*(1-(gls[i]-minG)/Math.max(maxG-minG,1));
-      return {x,y,v:gls[i],ev:c.evento||'',cat:(c.categoria||'').trim()};
+
+    // Posicionamiento X basado en fechas reales si hay al menos 2 con fecha
+    const withTs=items.filter(x=>x.ts!=null);
+    const useTime=withTs.length>=2;
+    let xFor;
+    if(useTime){
+      const tmin=Math.min(...withTs.map(x=>x.ts));
+      const tmax=Math.max(...withTs.map(x=>x.ts));
+      const span=Math.max(1,tmax-tmin);
+      // items sin fecha caen a la izquierda (más viejas) con un margen
+      let unkX=0;
+      xFor=(it,i)=>{
+        if(it.ts==null){const x=PX+unkX*(W-PX*2)*0.05;unkX++;return x;}
+        return PX+(it.ts-tmin)/span*(W-PX*2);
+      };
+    }else{
+      xFor=(it,i)=>PX+i*(W-PX*2)/(items.length-1);
+    }
+    const pts=items.map((it,i)=>{
+      const x=xFor(it,i);
+      const y=PY+(H-PY*2)*(1-(it.gl-minG)/Math.max(maxG-minG,1));
+      // Etiqueta fecha: si hay timestamp formatea, sino extrae año del evento, sino "—"
+      let dateLabel='—';
+      if(it.ts!=null){
+        const d=new Date(it.ts);
+        const mNames=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+        dateLabel=mNames[d.getMonth()]+' '+d.getFullYear();
+      }
+      return {x,y,v:it.gl,ev:it.c.evento||'',cat:(it.c.categoria||'').trim(),dateLabel};
     });
     const poly=pts.map(p=>p.x+','+p.y).join(' ');
     const area=PX+','+H+' '+poly+' '+pts[pts.length-1].x+','+H;
     h+='<div class="card"><div class="sec-title">Evolución GL Points</div>'
-      +'<svg viewBox="0 0 '+(W)+'  '+(H+22)+'" style="width:100%;max-width:'+W+'px">'
+      +'<svg viewBox="0 0 '+(W)+'  '+(H+28)+'" style="width:100%">'
       +'<defs><linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#D4A843" stop-opacity="0.3"/><stop offset="100%" stop-color="#D4A843" stop-opacity="0.02"/></linearGradient></defs>'
+      // Líneas guía horizontales
+      +[0.25,0.5,0.75].map(p=>'<line x1="'+PX+'" y1="'+(PY+(H-PY*2)*p)+'" x2="'+(W-PX)+'" y2="'+(PY+(H-PY*2)*p)+'" stroke="rgba(30,58,95,.4)" stroke-dasharray="2,3"/>').join('')
       +'<polygon points="'+area+'" fill="url(#gg)"/>'
       +'<polyline points="'+poly+'" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
-      +pts.map(p=>'<circle cx="'+p.x+'" cy="'+p.y+'" r="4.5" fill="'+catColor(p.cat)+'" stroke="var(--bg)" stroke-width="2"/>'
-        +'<text x="'+p.x+'" y="'+(p.y-8)+'" text-anchor="middle" font-size="9" fill="rgba(212,168,67,.9)" font-family="Oswald" font-weight="700">'+p.v+'</text>'
-        +'<text x="'+p.x+'" y="'+(H+16)+'" text-anchor="middle" font-size="8" fill="rgba(120,143,166,.7)">'+((p.ev.match(/20\d\d/)||[''])[0])+'</text>'
-      ).join('')
+      +pts.map((p,i)=>{
+        // Alternar posición del label de fecha arriba/abajo si hay puntos cercanos (evitar solape)
+        const tilt = (useTime && i>0 && (p.x - pts[i-1].x) < 30) ? '-25' : '0';
+        return '<circle cx="'+p.x+'" cy="'+p.y+'" r="4.5" fill="'+catColor(p.cat)+'" stroke="var(--bg)" stroke-width="2"><title>'+p.ev+' — '+p.dateLabel+'</title></circle>'
+        +'<text x="'+p.x+'" y="'+(p.y-9)+'" text-anchor="middle" font-size="9" fill="rgba(212,168,67,.95)" font-family="Oswald" font-weight="700">'+p.v+'</text>'
+        +'<text x="'+p.x+'" y="'+(H+16)+'" text-anchor="middle" font-size="8" fill="rgba(160,180,210,.75)" transform="rotate('+tilt+' '+p.x+' '+(H+16)+')">'+p.dateLabel+'</text>';
+      }).join('')
       +'</svg>'
-      +(uniqueCats.length>1?'<div style="display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:center;font-size:10px;color:var(--muted);margin-top:6px;padding-top:8px;border-top:1px solid rgba(30,58,95,.3)">'
-        +uniqueCats.map(cat=>'<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:'+catColor(cat)+'"></span>'+cat+'</span>').join('')
-      +'</div>':'')
+      +'<div style="display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:6px;padding-top:8px;border-top:1px solid rgba(30,58,95,.3)">'
+        +(uniqueCats.length>1?'<div style="display:flex;flex-wrap:wrap;gap:6px 12px">'+uniqueCats.map(cat=>'<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:'+catColor(cat)+'"></span>'+cat+' kg</span>').join('')+'</div>':'<div></div>')
+        +'<div style="font-style:italic">'+(useTime?'Eje X = línea de tiempo real':'Eje X = orden cronológico')+'</div>'
+      +'</div>'
       +'</div>';
   }
 
