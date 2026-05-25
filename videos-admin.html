@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>YourLift — Videos de Fondo (Admin)</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0A1628;--card:#11223B;--border:#1E3A5F;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A;--gold:#D4A843;--green:#22c55e;--red:#ef4444}
+body{font-family:'DM Sans',sans-serif;background:radial-gradient(ellipse at top left,#0F2444 0%,#06101F 50%,#040912 100%);color:var(--text);min-height:100vh;padding:24px}
+.os{font-family:Oswald,sans-serif}
+h1{font-family:Oswald;letter-spacing:2px;color:var(--gold);margin-bottom:18px;text-transform:uppercase;font-size:28px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;max-width:1100px}
+.sect{background:rgba(17,34,59,.65);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:14px;padding:16px;position:relative;overflow:hidden}
+.sect.has{border-color:rgba(34,197,94,.45)}
+.sect-ttl{font-family:Oswald;font-size:13px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin-bottom:6px}
+.sect-key{font-family:'Courier New',monospace;font-size:10px;color:var(--muted);margin-bottom:12px}
+.sect video{width:100%;aspect-ratio:16/9;background:#000;border-radius:8px;margin-bottom:10px;object-fit:cover}
+.sect .empty{aspect-ratio:16/9;background:rgba(0,0,0,.4);border-radius:8px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-family:Oswald;font-size:11px;letter-spacing:2px;border:2px dashed rgba(122,143,166,.25)}
+.act{display:flex;gap:6px;flex-wrap:wrap}
+.btn{padding:8px 12px;border-radius:6px;border:none;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;flex:1;min-width:80px}
+.btn-up{background:var(--accent);color:#fff}
+.btn-up:hover{background:#a8182f}
+.btn-del{background:transparent;border:1px solid rgba(196,30,58,.35);color:var(--accent)}
+.btn-del:hover{background:rgba(196,30,58,.15)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.fi{display:none}
+.sect.upl{pointer-events:none;opacity:.6}
+.sect.upl::after{content:'';position:absolute;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center}
+.prog{position:absolute;left:0;top:0;height:3px;background:var(--gold);width:0;transition:width .2s}
+.alert{padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:12px}
+.alert-ok{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.4)}
+.alert-err{background:rgba(196,30,58,.15);color:var(--accent);border:1px solid rgba(196,30,58,.4)}
+.login{max-width:380px;margin:60px auto;background:rgba(17,34,59,.65);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:14px;padding:24px}
+.login input{width:100%;background:#06101F;border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:Oswald;font-size:14px;margin-bottom:10px}
+.login button{width:100%;padding:11px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-weight:700;letter-spacing:1.5px;cursor:pointer}
+a.back{color:var(--muted);font-family:Oswald;font-size:12px;text-decoration:none;letter-spacing:1px;display:inline-block;margin-bottom:16px}
+a.back:hover{color:var(--gold)}
+</style>
+</head>
+<body>
+<a href="index.html" class="back">← Volver a YourLift</a>
+<h1>🎬 Videos de fondo por sección</h1>
+<p class="sub">Sube un video MP4 por sección. Aparece como fondo cuando esa pestaña esté activa. Recomendado: 1080p, sin audio, 5-15s en loop, &lt;10 MB.</p>
+
+<div id="loginCard" class="login">
+  <h2 class="os" style="font-size:16px;letter-spacing:2px;color:var(--gold);margin-bottom:14px">Acceso Admin</h2>
+  <input id="email" type="email" placeholder="Email admin">
+  <input id="pwd" type="password" placeholder="Contraseña">
+  <button onclick="doLogin()">Entrar</button>
+  <div id="loginMsg" style="margin-top:10px;font-size:12px;color:var(--accent)"></div>
+</div>
+
+<div id="mainApp" style="display:none">
+  <div id="msg"></div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import {getAuth, signInWithEmailAndPassword, onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import {getStorage, ref, uploadBytesResumable, getDownloadURL, listAll, deleteObject} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+
+const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
+const app=initializeApp(FB_CFG);
+const auth=getAuth(app);
+const storage=getStorage(app);
+
+const SECTIONS=[
+  {key:'nominas',label:'Nóminas'},
+  {key:'stats',label:'Estadísticas'},
+  {key:'records',label:'Records'},
+  {key:'trans',label:'Transmisiones'},
+  {key:'atletas',label:'Atletas'},
+  {key:'insc',label:'Inscripción'},
+  {key:'rank',label:'Ranking'},
+  {key:'default',label:'(Default — fallback)'}
+];
+
+let CURRENT={};
+
+window.doLogin=async function(){
+  const e=document.getElementById('email').value.trim();
+  const p=document.getElementById('pwd').value;
+  try{await signInWithEmailAndPassword(auth,e,p);}
+  catch(err){document.getElementById('loginMsg').textContent='Error: '+err.message;}
+};
+
+onAuthStateChanged(auth,async u=>{
+  if(u){
+    document.getElementById('loginCard').style.display='none';
+    document.getElementById('mainApp').style.display='block';
+    await refresh();
+  }
+});
+
+async function refresh(){
+  CURRENT={};
+  try{
+    const res=await listAll(ref(storage,'videos/sections'));
+    for(const it of res.items){
+      const m=it.name.match(/^bg_([a-z]+)\./i);
+      if(m){
+        CURRENT[m[1].toLowerCase()]={url:await getDownloadURL(it),name:it.name};
+      }
+    }
+  }catch(e){console.warn(e)}
+  renderGrid();
+}
+
+function renderGrid(){
+  const g=document.getElementById('grid');
+  g.innerHTML=SECTIONS.map(s=>{
+    const cur=CURRENT[s.key];
+    const id='in_'+s.key;
+    return `<div class="sect ${cur?'has':''}" id="card_${s.key}">
+      <div class="prog" id="prog_${s.key}"></div>
+      <div class="sect-ttl">${s.label}</div>
+      <div class="sect-key">bg_${s.key}.mp4</div>
+      ${cur?`<video src="${cur.url}" muted loop autoplay playsinline></video>`:'<div class="empty">SIN VIDEO</div>'}
+      <input type="file" accept="video/*" id="${id}" class="fi" onchange="up('${s.key}',this)">
+      <div class="act">
+        <button class="btn btn-up" onclick="document.getElementById('${id}').click()">${cur?'Reemplazar':'Subir'}</button>
+        ${cur?`<button class="btn btn-del" onclick="delV('${s.key}','${cur.name}')">Borrar</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.up=async function(key,inp){
+  const file=inp.files[0];if(!file)return;
+  if(file.size>50*1024*1024){msg('Archivo muy grande (máx 50MB)','err');return;}
+  const card=document.getElementById('card_'+key);
+  card.classList.add('upl');
+  const prog=document.getElementById('prog_'+key);
+  const ext=file.name.split('.').pop().toLowerCase()||'mp4';
+  // Borrar versiones previas con cualquier extensión
+  try{
+    const res=await listAll(ref(storage,'videos/sections'));
+    for(const it of res.items){if(it.name.toLowerCase().startsWith('bg_'+key+'.'))await deleteObject(it);}
+  }catch(e){}
+  const r=ref(storage,`videos/sections/bg_${key}.${ext}`);
+  const task=uploadBytesResumable(r,file);
+  task.on('state_changed',
+    snap=>{const pct=(snap.bytesTransferred/snap.totalBytes)*100;prog.style.width=pct+'%';},
+    err=>{msg('Error: '+err.message,'err');card.classList.remove('upl');},
+    async()=>{
+      prog.style.width='100%';
+      msg('✅ Video subido: '+key,'ok');
+      card.classList.remove('upl');
+      setTimeout(()=>prog.style.width='0',800);
+      await refresh();
+    }
+  );
+};
+
+window.delV=async function(key,name){
+  if(!confirm('¿Borrar el video de '+key+'?'))return;
+  try{
+    await deleteObject(ref(storage,'videos/sections/'+name));
+    msg('Video eliminado','ok');
+    await refresh();
+  }catch(e){msg('Error: '+e.message,'err');}
+};
+
+function msg(t,type){const m=document.getElementById('msg');m.innerHTML=`<div class="alert alert-${type}">${t}</div>`;setTimeout(()=>m.innerHTML='',4000);}
+</script>
+</body>
+</html>
