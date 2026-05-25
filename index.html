@@ -119,8 +119,30 @@ a{color:var(--accent);text-decoration:none}
 <!-- Video de fondo full screen -->
 <div id="bgVideoWrap" style="position:fixed;inset:0;z-index:-2;overflow:hidden;background:#06101F">
   <video id="bgVideo" autoplay muted loop playsinline preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s"></video>
-  <div style="position:absolute;inset:0;background:linear-gradient(135deg,rgba(6,16,31,.78) 0%,rgba(4,9,18,.88) 100%);pointer-events:none"></div>
+  <!-- Overlay más liviano para que el video se vea -->
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,16,31,.55) 0%,rgba(4,9,18,.40) 50%,rgba(6,16,31,.65) 100%);pointer-events:none"></div>
+  <!-- Vignette en bordes para enfocar al centro -->
+  <div style="position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 40%,rgba(0,0,0,.55) 100%);pointer-events:none"></div>
 </div>
+<style>
+/* Tarjetas más transparentes con frosted glass para que se vea el video sin perder legibilidad */
+body .cd2,body .pc,body .card,body .ar{
+  background:rgba(11,22,42,.55) !important;
+  backdrop-filter:blur(14px) saturate(120%) !important;
+  -webkit-backdrop-filter:blur(14px) saturate(120%) !important;
+  border:1px solid rgba(212,168,67,.18) !important;
+  box-shadow:0 8px 32px rgba(0,0,0,.35) !important;
+}
+body .ar{background:rgba(11,22,42,.42) !important}
+body .ar:hover{background:rgba(11,22,42,.65) !important;border-color:rgba(196,30,58,.55) !important}
+/* Inputs también semi-transparentes */
+body .fl input,body .fl select{background:rgba(11,22,42,.55) !important;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+/* Sombra a títulos para legibilidad sobre video */
+body h1,body h2,body .pn,body .hdr h1{text-shadow:0 2px 14px rgba(0,0,0,.65)}
+body .ftr{background:rgba(6,16,31,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border-radius:10px}
+/* Iframes embebidos transparentes */
+body iframe{background:transparent !important}
+</style>
 
 <img src="YourLift_logo.png" alt="YourLift" class="corner-logo" onclick="sv('nominas');closeMenu()" style="cursor:pointer" onerror="this.style.display='none'">
 <div class="hamburger" id="hamburger" onclick="toggleMenu()"><span></span><span></span><span></span></div>
@@ -149,6 +171,8 @@ function buildMenu(){
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});
 // Cargar video de fondo desde Firebase Storage videos/break/
+// Si existe videos/sections/bg_<seccion>.mp4 se usa ese, sino uno aleatorio.
+window._BG_VIDEOS={};
 (async()=>{
   try{
     const {initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
@@ -156,17 +180,39 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});
     const FB_CFG2={apiKey:"AIzaSyC3xWxxxLpkkbz_h9HxOSeg7C25wfh9KQ8",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"841056301810",appId:"1:841056301810:web:f6d62c0d4d22e88f7af2dd"};
     let app2;try{app2=initializeApp(FB_CFG2,'bgApp');}catch(e){app2=initializeApp(FB_CFG2,'bgApp_'+Date.now());}
     const storage=getStorage(app2);
+    // Intentar cargar de videos/sections (uno por seccion: bg_nominas.mp4, bg_stats.mp4, etc)
+    let sectionMap={};
+    try{
+      const sec=await listAll(ref(storage,'videos/sections'));
+      for(const it of sec.items){
+        const m=it.name.match(/^bg_([a-z]+)\./i);
+        if(m)sectionMap[m[1].toLowerCase()]=await getDownloadURL(it);
+      }
+    }catch(e){}
+    window._BG_VIDEOS=sectionMap;
+    // Cargar pool de videos break como fallback
     const res=await listAll(ref(storage,'videos/break'));
-    if(!res.items.length)return;
-    // Elegir uno aleatorio
-    const pick=res.items[Math.floor(Math.random()*res.items.length)];
-    const url=await getDownloadURL(pick);
-    const v=document.getElementById('bgVideo');
-    v.src=url;
-    v.addEventListener('canplay',()=>{v.style.opacity='1'},{once:true});
-    v.play().catch(()=>{});
+    const breakUrls=[];
+    for(const it of res.items){breakUrls.push(await getDownloadURL(it));}
+    window._BG_FALLBACK=breakUrls;
+    // Setear el inicial segun la seccion actual
+    setBgForSection(typeof ST!=='undefined'?ST.v:'nominas');
   }catch(e){console.warn('[bgVideo]',e.message);}
 })();
+function setBgForSection(section){
+  const v=document.getElementById('bgVideo');if(!v)return;
+  const map=window._BG_VIDEOS||{};
+  const fallback=window._BG_FALLBACK||[];
+  let url=map[section]||map['default'];
+  if(!url&&fallback.length){
+    // Misma sesion siempre usa el mismo video aleatorio (para no cambiar al navegar)
+    if(!window._pickedBgUrl)window._pickedBgUrl=fallback[Math.floor(Math.random()*fallback.length)];
+    url=window._pickedBgUrl;
+  }
+  if(!url||v.src===url)return;
+  v.style.opacity='0';
+  setTimeout(()=>{v.src=url;v.addEventListener('canplay',()=>{v.style.opacity='1'},{once:true});v.play().catch(()=>{});},300);
+}
 </script>
 <div class="ctn" id="app"><div class="ld"><div class="sp"></div><p>Cargando base de datos...</p></div></div>
 <script src="clubs.js"></script>
@@ -524,7 +570,7 @@ function embedded(url){return `<iframe src="${url}?embedded=1" style="width:100%
   h+=`<div class="ftr">FECHIPO — Federación Chilena de Powerlifting · Afiliada a IPF & WADA<br>Resultados ⚡ vía <a href="https://www.openpowerlifting.org" target="_blank">OpenPowerlifting.org</a> (Public Domain)</div>`;
   app.innerHTML=h;if(!ST.sel&&ST.v==="list"){const i=app.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}}
 
-function sv(v){ST.v=v;ST.p=0;render();scrollTo(0,0)}
+function sv(v){ST.v=v;ST.p=0;render();scrollTo(0,0);if(typeof setBgForSection==='function')setBgForSection(v)}
 let _ssTimer=null;
 function ss(v){ST.s=v;ST.p=0;if(_ssTimer)clearTimeout(_ssTimer);_ssTimer=setTimeout(()=>{render();setTimeout(()=>{const i=document.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},10)},300)}
 function sfc(v){ST.fc=v;ST.p=0;render()}
