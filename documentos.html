@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YourLift — Subir Documentos</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="bg-fechipo.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0A1628;--card:#11223B;--border:#1E3A5F;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A;--gold:#D4A843;--green:#22c55e;--red:#ef4444}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+.os{font-family:'Oswald',sans-serif}
+.nav{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);background:rgba(10,22,40,.95);position:sticky;top:0;z-index:100;backdrop-filter:blur(10px)}
+.wrap{max-width:560px;margin:0 auto;padding:32px 16px 80px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:13px 24px;border-radius:8px;border:none;font-weight:600;font-size:14px;cursor:pointer;font-family:'Oswald',sans-serif;letter-spacing:1px;text-transform:uppercase;transition:all .15s;width:100%}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-accent{background:var(--accent);color:#fff}.btn-accent:hover:not(:disabled){background:#a8182f}
+.btn-green{background:var(--green);color:#fff}.btn-green:hover:not(:disabled){background:#1aa34a}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-family:'Oswald',sans-serif}
+.inp{width:100%;padding:12px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:15px;transition:border-color .2s}
+.inp:focus{border-color:var(--accent);outline:none}
+.upload-zone{border:2px dashed var(--border);border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;margin-top:6px}
+.upload-zone:hover{border-color:var(--accent);background:rgba(196,30,58,.05)}
+.upload-zone.done{border-color:var(--green);border-style:solid;background:rgba(34,197,94,.05)}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-zone .icon{font-size:24px;margin-bottom:4px}
+.upload-zone .txt{font-size:12px;color:var(--muted)}
+.upload-zone .fname{font-size:13px;color:var(--green);font-weight:600;margin-top:4px;word-break:break-all}
+.alert{padding:14px 16px;border-radius:8px;font-size:13px;margin-bottom:16px}
+.alert-error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5}
+.alert-success{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:var(--green)}
+.alert-info{background:rgba(30,91,168,.15);border:1px solid rgba(30,91,168,.3);color:#93c5fd}
+@keyframes spin{to{transform:rotate(360deg)}}
+.sp{width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+.prog-bar{width:100%;height:4px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--gold));border-radius:2px;transition:width .3s}
+</style>
+</head>
+<body>
+<div id="bgGrid"></div>
+
+<div class="nav">
+  <span class="os" style="font-size:18px;font-weight:700;letter-spacing:2px">YOUR<span style="color:var(--accent)">LIFT</span></span>
+  <span style="font-size:12px;color:var(--muted)">Subir Documentos</span>
+</div>
+
+<div class="wrap">
+  <div style="text-align:center;margin-bottom:28px">
+    <div style="font-size:36px;margin-bottom:10px">📎</div>
+    <h1 class="os" style="font-size:26px;font-weight:700;letter-spacing:1px">SUBIR <span style="color:var(--accent)">DOCUMENTOS</span></h1>
+    <p style="color:var(--muted);font-size:13px;margin-top:6px">Completa tu inscripción subiendo tu carnet y certificado WADA/ADEL</p>
+  </div>
+
+  <div id="app"></div>
+</div>
+
+<script>
+const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app"};
+
+let db=null, storage=null, fbReady=false;
+let state={view:'lookup', rut:'', pin:'', inscripcion:null, privData:null,
+  carnetFile:null, carnetName:'', wadeFile:null, wadeName:'',
+  uploading:false, progress:0, error:'', success:false};
+
+async function initFB(){
+  const {initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+  const {getFirestore,doc,getDoc,setDoc}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+  const {getStorage,ref,uploadBytes,getDownloadURL}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js');
+  const app=initializeApp(FB_CFG);
+  db=getFirestore(app);
+  storage=getStorage(app,'gs://fechipo-db-13148.firebasestorage.app');
+  window.FB={doc,getDoc,setDoc,ref,uploadBytes,getDownloadURL};
+  fbReady=true;
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function render(){
+  const el=document.getElementById('app');
+  if(state.view==='lookup') el.innerHTML=renderLookup();
+  else if(state.view==='upload') el.innerHTML=renderUpload();
+  else if(state.view==='done') el.innerHTML=renderDone();
+  bindEvents();
+}
+
+function renderLookup(){
+  return `
+  <div class="card">
+    <div class="os" style="font-size:15px;font-weight:600;margin-bottom:16px;letter-spacing:1px">VERIFICAR INSCRIPCIÓN</div>
+    ${state.error?`<div class="alert alert-error">${esc(state.error)}</div>`:''}
+    <div class="field">
+      <label>RUT <span style="color:var(--accent)">*</span></label>
+      <input class="inp" id="f_rut" placeholder="12.345.678-9" value="${esc(state.rut)}" inputmode="text">
+    </div>
+    <div class="field">
+      <label>PIN de inscripción <span style="color:var(--accent)">*</span></label>
+      <input class="inp" id="f_pin" placeholder="4 dígitos" maxlength="4" inputmode="numeric" value="${esc(state.pin)}" type="password">
+    </div>
+    <div class="alert alert-info" style="margin-bottom:16px">Tu PIN fue creado por ti al inscribirte. Si no lo recuerdas, contacta a FECHIPO.</div>
+    <button class="btn btn-accent" id="btn_lookup" onclick="doLookup()">BUSCAR MI INSCRIPCIÓN</button>
+  </div>`;
+}
+
+function renderUpload(){
+  const i=state.inscripcion;
+  const priv=state.privData||{};
+  const yaCarnet=!!(priv.carnetURL);
+  const yaWada=!!(priv.wadeURL||priv.wadaURL);
+  return `
+  <div class="card" style="border-color:rgba(34,197,94,.3);margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="font-size:28px">✅</div>
+      <div>
+        <div style="font-weight:700;font-size:15px">${esc(i.nombre)}</div>
+        <div style="font-size:12px;color:var(--muted)">${esc(i.evento)} · ${esc(i.modalidad||'')} ${esc(i.categoria||'')}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="os" style="font-size:15px;font-weight:600;margin-bottom:16px;letter-spacing:1px">SUBIR DOCUMENTOS</div>
+    ${state.error?`<div class="alert alert-error">${esc(state.error)}</div>`:''}
+
+    <div class="field">
+      <label>📷 Carnet de Identidad (cara frontal)${yaCarnet?' <span style="color:var(--green);font-size:10px">✓ YA SUBIDO</span>':' <span style="color:var(--accent)">*</span>'}</label>
+      <div class="upload-zone ${state.carnetName?'done':''}" onclick="document.getElementById('f_carnet').click()">
+        <input type="file" id="f_carnet" accept="image/*,.pdf" onchange="handleFile(this,'carnet')">
+        ${state.carnetName
+          ? `<div class="icon">✅</div><div class="fname">${esc(state.carnetName)}</div><div class="txt">Click para cambiar</div>`
+          : `<div class="icon">📷</div><div class="txt">${yaCarnet?'Subir nueva versión':'Arrastra o haz click · JPG, PNG o PDF · Máx 10MB'}</div>`}
+      </div>
+    </div>
+
+    <div class="field">
+      <label>📄 Certificado ADEL/WADA o Carnet SENADIS${yaWada?' <span style="color:var(--green);font-size:10px">✓ YA SUBIDO</span>':' <span style="color:var(--accent)">*</span>'}</label>
+      <div class="upload-zone ${state.wadeName?'done':''}" onclick="document.getElementById('f_wada').click()">
+        <input type="file" id="f_wada" accept="image/*,.pdf" onchange="handleFile(this,'wade')">
+        ${state.wadeName
+          ? `<div class="icon">✅</div><div class="fname">${esc(state.wadeName)}</div><div class="txt">Click para cambiar</div>`
+          : `<div class="icon">📄</div><div class="txt">${yaWada?'Subir nueva versión':'JPG, PNG o PDF · Máx 10MB'}</div>`}
+      </div>
+    </div>
+
+    ${state.uploading?`
+    <div style="text-align:center;padding:8px 0;color:var(--muted);font-size:13px">
+      <span class="sp"></span> <span style="margin-left:8px">Subiendo archivos...</span>
+      <div class="prog-bar"><div class="prog-fill" style="width:${state.progress}%"></div></div>
+    </div>`:''}
+
+    <button class="btn btn-green" onclick="doUpload()" ${state.uploading?'disabled':''}>
+      ${state.uploading?'<span class="sp"></span>':'⬆'} SUBIR DOCUMENTOS
+    </button>
+  </div>`;
+}
+
+function renderDone(){
+  return `
+  <div class="card" style="text-align:center;padding:40px 24px;border-color:rgba(34,197,94,.4)">
+    <div style="font-size:56px;margin-bottom:16px">✅</div>
+    <div class="os" style="font-size:22px;font-weight:700;letter-spacing:1px;margin-bottom:8px">DOCUMENTOS <span style="color:var(--green)">SUBIDOS</span></div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:24px">Tus documentos fueron enviados correctamente. FECHIPO los revisará y confirmará tu inscripción.</p>
+    <a href="index.html" style="display:inline-block;padding:10px 24px;background:var(--accent);color:#fff;border-radius:8px;font-family:Oswald;font-size:13px;font-weight:600;letter-spacing:1px;text-decoration:none">← VOLVER A YOURLIFT</a>
+  </div>`;
+}
+
+function bindEvents(){
+  const rutEl=document.getElementById('f_rut');
+  if(rutEl) rutEl.addEventListener('input', e=>{
+    let v=e.target.value.replace(/[^0-9kK\-\.]/g,'');
+    state.rut=v; e.target.value=v;
+  });
+}
+
+function handleFile(input, type){
+  const file=input.files[0];
+  if(!file) return;
+  if(file.size>10*1024*1024){state.error='Archivo demasiado grande (máx 10MB)';render();return;}
+  if(type==='carnet'){state.carnetFile=file;state.carnetName=file.name;}
+  else{state.wadeFile=file;state.wadeName=file.name;}
+  state.error='';
+  render();
+}
+window.handleFile=handleFile;
+
+async function doLookup(){
+  const rut=(document.getElementById('f_rut')?.value||'').trim();
+  const pin=(document.getElementById('f_pin')?.value||'').trim();
+  state.rut=rut; state.pin=pin; state.error='';
+
+  if(!rut||!pin){state.error='Completa RUT y PIN';render();return;}
+
+  const btn=document.getElementById('btn_lookup');
+  if(btn){btn.disabled=true;btn.textContent='Buscando...';}
+
+  try{
+    if(!fbReady) await initFB();
+    const rutClean=rut.replace(/[^0-9kK]/g,'').toUpperCase();
+
+    // Buscar en inscripciones por RUT (busca en todos los eventos)
+    const {collection,getDocs,query,where}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const q=query(collection(db,'inscripciones'),where('rut','==',rut));
+    const snap=await getDocs(q);
+
+    // Si no encuentra con el RUT tal cual, intenta variaciones
+    let docs=snap.docs;
+    if(!docs.length){
+      const q2=query(collection(db,'inscripciones'));
+      const all=await getDocs(q2);
+      docs=all.docs.filter(d=>{
+        const r=(d.data().rut||'').replace(/[^0-9kK]/g,'').toUpperCase();
+        return r===rutClean;
+      });
+    }
+
+    if(!docs.length){state.error='No encontramos una inscripción con ese RUT. Verifica que sea el correcto.';render();return;}
+
+    // Verificar PIN en inscripciones_private
+    let inscripcion=null, privData=null;
+    for(const d of docs){
+      const privDoc=await window.FB.getDoc(window.FB.doc(db,'inscripciones_private',d.id));
+      if(privDoc.exists()){
+        const p=privDoc.data();
+        if(String(p.pin||'').trim()===String(pin).trim()){
+          inscripcion={id:d.id,...d.data()};
+          privData=p;
+          break;
+        }
+      }
+    }
+
+    if(!inscripcion){state.error='PIN incorrecto. Usa el PIN de 4 dígitos que creaste al inscribirte.';render();return;}
+
+    state.inscripcion=inscripcion;
+    state.privData=privData;
+    state.view='upload';
+    render();
+  }catch(e){
+    state.error='Error al buscar: '+e.message;
+    render();
+  }
+}
+window.doLookup=doLookup;
+
+async function doUpload(){
+  if(!state.inscripcion){return;}
+  const i=state.inscripcion;
+  const priv=state.privData||{};
+  const yaCarnet=!!(priv.carnetURL);
+  const yaWada=!!(priv.wadeURL||priv.wadaURL);
+
+  // Validar que haya algo que subir
+  if(!state.carnetFile && !yaCarnet){state.error='Debes subir tu Carnet de Identidad';render();return;}
+  if(!state.wadeFile && !yaWada){state.error='Debes subir el Certificado ADEL/WADA o Carnet SENADIS';render();return;}
+  if(!state.carnetFile && !state.wadeFile){state.error='No hay archivos nuevos para subir';render();return;}
+
+  state.uploading=true; state.error=''; state.progress=10;
+  render();
+
+  try{
+    const ts=Date.now();
+    const rutClean=(i.rut||'').replace(/[^0-9kK]/g,'').toUpperCase();
+    const updates={};
+
+    const compressImage=(file)=>new Promise(resolve=>{
+      if(!file.type.startsWith('image/')||file.size<800*1024){resolve(file);return;}
+      const img=new Image();
+      const url=URL.createObjectURL(file);
+      img.onload=()=>{
+        URL.revokeObjectURL(url);
+        const canvas=document.createElement('canvas');
+        const MAX=1400;
+        let w=img.width,h=img.height;
+        if(w>MAX||h>MAX){const r=Math.min(MAX/w,MAX/h);w=Math.round(w*r);h=Math.round(h*r);}
+        canvas.width=w;canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        canvas.toBlob(blob=>resolve(blob||file),'image/jpeg',0.82);
+      };
+      img.onerror=()=>{URL.revokeObjectURL(url);resolve(file);};
+      img.src=url;
+    });
+
+    const uploadFile=async(file, path)=>{
+      const uploadData=file.type?.startsWith('image/')?await compressImage(file):file;
+      const contentType=uploadData.type||file.type||'application/octet-stream';
+      for(let attempt=1;attempt<=3;attempt++){
+        try{
+          const fileRef=window.FB.ref(storage,path);
+          await window.FB.uploadBytes(fileRef,uploadData,{contentType});
+          return await window.FB.getDownloadURL(fileRef);
+        }catch(e){
+          console.warn(`Upload intento ${attempt}/3 falló:`,e.message);
+          if(attempt<3) await new Promise(r=>setTimeout(r,attempt*2000));
+        }
+      }
+      throw new Error('No se pudo subir el archivo después de 3 intentos. Verifica tu conexión.');
+    };
+
+    if(state.carnetFile){
+      state.progress=30; render();
+      const url=await uploadFile(state.carnetFile,`athlete_files/${rutClean}/carnet_${ts}`);
+      updates.carnetURL=url;
+    }
+
+    if(state.wadeFile){
+      state.progress=70; render();
+      const url=await uploadFile(state.wadeFile,`athlete_files/${rutClean}/wada_${ts}`);
+      updates.wadeURL=url;
+    }
+
+    state.progress=90; render();
+
+    // Actualizar inscripciones_private con las nuevas URLs
+    await window.FB.setDoc(window.FB.doc(db,'inscripciones_private',i.id), updates, {merge:true});
+
+    state.progress=100;
+    state.uploading=false;
+    state.view='done';
+    render();
+
+  }catch(e){
+    state.uploading=false;
+    state.error=e.message||'Error al subir. Verifica tu conexión e intenta de nuevo.';
+    render();
+  }
+}
+window.doUpload=doUpload;
+
+initFB().catch(e=>console.error('Firebase init error:',e));
+render();
+</script>
+</body>
+</html>
