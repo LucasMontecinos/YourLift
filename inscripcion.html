@@ -1278,27 +1278,34 @@ async function submitForm() {
         img.src = url;
       });
 
-      // Subir archivos — método original directo con Firebase Storage SDK
+      // Subir archivos — usa el snapshot.ref para getDownloadURL (más confiable)
+      async function uploadOne(file, name) {
+        const r = window.FB.ref(storage, `athlete_files/${rutClean}/${name}_${ts}`);
+        console.log('[upload]', name, 'starting...', file.size, 'bytes', file.type);
+        const snap = await window.FB.uploadBytes(r, file);
+        console.log('[upload]', name, 'uploaded OK, getting URL...');
+        const url = await window.FB.getDownloadURL(snap.ref);
+        console.log('[upload]', name, 'URL:', url.substring(0,80)+'...');
+        return url;
+      }
       if (state.carnetFile) {
-        const carnetRef = window.FB.ref(storage, `athlete_files/${rutClean}/carnet_${ts}`);
-        await window.FB.uploadBytes(carnetRef, state.carnetFile);
-        privateEntry.carnetURL = await window.FB.getDownloadURL(carnetRef);
+        privateEntry.carnetURL = await uploadOne(state.carnetFile, 'carnet');
       }
       if (state.wadeFile) {
-        const wadeRef = window.FB.ref(storage, `athlete_files/${rutClean}/wada_${ts}`);
-        await window.FB.uploadBytes(wadeRef, state.wadeFile);
-        privateEntry.wadeURL = await window.FB.getDownloadURL(wadeRef);
+        privateEntry.wadeURL = await uploadOne(state.wadeFile, 'wada');
       }
       if (state.carnetPhotoFile) {
-        const carnetPhotoRef = window.FB.ref(storage, `athlete_files/${rutClean}/carnetPhoto_${ts}`);
-        await window.FB.uploadBytes(carnetPhotoRef, state.carnetPhotoFile);
-        privateEntry.carnetPhotoURL = await window.FB.getDownloadURL(carnetPhotoRef);
+        privateEntry.carnetPhotoURL = await uploadOne(state.carnetPhotoFile, 'carnetPhoto');
       }
       if (state.consentimientoFile) {
-        const consRef = window.FB.ref(storage, `athlete_files/${rutClean}/consentimiento_${ts}`);
-        await window.FB.uploadBytes(consRef, state.consentimientoFile);
-        privateEntry.consentimientoURL = await window.FB.getDownloadURL(consRef);
+        privateEntry.consentimientoURL = await uploadOne(state.consentimientoFile, 'consentimiento');
       }
+      // Validar URLs presentes ANTES de guardar inscripción
+      if (!privateEntry.carnetURL || !privateEntry.wadeURL) {
+        console.error('[upload] URLs faltantes:', privateEntry);
+        throw new Error('No se pudieron guardar los documentos. Revisa tu conexión y vuelve a intentar.');
+      }
+      console.log('[upload] ✅ Todas las URLs OK, guardando inscripción...');
 
       publicEntry.timestamp = window.FB.serverTimestamp();
       privateEntry.ts = window.FB.serverTimestamp();
