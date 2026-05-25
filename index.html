@@ -16,6 +16,33 @@
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0A1628;--card:#11223B;--border:#1E3A5F;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A;--accent2:#E8243C;--blue:#1E5BA8;--gold:#D4A843;--green:#22c55e}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+/* === Header tipo enhanced.com === */
+.corner-logo{position:fixed;top:16px;left:18px;z-index:100;height:46px;width:auto;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));transition:opacity .2s}
+.corner-logo:hover{opacity:.85}
+.hamburger{position:fixed;top:18px;right:18px;z-index:101;width:46px;height:46px;background:rgba(10,22,40,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(212,168,67,.3);border-radius:10px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;cursor:pointer;transition:all .2s}
+.hamburger:hover{border-color:var(--gold);background:rgba(212,168,67,.1)}
+.hamburger span{display:block;width:22px;height:2px;background:#fff;border-radius:2px;transition:all .3s}
+.hamburger.open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+.hamburger.open span:nth-child(2){opacity:0}
+.hamburger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+.menu-overlay{position:fixed;inset:0;background:rgba(4,9,18,.6);backdrop-filter:blur(4px);z-index:99;opacity:0;pointer-events:none;transition:opacity .25s}
+.menu-overlay.open{opacity:1;pointer-events:auto}
+.side-menu{position:fixed;top:0;right:0;height:100vh;width:320px;max-width:85vw;background:rgba(8,16,30,.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-left:1px solid rgba(212,168,67,.25);z-index:100;transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);padding:80px 24px 24px;overflow-y:auto;box-shadow:-20px 0 60px rgba(0,0,0,.6)}
+.side-menu.open{transform:translateX(0)}
+.side-menu .mi{display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:10px;cursor:pointer;font-family:Oswald,sans-serif;font-size:15px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:rgba(220,230,245,.78);background:transparent;border:1px solid rgba(30,58,95,.4);margin-bottom:8px;transition:all .2s;position:relative;overflow:hidden}
+.side-menu .mi::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);transform:scaleY(0);transition:transform .2s;transform-origin:center}
+.side-menu .mi:hover{background:rgba(196,30,58,.12);color:#fff;border-color:rgba(196,30,58,.4);transform:translateX(-3px)}
+.side-menu .mi:hover::before{transform:scaleY(1)}
+.side-menu .mi.active{background:rgba(196,30,58,.18);color:#fff;border-color:var(--accent)}
+.side-menu .mi.active::before{transform:scaleY(1)}
+.side-menu .mi .ic{font-size:18px;width:22px;text-align:center}
+.side-menu .mi.special-g{border-color:rgba(34,197,94,.35);color:var(--green)}
+.side-menu .mi.special-g:hover{background:rgba(34,197,94,.12);color:#fff;border-color:var(--green)}
+.side-menu .mi.special-y{border-color:rgba(212,168,67,.35);color:var(--gold)}
+.side-menu .mi.special-y:hover{background:rgba(212,168,67,.12);color:#fff;border-color:var(--gold)}
+.menu-foot{position:absolute;bottom:20px;left:24px;right:24px;font-size:10px;color:var(--muted);text-align:center;font-family:Oswald;letter-spacing:1.5px;border-top:1px solid rgba(30,58,95,.4);padding-top:14px}
+.ctn{padding-top:78px !important}
+@media(max-width:520px){.corner-logo{height:38px;top:14px;left:14px}.hamburger{top:14px;right:14px}}
 .ctn{max-width:940px;margin:0 auto;padding:16px 20px}
 input,select,button{font-family:inherit}
 a{color:var(--accent);text-decoration:none}
@@ -89,6 +116,58 @@ a{color:var(--accent);text-decoration:none}
 </style>
 </head>
 <body>
+<!-- Video de fondo full screen -->
+<div id="bgVideoWrap" style="position:fixed;inset:0;z-index:-2;overflow:hidden;background:#06101F">
+  <video id="bgVideo" autoplay muted loop playsinline preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s"></video>
+  <div style="position:absolute;inset:0;background:linear-gradient(135deg,rgba(6,16,31,.78) 0%,rgba(4,9,18,.88) 100%);pointer-events:none"></div>
+</div>
+
+<img src="YourLift_logo.png" alt="YourLift" class="corner-logo" onclick="sv('nominas');closeMenu()" style="cursor:pointer" onerror="this.style.display='none'">
+<div class="hamburger" id="hamburger" onclick="toggleMenu()"><span></span><span></span><span></span></div>
+<div class="menu-overlay" id="menuOverlay" onclick="closeMenu()"></div>
+<nav class="side-menu" id="sideMenu">
+  <div id="menuItems"></div>
+  <div class="menu-foot">FECHIPO 2026<br><span style="color:rgba(212,168,67,.5);font-size:9px">Powered by YourLift</span></div>
+</nav>
+<script>
+function toggleMenu(){const m=document.getElementById('sideMenu');const o=document.getElementById('menuOverlay');const h=document.getElementById('hamburger');m.classList.toggle('open');o.classList.toggle('open');h.classList.toggle('open')}
+function closeMenu(){document.getElementById('sideMenu').classList.remove('open');document.getElementById('menuOverlay').classList.remove('open');document.getElementById('hamburger').classList.remove('open')}
+function buildMenu(){
+  const items=[
+    {v:'nominas',l:'Nóminas',ic:'📋'},
+    {v:'stats',l:'Estadísticas',ic:'📊'},
+    {v:'records',l:'Records',ic:'🏅'},
+    {v:'trans',l:'Transmisiones',ic:'📺'},
+    {v:'atletas',l:'Atletas',ic:'👤'},
+    {v:'insc',l:'Inscripción',ic:'📝',cls:'special-g'},
+    {v:'rank',l:'Ranking',ic:'🏆',cls:'special-y'},
+  ];
+  const cur=(typeof ST!=='undefined'?ST.v:'nominas');
+  document.getElementById('menuItems').innerHTML=items.map(it=>
+    `<div class="mi ${it.cls||''} ${cur===it.v?'active':''}" onclick="sv('${it.v}');closeMenu()"><span class="ic">${it.ic}</span>${it.l}</div>`
+  ).join('');
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});
+// Cargar video de fondo desde Firebase Storage videos/break/
+(async()=>{
+  try{
+    const {initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+    const {getStorage,ref,listAll,getDownloadURL}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js');
+    const FB_CFG2={apiKey:"AIzaSyC3xWxxxLpkkbz_h9HxOSeg7C25wfh9KQ8",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"841056301810",appId:"1:841056301810:web:f6d62c0d4d22e88f7af2dd"};
+    let app2;try{app2=initializeApp(FB_CFG2,'bgApp');}catch(e){app2=initializeApp(FB_CFG2,'bgApp_'+Date.now());}
+    const storage=getStorage(app2);
+    const res=await listAll(ref(storage,'videos/break'));
+    if(!res.items.length)return;
+    // Elegir uno aleatorio
+    const pick=res.items[Math.floor(Math.random()*res.items.length)];
+    const url=await getDownloadURL(pick);
+    const v=document.getElementById('bgVideo');
+    v.src=url;
+    v.addEventListener('canplay',()=>{v.style.opacity='1'},{once:true});
+    v.play().catch(()=>{});
+  }catch(e){console.warn('[bgVideo]',e.message);}
+})();
+</script>
 <div class="ctn" id="app"><div class="ld"><div class="sp"></div><p>Cargando base de datos...</p></div></div>
 <script src="clubs.js"></script>
 <script>
@@ -429,16 +508,18 @@ function lst(){const f=flt(),P=50,sh=f.slice(0,(ST.p+1)*P);
   return h}
 
 function render(){const app=document.getElementById("app");
-  let h=`<div class="hdr"><img src="YourLift_logo.png" alt="YourLift" style="max-width:280px;height:auto;margin-bottom:8px" onerror="this.style.display='none'"></div>`;
+  let h='';
   if(ST.sel)h+=prof(ST.sel);
-  else{h+=`<div class="tabs">${[["nominas","Nóminas"],["stats","Estadísticas"],["records","Records"],["trans","📺 Transmisiones"],["atletas","👤 Atletas"],["insc","📝 Inscripción"],["rank","🏆 Ranking"]].map(([v,l])=>{const extra=v==='insc'?'background:var(--green);color:#fff;border-color:var(--green);':v==='rank'?'background:var(--gold);color:#000;border-color:var(--gold);':'';return `<button class="tab ${ST.v===v?'a':''}" style="${extra}" onclick="sv('${v}')">${l}</button>`}).join('')}</div>`;
+  else{
     if(ST.v==="stats")h+=sts();
     else if(ST.v==="records")h+=rec();
     else if(ST.v==="trans")h+=trans();
     else if(ST.v==="atletas")h+=embedded('atleta.html');
     else if(ST.v==="insc")h+=embedded('inscripcion.html');
     else if(ST.v==="rank")h+=embedded('ranking.html');
-    else h+=nom()}
+    else h+=nom();
+    if(typeof buildMenu==='function')buildMenu();
+  }
 function embedded(url){return `<div style="background:rgba(17,34,59,.4);border:1px solid var(--border);border-radius:12px;overflow:hidden;height:calc(100vh - 240px);min-height:600px"><iframe src="${url}" style="width:100%;height:100%;border:0;background:transparent" loading="lazy"></iframe></div>`}
   h+=`<div class="ftr">FECHIPO — Federación Chilena de Powerlifting · Afiliada a IPF & WADA<br>Resultados ⚡ vía <a href="https://www.openpowerlifting.org" target="_blank">OpenPowerlifting.org</a> (Public Domain)</div>`;
   app.innerHTML=h;if(!ST.sel&&ST.v==="list"){const i=app.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}}
