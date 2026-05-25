@@ -116,14 +116,15 @@ a{color:var(--accent);text-decoration:none}
 </style>
 </head>
 <body>
-<!-- Video de fondo full screen -->
-<div id="bgVideoWrap" style="position:fixed;inset:0;z-index:-2;overflow:hidden;background:#06101F">
-  <video id="bgVideo" autoplay muted loop playsinline preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s"></video>
-  <!-- Overlay más liviano para que el video se vea -->
-  <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,16,31,.55) 0%,rgba(4,9,18,.40) 50%,rgba(6,16,31,.65) 100%);pointer-events:none"></div>
-  <!-- Vignette en bordes para enfocar al centro -->
-  <div style="position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 40%,rgba(0,0,0,.55) 100%);pointer-events:none"></div>
+<!-- Fondo: video opcional + gradiente animado de respaldo -->
+<div id="bgVideoWrap" style="position:fixed;inset:0;z-index:-2;overflow:hidden;background:radial-gradient(ellipse at top left,#0F2444 0%,#06101F 50%,#040912 100%)">
+  <video id="bgVideo" autoplay muted loop playsinline preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s;display:none"></video>
+  <!-- Manchas de color animadas -->
+  <div style="position:absolute;inset:0;pointer-events:none;filter:blur(2px);background:radial-gradient(circle at 18% 22%,rgba(196,30,58,.18) 0%,transparent 38%),radial-gradient(circle at 82% 78%,rgba(212,168,67,.13) 0%,transparent 42%),radial-gradient(circle at 70% 18%,rgba(30,91,168,.10) 0%,transparent 38%);animation:bgDrift 22s ease-in-out infinite alternate"></div>
+  <!-- Vignette -->
+  <div style="position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.45) 100%);pointer-events:none"></div>
 </div>
+<style>@keyframes bgDrift{0%{transform:translate(0,0) scale(1)}50%{transform:translate(-3%,2%) scale(1.06)}100%{transform:translate(3%,-2%) scale(1.02)}}</style>
 <style>
 /* Tarjetas más transparentes con frosted glass para que se vea el video sin perder legibilidad */
 body .cd2,body .pc,body .card,body .ar{
@@ -145,6 +146,20 @@ body iframe{background:transparent !important}
 </style>
 
 <img src="YourLift_logo.png" alt="YourLift" class="corner-logo" onclick="sv('nominas');closeMenu()" style="cursor:pointer" onerror="this.style.display='none'">
+<button id="backArrow" class="back-arrow" onclick="goBack()" title="Volver" style="display:none">←</button>
+<style>
+.back-arrow{position:fixed;top:72px;left:18px;z-index:100;width:38px;height:38px;background:rgba(10,22,40,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(212,168,67,.3);border-radius:50%;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;font-family:Oswald}
+.back-arrow:hover{border-color:var(--gold);background:rgba(212,168,67,.15);transform:translateX(-3px)}
+@media(max-width:520px){.back-arrow{top:60px;left:14px;width:34px;height:34px;font-size:16px}}
+</style>
+<script>
+function goBack(){if(typeof sv==='function')sv('nominas')}
+function updateBackArrow(){
+  const v=(typeof ST!=='undefined'?ST.v:'nominas');
+  const show=['stats','records','trans','atletas','insc','rank'].includes(v)||(typeof ST!=='undefined'&&ST.sel);
+  const b=document.getElementById('backArrow');if(b)b.style.display=show?'flex':'none';
+}
+</script>
 <div class="hamburger" id="hamburger" onclick="toggleMenu()"><span></span><span></span><span></span></div>
 <div class="menu-overlay" id="menuOverlay" onclick="closeMenu()"></div>
 <nav class="side-menu" id="sideMenu">
@@ -190,28 +205,18 @@ window._BG_VIDEOS={};
       }
     }catch(e){}
     window._BG_VIDEOS=sectionMap;
-    // Cargar pool de videos break como fallback
-    const res=await listAll(ref(storage,'videos/break'));
-    const breakUrls=[];
-    for(const it of res.items){breakUrls.push(await getDownloadURL(it));}
-    window._BG_FALLBACK=breakUrls;
-    // Setear el inicial segun la seccion actual
+    // Solo videos de sections (gestionados desde admin). Sin fallback automático a break/.
     setBgForSection(typeof ST!=='undefined'?ST.v:'nominas');
   }catch(e){console.warn('[bgVideo]',e.message);}
 })();
 function setBgForSection(section){
   const v=document.getElementById('bgVideo');if(!v)return;
   const map=window._BG_VIDEOS||{};
-  const fallback=window._BG_FALLBACK||[];
-  let url=map[section]||map['default'];
-  if(!url&&fallback.length){
-    // Misma sesion siempre usa el mismo video aleatorio (para no cambiar al navegar)
-    if(!window._pickedBgUrl)window._pickedBgUrl=fallback[Math.floor(Math.random()*fallback.length)];
-    url=window._pickedBgUrl;
-  }
-  if(!url||v.src===url)return;
+  const url=map[section]||map['default'];
+  if(!url){v.style.display='none';v.style.opacity='0';return;}
+  if(v.src===url){v.style.display='block';return;}
   v.style.opacity='0';
-  setTimeout(()=>{v.src=url;v.addEventListener('canplay',()=>{v.style.opacity='1'},{once:true});v.play().catch(()=>{});},300);
+  setTimeout(()=>{v.style.display='block';v.src=url;v.addEventListener('canplay',()=>{v.style.opacity='1'},{once:true});v.play().catch(()=>{});},300);
 }
 </script>
 <div class="ctn" id="app"><div id="initLoader" style="padding:80px 20px;text-align:center;animation:fadeIn .35s ease">
@@ -592,7 +597,7 @@ function embedded(url){return `<iframe src="${url}?embedded=1" style="width:100%
   h+=`<div class="ftr">FECHIPO — Federación Chilena de Powerlifting · Afiliada a IPF & WADA<br>Resultados ⚡ vía <a href="https://www.openpowerlifting.org" target="_blank">OpenPowerlifting.org</a> (Public Domain)</div>`;
   app.innerHTML=h;if(!ST.sel&&ST.v==="list"){const i=app.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}}
 
-function sv(v){ST.v=v;ST.p=0;render();scrollTo(0,0);if(typeof setBgForSection==='function')setBgForSection(v)}
+function sv(v){ST.v=v;ST.sel=null;ST.p=0;render();scrollTo(0,0);if(typeof setBgForSection==='function')setBgForSection(v);if(typeof updateBackArrow==='function')updateBackArrow()}
 let _ssTimer=null;
 function ss(v){ST.s=v;ST.p=0;if(_ssTimer)clearTimeout(_ssTimer);_ssTimer=setTimeout(()=>{render();setTimeout(()=>{const i=document.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},10)},300)}
 function sfc(v){ST.fc=v;ST.p=0;render()}

@@ -71,9 +71,12 @@ a{color:var(--gold);text-decoration:none}
 }
 </style>
 <style id="embedHide">
-/* Si estamos dentro de un iframe (param ?embedded=1) ocultamos el boton volver */
-html.embedded .btn-volver,html.embedded a[href="index.html"].btn-volver{display:none !important}
+html.embedded .btn-volver,html.embedded a[href="index.html"].btn-volver,html.embedded .header{display:none !important}
 html.embedded body{background:transparent !important}
+html.embedded::-webkit-scrollbar{width:0;background:transparent}
+html.embedded{scrollbar-width:none;-ms-overflow-style:none}
+/* Botones de modalidad más legibles */
+html.embedded .tabs button,html.embedded .tab,html.embedded button.tab{font-weight:700 !important;text-shadow:0 1px 6px rgba(0,0,0,.7)}
 </style>
 <script>
 (function(){
@@ -126,6 +129,8 @@ var TABS=[
 {id:'cl_f',lb:'🏋️ Classic Femenino',s:'sf'},
 {id:'eq_m',lb:'⚙️ Equipado Masculino',s:'sm'},
 {id:'eq_f',lb:'⚙️ Equipado Femenino',s:'sf'},
+{id:'uni_m',lb:'🎓 Universitario Masculino',s:'sm'},
+{id:'uni_f',lb:'🎓 Universitario Femenino',s:'sf'},
 {id:'bench_cl_m',lb:'💪 Bench Classic Masculino',s:'sm'},
 {id:'bench_cl_f',lb:'💪 Bench Classic Femenino',s:'sf'},
 {id:'bench_eq_m',lb:'💪 Bench Equipado Masculino',s:'sm'},
@@ -150,13 +155,16 @@ function _normCat(cat){
   if(!m)return '';
   return m[1]+(isPlus?'+':'');
 }
-function _getTab(sex,modalidad,view){
+function _getTab(sex,modalidad,view,divOrEvento){
   var isMale=(sex==='Hombre'||sex==='Masculino'||sex==='M');
   var s=isMale?'m':'f';
   var mod=modalidad||'';
   var isOE=/special olympics|olimpiadas|\bOE\b/i.test(mod);
   var isEq=/(equipado|equipped)/i.test(mod);
   var isBenchOnly=/only ?bench/i.test(mod);
+  // Universitario: viene en la division o en el nombre del evento
+  var isUni=/universitario|universidad/i.test(String(divOrEvento||''))||/universitario/i.test(mod);
+  if(isUni&&!isBenchOnly&&!isOE) return 'uni_'+s;
   // OE solo tiene Powerlifting Classic (no Only Bench)
   if(isOE) return 'oe_'+s;
   if(view==='bench'||isBenchOnly) return (isEq?'bench_eq_':'bench_cl_')+s;
@@ -200,7 +208,7 @@ function _rebuildPositions(){
         var glp=r.glp||r.gl||0;
         var cat=_normCat(data.categoria);
         if(!cat||!data.sexo)return;
-        var tab=_getTab(data.sexo,data.modalidad,data.view);
+        var tab=_getTab(data.sexo,data.modalidad,data.view,(data.division||'')+' '+(data.evento||''));
         var isBench=tab.indexOf('bench')===0;
         liveEntries.push({
           n:data.nombre||'',
