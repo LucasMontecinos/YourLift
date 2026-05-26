@@ -2561,6 +2561,7 @@ function renderObsTx(){
     {id:'scoreboard',icon:'📊',title:'Scoreboard (lower-third)',desc:'Barra inferior con categoría, rank, timer, nombre, club e intentos. Aparece al cambiar levantador / intento / peso, queda 20s en pantalla y se va con animación. Hasta el próximo cambio queda oculto.',obsBg:'Transparente (superpuesto sobre cámara).',size:'1920×320 (parte inferior)'},
     {id:'barbell',icon:'🏋️',title:'Barra con discos (lower-third)',desc:'Franja inferior que muestra la barra con discos IPF a color, nombre del atleta, club, categoría, peso del intento en kg/lbs, ronda y pronóstico de posición ("Si es válido pasará del X° al Y° lugar"). Se anima al entrar cuando cambia el levantador.',obsBg:'Transparente (overlay sobre cámara). Fondo se fusiona hacia abajo.',size:'1920×1080 (contenido en el tercio inferior)'},
     {id:'leaderboard',icon:'🏆',title:'Tabla de clasificación (FIJO)',desc:'Ranking completo de la categoría actual. Cascada fila por fila. SIEMPRE visible mientras la escena esté activa — usalo para escenas de pausa entre rondas que vos manejás manualmente.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
+    {id:'tablaactual',icon:'📋',title:'Tabla actual (corner)',desc:'Ranking de la categoría del lifter en pantalla, esquina inferior derecha. Entra deslizando desde abajo, queda fijo. El levantador actual se resalta y muestra una flecha de proyección: posición actual → posición que tendría si el intento es válido (ej. 2→1 si se mueve al primer lugar). Activá/desactivá con el botón "Tabla actual" en Control TX o tecla A.',obsBg:'Transparente (overlay sobre cámara). Solo ocupa el cuadrante inferior derecho.',size:'1920×1080 (overlay)'},
     {id:'lbauto',icon:'🔁',title:'Tabla de clasificación (AUTO)',desc:'Igual al leaderboard fijo, pero APARECE SOLO al detectar fin de ronda (cuando cambia lift/round/flight). Queda 10s en pantalla y se va. Ideal como overlay siempre activo en una escena de cámara.',obsBg:'Transparente (overlay sobre cámara).',size:'1920×1080 (overlay fullscreen)'},
     {id:'slam',icon:'⚡',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activá una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcás ✓/✗ en Control en Vivo. Volvé a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
     {id:'timer',icon:'⏱',title:'Timer independiente',desc:'Reloj 1:00 → 0:00 en grande. Verde/ámbar/rojo según se acerca a 0. Pulsa cuando quedan ≤10s. Sincronizado con el timer del operador.',obsBg:'Transparente. Posicionalo donde quieras (esquina, banner, etc).',size:'1920×1080 (autoescala)'},
@@ -2677,7 +2678,7 @@ function renderTxWidget(){
   if(TX_MODE==='ceremony'){renderTxCeremony(c);return true}
   // Widgets que dependen del lifter actual
   const cur=liftQueue()[0];
-  if(!cur&&TX_MODE!=='leaderboard'){
+  if(!cur&&TX_MODE!=='leaderboard'&&TX_MODE!=='tablaactual'){
     c.innerHTML='';
     return true;
   }
@@ -2688,7 +2689,13 @@ function renderTxWidget(){
   else if(TX_MODE==='scoreboard')html=renderTxScoreboard(cur,lifterChanged);
   else if(TX_MODE==='leaderboard')html=renderTxLeaderboard(cur,lifterChanged);
   else if(TX_MODE==='barbell')html=renderTxBarbell(cur,lifterChanged);
-  else html='<div style="color:#fff;padding:40px;font-family:Oswald">Widget desconocido: '+TX_MODE+'. Valores: profile | scoreboard | leaderboard | lbauto | slam | timer | lights | barbell</div>';
+  else if(TX_MODE==='tablaactual'){
+    const inner=renderTxTablaActual(cur);
+    // En modo standalone, animar el slide-in cada vez que cambia el lifter
+    const anim=lifterChanged?'animation:txSlideInBottom .75s cubic-bezier(.2,.85,.3,1.05) both':'';
+    html=anim?'<div style="'+anim+'">'+inner+'</div>':inner;
+  }
+  else html='<div style="color:#fff;padding:40px;font-family:Oswald">Widget desconocido: '+TX_MODE+'. Valores: profile | scoreboard | leaderboard | lbauto | slam | timer | lights | barbell | tablaactual</div>';
   c.innerHTML=html;
   // Setup GIF trim loop after DOM insertion
   const _gifVid=c.querySelector('video[data-gif-trim]');
@@ -3208,7 +3215,7 @@ function _startBarrido(dir){
   setTimeout(()=>{if(_txBarridoEl&&_txBarridoEl.parentNode){_txBarridoEl.parentNode.removeChild(_txBarridoEl);_txBarridoEl=null;}},TX_ANIM_MS.fullscreen+200);
 }
 function _txDetectTransitions(){
-  const comps=['profile','scoreboard','leaderboard','timer','breakTimer'];
+  const comps=['profile','scoreboard','leaderboard','timer','breakTimer','tablaActual'];
   const fullscreen=new Set(['profile','leaderboard','breakTimer']);
   const fsJustActivated=[...fullscreen].some(c=>!_txDirPrevActive[c]&&_txDirActive(c));
   const fsCurrentlyExiting=Object.keys(_txDirAnims).some(c=>fullscreen.has(c)&&_txDirAnims[c].dir==='out');
@@ -3294,7 +3301,7 @@ function renderTxDirector(container){
   // Detectar transiciones (cambios on↔off) para reproducir animaciones
   _txDetectTransitions();
   // Signature p/ evitar flicker por timer cada 1s
-  const sig=[showProf,showSb,showLb,showTm,showSlam,showBreak].join('|')
+  const sig=[showProf,showSb,showLb,showTm,showSlam,showBreak,_txDirActive('tablaActual')].join('|')
     +'|'+(cur?cur.id+'|'+(cur.att?.[DATA.lift]||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
     +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
     +'|'+(_txDirState.leaderboard?.cat||'')+'|'+(_txDirState.slam?.type||'')
@@ -3406,6 +3413,16 @@ function renderTxDirector(container){
     const tmAnim=animTm?(animTm.dir==='in'?'animation:txSlideInRight .65s cubic-bezier(.2,.85,.3,1) forwards;':'animation:txSlideOutRight .55s cubic-bezier(.5,0,.7,.5) forwards;'):'';
     const tmHtml=_renderTxCerTimerCorner(_txDirState.timer?.scale||1);
     html+=tmAnim?'<div style="'+tmAnim+'">'+tmHtml+'</div>':tmHtml;
+  }
+  // Tabla Actual (corner inferior derecha) — slide-in desde abajo, persistente hasta apagarlo
+  const showTabla=_txDirActive('tablaActual');
+  const animTabla=_txAnimActive('tablaActual');
+  if((showTabla||(animTabla&&animTabla.dir==='out'))&&cur){
+    const taAnim=animTabla?(animTabla.dir==='in'?'animation:txSlideInBottom .75s cubic-bezier(.2,.85,.3,1.05) forwards;':'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;'):'';
+    const taScale=_txDirState.tablaActual?.scale||1;
+    const taHtml=renderTxTablaActual(cur);
+    const wrap='<div style="position:fixed;inset:0;pointer-events:none;'+(taScale!==1?'transform:scale('+taScale+');transform-origin:bottom right;':'')+taAnim+'">'+taHtml+'</div>';
+    html+=wrap;
   }
   if(showSlam){
     // Slam armado: cuando el operador marca ✓/✗ en Control en Vivo,
@@ -3823,6 +3840,86 @@ function renderTxLeaderboard(cur,lifterChanged,opts){
             return '<div style="display:flex;gap:8px;align-items:center"><span style="font-family:Oswald;font-size:clamp(11px,1.1vw,14px);color:rgba(220,230,245,.7);letter-spacing:2px">'+LIFT_S[l]+'</span><span style="font-family:Oswald;font-size:clamp(16px,1.8vw,24px);font-weight:700;color:'+(b?LIFT_C[l]:'rgba(180,200,220,.4)')+';text-shadow:0 1px 3px rgba(0,0,0,.5)">'+(b?b.toFixed(1):'—')+'</span></div>';
           }).join('')}
         </div>
+      </div>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════
+// TX: TABLA ACTUAL — ranking de la cat actual en esquina inferior derecha
+// Slide-in desde abajo. Resalta al lifter actual con flecha de posición proyectada.
+// ══════════════════════════════════════════════
+function renderTxTablaActual(cur,opts){
+  opts=opts||{};
+  const ref=cur||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
+  if(!ref)return '';
+  const sameCat=DATA.athletes.filter(a=>a.cat===ref.cat&&a.div===ref.div&&a.sex===ref.sex&&!a.bombed);
+  // 1) Ranking ACTUAL: por total ya levantado (solo lifts válidos)
+  const curRank=sameCat.map(a=>({id:a.id,total:totalOf(a)})).sort((a,b)=>b.total-a.total);
+  const curPosOf={}; curRank.forEach((a,i)=>curPosOf[a.id]=i+1);
+  // 2) Ranking PROYECTADO: si el intento pendiente del lifter actual resulta válido
+  const fcRank=sameCat.map(a=>({id:a.id,total:a.id===ref.id?forecastTotal(a):totalOf(a)})).sort((a,b)=>b.total-a.total);
+  const fcPosOf={}; fcRank.forEach((a,i)=>fcPosOf[a.id]=i+1);
+  // Tabla ordenada por proyección
+  const ranked=fcRank.map(r=>{
+    const ath=sameCat.find(a=>a.id===r.id);
+    return {...ath,total:totalOf(ath),fTotal:r.total,curPos:curPosOf[r.id],fPos:fcPosOf[r.id]};
+  });
+  const divS=txDivShort(ref.div);
+  const sexLabel=(ref.sex==='Femenino'||ref.sex==='Mujer'||ref.sex==='F')?'Mujer':'Hombre';
+  const curRow=ranked.find(a=>a.id===ref.id);
+  const curPos=curRow?curRow.curPos:0;
+  const fcPos=curRow?curRow.fPos:0;
+  const arrow=curPos===fcPos?'=':(fcPos<curPos?'▲':'▼');
+  const arrowColor=fcPos<curPos?'#22c55e':(fcPos>curPos?'#ef4444':'#D4A843');
+  const pendingW=(ref.att?.[DATA.lift]?.[DATA.round]?.w)||0;
+  const liftN=LIFT_N[DATA.lift]||DATA.lift;
+  return `
+    <div style="position:fixed;bottom:30px;right:30px;width:min(520px,38vw);z-index:50;font-family:'Inter',sans-serif">
+      <div style="background:linear-gradient(180deg,rgba(10,22,40,.96) 0%,rgba(4,12,26,.96) 100%);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:2px solid #D4A843;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.7),0 0 30px rgba(212,168,67,.25)">
+        <!-- Header -->
+        <div style="padding:14px 20px;background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #D4A843">
+          <div>
+            <div style="font-family:Oswald;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.75);font-weight:600">TABLA ACTUAL · ${liftN} · R${(DATA.round||0)+1}</div>
+            <div style="font-family:Oswald;font-size:18px;letter-spacing:1.5px;color:#fff;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,.4);margin-top:2px">${divS} • ${ref.cat} ${sexLabel==='Mujer'?'♀':'♂'}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.65)">PROYECCIÓN</div>
+            <div style="font-family:Oswald;font-size:24px;font-weight:700;color:#fff;letter-spacing:1px;line-height:1">
+              <span style="color:rgba(255,255,255,.7)">${curPos||'—'}</span>
+              <span style="color:${arrowColor};margin:0 6px;font-size:22px">${arrow}</span>
+              <span style="color:#D4A843;text-shadow:0 0 12px rgba(212,168,67,.6)">${fcPos||'—'}</span>
+            </div>
+          </div>
+        </div>
+        <!-- Column header -->
+        <div style="display:grid;grid-template-columns:30px 1fr 70px 36px;padding:6px 18px;background:rgba(10,22,40,.7);font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(220,230,245,.5);border-bottom:1px solid rgba(212,168,67,.15)">
+          <div>#</div><div>NOMBRE</div><div style="text-align:right">TOTAL</div><div style="text-align:center">POS</div>
+        </div>
+        <!-- Rows -->
+        <div>
+        ${ranked.map((a,idx)=>{
+          const isCur=a.id===ref.id;
+          const rowBg=isCur?'background:linear-gradient(90deg,rgba(212,168,67,.32) 0%,rgba(212,168,67,.18) 100%);border-left:4px solid #D4A843':'background:'+(idx%2===0?'rgba(10,22,40,.4)':'transparent');
+          const nameC=isCur?'#fff':'rgba(240,245,255,.85)';
+          const fS=isCur?'15px':'13px';
+          const fW=isCur?'700':'500';
+          const totalShown=isCur?a.fTotal:a.total;
+          const posShown=isCur?a.fPos:a.curPos;
+          const posColor=isCur?'#D4A843':'rgba(220,230,245,.7)';
+          const extra=isCur?'<div style="font-family:Oswald;font-size:9px;color:#D4A843;letter-spacing:2px;margin-top:2px;font-weight:600">⚡ EN TARIMA · '+(pendingW||'—')+' kg</div>':'';
+          return `<div style="display:grid;grid-template-columns:30px 1fr 70px 36px;padding:${isCur?'14px 18px':'8px 18px'};${rowBg};border-bottom:1px solid rgba(212,168,67,.08);align-items:center">
+            <div style="font-family:Oswald;font-size:${isCur?'18px':'13px'};font-weight:700;color:${isCur?'#D4A843':'rgba(220,230,245,.5)'};text-shadow:${isCur?'0 0 8px rgba(212,168,67,.5)':'none'}">${posShown}</div>
+            <div style="overflow:hidden">
+              <div style="font-family:Oswald;font-size:${fS};font-weight:${fW};color:${nameC};letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.5)">${a.name}</div>
+              ${extra}
+            </div>
+            <div style="font-family:Oswald;font-size:${isCur?'17px':'13px'};font-weight:${fW};text-align:right;color:${isCur?'#D4A843':'rgba(220,230,245,.75)'};text-shadow:${isCur?'0 0 8px rgba(212,168,67,.4)':'none'}">${(totalShown||0).toFixed(1)}</div>
+            <div style="font-family:Oswald;font-size:${isCur?'18px':'13px'};font-weight:700;text-align:center;color:${posColor}">${isCur?(a.curPos+'→'+a.fPos):''}</div>
+          </div>`;
+        }).join('')}
+        </div>
+        <!-- Footer mini-strip -->
+        <div style="padding:6px 18px;background:rgba(10,22,40,.7);font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(220,230,245,.5);text-align:center;border-top:1px solid rgba(212,168,67,.15)">YOURLIFT · LIVE</div>
       </div>
     </div>`;
 }
@@ -4332,7 +4429,7 @@ window.dirHide=async function(comp){
   await _dirPush();R();
 };
 window.dirHideAll=async function(){
-  ['profile','scoreboard','leaderboard','timer','slam'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
+  ['profile','scoreboard','leaderboard','timer','slam','tablaActual'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
   await _dirPush();R();
 };
 window.dirShowLb=async function(cat,seconds){
@@ -4424,6 +4521,7 @@ window._dirKeyHandler=function(e){
   const map={p:'profile',s:'scoreboard',t:'timer'};
   if(map[k]){e.preventDefault();window.dirToggle(map[k]);return}
   if(k==='l'){e.preventDefault();window.dirToggleLb();return}
+  if(k==='a'){e.preventDefault();window.dirToggle('tablaActual');return}
   if(k==='g'){e.preventDefault();window.dirShowSlam('g');return}
   if(k==='n'){e.preventDefault();window.dirShowSlam('n');return}
   if(k==='b'){e.preventDefault();window.dirToggleBreak();return}
@@ -4683,6 +4781,7 @@ function renderDirector(){
   h+='</div>';
   h+='<button class="btn '+(lbActive?'btn-r':'btn-g')+'" onclick="dirToggleLb()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(lbActive?'⏸ DESACTIVAR':'▶ ACTIVAR')+'</button>';
   h+='</div>'+scaleSlider('leaderboard')+'</div>';
+  h+=compToggle('tablaActual','📋','Tabla actual (corner)','Ranking de la categoría del lifter actual, esquina inferior derecha. Entra desde abajo, queda fijo. El levantador en pantalla se resalta y muestra la flecha de proyección (pos actual → pos si lo levanta).','A','dirToggle(\'tablaActual\')');
   h+=compToggle('timer','⏱','Timer grande','Reloj 1:00 → 0:00 en la esquina superior derecha. Sincronizado con el del operador.','T','dirToggle(\'timer\')');
   // Slam — dos botones momentáneos (GOOD / NO LIFT, no toggle)
   h+='<div class="card" style="padding:14px 18px;border-left:4px solid var(--border)">';
