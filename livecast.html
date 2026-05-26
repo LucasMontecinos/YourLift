@@ -233,6 +233,8 @@ async function initFB(){
       });
       if(Object.keys(evs).length)LIVE_EVENTS=evs;
       if(DATA.phase==='setup'&&DATA.events.length>0)R();
+      // Auto-pick event si vino ?evento= en la URL (después de que se carguen los eventos)
+      if(!window._autoEvtTried){window._autoEvtTried=true;try{applyEventURLParam()}catch(e){console.warn('[LC] auto-pick',e)}}
     });
     // Check if already logged in (session persists)
     authMod.onAuthStateChanged(fbAuth,(u)=>{
@@ -5800,6 +5802,12 @@ try{localStorage.removeItem('fechipo_lc2');localStorage.removeItem('fechipo_live
 
 const loaded=load();
 let DB_FULL=[];
+
+// Auto-pick event si vino ?evento= en la URL (fallback por si los eventos
+// ya están en DATA.events de nominas.json antes de que el listener Firestore corra)
+if(!TX_MODE){
+  setTimeout(()=>{try{if(!window._autoEvtTried){window._autoEvtTried=true;applyEventURLParam()}}catch(e){}},150);
+}
 
 // ── Auto-backup every 30 seconds ─────────────────────────────
 const BACKUP_KEY='fechipo_lc3_backup';
