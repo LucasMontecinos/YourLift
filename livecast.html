@@ -267,6 +267,9 @@ function fbDocId(){
   // Así dos PCs (uno por tarima) escriben a docs separados y NO se pisan datos.
   return TARIMA?`${base}_T${TARIMA}`:base;
 }
+// Sufijo para docs auxiliares (record alerts, director scene) cuando hay 2 tarimas
+// → cada tarima maneja sus widgets sin pisar a la otra.
+function txDocId(base){return TARIMA?`${base}_T${TARIMA}`:base;}
 async function syncToFB(){
   if(!fbReady||!isAdmin||_fbSyncing)return;
   if(!window.IS_CONTROLLER)return; // Solo el controller escribe — evita conflictos multi-admin
@@ -664,7 +667,7 @@ function checkRecord(athlete,lift,round){
 async function pushRecordToFB(rec){
   if(!fbReady||!isAdmin||!window._fb)return;
   try{
-    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_record','current'),rec);
+    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_record',txDocId('current')),rec);
   }catch(e){console.warn('[FB] pushRecord',e)}
 }
 function closeRecAlert(){const e=document.getElementById('recAlert');if(e)e.remove();}
@@ -2744,7 +2747,7 @@ let _txCerLastSig=null;            // signature p/ saltarse re-renders innecesar
 function _txCerStartRecordListener(){
   if(_txCerRecordUnsub||!fbReady||!window._fb)return;
   try{
-    _txCerRecordUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_record','current'),(snap)=>{
+    _txCerRecordUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_record',txDocId('current')),(snap)=>{
       if(!snap.exists())return;
       const d=snap.data();if(!d||!d.ts)return;
       if(d.ts===_txCerRecordSeenTs)return;
@@ -3101,7 +3104,7 @@ function _txStartDirectorListener(){
     return;
   }
   try{
-    _txDirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director','current'),(snap)=>{
+    _txDirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',txDocId('current')),(snap)=>{
       if(snap.exists()){
         const d=snap.data();
         _txDirState=Object.assign({},TX_DIR_DEFAULT,d.show||{});
@@ -3970,8 +3973,14 @@ function renderSetup(){
     if(_isMultiTarima(ev)){
       const cnt=_athleteCountByTarima(ev);
       const evParam=encodeURIComponent(ev.id||ev.name);
+      // Preservar controller/admin flags al redirigir
+      const curParams=new URLSearchParams(location.search);
+      const extra=[];
+      if(curParams.get('controller')==='1'||window.IS_CONTROLLER)extra.push('controller=1');
+      if(curParams.get('admin')==='1')extra.push('admin=1');
+      const extraStr=extra.length?'&'+extra.join('&'):'';
       [1,2].forEach(t=>{
-        const url='livecast.html?evento='+evParam+'&tarima='+t;
+        const url='livecast.html?evento='+evParam+'&tarima='+t+extraStr;
         h+='<div class="card" style="cursor:pointer;transition:all .2s;border-left:4px solid var(--gold)" onclick="window.location.href=\''+url+'\'" onmouseenter="this.style.borderColor=\'var(--accent)\'" onmouseleave="this.style.borderColor=\'var(--border)\';this.style.borderLeftColor=\'var(--gold)\'"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="os" style="font-size:18px;font-weight:700">'+ev.name+' \u2014 <span style="color:var(--gold)">Tarima '+t+'</span></div><p style="color:var(--muted);font-size:12px;margin-top:4px">'+(ev.organizer||'')+' \u00b7 '+(ev.location||'')+' \u00b7 <span style="color:var(--gold)">gesti\u00f3n independiente</span></p></div><div style="text-align:right"><div style="background:var(--accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;font-family:Oswald">'+(cnt[t]||0)+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">atletas T'+t+'</div></div></div></div>';
       });
       return;
@@ -4263,7 +4272,7 @@ window.dirBtDeleteVideo=async function(name){
 function _dirEnsureListener(){
   if(_dirUnsub||!fbReady||!window._fb)return;
   try{
-    _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director','current'),(snap)=>{
+    _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',txDocId('current')),(snap)=>{
       const DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[]}};
       if(snap.exists()){
         const d=snap.data();
@@ -4278,7 +4287,7 @@ function _dirEnsureListener(){
 async function _dirPush(){
   if(!fbReady||!isAdmin||!window._fb)return;
   try{
-    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director','current'),{show:_dirState,ts:Date.now()});
+    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director',txDocId('current')),{show:_dirState,ts:Date.now()});
   }catch(e){alert('Error pusheando comando: '+(e.message||e))}
   _obsWsBroadcastSync();
 }
