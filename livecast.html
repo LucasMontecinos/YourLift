@@ -123,11 +123,16 @@ if(TX_MODE){
     @keyframes txSbRevealFromLogo{0%{clip-path:inset(0 calc(100% - 80px) 0 0);opacity:.9}55%{clip-path:inset(0 0 0 0);opacity:1}100%{clip-path:inset(0 0 0 0);opacity:1}}
     @keyframes txTaRevealFromLogo{0%{clip-path:inset(0 calc(100% - 90px) 0 0);opacity:.9;transform:translateY(20px)}55%{clip-path:inset(0 0 0 0);opacity:1;transform:translateY(0)}100%{clip-path:inset(0 0 0 0);opacity:1;transform:translateY(0)}}
     @keyframes txFadeUpDelay{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
-    .ta-logo-anim{animation:txLogoBuildIn .75s cubic-bezier(.2,.85,.3,1.05) both;animation-delay:.05s}
-    .ta-title-anim{animation:txFadeUpDelay .5s ease-out both;animation-delay:.55s}
-    .ta-header-anim > *:last-child{animation:txFadeUpDelay .5s ease-out both;animation-delay:.7s}
-    .ta-row-anim{animation:txFadeUpDelay .45s ease-out both}
-    .sb-logo-anim{animation:txLogoBuildIn .7s cubic-bezier(.2,.85,.3,1.05) both;display:inline-block}
+    /* Tabla Actual: explode from logo (top-left header, logo center ~52px,50px del card) */
+    @keyframes txTaCardExplode{0%{clip-path:circle(40px at 52px 50px)}100%{clip-path:circle(180% at 52px 50px)}}
+    /* Scoreboard: explode from logo (top-left header) */
+    @keyframes txSbCardExplode{0%{clip-path:circle(34px at 50px 32px)}100%{clip-path:circle(180% at 50px 32px)}}
+    /* Animaciones SOLO cuando el wrapper tiene la clase de entrada.
+       Así, si el componente re-renderiza por update de datos, no replay. */
+    .ta-wrap-anim .ta-card-explode{animation:txTaCardExplode .95s cubic-bezier(.3,0,.2,1) .15s both}
+    .ta-wrap-anim .ta-logo-anim{animation:txLogoBuildIn .7s cubic-bezier(.2,.85,.3,1.05) both}
+    .sb-wrap-anim .sb-card-explode{animation:txSbCardExplode .9s cubic-bezier(.3,0,.2,1) .15s both}
+    .sb-wrap-anim .sb-logo-anim{animation:txLogoBuildIn .7s cubic-bezier(.2,.85,.3,1.05) both;display:inline-block}
     @keyframes txSbRowOut{0%{opacity:1;transform:scaleY(1)}100%{opacity:0;transform:scaleY(0)}}
     @keyframes txScoreboardCycle{0%{transform:translateY(110%);opacity:0}3%{transform:translateY(0);opacity:1}97%{transform:translateY(0);opacity:1}100%{transform:translateY(110%);opacity:0}}
     @keyframes txLbCycle{0%{transform:scale(.92);opacity:0}5%{transform:scale(1);opacity:1}95%{transform:scale(1);opacity:1}100%{transform:scale(1.04);opacity:0;filter:blur(4px)}}
@@ -2963,9 +2968,11 @@ function _renderTxCerScoreboardBL(cur,opts){
   const animOrTx=noAnimate
     ? (scale!==1?'transform:scale('+scale+');transform-origin:bottom left;':'')
     : 'animation:txScoreboardCycle '+(TX_CEREMONY.scoreboardMs/1000)+'s ease-in-out forwards;';
-  return '<div style="position:fixed;bottom:24px;left:24px;width:min(640px,55vw);'+animOrTx+'border-radius:8px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.6)">'
-    +'<div style="'+_sbRowAnim(animDir,0)+'display:flex;justify-content:space-between;align-items:center;background:'+_txC('headerBg')+';border-top:2px solid '+_txC('accent')+';padding:6px 14px">'
-      +'<div style="font-family:Oswald;font-size:12px;color:rgba(200,215,240,.85);letter-spacing:1px">'+catLabel+'</div>'
+  const champLogo=DATA.event?.logoUrl||'';
+  const champLogoHtml=champLogo?'<img src="'+champLogo+'" alt="" class="sb-logo-anim" style="height:46px;width:46px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 6px rgba(0,0,0,.7))" onerror="this.style.display=\'none\'">':'';
+  return '<div class="sb-card-explode" style="position:fixed;bottom:24px;left:24px;width:min(640px,55vw);'+animOrTx+'border-radius:8px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.6)">'
+    +'<div style="'+_sbRowAnim(animDir,0)+'display:flex;justify-content:space-between;align-items:center;background:'+_txC('headerBg')+';border-top:2px solid '+_txC('accent')+';padding:6px 14px;gap:12px">'
+      +'<div style="display:flex;align-items:center;gap:12px;font-family:Oswald;font-size:12px;color:rgba(200,215,240,.85);letter-spacing:1px">'+champLogoHtml+'<span>'+catLabel+'</span></div>'
       +'<div style="font-family:Oswald;font-size:18px;font-weight:800;color:'+_forecastColor+';letter-spacing:2px">'+_forecastTxt+'</div>'
     +'</div>'
     +'<div style="'+_sbRowAnim(animDir,1)+'background:linear-gradient(90deg,'+_txC('nameBg')+','+_txC('nameBg2')+');padding:5px 14px;display:flex;align-items:center;gap:10px">'
@@ -3273,9 +3280,18 @@ function _txDetectTransitions(){
           delete _txDirAnims[c]; // hide instantáneo, sin animación de salida
         } else {
           _txDirAnims[c]={dir:now?'in':'out',startedAt:Date.now(),dur};
+          const _animDirCur=now?'in':'out';
           setTimeout(()=>{
             if(_txDirAnims[c]&&Date.now()-_txDirAnims[c].startedAt>=dur-50){
-              delete _txDirAnims[c];_txDirLastSig=null;
+              delete _txDirAnims[c];
+              // Para entradas IN de scoreboard/tablaActual: NO forzar re-render.
+              // El wrapper-anim class se quita en el próximo render natural (sin replay
+              // de animaciones internas como ta-logo-anim que están gateadas en .ta-wrap-anim).
+              if(_animDirCur==='in' && (c==='scoreboard'||c==='tablaActual')){
+                _txDirLastSig=null; // marca para que el próximo render compute la nueva sig
+                return;
+              }
+              _txDirLastSig=null;
               if(typeof renderTxWidget==='function')renderTxWidget();
             }
           },dur+50);
@@ -3423,13 +3439,14 @@ function renderTxDirector(container){
       +'</div>';
     }
   }
-  // Scoreboard (corner) — slide-in/out desde la derecha (mismo estilo que el timer)
+  // Scoreboard (corner) — anim "explode from logo" si HAY logo, cascade original si no.
   if((showSb||(animSb&&animSb.dir==='out'))&&cur){
-    // Scoreboard entra subiendo desde abajo y sale bajando.
-    // Pasamos la animación al render del scoreboard (no a un wrapper) porque
-    // el scoreboard usa position:fixed y el wrapper tendría altura 0.
+    const hasLogoSb = !!(DATA.event?.logoUrl);
     const sbHtml=_renderTxCerScoreboardBL(cur,{noAnimate:true,scale:_txDirState.scoreboard?.scale||1,animDir:animSb?.dir||null});
-    html+=sbHtml;
+    const isSbEnter = animSb && animSb.dir==='in';
+    // Sin logo: usar el HTML directo (la cascada _sbRowAnim ya viene del render con animDir)
+    // Con logo: envolvemos para gatear logo zoom + explode, sin replay en updates
+    html += (hasLogoSb && isSbEnter) ? '<div class="sb-wrap-anim">'+sbHtml+'</div>' : sbHtml;
   }
   // Timer (corner) — slide-in/out desde la derecha
   if(showTm||(animTm&&animTm.dir==='out')){
@@ -3437,14 +3454,27 @@ function renderTxDirector(container){
     const tmHtml=_renderTxCerTimerCorner(_txDirState.timer?.scale||1);
     html+=tmAnim?'<div style="'+tmAnim+'">'+tmHtml+'</div>':tmHtml;
   }
-  // Tabla Actual (corner inferior derecha) — slide-in desde abajo, persistente hasta apagarlo
+  // Tabla Actual (corner inferior derecha) — anim "explode from logo" si HAY logo, slide-up si no.
   const showTabla=_txDirActive('tablaActual');
   const animTabla=_txAnimActive('tablaActual');
   if((showTabla||(animTabla&&animTabla.dir==='out'))&&cur){
-    const taAnim=animTabla?(animTabla.dir==='in'?'animation:txSlideInBottom .75s cubic-bezier(.2,.85,.3,1.05) forwards;':'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;'):'';
+    const hasLogo = !!(DATA.event?.logoUrl);
+    const isEntering = animTabla && animTabla.dir==='in';
+    const isExiting  = animTabla && animTabla.dir==='out';
+    let wrapClass = '';
+    let taAnim = '';
+    if(hasLogo){
+      wrapClass = isEntering ? 'ta-wrap-anim' : '';
+      taAnim = isExiting ? 'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;' : '';
+    } else {
+      // Sin logo: animación original slide-up desde abajo
+      taAnim = isEntering
+        ? 'animation:txSlideInBottom .75s cubic-bezier(.2,.85,.3,1.05) forwards;'
+        : (isExiting ? 'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;' : '');
+    }
     const taScale=_txDirState.tablaActual?.scale||1;
     const taHtml=renderTxTablaActual(cur);
-    const wrap='<div style="position:fixed;inset:0;pointer-events:none;'+(taScale!==1?'transform:scale('+taScale+');transform-origin:bottom right;':'')+taAnim+'">'+taHtml+'</div>';
+    const wrap='<div class="'+wrapClass+'" style="position:fixed;inset:0;pointer-events:none;'+(taScale!==1?'transform:scale('+taScale+');transform-origin:bottom right;':'')+taAnim+'">'+taHtml+'</div>';
     html+=wrap;
   }
   if(showSlam){
@@ -3787,7 +3817,7 @@ function renderTxScoreboard(cur,lifterChanged){
   }
   const _animDir=TX_MODE==='scoreboard'?null:(lifterChanged?'in':null);
   return `
-    <div style="position:absolute;bottom:0;left:0;right:0;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
+    <div class="sb-card-explode" style="position:absolute;bottom:0;left:0;right:0;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
       <div style="${_sbRowAnim(_animDir,0)}display:grid;grid-template-columns:240px 1fr 180px;background:${_txC('headerBg')};border-top:2px solid ${_txC('accent')};padding:10px 22px;align-items:center">
         <div style="display:flex;align-items:center;gap:14px;font-family:Oswald;font-size:15px;color:rgba(200,215,240,.85);letter-spacing:1px">
           ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" class="sb-logo-anim" style="height:54px;width:54px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 8px rgba(0,0,0,.7))" onerror="this.style.display='none'">`:''}
@@ -3902,12 +3932,12 @@ function renderTxTablaActual(cur,opts){
   const liftN=LIFT_N[DATA.lift]||DATA.lift;
   return `
     <div style="position:fixed;bottom:30px;right:30px;width:min(520px,38vw);z-index:50;font-family:'Inter',sans-serif">
-      <div style="background:linear-gradient(180deg,rgba(10,22,40,.96) 0%,rgba(4,12,26,.96) 100%);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:2px solid #D4A843;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.7),0 0 30px rgba(212,168,67,.25)">
+      <div class="ta-card-explode" style="background:linear-gradient(180deg,rgba(10,22,40,.96) 0%,rgba(4,12,26,.96) 100%);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:2px solid #D4A843;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.7),0 0 30px rgba(212,168,67,.25)">
         <!-- Header -->
-        <div class="ta-header-anim" style="padding:14px 20px;background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:2px solid #D4A843;overflow:hidden">
+        <div data-ta-header style="padding:14px 20px;background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:2px solid #D4A843;overflow:hidden">
           <div style="display:flex;align-items:center;gap:16px;flex:1;min-width:0">
             ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" class="ta-logo-anim" style="height:72px;width:72px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 4px 12px rgba(0,0,0,.6))" onerror="this.style.display='none'">`:''}
-            <div class="ta-title-anim" style="min-width:0">
+            <div data-ta-title style="min-width:0">
               <div style="font-family:Oswald;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.75);font-weight:600">TABLA ACTUAL · ${liftN} · R${(DATA.round||0)+1}</div>
               <div style="font-family:Oswald;font-size:18px;letter-spacing:1.5px;color:#fff;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,.4);margin-top:2px">${divS} • ${ref.cat} ${sexLabel==='Mujer'?'♀':'♂'}</div>
             </div>
@@ -3922,7 +3952,7 @@ function renderTxTablaActual(cur,opts){
           </div>
         </div>
         <!-- Column header -->
-        <div class="ta-row-anim" style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:6px 18px;background:rgba(10,22,40,.7);font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(220,230,245,.5);border-bottom:1px solid rgba(212,168,67,.15);animation-delay:.8s">
+        <div style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:6px 18px;background:rgba(10,22,40,.7);font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(220,230,245,.5);border-bottom:1px solid rgba(212,168,67,.15)">
           <div>#</div><div>NOMBRE</div><div style="text-align:right">TOTAL</div><div style="text-align:center">POS</div>
         </div>
         <!-- Rows -->
@@ -3937,7 +3967,7 @@ function renderTxTablaActual(cur,opts){
           const posShown=isCur?a.fPos:a.curPos;
           const posColor=isCur?'#D4A843':'rgba(220,230,245,.7)';
           const extra=isCur?'<div style="font-family:Oswald;font-size:9px;color:#D4A843;letter-spacing:2px;margin-top:2px;font-weight:600">⚡ EN TARIMA · '+(pendingW||'—')+' kg</div>':'';
-          return `<div class="ta-row-anim" style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:${isCur?'14px 18px':'8px 18px'};${rowBg};border-bottom:1px solid rgba(212,168,67,.08);align-items:center;animation-delay:${0.9+idx*0.06}s">
+          return `<div style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:${isCur?'14px 18px':'8px 18px'};${rowBg};border-bottom:1px solid rgba(212,168,67,.08);align-items:center">
             <div style="font-family:Oswald;font-size:${isCur?'18px':'13px'};font-weight:700;color:${isCur?'#D4A843':'rgba(220,230,245,.5)'};text-shadow:${isCur?'0 0 8px rgba(212,168,67,.5)':'none'}">${posShown}</div>
             <div style="overflow:hidden">
               <div style="font-family:Oswald;font-size:${fS};font-weight:${fW};color:${nameC};letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.5)">${a.name}</div>
