@@ -150,3 +150,156 @@ Es idempotente — correrlo varias veces no rompe nada (usa `merge:true`).
   donde estaban. Solo cambia dónde vive la URL.
 - Los flujos que ya no usan el PIN (livecast, cronograma, nóminas
   públicas) no se tocan.
+
+---
+
+## 6. Security headers HTTP via `firebase.json`
+
+El archivo [`firebase.json`](./firebase.json) configura headers de seguridad
+que Firebase Hosting envía con cada respuesta. Sin esto, el sitio queda
+vulnerable a clickjacking, XSS reflejado, sniffing de MIME types, etc.
+
+### Headers configurados
+
+| Header | Para qué sirve |
+|---|---|
+| `Strict-Transport-Security` | Fuerza HTTPS por 1 año (incluso si alguien teclea http://) |
+| `X-Content-Type-Options: nosniff` | Browser no adivina tipos de archivo (evita ejecución como script) |
+| `X-Frame-Options: SAMEORIGIN` | Protege de clickjacking (no se puede embeber yourlift.cl en otra página) |
+| `Referrer-Policy: strict-origin-when-cross-origin` | No filtra URLs internas a sitios externos |
+| `Permissions-Policy` | Bloquea acceso a cámara, micrófono, geolocalización |
+| `Content-Security-Policy` | Whitelist de dominios para scripts, conexiones, imágenes |
+
+### CSP — qué permite
+
+- **Scripts**: solo desde el mismo dominio + `gstatic.com` (Firebase) + `cdn.jsdelivr.net` (obs-websocket-js)
+- **Conexiones**: Firebase + WebSocket localhost (OBS) + LAN local (192.168.*)
+- **Imágenes**: cualquier https + Google sites (logos)
+- **Estilos**: inline + Google Fonts
+
+Si en el futuro agregás un nuevo CDN o servicio externo, hay que actualizar
+la CSP en `firebase.json` o el browser bloqueará la carga.
+
+### Despliegue
+
+```
+firebase deploy --only hosting
+```
+
+⚠️ **No deployar 1-2 días antes de la compe sin testear primero.** Un CSP mal
+configurado puede romper la carga de algún recurso. Probá en una rama de
+preview primero si es posible.
+
+---
+
+## 7. Storage rules
+
+El archivo [`storage.rules`](./storage.rules) restringe quién puede leer/escribir
+en Firebase Storage. Antes de aplicarlo:
+
+1. Andá a Firebase Console → Storage → Files.
+2. Mirá qué archivos hay y bajo qué carpetas.
+3. Compará con las paths definidas en `storage.rules`:
+   - `/logos/*` — públicos
+   - `/public/*` — públicos
+   - `/athlete_files/{rut}/*` — solo admin lee, atletas autenticados pueden subir
+   - `/backups/*` — solo admin
+   - cualquier otra path → bloqueada (default deny)
+4. Si tu Storage usa otras paths (ej. archivos en la raíz), agregalos a las
+   reglas o moverlos antes de deployar.
+
+### Despliegue
+
+```
+firebase deploy --only storage
+```
+
+O via consola: Firebase Console → Storage → Rules → pegar contenido.
+
+⚠️ Si deployás sin auditar antes, archivos en paths no listadas dejan de ser
+accesibles públicamente. Mejor revisar primero.
+
+---
+
+## 8. SRI (Subresource Integrity) para CDNs
+
+`livecast.html` carga `obs-websocket-js` desde jsdelivr. Si el CDN se ve
+comprometido, código malicioso podría inyectarse. Para evitar esto, el script
+tag tiene un atributo `integrity` con un hash SHA-384 del archivo:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/obs-websocket-js@5/dist/obs-ws.min.js"
+  integrity="sha384-Vce9u7FN5Pbapc8dhpMdg2EjTels5H1cGOVLAe7THp3fEtfb89nD6YOIaf8781ay"
+  crossorigin="anonymous"></script>
+```
+
+Si el archivo en el CDN es modificado (incluso 1 byte), el browser rechaza la
+ejecución. Si más adelante actualizás la versión del paquete, hay que
+recalcular el hash:
+
+```bash
+curl -s https://cdn.jsdelivr.net/npm/obs-websocket-js@<NUEVA_VERSION>/dist/obs-ws.min.js | openssl dgst -sha384 -binary | openssl base64 -A
+```
+
+---
+
+## 9. Bridge OBS — autenticación con AUTH_TOKEN
+
+El `bridge.py` tiene un campo `AUTH_TOKEN` que cuando se setea, exige el
+header `X-Auth-Token: <token>` en cada request POST. Sin esto, cualquier
+dispositivo en la red puede mandar comandos al bridge cuando está en modo
+LAN (`HTTP_HOST = '0.0.0.0'`).
+
+### Token sugerido para esta compe
+
+```
+dBPRwNseW7zYEQqxZiguw8yFF57FbPYa
+```
+
+(generado con `openssl rand -base64 32`. Único y aleatorio. Cambialo si
+preferís uno propio.)
+
+### Activarlo (PRE-COMPE):
+
+1. Abrir `bridge.py` con Notepad.
+2. Buscar la línea `AUTH_TOKEN = ''` y cambiarla por:
+   ```python
+   AUTH_TOKEN = 'dBPRwNseW7zYEQqxZiguw8yFF57FbPYa'
+   ```
+3. Guardar.
+4. En cada botón del Stream Deck (Web Requests), en la sección Headers
+   agregar:
+   ```
+   X-Auth-Token: dBPRwNseW7zYEQqxZiguw8yFF57FbPYa
+   ```
+5. Reiniciar bridge: ver mensaje `[bridge] 🔒 Auth ACTIVA`.
+
+Sin el header, el bridge responde **401 Unauthorized**.
+
+---
+
+## 10. Auditoría de admins
+
+Con permisos de admin se puede borrar datos, crear coaches, modificar
+inscripciones, etc. Verificá la lista periódicamente:
+
+1. Firebase Console → Firestore → colección `admins/`.
+2. Cada doc es un UID con permisos completos.
+3. Para mapear UID → email: Firebase Console → Authentication → Users.
+4. Si hay UIDs que no reconocés → borrar el doc en `admins/`.
+5. Para revocar todo el acceso de un admin: borrar su doc EN `admins/` y
+   también su cuenta en Authentication (si ya no debería entrar).
+
+---
+
+## Checklist rápido pre-compe
+
+- [ ] Deployar `firestore.rules` con todos los cambios actuales (livecast_director, livecast_record, recordsEnabled, coaches, etc.)
+- [ ] Deployar `storage.rules` (después de auditar archivos existentes)
+- [ ] Deployar `firebase.json` headers (`firebase deploy --only hosting`)
+- [ ] Verificar que `livecast.html` tiene el `integrity=` en el script CDN
+- [ ] Activar `AUTH_TOKEN` en `bridge.py` para la compe
+- [ ] Actualizar Stream Deck con el header `X-Auth-Token`
+- [ ] Auditar lista de admins en `admins/` (borrar UIDs desconocidos)
+- [ ] Verificar que las claves temporales de coaches creados son únicas
+- [ ] Backup de Firestore antes de la compe (export desde consola)

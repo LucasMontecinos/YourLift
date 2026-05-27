@@ -1,0 +1,100 @@
+═══════════════════════════════════════════════════════════════
+  YourLift — Relay LAN (fallback sin internet)
+  Guía paso a paso para eventos con mala señal
+═══════════════════════════════════════════════════════════════
+
+ANTES DEL EVENTO (hacer esto en casa / con internet)
+──────────────────────────────────────────────────────
+
+PASO 1 — Verificar que Node.js está instalado
+  → Abre terminal (cmd o PowerShell) en tu PC admin
+  → Escribe:   node --version
+  → Debe mostrar algo como:  v18.0.0  (cualquier número sirve)
+  → Si dice "no se reconoce el comando" → descargar Node.js en:
+    https://nodejs.org  (botón LTS)
+
+PASO 2 — Conectar ambos PC a la misma red
+  → Usa el router del recinto, un router de viaje, o un cable
+    ethernet directo entre los dos PC
+  → Ambos deben estar en la misma red local
+
+PASO 3 — Arrancar el relay en TU PC (admin)
+  → Abre terminal en la carpeta:
+    C:\Users\lucas\OneDrive\Escritorio\claude code\YourLift\
+  → Escribe:   node relay.js
+  → Verás algo así:
+
+    ╔══════════════════════════════════════════════╗
+    ║         YourLift Relay LAN — ACTIVO          ║
+    ╠══════════════════════════════════════════════╣
+    ║  PC ADMIN  → abrir livecast.html con:        ║
+    ║    ?relay=localhost:3000                      ║
+    ║                                              ║
+    ║  PC TX/OBS → browser sources usar:           ║
+    ║    ?relay=192.168.1.5:3000                   ║
+    ╚══════════════════════════════════════════════╝
+
+  → ANOTA la IP que aparece (ej: 192.168.1.5)
+  → DEJA ESTA TERMINAL ABIERTA durante todo el evento
+
+PASO 4 — Abrir livecast.html en TU PC (admin)
+  → Abre el navegador y ve a la URL del livecast
+  → Agrega al final:   ?relay=localhost:3000
+  → Ejemplo:
+    https://fechipo.cl/livecast.html?relay=localhost:3000
+  → Si ya tenías la URL guardada, edítala y agrega eso al final
+
+PASO 5 — Configurar OBS en el PC de transmisión (hacer UNA VEZ)
+  → Abre OBS en el PC TX
+  → Por cada browser source del livecast (perfil, scoreboard, etc):
+      1. Clic derecho sobre la fuente → Properties / Propiedades
+      2. Busca el campo URL
+      3. Al final de la URL agrega:   &relay=192.168.1.5:3000
+         (usa la IP que anotaste en el Paso 3)
+      4. Ejemplo antes:
+           https://fechipo.cl/livecast.html?tx=profile
+         Ejemplo después:
+           https://fechipo.cl/livecast.html?tx=profile&relay=192.168.1.5:3000
+      5. Clic OK / Aceptar
+  → Repetir para cada browser source
+  → ESTO SE GUARDA → no necesitas hacerlo de nuevo en el futuro
+
+
+DURANTE EL EVENTO
+──────────────────────────────────────────────────────
+
+→ Todo funciona igual que siempre (Firebase normal)
+→ Si la señal cae:
+    - En el PC TX aparece un badge naranja  📡 LAN
+    - La transmisión sigue sin interrupciones
+    - El relay toma el control automáticamente
+→ Cuando vuelve la señal:
+    - Firebase retoma automáticamente
+    - El badge desaparece
+    - No necesitas hacer nada
+
+CHECKLIST PRE-EVENTO (revisar 30 min antes)
+──────────────────────────────────────────────────────
+
+  [ ] Terminal con relay.js corriendo en tu PC
+  [ ] Ambos PC conectados a la misma red local
+  [ ] livecast.html abierto con ?relay=localhost:3000
+  [ ] OBS browser sources con &relay=IP:3000 configurado
+  [ ] Probar: marcar un intento de prueba y ver que el overlay
+      actualiza en el PC TX
+
+SOLUCIÓN DE PROBLEMAS
+──────────────────────────────────────────────────────
+
+  El relay no arranca → Puerto 3000 ocupado
+    → Cierra otros programas o reinicia el PC
+
+  TX no recibe datos por relay → Firewall bloqueando
+    → En tu PC admin: Panel de Control → Firewall →
+      Permitir acceso al puerto 3000
+
+  La IP cambió → El router asignó una IP diferente
+    → Corre node relay.js de nuevo para ver la IP actual
+    → Actualiza las URLs en OBS
+
+═══════════════════════════════════════════════════════════════

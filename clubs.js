@@ -14,19 +14,21 @@
 // ═══════════════════════════════════════════════════════════════
 
 window.CLUBS_LOGOS = {
-  'allpower':         'clubs/allpower.png',
-  'himalaya':         'clubs/himalaya.png',
-  'beersandlifts':    'clubs/beersandlifts.png',
-  'ironforces':       'clubs/ironforces.png',
-  'jaquesoliger':     'clubs/jaquesoliger.png',
-  'lostoros':         'clubs/lostoros.png',
-  'potenciamuscular': 'clubs/potenciamuscular.png',
-  'kaizen':           'clubs/kaizen.png',
-  'rema':             'clubs/rema.png',
-  'southside':        'clubs/southside.png',
-  'hannya':           'clubs/hannya.png',
-  'bushido':          'clubs/bushido.png',
-  'atacama':          'clubs/atacama.png'
+  'allpower':         'clubs/AllPower.png',
+  'atacama':          'clubs/Atacama.png',
+  'beersandlifts':    'clubs/BeersLifts.png',
+  'blackbars':        'clubs/Blackbars.jpg',
+  'bushido':          'clubs/Bushido.png',
+  'hannya':           'clubs/Hannya.png',
+  'himalaya':         'clubs/Himalaya.png',
+  'ironforces':       'clubs/IronForces.png',
+  'jacquesoliger':    'clubs/Jacques.png',
+  'jaquesoliger':     'clubs/Jacques.png',           // alias por si queda escrito sin "c"
+  'kaizen':           'clubs/Kaizen.png',
+  'lostoros':         'clubs/Lostoros.png',
+  'potenciamuscular': 'clubs/PotenciaMuscular.png',
+  'rema':             'clubs/Rema.jpg',
+  'southside':        'clubs/SouthSide.png'
 };
 
 // Normaliza nombre: minúsculas, sin acentos, sin espacios ni símbolos
