@@ -117,6 +117,17 @@ if(TX_MODE){
     @keyframes txSlideOutBottom{0%{transform:translateY(0);opacity:1}100%{transform:translateY(260px);opacity:0}}
     @keyframes txBuildRow{0%{transform:translateX(-30px) scaleY(0);opacity:0;transform-origin:left center}60%{transform:translateX(0) scaleY(1);opacity:1}100%{transform:translateX(0) scaleY(1);opacity:1}}
     @keyframes txSbRowIn{0%{opacity:0;transform:scaleY(0)}60%{opacity:1;transform:scaleY(1.04)}100%{opacity:1;transform:scaleY(1)}}
+    /* Logo del campeonato: aparece primero, hace un mini-bounce, queda fijo */
+    @keyframes txLogoBuildIn{0%{transform:scale(0) rotate(-20deg);opacity:0;filter:blur(8px)}55%{transform:scale(1.18) rotate(4deg);opacity:1;filter:blur(0)}80%{transform:scale(.95) rotate(-2deg)}100%{transform:scale(1) rotate(0);opacity:1;filter:blur(0)}}
+    /* Para el wrapper del scoreboard: comienza colapsado en el ancho del logo y se expande */
+    @keyframes txSbRevealFromLogo{0%{clip-path:inset(0 calc(100% - 80px) 0 0);opacity:.9}55%{clip-path:inset(0 0 0 0);opacity:1}100%{clip-path:inset(0 0 0 0);opacity:1}}
+    @keyframes txTaRevealFromLogo{0%{clip-path:inset(0 calc(100% - 90px) 0 0);opacity:.9;transform:translateY(20px)}55%{clip-path:inset(0 0 0 0);opacity:1;transform:translateY(0)}100%{clip-path:inset(0 0 0 0);opacity:1;transform:translateY(0)}}
+    @keyframes txFadeUpDelay{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
+    .ta-logo-anim{animation:txLogoBuildIn .75s cubic-bezier(.2,.85,.3,1.05) both;animation-delay:.05s}
+    .ta-title-anim{animation:txFadeUpDelay .5s ease-out both;animation-delay:.55s}
+    .ta-header-anim > *:last-child{animation:txFadeUpDelay .5s ease-out both;animation-delay:.7s}
+    .ta-row-anim{animation:txFadeUpDelay .45s ease-out both}
+    .sb-logo-anim{animation:txLogoBuildIn .7s cubic-bezier(.2,.85,.3,1.05) both;display:inline-block}
     @keyframes txSbRowOut{0%{opacity:1;transform:scaleY(1)}100%{opacity:0;transform:scaleY(0)}}
     @keyframes txScoreboardCycle{0%{transform:translateY(110%);opacity:0}3%{transform:translateY(0);opacity:1}97%{transform:translateY(0);opacity:1}100%{transform:translateY(110%);opacity:0}}
     @keyframes txLbCycle{0%{transform:scale(.92);opacity:0}5%{transform:scale(1);opacity:1}95%{transform:scale(1);opacity:1}100%{transform:scale(1.04);opacity:0;filter:blur(4px)}}
@@ -3777,9 +3788,9 @@ function renderTxScoreboard(cur,lifterChanged){
   const _animDir=TX_MODE==='scoreboard'?null:(lifterChanged?'in':null);
   return `
     <div style="position:absolute;bottom:0;left:0;right:0;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
-      <div style="${_sbRowAnim(_animDir,0)}display:grid;grid-template-columns:180px 1fr 180px;background:${_txC('headerBg')};border-top:2px solid ${_txC('accent')};padding:10px 22px;align-items:center">
-        <div style="display:flex;align-items:center;gap:10px;font-family:Oswald;font-size:15px;color:rgba(200,215,240,.85);letter-spacing:1px">
-          ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" style="height:30px;width:30px;object-fit:contain;background:rgba(255,255,255,.95);padding:2px;border-radius:4px;flex-shrink:0" onerror="this.style.display='none'">`:''}
+      <div style="${_sbRowAnim(_animDir,0)}display:grid;grid-template-columns:240px 1fr 180px;background:${_txC('headerBg')};border-top:2px solid ${_txC('accent')};padding:10px 22px;align-items:center">
+        <div style="display:flex;align-items:center;gap:14px;font-family:Oswald;font-size:15px;color:rgba(200,215,240,.85);letter-spacing:1px">
+          ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" class="sb-logo-anim" style="height:54px;width:54px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 8px rgba(0,0,0,.7))" onerror="this.style.display='none'">`:''}
           <span>${catLabel}</span>
         </div>
         <div style="text-align:center;font-family:Oswald;font-size:14px;letter-spacing:1px;color:rgba(200,215,240,.7)">${(rk.pos&&totalAth?rk.pos+'/'+totalAth+' en categoría':'')}</div>
@@ -3893,10 +3904,10 @@ function renderTxTablaActual(cur,opts){
     <div style="position:fixed;bottom:30px;right:30px;width:min(520px,38vw);z-index:50;font-family:'Inter',sans-serif">
       <div style="background:linear-gradient(180deg,rgba(10,22,40,.96) 0%,rgba(4,12,26,.96) 100%);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:2px solid #D4A843;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.7),0 0 30px rgba(212,168,67,.25)">
         <!-- Header -->
-        <div style="padding:14px 20px;background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);display:flex;justify-content:space-between;align-items:center;gap:14px;border-bottom:2px solid #D4A843">
-          <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">
-            ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" style="height:46px;width:46px;object-fit:contain;background:rgba(255,255,255,.95);padding:4px;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'">`:''}
-            <div style="min-width:0">
+        <div class="ta-header-anim" style="padding:14px 20px;background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:2px solid #D4A843;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:16px;flex:1;min-width:0">
+            ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" class="ta-logo-anim" style="height:72px;width:72px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 4px 12px rgba(0,0,0,.6))" onerror="this.style.display='none'">`:''}
+            <div class="ta-title-anim" style="min-width:0">
               <div style="font-family:Oswald;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.75);font-weight:600">TABLA ACTUAL · ${liftN} · R${(DATA.round||0)+1}</div>
               <div style="font-family:Oswald;font-size:18px;letter-spacing:1.5px;color:#fff;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,.4);margin-top:2px">${divS} • ${ref.cat} ${sexLabel==='Mujer'?'♀':'♂'}</div>
             </div>
@@ -3911,7 +3922,7 @@ function renderTxTablaActual(cur,opts){
           </div>
         </div>
         <!-- Column header -->
-        <div style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:6px 18px;background:rgba(10,22,40,.7);font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(220,230,245,.5);border-bottom:1px solid rgba(212,168,67,.15)">
+        <div class="ta-row-anim" style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:6px 18px;background:rgba(10,22,40,.7);font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(220,230,245,.5);border-bottom:1px solid rgba(212,168,67,.15);animation-delay:.8s">
           <div>#</div><div>NOMBRE</div><div style="text-align:right">TOTAL</div><div style="text-align:center">POS</div>
         </div>
         <!-- Rows -->
@@ -3926,7 +3937,7 @@ function renderTxTablaActual(cur,opts){
           const posShown=isCur?a.fPos:a.curPos;
           const posColor=isCur?'#D4A843':'rgba(220,230,245,.7)';
           const extra=isCur?'<div style="font-family:Oswald;font-size:9px;color:#D4A843;letter-spacing:2px;margin-top:2px;font-weight:600">⚡ EN TARIMA · '+(pendingW||'—')+' kg</div>':'';
-          return `<div style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:${isCur?'14px 18px':'8px 18px'};${rowBg};border-bottom:1px solid rgba(212,168,67,.08);align-items:center">
+          return `<div class="ta-row-anim" style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:${isCur?'14px 18px':'8px 18px'};${rowBg};border-bottom:1px solid rgba(212,168,67,.08);align-items:center;animation-delay:${0.9+idx*0.06}s">
             <div style="font-family:Oswald;font-size:${isCur?'18px':'13px'};font-weight:700;color:${isCur?'#D4A843':'rgba(220,230,245,.5)'};text-shadow:${isCur?'0 0 8px rgba(212,168,67,.5)':'none'}">${posShown}</div>
             <div style="overflow:hidden">
               <div style="font-family:Oswald;font-size:${fS};font-weight:${fW};color:${nameC};letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.5)">${a.name}</div>
