@@ -208,11 +208,12 @@ async function initFB(){
     window._fbSt=storageMod;window._fbStInst=storageMod.getStorage(app);
     _setupFotoListener(); // in case data.json already loaded before Firebase was ready
     // Keep LIVE_EVENTS in sync with Firestore eventos
-    fb.onSnapshot(fb.collection(fbDB,'eventos'),(snap)=>{
+    fb.onSnapshot(fb.collection(fbDB,'eventos'),async (snap)=>{
       const evs={};
       window.LIVE_EVENT_META=window.LIVE_EVENT_META||{};
       window.LIVE_EVENT_HIDDEN=new Set();
       window.LIVE_EVENT_HIDDEN_NAMES=new Set();
+      const activeIds=[];
       snap.docs.forEach(d=>{
         const e=d.data();
         if(e.status==='archived'||e.livecastVisible===false){
@@ -221,20 +222,30 @@ async function initFB(){
           return;
         }
         evs[d.id]=e.name;
-        // Default récords activos; en "Universitario" arrancan apagados.
+        activeIds.push(d.id);
         const recordsEnabled=(typeof e.recordsEnabled==='boolean')
           ? e.recordsEnabled
           : !/universitar/i.test(e.name||'');
-        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||''};
-        // Sync flag al evento activo
+        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0};
         if(DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
           DATA.event.recordsEnabled=recordsEnabled;
         }
       });
       if(Object.keys(evs).length)LIVE_EVENTS=evs;
       if(DATA.phase==='setup'&&DATA.events.length>0)R();
-      // Auto-pick event si vino ?evento= en la URL (después de que se carguen los eventos)
       if(!window._autoEvtTried){window._autoEvtTried=true;try{applyEventURLParam()}catch(e){console.warn('[LC] auto-pick',e)}}
+      // Contar atletas por evento desde inscripciones (para mostrar en el picker)
+      for(const evId of activeIds){
+        try{
+          const q=fb.query(fb.collection(fbDB,'inscripciones'),fb.where('evento','==',evId),fb.where('status','in',['approved','pending']));
+          const insSnap=await fb.getDocs(q);
+          if(window.LIVE_EVENT_META[evId]){
+            window.LIVE_EVENT_META[evId].athleteCount=insSnap.size;
+          }
+          // Refrescar el picker si está activo
+          if(DATA.phase==='setup')R();
+        }catch(e){/* silencioso */}
+      }
     });
     // Check if already logged in (session persists)
     authMod.onAuthStateChanged(fbAuth,(u)=>{
@@ -243,13 +254,20 @@ async function initFB(){
         fb.getDoc(fb.doc(fbDB,'admins',u.uid)).then(snap=>{
           if(snap.exists()){
             isAdmin=true;
-            console.log('[LiveCast] Admin session detected:',u.email);
+            // Auto-controller: admin = controller (no necesita ?controller=1 en URL)
+            if(!window.IS_CONTROLLER){
+              window.IS_CONTROLLER=true;
+              try{localStorage.setItem('yl_controller','1')}catch(e){}
+              console.log('[LiveCast] Admin session detected:',u.email,'· Modo CONTROLLER activado automáticamente');
+            } else {
+              console.log('[LiveCast] Admin session detected:',u.email);
+            }
           } else {
             isAdmin=false;
             console.log('[LiveCast] Logged in but not admin:',u.email);
           }
           R();
-        }).catch(()=>{isAdmin=true;R();}); // fallback: trust auth
+        }).catch(()=>{isAdmin=true;if(!window.IS_CONTROLLER){window.IS_CONTROLLER=true;try{localStorage.setItem('yl_controller','1')}catch(e){}}R();}); // fallback: trust auth
       } else {
         if(isAdmin){isAdmin=false;DATA.phase='liveView';R();}
       }
@@ -4053,38 +4071,12 @@ function renderSetup(){
     });
   }
   const _hidden=window.LIVE_EVENT_HIDDEN,_hiddenN=window.LIVE_EVENT_HIDDEN_NAMES;
-  // Eventos que corren en 2 tarimas simult\u00e1neas \u2192 mostrar 1 card por tarima
-  const _isMultiTarima=(ev)=>/debutantes/i.test(ev.name||'');
-  // Pre-cuenta atletas por tarima usando el cronograma guardado
-  const _athleteCountByTarima=(ev)=>{
-    try{
-      const cronoKey='fechipo_crono_'+(ev.name||'').replace(/\s+/g,'_');
-      const saved=localStorage.getItem(cronoKey);
-      if(!saved)return{1:ev.athletes.length,2:0};
-      const fm=JSON.parse(saved).map||{};
-      const c={1:0,2:0};
-      Object.values(fm).forEach(fl=>{const t=String(fl).slice(-1);if(t==='1')c[1]++;else if(t==='2')c[2]++});
-      return c;
-    }catch(e){return{1:ev.athletes.length,2:0}}
-  };
   DATA.events.forEach((ev,i)=>{
     if(_hidden&&(_hidden.has(ev.id)||_hiddenN?.has(ev.name)))return;
-    if(_isMultiTarima(ev)){
-      const cnt=_athleteCountByTarima(ev);
-      const evParam=encodeURIComponent(ev.id||ev.name);
-      // Preservar controller/admin flags al redirigir
-      const curParams=new URLSearchParams(location.search);
-      const extra=[];
-      if(curParams.get('controller')==='1'||window.IS_CONTROLLER)extra.push('controller=1');
-      if(curParams.get('admin')==='1')extra.push('admin=1');
-      const extraStr=extra.length?'&'+extra.join('&'):'';
-      [1,2].forEach(t=>{
-        const url='livecast.html?evento='+evParam+'&tarima='+t+extraStr;
-        h+='<div class="card" style="cursor:pointer;transition:all .2s;border-left:4px solid var(--gold)" onclick="window.location.href=\''+url+'\'" onmouseenter="this.style.borderColor=\'var(--accent)\'" onmouseleave="this.style.borderColor=\'var(--border)\';this.style.borderLeftColor=\'var(--gold)\'"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="os" style="font-size:18px;font-weight:700">'+ev.name+' \u2014 <span style="color:var(--gold)">Tarima '+t+'</span></div><p style="color:var(--muted);font-size:12px;margin-top:4px">'+(ev.organizer||'')+' \u00b7 '+(ev.location||'')+' \u00b7 <span style="color:var(--gold)">gesti\u00f3n independiente</span></p></div><div style="text-align:right"><div style="background:var(--accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;font-family:Oswald">'+(cnt[t]||0)+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">atletas T'+t+'</div></div></div></div>';
-      });
-      return;
-    }
-    h+='<div class="card" style="cursor:pointer;transition:all .2s" onclick="pickEvent('+i+')" onmouseenter="this.style.borderColor=\'var(--accent)\'" onmouseleave="this.style.borderColor=\'var(--border)\'"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="os" style="font-size:18px;font-weight:700">'+ev.name+'</div><p style="color:var(--muted);font-size:12px;margin-top:4px">'+(ev.organizer||'')+' \u00b7 '+(ev.location||'')+(ev._fromFirestore?' \u00b7 <span style="color:var(--gold)">creado en admin</span>':'')+'</p></div><div style="text-align:right"><div style="background:var(--accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;font-family:Oswald">'+ev.athletes.length+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">atletas</div></div></div></div>'});
+    // Conteo de atletas: usa el de Firestore (LIVE_EVENT_META) si el local es 0
+    const fbCount = (window.LIVE_EVENT_META && window.LIVE_EVENT_META[ev.id] && window.LIVE_EVENT_META[ev.id].athleteCount) || 0;
+    const athCount = ev.athletes.length || fbCount;
+    h+='<div class="card" style="cursor:pointer;transition:all .2s" onclick="pickEvent('+i+')" onmouseenter="this.style.borderColor=\'var(--accent)\'" onmouseleave="this.style.borderColor=\'var(--border)\'"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="os" style="font-size:18px;font-weight:700">'+ev.name+'</div><p style="color:var(--muted);font-size:12px;margin-top:4px">'+(ev.organizer||'')+' \u00b7 '+(ev.location||'')+(ev._fromFirestore?' \u00b7 <span style="color:var(--gold)">creado en admin</span>':'')+'</p></div><div style="text-align:right"><div style="background:var(--accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;font-family:Oswald">'+athCount+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">atletas</div></div></div></div>'});
   h+='</div>';return h;
 }
 
@@ -5028,7 +5020,9 @@ function renderDirector(){
 }
 
 function renderManage(){
-  const ath=DATA.athletes;let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">🎲 Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">🔄 Re-sincronizar con admin</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">⚖️ Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">📏 Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">🏋️ Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">🎫 Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  // Filtrar por tarima si está activo (modo 2 tarimas)
+  const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">🎲 Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">🔄 Re-sincronizar con admin</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">⚖️ Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">📏 Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">🏋️ Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">🎫 Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th><th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:38px">VLO</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:80px">BW + 1ros</th>';
   ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:62px">'+LIFT_S[l]+r+'</th>'})});
@@ -5037,7 +5031,11 @@ function renderManage(){
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3);'+(a.bombed?'opacity:.4':'')+'">';
     h+='<td style="padding:3px 2px;text-align:center"><input type="number" min="1" value="'+a.lot+'" onchange="setLot('+a.id+',this.value)" title="Editá el número de lote — si ya existe se hace swap" style="width:42px;padding:3px 2px;font-family:Oswald;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:13px"></td>';
     h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+a.name+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
-    h+='<td style="padding:3px 2px"><select class="inp-sm" onchange="updA('+a.id+',\'flight\',this.value);R()" style="width:38px;padding:4px 1px;font-size:11px">'+['A','B','C','D','E','F'].map(f=>'<option '+(a.flight===f?'selected':'')+'>'+f+'</option>').join('')+'</select></td>';
+    {
+      // Opciones del dropdown de vuelo: si hay tarima, suffix con 1/2; si no, letras simples.
+      const _flOpts = TARIMA ? ['A','B','C','D','E','F'].map(L=>L+TARIMA) : ['A','B','C','D','E','F'];
+      h+='<td style="padding:3px 2px"><select class="inp-sm" onchange="updA('+a.id+',\'flight\',this.value);R()" style="width:42px;padding:4px 1px;font-size:11px">'+_flOpts.map(f=>'<option value="'+f+'" '+(a.flight===f?'selected':'')+'>'+f+'</option>').join('')+'</select></td>';
+    }
     h+='<td style="padding:3px 2px;text-align:center">';
     if(a.weighedIn){
       h+='<button onclick="openWeighIn('+a.id+')" style="padding:2px 6px;border-radius:4px;border:1px solid var(--green);background:rgba(34,197,94,.1);color:var(--green);font-family:Oswald;font-size:9px;cursor:pointer;white-space:nowrap">'+a.bw+'kg ✓</button>';
