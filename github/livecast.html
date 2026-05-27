@@ -3084,6 +3084,11 @@ function _widgetHandleDirectObsEvent(d){
           }
         }
       });
+      // Apagar tambien Tabla Actual al activar fullscreen — no reaparece sola
+      const ta=_txDirState.tablaActual;
+      if(ta && ta.active){
+        _txDirState.tablaActual=Object.assign({},ta,{active:false,until:0});
+      }
     }
     _txDirState[d.component]=Object.assign({},c,{active:willActivate,until:0});
     mark();return;
@@ -4493,6 +4498,12 @@ window.dirShow=async function(comp,seconds,opts){
         }
       }
     });
+    // Al activar un fullscreen (perfil/leaderboard), apagar tambien la Tabla Actual.
+    // Asi cuando se quite el fullscreen la tabla NO reaparece sola; debe re-activarse a mano.
+    const ta=_dirState.tablaActual;
+    if(ta && ta.active){
+      _dirState.tablaActual=Object.assign({},ta,{active:false,until:0});
+    }
   }
   _dirState[comp]=Object.assign({},_dirState[comp]||{},{active:true,until},opts||{});
   await _dirPush();R();
