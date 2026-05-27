@@ -4344,6 +4344,8 @@ window.dirUploadChampionshipLogo=async function(){
       // Guardar en el doc del evento
       await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{logoUrl:url});
       DATA.event.logoUrl=url;
+      // Forzar sync inmediato a livecast_sync para que los widgets de OBS lo vean
+      try{ if(typeof syncToFB==='function') await syncToFB(); }catch(e){}
       R();
       if(btn)btn.textContent='✓ Subido';
       setTimeout(()=>{if(btn)btn.textContent='⬆ Cambiar logo'},2000);
@@ -4358,6 +4360,7 @@ window.dirClearChampionshipLogo=async function(){
   try{
     await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{logoUrl:''});
     DATA.event.logoUrl='';
+    try{ if(typeof syncToFB==='function') await syncToFB(); }catch(e){}
     R();
   }catch(e){alert('Error: '+e.message);}
 };
