@@ -124,7 +124,7 @@ if(TX_MODE){
     @keyframes txTaRevealFromLogo{0%{clip-path:inset(0 calc(100% - 90px) 0 0);opacity:.9;transform:translateY(20px)}55%{clip-path:inset(0 0 0 0);opacity:1;transform:translateY(0)}100%{clip-path:inset(0 0 0 0);opacity:1;transform:translateY(0)}}
     @keyframes txFadeUpDelay{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
     /* Tabla Actual: explode from logo (top-left header, logo center ~52px,50px del card) */
-    @keyframes txTaCardExplode{0%{clip-path:circle(40px at 52px 50px)}100%{clip-path:circle(180% at 52px 50px)}}
+    @keyframes txTaCardExplode{0%{clip-path:circle(55px at 70px 64px)}100%{clip-path:circle(180% at 70px 64px)}}
     /* Scoreboard: explode from logo (top-left header) */
     @keyframes txSbCardExplode{0%{clip-path:circle(34px at 50px 32px)}100%{clip-path:circle(180% at 50px 32px)}}
     /* Animaciones SOLO cuando el wrapper tiene la clase de entrada.
@@ -3084,6 +3084,11 @@ function _widgetHandleDirectObsEvent(d){
           }
         }
       });
+      // Apagar tambien Tabla Actual al activar fullscreen — no reaparece sola
+      const ta=_txDirState.tablaActual;
+      if(ta && ta.active){
+        _txDirState.tablaActual=Object.assign({},ta,{active:false,until:0});
+      }
     }
     _txDirState[d.component]=Object.assign({},c,{active:willActivate,until:0});
     mark();return;
@@ -3936,7 +3941,7 @@ function renderTxTablaActual(cur,opts){
         <!-- Header -->
         <div data-ta-header style="padding:14px 20px;background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:2px solid #D4A843;overflow:hidden">
           <div style="display:flex;align-items:center;gap:16px;flex:1;min-width:0">
-            ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" class="ta-logo-anim" style="height:72px;width:72px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 4px 12px rgba(0,0,0,.6))" onerror="this.style.display='none'">`:''}
+            ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" class="ta-logo-anim" style="height:100px;width:100px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 4px 14px rgba(0,0,0,.7))" onerror="this.style.display='none'">`:''}
             <div data-ta-title style="min-width:0">
               <div style="font-family:Oswald;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.75);font-weight:600">TABLA ACTUAL · ${liftN} · R${(DATA.round||0)+1}</div>
               <div style="font-family:Oswald;font-size:18px;letter-spacing:1.5px;color:#fff;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,.4);margin-top:2px">${divS} • ${ref.cat} ${sexLabel==='Mujer'?'♀':'♂'}</div>
@@ -4493,6 +4498,12 @@ window.dirShow=async function(comp,seconds,opts){
         }
       }
     });
+    // Al activar un fullscreen (perfil/leaderboard), apagar tambien la Tabla Actual.
+    // Asi cuando se quite el fullscreen la tabla NO reaparece sola; debe re-activarse a mano.
+    const ta=_dirState.tablaActual;
+    if(ta && ta.active){
+      _dirState.tablaActual=Object.assign({},ta,{active:false,until:0});
+    }
   }
   _dirState[comp]=Object.assign({},_dirState[comp]||{},{active:true,until},opts||{});
   await _dirPush();R();
