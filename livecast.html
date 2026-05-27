@@ -175,13 +175,6 @@ let fbDB=null,fbReady=false,fbUnsub=null,_fbSyncing=false,_fbLastWrite=0,fbAuth=
 // Los demás (productor, viewers) solo leen. Evita conflictos entre admins.
 window.IS_CONTROLLER=(new URLSearchParams(location.search).get('controller')==='1')||localStorage.getItem('yl_controller')==='1';
 if(window.IS_CONTROLLER){
-  // Badge visible
-  setTimeout(()=>{
-    const b=document.createElement('div');
-    b.style.cssText='position:fixed;top:8px;left:8px;z-index:99999;background:#22c55e;color:#000;font-family:Oswald;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;pointer-events:none;letter-spacing:1px';
-    b.textContent='🎮 CONTROLLER';
-    document.body.appendChild(b);
-  },1500);
   console.log('[YL] Modo CONTROLLER activo — esta PC escribe a Firebase');
 }else{
   console.log('[YL] Modo LECTURA — solo lee de Firebase. Agrega ?controller=1 a la URL para escribir.');
@@ -226,9 +219,10 @@ async function initFB(){
         const recordsEnabled=(typeof e.recordsEnabled==='boolean')
           ? e.recordsEnabled
           : !/universitar/i.test(e.name||'');
-        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0};
+        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0,logoUrl:e.logoUrl||''};
         if(DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
           DATA.event.recordsEnabled=recordsEnabled;
+          DATA.event.logoUrl=e.logoUrl||'';
         }
       });
       if(Object.keys(evs).length)LIVE_EVENTS=evs;
@@ -3721,7 +3715,8 @@ function renderTxProfile(cur){
               </div>`).join('')}
           </div>
         </div>
-        <div style="position:absolute;top:clamp(20px,2.5vw,40px);right:clamp(20px,2.5vw,40px);display:flex;align-items:center;gap:8px;padding:8px 14px;background:rgba(10,22,40,.55);border:2px solid rgba(212,168,67,.4);border-radius:8px">
+        <div style="position:absolute;top:clamp(20px,2.5vw,40px);right:clamp(20px,2.5vw,40px);display:flex;align-items:center;gap:12px;padding:8px 14px;background:rgba(10,22,40,.55);border:2px solid rgba(212,168,67,.4);border-radius:8px">
+          ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="Campeonato" style="height:clamp(32px,3.4vw,50px);width:auto;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))" onerror="this.style.display='none'"><div style="width:1px;height:clamp(24px,2.8vw,40px);background:rgba(212,168,67,.4)"></div>`:''}
           <img src="YourLift_logo.png" alt="YourLift" style="height:clamp(28px,3vw,44px);filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(14px,1.4vw,20px);letter-spacing:3px;color:rgba(212,168,67,.7)\\'>⚡ YourLift</span>'">
         </div>
       </div>
@@ -3783,7 +3778,10 @@ function renderTxScoreboard(cur,lifterChanged){
   return `
     <div style="position:absolute;bottom:0;left:0;right:0;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
       <div style="${_sbRowAnim(_animDir,0)}display:grid;grid-template-columns:180px 1fr 180px;background:${_txC('headerBg')};border-top:2px solid ${_txC('accent')};padding:10px 22px;align-items:center">
-        <div style="font-family:Oswald;font-size:15px;color:rgba(200,215,240,.85);letter-spacing:1px">${catLabel}</div>
+        <div style="display:flex;align-items:center;gap:10px;font-family:Oswald;font-size:15px;color:rgba(200,215,240,.85);letter-spacing:1px">
+          ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" style="height:30px;width:30px;object-fit:contain;background:rgba(255,255,255,.95);padding:2px;border-radius:4px;flex-shrink:0" onerror="this.style.display='none'">`:''}
+          <span>${catLabel}</span>
+        </div>
         <div style="text-align:center;font-family:Oswald;font-size:14px;letter-spacing:1px;color:rgba(200,215,240,.7)">${(rk.pos&&totalAth?rk.pos+'/'+totalAth+' en categoría':'')}</div>
         <div style="font-family:Oswald;font-size:${willChange?'16px':'20px'};font-weight:800;color:${forecastColor};letter-spacing:${willChange?'1px':'2px'};text-align:right;white-space:nowrap" title="Posición forecast en su sexo+categoría+división">${forecastTxt}</div>
       </div>
@@ -3895,12 +3893,15 @@ function renderTxTablaActual(cur,opts){
     <div style="position:fixed;bottom:30px;right:30px;width:min(520px,38vw);z-index:50;font-family:'Inter',sans-serif">
       <div style="background:linear-gradient(180deg,rgba(10,22,40,.96) 0%,rgba(4,12,26,.96) 100%);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:2px solid #D4A843;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.7),0 0 30px rgba(212,168,67,.25)">
         <!-- Header -->
-        <div style="padding:14px 20px;background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #D4A843">
-          <div>
-            <div style="font-family:Oswald;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.75);font-weight:600">TABLA ACTUAL · ${liftN} · R${(DATA.round||0)+1}</div>
-            <div style="font-family:Oswald;font-size:18px;letter-spacing:1.5px;color:#fff;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,.4);margin-top:2px">${divS} • ${ref.cat} ${sexLabel==='Mujer'?'♀':'♂'}</div>
+        <div style="padding:14px 20px;background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);display:flex;justify-content:space-between;align-items:center;gap:14px;border-bottom:2px solid #D4A843">
+          <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">
+            ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" style="height:46px;width:46px;object-fit:contain;background:rgba(255,255,255,.95);padding:4px;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'">`:''}
+            <div style="min-width:0">
+              <div style="font-family:Oswald;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.75);font-weight:600">TABLA ACTUAL · ${liftN} · R${(DATA.round||0)+1}</div>
+              <div style="font-family:Oswald;font-size:18px;letter-spacing:1.5px;color:#fff;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,.4);margin-top:2px">${divS} • ${ref.cat} ${sexLabel==='Mujer'?'♀':'♂'}</div>
+            </div>
           </div>
-          <div style="text-align:right">
+          <div style="text-align:right;flex-shrink:0">
             <div style="font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.65)">PROYECCIÓN</div>
             <div style="font-family:Oswald;font-size:24px;font-weight:700;color:#fff;letter-spacing:1px;line-height:1">
               <span style="color:rgba(255,255,255,.7)">${curPos||'—'}</span>
@@ -4324,6 +4325,43 @@ window.dirBtUploadVideo=async function(){
   };
   inp.click();
 };
+// Logo DEL CAMPEONATO (no del break timer): persiste en Firestore eventos/{evId}.logoUrl
+// y se muestra en scoreboard, perfil y tabla actual.
+window.dirUploadChampionshipLogo=async function(){
+  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía');return;}
+  if(!DATA.event){alert('Primero elegí un evento');return;}
+  const evId = DATA.event.id || DATA.event.name;
+  const inp=document.createElement('input');inp.type='file';inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
+  inp.onchange=async()=>{
+    const f=inp.files&&inp.files[0];if(!f)return;
+    const btn=document.getElementById('dirChampLogoBtn');if(btn)btn.textContent='⏳ Subiendo...';
+    try{
+      const {ref,uploadBytes,getDownloadURL}=window._fbSt;
+      const safeId=evId.replace(/[^a-zA-Z0-9_]/g,'_');
+      const r=ref(window._fbStInst,'logos/event/'+safeId+'_'+f.name);
+      await uploadBytes(r,f,{contentType:f.type});
+      const url=await getDownloadURL(r);
+      // Guardar en el doc del evento
+      await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{logoUrl:url});
+      DATA.event.logoUrl=url;
+      R();
+      if(btn)btn.textContent='✓ Subido';
+      setTimeout(()=>{if(btn)btn.textContent='⬆ Cambiar logo'},2000);
+    }catch(e){alert('Error subiendo logo: '+e.message); if(btn)btn.textContent='⬆ Cambiar logo';}
+  };
+  inp.click();
+};
+window.dirClearChampionshipLogo=async function(){
+  if(!DATA.event)return;
+  if(!confirm('¿Quitar el logo del campeonato?'))return;
+  const evId = DATA.event.id || DATA.event.name;
+  try{
+    await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{logoUrl:''});
+    DATA.event.logoUrl='';
+    R();
+  }catch(e){alert('Error: '+e.message);}
+};
+
 window.dirBtUploadEventLogo=async function(){
   if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía');return;}
   const inp=document.createElement('input');inp.type='file';inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
@@ -4738,6 +4776,23 @@ function renderDirector(){
     h+='<div class="card" style="margin-bottom:14px;padding:10px 14px;background:rgba(34,197,94,.05);border-color:rgba(34,197,94,.3);font-size:12px">';
     h+='👤 <b>Levantador actual:</b> <span style="color:var(--gold);font-family:Oswald">'+cur.name+'</span> · '+cur.cat+' · '+cur.div+' · Vuelo '+cur.flight+' · '+LIFT_S[DATA.lift]+(DATA.round+1);
     h+='</div>';
+  }
+  // ── Logo del campeonato (se muestra en perfil/scoreboard/tabla actual)
+  {
+    const champLogo=DATA.event?.logoUrl||'';
+    h+='<div class="card" style="padding:14px 18px;border-left:4px solid var(--gold);background:rgba(212,168,67,.06);margin-bottom:12px">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">';
+    h+='<div style="flex:1;min-width:200px;display:flex;align-items:center;gap:14px">';
+    h+='<div style="width:64px;height:64px;background:rgba(10,22,40,.5);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">'
+      +(champLogo?'<img src="'+champLogo+'" style="max-width:100%;max-height:100%;object-fit:contain">':'<span style="font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:1px;text-align:center;line-height:1.2">SIN<br>LOGO</span>')
+      +'</div>';
+    h+='<div><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">🏆 Logo del campeonato</div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Aparece en el Perfil, Scoreboard y Tabla Actual. Recomendado: PNG transparente, 256×256+.</div></div>';
+    h+='</div>';
+    h+='<div style="display:flex;gap:6px">';
+    h+='<button id="dirChampLogoBtn" class="btn btn-o" onclick="dirUploadChampionshipLogo()" style="padding:10px 16px;font-size:12px;font-family:Oswald;letter-spacing:1.5px">⬆ '+(champLogo?'Cambiar logo':'Subir logo')+'</button>';
+    if(champLogo) h+='<button class="btn" onclick="dirClearChampionshipLogo()" style="padding:10px 14px;font-size:12px;background:transparent;border:1px solid var(--red);color:var(--red);font-family:Oswald;letter-spacing:1.5px">✕ Quitar</button>';
+    h+='</div></div></div>';
   }
   // Componentes — TOGGLES (1 botón / 1 tecla por componente, listo para Stream Deck)
   h+='<div style="display:grid;gap:12px">';
