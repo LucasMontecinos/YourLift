@@ -3439,13 +3439,14 @@ function renderTxDirector(container){
       +'</div>';
     }
   }
-  // Scoreboard (corner) — animación "explode from logo" al entrar, sin replay en updates
+  // Scoreboard (corner) — anim "explode from logo" si HAY logo, cascade original si no.
   if((showSb||(animSb&&animSb.dir==='out'))&&cur){
+    const hasLogoSb = !!(DATA.event?.logoUrl);
     const sbHtml=_renderTxCerScoreboardBL(cur,{noAnimate:true,scale:_txDirState.scoreboard?.scale||1,animDir:animSb?.dir||null});
-    // Envolvemos en wrapper para gatear las animaciones internas (logo + explode)
-    // solo cuando es la transición de ENTRADA, evita replay en updates de datos.
     const isSbEnter = animSb && animSb.dir==='in';
-    html += isSbEnter ? '<div class="sb-wrap-anim">'+sbHtml+'</div>' : sbHtml;
+    // Sin logo: usar el HTML directo (la cascada _sbRowAnim ya viene del render con animDir)
+    // Con logo: envolvemos para gatear logo zoom + explode, sin replay en updates
+    html += (hasLogoSb && isSbEnter) ? '<div class="sb-wrap-anim">'+sbHtml+'</div>' : sbHtml;
   }
   // Timer (corner) — slide-in/out desde la derecha
   if(showTm||(animTm&&animTm.dir==='out')){
@@ -3453,16 +3454,24 @@ function renderTxDirector(container){
     const tmHtml=_renderTxCerTimerCorner(_txDirState.timer?.scale||1);
     html+=tmAnim?'<div style="'+tmAnim+'">'+tmHtml+'</div>':tmHtml;
   }
-  // Tabla Actual (corner inferior derecha) — animación "explode from logo" al entrar, sin replay en updates
+  // Tabla Actual (corner inferior derecha) — anim "explode from logo" si HAY logo, slide-up si no.
   const showTabla=_txDirActive('tablaActual');
   const animTabla=_txAnimActive('tablaActual');
   if((showTabla||(animTabla&&animTabla.dir==='out'))&&cur){
-    // Solo aplicar las animaciones internas cuando es la transición de ENTRADA inicial.
-    // Para updates de datos (lifter change, etc.) no hay anim → sin replay molesto.
+    const hasLogo = !!(DATA.event?.logoUrl);
     const isEntering = animTabla && animTabla.dir==='in';
     const isExiting  = animTabla && animTabla.dir==='out';
-    const wrapClass = isEntering ? 'ta-wrap-anim' : '';
-    const taAnim = isExiting ? 'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;' : '';
+    let wrapClass = '';
+    let taAnim = '';
+    if(hasLogo){
+      wrapClass = isEntering ? 'ta-wrap-anim' : '';
+      taAnim = isExiting ? 'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;' : '';
+    } else {
+      // Sin logo: animación original slide-up desde abajo
+      taAnim = isEntering
+        ? 'animation:txSlideInBottom .75s cubic-bezier(.2,.85,.3,1.05) forwards;'
+        : (isExiting ? 'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;' : '');
+    }
     const taScale=_txDirState.tablaActual?.scale||1;
     const taHtml=renderTxTablaActual(cur);
     const wrap='<div class="'+wrapClass+'" style="position:fixed;inset:0;pointer-events:none;'+(taScale!==1?'transform:scale('+taScale+');transform-origin:bottom right;':'')+taAnim+'">'+taHtml+'</div>';
