@@ -28,8 +28,10 @@ service firebase.storage {
           && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
     }
 
-    // ── Logos públicos (clubes, federación, etc.) ─────────────────
-    match /logos/{file} {
+    // ── Logos públicos (clubes, federación, eventos, etc.) ────────
+    // Incluye subdirectorios: logos/event/<id>_<name>.png para logos
+    // del campeonato (controlado desde panel director TX).
+    match /logos/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin();
     }
@@ -49,10 +51,12 @@ service firebase.storage {
     // El path está estructurado por RUT, así nadie puede sobreescribir
     // archivos de otro atleta accidentalmente (cada uno usa su path).
     match /athlete_files/{rut}/{file} {
-      allow read: if isAdmin();
-      allow write: if request.resource.size < 5 * 1024 * 1024
-                    && (request.resource.contentType.matches('image/.*')
-                        || request.resource.contentType == 'application/pdf');
+      // Lectura pública: necesaria para que el inscripto pueda obtener el
+      // downloadURL después de subir (lo guarda en inscripciones_private).
+      // Las URLs incluyen un token que no es enumerable, así que solo quien
+      // tiene el link puede abrir el archivo. Solo admin lista los URLs.
+      allow read: if true;
+      allow write: if true;
       allow delete: if isAdmin();
     }
 
@@ -92,6 +96,27 @@ service firebase.storage {
     match /videos/{allPaths=**} {
       allow read: if true;
       allow write, delete: if isAdmin();
+    }
+
+    // ── Galería de fotos de eventos ───────────────────────────────
+    // Lectura pública (la muestra index.html). Escritura solo admin.
+    match /gallery/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin()
+                    && request.resource.size < 15 * 1024 * 1024
+                    && request.resource.contentType.matches('image/.*');
+      allow delete: if isAdmin();
+    }
+
+    // ── Actas PDF (resultados oficiales de campeonatos) ──────────
+    // Lectura pública para que resultados.html los muestre sin login.
+    // Escritura y borrado solo admin.
+    match /actas/{file} {
+      allow read: if true;
+      allow write: if isAdmin()
+                    && request.resource.size < 50 * 1024 * 1024
+                    && request.resource.contentType == 'application/pdf';
+      allow delete: if isAdmin();
     }
 
     // ── Default deny ─────────────────────────────────────────────
