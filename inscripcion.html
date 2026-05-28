@@ -364,6 +364,8 @@ let state = {
   wadeFile: null, wadeName: '',
   carnetPhotoFile: null, carnetPhotoName: '',
   consentimientoFile: null, consentimientoName: '',
+  passportFile: null, passportName: '',          // pasaporte (eventos IPF Worlds)
+  ipfConsentFile: null, ipfConsentName: '',      // IPF consentimiento firmado
   submitting: false,
   storageWarning: false,
   adminAuth: false,
@@ -631,22 +633,57 @@ function renderForm() {
 
   // STEP 3: Documents
   if (s === 3) {
-    h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Documentos</h3>
+    // Detección de evento IPF World — requiere documentación internacional especial
+    const _evObj = EVENTS.find(e=>e.id===f.evento);
+    const _evName = _evObj?.name || '';
+    const isIPFWorld = /IPF\s*World/i.test(_evName) || _evObj?.tipo==='ipf_world';
+
+    h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Documentos${isIPFWorld?' · 🌍 IPF WORLD':''}</h3>
+    ${isIPFWorld?`
+    <div style="background:rgba(212,168,67,.08);border:1px solid rgba(212,168,67,.4);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:600;color:var(--gold);margin-bottom:4px">🌍 Campeonato Internacional IPF World</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5">Este campeonato requiere documentación internacional: pasaporte vigente, certificación WADA internacional, foto oficial con fondo blanco y el formulario de consentimiento IPF firmado.</div>
+    </div>` : ''}
     <div class="field">
-      <label>Carnet de Identidad (cara frontal) <span class="req">*</span></label>
+      <label>${isIPFWorld?'Pasaporte (página de datos)':'Carnet de Identidad (cara frontal)'} <span class="req">*</span></label>
       <div class="upload-zone ${state.carnetName?'done':''}" id="carnetZone">
         <input type="file" accept="image/*,.pdf" onchange="handleFile(this,'carnet')">
-        ${state.carnetName ? `<div class="icon">✅</div><div class="fname">${state.carnetName}</div><div class="txt">Click para cambiar</div>` : `<div class="icon">📷</div><div class="txt">Arrastra o haz click para subir imagen del carnet</div><div style="font-size:10px;color:var(--muted);margin-top:4px">JPG, PNG o PDF · Máx 10MB</div>`}
+        ${state.carnetName ? `<div class="icon">✅</div><div class="fname">${state.carnetName}</div><div class="txt">Click para cambiar</div>` : `<div class="icon">📷</div><div class="txt">${isIPFWorld?'Foto/escaneo del pasaporte vigente':'Arrastra o haz click para subir imagen del carnet'}</div><div style="font-size:10px;color:var(--muted);margin-top:4px">JPG, PNG o PDF · Máx 10MB</div>`}
       </div>
     </div>
     <div class="field">
-      <label>Certificado ADEL/WADA <span style="color:#ef4444;font-weight:700">*</span> <span style="font-size:10px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">(atletas internacionales) / Carnet SENADIS (atletas OE)</span></label>
+      <label>${isIPFWorld?'Certificación WADA Internacional <span style="color:#ef4444;font-weight:700">*</span>':'Certificado ADEL/WADA <span style="color:#ef4444;font-weight:700">*</span> <span style="font-size:10px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">(atletas internacionales) / Carnet SENADIS (atletas OE)</span>'}</label>
       <div class="upload-zone ${state.wadeName?'done':''}" id="wadeZone">
         <input type="file" accept="image/*,.pdf" onchange="handleFile(this,'wade')">
-        ${state.wadeName ? `<div class="icon">✅</div><div class="fname">${state.wadeName}</div><div class="txt">Click para cambiar</div>` : `<div class="icon">📄</div><div class="txt">Certificado ADEL/WADA (internacional) · Carnet SENADIS (OE)</div><div style="font-size:10px;color:var(--muted);margin-top:4px">JPG, PNG o PDF · Máx 10MB</div>`}
+        ${state.wadeName ? `<div class="icon">✅</div><div class="fname">${state.wadeName}</div><div class="txt">Click para cambiar</div>` : `<div class="icon">📄</div><div class="txt">${isIPFWorld?'Certificación WADA internacional vigente':'Certificado ADEL/WADA (internacional) · Carnet SENADIS (OE)'}</div><div style="font-size:10px;color:var(--muted);margin-top:4px">JPG, PNG o PDF · Máx 10MB</div>`}
       </div>
     </div>
-    ${isMinor(f.fechaNac) ? `
+    ${isIPFWorld?`
+    <div class="field">
+      <label>Foto oficial — fondo blanco, sin accesorios <span class="req">*</span></label>
+      <div class="upload-zone ${state.carnetPhotoName?'done':''}" id="carnetPhotoZone">
+        <input type="file" accept="image/*" onchange="handleFile(this,'carnetPhoto')">
+        ${state.carnetPhotoName ? `<div class="icon">✅</div><div class="fname">${state.carnetPhotoName}</div><div class="txt">Click para cambiar</div>` : `<div class="icon">📸</div><div class="txt">Foto de rostro con fondo blanco, sin accesorios (gorra, lentes, joyas)</div><div style="font-size:10px;color:var(--muted);margin-top:4px">JPG, PNG · Máx 10MB</div>`}
+      </div>
+    </div>
+    <div class="field">
+      <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.4);border-radius:10px;padding:14px 16px;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:600;color:#60a5fa;margin-bottom:4px">📋 Consentimiento IPF</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.5">Descargá el formulario IPF, completalo y firmalo. Luego subí el documento firmado.</div>
+        <a href="IPF%20Consentimiento.pdf" download="IPF Consentimiento.pdf" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:8px 14px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.5);border-radius:6px;color:#60a5fa;font-size:12px;font-weight:600;text-decoration:none;font-family:Oswald,sans-serif;letter-spacing:1px">
+          ⬇ DESCARGAR IPF CONSENTIMIENTO
+        </a>
+      </div>
+      <label>IPF Consentimiento firmado <span class="req">*</span></label>
+      <div class="upload-zone ${state.ipfConsentName?'done':''}" id="ipfConsentZone">
+        <input type="file" accept="image/*,.pdf" onchange="handleFile(this,'ipfConsent')">
+        ${state.ipfConsentName
+          ? `<div class="icon">✅</div><div class="fname">${state.ipfConsentName}</div><div class="txt">Click para cambiar</div>`
+          : `<div class="icon">📋</div><div class="txt">Sube el formulario IPF completado y firmado</div><div style="font-size:10px;color:var(--muted);margin-top:4px">PDF o imagen · Máx 10MB</div>`}
+      </div>
+    </div>
+    ` : ''}
+    ${!isIPFWorld && isMinor(f.fechaNac) ? `
     <div class="field">
       <div style="background:rgba(212,168,67,.1);border:1px solid rgba(212,168,67,.35);border-radius:10px;padding:14px 16px;margin-bottom:12px">
         <div style="font-size:13px;font-weight:600;color:var(--gold);margin-bottom:4px">⚠️ Atleta menor de edad</div>
@@ -664,6 +701,8 @@ function renderForm() {
       </div>
     </div>` : ''}
     ${(()=>{
+      // En IPF Worlds la foto blanca ya se pidió arriba, no duplicar
+      if(isIPFWorld) return '';
       const ev = EVENTS.find(e=>e.id===f.evento);
       const requiere = ev?.requiereFoto;
       const yaTiene = window.atletaTieneFoto && window.atletaTieneFoto(f.rut);
@@ -704,10 +743,16 @@ function renderForm() {
         <div><span style="color:var(--muted)">División:</span> ${f.division}</div>
         <div><span style="color:var(--muted)">Categoría:</span> ${f.categoria}</div>
         <div><span style="color:var(--muted)">Modalidad:</span> ${f.modalidad}</div>
-        <div><span style="color:var(--muted)">Carnet:</span> ${state.carnetName?'✅':'❌ Falta'}</div>
-        ${isMinor(f.fechaNac)?`<div><span style="color:var(--muted)">Consentimiento:</span> ${state.consentimientoName?'✅':'❌ Falta'}</div>`:''}
+        <div><span style="color:var(--muted)">${isIPFWorld?'Pasaporte':'Carnet'}:</span> ${state.carnetName?'✅':'❌ Falta'}</div>
+        <div><span style="color:var(--muted)">${isIPFWorld?'WADA Internacional':'WADA/ADEL'}:</span> ${state.wadeName?'✅':'❌ Falta'}</div>
+        ${isIPFWorld?`
+          <div><span style="color:var(--muted)">Foto fondo blanco:</span> ${state.carnetPhotoName?'✅':'❌ Falta'}</div>
+          <div><span style="color:var(--muted)">IPF Consentimiento:</span> ${state.ipfConsentName?'✅':'❌ Falta'}</div>
+        `:''}
+        ${!isIPFWorld && isMinor(f.fechaNac)?`<div><span style="color:var(--muted)">Consentimiento:</span> ${state.consentimientoName?'✅':'❌ Falta'}</div>`:''}
 
         ${(()=>{
+          if(isIPFWorld) return ''; // ya cubierto arriba
           const requiere = EVENTS.find(e=>e.id===f.evento)?.requiereFoto;
           if(!requiere) return '';
           const yaTiene = window.atletaTieneFoto && window.atletaTieneFoto(f.rut);
@@ -723,11 +768,16 @@ function renderForm() {
         if(!state.carnetName) return 'disabled';
         if(!state.wadeName) return 'disabled';
         if(state.submitting) return 'disabled';
-        if(isMinor(f.fechaNac) && !state.consentimientoName) return 'disabled';
-        const requiere = EVENTS.find(e=>e.id===f.evento)?.requiereFoto;
-        if(requiere){
-          const yaTiene = window.atletaTieneFoto && window.atletaTieneFoto(f.rut);
-          if(!yaTiene && !state.carnetPhotoName) return 'disabled';
+        if(isIPFWorld){
+          if(!state.carnetPhotoName) return 'disabled';
+          if(!state.ipfConsentName) return 'disabled';
+        } else {
+          if(isMinor(f.fechaNac) && !state.consentimientoName) return 'disabled';
+          const requiere = EVENTS.find(e=>e.id===f.evento)?.requiereFoto;
+          if(requiere){
+            const yaTiene = window.atletaTieneFoto && window.atletaTieneFoto(f.rut);
+            if(!yaTiene && !state.carnetPhotoName) return 'disabled';
+          }
         }
         return '';
       })()}>${state.submitting?'<span class="sp"></span> Enviando...':'✓ Enviar Inscripción'}</button>
@@ -1166,6 +1216,8 @@ function handleFile(input, type) {
   else if (type === 'wade') { state.wadeFile = file; state.wadeName = file.name; }
   else if (type === 'carnetPhoto') { state.carnetPhotoFile = file; state.carnetPhotoName = file.name; }
   else if (type === 'consentimiento') { state.consentimientoFile = file; state.consentimientoName = file.name; }
+  else if (type === 'ipfConsent') { state.ipfConsentFile = file; state.ipfConsentName = file.name; }
+  else if (type === 'passport') { state.passportFile = file; state.passportName = file.name; }
   render();
 }
 
@@ -1299,6 +1351,12 @@ async function submitForm() {
       }
       if (state.consentimientoFile) {
         privateEntry.consentimientoURL = await uploadOne(state.consentimientoFile, 'consentimiento');
+      }
+      if (state.ipfConsentFile) {
+        privateEntry.ipfConsentURL = await uploadOne(state.ipfConsentFile, 'ipfConsent');
+      }
+      if (state.passportFile) {
+        privateEntry.passportURL = await uploadOne(state.passportFile, 'passport');
       }
       // Validar URLs presentes ANTES de guardar inscripción
       if (!privateEntry.carnetURL || !privateEntry.wadeURL) {
