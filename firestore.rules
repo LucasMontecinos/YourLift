@@ -66,11 +66,14 @@ service cloud.firestore {
     //    Solo admin lee/borra. Creación pública pero bloqueada a campos
     //    permitidos y con PIN de 4 dígitos. Update solo admin.
     //    El ID debe coincidir con el de inscripciones/{id} (mismo evento_rut).
+    //    Campos permitidos:
+    //      - pin, rut, ts (siempre)
+    //      - carnetURL, wadeURL, carnetPhotoURL (eventos regulares)
+    //      - consentimientoURL (menores de edad)
+    //      - passportURL, ipfConsentURL (eventos IPF World)
     match /inscripciones_private/{id} {
       allow read: if isAdmin();
-      // Crear: solo campos permitidos (pin obligatorio, URLs opcionales).
-      // Se permite carnetPhotoURL para la foto tipo carnet IPF (modalidades nuevas).
-      allow create: if request.resource.data.keys().hasOnly(['pin','carnetURL','wadeURL','carnetPhotoURL','ts'])
+      allow create: if request.resource.data.keys().hasOnly(['pin','rut','carnetURL','wadeURL','carnetPhotoURL','consentimientoURL','passportURL','ipfConsentURL','notasURL','ts'])
                     && request.resource.data.pin is string
                     && request.resource.data.pin.size() == 4;
       allow update, delete: if isAdmin();
@@ -196,6 +199,21 @@ service cloud.firestore {
     // Lectura pública (atleta.html los muestra en el perfil).
     // Escritura solo admin (superadmin/owner agrega o quita desde panel).
     match /atleta_achievements/{codigo} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+
+    // ── Actas PDF de campeonatos pasados ─────────────────────────────
+    // Lectura pública (resultados.html las lista sin login).
+    // Escritura solo admin (subida y gestión desde panel).
+    match /actas/{id} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+
+    // ── Galería de fotos (eventos) ────────────────────────────────
+    // Lectura pública. Escritura solo admin desde panel.
+    match /gallery_photos/{id} {
       allow read: if true;
       allow write, delete: if isAdmin();
     }

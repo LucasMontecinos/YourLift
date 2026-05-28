@@ -366,6 +366,7 @@ let state = {
   consentimientoFile: null, consentimientoName: '',
   passportFile: null, passportName: '',          // pasaporte (eventos IPF Worlds)
   ipfConsentFile: null, ipfConsentName: '',      // IPF consentimiento firmado
+  notasFile: null, notasName: '',                // concentración de notas (IPF Worlds)
   submitting: false,
   storageWarning: false,
   adminAuth: false,
@@ -682,6 +683,15 @@ function renderForm() {
           : `<div class="icon">📋</div><div class="txt">Sube el formulario IPF completado y firmado</div><div style="font-size:10px;color:var(--muted);margin-top:4px">PDF o imagen · Máx 10MB</div>`}
       </div>
     </div>
+    <div class="field">
+      <label>Concentración de notas <span class="req">*</span></label>
+      <div class="upload-zone ${state.notasName?'done':''}" id="notasZone">
+        <input type="file" accept="image/*,.pdf" onchange="handleFile(this,'notas')">
+        ${state.notasName
+          ? `<div class="icon">✅</div><div class="fname">${state.notasName}</div><div class="txt">Click para cambiar</div>`
+          : `<div class="icon">📚</div><div class="txt">Documento oficial de notas / certificado académico</div><div style="font-size:10px;color:var(--muted);margin-top:4px">PDF o imagen · Máx 10MB</div>`}
+      </div>
+    </div>
     ` : ''}
     ${!isIPFWorld && isMinor(f.fechaNac) ? `
     <div class="field">
@@ -748,6 +758,7 @@ function renderForm() {
         ${isIPFWorld?`
           <div><span style="color:var(--muted)">Foto fondo blanco:</span> ${state.carnetPhotoName?'✅':'❌ Falta'}</div>
           <div><span style="color:var(--muted)">IPF Consentimiento:</span> ${state.ipfConsentName?'✅':'❌ Falta'}</div>
+          <div><span style="color:var(--muted)">Concentración de notas:</span> ${state.notasName?'✅':'❌ Falta'}</div>
         `:''}
         ${!isIPFWorld && isMinor(f.fechaNac)?`<div><span style="color:var(--muted)">Consentimiento:</span> ${state.consentimientoName?'✅':'❌ Falta'}</div>`:''}
 
@@ -771,6 +782,7 @@ function renderForm() {
         if(isIPFWorld){
           if(!state.carnetPhotoName) return 'disabled';
           if(!state.ipfConsentName) return 'disabled';
+          if(!state.notasName) return 'disabled';
         } else {
           if(isMinor(f.fechaNac) && !state.consentimientoName) return 'disabled';
           const requiere = EVENTS.find(e=>e.id===f.evento)?.requiereFoto;
@@ -1218,6 +1230,7 @@ function handleFile(input, type) {
   else if (type === 'consentimiento') { state.consentimientoFile = file; state.consentimientoName = file.name; }
   else if (type === 'ipfConsent') { state.ipfConsentFile = file; state.ipfConsentName = file.name; }
   else if (type === 'passport') { state.passportFile = file; state.passportName = file.name; }
+  else if (type === 'notas') { state.notasFile = file; state.notasName = file.name; }
   render();
 }
 
@@ -1357,6 +1370,9 @@ async function submitForm() {
       }
       if (state.passportFile) {
         privateEntry.passportURL = await uploadOne(state.passportFile, 'passport');
+      }
+      if (state.notasFile) {
+        privateEntry.notasURL = await uploadOne(state.notasFile, 'notas');
       }
       // Validar URLs presentes ANTES de guardar inscripción
       if (!privateEntry.carnetURL || !privateEntry.wadeURL) {
