@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>YourLift Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100vw;height:100vh;overflow:hidden;background:#000;font-family:'Inter',sans-serif;color:#fff}
+#stage{position:fixed;inset:0;overflow:hidden;background:radial-gradient(ellipse at top,#0a1628 0%,#020410 100%)}
+
+/* Partículas doradas */
+.particle{position:absolute;width:4px;height:4px;background:#D4A843;border-radius:50%;box-shadow:0 0 8px #D4A843;animation:float linear infinite;opacity:0;z-index:1;pointer-events:none}
+@keyframes float{0%{transform:translateY(110vh) scale(.5);opacity:0}10%{opacity:.7}90%{opacity:.7}100%{transform:translateY(-10vh) scale(1.2);opacity:0}}
+
+.scene{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;opacity:0;transition:opacity .35s ease;z-index:2}
+.scene.on{opacity:1}
+
+/* ============ S1 Intro ============ */
+#s1 .logoBig{font-family:Oswald;font-size:130px;font-weight:700;letter-spacing:12px;text-transform:uppercase;color:#fff;opacity:0;transform:scale(.5);animation:logoIn 1.2s cubic-bezier(.2,.9,.3,1.4) forwards;line-height:1}
+#s1 .logoBig .red{color:#C41E3A}
+#s1 .tagline{font-size:24px;letter-spacing:10px;color:#D4A843;margin-top:34px;opacity:0;animation:fadeUp .7s .8s forwards;text-transform:uppercase;font-weight:600;text-align:center}
+@keyframes logoIn{0%{opacity:0;transform:scale(.3) rotate(-10deg);filter:blur(20px)}60%{opacity:1;transform:scale(1.15) rotate(3deg);filter:blur(0)}100%{opacity:1;transform:scale(1) rotate(0)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* ============ Feature scenes (video bg + texto) ============ */
+.feat{display:none}
+.feat.on{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start}
+.feat-video-wrap{position:relative;width:100%;height:65%;overflow:hidden;background:#000}
+.feat-video-wrap video{width:100%;height:100%;object-fit:cover;filter:saturate(1.05) contrast(1.05)}
+.feat-video-wrap::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.35) 0%,transparent 25%,transparent 75%,rgba(10,22,40,.95) 100%);pointer-events:none}
+
+.feat-bottom{flex:1;background:linear-gradient(180deg,#0a1628 0%,#020410 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 50px;position:relative;overflow:hidden}
+.feat-bottom::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:200px;height:4px;background:linear-gradient(90deg,transparent,#D4A843,transparent)}
+
+.feat-num{font-family:Oswald;font-size:18px;letter-spacing:8px;color:#D4A843;font-weight:600;opacity:0;animation:fadeUp .5s .15s forwards}
+.feat-title{font-family:Oswald;font-size:64px;font-weight:700;letter-spacing:5px;color:#fff;text-transform:uppercase;line-height:1.05;text-align:center;margin-top:14px;opacity:0;animation:fadeUp .6s .35s forwards;text-shadow:0 4px 20px rgba(0,0,0,.6)}
+.feat-sub{font-size:22px;letter-spacing:3px;color:rgba(220,230,245,.85);margin-top:24px;text-align:center;line-height:1.4;opacity:0;animation:fadeUp .6s .55s forwards;max-width:90%;font-weight:500}
+.feat-badge{display:inline-block;padding:8px 18px;background:#C41E3A;color:#fff;font-family:Oswald;font-size:12px;letter-spacing:3px;border-radius:6px;margin-top:30px;font-weight:700;opacity:0;animation:fadeUp .5s .75s forwards;box-shadow:0 4px 16px rgba(196,30,58,.5)}
+
+/* Top overlay strip — siempre en featured con YourLift */
+.feat-top-strip{position:absolute;top:24px;left:24px;right:24px;display:flex;justify-content:space-between;align-items:center;z-index:5;pointer-events:none}
+.feat-yl{font-family:Oswald;font-size:24px;font-weight:700;letter-spacing:5px;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.9)}
+.feat-yl .red{color:#C41E3A}
+.feat-live{background:#C41E3A;color:#fff;padding:6px 12px;font-family:Oswald;font-size:11px;letter-spacing:3px;border-radius:4px;font-weight:700;animation:pulse 1.5s steps(2) infinite;box-shadow:0 4px 12px rgba(196,30,58,.5)}
+@keyframes pulse{50%{opacity:.7}}
+
+/* ============ Cierre ============ */
+#sFin .logoFinal{font-family:Oswald;font-size:170px;font-weight:700;letter-spacing:16px;text-transform:uppercase;color:#fff;text-shadow:0 0 60px rgba(212,168,67,.7);animation:finalZoom 1s ease-out forwards;line-height:.9}
+#sFin .logoFinal .red{color:#C41E3A}
+@keyframes finalZoom{from{opacity:0;transform:scale(1.3);filter:blur(20px)}to{opacity:1;transform:scale(1);filter:blur(0)}}
+#sFin .finalUrl{font-family:Oswald;font-size:54px;letter-spacing:14px;color:#D4A843;margin-top:40px;opacity:0;animation:fadeUp .8s .55s forwards;font-weight:700}
+#sFin .finalUrl .dot{color:#fff}
+#sFin .finalSub{font-size:20px;letter-spacing:7px;color:rgba(255,255,255,.75);margin-top:30px;text-transform:uppercase;opacity:0;animation:fadeUp .8s 1.1s forwards;font-weight:600;text-align:center}
+#sFin .ig{margin-top:32px;font-family:Oswald;font-size:18px;letter-spacing:4px;color:#D4A843;opacity:0;animation:fadeUp .8s 1.4s forwards}
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- INTRO -->
+  <div class="scene on" id="s1">
+    <div class="logoBig"><span class="red">YOUR</span>LIFT</div>
+    <div class="tagline">TRANSMITÍ COMO PRO</div>
+  </div>
+
+  <!-- FEATURE 1: Perfil del Atleta -->
+  <div class="scene feat" id="sF1">
+    <div class="feat-video-wrap">
+      <video id="vid1" src="yourlift_action.mp4" muted playsinline preload="auto"></video>
+      <div class="feat-top-strip">
+        <div class="feat-yl"><span class="red">YOUR</span>LIFT</div>
+        <div class="feat-live">● EN VIVO</div>
+      </div>
+    </div>
+    <div class="feat-bottom">
+      <div class="feat-num">01 · WIDGET</div>
+      <div class="feat-title">Perfil del<br>Atleta</div>
+      <div class="feat-sub">Info completa al instante:<br>club, categoría, PR y edad</div>
+    </div>
+  </div>
+
+  <!-- FEATURE 2: Scoreboard -->
+  <div class="scene feat" id="sF2">
+    <div class="feat-video-wrap">
+      <video id="vid2" src="yourlift_action.mp4" muted playsinline preload="auto"></video>
+      <div class="feat-top-strip">
+        <div class="feat-yl"><span class="red">YOUR</span>LIFT</div>
+        <div class="feat-live">● EN VIVO</div>
+      </div>
+    </div>
+    <div class="feat-bottom">
+      <div class="feat-num">02 · WIDGET</div>
+      <div class="feat-title">Scoreboard<br>Tiempo Real</div>
+      <div class="feat-sub">Cada intento y posición<br>proyectada en pantalla</div>
+    </div>
+  </div>
+
+  <!-- FEATURE 3: Tabla Actual -->
+  <div class="scene feat" id="sF3">
+    <div class="feat-video-wrap">
+      <video id="vid3" src="yourlift_action.mp4" muted playsinline preload="auto"></video>
+      <div class="feat-top-strip">
+        <div class="feat-yl"><span class="red">YOUR</span>LIFT</div>
+        <div class="feat-live">● EN VIVO</div>
+      </div>
+    </div>
+    <div class="feat-bottom">
+      <div class="feat-num">03 · WIDGET</div>
+      <div class="feat-title">Tabla<br>Actual</div>
+      <div class="feat-sub">Ranking proyectado<br>fila por fila, animado</div>
+    </div>
+  </div>
+
+  <!-- CIERRE -->
+  <div class="scene" id="sFin">
+    <div class="logoFinal"><span class="red">YOUR</span>LIFT</div>
+    <div class="finalUrl">yourlift<span class="dot">.</span>cl</div>
+    <div class="finalSub">★ Tu próxima transmisión, automatizada ★</div>
+    <div class="ig">@yourlift_oficial</div>
+  </div>
+</div>
+
+<script>
+const stage=document.getElementById('stage');
+for(let i=0;i<22;i++){
+  const p=document.createElement('div');
+  p.className='particle';
+  p.style.left=Math.random()*100+'%';
+  p.style.animationDuration=(4+Math.random()*4)+'s';
+  p.style.animationDelay=Math.random()*4+'s';
+  stage.appendChild(p);
+}
+
+function show(id){
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+}
+function playVid(id, startAt){
+  const v=document.getElementById(id);
+  if(!v) return;
+  try{ v.currentTime=startAt||0; v.play().catch(()=>{}); }catch(e){}
+}
+
+// Timeline 28s total
+// 0-3s: INTRO
+// 3-9s: Feature 1 — Perfil (video 0-6s)
+// 9-15s: Feature 2 — Scoreboard (video 8-14s)
+// 15-21s: Feature 3 — Tabla (video 18-24s)
+// 21-28s: Cierre
+
+setTimeout(()=>{ show('sF1'); playVid('vid1', 0); }, 3000);
+setTimeout(()=>{ show('sF2'); playVid('vid2', 8); }, 9000);
+setTimeout(()=>{ show('sF3'); playVid('vid3', 18); }, 15000);
+setTimeout(()=>{ show('sFin'); }, 21000);
+</script>
+</body>
+</html>
