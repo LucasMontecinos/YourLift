@@ -138,7 +138,7 @@ function _getPeerKey(a){
 }
 function _peerPerc(myTotal,key){const g=PEERS[key];if(!g)return null;const all=[...g.members.map(m=>m.total),myTotal].sort((a,b)=>b-a);const rank=all.indexOf(myTotal)+1;return{rank,n:all.length,pct:Math.round((1-rank/all.length)*100),g};}
 
-const ST={user:null,adminInfo:null,view:'athletes',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{},achievementsByCodigo:{},fotosByCodigo:{},actas:[]};
+const ST={user:null,adminInfo:null,view:'athletes',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{},achievementsByCodigo:{},fotosByCodigo:{}};
 window.ST=ST;
 
 // HTML-escape helper — defensa contra XSS al inyectar datos en innerHTML
@@ -413,22 +413,6 @@ async function loadAll(){
     ST.eventos=evSnap.docs.map(d=>({...d.data(),id:d.id}))
       .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   }catch(e){console.warn('[loadAll] eventos:',e.message);ST.eventos=[];}
-
-  // Actas (PDFs de campeonatos pasados) — real-time listener
-  if(!window._actasListener){
-    try{
-      window._actasListener=onSnapshot(collection(db,'actas'),(snap)=>{
-        ST.actas=snap.docs.map(d=>({id:d.id,...d.data()}))
-          .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
-        if(ST.view==='actas')render();
-      },(e)=>console.warn('[listener] actas:',e.message));
-    }catch(e){console.warn('[loadAll] actas listener:',e.message);}
-  }
-  try{
-    const actasSnap=await getDocs(collection(db,'actas'));
-    ST.actas=actasSnap.docs.map(d=>({id:d.id,...d.data()}))
-      .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
-  }catch(e){console.warn('[loadAll] actas:',e.message);ST.actas=[];}
 
   // Audit log — non-blocking, no ordering (avoids index requirement)
   try{
@@ -804,56 +788,6 @@ window.setStatus=async function(insId,status){
   }catch(e){showToast('Error: '+e.message,null,true)}
 }
 
-// ── Subida manual de documentos desde admin (para inscripciones sin archivos) ──
-window.uploadInscDoc = async function(insId, tipo) {
-  insId = decodeURIComponent(insId);
-  const ins = ST.inscripciones.find(x => x.id === insId);
-  if (!ins) return;
-
-  // Crear input de archivo temporal
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = tipo === 'carnet' ? 'image/*,.pdf' : 'image/*,.pdf';
-  input.style.display = 'none';
-  document.body.appendChild(input);
-
-  input.onchange = async () => {
-    const file = input.files[0];
-    document.body.removeChild(input);
-    if (!file) return;
-
-    const label = tipo === 'carnet' ? 'Carnet' : 'WADA/ADEL';
-    showToast(`Subiendo ${label}...`);
-
-    try {
-      const rutClean = String(ins.rut || '').replace(/[^0-9kK]/g, '').toUpperCase();
-      const ts = Date.now();
-      const path = `athlete_files/${rutClean}/${tipo}_${ts}`;
-      const storage = getStorage(app);
-      const sRef = storageRef(storage, path);
-      await uploadBytes(sRef, file, { contentType: file.type || 'application/octet-stream' });
-      const url = await getDownloadURL(sRef);
-
-      // Actualizar inscripciones_private con la URL
-      const privRef = doc(db, 'inscripciones_private', insId);
-      const field = tipo === 'carnet' ? 'carnetURL' : 'wadeURL';
-      await setDoc(privRef, { [field]: url }, { merge: true });
-
-      // Actualizar estado local
-      if (!ST.inscripcionesPrivate[insId]) ST.inscripcionesPrivate[insId] = {};
-      ST.inscripcionesPrivate[insId][field] = url;
-
-      showToast(`✅ ${label} subido correctamente`);
-      render();
-    } catch (e) {
-      showToast(`Error al subir: ${e.message}`, null, true);
-      console.error('[uploadInscDoc]', e);
-    }
-  };
-
-  input.click();
-};
-
 window.deleteInsc=async function(insId){
   insId=decodeURIComponent(insId);
   const ins=ST.inscripciones.find(x=>x.id===insId);if(!ins)return;
@@ -1142,6 +1076,89 @@ window.exportData=function(){
   logAction('export','data.json',null,`${clean.length} athletes`);
 }
 
+// ════════════════════════════════════════════════════════════════
+// Ver TODOS los documentos subidos por un atleta (modal con previews)
+// ════════════════════════════════════════════════════════════════
+window.viewInsDocs = function(sid){
+  const insId = decodeURIComponent(sid);
+  const i = ST.inscripciones.find(x=>x.id===insId);
+  if(!i) { showToast('Inscripción no encontrada', null, true); return; }
+  const priv = ST.inscripcionesPrivate?.[insId] || {};
+
+  // Mapeo de campos legacy → metadata del catálogo
+  const LEGACY_MAP = {
+    carnetURL:         { label: 'Carnet de Identidad', icon: '📷' },
+    wadeURL:           { label: 'ADEL/WADA', icon: '🧪' },
+    carnetPhotoURL:    { label: 'Foto fondo blanco', icon: '📸' },
+    consentimientoURL: { label: 'Consentimiento Menor', icon: '⚠️' },
+    passportURL:       { label: 'Pasaporte', icon: '🛂' },
+    ipfConsentURL:     { label: 'Consentimiento IPF', icon: '📋' },
+    notasURL:          { label: 'Concentración de Notas', icon: '📚' }
+  };
+  const NEW_MAP = (window.DOC_TYPES_CATALOG||{});
+
+  // Construir lista unificada de docs (sin duplicar)
+  const docs = [];
+  // 1) Primero del campo `docs` (nuevo sistema)
+  if(priv.docs && typeof priv.docs==='object'){
+    Object.entries(priv.docs).forEach(([k, url])=>{
+      const meta = NEW_MAP[k] || { label: k, icon: '📄', desc: '' };
+      docs.push({ key: k, url, label: meta.label, icon: meta.icon, source: 'docs' });
+    });
+  }
+  // 2) Después los campos legacy que no estén ya cubiertos
+  Object.entries(LEGACY_MAP).forEach(([field, meta])=>{
+    const url = priv[field];
+    if(!url) return;
+    if(docs.some(d=>d.url===url)) return; // ya incluido
+    docs.push({ key: field, url, label: meta.label, icon: meta.icon, source: 'legacy' });
+  });
+
+  const isImg = url => /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(url);
+
+  let body = '';
+  if(docs.length===0){
+    body = `<div style="padding:40px;text-align:center;color:var(--muted)">Este atleta no tiene documentos subidos.</div>`;
+  } else {
+    body = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;padding:18px">
+      ${docs.map(d => `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <div style="aspect-ratio:4/5;background:#0a1628;display:flex;align-items:center;justify-content:center;position:relative">
+            ${isImg(d.url)
+              ? `<img src="${esc(d.url)}" style="width:100%;height:100%;object-fit:cover" onerror="this.outerHTML='<div style=&quot;font-size:48px&quot;>${d.icon}</div>'">`
+              : `<div style="font-size:64px">${d.icon}</div><div style="position:absolute;bottom:12px;font-family:Oswald;font-size:11px;color:var(--muted);letter-spacing:2px">PDF</div>`}
+          </div>
+          <div style="padding:10px 12px">
+            <div style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:var(--gold);font-weight:600">${d.icon} ${esc(d.label)}</div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <a href="${esc(d.url)}" target="_blank" rel="noopener" style="flex:1;padding:6px 10px;background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);border-radius:5px;text-align:center;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;text-decoration:none">↗ ABRIR</a>
+              <a href="${esc(d.url)}" download style="padding:6px 10px;background:rgba(59,130,246,.15);border:1px solid var(--blue);color:var(--blue);border-radius:5px;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;text-decoration:none">⬇</a>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
+  // Modal overlay
+  const ex = document.getElementById('docsModal'); if(ex) ex.remove();
+  const m = document.createElement('div');
+  m.id = 'docsModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:40px';
+  m.onclick = (e) => { if(e.target===m) m.remove(); };
+  m.innerHTML = `<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:1100px;width:100%;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.5)">
+    <div style="padding:18px 22px;background:linear-gradient(90deg,#0a1628,#152849);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-family:Oswald;font-size:11px;letter-spacing:3px;color:var(--gold)">📁 DOCUMENTOS DE INSCRIPCIÓN</div>
+        <div style="font-family:Oswald;font-size:20px;font-weight:700;color:var(--text);margin-top:4px">${esc(i.nombre)} <span style="color:var(--muted);font-weight:400">· ${esc(i.rut||'')}</span></div>
+      </div>
+      <button onclick="document.getElementById('docsModal').remove()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:8px 14px;border-radius:6px;cursor:pointer;font-family:Oswald;font-size:12px">✕ CERRAR</button>
+    </div>
+    <div style="overflow:auto">${body}</div>
+  </div>`;
+  document.body.appendChild(m);
+};
+
 window.crearPerfilDebutante=async function(sid){
   const insId=decodeURIComponent(sid);
   const i=ST.inscripciones.find(x=>x.id===insId);
@@ -1368,7 +1385,6 @@ function render(){
       <a href="cronograma.html" target="_blank" class="side-btn" style="text-decoration:none"><span class="icon">📅</span>Cronograma</a>
       <a href="livecast.html" target="_blank" class="side-btn" style="text-decoration:none"><span class="icon">📡</span>LiveCast</a>
       <button class="side-btn ${ST.view==='campeonatos'?'active':''}" onclick="go('campeonatos')"><span class="icon">🏆</span>Campeonatos</button>
-      <button class="side-btn ${ST.view==='actas'?'active':''}" onclick="go('actas')"><span class="icon">📑</span>Actas PDF</button>
       <button class="side-btn ${ST.view==='exports'?'active':''}" onclick="go('exports')"><span class="icon">💾</span>Exports</button>
       <button class="side-btn ${ST.view==='audit'?'active':''}" onclick="go('audit')"><span class="icon">📜</span>Audit Log</button>
       ${ST.pendingResults?`<button class="side-btn ${ST.view==='mergeResults'?'active':''}" onclick="go('mergeResults')" style="border-color:var(--green);color:var(--green)"><span class="icon">🏁</span>Resultados Pendientes <span style="background:var(--green);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.pendingResults}</span></button>`:''}
@@ -1390,7 +1406,6 @@ function render(){
   else if(ST.view==='importar')content=renderImportar();
   else if(ST.view==='cronograma')content=renderCronograma();
   else if(ST.view==='campeonatos')content=renderCampeonatos();
-  else if(ST.view==='actas')content=renderActas();
   else if(ST.view==='exports')content=renderExports();
   else if(ST.view==='audit')content=renderAudit();
   else if(ST.view==='admins'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderAdmins();else go('athletes');}
@@ -2295,7 +2310,7 @@ function renderNominas(){
     ${needsMetaSync?'<div class="card" style="background:rgba(212,168,67,.08);border-color:rgba(212,168,67,.3);padding:12px 16px;margin-bottom:12px"><span style="color:var(--gold);font-size:12px">⚠️ Las inscripciones están en Firebase pero falta el doc de evento en <code>eventos/</code>. Sin eso no podés editar fecha/cierre/ubicación desde <b>Campeonatos</b>. Creá el evento desde el panel de Campeonatos.</span></div>':''}
     <div class="card" style="padding:0;overflow-x:auto">
       <table class="tbl">
-        <tr><th>#</th><th>Nombre</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Modalidad</th><th>Club</th><th title="Comuna / Región">📍 Zona</th><th title="Carnet">🪪 Carnet</th><th title="Certificado WADA / ADEL">📜 WADA</th><th title="Consentimiento menor de edad">👶 Menor</th><th>Estado</th><th></th></tr>
+        <tr><th>#</th><th>Nombre</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Modalidad</th><th>Club</th><th title="Comuna / Región">📍 Zona</th><th title="Documentos subidos">📁 Docs</th><th>Estado</th><th></th></tr>
         ${filtered.map((i,idx)=>{
           const editable=!i._json;
           const click=(f)=>editable?`onclick="editInsc('${i.id}','${f}')"`:'';
@@ -2307,29 +2322,18 @@ function renderNominas(){
           const rutNormRow=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
           const tienePerfilRow=!!(ST.data||[]).find(a=>rutNormRow(a.rut)===rutNormRow(i.rut));
           const sinPerfilBtn=editable&&!tienePerfilRow?`<button onclick="crearPerfilDebutante('${sid}')" style="background:transparent;border:1px solid rgba(212,168,67,.5);color:var(--gold);padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald;white-space:nowrap" title="Crear perfil de debutante">★ Perfil</button>`:'';
-          const carnetUrl = priv.carnetURL || '';
-          const wadaUrl = priv.wadeURL || priv.wadaURL || '';
-          const consentimientoUrl = priv.consentimientoURL || '';
-          // Detectar si es menor de edad
-          const esMinorAdmin = (fechaNac => {
-            if (!fechaNac) return false;
-            const dob = new Date(fechaNac + 'T00:00:00');
-            const hoy = new Date();
-            let age = hoy.getFullYear() - dob.getFullYear();
-            const m = hoy.getMonth() - dob.getMonth();
-            if (m < 0 || (m === 0 && hoy.getDate() < dob.getDate())) age--;
-            return age < 18;
-          })(i.fechaNac);
-          const carnetCell = carnetUrl
-            ? `<a href="${esc(carnetUrl)}" target="_blank" rel="noopener" title="Abrir foto del carnet" style="display:inline-block;padding:4px 8px;background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);border-radius:5px;text-decoration:none;font-size:11px;font-weight:600">🪪 Ver</a>`
-            : (editable ? `<button onclick="uploadInscDoc('${sid}','carnet')" title="Subir carnet" style="background:transparent;border:1px dashed rgba(34,197,94,.4);color:var(--green);padding:3px 7px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald">⬆ Carnet</button>` : `<span style="color:var(--muted);font-size:11px;opacity:.5">—</span>`);
-          const wadaCell = wadaUrl
-            ? `<a href="${esc(wadaUrl)}" target="_blank" rel="noopener" title="Abrir certificado WADA" style="display:inline-block;padding:4px 8px;background:rgba(59,130,246,.12);border:1px solid var(--blue);color:var(--blue);border-radius:5px;text-decoration:none;font-size:11px;font-weight:600">📜 Ver</a>`
-            : (editable ? `<button onclick="uploadInscDoc('${sid}','wada')" title="Subir certificado WADA/ADEL" style="background:transparent;border:1px dashed rgba(30,91,168,.5);color:var(--blue);padding:3px 7px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald">⬆ WADA</button>` : `<span style="color:var(--muted);font-size:11px;opacity:.5">—</span>`);
-          const consentimientoCell = !esMinorAdmin ? `<span style="color:var(--muted);font-size:11px;opacity:.4">—</span>`
-            : consentimientoUrl
-              ? `<a href="${esc(consentimientoUrl)}" target="_blank" rel="noopener" title="Abrir consentimiento" style="display:inline-block;padding:4px 8px;background:rgba(212,168,67,.12);border:1px solid var(--gold);color:var(--gold);border-radius:5px;text-decoration:none;font-size:11px;font-weight:600">📋 Ver</a>`
-              : `<span style="padding:4px 7px;background:rgba(239,68,68,.1);border:1px dashed rgba(239,68,68,.5);color:var(--red);border-radius:5px;font-size:10px;font-weight:600;font-family:Oswald">⚠ Falta</span>`;
+          // Contar docs subidos (mapa nuevo `docs` + URLs legacy)
+          const docKeys = ['carnetURL','wadeURL','carnetPhotoURL','consentimientoURL','passportURL','ipfConsentURL','notasURL'];
+          let docCount = 0;
+          docKeys.forEach(k=>{if(priv[k])docCount++});
+          if(priv.docs && typeof priv.docs==='object'){
+            // Contar los del map que no estén ya contados via legacy
+            const docsMapCount = Object.keys(priv.docs).length;
+            docCount = Math.max(docCount, docsMapCount);
+          }
+          const docsCell = docCount>0
+            ? `<button onclick="viewInsDocs('${sid}')" title="Ver todos los documentos subidos" style="display:inline-block;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;font-family:Oswald">📁 Ver (${docCount})</button>`
+            : `<span style="color:var(--muted);font-size:11px;opacity:.5">—</span>`;
           return `<tr>
             <td style="color:var(--muted);font-family:Oswald">${idx+1}</td>
             <td>${esc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${esc(i.rut||'')}</span></td>
@@ -2339,9 +2343,7 @@ function renderNominas(){
             <td><span class="${cls}" ${click('modalidad')}>${esc(i.modalidad||'—')}</span></td>
             <td><span class="${cls}" ${click('club')} style="display:inline-flex;align-items:center;gap:5px">${window.clubLogoImg?window.clubLogoImg(i.club,18,'background:var(--bg);padding:1px;'):''}${esc(i.club||'—')}</span></td>
             <td style="font-size:11px;color:var(--muted);max-width:160px"><span class="${cls}" ${click('comuna')} title="${esc(i.comuna||'')}">${esc(i.comuna||'—')}</span></td>
-            <td style="text-align:center">${carnetCell}</td>
-            <td style="text-align:center">${wadaCell}</td>
-            <td style="text-align:center">${consentimientoCell}</td>
+            <td style="text-align:center">${docsCell}</td>
             <td><span class="badge ${i.status==='approved'?'b-g':i.status==='pending'?'b-y':'b-r'}">${esc(i.status||'approved')}</span></td>
             <td style="white-space:nowrap">${sinPerfilBtn}${editable?`<button onclick="deleteInsc('${sid}')" style="background:transparent;border:1px solid rgba(239,68,68,.3);color:var(--red);padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald;margin-left:4px" title="Eliminar">✕</button>`:''}</td>
           </tr>`;
@@ -2747,6 +2749,18 @@ function renderCampeonatos(){
             <div style="font-size:11px;color:var(--muted);margin-top:2px">Si está activo, el campeonato aparece en el selector de eventos de <b>livecast.html</b>. <b>Desactivá para ocultarlo del LiveCast</b> (ej. campeonatos ya terminados que no querés mostrar).</div>
           </div>
         </label>
+
+        <!-- Sección NUEVA: Documentos requeridos en inscripción ──────────────────── -->
+        <div class="field" style="grid-column:span 2">
+          <div style="background:rgba(212,168,67,.06);border:1px solid rgba(212,168,67,.35);border-radius:10px;padding:14px 16px">
+            <div style="font-weight:600;color:var(--gold);margin-bottom:6px">📋 Documentos requeridos en inscripción</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5">
+              Marcá qué documentos pedir al atleta cuando se inscriba. Si dejás todo desmarcado, se usa la <b>lógica vieja</b> (carnet + WADA por default, IPF World detección por nombre, consentimiento menor si fechaNac &lt; 18, foto si "requiere foto" está activo arriba).
+            </div>
+            <div id="ef_docs_container" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+          </div>
+        </div>
+        <!-- ──────────────────────────────────────────────────────────────────────── -->
         <label class="field" style="grid-column:span 2">
           <span>▶️ URL YouTube en vivo <span style="font-weight:400;color:var(--muted)">(opcional)</span></span>
           <input class="inp" id="ef_youtubeUrl" value="${editing.youtubeUrl||''}" placeholder="ej: https://www.youtube.com/live/abc123xyz">
@@ -2835,6 +2849,45 @@ window.editEvento = function(id){
   render();
 };
 
+// ─── Catálogo de tipos de documento (espejo de inscripcion.html) ───
+window.DOC_TYPES_CATALOG = {
+  carnetIdFront: { label: 'Carnet de Identidad', icon: '📷', desc: 'Cara frontal del carnet' },
+  fotoBlanco:    { label: 'Foto fondo blanco',  icon: '📸', desc: 'Tipo carnet, sin accesorios' },
+  pasaporte:     { label: 'Pasaporte',          icon: '🛂', desc: 'Página de datos' },
+  wadaIntl:      { label: 'ADEL/WADA Internacional', icon: '🧪', desc: 'Vigente' },
+  ipfConsent:    { label: 'Consentimiento IPF', icon: '📋', desc: 'Firmado · PDF descargable' },
+  menorConsent:  { label: 'Consentimiento Menor', icon: '⚠️', desc: 'Tutor firma · PDF descargable' },
+  notas:         { label: 'Concentración de Notas', icon: '📚', desc: 'Certificado académico' }
+};
+
+// Renderiza el container de checkboxes de docs cuando el form de evento está visible
+window.renderDocsChecklist = function(){
+  const cont = document.getElementById('ef_docs_container');
+  if(!cont || !ST.eventoForm) return;
+  const current = Array.isArray(ST.eventoForm.requiredDocs) ? ST.eventoForm.requiredDocs : [];
+  let h = '';
+  Object.entries(window.DOC_TYPES_CATALOG).forEach(([k, meta])=>{
+    const checked = current.includes(k);
+    h += `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:${checked?'rgba(34,197,94,.08)':'transparent'};border:1px solid ${checked?'rgba(34,197,94,.4)':'var(--border)'};border-radius:6px;cursor:pointer;transition:all .15s">
+      <input type="checkbox" data-doc-key="${k}" ${checked?'checked':''} onchange="this.parentElement.style.background=this.checked?'rgba(34,197,94,.08)':'transparent';this.parentElement.style.borderColor=this.checked?'rgba(34,197,94,.4)':'var(--border)'" style="width:16px;height:16px;cursor:pointer;margin-top:2px;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px;color:var(--text)">${meta.icon} ${meta.label}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:1px">${meta.desc}</div>
+      </div>
+    </label>`;
+  });
+  cont.innerHTML = h;
+};
+// Hook a render: cada vez que se renderiza el form, dibuja los checkboxes después
+const _origRender_docsHook = window.render;
+if(!window._docsHookInstalled){
+  window._docsHookInstalled = true;
+  window.render = function(){
+    if(typeof _origRender_docsHook==='function') _origRender_docsHook();
+    setTimeout(()=>{ try{ window.renderDocsChecklist(); }catch(e){} }, 0);
+  };
+}
+
 window.saveEvento = async function(){
   const isNew = ST.eventoFormMode === 'create';
   const id  = isNew ? (document.getElementById('ef_id').value||'').trim().replace(/\s+/g,'_') : ST.eventoForm.id;
@@ -2856,12 +2909,16 @@ window.saveEvento = async function(){
   const requiereFoto = !!document.getElementById('ef_requiereFoto')?.checked;
   const livecastVisible = document.getElementById('ef_livecastVisible')?.checked !== false;
   const youtubeUrl = (document.getElementById('ef_youtubeUrl')?.value||'').trim();
+  // NUEVO: leer los checkboxes de documentos requeridos
+  const requiredDocs = Array.from(document.querySelectorAll('#ef_docs_container input[type="checkbox"]:checked'))
+    .map(cb => cb.getAttribute('data-doc-key'));
 
   if(!id || !name){ showToast('ID y nombre son obligatorios', null, true); return; }
   if(isNew && ST.eventos.find(e=>e.id===id)){ showToast('Ya existe un campeonato con ese ID', null, true); return; }
 
   const data = {id, name, date, closeDate, preNominaCloseAt, nominaCloseAt, location, org, days, status,
     extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, youtubeUrl,
+    requiredDocs,    // nuevo: array de docKeys requeridos
     updatedAt: serverTimestamp()};
   if(isNew) data.createdAt = serverTimestamp();
 
@@ -5145,164 +5202,6 @@ window.verDetalleComp = function(compId){
   </div>`;
   document.body.appendChild(m);
   m.onclick=e=>{if(e.target===m)m.remove();};
-};
-
-// ══════════════════════════════════════════════════════════════
-// ACTAS PDF — renderActas + handlers
-// ══════════════════════════════════════════════════════════════
-function renderActas(){
-  const actas = ST.actas || [];
-  // Group by year
-  const byYear = {};
-  actas.forEach(a => {
-    const yr = (a.fecha||'').slice(0,4) || 'Sin fecha';
-    if(!byYear[yr]) byYear[yr] = [];
-    byYear[yr].push(a);
-  });
-  const years = Object.keys(byYear).sort((a,b)=>b.localeCompare(a));
-
-  return `
-  <div class="h1">📑 Actas PDF</div>
-  <p class="subtitle">Resultados oficiales de campeonatos pasados — se publican en <a href="resultados.html" target="_blank" style="color:var(--blue)">resultados.html</a></p>
-
-  <!-- Upload form -->
-  <div class="card" style="max-width:640px;margin-bottom:24px">
-    <div class="h2" style="margin-bottom:16px">Subir nueva acta</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <label class="field" style="grid-column:span 2">
-        <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Nombre del campeonato *</span>
-        <input class="inp" id="acta_nombre" placeholder="ej: Campeonato Nacional FECHIPO 2024" style="margin-top:6px">
-      </label>
-      <label class="field">
-        <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Fecha</span>
-        <input class="inp" id="acta_fecha" type="date" style="margin-top:6px">
-      </label>
-      <label class="field">
-        <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Organización</span>
-        <input class="inp" id="acta_org" placeholder="FECHIPO" value="FECHIPO" style="margin-top:6px">
-      </label>
-      <label class="field" style="grid-column:span 2">
-        <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Lugar</span>
-        <input class="inp" id="acta_lugar" placeholder="ej: Santiago, Chile" style="margin-top:6px">
-      </label>
-      <label class="field" style="grid-column:span 2">
-        <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Archivo PDF *</span>
-        <div id="actaPdfZone" onclick="document.getElementById('actaPdfInput').click()" style="margin-top:6px;border:2px dashed var(--border);border-radius:8px;padding:20px;text-align:center;cursor:pointer;transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div id="actaPdfLabel" style="color:var(--muted);font-size:13px">📄 Click para seleccionar PDF · Máx 50MB</div>
-          <input type="file" id="actaPdfInput" accept=".pdf" style="display:none" onchange="actaPdfSelected(this)">
-        </div>
-      </label>
-    </div>
-    <div id="actaUploadError" style="display:none;color:var(--red);font-size:12px;margin-top:6px"></div>
-    <div style="margin-top:16px;display:flex;justify-content:flex-end">
-      <button class="btn btn-g" id="actaUploadBtn" onclick="actasUpload()">⬆ Subir Acta</button>
-    </div>
-  </div>
-
-  <!-- Lista de actas -->
-  ${years.length === 0 ? `<div class="card" style="text-align:center;padding:40px;color:var(--muted)">No hay actas publicadas aún.</div>` :
-    years.map(yr => `
-    <div style="margin-bottom:24px">
-      <div class="os" style="font-size:13px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">${yr}</div>
-      ${byYear[yr].map(a => `
-      <div class="card" style="padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-        <div style="font-size:20px;flex-shrink:0">📑</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.nombre||'Sin nombre')}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">${esc(a.org||'')}${a.lugar?' · '+esc(a.lugar):''}${a.fecha?' · '+a.fecha:''}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-          <span class="badge ${a.visible!==false?'b-g':'b-y'}" style="cursor:pointer" onclick="actasToggle('${a.id}',${a.visible!==false})" title="Click para cambiar visibilidad">${a.visible!==false?'✓ Publicado':'⏸ Oculto'}</span>
-          ${a.pdfURL?`<a href="${esc(a.pdfURL)}" target="_blank" class="btn btn-b" style="padding:5px 10px;font-size:11px;text-decoration:none">Ver PDF</a>`:''}
-          <button class="btn btn-r" style="padding:5px 10px;font-size:11px" onclick="actasDelete('${a.id}','${esc(a.nombre||'')}')">🗑</button>
-        </div>
-      </div>`).join('')}
-    </div>`).join('')
-  }`;
-}
-
-window.actaPdfFile = null;
-window.actaPdfSelected = function(input){
-  const file = input.files[0];
-  if(!file) return;
-  if(file.size > 50 * 1024 * 1024){ document.getElementById('actaUploadError').textContent='El PDF excede 50MB'; document.getElementById('actaUploadError').style.display='block'; window.actaPdfFile=null; return; }
-  window.actaPdfFile = file;
-  document.getElementById('actaPdfLabel').innerHTML = `✅ <strong>${esc(file.name)}</strong> (${(file.size/1024/1024).toFixed(1)}MB)`;
-  document.getElementById('actaPdfLabel').style.color = 'var(--green)';
-  document.getElementById('actaUploadError').style.display = 'none';
-  document.getElementById('actaPdfZone').style.borderColor = 'var(--green)';
-  document.getElementById('actaPdfZone').style.borderStyle = 'solid';
-};
-
-window.actasUpload = async function(){
-  const nombre = document.getElementById('acta_nombre')?.value?.trim();
-  const fecha  = document.getElementById('acta_fecha')?.value || '';
-  const org    = document.getElementById('acta_org')?.value?.trim() || 'FECHIPO';
-  const lugar  = document.getElementById('acta_lugar')?.value?.trim() || '';
-  const errEl  = document.getElementById('actaUploadError');
-  const btn    = document.getElementById('actaUploadBtn');
-
-  if(!nombre){ errEl.textContent='El nombre es obligatorio'; errEl.style.display='block'; return; }
-  if(!window.actaPdfFile){ errEl.textContent='Selecciona un archivo PDF'; errEl.style.display='block'; return; }
-  errEl.style.display='none';
-
-  btn.disabled = true;
-  btn.textContent = '⏳ Subiendo...';
-  try{
-    const ts = Date.now();
-    const safeName = window.actaPdfFile.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-    const path = `actas/${ts}_${safeName}`;
-    const storage = getStorage(app);
-    const sRef = storageRef(storage, path);
-    await uploadBytes(sRef, window.actaPdfFile, {contentType:'application/pdf'});
-    const pdfURL = await getDownloadURL(sRef);
-
-    await addDoc(collection(db,'actas'),{
-      nombre, fecha, org, lugar, pdfURL,
-      storagePath: path,
-      visible: true,
-      ts: serverTimestamp(),
-    });
-
-    showToast('✅ Acta publicada correctamente');
-    // Reset form
-    document.getElementById('acta_nombre').value='';
-    document.getElementById('acta_fecha').value='';
-    document.getElementById('acta_lugar').value='';
-    document.getElementById('actaPdfLabel').innerHTML='📄 Click para seleccionar PDF · Máx 50MB';
-    document.getElementById('actaPdfLabel').style.color='var(--muted)';
-    document.getElementById('actaPdfZone').style.borderColor='var(--border)';
-    document.getElementById('actaPdfZone').style.borderStyle='dashed';
-    document.getElementById('actaPdfInput').value='';
-    window.actaPdfFile = null;
-  }catch(e){
-    errEl.textContent = 'Error: '+e.message;
-    errEl.style.display='block';
-  }finally{
-    btn.disabled=false;
-    btn.textContent='⬆ Subir Acta';
-  }
-};
-
-window.actasToggle = async function(id, currentlyVisible){
-  try{
-    await updateDoc(doc(db,'actas',id),{visible:!currentlyVisible});
-    showToast(currentlyVisible?'Acta ocultada':'Acta publicada');
-  }catch(e){ showToast('Error: '+e.message,null,true); }
-};
-
-window.actasDelete = async function(id, nombre){
-  if(!confirm(`¿Eliminar el acta "${nombre}"? Se borrará el PDF de Storage.`)) return;
-  try{
-    const snap = await getDoc(doc(db,'actas',id));
-    if(snap.exists() && snap.data().storagePath){
-      try{
-        await deleteObject(storageRef(getStorage(app), snap.data().storagePath));
-      }catch(e){ console.warn('Storage delete failed:', e.message); }
-    }
-    await deleteDoc(doc(db,'actas',id));
-    showToast('🗑 Acta eliminada');
-  }catch(e){ showToast('Error: '+e.message,null,true); }
 };
 
 </script>
