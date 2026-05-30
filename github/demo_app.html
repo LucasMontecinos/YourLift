@@ -3,68 +3,303 @@
 <head>
 <meta charset="UTF-8">
 <title>YourLift Demo</title>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@500;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100vw;height:100vh;overflow:hidden;background:#000;font-family:'Inter',sans-serif;color:#fff}
-#stage{position:fixed;inset:0;overflow:hidden;background:radial-gradient(ellipse at top,#0a1628 0%,#020410 100%)}
+html,body{width:100vw;height:100vh;overflow:hidden;background:#000;font-family:'Inter',sans-serif;color:#fff;font-feature-settings:"tnum"}
+#stage{position:fixed;inset:0;overflow:hidden;background:radial-gradient(ellipse at top left,#0a1628 0%,#020410 100%)}
 
-/* Partículas doradas */
+/* Partículas doradas (decorativas) */
 .particle{position:absolute;width:4px;height:4px;background:#D4A843;border-radius:50%;box-shadow:0 0 8px #D4A843;animation:float linear infinite;opacity:0;z-index:1;pointer-events:none}
 @keyframes float{0%{transform:translateY(110vh) scale(.5);opacity:0}10%{opacity:.7}90%{opacity:.7}100%{transform:translateY(-10vh) scale(1.2);opacity:0}}
 
-.scene{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;opacity:0;transition:opacity .35s ease;z-index:2}
+.scene{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;opacity:0;transition:opacity .4s ease;z-index:2;padding:50px 60px}
 .scene.on{opacity:1}
 
-/* ============ S1 Intro ============ */
-#s1 .logoBig{font-family:Oswald;font-size:130px;font-weight:700;letter-spacing:12px;text-transform:uppercase;color:#fff;opacity:0;transform:scale(.5);animation:logoIn 1.2s cubic-bezier(.2,.9,.3,1.4) forwards;line-height:1}
-#s1 .logoBig .red{color:#C41E3A}
-#s1 .tagline{font-size:24px;letter-spacing:10px;color:#D4A843;margin-top:34px;opacity:0;animation:fadeUp .7s .8s forwards;text-transform:uppercase;font-weight:600;text-align:center}
 @keyframes logoIn{0%{opacity:0;transform:scale(.3) rotate(-10deg);filter:blur(20px)}60%{opacity:1;transform:scale(1.15) rotate(3deg);filter:blur(0)}100%{opacity:1;transform:scale(1) rotate(0)}}
-@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-
-/* ============ Feature scenes (video bg + texto) ============ */
-.feat{display:none}
-.feat.on{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start}
-.feat-video-wrap{position:relative;width:100%;height:65%;overflow:hidden;background:#000}
-.feat-video-wrap video{width:100%;height:100%;object-fit:cover;filter:saturate(1.05) contrast(1.05)}
-.feat-video-wrap::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.35) 0%,transparent 25%,transparent 75%,rgba(10,22,40,.95) 100%);pointer-events:none}
-
-.feat-bottom{flex:1;background:linear-gradient(180deg,#0a1628 0%,#020410 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 50px;position:relative;overflow:hidden}
-.feat-bottom::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:200px;height:4px;background:linear-gradient(90deg,transparent,#D4A843,transparent)}
-
-.feat-num{font-family:Oswald;font-size:18px;letter-spacing:8px;color:#D4A843;font-weight:600;opacity:0;animation:fadeUp .5s .15s forwards}
-.feat-title{font-family:Oswald;font-size:64px;font-weight:700;letter-spacing:5px;color:#fff;text-transform:uppercase;line-height:1.05;text-align:center;margin-top:14px;opacity:0;animation:fadeUp .6s .35s forwards;text-shadow:0 4px 20px rgba(0,0,0,.6)}
-.feat-sub{font-size:22px;letter-spacing:3px;color:rgba(220,230,245,.85);margin-top:24px;text-align:center;line-height:1.4;opacity:0;animation:fadeUp .6s .55s forwards;max-width:90%;font-weight:500}
-.feat-badge{display:inline-block;padding:8px 18px;background:#C41E3A;color:#fff;font-family:Oswald;font-size:12px;letter-spacing:3px;border-radius:6px;margin-top:30px;font-weight:700;opacity:0;animation:fadeUp .5s .75s forwards;box-shadow:0 4px 16px rgba(196,30,58,.5)}
-
-/* Top overlay strip — siempre en featured con YourLift */
-.feat-top-strip{position:absolute;top:24px;left:24px;right:24px;display:flex;justify-content:space-between;align-items:center;z-index:5;pointer-events:none}
-.feat-yl{font-family:Oswald;font-size:24px;font-weight:700;letter-spacing:5px;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.9)}
-.feat-yl .red{color:#C41E3A}
-.feat-live{background:#C41E3A;color:#fff;padding:6px 12px;font-family:Oswald;font-size:11px;letter-spacing:3px;border-radius:4px;font-weight:700;animation:pulse 1.5s steps(2) infinite;box-shadow:0 4px 12px rgba(196,30,58,.5)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeDown{from{opacity:0;transform:translateY(-30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideRight{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:translateX(0)}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
 @keyframes pulse{50%{opacity:.7}}
 
+/* ============ S1 INTRO ============ */
+#s1 .logoBig{font-family:Oswald;font-size:180px;font-weight:700;letter-spacing:16px;text-transform:uppercase;color:#fff;opacity:0;animation:logoIn 1.2s cubic-bezier(.2,.9,.3,1.4) forwards;line-height:1}
+#s1 .logoBig .red{color:#C41E3A}
+#s1 .tagline{font-size:26px;letter-spacing:10px;color:#D4A843;margin-top:40px;opacity:0;animation:fadeUp .7s .8s forwards;text-transform:uppercase;font-weight:600;text-align:center}
+
+/* ============ Tabla común para escenas con título ============ */
+.scn-title-row{position:absolute;top:50px;left:0;right:0;text-align:center;z-index:3}
+.scn-num{font-family:Oswald;font-size:16px;letter-spacing:8px;color:#D4A843;font-weight:600}
+.scn-title{font-family:Oswald;font-size:48px;font-weight:700;letter-spacing:6px;color:#fff;text-transform:uppercase;margin-top:8px}
+.scn-sub{font-size:18px;letter-spacing:3px;color:rgba(220,230,245,.85);margin-top:14px;font-weight:500}
+
+.scn-title-row .scn-num{opacity:0;animation:fadeDown .5s .1s forwards}
+.scn-title-row .scn-title{opacity:0;animation:fadeDown .6s .3s forwards}
+.scn-title-row .scn-sub{opacity:0;animation:fadeDown .6s .5s forwards}
+
+/* ============ S2 INSCRIPCIÓN (mockup form) ============ */
+.mockup-card{background:linear-gradient(180deg,rgba(17,34,59,.95),rgba(10,22,40,.95));border:1px solid rgba(212,168,67,.35);border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 40px rgba(212,168,67,.15);overflow:hidden;opacity:0;animation:scaleIn .7s .35s cubic-bezier(.2,.9,.3,1.1) forwards}
+
+#s2 .mockup-card{width:720px;margin-top:200px}
+.insc-header{background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);padding:18px 28px;display:flex;justify-content:space-between;align-items:center}
+.insc-header-l{font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:3px;color:#fff}
+.insc-header-r{font-family:Oswald;font-size:13px;letter-spacing:2px;color:rgba(255,255,255,.85)}
+
+.insc-progress{display:flex;gap:0;background:rgba(8,16,30,.6)}
+.insc-step{flex:1;padding:18px 0;text-align:center;font-family:Oswald;font-size:12px;letter-spacing:2px;color:rgba(220,230,245,.5);border-bottom:3px solid transparent;position:relative}
+.insc-step.active{color:#D4A843;border-bottom-color:#D4A843;background:rgba(212,168,67,.05)}
+.insc-step.done{color:#22c55e;border-bottom-color:#22c55e}
+.insc-step b{display:block;font-family:Inter;font-weight:700;font-size:14px;color:inherit;margin-top:4px;letter-spacing:1px}
+
+.insc-body{padding:28px 32px;display:flex;flex-direction:column;gap:14px}
+.insc-field{display:flex;flex-direction:column;gap:6px}
+.insc-field label{font-family:Oswald;font-size:11px;letter-spacing:2px;color:rgba(220,230,245,.65);font-weight:600}
+.insc-uploaded{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.4);border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:14px}
+.insc-uploaded .ic{font-size:22px}
+.insc-uploaded .fname{font-family:Inter;font-size:14px;font-weight:600;color:#fff}
+.insc-uploaded .stat{font-family:Oswald;font-size:11px;letter-spacing:2px;color:#22c55e;margin-left:auto}
+
+.insc-cta{margin-top:6px;padding:16px 0;background:#22c55e;color:#fff;font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:3px;text-align:center;border-radius:10px;cursor:pointer;box-shadow:0 8px 20px rgba(34,197,94,.3)}
+
+/* ============ S3 PERFIL ATLETA ============ */
+#s3 .mockup-card{width:780px;margin-top:200px;padding:0}
+.prof-h{background:linear-gradient(90deg,#0a1628 0%,#1a2e4f 100%);padding:24px 28px;display:flex;gap:24px;align-items:center;border-bottom:2px solid rgba(212,168,67,.4)}
+.prof-avatar{width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,#C41E3A,#D4A843);border:3px solid #D4A843;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:40px;color:#fff;font-weight:700;flex-shrink:0;box-shadow:0 0 30px rgba(212,168,67,.4)}
+.prof-info{flex:1}
+.prof-name{font-family:Oswald;font-size:30px;font-weight:700;letter-spacing:2px;color:#fff;line-height:1.05}
+.prof-club{font-family:Oswald;font-size:14px;letter-spacing:3px;color:#D4A843;margin-top:6px}
+.prof-tags{display:flex;gap:8px;margin-top:10px}
+.prof-tag{background:rgba(212,168,67,.15);border:1px solid rgba(212,168,67,.4);padding:4px 12px;border-radius:6px;font-family:Oswald;font-size:11px;letter-spacing:2px;color:#D4A843}
+
+.prof-stats{padding:24px 28px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;background:rgba(8,16,30,.5)}
+.prof-stat{background:rgba(10,22,40,.6);border:1px solid rgba(212,168,67,.2);border-radius:10px;padding:14px;text-align:center}
+.prof-stat .lb{font-family:Oswald;font-size:10px;letter-spacing:2px;color:#D4A843;font-weight:600}
+.prof-stat .vl{font-family:Oswald;font-size:32px;font-weight:700;color:#fff;line-height:1;margin-top:6px}
+.prof-stat .un{font-family:Inter;font-size:10px;color:rgba(220,230,245,.55);margin-top:3px}
+
+.prof-h-rows{padding:18px 28px 24px}
+.prof-h-title{font-family:Oswald;font-size:13px;letter-spacing:3px;color:#D4A843;margin-bottom:12px;font-weight:600}
+.prof-h-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(212,168,67,.1)}
+.prof-h-row:last-child{border:0}
+.prof-h-evt{font-family:Inter;font-size:13px;color:rgba(240,245,255,.9);font-weight:500}
+.prof-h-pos{font-family:Oswald;font-size:13px;color:#D4A843;font-weight:700;letter-spacing:2px}
+
+/* ============ S4 RANKING ============ */
+#s4 .mockup-card{width:780px;margin-top:200px}
+.rk-h{background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);padding:18px 28px;display:flex;justify-content:space-between;align-items:center}
+.rk-h-l{font-family:Oswald;font-size:13px;letter-spacing:3px;color:rgba(255,255,255,.75)}
+.rk-h-t{font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:2px;color:#fff;margin-top:2px}
+.rk-h-r{font-family:Oswald;font-size:12px;letter-spacing:2px;color:#D4A843;background:rgba(212,168,67,.15);padding:6px 14px;border-radius:6px;border:1px solid rgba(212,168,67,.4)}
+.rk-row{display:grid;grid-template-columns:60px 1fr 120px 120px;padding:14px 28px;align-items:center;border-bottom:1px solid rgba(212,168,67,.1)}
+.rk-row:nth-child(2){background:rgba(212,168,67,.08);border-left:4px solid #D4A843}
+.rk-row .rk-pos{font-family:Oswald;font-size:24px;font-weight:700;color:#D4A843}
+.rk-row .rk-name{font-family:Inter;font-weight:600;font-size:15px;color:#fff}
+.rk-row .rk-club{font-size:11px;color:rgba(220,230,245,.5);font-family:Oswald;letter-spacing:1px;margin-top:2px}
+.rk-row .rk-total{font-family:Oswald;font-size:18px;font-weight:700;color:rgba(240,245,255,.9);text-align:right}
+.rk-row .rk-gl{font-family:Oswald;font-size:18px;font-weight:700;color:#D4A843;text-align:right}
+.rk-cols{padding:8px 28px;background:rgba(8,16,30,.6);display:grid;grid-template-columns:60px 1fr 120px 120px;font-family:Oswald;font-size:10px;letter-spacing:2px;color:rgba(220,230,245,.5)}
+.rk-cols div:nth-child(3),.rk-cols div:nth-child(4){text-align:right}
+
+/* ============ S5 RECORDS ============ */
+#s5 .mockup-card{width:780px;margin-top:200px;padding:24px}
+.rec-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.rec-card{background:linear-gradient(180deg,rgba(196,30,58,.2),rgba(196,30,58,.05));border:1px solid rgba(212,168,67,.4);border-radius:12px;padding:18px;position:relative;overflow:hidden}
+.rec-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#C41E3A,#D4A843)}
+.rec-cat{font-family:Oswald;font-size:11px;letter-spacing:2px;color:#D4A843;font-weight:600}
+.rec-lift{font-family:Oswald;font-size:24px;font-weight:700;letter-spacing:2px;color:#fff;margin-top:4px;text-transform:uppercase}
+.rec-mark{font-family:Oswald;font-size:42px;font-weight:700;color:#D4A843;text-shadow:0 0 20px rgba(212,168,67,.5);margin-top:10px}
+.rec-mark .kg{font-size:18px;color:rgba(212,168,67,.7);margin-left:6px}
+.rec-name{font-family:Inter;font-size:12px;color:rgba(240,245,255,.85);margin-top:8px;font-weight:600}
+.rec-date{font-family:Oswald;font-size:10px;letter-spacing:2px;color:rgba(220,230,245,.5);margin-top:2px}
+.rec-badge{position:absolute;top:14px;right:14px;background:#C41E3A;color:#fff;padding:3px 8px;font-family:Oswald;font-size:9px;letter-spacing:1.5px;border-radius:4px}
+
+/* ============ Transition card ============ */
+#sTrans{display:flex}
+#sTrans .trans-big{font-family:Oswald;font-size:120px;font-weight:700;letter-spacing:14px;text-transform:uppercase;color:#fff;line-height:1.05;text-align:center;opacity:0;animation:fadeUp 1s forwards;text-shadow:0 0 40px rgba(212,168,67,.3)}
+#sTrans .trans-big .gold{color:#D4A843}
+#sTrans .trans-sub{font-family:Oswald;font-size:24px;letter-spacing:8px;color:#D4A843;margin-top:30px;opacity:0;animation:fadeUp .8s .6s forwards;font-weight:600}
+
+/* ============ Feature scenes (video + texto split) ============ */
+.feat{display:none}
+.feat.on{display:flex;flex-direction:row;align-items:stretch;justify-content:flex-start;padding:0}
+
+.feat-video-wrap{position:relative;width:62%;height:100%;overflow:hidden;background:#000}
+.feat-video-wrap video{width:100%;height:100%;object-fit:cover;filter:saturate(1.05) contrast(1.05)}
+.feat-video-wrap::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.2) 0%,transparent 30%,transparent 70%,rgba(10,22,40,.9) 100%);pointer-events:none}
+
+.feat-side{flex:1;background:linear-gradient(180deg,#0a1628 0%,#020410 100%);display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding:0 80px 0 60px;position:relative}
+.feat-side::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:4px;height:60%;background:linear-gradient(180deg,transparent,#D4A843,transparent)}
+
+.feat-num{font-family:Oswald;font-size:18px;letter-spacing:8px;color:#D4A843;font-weight:600;opacity:0;animation:fadeUp .5s .15s forwards}
+.feat-title{font-family:Oswald;font-size:78px;font-weight:700;letter-spacing:5px;color:#fff;text-transform:uppercase;line-height:1.0;text-align:left;margin-top:14px;opacity:0;animation:fadeUp .6s .35s forwards;text-shadow:0 4px 20px rgba(0,0,0,.6)}
+.feat-sub{font-size:20px;letter-spacing:2px;color:rgba(220,230,245,.85);margin-top:26px;text-align:left;line-height:1.45;opacity:0;animation:fadeUp .6s .55s forwards;font-weight:500}
+
+.feat-top-strip{position:absolute;top:28px;left:32px;display:flex;align-items:center;gap:16px;z-index:5;pointer-events:none}
+.feat-yl{font-family:Oswald;font-size:28px;font-weight:700;letter-spacing:5px;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.9)}
+.feat-yl .red{color:#C41E3A}
+.feat-live{background:#C41E3A;color:#fff;padding:7px 14px;font-family:Oswald;font-size:13px;letter-spacing:3px;border-radius:4px;font-weight:700;animation:pulse 1.5s steps(2) infinite;box-shadow:0 4px 12px rgba(196,30,58,.5)}
+
+/* ============ Good lift / No lift slam ============ */
+.slam{display:flex;align-items:center;justify-content:center}
+.slam .slamBox{font-family:Oswald;font-size:280px;font-weight:700;letter-spacing:14px;text-transform:uppercase;text-align:center;opacity:0;transform:scale(.6);animation:slamIn .35s cubic-bezier(.3,1.2,.4,1) forwards}
+.slam .slamSub{position:absolute;bottom:18%;left:0;right:0;text-align:center;font-family:Oswald;font-size:38px;letter-spacing:8px;color:rgba(255,255,255,.85);font-weight:600;opacity:0;animation:fadeUp .5s .25s forwards}
+@keyframes slamIn{from{opacity:0;transform:scale(.55) rotate(-3deg);filter:blur(10px)}to{opacity:1;transform:scale(1) rotate(0);filter:blur(0)}}
+#sGood{background:radial-gradient(circle at center,#0d4a26 0%,#022416 100%)}
+#sGood .slamBox{color:#22c55e;text-shadow:0 0 60px rgba(34,197,94,.6)}
+#sNoLift{background:radial-gradient(circle at center,#5c0e21 0%,#1a0309 100%)}
+#sNoLift .slamBox{color:#ef4444;text-shadow:0 0 60px rgba(239,68,68,.6)}
+
 /* ============ Cierre ============ */
-#sFin .logoFinal{font-family:Oswald;font-size:170px;font-weight:700;letter-spacing:16px;text-transform:uppercase;color:#fff;text-shadow:0 0 60px rgba(212,168,67,.7);animation:finalZoom 1s ease-out forwards;line-height:.9}
+#sFin .logoFinal{font-family:Oswald;font-size:200px;font-weight:700;letter-spacing:20px;text-transform:uppercase;color:#fff;text-shadow:0 0 60px rgba(212,168,67,.7);animation:finalZoom 1s ease-out forwards;line-height:.9}
 #sFin .logoFinal .red{color:#C41E3A}
 @keyframes finalZoom{from{opacity:0;transform:scale(1.3);filter:blur(20px)}to{opacity:1;transform:scale(1);filter:blur(0)}}
-#sFin .finalUrl{font-family:Oswald;font-size:54px;letter-spacing:14px;color:#D4A843;margin-top:40px;opacity:0;animation:fadeUp .8s .55s forwards;font-weight:700}
+#sFin .finalUrl{font-family:Oswald;font-size:72px;letter-spacing:20px;color:#D4A843;margin-top:50px;opacity:0;animation:fadeUp .8s .55s forwards;font-weight:700}
 #sFin .finalUrl .dot{color:#fff}
-#sFin .finalSub{font-size:20px;letter-spacing:7px;color:rgba(255,255,255,.75);margin-top:30px;text-transform:uppercase;opacity:0;animation:fadeUp .8s 1.1s forwards;font-weight:600;text-align:center}
-#sFin .ig{margin-top:32px;font-family:Oswald;font-size:18px;letter-spacing:4px;color:#D4A843;opacity:0;animation:fadeUp .8s 1.4s forwards}
+#sFin .finalSub{font-size:22px;letter-spacing:7px;color:rgba(255,255,255,.75);margin-top:34px;text-transform:uppercase;opacity:0;animation:fadeUp .8s 1.1s forwards;font-weight:600;text-align:center}
+#sFin .ig{margin-top:32px;font-family:Oswald;font-size:22px;letter-spacing:4px;color:#D4A843;opacity:0;animation:fadeUp .8s 1.4s forwards}
 </style>
 </head>
 <body>
 <div id="stage">
 
-  <!-- INTRO -->
+  <!-- 1. INTRO -->
   <div class="scene on" id="s1">
     <div class="logoBig"><span class="red">YOUR</span>LIFT</div>
-    <div class="tagline">TRANSMITÍ COMO PRO</div>
+    <div class="tagline">LA TECNOLOGÍA DEL POWERLIFTING</div>
   </div>
 
-  <!-- FEATURE 1: Perfil del Atleta -->
+  <!-- 2. INSCRIPCIÓN -->
+  <div class="scene" id="s2">
+    <div class="scn-title-row">
+      <div class="scn-num">01 · GESTIÓN</div>
+      <div class="scn-title">Inscripción Digital</div>
+      <div class="scn-sub">Online, validada y conectada al sistema en vivo</div>
+    </div>
+    <div class="mockup-card">
+      <div class="insc-header">
+        <div class="insc-header-l">INSCRIPCIÓN · IPF WORLD 2026</div>
+        <div class="insc-header-r">PASO 3 DE 3</div>
+      </div>
+      <div class="insc-progress">
+        <div class="insc-step done">✓<b>Datos</b></div>
+        <div class="insc-step done">✓<b>Categoría</b></div>
+        <div class="insc-step active">●<b>Documentos</b></div>
+      </div>
+      <div class="insc-body">
+        <div class="insc-uploaded"><div class="ic">🛂</div><div class="fname">pasaporte_montecinos.pdf</div><div class="stat">✓ SUBIDO</div></div>
+        <div class="insc-uploaded"><div class="ic">🧪</div><div class="fname">wada_internacional.pdf</div><div class="stat">✓ SUBIDO</div></div>
+        <div class="insc-uploaded"><div class="ic">📸</div><div class="fname">foto_oficial.jpg</div><div class="stat">✓ SUBIDO</div></div>
+        <div class="insc-uploaded"><div class="ic">📋</div><div class="fname">ipf_consentimiento_firmado.pdf</div><div class="stat">✓ SUBIDO</div></div>
+        <div class="insc-cta">✓ ENVIAR INSCRIPCIÓN</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. PERFIL ATLETA -->
+  <div class="scene" id="s3">
+    <div class="scn-title-row">
+      <div class="scn-num">02 · ATLETAS</div>
+      <div class="scn-title">Perfil Verificado</div>
+      <div class="scn-sub">Records personales, historial e info al instante</div>
+    </div>
+    <div class="mockup-card">
+      <div class="prof-h">
+        <div class="prof-avatar">FR</div>
+        <div class="prof-info">
+          <div class="prof-name">Felipe Rieutord</div>
+          <div class="prof-club">RIVA POWER CLUB · CHI 🇨🇱</div>
+          <div class="prof-tags">
+            <div class="prof-tag">Open · -83 kg</div>
+            <div class="prof-tag">Classic</div>
+            <div class="prof-tag">⭐ Verified</div>
+          </div>
+        </div>
+      </div>
+      <div class="prof-stats">
+        <div class="prof-stat"><div class="lb">SQUAT</div><div class="vl">260</div><div class="un">kg · PR</div></div>
+        <div class="prof-stat"><div class="lb">BENCH</div><div class="vl">155</div><div class="un">kg · PR</div></div>
+        <div class="prof-stat"><div class="lb">DEADLIFT</div><div class="vl">295</div><div class="un">kg · PR</div></div>
+        <div class="prof-stat"><div class="lb">GL POINTS</div><div class="vl">98.3</div><div class="un">overall</div></div>
+      </div>
+      <div class="prof-h-rows">
+        <div class="prof-h-title">HISTORIAL · 4 COMPETENCIAS</div>
+        <div class="prof-h-row"><div class="prof-h-evt">Universitario FECHIPO 2026</div><div class="prof-h-pos">1° · BEST LIFTER ⭐</div></div>
+        <div class="prof-h-row"><div class="prof-h-evt">Regional Centro 2026</div><div class="prof-h-pos">1° · 708 kg total</div></div>
+        <div class="prof-h-row"><div class="prof-h-evt">Nacional Classic 2025</div><div class="prof-h-pos">2° · 685 kg total</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. RANKING -->
+  <div class="scene" id="s4">
+    <div class="scn-title-row">
+      <div class="scn-num">03 · RANKING</div>
+      <div class="scn-title">Ranking GL Points</div>
+      <div class="scn-sub">Actualizado al cierre de cada competencia</div>
+    </div>
+    <div class="mockup-card">
+      <div class="rk-h">
+        <div>
+          <div class="rk-h-l">RANKING NACIONAL · 2026</div>
+          <div class="rk-h-t">Hombres · Open · Classic</div>
+        </div>
+        <div class="rk-h-r">⚡ ACTUALIZADO HOY</div>
+      </div>
+      <div class="rk-cols">
+        <div>POS</div><div>ATLETA</div><div>TOTAL</div><div>GL POINTS</div>
+      </div>
+      <div class="rk-row"><div class="rk-pos">1°</div><div><div class="rk-name">Felipe Rieutord</div><div class="rk-club">RIVA POWER · -83</div></div><div class="rk-total">708.0</div><div class="rk-gl">98.306</div></div>
+      <div class="rk-row"><div class="rk-pos">2°</div><div><div class="rk-name">Andrés Landon</div><div class="rk-club">ALL POWER CD · -83</div></div><div class="rk-total">692.5</div><div class="rk-gl">95.857</div></div>
+      <div class="rk-row"><div class="rk-pos">3°</div><div><div class="rk-name">Francisco Pérez</div><div class="rk-club">HIMALAYA · -93</div></div><div class="rk-total">735.0</div><div class="rk-gl">94.305</div></div>
+      <div class="rk-row"><div class="rk-pos">4°</div><div><div class="rk-name">Cristóbal Soto</div><div class="rk-club">FORZA · -83</div></div><div class="rk-total">670.0</div><div class="rk-gl">92.114</div></div>
+    </div>
+  </div>
+
+  <!-- 5. RÉCORDS -->
+  <div class="scene" id="s5">
+    <div class="scn-title-row">
+      <div class="scn-num">04 · RÉCORDS</div>
+      <div class="scn-title">Récords Nacionales</div>
+      <div class="scn-sub">Detección automática en transmisión en vivo</div>
+    </div>
+    <div class="mockup-card">
+      <div class="rec-grid">
+        <div class="rec-card">
+          <div class="rec-badge">NUEVO</div>
+          <div class="rec-cat">OPEN · -83 KG · M</div>
+          <div class="rec-lift">SQUAT</div>
+          <div class="rec-mark">262.5<span class="kg">kg</span></div>
+          <div class="rec-name">Felipe Rieutord</div>
+          <div class="rec-date">UNIVERSITARIO 2026</div>
+        </div>
+        <div class="rec-card">
+          <div class="rec-cat">OPEN · -83 KG · M</div>
+          <div class="rec-lift">BENCH</div>
+          <div class="rec-mark">160<span class="kg">kg</span></div>
+          <div class="rec-name">Andrés Landon</div>
+          <div class="rec-date">REGIONAL 2025</div>
+        </div>
+        <div class="rec-card">
+          <div class="rec-badge">NUEVO</div>
+          <div class="rec-cat">OPEN · -83 KG · M</div>
+          <div class="rec-lift">DEADLIFT</div>
+          <div class="rec-mark">300<span class="kg">kg</span></div>
+          <div class="rec-name">Felipe Rieutord</div>
+          <div class="rec-date">UNIVERSITARIO 2026</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. TRANSITION → TX -->
+  <div class="scene" id="sTrans">
+    <div class="trans-big">Y en<br><span class="gold">transmisión...</span></div>
+    <div class="trans-sub">★ TODO PASA AUTOMÁTICAMENTE ★</div>
+  </div>
+
+  <!-- 7. TX: Scoreboard -->
   <div class="scene feat" id="sF1">
     <div class="feat-video-wrap">
       <video id="vid1" src="yourlift_action.mp4" muted playsinline preload="auto"></video>
@@ -73,14 +308,14 @@ html,body{width:100vw;height:100vh;overflow:hidden;background:#000;font-family:'
         <div class="feat-live">● EN VIVO</div>
       </div>
     </div>
-    <div class="feat-bottom">
-      <div class="feat-num">01 · WIDGET</div>
-      <div class="feat-title">Perfil del<br>Atleta</div>
-      <div class="feat-sub">Info completa al instante:<br>club, categoría, PR y edad</div>
+    <div class="feat-side">
+      <div class="feat-num">05 · TX WIDGET</div>
+      <div class="feat-title">Scoreboard<br>en vivo</div>
+      <div class="feat-sub">Cada intento, peso y proyección<br>de posición en pantalla.</div>
     </div>
   </div>
 
-  <!-- FEATURE 2: Scoreboard -->
+  <!-- 8. TX: Tabla Actual -->
   <div class="scene feat" id="sF2">
     <div class="feat-video-wrap">
       <video id="vid2" src="yourlift_action.mp4" muted playsinline preload="auto"></video>
@@ -89,14 +324,14 @@ html,body{width:100vw;height:100vh;overflow:hidden;background:#000;font-family:'
         <div class="feat-live">● EN VIVO</div>
       </div>
     </div>
-    <div class="feat-bottom">
-      <div class="feat-num">02 · WIDGET</div>
-      <div class="feat-title">Scoreboard<br>Tiempo Real</div>
-      <div class="feat-sub">Cada intento y posición<br>proyectada en pantalla</div>
+    <div class="feat-side">
+      <div class="feat-num">06 · TX WIDGET</div>
+      <div class="feat-title">Tabla<br>Actual</div>
+      <div class="feat-sub">Ranking proyectado en tiempo real<br>de la categoría.</div>
     </div>
   </div>
 
-  <!-- FEATURE 3: Tabla Actual -->
+  <!-- 9. TX: Perfil Atleta -->
   <div class="scene feat" id="sF3">
     <div class="feat-video-wrap">
       <video id="vid3" src="yourlift_action.mp4" muted playsinline preload="auto"></video>
@@ -105,25 +340,37 @@ html,body{width:100vw;height:100vh;overflow:hidden;background:#000;font-family:'
         <div class="feat-live">● EN VIVO</div>
       </div>
     </div>
-    <div class="feat-bottom">
-      <div class="feat-num">03 · WIDGET</div>
-      <div class="feat-title">Tabla<br>Actual</div>
-      <div class="feat-sub">Ranking proyectado<br>fila por fila, animado</div>
+    <div class="feat-side">
+      <div class="feat-num">07 · TX WIDGET</div>
+      <div class="feat-title">Perfil<br>del Atleta</div>
+      <div class="feat-sub">Info completa en pantalla<br>antes de cada intento.</div>
     </div>
   </div>
 
-  <!-- CIERRE -->
+  <!-- 10. GOOD LIFT slam -->
+  <div class="scene slam" id="sGood">
+    <div class="slamBox">✓ GOOD LIFT</div>
+    <div class="slamSub">DECISIÓN DE JUECES · EN VIVO</div>
+  </div>
+
+  <!-- 11. NO LIFT slam -->
+  <div class="scene slam" id="sNoLift">
+    <div class="slamBox">✗ NO LIFT</div>
+    <div class="slamSub">DECISIÓN DE JUECES · EN VIVO</div>
+  </div>
+
+  <!-- 12. CIERRE -->
   <div class="scene" id="sFin">
     <div class="logoFinal"><span class="red">YOUR</span>LIFT</div>
     <div class="finalUrl">yourlift<span class="dot">.</span>cl</div>
-    <div class="finalSub">★ Tu próxima transmisión, automatizada ★</div>
+    <div class="finalSub">★ Inscripción, gestión y transmisión ★</div>
     <div class="ig">@yourlift_oficial</div>
   </div>
 </div>
 
 <script>
 const stage=document.getElementById('stage');
-for(let i=0;i<22;i++){
+for(let i=0;i<30;i++){
   const p=document.createElement('div');
   p.className='particle';
   p.style.left=Math.random()*100+'%';
@@ -142,17 +389,31 @@ function playVid(id, startAt){
   try{ v.currentTime=startAt||0; v.play().catch(()=>{}); }catch(e){}
 }
 
-// Timeline 28s total
-// 0-3s: INTRO
-// 3-9s: Feature 1 — Perfil (video 0-6s)
-// 9-15s: Feature 2 — Scoreboard (video 8-14s)
-// 15-21s: Feature 3 — Tabla (video 18-24s)
-// 21-28s: Cierre
-
-setTimeout(()=>{ show('sF1'); playVid('vid1', 0); }, 3000);
-setTimeout(()=>{ show('sF2'); playVid('vid2', 8); }, 9000);
-setTimeout(()=>{ show('sF3'); playVid('vid3', 18); }, 15000);
-setTimeout(()=>{ show('sFin'); }, 21000);
+/* Timeline ~72s
+  0-3s   s1   INTRO
+  3-10   s2   INSCRIPCIÓN (7s)
+  10-17  s3   PERFIL ATLETA (7s)
+  17-24  s4   RANKING (7s)
+  24-31  s5   RÉCORDS (7s)
+  31-35  sTrans (4s)
+  35-41  sF1   TX Scoreboard (6s)
+  41-47  sF2   TX Tabla Actual (6s)
+  47-53  sF3   TX Perfil (6s)
+  53-58  sGood (5s)
+  58-63  sNoLift (5s)
+  63-72  sFin (9s)
+*/
+setTimeout(()=>show('s2'),3000);
+setTimeout(()=>show('s3'),10000);
+setTimeout(()=>show('s4'),17000);
+setTimeout(()=>show('s5'),24000);
+setTimeout(()=>show('sTrans'),31000);
+setTimeout(()=>{show('sF1');playVid('vid1',0);},35000);
+setTimeout(()=>{show('sF2');playVid('vid2',8);},41000);
+setTimeout(()=>{show('sF3');playVid('vid3',18);},47000);
+setTimeout(()=>show('sGood'),53000);
+setTimeout(()=>show('sNoLift'),58000);
+setTimeout(()=>show('sFin'),63000);
 </script>
 </body>
 </html>
