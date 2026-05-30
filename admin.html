@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="bg-fechipo.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0A1628;--card:#11223B;--border:#1E3A5F;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A;--blue:#1E5BA8;--gold:#D4A843;--green:#22c55e;--red:#ef4444;--orange:#f59e0b}
@@ -1379,6 +1380,7 @@ function render(){
       <button class="side-btn ${ST.view==='athletes'?'active':''}" onclick="go('athletes')"><span class="icon">🏋️</span>Atletas (DB)</button>
       <button class="side-btn ${ST.view==='nominas'?'active':''}" onclick="go('nominas')"><span class="icon">📋</span>Nóminas</button>
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='stats'?'active':''}" onclick="go('stats')"><span class="icon">📈</span>Estadísticas</button>`:''}
+      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='publisher'?'active':''}" onclick="go('publisher')"><span class="icon">🎨</span>Editor publicaciones</button>`:''}
       <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')"><span class="icon">✓</span>Aprobaciones</button>
       <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')"><span class="icon">✏️</span>Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
       <button class="side-btn ${ST.view==='entrenadores'?'active':''}" onclick="go('entrenadores')"><span class="icon">👥</span>Entrenadores</button>
@@ -1403,6 +1405,7 @@ function render(){
   if(ST.view==='athletes')content=renderAthletes();
   else if(ST.view==='nominas')content=renderNominas();
   else if(ST.view==='stats'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderStats();else go('athletes');}
+  else if(ST.view==='publisher'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderPublisher();else go('athletes');}
   else if(ST.view==='approvals')content=renderApprovals();
   else if(ST.view==='editRequests')content=renderEditRequests();
   else if(ST.view==='entrenadores')content=renderEntrenadores();
@@ -5345,6 +5348,409 @@ window.verDetalleComp = function(compId){
   document.body.appendChild(m);
   m.onclick=e=>{if(e.target===m)m.remove();};
 };
+
+// ════════════════════════════════════════════════════════════════
+// 🎨 EDITOR DE PUBLICACIONES (solo owner)
+// 6 templates · form + preview en vivo · descarga PNG 1080×1350
+// Autocompleta desde Firestore (eventos/) y usa logoUrl del evento si existe
+// ════════════════════════════════════════════════════════════════
+window.PUB_TEMPLATES = {
+  estaremosPresentes: {
+    label: 'Estaremos presentes',
+    icon: '🎯',
+    desc: 'Anuncio de presencia en un campeonato'
+  },
+  inscripcionesAbiertas: {
+    label: 'Inscripciones abiertas',
+    icon: '📋',
+    desc: 'Convocatoria a inscribirse'
+  },
+  proximoTorneo: {
+    label: 'Próximo torneo',
+    icon: '⏱',
+    desc: 'Countdown al próximo campeonato'
+  },
+  resultadosPodio: {
+    label: 'Resultados / Podio',
+    icon: '🏆',
+    desc: 'Top 3 con stats'
+  },
+  recordNuevo: {
+    label: 'Nuevo récord',
+    icon: '🔥',
+    desc: 'Anuncio de récord nacional'
+  },
+  anuncioGenerico: {
+    label: 'Anuncio genérico',
+    icon: '📢',
+    desc: 'Mensaje libre con título y texto'
+  }
+};
+
+// Estado del editor (persistente durante la sesión)
+window.PUB_STATE = window.PUB_STATE || {
+  template: 'estaremosPresentes',
+  data: {
+    eventName: 'SANGRE NUEVA',
+    eventSubtitle: '1° Edición · Debutantes Powerlifting 2026',
+    date: '13 DE JUNIO · 2026',
+    location: 'Santiago · Chile',
+    organizer: 'ALL POWER CD',
+    title: '',
+    subtitle: '',
+    body: '',
+    athlete1: 'Felipe Rieutord',
+    athlete1Total: '708.0',
+    athlete1Club: 'RIVA POWER',
+    athlete2: 'Andrés Landon',
+    athlete2Total: '692.5',
+    athlete2Club: 'ALL POWER',
+    athlete3: 'Francisco Pérez',
+    athlete3Total: '670.0',
+    athlete3Club: 'HIMALAYA',
+    category: 'OPEN · -83 kg ♂',
+    recordType: 'SQUAT',
+    recordMark: '262.5',
+    recordAthlete: 'Felipe Rieutord',
+    docsList: 'Carnet · WADA · Foto',
+    customLogoUrl: ''   // si el user sube un logo, se almacena aquí
+  }
+};
+
+window.pubSetTemplate = function(t){
+  PUB_STATE.template = t;
+  document.getElementById('pubEditorRoot').innerHTML = renderPublisherInner();
+  setTimeout(pubUpdatePreview, 50);
+};
+
+window.pubSetField = function(key, value){
+  PUB_STATE.data[key] = value;
+  pubUpdatePreview();
+};
+
+window.pubLoadFromEvent = function(evId){
+  if(!evId) return;
+  const ev = (ST.eventos||[]).find(e=>e.id===evId);
+  if(!ev) return;
+  PUB_STATE.data.eventName = ev.short || ev.name || '';
+  PUB_STATE.data.eventSubtitle = ev.name || '';
+  PUB_STATE.data.organizer = ev.organizer || ev.org || '';
+  PUB_STATE.data.location = ev.location || '';
+  // Fecha bonita
+  if(ev.date){
+    try{
+      const d = new Date(ev.date+'T00:00:00');
+      const months = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+      PUB_STATE.data.date = `${d.getDate()} DE ${months[d.getMonth()]} · ${d.getFullYear()}`;
+    }catch(e){PUB_STATE.data.date = ev.date}
+  }
+  if(ev.logoUrl) PUB_STATE.data.customLogoUrl = ev.logoUrl;
+  // Repintar form + preview
+  document.getElementById('pubEditorRoot').innerHTML = renderPublisherInner();
+  setTimeout(pubUpdatePreview, 50);
+};
+
+window.pubUploadLogo = function(inp){
+  const f = inp.files && inp.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    PUB_STATE.data.customLogoUrl = e.target.result;
+    pubUpdatePreview();
+  };
+  reader.readAsDataURL(f);
+};
+
+window.pubClearLogo = function(){
+  PUB_STATE.data.customLogoUrl = '';
+  document.getElementById('pubEditorRoot').innerHTML = renderPublisherInner();
+  setTimeout(pubUpdatePreview, 50);
+};
+
+window.pubDownload = async function(){
+  const node = document.getElementById('pubCanvas');
+  if(!node || !window.html2canvas){ showToast('html2canvas no cargado', null, true); return; }
+  const btn = document.getElementById('pubDownloadBtn');
+  if(btn){btn.textContent='⏳ Generando...';btn.disabled=true;}
+  try{
+    const canvas = await window.html2canvas(node, {
+      backgroundColor: null,
+      scale: 1,
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      width: 1080,
+      height: 1350
+    });
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const tplName = PUB_TEMPLATES[PUB_STATE.template]?.label.replace(/\s+/g,'_') || 'post';
+      a.href = url;
+      a.download = `YL_${tplName}_${Date.now()}.png`;
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(url), 1500);
+    }, 'image/png');
+    showToast('✅ Imagen descargada');
+  } catch(e){
+    console.error(e);
+    showToast('Error generando PNG: '+e.message, null, true);
+  }
+  if(btn){btn.textContent='💾 Descargar PNG';btn.disabled=false;}
+};
+
+window.pubUpdatePreview = function(){
+  const c = document.getElementById('pubCanvas');
+  if(!c) return;
+  const tpl = PUB_STATE.template;
+  const d = PUB_STATE.data;
+  c.innerHTML = pubRenderTemplate(tpl, d);
+};
+
+// ─── Renderer de templates ─────────────────────────────────
+window.pubRenderTemplate = function(tpl, d){
+  const bg = `background:radial-gradient(ellipse at top left,#0F2444 0%,#06101F 50%,#040912 100%)`;
+  const overlay = `background:
+    radial-gradient(circle at 18% 22%,rgba(196,30,58,.22) 0%,transparent 38%),
+    radial-gradient(circle at 82% 78%,rgba(212,168,67,.16) 0%,transparent 42%),
+    radial-gradient(circle at 70% 18%,rgba(30,91,168,.12) 0%,transparent 38%)`;
+  const logoYL = `<div style="font-family:Oswald;font-weight:700;letter-spacing:5px;color:#fff;font-size:34px"><span style="color:#C41E3A">YOUR</span>LIFT</div>`;
+  const logo = d.customLogoUrl
+    ? `<img src="${d.customLogoUrl}" crossorigin="anonymous" style="max-width:88%;max-height:560px;object-fit:contain;filter:drop-shadow(0 12px 30px rgba(0,0,0,.5))" onerror="this.style.display='none'">`
+    : `<div style="padding:60px 80px;background:#2A1414;border:3px solid #D4A843;border-radius:24px;font-family:Oswald;color:#fff;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.6)">
+        <div style="font-size:22px;letter-spacing:6px;color:#D4A843;margin-bottom:10px">★ ${d.eventSubtitle||'EDICIÓN'} ★</div>
+        <div style="font-size:96px;font-weight:700;letter-spacing:6px;line-height:.95;color:#E8E8E8;text-shadow:0 4px 14px rgba(0,0,0,.5)">${(d.eventName||'EVENTO').toUpperCase()}</div>
+        <div style="font-size:18px;letter-spacing:5px;color:#D4A843;margin-top:14px">${(d.organizer||'').toUpperCase()}</div>
+       </div>`;
+  const common = (header, content, footer)=>`
+    <div style="width:1080px;height:1350px;${bg};color:#fff;font-family:'DM Sans',sans-serif;position:relative;overflow:hidden">
+      <div style="position:absolute;inset:0;${overlay}"></div>
+      <div style="position:relative;z-index:2;height:100%;display:flex;flex-direction:column">
+        ${header}
+        ${content}
+        ${footer}
+      </div>
+    </div>`;
+  const banda = (txt, color)=>`<div style="background:${color||'#C41E3A'};padding:18px 0;text-align:center;font-family:Oswald;font-size:24px;letter-spacing:6px;color:#fff;font-weight:700">${txt}</div>
+    <div style="height:4px;background:#D4A843"></div>`;
+  const credYL = `<div style="margin-top:auto;padding:36px 60px 40px">
+    <div style="background:rgba(10,22,40,.9);border:2px solid #D4A843;border-radius:14px;padding:18px 26px;display:flex;align-items:center;gap:18px">
+      <div style="flex-shrink:0">${logoYL}</div>
+      <div>
+        <div style="font-family:Oswald;font-size:12px;letter-spacing:3px;color:#D4A843">TRANSMISIÓN EN VIVO POR</div>
+        <div style="font-family:Oswald;font-size:30px;font-weight:700;letter-spacing:4px;color:#fff;margin-top:2px">YOURLIFT.CL</div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:14px;font-family:Oswald;font-size:13px;letter-spacing:2px;color:rgba(180,200,220,.7)">@all_power_cd · @fechipo_oficial · @yourlift_oficial</div>
+  </div>`;
+
+  if(tpl === 'estaremosPresentes'){
+    return common(
+      banda('★  ESTAREMOS PRESENTES  ★'),
+      `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 50px">
+        ${logo}
+        <div style="margin-top:50px;text-align:center">
+          <div style="font-family:Oswald;font-size:18px;letter-spacing:6px;color:#D4A843">CAMPEONATO</div>
+          <div style="font-family:Oswald;font-size:64px;font-weight:700;letter-spacing:4px;color:#fff;margin-top:8px">${d.date||''}</div>
+          <div style="font-family:Oswald;font-size:22px;letter-spacing:4px;color:rgba(220,230,245,.9);margin-top:14px">📍 ${d.location||''}</div>
+        </div>
+      </div>`,
+      credYL
+    );
+  }
+  if(tpl === 'inscripcionesAbiertas'){
+    return common(
+      banda('★  INSCRIPCIONES ABIERTAS  ★'),
+      `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 50px">
+        ${logo}
+        <div style="margin-top:40px;text-align:center;max-width:880px">
+          <div style="font-family:Oswald;font-size:50px;font-weight:700;letter-spacing:3px;color:#fff;line-height:1.05">${d.date||''}</div>
+          <div style="font-family:Oswald;font-size:20px;letter-spacing:4px;color:rgba(220,230,245,.85);margin-top:12px">📍 ${d.location||''}</div>
+          ${d.docsList?`<div style="margin-top:30px;background:rgba(10,22,40,.7);border:1px solid rgba(212,168,67,.5);border-radius:14px;padding:20px 28px">
+            <div style="font-family:Oswald;font-size:15px;letter-spacing:3px;color:#D4A843;margin-bottom:8px">📋 DOCUMENTACIÓN REQUERIDA</div>
+            <div style="font-family:Oswald;font-size:22px;letter-spacing:2px;color:#fff;line-height:1.4">${d.docsList}</div>
+          </div>`:''}
+          <div style="margin-top:30px;font-family:Oswald;font-size:18px;letter-spacing:4px;color:#D4A843">👉 INSCRÍBETE EN YOURLIFT.CL</div>
+        </div>
+      </div>`,
+      credYL
+    );
+  }
+  if(tpl === 'proximoTorneo'){
+    return common(
+      banda('★  PRÓXIMO CAMPEONATO  ★'),
+      `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 50px">
+        ${logo}
+        <div style="margin-top:40px;text-align:center">
+          <div style="font-family:Oswald;font-size:80px;font-weight:700;letter-spacing:4px;color:#fff;line-height:1">${d.date||''}</div>
+          <div style="font-family:Oswald;font-size:24px;letter-spacing:5px;color:#D4A843;margin-top:18px">📍 ${d.location||''}</div>
+          <div style="font-family:Oswald;font-size:20px;letter-spacing:5px;color:rgba(220,230,245,.85);margin-top:14px">ORGANIZA: ${d.organizer||''}</div>
+        </div>
+      </div>`,
+      credYL
+    );
+  }
+  if(tpl === 'resultadosPodio'){
+    const podio = [
+      {pos:'🥇 1°', name:d.athlete1, total:d.athlete1Total, club:d.athlete1Club, color:'#D4A843'},
+      {pos:'🥈 2°', name:d.athlete2, total:d.athlete2Total, club:d.athlete2Club, color:'#c0c0c0'},
+      {pos:'🥉 3°', name:d.athlete3, total:d.athlete3Total, club:d.athlete3Club, color:'#cd7f32'}
+    ];
+    return common(
+      banda('🏆  PODIO OFICIAL  🏆'),
+      `<div style="flex:1;display:flex;flex-direction:column;align-items:center;padding:40px 50px">
+        <div style="text-align:center;margin-bottom:24px">
+          <div style="font-family:Oswald;font-size:18px;letter-spacing:5px;color:#D4A843">${d.eventName||''}</div>
+          <div style="font-family:Oswald;font-size:38px;font-weight:700;letter-spacing:3px;color:#fff;margin-top:6px">${d.category||''}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:18px;width:100%;max-width:840px">
+          ${podio.map(p=>`<div style="display:flex;align-items:center;gap:24px;background:linear-gradient(90deg,rgba(10,22,40,.95),rgba(17,34,59,.85));border:2px solid ${p.color};border-radius:14px;padding:20px 28px;box-shadow:0 8px 30px rgba(0,0,0,.4)">
+            <div style="font-family:Oswald;font-size:48px;font-weight:700;color:${p.color};min-width:120px">${p.pos}</div>
+            <div style="flex:1">
+              <div style="font-family:Oswald;font-size:32px;font-weight:700;color:#fff;letter-spacing:1px">${p.name||''}</div>
+              <div style="font-family:Oswald;font-size:16px;color:rgba(220,230,245,.6);letter-spacing:2px;margin-top:3px">${p.club||''}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-family:Oswald;font-size:42px;font-weight:700;color:${p.color}">${p.total||''}</div>
+              <div style="font-family:Oswald;font-size:11px;letter-spacing:3px;color:rgba(220,230,245,.6)">KG TOTAL</div>
+            </div>
+          </div>`).join('')}
+        </div>
+      </div>`,
+      credYL
+    );
+  }
+  if(tpl === 'recordNuevo'){
+    return common(
+      banda('🔥  NUEVO RÉCORD NACIONAL  🔥', '#0d4a26'),
+      `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 50px">
+        <div style="font-family:Oswald;font-size:30px;letter-spacing:8px;color:#D4A843;margin-bottom:20px">RÉCORD ${d.recordType||'SQUAT'}</div>
+        <div style="background:linear-gradient(180deg,rgba(34,197,94,.25),rgba(8,16,30,.85));border:4px solid #22c55e;border-radius:24px;padding:50px 80px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 80px rgba(34,197,94,.2)">
+          <div style="font-family:Oswald;font-size:200px;font-weight:700;color:#22c55e;line-height:1;text-shadow:0 0 40px rgba(34,197,94,.5)">${d.recordMark||''}<span style="font-size:60px;color:rgba(34,197,94,.7);margin-left:10px">kg</span></div>
+          <div style="font-family:Oswald;font-size:42px;font-weight:700;color:#fff;letter-spacing:3px;margin-top:14px">${d.recordAthlete||''}</div>
+          <div style="font-family:Oswald;font-size:20px;letter-spacing:4px;color:rgba(220,230,245,.85);margin-top:8px">${d.category||''}</div>
+        </div>
+        <div style="margin-top:30px;font-family:Oswald;font-size:18px;letter-spacing:4px;color:#D4A843">${d.eventName||''} · ${d.date||''}</div>
+      </div>`,
+      credYL
+    );
+  }
+  if(tpl === 'anuncioGenerico'){
+    return common(
+      banda('📢  ANUNCIO  📢'),
+      `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 60px;text-align:center">
+        ${d.title?`<div style="font-family:Oswald;font-size:72px;font-weight:700;letter-spacing:4px;color:#fff;line-height:1.05;margin-bottom:30px">${d.title}</div>`:''}
+        ${d.subtitle?`<div style="font-family:Oswald;font-size:32px;letter-spacing:4px;color:#D4A843;margin-bottom:30px">${d.subtitle}</div>`:''}
+        ${d.body?`<div style="font-family:'DM Sans';font-size:24px;line-height:1.55;color:rgba(240,245,255,.92);max-width:920px">${d.body.replace(/\n/g,'<br>')}</div>`:''}
+      </div>`,
+      credYL
+    );
+  }
+  return '<div style="padding:40px;color:#fff">Template no encontrado</div>';
+};
+
+function renderPublisher(){
+  if(!(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap))
+    return '<div class="h1">Sin acceso</div><p class="subtitle">Solo el owner puede usar el editor.</p>';
+  return `<div class="h1">🎨 Editor de publicaciones</div>
+    <p class="subtitle">Generá imágenes para Instagram con templates predefinidos · Solo Owner</p>
+    <div id="pubEditorRoot">${renderPublisherInner()}</div>
+    <script>setTimeout(pubUpdatePreview, 100);</script>`;
+}
+
+function renderPublisherInner(){
+  const tpl = PUB_STATE.template;
+  const d = PUB_STATE.data;
+  const t = PUB_TEMPLATES[tpl];
+  // Selector de templates
+  const tplCards = Object.entries(PUB_TEMPLATES).map(([k,m])=>`
+    <div onclick="pubSetTemplate('${k}')" style="padding:12px 14px;border-radius:10px;border:2px solid ${tpl===k?'var(--gold)':'var(--border)'};background:${tpl===k?'rgba(212,168,67,.1)':'rgba(10,22,40,.5)'};cursor:pointer;transition:all .15s">
+      <div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;color:${tpl===k?'var(--gold)':'var(--text)'}">${m.icon} ${m.label}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">${m.desc}</div>
+    </div>`).join('');
+
+  // Form fields dinámicos según template
+  const inp = (key, label, value, multi=false) => multi
+    ? `<div class="field"><label>${label}</label><textarea oninput="pubSetField('${key}',this.value)" style="min-height:80px">${esc(value||'')}</textarea></div>`
+    : `<div class="field"><label>${label}</label><input class="inp" value="${esc(value||'')}" oninput="pubSetField('${key}',this.value)"></div>`;
+  let fields = '';
+  // Selector evento para autocompletar (siempre visible)
+  const evOpts = (ST.eventos||[]).filter(e=>e.status!=='archived').map(e=>`<option value="${esc(e.id)}">${esc(e.name||e.id)}</option>`).join('');
+  fields += `<div class="field"><label>📥 Auto-llenar desde evento</label>
+    <select class="inp" onchange="pubLoadFromEvent(this.value)">
+      <option value="">— Elegir evento (carga nombre, fecha, ubicación, logo) —</option>
+      ${evOpts}
+    </select></div>`;
+  // Logo upload (común)
+  fields += `<div class="field"><label>🖼 Logo del evento</label>
+    ${d.customLogoUrl
+      ? `<div style="display:flex;gap:10px;align-items:center;padding:10px;background:rgba(34,197,94,.08);border:1px solid var(--green);border-radius:8px"><img src="${d.customLogoUrl}" style="height:60px;object-fit:contain"><div style="flex:1"><div style="font-size:11px;color:var(--green);font-family:Oswald">✓ Logo cargado</div></div><button onclick="pubClearLogo()" style="background:transparent;border:1px solid var(--red);color:var(--red);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer">✕ Quitar</button></div>`
+      : `<input type="file" accept="image/*" onchange="pubUploadLogo(this)" style="padding:8px;border:1px dashed var(--border);border-radius:6px;background:rgba(10,22,40,.4);color:var(--muted);width:100%">`}
+    </div>`;
+  // Campos específicos por template
+  if(tpl==='estaremosPresentes' || tpl==='inscripcionesAbiertas' || tpl==='proximoTorneo'){
+    fields += inp('eventName','Nombre evento (grande, si NO subís logo)',d.eventName);
+    fields += inp('eventSubtitle','Subtítulo (ej. "1° Edición")',d.eventSubtitle);
+    fields += inp('date','Fecha',d.date);
+    fields += inp('location','Ubicación',d.location);
+    fields += inp('organizer','Organizador',d.organizer);
+    if(tpl==='inscripcionesAbiertas') fields += inp('docsList','Documentación (separar por · )',d.docsList);
+  }
+  if(tpl==='resultadosPodio'){
+    fields += inp('eventName','Nombre evento',d.eventName);
+    fields += inp('category','Categoría',d.category);
+    fields += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">`;
+    [1,2,3].forEach(i=>{
+      fields += `<div>
+        <div style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:var(--gold);margin:8px 0 4px">${i}° PUESTO</div>
+        ${inp('athlete'+i,'Nombre',d['athlete'+i])}
+        ${inp('athlete'+i+'Total','Total kg',d['athlete'+i+'Total'])}
+        ${inp('athlete'+i+'Club','Club',d['athlete'+i+'Club'])}
+      </div>`;
+    });
+    fields += `</div>`;
+  }
+  if(tpl==='recordNuevo'){
+    fields += inp('eventName','Nombre evento',d.eventName);
+    fields += inp('date','Fecha',d.date);
+    fields += inp('category','Categoría',d.category);
+    fields += inp('recordType','Movimiento (SQUAT/BENCH/DEADLIFT)',d.recordType);
+    fields += inp('recordMark','Marca (kg)',d.recordMark);
+    fields += inp('recordAthlete','Atleta',d.recordAthlete);
+  }
+  if(tpl==='anuncioGenerico'){
+    fields += inp('title','Título grande',d.title);
+    fields += inp('subtitle','Subtítulo',d.subtitle);
+    fields += inp('body','Texto del anuncio (multilínea)',d.body,true);
+  }
+
+  return `
+  <div style="display:grid;grid-template-columns:280px 1fr 1fr;gap:18px;align-items:start;margin-top:18px">
+    <!-- Selector templates -->
+    <div style="display:flex;flex-direction:column;gap:8px;position:sticky;top:18px">
+      <div style="font-family:Oswald;font-size:11px;letter-spacing:3px;color:var(--gold);font-weight:700;padding:0 4px 4px">TEMPLATES</div>
+      ${tplCards}
+    </div>
+    <!-- Form -->
+    <div class="card" style="padding:16px 18px;max-height:80vh;overflow-y:auto">
+      <div style="font-family:Oswald;font-size:14px;letter-spacing:2px;color:var(--gold);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        ${t.icon} ${t.label.toUpperCase()}
+      </div>
+      ${fields}
+      <button id="pubDownloadBtn" onclick="pubDownload()" class="btn btn-g" style="width:100%;padding:14px;margin-top:14px;font-size:14px;font-family:Oswald;letter-spacing:2px">💾 Descargar PNG</button>
+    </div>
+    <!-- Preview -->
+    <div style="position:sticky;top:18px">
+      <div style="font-family:Oswald;font-size:11px;letter-spacing:3px;color:var(--gold);margin-bottom:8px">PREVIEW · 1080×1350</div>
+      <div style="background:#000;border:1px solid var(--border);border-radius:12px;padding:8px;overflow:hidden">
+        <div style="position:relative;width:100%;padding-top:125%;overflow:hidden;border-radius:6px">
+          <div style="position:absolute;inset:0;transform:scale(calc(1/3.5));transform-origin:top left;width:1080px;height:1350px">
+            <div id="pubCanvas"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
 
 </script>
 </body>
