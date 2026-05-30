@@ -207,6 +207,74 @@ const CLUBS = [
 // Created and managed only through admin.html — no hardcoded events
 let EVENTS = [];
 
+// ════════════════════════════════════════════════════════════════
+// CATÁLOGO ESTANDARIZADO DE TIPOS DE DOCUMENTO
+// El admin elige cuáles activar por evento (campo `requiredDocs` en eventos/).
+// Si el evento NO tiene requiredDocs definido → fallback a lógica vieja
+// (IPF World auto-detección, isMinor → consentimiento menor, requiereFoto → carnetPhoto).
+// ════════════════════════════════════════════════════════════════
+const DOC_TYPES = {
+  carnetIdFront: {
+    label: 'Carnet de Identidad',
+    icon: '📷',
+    desc: 'Cara frontal del carnet de identidad',
+    accept: 'image/*,.pdf',
+    stateKey: 'carnetFile', nameKey: 'carnetName', urlKey: 'carnetURL',
+    storagePath: 'carnet'
+  },
+  fotoBlanco: {
+    label: 'Foto fondo blanco',
+    icon: '📸',
+    desc: 'Foto tipo carnet con fondo blanco, sin accesorios',
+    accept: 'image/*',
+    stateKey: 'carnetPhotoFile', nameKey: 'carnetPhotoName', urlKey: 'carnetPhotoURL',
+    storagePath: 'carnetPhoto'
+  },
+  pasaporte: {
+    label: 'Pasaporte',
+    icon: '🛂',
+    desc: 'Foto/escaneo de la página de datos del pasaporte vigente',
+    accept: 'image/*,.pdf',
+    stateKey: 'passportFile', nameKey: 'passportName', urlKey: 'passportURL',
+    storagePath: 'passport'
+  },
+  wadaIntl: {
+    label: 'ADEL/WADA Internacional',
+    icon: '🧪',
+    desc: 'Certificación WADA internacional vigente',
+    accept: 'image/*,.pdf',
+    stateKey: 'wadeFile', nameKey: 'wadeName', urlKey: 'wadeURL',
+    storagePath: 'wada'
+  },
+  ipfConsent: {
+    label: 'Consentimiento IPF',
+    icon: '📋',
+    desc: 'Formulario de consentimiento IPF firmado',
+    accept: 'image/*,.pdf',
+    stateKey: 'ipfConsentFile', nameKey: 'ipfConsentName', urlKey: 'ipfConsentURL',
+    storagePath: 'ipfConsent',
+    defaultPdfUrl: 'IPF%20Consentimiento.pdf'   // fallback si el evento no sube uno custom
+  },
+  menorConsent: {
+    label: 'Consentimiento Menor',
+    icon: '⚠️',
+    desc: 'Formulario de consentimiento del tutor legal firmado',
+    accept: 'image/*,.pdf',
+    stateKey: 'consentimientoFile', nameKey: 'consentimientoName', urlKey: 'consentimientoURL',
+    storagePath: 'consentimiento',
+    defaultPdfUrl: 'consentimiento_menores.pdf'
+  },
+  notas: {
+    label: 'Concentración de Notas',
+    icon: '📚',
+    desc: 'Certificado académico oficial',
+    accept: 'image/*,.pdf',
+    stateKey: 'notasFile', nameKey: 'notasName', urlKey: 'notasURL',
+    storagePath: 'notas'
+  }
+};
+window.DOC_TYPES = DOC_TYPES; // exponer para admin.html
+
 const CATEGORIES_M = ["-53 kg","-59 kg","-66 kg","-74 kg","-83 kg","-93 kg","-105 kg","-120 kg","+120 kg"];
 const CATEGORIES_F = ["-43 kg","-47 kg","-52 kg","-57 kg","-63 kg","-69 kg","-76 kg","-84 kg","+84 kg"];
 const DIVISIONS = ["Sub-Junior","Junior","Open","Master I","Master II","Master III","Master IV","Universitario"];
@@ -634,13 +702,73 @@ function renderForm() {
 
   // STEP 3: Documents
   if (s === 3) {
-    // Detección de evento IPF World — requiere documentación internacional especial
     const _evObj = EVENTS.find(e=>e.id===f.evento);
     const _evName = _evObj?.name || '';
-    const isIPFWorld = /IPF\s*World/i.test(_evName) || _evObj?.tipo==='ipf_world';
+    // Si el evento tiene requiredDocs definido → usar el nuevo sistema dinámico.
+    // Si no → usar la lógica vieja (backward compat: IPF auto-detección, isMinor, requiereFoto).
+    const _hasNewDocs = Array.isArray(_evObj?.requiredDocs) && _evObj.requiredDocs.length>0;
+    const _docTemplates = _evObj?.docTemplates || {};
+    const isIPFWorld = !_hasNewDocs && (/IPF\s*World/i.test(_evName) || _evObj?.tipo==='ipf_world');
 
-    h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Documentos${isIPFWorld?' · 🌍 IPF WORLD':''}</h3>
-    ${isIPFWorld?`
+    h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Documentos${isIPFWorld?' · 🌍 IPF WORLD':''}${_hasNewDocs?' · '+(_evObj.docsLabel||_evName):''}</h3>`;
+
+    // ─── SISTEMA NUEVO: requiredDocs explícito en el evento ───
+    if (_hasNewDocs) {
+      _evObj.requiredDocs.forEach(docKey => {
+        const meta = DOC_TYPES[docKey];
+        if (!meta) return;
+        const stName = state[meta.nameKey] || '';
+        const dlUrl = _docTemplates[docKey] || meta.defaultPdfUrl || null;
+        h += `<div class="field">`;
+        if (dlUrl) {
+          h += `<div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.4);border-radius:10px;padding:14px 16px;margin-bottom:12px">
+            <div style="font-size:13px;font-weight:600;color:#60a5fa;margin-bottom:4px">${meta.icon} ${meta.label}</div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.5">${meta.desc}. Descargá el formulario, completalo y subí el documento firmado.</div>
+            <a href="${dlUrl}" download style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:8px 14px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.5);border-radius:6px;color:#60a5fa;font-size:12px;font-weight:600;text-decoration:none;font-family:Oswald,sans-serif;letter-spacing:1px">⬇ DESCARGAR FORMULARIO</a>
+          </div>`;
+        }
+        h += `<label>${meta.icon} ${meta.label} <span class="req">*</span></label>
+        <div class="upload-zone ${stName?'done':''}" id="zone_${docKey}">
+          <input type="file" accept="${meta.accept}" onchange="handleFile(this,'${meta.storagePath}')">
+          ${stName
+            ? `<div class="icon">✅</div><div class="fname">${stName}</div><div class="txt">Click para cambiar</div>`
+            : `<div class="icon">${meta.icon}</div><div class="txt">${meta.desc}</div><div style="font-size:10px;color:var(--muted);margin-top:4px">Máx 10MB</div>`}
+        </div>
+        </div>`;
+      });
+      // Summary + botones + cierre card
+      const allDocsCheck = _evObj.requiredDocs.map(k=>{
+        const m=DOC_TYPES[k]; if(!m) return '';
+        const ok = !!state[m.nameKey];
+        return `<div><span style="color:var(--muted)">${m.icon} ${m.label}:</span> ${ok?'✅':'❌ Falta'}</div>`;
+      }).join('');
+      const allDocsDisabled = (()=>{
+        for(const k of _evObj.requiredDocs){
+          const m=DOC_TYPES[k]; if(!m) continue;
+          if(!state[m.nameKey]) return 'disabled';
+        }
+        if(state.submitting) return 'disabled';
+        return '';
+      })();
+      h += `<div style="background:var(--bg);border-radius:10px;padding:16px;margin-top:16px;border:1px solid var(--border)">
+        <h4 class="os" style="font-size:13px;letter-spacing:1px;color:var(--gold);margin-bottom:10px">RESUMEN DE INSCRIPCIÓN</h4>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+          <div><span style="color:var(--muted)">Evento:</span> <strong>${_evName}</strong></div>
+          <div><span style="color:var(--muted)">Atleta:</span> <strong>${f.nombre}</strong></div>
+          <div><span style="color:var(--muted)">RUT:</span> ${f.rut}</div>
+          <div><span style="color:var(--muted)">Club:</span> ${f.club==='Otro'?f.clubOtro:f.club}</div>
+          <div><span style="color:var(--muted)">División:</span> ${f.division}</div>
+          <div><span style="color:var(--muted)">Categoría:</span> ${f.categoria}</div>
+          ${allDocsCheck}
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:20px">
+        <button class="btn btn-outline" onclick="prevStep()">← Atrás</button>
+        <button class="btn btn-green" onclick="submitForm()" ${allDocsDisabled}>${state.submitting?'<span class="sp"></span> Enviando...':'✓ Enviar Inscripción'}</button>
+      </div></div>`;
+    } else {
+    // ─── SISTEMA VIEJO (backward compat) — el bloque IPF/menor/foto sigue como estaba ───
+    h += `${isIPFWorld?`
     <div style="background:rgba(212,168,67,.08);border:1px solid rgba(212,168,67,.4);border-radius:10px;padding:14px 16px;margin-bottom:16px">
       <div style="font-size:13px;font-weight:600;color:var(--gold);margin-bottom:4px">🌍 Campeonato Internacional IPF World</div>
       <div style="font-size:12px;color:var(--muted);line-height:1.5">Este campeonato requiere documentación internacional: pasaporte vigente, certificación WADA internacional, foto oficial con fondo blanco y el formulario de consentimiento IPF firmado.</div>
@@ -794,6 +922,7 @@ function renderForm() {
         return '';
       })()}>${state.submitting?'<span class="sp"></span> Enviando...':'✓ Enviar Inscripción'}</button>
     </div></div>`;
+    } // cierre else (legacy docs)
   }
 
   h += `</div>`;
@@ -1374,10 +1503,32 @@ async function submitForm() {
       if (state.notasFile) {
         privateEntry.notasURL = await uploadOne(state.notasFile, 'notas');
       }
+      // Construir el mapa `docs` estandarizado (nuevo sistema): para cada docKey
+      // del catálogo cuyo stateKey tenga archivo, guarda la URL bajo docKey.
+      const _docsMap = {};
+      const _evObj2 = EVENTS.find(e=>e.id===f.evento);
+      const _useNewSys = Array.isArray(_evObj2?.requiredDocs) && _evObj2.requiredDocs.length>0;
+      if (_useNewSys && window.DOC_TYPES) {
+        Object.entries(window.DOC_TYPES).forEach(([dk, meta])=>{
+          const url = privateEntry[meta.urlKey];
+          if (url) _docsMap[dk] = url;
+        });
+        if (Object.keys(_docsMap).length) privateEntry.docs = _docsMap;
+      }
       // Validar URLs presentes ANTES de guardar inscripción
-      if (!privateEntry.carnetURL || !privateEntry.wadeURL) {
-        console.error('[upload] URLs faltantes:', privateEntry);
-        throw new Error('No se pudieron guardar los documentos. Revisa tu conexión y vuelve a intentar.');
+      if (_useNewSys) {
+        // Nuevo sistema: validar que todos los docs requeridos del evento están subidos
+        const missing = _evObj2.requiredDocs.filter(dk => !_docsMap[dk]);
+        if (missing.length) {
+          console.error('[upload] docs faltantes:', missing);
+          throw new Error('No se pudieron guardar los documentos: ' + missing.join(', ') + '. Revisa tu conexión y vuelve a intentar.');
+        }
+      } else {
+        // Sistema viejo: carnet + wade obligatorios
+        if (!privateEntry.carnetURL || !privateEntry.wadeURL) {
+          console.error('[upload] URLs faltantes:', privateEntry);
+          throw new Error('No se pudieron guardar los documentos. Revisa tu conexión y vuelve a intentar.');
+        }
       }
       console.log('[upload] ✅ Todas las URLs OK, guardando inscripción...');
 
