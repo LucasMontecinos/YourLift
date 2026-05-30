@@ -2878,7 +2878,28 @@ function renderCampeonatos(){
             <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5">
               Marcá qué documentos pedir al atleta cuando se inscriba. Si dejás todo desmarcado, se usa la <b>lógica vieja</b> (carnet + WADA por default, IPF World detección por nombre, consentimiento menor si fechaNac &lt; 18, foto si "requiere foto" está activo arriba).
             </div>
-            <div id="ef_docs_container" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+            <div id="ef_docs_container" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${(()=>{
+              const DOC_TYPES = {
+                carnetIdFront: { label:'Carnet de Identidad', icon:'📷', desc:'Cara frontal del carnet' },
+                fotoBlanco:    { label:'Foto fondo blanco',  icon:'📸', desc:'Tipo carnet, sin accesorios' },
+                pasaporte:     { label:'Pasaporte',          icon:'🛂', desc:'Página de datos' },
+                wadaIntl:      { label:'ADEL/WADA Internacional', icon:'🧪', desc:'Vigente' },
+                ipfConsent:    { label:'Consentimiento IPF', icon:'📋', desc:'Firmado · PDF descargable' },
+                menorConsent:  { label:'Consentimiento Menor', icon:'⚠️', desc:'Tutor firma · PDF descargable' },
+                notas:         { label:'Concentración de Notas', icon:'📚', desc:'Certificado académico' }
+              };
+              const current = Array.isArray(editing.requiredDocs) ? editing.requiredDocs : [];
+              return Object.entries(DOC_TYPES).map(([k,meta])=>{
+                const checked = current.includes(k);
+                return `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:${checked?'rgba(34,197,94,.08)':'transparent'};border:1px solid ${checked?'rgba(34,197,94,.4)':'var(--border)'};border-radius:6px;cursor:pointer;transition:all .15s">
+                  <input type="checkbox" data-doc-key="${k}" ${checked?'checked':''} onchange="this.parentElement.style.background=this.checked?'rgba(34,197,94,.08)':'transparent';this.parentElement.style.borderColor=this.checked?'rgba(34,197,94,.4)':'var(--border)'" style="width:16px;height:16px;cursor:pointer;margin-top:2px;flex-shrink:0">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-weight:600;font-size:13px;color:var(--text)">${meta.icon} ${meta.label}</div>
+                    <div style="font-size:10px;color:var(--muted);margin-top:1px">${meta.desc}</div>
+                  </div>
+                </label>`;
+              }).join('');
+            })()}</div>
           </div>
         </div>
         <!-- ──────────────────────────────────────────────────────────────────────── -->
