@@ -10,7 +10,8 @@
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0A1628;--card:#0f1e35;--border:#1E3A5F;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A;--green:#22c55e;--gold:#D4A843;--blue:#3b82f6;--orange:#f59e0b;--red:#ef4444}
 body{font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh}
-.nav-hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:rgba(10,22,40,.9);border:1px solid var(--border);border-radius:8px;position:fixed;top:14px;right:16px;z-index:200}
+/* Hamburguesa mobile */
+.nav-hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:rgba(10,22,40,.7);border:1px solid rgba(212,168,67,.3);border-radius:8px;position:fixed;top:14px;right:16px;z-index:200}
 .nav-hamburger span{width:22px;height:2px;background:var(--text);border-radius:2px;transition:all .25s}
 .nav-hamburger.open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
 .nav-hamburger.open span:nth-child(2){opacity:0}
@@ -46,10 +47,29 @@ body{font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh}
 .result-item:hover{border-color:var(--accent)}
 .empty{text-align:center;padding:50px 20px;color:var(--muted)}
 </style>
+<style id="embedHide">
+/* Si estamos dentro de un iframe (param ?embedded=1): ocultar headers redundantes */
+html.embedded .btn-volver,html.embedded a[href="index.html"].btn-volver,html.embedded .nav{display:none !important}
+html.embedded body{background:transparent !important}
+html.embedded .wrap{padding-top:0 !important}
+/* Esconder la barra de scroll vertical (mantiene scroll funcional) */
+html.embedded::-webkit-scrollbar{width:0;background:transparent}
+html.embedded{scrollbar-width:none;-ms-overflow-style:none}
+</style>
+<script>
+(function(){
+  try{
+    var p=new URLSearchParams(location.search);
+    if(p.get('embedded')==='1' || window.parent!==window){
+      document.documentElement.classList.add('embedded');
+    }
+  }catch(e){}
+})();
+</script>
 </head>
 <body>
 <div id="bgGrid"></div>
-<button class="nav-hamburger" id="navBtn" onclick="document.getElementById('navBtn').classList.toggle('open');document.getElementById('navMobile').classList.toggle('open')" aria-label="Menú">
+<button class="nav-hamburger" id="navBtn" onclick="this.classList.toggle('open');document.getElementById('navMobile').classList.toggle('open')" aria-label="Menú">
   <span></span><span></span><span></span>
 </button>
 <div class="nav-mobile" id="navMobile">
@@ -59,19 +79,6 @@ body{font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh}
   <a href="ranking.html" class="rank">🏆 Ranking</a>
 </div>
 <script src="clubs.js"></script>
-
-<a href="index.html" class="btn-volver" title="Volver a YourLift">← Volver a YourLift</a>
-
-<style>
-/* Botón "Volver" universal */
-.btn-volver{position:fixed;top:14px;left:14px;z-index:9999;padding:8px 14px;background:rgba(10,22,40,.85);border:1px solid rgba(212,168,67,.4);border-radius:8px;color:rgba(220,230,245,.85);font-family:Oswald,sans-serif;font-size:12px;font-weight:600;letter-spacing:1px;text-decoration:none;cursor:pointer;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:all .15s;display:inline-flex;align-items:center;gap:4px}
-.btn-volver:hover{border-color:#D4A843;color:#D4A843;transform:translateX(-2px)}
-</style>
-
-<div class="nav" style="padding-left:170px">
-  <span style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--text)">YOUR<span style="color:var(--accent)">LIFT</span></span>
-  <span style="font-size:12px;color:var(--muted)">Perfil Atleta</span>
-</div>
 
 <div class="wrap">
   <div id="searchSection">
@@ -183,46 +190,9 @@ const PEERS={"M|93|Open|classic":{"n":44,"avg":589.5,"top":740,"p75":680,"p50":5
   }catch(e){console.warn('Firebase unavailable',e)}
 
   try{
-    DB=await fetch('data.json').then(r=>r.json());
-
-    // ── Aplicar overlay athlete_edits desde Firestore (admin → atletas) ────
-    // Así los cambios hechos en admin se reflejan AUTOMÁTICAMENTE en este perfil
-    // sin necesidad de re-deployar data.json.
-    if(_fbDB && _fbMod){
-      try{
-        const _EDIT_FIELDS=['nombre','club','debut','rut','sexo','fechaNac','fecha_nac','zona','comuna','universidad'];
-        const editsSnap=await _fbMod.getDocs(_fbMod.collection(_fbDB,'athlete_edits'));
-        let _editCount=0;
-        editsSnap.forEach(d=>{
-          const ed=d.data();
-          const a = DB.find(x=>x.codigo===ed.codigo) || (ed.rut?DB.find(x=>x.rut===ed.rut):null);
-          if(!a) return;
-          _EDIT_FIELDS.forEach(f=>{
-            if(ed[f]!==undefined && a[f]!==ed[f]){ a[f]=ed[f]; _editCount++; }
-          });
-        });
-        if(_editCount>0) console.log('[atleta] aplicados',_editCount,'campos editados desde admin');
-        // Listener en tiempo real (para que cambios en admin se vean sin recargar)
-        _fbMod.onSnapshot(_fbMod.collection(_fbDB,'athlete_edits'),(snap)=>{
-          let changed=false;
-          snap.docChanges().forEach(ch=>{
-            if(ch.type==='added'||ch.type==='modified'){
-              const ed=ch.doc.data();
-              const a = DB.find(x=>x.codigo===ed.codigo) || (ed.rut?DB.find(x=>x.rut===ed.rut):null);
-              if(a){
-                _EDIT_FIELDS.forEach(f=>{
-                  if(ed[f]!==undefined && a[f]!==ed[f]){ a[f]=ed[f]; changed=true; }
-                });
-              }
-            }
-          });
-          // Re-render si estamos mostrando un perfil
-          if(changed && typeof showProfile==='function' && window._curCodigo){
-            try{ showProfile(window._curCodigo) }catch(e){}
-          }
-        });
-      }catch(e){console.warn('[atleta] athlete_edits unavailable',e)}
-    }
+    DB=await fetch('data.json?v='+Date.now()).then(r=>r.json());
+    // Cargar records.json para mostrar reconocimientos
+    try{window.RECORDS=await fetch('records.json?v='+Date.now()).then(r=>r.json());}catch(e){window.RECORDS={};}
 
     // Merge debutant athletes from Firestore (inscribed but not yet in data.json)
     if(_fbDB && _fbMod){
@@ -320,8 +290,26 @@ window.showProfile=function(codigo){
   }
   history.replaceState(null,'','?codigo='+codigo);
 
-  const bl=a.bestLifts||{};
   const allComps=a.competencias||[];
+  // Calcular best lifts dinámicamente desde TODAS las competencias (estáticas + Firestore)
+  // Así se actualiza solo cuando el atleta mejora en una compe nueva.
+  const _staticBl=a.bestLifts||{};
+  const bl={
+    sq:_staticBl.sq||0,
+    bp:_staticBl.bp||0,
+    dl:_staticBl.dl||0,
+    total:_staticBl.total||0,
+    glp:_staticBl.glp||0
+  };
+  allComps.forEach(c=>{
+    const r=c.resultado||{};
+    if((r.sq||0)>bl.sq)bl.sq=r.sq;
+    if((r.bp||0)>bl.bp)bl.bp=r.bp;
+    if((r.dl||0)>bl.dl)bl.dl=r.dl;
+    if((r.total||0)>bl.total)bl.total=r.total;
+    const g=r.glp||r.gl||0;
+    if(g>bl.glp)bl.glp=g;
+  });
   const compsWithResults=allComps.filter(c=>c.resultado&&(c.resultado.total>0||c.resultado.status==='DQ'));
   const sorted=[...compsWithResults].sort((x,y)=>(y.fecha||y.evento||'').localeCompare(x.fecha||x.evento||''));
 
@@ -438,34 +426,116 @@ window.showProfile=function(codigo){
     h+='</div></div>';
   }
 
-  // ── GL chart ────────────────────────────────────────────
+  // ── GL chart con fechas reales ────────────────────────
   if(glHistory.length>1){
-    const W=340,H=80,PX=8,PY=8;
-    const gls=glHistory.map(c=>c.resultado.glp||c.resultado.gl||0);
+    // Resolver fecha (timestamp ms) por competencia
+    // Prioridad: c.fecha (ISO) > extraer año del nombre del evento > null
+    const MES_NUM={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
+    function parseFecha(c){
+      // 1) fecha explícita ISO
+      if(c.fecha){
+        const m=String(c.fecha).match(/(\d{4})-(\d{2})-(\d{2})/);
+        if(m)return new Date(+m[1],+m[2]-1,+m[3]).getTime();
+        const m2=String(c.fecha).match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+        if(m2)return new Date(+m2[3],+m2[2]-1,+m2[1]).getTime();
+        const m3=String(c.fecha).match(/(\d{4})/);
+        if(m3)return new Date(+m3[1],5,15).getTime(); // mitad de año
+      }
+      // 2) Buscar "Mes 2024" o "2024" en evento
+      const ev=String(c.evento||'');
+      const mesY=ev.toLowerCase().match(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)[^0-9]+(\d{4})/);
+      if(mesY)return new Date(+mesY[2], MES_NUM[mesY[1]]-1, 15).getTime();
+      const y=ev.match(/(20\d\d)/);
+      if(y)return new Date(+y[1],5,15).getTime();
+      return null;
+    }
+    // Asignar fecha a cada punto
+    const items=glHistory.map(c=>({
+      c,gl:c.resultado.glp||c.resultado.gl||0,
+      ts:parseFecha(c)
+    }));
+    // Ordenar por timestamp (los sin fecha al final, en orden actual)
+    items.sort((a,b)=>{
+      if(a.ts!=null&&b.ts!=null)return a.ts-b.ts;
+      if(a.ts!=null)return -1;
+      if(b.ts!=null)return 1;
+      return 0;
+    });
+    const W=400,H=160,PX=24,PY=24,PB=42; // PB = padding inferior para etiquetas
+    const gls=items.map(x=>x.gl);
     const maxG=Math.max(...gls),minG=Math.min(...gls.filter(v=>v>0));
+    const padG=Math.max(2,(maxG-minG)*0.15);
+    const yMin=Math.max(0,minG-padG),yMax=maxG+padG;
     const catPalette=['#D4A843','#3B82F6','#22C55E','#F59E0B','#C41E3A','#A78BFA','#F472B6'];
-    const uniqueCats=[...new Set(glHistory.map(c=>(c.categoria||'').trim()).filter(Boolean))];
+    const uniqueCats=[...new Set(items.map(x=>(x.c.categoria||'').trim()).filter(Boolean))];
     const catColor=c=>{const i=uniqueCats.indexOf((c||'').trim());return i>=0?catPalette[i%catPalette.length]:'#D4A843'};
-    const pts=glHistory.map((c,i)=>{
-      const x=PX+i*(W-PX*2)/(glHistory.length-1);
-      const y=PY+(H-PY*2)*(1-(gls[i]-minG)/Math.max(maxG-minG,1));
-      return {x,y,v:gls[i],ev:c.evento||'',cat:(c.categoria||'').trim()};
+
+    // Posicionamiento X basado en fechas reales con SPACING MÍNIMO de 35px
+    const withTs=items.filter(x=>x.ts!=null);
+    const useTime=withTs.length>=2;
+    const xAvail=W-PX*2;
+    let xPositions;
+    if(useTime){
+      const tmin=Math.min(...withTs.map(x=>x.ts));
+      const tmax=Math.max(...withTs.map(x=>x.ts));
+      const span=Math.max(1,tmax-tmin);
+      xPositions=items.map((it,i)=>it.ts==null?PX+i*xAvail/(items.length-1):PX+(it.ts-tmin)/span*xAvail);
+      // Empuje mínimo: separa puntos demasiado cercanos
+      const MIN_GAP=38;
+      for(let i=1;i<xPositions.length;i++){
+        if(xPositions[i]-xPositions[i-1]<MIN_GAP){
+          xPositions[i]=xPositions[i-1]+MIN_GAP;
+        }
+      }
+      // Si la cosa se sale del SVG, reescala todo proporcionalmente
+      const last=xPositions[xPositions.length-1];
+      if(last>W-PX){
+        const factor=(W-PX-PX)/(last-PX);
+        xPositions=xPositions.map(x=>PX+(x-PX)*factor);
+      }
+    }else{
+      xPositions=items.map((it,i)=>PX+i*xAvail/(Math.max(1,items.length-1)));
+    }
+    const pts=items.map((it,i)=>{
+      const x=xPositions[i];
+      const y=PY+(H-PY-PB)*(1-(it.gl-yMin)/Math.max(yMax-yMin,1));
+      let dateLabel='—';
+      if(it.ts!=null){
+        const d=new Date(it.ts);
+        const mNames=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+        dateLabel=mNames[d.getMonth()]+'·'+String(d.getFullYear()).slice(2);
+      }
+      return {x,y,v:it.gl,ev:it.c.evento||'',cat:(it.c.categoria||'').trim(),dateLabel};
     });
     const poly=pts.map(p=>p.x+','+p.y).join(' ');
-    const area=PX+','+H+' '+poly+' '+pts[pts.length-1].x+','+H;
+    const yBase=H-PB+2;
+    const area=pts[0].x+','+yBase+' '+poly+' '+pts[pts.length-1].x+','+yBase;
+    // Determinar si label arriba o abajo para evitar solape vertical entre 2 puntos cercanos
+    const labelPos=pts.map((p,i)=>{
+      let above=true;
+      // Si el siguiente o anterior está muy cerca en X Y, alternar
+      const close=(j)=>j>=0&&j<pts.length&&Math.abs(pts[j].x-p.x)<40&&Math.abs(pts[j].y-p.y)<14;
+      if(close(i-1))above=!(i%2===0);
+      return above;
+    });
     h+='<div class="card"><div class="sec-title">Evolución GL Points</div>'
-      +'<svg viewBox="0 0 '+(W)+'  '+(H+22)+'" style="width:100%;max-width:'+W+'px">'
-      +'<defs><linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#D4A843" stop-opacity="0.3"/><stop offset="100%" stop-color="#D4A843" stop-opacity="0.02"/></linearGradient></defs>'
+      +'<svg viewBox="0 0 '+(W)+' '+(H)+'" preserveAspectRatio="xMidYMid meet" style="width:100%;max-width:520px;display:block;margin:0 auto">'
+      +'<defs><linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#D4A843" stop-opacity="0.32"/><stop offset="100%" stop-color="#D4A843" stop-opacity="0.02"/></linearGradient></defs>'
+      // Líneas guía horizontales (5 niveles) con valores
+      +[0,0.25,0.5,0.75,1].map(p=>{const yy=PY+(H-PY-PB)*p;const val=Math.round((yMax-(yMax-yMin)*p)*10)/10;return '<line x1="'+PX+'" y1="'+yy+'" x2="'+(W-PX)+'" y2="'+yy+'" stroke="rgba(30,58,95,.35)" stroke-dasharray="2,3"/>'+'<text x="'+(PX-4)+'" y="'+(yy+3)+'" text-anchor="end" font-size="8" fill="rgba(160,180,210,.5)" font-family="Oswald">'+val+'</text>'}).join('')
       +'<polygon points="'+area+'" fill="url(#gg)"/>'
       +'<polyline points="'+poly+'" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
-      +pts.map(p=>'<circle cx="'+p.x+'" cy="'+p.y+'" r="4.5" fill="'+catColor(p.cat)+'" stroke="var(--bg)" stroke-width="2"/>'
-        +'<text x="'+p.x+'" y="'+(p.y-8)+'" text-anchor="middle" font-size="9" fill="rgba(212,168,67,.9)" font-family="Oswald" font-weight="700">'+p.v+'</text>'
-        +'<text x="'+p.x+'" y="'+(H+16)+'" text-anchor="middle" font-size="8" fill="rgba(120,143,166,.7)">'+((p.ev.match(/20\d\d/)||[''])[0])+'</text>'
-      ).join('')
+      +pts.map((p,i)=>{
+        const lblY=labelPos[i]?(p.y-9):(p.y+15);
+        return '<circle cx="'+p.x+'" cy="'+p.y+'" r="4" fill="'+catColor(p.cat)+'" stroke="var(--bg)" stroke-width="2"><title>'+p.ev+' — '+p.dateLabel+' — '+p.v+' GL</title></circle>'
+        +'<text x="'+p.x+'" y="'+lblY+'" text-anchor="middle" font-size="9" fill="rgba(212,168,67,.95)" font-family="Oswald" font-weight="700">'+p.v+'</text>'
+        +'<text x="'+p.x+'" y="'+(H-PB+14)+'" text-anchor="middle" font-size="8" fill="rgba(160,180,210,.7)" font-family="Oswald">'+p.dateLabel+'</text>';
+      }).join('')
       +'</svg>'
-      +(uniqueCats.length>1?'<div style="display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:center;font-size:10px;color:var(--muted);margin-top:6px;padding-top:8px;border-top:1px solid rgba(30,58,95,.3)">'
-        +uniqueCats.map(cat=>'<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:'+catColor(cat)+'"></span>'+cat+'</span>').join('')
-      +'</div>':'')
+      +'<div style="display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:6px;padding-top:8px;border-top:1px solid rgba(30,58,95,.3)">'
+        +(uniqueCats.length>1?'<div style="display:flex;flex-wrap:wrap;gap:6px 12px">'+uniqueCats.map(cat=>'<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:'+catColor(cat)+'"></span>'+cat+' kg</span>').join('')+'</div>':'<div></div>')
+        +'<div style="font-style:italic">'+(useTime?'Eje X = línea de tiempo':'Eje X = orden cronológico')+'</div>'
+      +'</div>'
       +'</div>';
   }
 
