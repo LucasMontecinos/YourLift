@@ -486,13 +486,15 @@ function trans(){
 }
 
 function cdStr(target){if(!target||target.includes("X"))return{d:null,h:null,m:null,done:false,unknown:true};const now=new Date(),t=new Date(target+"T00:00:00"),diff=t-now;if(isNaN(diff))return{d:null,h:null,m:null,done:false,unknown:true};if(diff<=0)return{d:0,h:0,m:0,done:true};const d=Math.floor(diff/864e5),h=Math.floor((diff%864e5)/36e5),m=Math.floor((diff%36e5)/6e4);return{d,h,m,done:false}}
+// cdStrDT: igual pero acepta datetime-local 'YYYY-MM-DDTHH:MM' (para preNominaCloseAt)
+function cdStrDT(target){if(!target)return{d:null,h:null,m:null,done:false,unknown:true};const now=new Date(),t=new Date(target);if(isNaN(t))return{d:null,h:null,m:null,done:false,unknown:true};const diff=t-now;if(diff<=0)return{d:0,h:0,m:0,done:true};const d=Math.floor(diff/864e5),h=Math.floor((diff%864e5)/36e5),m=Math.floor((diff%36e5)/6e4);return{d,h,m,done:false}}
 function nom(){
   let h='';
   const visibleEvs=(NM.events||[]).filter(ev=>ev.fromFirebase);
   if(!visibleEvs.length)return'<div class="emp" style="padding:40px;text-align:center;color:var(--muted)">No hay campeonatos activos. El administrador los publicará pronto.</div>';
   NM.events=visibleEvs; // ensure we only render Firestore events in nóminas
   NM.events.forEach((ev,ei)=>{
-    const cd=cdStr(ev.date),cc=cdStr(ev.closeDate),isUni=ev.extraCols&&ev.extraCols.includes("universidad");
+    const cd=cdStr(ev.date),cc=cdStr(ev.closeDate),cp=cdStrDT(ev.preNominaCloseAt),isUni=ev.extraCols&&ev.extraCols.includes("universidad");
     h+=`<div class="cd2" style="margin-bottom:24px">`;
     const lc=ev.liveCount||{};
     h+=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px"><div><h2 style="font-family:Oswald;font-size:clamp(16px,3.5vw,20px);letter-spacing:1px;text-transform:uppercase">${ev.name}${ev.fromFirebase?' <span style="font-size:10px;background:var(--green);color:#fff;padding:2px 8px;border-radius:10px;vertical-align:middle;animation:pulse 2s infinite">🔴 EN VIVO</span>':''} ${ev.hasJsonFallback?'<span style="font-size:10px;background:rgba(212,168,67,.2);color:var(--gold);padding:2px 8px;border-radius:10px;vertical-align:middle;border:1px solid rgba(212,168,67,.4)">📋 Nómina manual</span>':''}</h2><p style="font-size:12px;color:var(--muted);margin-top:2px">${ev.organizer||ev.org||''} · ${ev.location} · ${ev.days}</p>${ev.fromFirebase&&lc.pending>0?`<p style="font-size:11px;color:var(--gold);margin-top:2px">⏳ ${lc.pending} inscripción${lc.pending!==1?"es":""} pendiente${lc.pending!==1?"s":""} de aprobación</p>`:''}</div><div style="display:flex;gap:8px;align-items:center">${ev.fromFirebase&&lc.approved?`<span style="font-size:12px;background:rgba(34,197,94,.15);color:var(--green);padding:4px 10px;border-radius:8px;border:1px solid rgba(34,197,94,.3)">✓ ${lc.approved} confirmados</span>`:"" }<span class="bg" style="background:var(--accent);color:#fff;font-size:14px;padding:6px 14px">${ev.athletes.length} inscritos</span></div></div>`;
@@ -506,8 +508,9 @@ function nom(){
         h+=`</div>`;
       }
     }
-    // Countdown cards
-    h+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">`;
+    // Countdown cards — 3 columnas si hay cierre de pre-nómina, si no 2
+    const hasCp=ev.preNominaCloseAt&&!cp.unknown;
+    h+=`<div style="display:grid;grid-template-columns:${hasCp?'1fr 1fr 1fr':'1fr 1fr'};gap:12px;margin-bottom:16px">`;
     // Competition countdown
     h+=`<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center">`;
     h+=`<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">⏱ Competencia</div>`;
@@ -519,7 +522,16 @@ function nom(){
     h+=`<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">📋 Cierre de Nómina</div>`;
     if(cc.done)h+=`<div style="font-size:18px;font-weight:700;color:var(--accent);font-family:Oswald">NÓMINA CERRADA</div>`;
     else if(cc.unknown)h+=`<div style="font-size:14px;color:var(--muted);padding:12px 0">Por confirmar</div>`;else h+=`<div style="display:flex;justify-content:center;gap:12px"><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--accent);font-family:Oswald">${cc.d}</span><div style="font-size:10px;color:var(--muted)">días</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--accent);font-family:Oswald">${cc.h}</span><div style="font-size:10px;color:var(--muted)">hrs</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--accent);font-family:Oswald">${cc.m}</span><div style="font-size:10px;color:var(--muted)">min</div></div></div>`;
-    h+=`</div></div>`;
+    h+=`</div>`;
+    // Pre-nómina close countdown (cierre de inscripciones)
+    if(hasCp){
+      h+=`<div style="background:var(--bg);border:1px solid ${cp.done?'var(--green)':'rgba(34,197,94,.4)'};border-radius:12px;padding:16px;text-align:center">`;
+      h+=`<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">📝 Cierre Inscripciones</div>`;
+      if(cp.done) h+=`<div style="font-size:18px;font-weight:700;color:var(--green);font-family:Oswald">INSCRIPCIONES CERRADAS</div>`;
+      else h+=`<div style="display:flex;justify-content:center;gap:12px"><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--green);font-family:Oswald">${cp.d}</span><div style="font-size:10px;color:var(--muted)">días</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--green);font-family:Oswald">${cp.h}</span><div style="font-size:10px;color:var(--muted)">hrs</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--green);font-family:Oswald">${cp.m}</span><div style="font-size:10px;color:var(--muted)">min</div></div></div>`;
+      h+=`</div>`;
+    }
+    h+=`</div>`;
     // Search
     h+=`<div class="fl" style="margin-bottom:10px"><input type="text" placeholder="Buscar en nómina..." value="${ST.ne===ei?ST.ns:''}" oninput="nss(${ei},this.value)"></div>`;
     // Roster table
