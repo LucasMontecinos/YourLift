@@ -40,8 +40,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .side-menu .mi.special-g:hover{background:rgba(34,197,94,.12);color:#fff;border-color:var(--green)}
 .side-menu .mi.special-y{border-color:rgba(212,168,67,.35);color:var(--gold)}
 .side-menu .mi.special-y:hover{background:rgba(212,168,67,.12);color:#fff;border-color:var(--gold)}
-.side-menu .mi.special-b{border-color:rgba(59,130,246,.35);color:#60a5fa}
-.side-menu .mi.special-b:hover{background:rgba(59,130,246,.12);color:#fff;border-color:#60a5fa}
 .menu-foot{position:absolute;bottom:20px;left:24px;right:24px;font-size:10px;color:var(--muted);text-align:center;font-family:Oswald;letter-spacing:1.5px;border-top:1px solid rgba(30,58,95,.4);padding-top:14px}
 .ctn{padding-top:90px !important}
 @media(max-width:520px){.hamburger{top:10px;right:12px;width:42px;height:42px}.ctn{padding-top:80px !important}.side-menu{width:280px;padding:70px 20px 24px}.side-menu .mi{font-size:14px;padding:14px 16px}}
@@ -183,7 +181,6 @@ function buildMenu(){
     {v:'atletas',l:'Atletas',ic:'👤'},
     {v:'insc',l:'Inscripción',ic:'📝',cls:'special-g'},
     {v:'rank',l:'Ranking',ic:'🏆',cls:'special-y'},
-    {v:'glcalc',l:'Calculadora GL',ic:'🧮',cls:'special-b'},
   ];
   const cur=(typeof ST!=='undefined'?ST.v:'nominas');
   document.getElementById('menuItems').innerHTML=items.map(it=>
@@ -608,168 +605,10 @@ function render(){const app=document.getElementById("app");
     else if(ST.v==="atletas")h+=embedded('atleta.html');
     else if(ST.v==="insc")h+=embedded('inscripcion.html');
     else if(ST.v==="rank")h+=embedded('ranking.html');
-    else if(ST.v==="glcalc")h+=glcalc();
     else h+=nom();
     if(typeof buildMenu==='function')buildMenu();
   }
 function embedded(url){return `<iframe src="${url}?embedded=1" style="width:100%;height:calc(100vh - 110px);min-height:600px;border:0;background:transparent;display:block" loading="lazy"></iframe>`}
-
-// ═══════════════════════════════════════════════════════════════
-// CALCULADORA GL POINTS (IPF Good Lift Points 2020)
-// Fórmula oficial: GL = 100 × Total / (a - b × e^(-c × BW))
-// ═══════════════════════════════════════════════════════════════
-const GL_COEFS = {
-  // Powerlifting Classic
-  pl_m:  {a:1199.72839, b:1025.18162, c:0.00921},
-  pl_f:  {a:610.32796,  b:1045.59282, c:0.03048},
-  // Powerlifting Equipped
-  ple_m: {a:1236.25115, b:1449.21864, c:0.01644},
-  ple_f: {a:758.63878,  b:949.31382,  c:0.02435},
-  // Bench Only Classic
-  bo_m:  {a:320.98041,  b:281.40258,  c:0.01008},
-  bo_f:  {a:142.40398,  b:442.52671,  c:0.04724},
-  // Bench Only Equipped
-  boe_m: {a:381.22073,  b:733.79378,  c:0.02398},
-  boe_f: {a:221.82209,  b:357.00377,  c:0.02937},
-};
-
-function calcGL(bw, total, coefKey){
-  if(!bw||!total||bw<=0||total<=0)return null;
-  const c=GL_COEFS[coefKey];if(!c)return null;
-  const denom=c.a - c.b * Math.exp(-c.c * bw);
-  if(denom<=0)return null;
-  return Math.round(100 * total / denom * 100)/100;
-}
-
-// Estado local del calculador
-if(!window.GLC)window.GLC={sex:'m',eq:'pl',bw:'',sq:'',bp:'',dl:'',gl:null};
-
-window.glcUpdate=function(){
-  const bw=parseFloat(document.getElementById('glc_bw')?.value)||0;
-  const sq=parseFloat(document.getElementById('glc_sq')?.value)||0;
-  const bp=parseFloat(document.getElementById('glc_bp')?.value)||0;
-  const dl=parseFloat(document.getElementById('glc_dl')?.value)||0;
-  const eq=document.getElementById('glc_eq')?.value||'pl';
-  const sex=document.getElementById('glc_sex')?.value||'m';
-  const isBO=eq==='bo'||eq==='boe';
-  const total=isBO?bp:(sq+bp+dl);
-  const coef=eq+'_'+sex;
-  const gl=calcGL(bw,total,coef);
-  window.GLC={sex,eq,bw,sq,bp,dl,gl};
-  const res=document.getElementById('glc_result');
-  const totEl=document.getElementById('glc_total');
-  if(totEl)totEl.textContent=total>0?total.toFixed(1)+' kg':'—';
-  if(res){
-    if(gl!==null){
-      let cat='';
-      if(gl>=100)cat='🌟 Elite';
-      else if(gl>=90)cat='🔴 Élite Nacional';
-      else if(gl>=80)cat='🟠 Alto Rendimiento';
-      else if(gl>=70)cat='🟡 Avanzado';
-      else if(gl>=60)cat='🔵 Intermedio';
-      else cat='⚪ Principiante';
-      res.innerHTML=`<div style="font-family:Oswald;font-size:70px;font-weight:700;color:var(--gold);line-height:1;text-shadow:0 0 30px rgba(212,168,67,.5)">${gl}</div>
-        <div style="font-family:Oswald;font-size:14px;letter-spacing:3px;color:rgba(212,168,67,.7);margin-top:6px">GL POINTS</div>
-        <div style="margin-top:16px;font-family:Oswald;font-size:18px;letter-spacing:2px;color:var(--text)">${cat}</div>`;
-    }else{
-      res.innerHTML=`<div style="font-family:Oswald;font-size:28px;color:var(--muted)">—</div><div style="font-size:12px;color:var(--muted);margin-top:8px">Completá los campos</div>`;
-    }
-  }
-};
-
-function glcalc(){
-  const g=window.GLC;
-  const inp=(id,label,ph,val='')=>`<div style="display:flex;flex-direction:column;gap:6px">
-    <label style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:var(--muted)">${label}</label>
-    <input id="${id}" type="number" min="0" step="0.1" placeholder="${ph}" value="${val}"
-      oninput="glcUpdate()"
-      style="background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px 16px;font-size:18px;font-family:Oswald;outline:none;width:100%;transition:border-color .15s"
-      onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
-  </div>`;
-  return `
-  <div class="cd2" style="max-width:760px;margin:0 auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:20px">
-      <div>
-        <h2 style="font-family:Oswald;font-size:22px;letter-spacing:2px;color:var(--text)">🧮 CALCULADORA GL POINTS</h2>
-        <p style="font-size:12px;color:var(--muted);margin-top:4px">Fórmula oficial IPF Good Lift 2020</p>
-      </div>
-    </div>
-
-    <!-- Selector sexo + modalidad -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <label style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:var(--muted)">SEXO</label>
-        <select id="glc_sex" onchange="glcUpdate()"
-          style="background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px 16px;font-size:15px;font-family:Oswald;outline:none;cursor:pointer">
-          <option value="m" ${g.sex==='m'?'selected':''}>♂ Masculino</option>
-          <option value="f" ${g.sex==='f'?'selected':''}>♀ Femenino</option>
-        </select>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <label style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:var(--muted)">MODALIDAD</label>
-        <select id="glc_eq" onchange="glcUpdate()"
-          style="background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px 16px;font-size:15px;font-family:Oswald;outline:none;cursor:pointer">
-          <option value="pl"  ${g.eq==='pl' ?'selected':''}>Classic Powerlifting</option>
-          <option value="ple" ${g.eq==='ple'?'selected':''}>Equipado Powerlifting</option>
-          <option value="bo"  ${g.eq==='bo' ?'selected':''}>Classic Bench Only</option>
-          <option value="boe" ${g.eq==='boe'?'selected':''}>Equipado Bench Only</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- Pesos -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-      ${inp('glc_bw','PESO CORPORAL (kg)','ej: 83.0')}
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <label style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:var(--muted)">TOTAL (kg)</label>
-        <div id="glc_total" style="background:rgba(10,22,40,.4);border:1px solid var(--border);border-radius:10px;color:var(--gold);padding:12px 16px;font-size:22px;font-family:Oswald;text-align:center;letter-spacing:2px">—</div>
-      </div>
-    </div>
-    <div id="glc_lifts_row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
-      ${inp('glc_sq','SQUAT (kg)','ej: 200')}
-      ${inp('glc_bp','BENCH (kg)','ej: 130')}
-      ${inp('glc_dl','DEADLIFT (kg)','ej: 250')}
-    </div>
-
-    <!-- Resultado -->
-    <div style="background:linear-gradient(135deg,rgba(212,168,67,.08),rgba(212,168,67,.03));border:2px solid rgba(212,168,67,.4);border-radius:16px;padding:32px;text-align:center">
-      <div id="glc_result">
-        <div style="font-family:Oswald;font-size:28px;color:var(--muted)">—</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:8px">Completá los campos</div>
-      </div>
-    </div>
-
-    <!-- Tabla de referencia -->
-    <div style="margin-top:20px;background:rgba(10,22,40,.4);border:1px solid var(--border);border-radius:12px;padding:16px">
-      <div style="font-family:Oswald;font-size:11px;letter-spacing:3px;color:var(--muted);margin-bottom:12px">TABLA DE REFERENCIA</div>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;font-size:13px">
-        ${[['🌟 Elite','≥ 100'],['🔴 Élite Nacional','90–99'],['🟠 Alto Rendimiento','80–89'],['🟡 Avanzado','70–79'],['🔵 Intermedio','60–69'],['⚪ Principiante','< 60']].map(([c,r])=>`
-          <div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(30,58,95,.2);border-radius:6px">
-            <span>${c}</span><span style="color:var(--gold);font-family:Oswald;font-weight:700">${r}</span>
-          </div>`).join('')}
-      </div>
-    </div>
-
-    <p style="font-size:11px;color:var(--muted);margin-top:14px;text-align:center">
-      Fórmula: GL = 100 × Total ÷ (a − b × e<sup>−c × BW</sup>) · <a href="https://goodlift.info" target="_blank" style="color:var(--gold)">goodlift.info</a>
-    </p>
-  </div>
-  <script>
-    // Ocultar DL en Bench Only
-    (function(){
-      var eq=document.getElementById('glc_eq');
-      function toggleLifts(){
-        var isBO=eq&&(eq.value==='bo'||eq.value==='boe');
-        var row=document.getElementById('glc_lifts_row');
-        if(row){row.style.gridTemplateColumns=isBO?'1fr':'1fr 1fr 1fr';
-          ['glc_sq','glc_dl'].forEach(function(id){var el=document.getElementById(id);if(el){el.closest('div').style.display=isBO?'none':'flex';}});
-        }
-      }
-      if(eq)eq.addEventListener('change',toggleLifts);
-      toggleLifts();
-    })();
-  </script>`;
-}
   h+=`<div class="ftr">FECHIPO — Federación Chilena de Powerlifting · Afiliada a IPF & WADA<br>Resultados ⚡ vía <a href="https://www.openpowerlifting.org" target="_blank">OpenPowerlifting.org</a> (Public Domain)</div>`;
   app.innerHTML=h;if(!ST.sel&&ST.v==="list"){const i=app.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}}
 
