@@ -42,6 +42,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .side-menu .mi.special-y:hover{background:rgba(212,168,67,.12);color:#fff;border-color:var(--gold)}
 .side-menu .mi.special-b{border-color:rgba(59,130,246,.35);color:#60a5fa}
 .side-menu .mi.special-b:hover{background:rgba(59,130,246,.12);color:#fff;border-color:#60a5fa}
+@media(max-width:760px){.glc-grid{grid-template-columns:1fr !important}.glc-grid > div:first-child{order:2}.glc-grid > div:last-child{order:1}}
 .menu-foot{position:absolute;bottom:20px;left:24px;right:24px;font-size:10px;color:var(--muted);text-align:center;font-family:Oswald;letter-spacing:1.5px;border-top:1px solid rgba(30,58,95,.4);padding-top:14px}
 .ctn{padding-top:90px !important}
 @media(max-width:520px){.hamburger{top:10px;right:12px;width:42px;height:42px}.ctn{padding-top:80px !important}.side-menu{width:280px;padding:70px 20px 24px}.side-menu .mi{font-size:14px;padding:14px 16px}}
@@ -828,71 +829,73 @@ function glcalc(){
   const lbl=(t)=>`<div style="font-family:Oswald;font-size:10px;letter-spacing:3px;color:var(--muted);margin-bottom:8px">${t}</div>`;
   const isBO=g.eq==='bo'||g.eq==='boe';
   return `
-  <div class="cd2" style="max-width:640px;margin:0 auto">
-    <h2 style="font-family:Oswald;font-size:22px;letter-spacing:3px;margin-bottom:4px">🧮 CALCULADORA GL POINTS</h2>
+  <div class="cd2" style="max-width:1000px;margin:0 auto">
+    <h2 style="font-family:Oswald;font-size:22px;letter-spacing:3px;margin-bottom:4px">\u{1F9EE} CALCULADORA GL POINTS</h2>
     <p style="font-size:11px;color:var(--muted);margin-bottom:22px">Fórmula oficial IPF Good Lift 2020 · Solo kilogramos</p>
 
-    <!-- MODO: SQ+BP+DL o TOTAL directo -->
-    <div style="display:flex;gap:10px;margin-bottom:20px">
-      <button id="glc_btn_lifts" onclick="glcSetMode('lifts')"
-        style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;cursor:pointer">
-        SQ + BP + DL
-      </button>
-      <button id="glc_btn_total" onclick="glcSetMode('total')"
-        style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:rgba(10,22,40,.5);color:#fff;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;cursor:pointer">
-        TOTAL DIRECTO
-      </button>
-    </div>
+    <div class="glc-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
 
-    <!-- FILA SQ BP DL -->
-    <div id="glc_lifts_row" style="display:grid;grid-template-columns:${isBO?'1fr':'1fr 1fr 1fr'};gap:10px;margin-bottom:16px">
-      ${!isBO?`<div>${lbl('SQUAT (kg)')}<input id="glc_sq" type="number" min="0" step="0.5" placeholder="0" oninput="glcUpdate()" style="${inpStyle}" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></div>`:''}
-      <div>${lbl('BENCH (kg)')}<input id="glc_bp" type="number" min="0" step="0.5" placeholder="0" oninput="glcUpdate()" style="${inpStyle}" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></div>
-      ${!isBO?`<div>${lbl('DEADLIFT (kg)')}<input id="glc_dl" type="number" min="0" step="0.5" placeholder="0" oninput="glcUpdate()" style="${inpStyle}" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></div>`:''}
-    </div>
-    <!-- Suma automática -->
-    <div id="glc_sum_row" style="text-align:center;margin-bottom:16px;font-family:Oswald;font-size:13px;letter-spacing:2px;color:var(--muted)">TOTAL: <span id="glc_sum" style="color:var(--gold)"></span></div>
-
-    <!-- FILA TOTAL DIRECTO -->
-    <div id="glc_total_row" style="display:none;margin-bottom:16px">
-      ${lbl('TOTAL (kg)')}
-      <input id="glc_tot_inp" type="number" min="0" step="0.5" placeholder="0" oninput="glcUpdate()" style="${inpStyle}" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
-    </div>
-
-    <!-- PESO CORPORAL + SELECTS -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px">
+      <!-- ===== IZQUIERDA: RESULTADO + TOP3 ===== -->
       <div>
-        ${lbl('PESO CORPORAL (kg)')}
-        <input id="glc_bw" type="number" min="0" step="0.1" placeholder="0.0" oninput="glcUpdate()" style="${inpStyle}" onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
+        <div style="background:linear-gradient(135deg,rgba(212,168,67,.07),rgba(212,168,67,.02));border:2px solid rgba(212,168,67,.35);border-radius:18px;padding:40px 24px;text-align:center;margin-bottom:18px;position:sticky;top:10px">
+          <div id="glc_result">
+            <div style="font-family:Oswald;font-size:56px;color:var(--muted);line-height:1">—</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:10px">Completá los campos</div>
+          </div>
+        </div>
+        <div id="glc_top3" style="background:rgba(10,22,40,.4);border:1px solid var(--border);border-radius:12px;padding:14px;min-height:20px"></div>
       </div>
-      <div>
-        ${lbl('MODALIDAD')}
-        <select id="glc_eq" onchange="window.GLC.eq=this.value;render()" style="${selStyle}">
-          <option value="pl"  ${g.eq==='pl' ?'selected':''}>Classic PL</option>
-          <option value="ple" ${g.eq==='ple'?'selected':''}>Equipado PL</option>
-          <option value="bo"  ${g.eq==='bo' ?'selected':''}>Classic Bench</option>
-          <option value="boe" ${g.eq==='boe'?'selected':''}>Equip. Bench</option>
-        </select>
-      </div>
-      <div>
-        ${lbl('SEXO')}
-        <select id="glc_sex" onchange="glcUpdate()" style="${selStyle}">
-          <option value="m" ${g.sex==='m'?'selected':''}>♂ Hombre</option>
-          <option value="f" ${g.sex==='f'?'selected':''}>♀ Mujer</option>
-        </select>
-      </div>
-    </div>
 
-    <!-- RESULTADO -->
-    <div style="background:linear-gradient(135deg,rgba(212,168,67,.07),rgba(212,168,67,.02));border:2px solid rgba(212,168,67,.35);border-radius:18px;padding:36px 24px;text-align:center;margin-bottom:20px">
-      <div id="glc_result">
-        <div style="font-family:Oswald;font-size:48px;color:var(--muted);line-height:1">—</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:10px">Completá los campos</div>
-      </div>
-    </div>
+      <!-- ===== DERECHA: FORMULARIO ===== -->
+      <div>
+        <!-- MODO -->
+        <div style="display:flex;gap:10px;margin-bottom:18px">
+          <button id="glc_btn_lifts" onclick="glcSetMode('lifts')" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;cursor:pointer">SQ + BP + DL</button>
+          <button id="glc_btn_total" onclick="glcSetMode('total')" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:rgba(10,22,40,.5);color:#fff;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;cursor:pointer">TOTAL DIRECTO</button>
+        </div>
 
-    <!-- TOP 3 DE LA CATEGORÍA -->
-    <div id="glc_top3" style="background:rgba(10,22,40,.4);border:1px solid var(--border);border-radius:12px;padding:14px;min-height:20px"></div>
+        <!-- SQ BP DL -->
+        <div id="glc_lifts_row" style="display:grid;grid-template-columns:${isBO?'1fr':'1fr 1fr 1fr'};gap:10px;margin-bottom:14px">
+          ${!isBO?`<div>${lbl('SQUAT (kg)')}<input id="glc_sq" type="number" min="0" step="0.5" placeholder="0" oninput="glcUpdate()" style="${inpStyle}" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></div>`:''}
+          <div>${lbl('BENCH (kg)')}<input id="glc_bp" type="number" min="0" step="0.5" placeholder="0" oninput="glcUpdate()" style="${inpStyle}" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></div>
+          ${!isBO?`<div>${lbl('DEADLIFT (kg)')}<input id="glc_dl" type="number" min="0" step="0.5" placeholder="0" oninput="glcUpdate()" style="${inpStyle}" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></div>`:''}
+        </div>
+        <div id="glc_sum_row" style="text-align:center;margin-bottom:14px;font-family:Oswald;font-size:13px;letter-spacing:2px;color:var(--muted)">TOTAL: <span id="glc_sum" style="color:var(--gold)"></span></div>
+
+        <!-- TOTAL DIRECTO -->
+        <div id="glc_total_row" style="display:none;margin-bottom:14px">
+          ${lbl('TOTAL (kg)')}
+          <input id="glc_tot_inp" type="number" min="0" step="0.5" placeholder="0" oninput="glcUpdate()" style="${inpStyle}" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+
+        <!-- BW -->
+        <div style="margin-bottom:14px">
+          ${lbl('PESO CORPORAL (kg)')}
+          <input id="glc_bw" type="number" min="0" step="0.1" placeholder="0.0" oninput="glcUpdate()" style="${inpStyle}" onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+
+        <!-- MODALIDAD + SEXO -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            ${lbl('MODALIDAD')}
+            <select id="glc_eq" onchange="window.GLC.eq=this.value;render()" style="${selStyle}">
+              <option value="pl"  ${g.eq==='pl' ?'selected':''}>Classic PL</option>
+              <option value="ple" ${g.eq==='ple'?'selected':''}>Equipado PL</option>
+              <option value="bo"  ${g.eq==='bo' ?'selected':''}>Classic Bench</option>
+              <option value="boe" ${g.eq==='boe'?'selected':''}>Equip. Bench</option>
+            </select>
+          </div>
+          <div>
+            ${lbl('SEXO')}
+            <select id="glc_sex" onchange="glcUpdate()" style="${selStyle}">
+              <option value="m" ${g.sex==='m'?'selected':''}>♂ Hombre</option>
+              <option value="f" ${g.sex==='f'?'selected':''}>♀ Mujer</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+    </div>
   </div>`;
 }
   h+=`<div class="ftr">FECHIPO — Federación Chilena de Powerlifting · Afiliada a IPF & WADA<br>Resultados ⚡ vía <a href="https://www.openpowerlifting.org" target="_blank">OpenPowerlifting.org</a> (Public Domain)</div>`;
