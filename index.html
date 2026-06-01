@@ -636,11 +636,12 @@ const GL_COEFS = {
 function calcGL(bw, total, coefKey){
   if(!bw||!total||bw<=0||total<=0)return null;
   const c=GL_COEFS[coefKey];if(!c)return null;
-  const denom=c.a - c.b * Math.exp(-c.c * bw);
-  if(denom<=0)return null;
-  return Math.round(100 * total / denom * 100)/100;
+  // Procedimiento oficial IPF GL: coef redondeado a 6 decimales, luego × total, redondeo a 6 dec.
+  const denomRaw=c.a - c.b * Math.exp(-c.c * bw);
+  if(denomRaw<=0)return null;
+  const coef=Math.round(100/denomRaw*1e6)/1e6;
+  return Math.round(coef*total*1e6)/1e6;
 }
-
 // Estado local del calculador
 if(!window.GLC)window.GLC={sex:'m',eq:'pl',mode:'lifts'};
 
@@ -809,7 +810,8 @@ window.glcUpdate=function(){
       else if(gl>=70){cat='🟡 Avanzado';catColor='#eab308';}
       else if(gl>=60){cat='🔵 Intermedio';catColor='#3b82f6';}
       else{cat='⚪ Principiante';catColor='var(--muted)';}
-      res.innerHTML=`<div style="font-family:Oswald;font-size:80px;font-weight:700;color:${catColor};line-height:1;text-shadow:0 0 40px ${catColor}55">${gl.toFixed(2)}</div>
+      res.innerHTML=`<div style="font-family:Oswald;font-size:76px;font-weight:700;color:${catColor};line-height:1;text-shadow:0 0 40px ${catColor}55">${gl.toFixed(2)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${gl.toFixed(6)}</div>
         <div style="font-family:Oswald;font-size:13px;letter-spacing:4px;color:rgba(212,168,67,.8);margin-top:8px">GL POINTS</div>
         <div style="margin-top:14px;font-family:Oswald;font-size:20px;letter-spacing:2px;color:${catColor}">${cat}</div>
         ${wcat?`<div style="margin-top:10px;font-family:Oswald;font-size:14px;letter-spacing:2px;color:var(--blue)">Categoría: ${wcat}</div>`:''}`;
