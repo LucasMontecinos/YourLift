@@ -829,21 +829,25 @@ window.glcUpdate=function(){
 // ═══════════════════════════════════════════════════════════════
 function home(){
   const months=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+  const baseName=n=>String(n||'').replace(/\s*[-–]\s*tarima\s*\d+/i,'').trim();
   const evs=(window.ALL_EVENTS||NOM_EVENTS||[])
     .filter(e=>e.status!=='archived'&&e.date)
     .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   const now=new Date();
-  const proximos=evs.filter(e=>{const d=new Date(e.date+'T00:00:00');return !isNaN(d)&&d>=new Date(now.getFullYear(),now.getMonth(),now.getDate());});
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const proximos=evs.filter(e=>{const d=new Date(e.date+'T00:00:00');return !isNaN(d)&&d>=today;});
   let next=(proximos.length?proximos[0]:(evs.length?evs[evs.length-1]:null));
-  // Si el próximo es parte de un evento multi-tarima (mismo nombre base + misma fecha),
-  // mostrar el nombre base unificado (sin "- Tarima N") para que sea una sola tarjeta.
-  if(next){
-    const baseName=n=>String(n||'').replace(/\s*[-–]\s*tarima\s*\d+/i,'').trim();
-    next={...next, name: baseName(next.name)};
-  }
+  if(next) next={...next, name: baseName(next.name)};
+  const insOpen=[];const seenBase={};
+  evs.forEach(e=>{
+    if(e.status!=='open') return;
+    if(e.preNominaCloseAt){const c=new Date(e.preNominaCloseAt);if(!isNaN(c)&&now>c) return;}
+    const bn=baseName(e.name);
+    if(seenBase[bn]) return; seenBase[bn]=1;
+    insOpen.push({...e,name:bn});
+  });
 
   let h=`
-  <!-- HERO con foto de fondo (hero-bg.jpg). Fallback: gradiente -->
   <div style="position:relative;margin:-90px calc(-50vw + 50%) 44px;width:100vw;min-height:clamp(460px,72vh,680px);display:flex;align-items:center;justify-content:center;overflow:hidden">
     <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,#142a4d 0%,#0a1628 45%,#06101f 100%)"></div>
     <div style="position:absolute;inset:0;background:radial-gradient(circle at 20% 30%,rgba(196,30,58,.18) 0%,transparent 45%),radial-gradient(circle at 80% 70%,rgba(212,168,67,.14) 0%,transparent 45%)"></div>
@@ -863,16 +867,13 @@ function home(){
     </div>
   </div>
 
-  <div style="margin-bottom:30px">
+  <div style="margin-bottom:34px">
     <h2 style="font-family:Oswald;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:18px">Próximo Campeonato</h2>`;
-
   if(!next){
     h+=`<div style="background:rgba(17,34,59,.4);border:1px solid var(--border);border-radius:12px;padding:30px;text-align:center;color:var(--muted)">No hay campeonatos programados por el momento.</div>`;
   }else{
     const d=new Date((next.date||'')+'T00:00:00');
-    const dd=isNaN(d)?'--':d.getDate();
-    const mm=isNaN(d)?'':months[d.getMonth()];
-    const yy=isNaN(d)?'':d.getFullYear();
+    const dd=isNaN(d)?'--':d.getDate();const mm=isNaN(d)?'':months[d.getMonth()];const yy=isNaN(d)?'':d.getFullYear();
     const cd=cdStr(next.date);
     const cdHtml=cd&&!cd.done&&!cd.unknown
       ?`<div style="display:flex;gap:16px;margin-top:18px">
@@ -891,14 +892,39 @@ function home(){
         <div style="font-family:Oswald;font-size:clamp(20px,3vw,28px);font-weight:700;letter-spacing:1px;color:var(--text);text-transform:uppercase;line-height:1.1">${next.name||''}</div>
         <div style="font-size:13px;color:var(--muted);margin-top:8px">${next.organizer||next.org||''}${next.location?' · '+next.location:''}</div>
         ${cdHtml}
-        <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
+        <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;align-items:center">
           <button onclick="sv('nominas')" style="padding:11px 22px;background:var(--accent);color:#fff;border:none;border-radius:9px;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">VER NÓMINA</button>
-          <button onclick="sv('insc')" style="padding:11px 22px;background:transparent;color:var(--green);border:1px solid var(--green);border-radius:9px;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">INSCRIBIRME</button>
         </div>
       </div>
     </div>`;
   }
   h+=`</div>`;
+
+  if(insOpen.length){
+    h+=`<div style="margin-bottom:30px">
+      <h2 style="font-family:Oswald;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:6px">Inscripciones Abiertas</h2>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:18px">Campeonatos con inscripciones disponibles ahora</p>
+      <div style="display:flex;flex-direction:column;gap:10px">`;
+    insOpen.forEach(ev=>{
+      const d=new Date((ev.date||'')+'T00:00:00');
+      const dd=isNaN(d)?'--':d.getDate();const mm=isNaN(d)?'':months[d.getMonth()];const yy=isNaN(d)?'':d.getFullYear();
+      let cierreTxt='';
+      if(ev.preNominaCloseAt){const c=new Date(ev.preNominaCloseAt);if(!isNaN(c)){const diff=c-now;const dias=Math.floor(diff/864e5);cierreTxt=dias>0?`cierra en ${dias} día${dias!==1?'s':''}`:'cierra hoy';}}
+      h+=`<div style="display:flex;align-items:center;gap:16px;background:rgba(17,34,59,.55);backdrop-filter:blur(8px);border:1px solid var(--border);border-left:4px solid var(--green);border-radius:12px;padding:14px 18px">
+        <div style="flex-shrink:0;text-align:center;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:8px 14px;min-width:60px">
+          <div style="font-family:Oswald;font-size:24px;font-weight:700;color:var(--green);line-height:1">${dd}</div>
+          <div style="font-family:Oswald;font-size:10px;letter-spacing:1px;color:rgba(34,197,94,.8)">${mm}</div>
+          <div style="font-size:9px;color:var(--muted)">${yy}</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-family:Oswald;font-size:15px;font-weight:600;letter-spacing:1px;color:var(--text);text-transform:uppercase;line-height:1.15">${ev.name||''}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px">${ev.organizer||ev.org||''}${ev.location?' · '+ev.location:''}${cierreTxt?` · <span style="color:var(--gold)">${cierreTxt}</span>`:''}</div>
+        </div>
+        <button onclick="sv('insc')" style="flex-shrink:0;padding:10px 20px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">INSCRIBIRME</button>
+      </div>`;
+    });
+    h+=`</div></div>`;
+  }
   return h;
 }
 
