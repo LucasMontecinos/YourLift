@@ -266,8 +266,10 @@ async function initFB(){
     const{initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
     const fb=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     const app=initializeApp(FB_CFG);fbDB=fb.getFirestore(app);
-    window.FBQ={collection:fb.collection,getDocs:fb.getDocs,query:fb.query,orderBy:fb.orderBy,where:fb.where,doc:fb.doc,setDoc:fb.setDoc,getDoc:fb.getDoc,onSnapshot:fb.onSnapshot,updateDoc:fb.updateDoc};
+    window.FBQ={collection:fb.collection,getDocs:fb.getDocs,query:fb.query,orderBy:fb.orderBy,where:fb.where,doc:fb.doc,setDoc:fb.setDoc,getDoc:fb.getDoc,onSnapshot:fb.onSnapshot,updateDoc:fb.updateDoc,increment:fb.increment,serverTimestamp:fb.serverTimestamp};
     fbReady=true;
+    // ── Analytics propio: registrar visita del día (no bloquea el render) ──
+    try{ trackVisit(fb); }catch(e){}
     // Load eventos from Firestore and update NOM_EVENTS
     window.FBQ.onSnapshot(window.FBQ.collection(fbDB,'eventos'),(snap)=>{
       const allEvs=snap.docs.map(d=>({...d.data(),id:d.id}))
@@ -287,21 +289,83 @@ async function initFB(){
     await loadFBNominas();
   }catch(e){console.warn('Firebase not available, using nominas.json',e)}
 }
+
+// ════════════════════════════════════════════════════════════════
+// ANALYTICS PROPIO (Firestore) — visitas día/semana/mes, únicos, páginas
+// Doc por día: analytics_daily/{YYYY-MM-DD}
+//   { total, unique, ts, pages:{home,nominas,ranking,...}, refs:{...} }
+// ════════════════════════════════════════════════════════════════
+async function trackVisit(fb){
+  if(!fbDB)return;
+  const today=new Date();
+  const ymd=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  const ref=fb.doc(fbDB,'analytics_daily',ymd);
+  // ¿visitante único hoy? (localStorage marca 1 vez por día)
+  let isUnique=false;
+  try{
+    const key='yl_visit_'+ymd;
+    if(!localStorage.getItem(key)){ localStorage.setItem(key,'1'); isUnique=true; }
+  }catch(e){ isUnique=true; }
+  // Origen del tráfico (referrer host)
+  let refHost='directo';
+  try{
+    if(document.referrer){
+      const u=new URL(document.referrer);
+      if(!/yourlift\.cl|fechipo-db/.test(u.hostname)) refHost=u.hostname.replace(/^www\./,'');
+      else refHost='interno';
+    }
+  }catch(e){}
+  refHost=refHost.replace(/[.#$/\[\]]/g,'_');
+  window._YL_TRACK_FB=fb; // para registrar páginas en sv()
+  const payload={
+    total: fb.increment(1),
+    ts: fb.serverTimestamp(),
+    date: ymd,
+    refs: { [refHost]: fb.increment(1) }
+  };
+  if(isUnique) payload.unique = fb.increment(1);
+  try{
+    await fb.setDoc(ref, payload, {merge:true});
+    console.log('[analytics] visita registrada',ymd);
+  }catch(e){ console.warn('[analytics] visit error:',e.code,e.message); }
+}
+// Registrar página vista (se llama desde sv)
+async function trackPage(view){
+  const fb=window._YL_TRACK_FB;
+  if(!fb||!fbDB)return;
+  const t=new Date();
+  const ymd=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+  const ref=fb.doc(fbDB,'analytics_daily',ymd);
+  const v=(view||'home').replace(/[.#$/\[\]]/g,'_');
+  try{ await fb.setDoc(ref,{pages:{[v]: fb.increment(1)}},{merge:true}); }catch(e){}
+}
+
+const _rutNormE=s=>String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();
+function _findByEdit(ed){
+  // RUT primero (estable), luego código (compat docs viejos)
+  if(ed.rut){const a=D.find(x=>_rutNormE(x.rut)===_rutNormE(ed.rut));if(a)return a;}
+  if(ed.codigo)return D.find(x=>x.codigo===ed.codigo);
+  return null;
+}
+function _applyEditFields(a,ed){
+  let ch=false;
+  if(ed.nombre&&a.nombre!==ed.nombre){a.nombre=ed.nombre;ch=true}
+  if(ed.club!==undefined&&a.club!==ed.club){a.club=ed.club;ch=true}
+  if(ed.debut!==undefined&&a.debut!==ed.debut){a.debut=ed.debut;ch=true}
+  if(ed.codigo&&a.codigo!==ed.codigo){a.codigo=ed.codigo;ch=true}
+  if(ed.rut&&a.rut!==ed.rut){a.rut=ed.rut;ch=true}
+  if(ed.sexo&&a.sexo!==ed.sexo){a.sexo=ed.sexo;ch=true}
+  if(ed.fechaNac&&a.fechaNac!==ed.fechaNac){a.fechaNac=ed.fechaNac;ch=true}
+  if(ed.zona&&a.zona!==ed.zona){a.zona=ed.zona;ch=true}
+  if(ed.comuna&&a.comuna!==ed.comuna){a.comuna=ed.comuna;ch=true}
+  return ch;
+}
 async function loadEdits(){
   if(!fbReady)return;
   try{
     const snap=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'athlete_edits'));
     let count=0;
-    snap.forEach(d=>{
-      const ed=d.data();
-      const a=D.find(x=>x.codigo===ed.codigo);
-      if(a){
-        if(ed.nombre)a.nombre=ed.nombre;
-        if(ed.club!==undefined)a.club=ed.club;
-        if(ed.debut!==undefined)a.debut=ed.debut;
-        count++;
-      }
-    });
+    snap.forEach(d=>{const ed=d.data();const a=_findByEdit(ed);if(a&&_applyEditFields(a,ed))count++;});
     if(count>0){console.log('[FB] Applied',count,'athlete edits');render()}
   }catch(e){console.warn('Error loading edits',e)}
 }
@@ -312,13 +376,8 @@ function startEditsListener(){
       let changed=false;
       snap.docChanges().forEach(ch=>{
         if(ch.type==='added'||ch.type==='modified'){
-          const ed=ch.doc.data();
-          const a=D.find(x=>x.codigo===ed.codigo);
-          if(a){
-            if(ed.nombre&&a.nombre!==ed.nombre){a.nombre=ed.nombre;changed=true}
-            if(ed.club!==undefined&&a.club!==ed.club){a.club=ed.club;changed=true}
-            if(ed.debut!==undefined&&a.debut!==ed.debut){a.debut=ed.debut;changed=true}
-          }
+          const ed=ch.doc.data();const a=_findByEdit(ed);
+          if(a&&_applyEditFields(a,ed))changed=true;
         }
       });
       if(changed){if(ST.sel){const up=D.find(x=>x.codigo===ST.sel.codigo);if(up)ST.sel=up}render()}
@@ -1014,7 +1073,7 @@ function glcalc(){
   if(clogo)clogo.style.display=isHome?'none':'block';
 }
 
-function sv(v){ST.v=v;ST.sel=null;ST.p=0;render();scrollTo(0,0);if(typeof setBgForSection==='function')setBgForSection(v)}
+function sv(v){ST.v=v;ST.sel=null;ST.p=0;render();scrollTo(0,0);if(typeof setBgForSection==='function')setBgForSection(v);if(typeof trackPage==='function')trackPage(v)}
 let _ssTimer=null;
 function ss(v){ST.s=v;ST.p=0;if(_ssTimer)clearTimeout(_ssTimer);_ssTimer=setTimeout(()=>{render();setTimeout(()=>{const i=document.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},10)},300)}
 function sfc(v){ST.fc=v;ST.p=0;render()}
