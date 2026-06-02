@@ -291,17 +291,26 @@ async function loadAll(){
     });
   }catch(e){console.warn('[loadAll] atletas_pending:',e.message);}
 
-  // Apply athlete_edits non-blocking
+  // Apply athlete_edits non-blocking. Matchea por RUT (estable), fallback a código.
   try{
+    const rutNormE=s=>String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();
     const editsSnap=await getDocs(collection(db,'athlete_edits'));
     editsSnap.forEach(d=>{
       const ed=d.data();
-      const a=(ST.data||[]).find(x=>x.codigo===ed.codigo);
+      // Buscar por RUT primero (no cambia nunca), luego por código (compat docs viejos)
+      let a=null;
+      if(ed.rut) a=(ST.data||[]).find(x=>rutNormE(x.rut)===rutNormE(ed.rut));
+      if(!a && ed.codigo) a=(ST.data||[]).find(x=>x.codigo===ed.codigo);
       if(a){
         if(ed.nombre)a.nombre=ed.nombre;
         if(ed.club!==undefined)a.club=ed.club;
         if(ed.debut!==undefined)a.debut=ed.debut;
-        if(ed.rut!==undefined)a.rut=ed.rut;
+        if(ed.rut)a.rut=ed.rut;
+        if(ed.codigo)a.codigo=ed.codigo;   // ← clave: aplicar el código editado
+        if(ed.sexo)a.sexo=ed.sexo;
+        if(ed.fechaNac)a.fechaNac=ed.fechaNac;
+        if(ed.zona)a.zona=ed.zona;
+        if(ed.comuna)a.comuna=ed.comuna;
       }
     });
   }catch(e){console.warn('[loadAll] athlete_edits:',e.message);}
@@ -633,32 +642,38 @@ window.editInsc=async function(insId,field){
 // ═══════════════════════════════════════════
 // EDIT ATHLETES (data.json)
 // ═══════════════════════════════════════════
+// Los athlete_edits se indexan por RUT (que nunca cambia) en vez de código,
+// así editar el código no rompe el matching ni revierte al recargar.
+function _editDocId(a){
+  const rut=String(a.rut||'').replace(/[^0-9kK]/gi,'').toUpperCase();
+  if(rut) return 'rut_'+rut;
+  // fallback: si no hay rut, usar código (atletas viejos sin rut)
+  return 'cod_'+String(a.codigo||'').replace(/[^a-zA-Z0-9_-]/g,'_');
+}
+// Guarda el overlay completo del atleta en athlete_edits (snapshot de campos editables)
+async function _saveEdit(a){
+  const docId=_editDocId(a);
+  await setDoc(doc(db,'athlete_edits',docId),{
+    rut:a.rut||'', codigo:a.codigo||'', nombre:a.nombre||'',
+    club:a.club||'', debut:a.debut||'', sexo:a.sexo||'',
+    fechaNac:a.fechaNac||a.fecha_nac||'', zona:a.zona||'', comuna:a.comuna||'',
+    ts:Date.now()
+  },{merge:true});
+}
 window.editAthlete=async function(cod,field){
   const a=ST.data.find(x=>x.codigo===cod);if(!a)return;
   const cur=a[field]||'';
   openEditModal(`Editar ${field} de ${a.nombre}`,field,cur,async(nv)=>{
     if(nv===cur)return;
     const old=cur;
-    const oldCod=a.codigo;
     a[field]=nv;
     try{
-      // If codigo changed, delete old doc and create new one
-      if(field==='codigo'){
-        const oldDocId=oldCod.replace(/[^a-zA-Z0-9_-]/g,'_');
-        try{await deleteDoc(doc(db,'athlete_edits',oldDocId))}catch(e){}
-      }
-      const docId=a.codigo.replace(/[^a-zA-Z0-9_-]/g,'_');
-      await setDoc(doc(db,'athlete_edits',docId),{codigo:a.codigo,nombre:a.nombre,club:a.club||'',debut:a.debut||'',rut:a.rut||'',ts:Date.now()});
-      await logAction('edit_athlete',`${oldCod}.${field}`,old,nv,{nombre:a.nombre});
+      await _saveEdit(a);   // guarda snapshot completo indexado por RUT
+      await logAction('edit_athlete',`${a.codigo}.${field}`,old,nv,{nombre:a.nombre});
       render();
       showToast(`${field} actualizado: ${a.nombre}`,async()=>{
         a[field]=old;
-        if(field==='codigo'){
-          const newDocId=nv.replace(/[^a-zA-Z0-9_-]/g,'_');
-          try{await deleteDoc(doc(db,'athlete_edits',newDocId))}catch(e){}
-        }
-        const rDocId=a.codigo.replace(/[^a-zA-Z0-9_-]/g,'_');
-        await setDoc(doc(db,'athlete_edits',rDocId),{codigo:a.codigo,nombre:a.nombre,club:a.club||'',debut:a.debut||'',ts:Date.now()});
+        await _saveEdit(a);
         await logAction('undo_edit_athlete',`${a.codigo}.${field}`,nv,old,{nombre:a.nombre});
         render();showToast('Cambio revertido');
       });
@@ -681,13 +696,14 @@ function generarCodigo(a){
 }
 
 async function _applyCodigoFix(a,oldCod,newCod,newRut){
-  const oldDocId=oldCod.replace(/[^a-zA-Z0-9_-]/g,'_');
   try{
-    try{await deleteDoc(doc(db,'athlete_edits',oldDocId))}catch(_){}
+    // Si el RUT cambia, el docId (basado en RUT) también cambia → borrar el viejo
+    const oldDocId=_editDocId(a);
     a.codigo=newCod;
     if(newRut)a.rut=newRut;
-    const newDocId=newCod.replace(/[^a-zA-Z0-9_-]/g,'_');
-    await setDoc(doc(db,'athlete_edits',newDocId),{codigo:newCod,nombre:a.nombre,club:a.club||'',debut:a.debut||'',rut:a.rut||'',ts:Date.now()});
+    const newDocId=_editDocId(a);
+    if(oldDocId!==newDocId){try{await deleteDoc(doc(db,'athlete_edits',oldDocId))}catch(_){}}
+    await _saveEdit(a);   // snapshot completo indexado por RUT
     await logAction('fix_codigo',oldCod,oldCod,newCod,{nombre:a.nombre,rut:a.rut||''});
     render();
     showToast('✅ Código corregido: '+newCod);
@@ -1139,6 +1155,7 @@ window.viewInsDocs = function(sid){
               <a href="${esc(d.url)}" target="_blank" rel="noopener" style="flex:1;padding:6px 10px;background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);border-radius:5px;text-align:center;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;text-decoration:none">↗ ABRIR</a>
               <a href="${esc(d.url)}" download style="padding:6px 10px;background:rgba(59,130,246,.15);border:1px solid var(--blue);color:var(--blue);border-radius:5px;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;text-decoration:none">⬇</a>
             </div>
+            <button onclick="replaceInsDocFile('${sid}','${d.key}')" style="width:100%;margin-top:6px;padding:6px 10px;background:rgba(212,168,67,.12);border:1px solid var(--gold);color:var(--gold);border-radius:5px;cursor:pointer;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px">🔄 REEMPLAZAR</button>
           </div>
         </div>
       `).join('')}
@@ -1162,6 +1179,73 @@ window.viewInsDocs = function(sid){
     <div style="overflow:auto">${body}</div>
   </div>`;
   document.body.appendChild(m);
+};
+
+// ════════════════════════════════════════════════════════════════
+// Reemplazar un documento de inscripción: sube el archivo nuevo a
+// Storage y ACTUALIZA la URL en inscripciones_private. No hay que
+// tocar Storage manualmente — esto evita el problema de URLs viejas.
+// docKey: clave nueva ('carnetIdFront'...) o legacy ('carnetURL'...)
+// ════════════════════════════════════════════════════════════════
+// Mapa docKey nuevo → campo legacy + storagePath
+const DOC_STORAGE_MAP = {
+  carnetIdFront:{legacy:'carnetURL',path:'carnet'},
+  fotoBlanco:{legacy:'carnetPhotoURL',path:'carnetPhoto'},
+  pasaporte:{legacy:'passportURL',path:'passport'},
+  wadaIntl:{legacy:'wadeURL',path:'wada'},
+  ipfConsent:{legacy:'ipfConsentURL',path:'ipfConsent'},
+  menorConsent:{legacy:'consentimientoURL',path:'consentimiento'},
+  notas:{legacy:'notasURL',path:'notas'},
+  // legacy keys (cuando el doc viene del sistema viejo)
+  carnetURL:{legacy:'carnetURL',path:'carnet',newKey:'carnetIdFront'},
+  wadeURL:{legacy:'wadeURL',path:'wada',newKey:'wadaIntl'},
+  carnetPhotoURL:{legacy:'carnetPhotoURL',path:'carnetPhoto',newKey:'fotoBlanco'},
+  consentimientoURL:{legacy:'consentimientoURL',path:'consentimiento',newKey:'menorConsent'},
+  passportURL:{legacy:'passportURL',path:'passport',newKey:'pasaporte'},
+  ipfConsentURL:{legacy:'ipfConsentURL',path:'ipfConsent',newKey:'ipfConsent'},
+  notasURL:{legacy:'notasURL',path:'notas',newKey:'notas'}
+};
+window.replaceInsDocFile = function(sid, docKey){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='image/*,.pdf';
+  inp.onchange=async()=>{
+    const file=inp.files&&inp.files[0]; if(!file) return;
+    const insId=decodeURIComponent(sid);
+    const i=ST.inscripciones.find(x=>x.id===insId);
+    if(!i){showToast('Inscripción no encontrada',null,true);return;}
+    const map=DOC_STORAGE_MAP[docKey];
+    if(!map){showToast('Tipo de documento desconocido: '+docKey,null,true);return;}
+    const rutClean=String(i.rut||'').replace(/[^0-9kK]/g,'').toUpperCase();
+    if(!rutClean){showToast('Esta inscripción no tiene RUT',null,true);return;}
+    showToast('Subiendo archivo nuevo…');
+    try{
+      const storage=getStorage(app);
+      const ts=Date.now();
+      const sref=storageRef(storage,`athlete_files/${rutClean}/${map.path}_${ts}`);
+      await uploadBytes(sref,file,{contentType:file.type||'application/octet-stream'});
+      const url=await getDownloadURL(sref);
+      // Actualizar AMBOS: campo legacy y el mapa docs (nuevo sistema)
+      const update={[map.legacy]:url};
+      const newKey=map.newKey||docKey;
+      // si DOC_TYPES_CATALOG tiene newKey, escribir también en docs.{newKey}
+      update['docs.'+newKey]=url;
+      await updateDoc(doc(db,'inscripciones_private',insId),update);
+      // refrescar estado local
+      if(!ST.inscripcionesPrivate[insId])ST.inscripcionesPrivate[insId]={};
+      ST.inscripcionesPrivate[insId][map.legacy]=url;
+      if(!ST.inscripcionesPrivate[insId].docs)ST.inscripcionesPrivate[insId].docs={};
+      ST.inscripcionesPrivate[insId].docs[newKey]=url;
+      await logAction('replace_doc',insId,docKey,'(nuevo archivo)',{nombre:i.nombre});
+      showToast('✅ Documento reemplazado');
+      // re-abrir el modal con los datos frescos
+      document.getElementById('docsModal')?.remove();
+      viewInsDocs(sid);
+    }catch(e){
+      console.error(e);
+      showToast('Error: '+e.message,null,true);
+    }
+  };
+  inp.click();
 };
 
 window.crearPerfilDebutante=async function(sid){
@@ -1420,7 +1504,10 @@ function render(){
   else if(ST.view==='athleteProfile')content=renderAthleteProfile();
   
   app.innerHTML=`<div class="shell">${sidebar}<div class="main">${content}</div></div>`;
-  if(ST.view==='stats')setTimeout(initStatsCharts,0);
+  if(ST.view==='stats'){
+    if((ST.statsTab||'deporte')==='web') setTimeout(loadWebAnalytics,0);
+    else setTimeout(initStatsCharts,0);
+  }
   if(ST.view==='publisher')setTimeout(()=>{try{pubUpdatePreview()}catch(e){}},50);
   if(ST.view==='publisher')setTimeout(pubUpdatePreview,0);
 }
@@ -1549,12 +1636,120 @@ window.exportStatsJSON = function(){
   showToast('📊 JSON exportado: ' + rows.length + ' filas');
 };
 
+// ════════════════════════════════════════════════════════════════
+// TRÁFICO WEB (analytics propio) — lee analytics_daily de Firestore
+// ════════════════════════════════════════════════════════════════
+let _webCharts={};
+async function loadWebAnalytics(){
+  const cont=document.getElementById('statsWebContent');
+  if(!cont)return;
+  try{
+    const snap=await getDocs(collection(db,'analytics_daily'));
+    const days=[];
+    snap.forEach(d=>{const x=d.data();days.push({date:d.id,total:x.total||0,unique:x.unique||0,pages:x.pages||{},refs:x.refs||{}})});
+    days.sort((a,b)=>a.date.localeCompare(b.date));
+    window._WEB_DAYS=days;
+    cont.innerHTML=renderWebAnalytics(days);
+    setTimeout(()=>initWebCharts(days),0);
+  }catch(e){
+    cont.innerHTML='<div style="padding:30px;text-align:center;color:var(--red)">Error cargando analytics: '+e.message+'</div>';
+  }
+}
+
+function _sumRange(days,fromDate){
+  let t=0,u=0;
+  days.forEach(d=>{ if(d.date>=fromDate){ t+=d.total; u+=d.unique; } });
+  return {t,u};
+}
+function renderWebAnalytics(days){
+  if(!days.length) return '<div style="padding:40px;text-align:center;color:var(--muted)">Aún no hay datos de visitas. Se registrarán a medida que la gente entre a yourlift.cl.</div>';
+  const today=new Date();
+  const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const todayStr=ymd(today);
+  const weekAgo=new Date(today);weekAgo.setDate(today.getDate()-6);
+  const monthAgo=new Date(today);monthAgo.setDate(today.getDate()-29);
+  const todayRow=days.find(d=>d.date===todayStr)||{total:0,unique:0};
+  const week=_sumRange(days,ymd(weekAgo));
+  const month=_sumRange(days,ymd(monthAgo));
+  const totalAll=days.reduce((s,d)=>s+d.total,0);
+  const uniqueAll=days.reduce((s,d)=>s+d.unique,0);
+  // Páginas agregadas
+  const pageAgg={};
+  days.forEach(d=>Object.entries(d.pages).forEach(([k,v])=>{pageAgg[k]=(pageAgg[k]||0)+v}));
+  const pageTop=Object.entries(pageAgg).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  // Orígenes agregados
+  const refAgg={};
+  days.forEach(d=>Object.entries(d.refs).forEach(([k,v])=>{refAgg[k]=(refAgg[k]||0)+v}));
+  const refTop=Object.entries(refAgg).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const PAGE_LABEL={home:'Inicio',nominas:'Nóminas',stats:'Estadísticas',records:'Records',trans:'Transmisiones',atletas:'Atletas',insc:'Inscripción',rank:'Ranking',glcalc:'Calc. GL'};
+  const ks='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;text-align:center';
+  const kpi=(val,lbl,col)=>`<div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:${col}">${val.toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">${lbl}</div></div>`;
+  const card=(t,id,h='300px')=>`<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px"><div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted);margin-bottom:14px">${t}</div><div style="position:relative;height:${h}"><canvas id="${id}"></canvas></div></div>`;
+  return `
+  <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+    <button onclick="exportWebCSV()" style="background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);padding:8px 14px;border-radius:8px;font-family:Oswald;font-size:11px;letter-spacing:1px;cursor:pointer;font-weight:700">📥 EXPORTAR CSV</button>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px">
+    ${kpi(todayRow.total,'VISITAS HOY','var(--gold)')}
+    ${kpi(week.t,'VISITAS 7 DÍAS','#3b82f6')}
+    ${kpi(month.t,'VISITAS 30 DÍAS','#22c55e')}
+    ${kpi(totalAll,'VISITAS TOTALES','#a78bfa')}
+    ${kpi(uniqueAll,'VISITANTES ÚNICOS','#f59e0b')}
+  </div>
+  <div style="margin-bottom:12px;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--muted)">EVOLUCIÓN DE VISITAS</div>
+  <div style="margin-bottom:16px">${card('VISITAS POR DÍA (TOTAL vs ÚNICOS)','webDaily','320px')}</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    ${card('PÁGINAS MÁS VISITADAS','webPages','320px')}
+    ${card('ORIGEN DEL TRÁFICO','webRefs','320px')}
+  </div>
+  <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:16px">Datos propios de YourLift · Actualizado en tiempo real · Visitante único = 1 por persona por día</div>`;
+}
+
+function initWebCharts(days){
+  Object.values(_webCharts).forEach(c=>{try{c.destroy()}catch(e){}});_webCharts={};
+  const base={color:'#D4E1F0',plugins:{legend:{labels:{color:'#D4E1F0',font:{family:'Oswald',size:11}}}},
+    scales:{x:{ticks:{color:'#7A8FA6',font:{family:'Oswald',size:10}},grid:{color:'rgba(30,58,95,.5)'}},y:{ticks:{color:'#7A8FA6',font:{family:'Oswald',size:10}},grid:{color:'rgba(30,58,95,.5)'},beginAtZero:true}}};
+  const mk=(id,type,data,extra={})=>{const el=document.getElementById(id);if(!el)return;_webCharts[id]=new Chart(el,{type,data,options:{responsive:true,maintainAspectRatio:false,...base,...extra,plugins:{...base.plugins,...(extra.plugins||{})}}})};
+  // Últimos 30 días
+  const last=days.slice(-30);
+  const labels=last.map(d=>d.date.slice(5));
+  mk('webDaily','line',{labels,datasets:[
+    {label:'Total',data:last.map(d=>d.total),borderColor:'#D4A843',backgroundColor:'rgba(212,168,67,.15)',fill:true,tension:.3},
+    {label:'Únicos',data:last.map(d=>d.unique),borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.1)',fill:true,tension:.3}
+  ]});
+  // Páginas
+  const pageAgg={};days.forEach(d=>Object.entries(d.pages).forEach(([k,v])=>{pageAgg[k]=(pageAgg[k]||0)+v}));
+  const PAGE_LABEL={home:'Inicio',nominas:'Nóminas',stats:'Estadísticas',records:'Records',trans:'Transmisiones',atletas:'Atletas',insc:'Inscripción',rank:'Ranking',glcalc:'Calc. GL'};
+  const pe=Object.entries(pageAgg).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  mk('webPages','bar',{labels:pe.map(([k])=>PAGE_LABEL[k]||k),datasets:[{label:'Vistas',data:pe.map(([,v])=>v),backgroundColor:'#22c55e'}]},{indexAxis:'y'});
+  // Refs
+  const refAgg={};days.forEach(d=>Object.entries(d.refs).forEach(([k,v])=>{refAgg[k]=(refAgg[k]||0)+v}));
+  const re=Object.entries(refAgg).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  mk('webRefs','doughnut',{labels:re.map(([k])=>k),datasets:[{data:re.map(([,v])=>v),backgroundColor:['#D4A843','#3b82f6','#22c55e','#ef4444','#a78bfa','#f59e0b','#ec4899','#06b6d4']}]},{scales:{}});
+}
+
+window.exportWebCSV=function(){
+  const days=window._WEB_DAYS||[];
+  const csv=['fecha,total,unicos'];
+  days.forEach(d=>csv.push(`${d.date},${d.total},${d.unique}`));
+  const blob=new Blob([csv.join('\n')],{type:'text/csv'});
+  const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download='yourlift_trafico_web.csv';a.click();
+  setTimeout(()=>URL.revokeObjectURL(u),1000);
+};
+
 function renderStats(){
   if(!(ST.adminInfo?.role==='superadmin'||ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap))
     return '<div class="h1">Sin acceso</div><p class="subtitle">Solo el owner puede ver las estadísticas.</p>';
-  return `<div class="h1">📈 Estadísticas del Deporte</div>
-    <p class="subtitle">Dashboard interactivo · Filtros globales · Export para Power BI</p>
-    <div id="statsContent">${renderStatsContent()}</div>`;
+  const tab=ST.statsTab||'deporte';
+  const tabBtn=(id,label)=>`<button onclick="ST.statsTab='${id}';render()" style="padding:10px 20px;border-radius:9px;border:1px solid ${tab===id?'var(--gold)':'var(--border)'};background:${tab===id?'rgba(212,168,67,.12)':'transparent'};color:${tab===id?'var(--gold)':'var(--muted)'};font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">${label}</button>`;
+  return `<div class="h1">📈 Estadísticas</div>
+    <div style="display:flex;gap:10px;margin:14px 0 20px">
+      ${tabBtn('deporte','🏋️ DEPORTE')}
+      ${tabBtn('web','🌐 TRÁFICO WEB')}
+    </div>
+    ${tab==='web'
+      ? `<div id="statsWebContent"><div style="padding:40px;text-align:center;color:var(--muted)">Cargando analytics…</div></div>`
+      : `<p class="subtitle">Dashboard interactivo · Filtros globales · Export para Power BI</p><div id="statsContent">${renderStatsContent()}</div>`}`;
 }
 
 function renderStatsContent(){
@@ -2342,32 +2537,11 @@ function renderAthletes(){
     return true;
   }).slice(0,100);
   const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-  const pendientes=(ST.data||[]).filter(a=>a._isPending);
   const _isOwner=ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap;
+  // Banner de debutantes pendientes eliminado: los debutantes se integran
+  // automáticamente al inscribirse (viven en atletas_pending y ya son visibles).
+  // Ya no requieren "publicar data.json" manualmente.
   let bannerPend='';
-  if(pendientes.length>0){
-    const rows=pendientes.map(a=>`
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid rgba(212,168,67,.2);font-size:12px">
-        <div>
-          <span style="font-weight:700;color:var(--text)">${escapeHtml(a.nombre)}</span>
-          <span style="color:var(--muted);margin-left:8px">${escapeHtml(a.rut||'')} · ${escapeHtml(a.club||'')} · ${escapeHtml(a.codigo||'')}</span>
-        </div>
-        <span style="font-size:10px;color:var(--gold);font-weight:700">★ DEBUT</span>
-      </div>`).join('');
-    const publishBtn=_isOwner
-      ?`<button onclick="publicarDataJson()" style="padding:10px 20px;background:var(--gold);color:#000;border:none;border-radius:8px;font-family:Oswald;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:1px;white-space:nowrap;margin-left:16px">📤 Publicar data.json</button>`
-      :`<span style="font-size:10px;color:var(--muted);margin-left:16px;font-style:italic">🔒 Solo el Owner puede publicar</span>`;
-    bannerPend=`<div style="background:rgba(212,168,67,.07);border:1px solid rgba(212,168,67,.4);border-radius:10px;margin-bottom:18px;overflow:hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid rgba(212,168,67,.3)">
-        <div>
-          <div style="font-family:Oswald;font-size:14px;color:var(--gold);letter-spacing:1px">★ ${pendientes.length} ATLETA${pendientes.length>1?'S':''} DEBUTANTE${pendientes.length>1?'S':''} PENDIENTE${pendientes.length>1?'S':''}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:3px">Se inscribieron pero aún no están en data.json. Sus perfiles ya son visibles en el sitio.${_isOwner?' Publicá para incorporarlos formalmente.':' Avisá al Owner para publicarlos.'}</div>
-        </div>
-        ${publishBtn}
-      </div>
-      ${rows}
-    </div>`;
-  }
   return `
     <div class="h1">Atletas (Base de Datos)</div>
     <p class="subtitle">${ST.data.length} atletas · Ordenados A-Z · Click en cualquier campo para editar</p>
