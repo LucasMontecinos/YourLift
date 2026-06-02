@@ -261,11 +261,25 @@ function getPeerKey(a){
 }
 
 function peerPerc(myTotal,key){
-  const g=PEERS[key];
+  let g=PEERS[key];
+  // Fallback: si no hay grupo para la división exacta (ej. Sub-Junior con pocos
+  // atletas), comparar contra el grupo OPEN de la misma categoría/sexo/modalidad.
+  if(!g&&key){
+    const parts=key.split('|'); // sexo|cat|division|modal
+    if(parts.length===4&&parts[2]!=='Open'){
+      const openKey=parts[0]+'|'+parts[1]+'|Open|'+parts[3];
+      g=PEERS[openKey];
+      if(g)key=openKey;
+    }
+  }
   if(!g)return null;
-  const all=[...g.members.map(m=>m.total),myTotal].sort((a,b)=>b-a);
+  // myTotal puede que ya esté en members (mismo atleta) → no duplicar
+  const totals=g.members.map(m=>m.total);
+  const all=[...totals];
+  if(!totals.includes(myTotal))all.push(myTotal);
+  all.sort((a,b)=>b-a);
   const rank=all.indexOf(myTotal)+1;
-  return{rank,n:all.length,pct:Math.round((1-rank/all.length)*100),g};
+  return{rank,n:all.length,pct:Math.round((1-rank/all.length)*100),g,_key:key};
 }
 
 // ── Search ───────────────────────────────────────────────
@@ -332,15 +346,27 @@ window.showProfile=function(codigo){
   const monthsSince=lastFecha?Math.floor((Date.now()-new Date(lastFecha))/(1000*60*60*24*30.4)):null;
   const churnRisk=monthsSince&&monthsSince>14;
 
-  // GL history for chart
-  // GL chart only shows results from same modality as most recent competition
-  const lastModal=(sorted[0]?.modalidad||'').toLowerCase().includes('equip')?'equipped':'classic';
-  const glHistory=[...compsWithResults]
-    .filter(c=>{
-      const m=(c.modalidad||'').toLowerCase().includes('equip')?'equipped':'classic';
-      return m===lastModal&&(c.resultado?.glp||c.resultado?.gl);
-    })
-    .sort((x,y)=>(x.fecha||x.evento||'').localeCompare(y.fecha||y.evento||''));
+  // GL history for chart — clasificar cada competencia en su modalidad real:
+  // 'classic' (Powerlifting clásico), 'bench' (Only Bench), 'equipped' (Equipado)
+  function glModalKey(c){
+    const m=(c.modalidad||'').toLowerCase();
+    const isBench=/only ?bench|solo ?banca|bench ?only/.test(m)||(c.view==='bench');
+    const isEq=/equip/.test(m);
+    if(isBench) return isEq?'bench_eq':'bench';
+    if(isEq) return 'equipped';
+    return 'classic';
+  }
+  const GL_MODAL_LABEL={classic:'Powerlifting Clásico',equipped:'Powerlifting Equipado',bench:'Only Bench Clásico',bench_eq:'Only Bench Equipado'};
+  // Agrupar todas las competencias con GL por modalidad
+  const glByModal={};
+  [...compsWithResults].forEach(c=>{
+    if(!(c.resultado?.glp||c.resultado?.gl)) return;
+    const k=glModalKey(c);
+    (glByModal[k]=glByModal[k]||[]).push(c);
+  });
+  Object.keys(glByModal).forEach(k=>{
+    glByModal[k].sort((x,y)=>(x.fecha||x.evento||'').localeCompare(y.fecha||y.evento||''));
+  });
 
   // Peer comparison
   const peerKey=getPeerKey(a);
@@ -434,10 +460,11 @@ window.showProfile=function(codigo){
     h+='</div></div>';
   }
 
-  // ── GL chart con fechas reales ────────────────────────
-  if(glHistory.length>1){
+  // ── GL charts: una gráfica por modalidad (Clásico / Only Bench / Equipado) ──
+  // Función que arma el SVG de una modalidad dada su historial.
+  function glChartSVG(glHistory, modalLabel){
+    if(!glHistory||glHistory.length<2) return '';
     // Resolver fecha (timestamp ms) por competencia
-    // Prioridad: c.fecha (ISO) > extraer año del nombre del evento > null
     const MES_NUM={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
     function parseFecha(c){
       // 1) fecha explícita ISO
@@ -458,8 +485,9 @@ window.showProfile=function(codigo){
       return null;
     }
     // Asignar fecha a cada punto
+    const r2=v=>Math.round((+v||0)*100)/100;  // redondear GL a 2 decimales
     const items=glHistory.map(c=>({
-      c,gl:c.resultado.glp||c.resultado.gl||0,
+      c,gl:r2(c.resultado.glp||c.resultado.gl||0),
       ts:parseFecha(c)
     }));
     // Ordenar por timestamp (los sin fecha al final, en orden actual)
@@ -526,12 +554,12 @@ window.showProfile=function(codigo){
       if(close(i-1))above=!(i%2===0);
       return above;
     });
-    h+='<div class="card"><div class="sec-title">Evolución GL Points</div>'
+    const gradId='gg_'+modalLabel.replace(/[^a-z]/gi,'');
+    let out='<div class="card"><div class="sec-title">Evolución GL · '+modalLabel+'</div>'
       +'<svg viewBox="0 0 '+(W)+' '+(H)+'" preserveAspectRatio="xMidYMid meet" style="width:100%;max-width:520px;display:block;margin:0 auto">'
-      +'<defs><linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#D4A843" stop-opacity="0.32"/><stop offset="100%" stop-color="#D4A843" stop-opacity="0.02"/></linearGradient></defs>'
-      // Líneas guía horizontales (5 niveles) con valores
+      +'<defs><linearGradient id="'+gradId+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#D4A843" stop-opacity="0.32"/><stop offset="100%" stop-color="#D4A843" stop-opacity="0.02"/></linearGradient></defs>'
       +[0,0.25,0.5,0.75,1].map(p=>{const yy=PY+(H-PY-PB)*p;const val=Math.round((yMax-(yMax-yMin)*p)*10)/10;return '<line x1="'+PX+'" y1="'+yy+'" x2="'+(W-PX)+'" y2="'+yy+'" stroke="rgba(30,58,95,.35)" stroke-dasharray="2,3"/>'+'<text x="'+(PX-4)+'" y="'+(yy+3)+'" text-anchor="end" font-size="8" fill="rgba(160,180,210,.5)" font-family="Oswald">'+val+'</text>'}).join('')
-      +'<polygon points="'+area+'" fill="url(#gg)"/>'
+      +'<polygon points="'+area+'" fill="url(#'+gradId+')"/>'
       +'<polyline points="'+poly+'" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
       +pts.map((p,i)=>{
         const lblY=labelPos[i]?(p.y-9):(p.y+15);
@@ -545,12 +573,19 @@ window.showProfile=function(codigo){
         +'<div style="font-style:italic">'+(useTime?'Eje X = línea de tiempo':'Eje X = orden cronológico')+'</div>'
       +'</div>'
       +'</div>';
+    return out;
   }
+  // Dibujar una gráfica por modalidad que el atleta tenga (orden: clásico, equipado, bench, bench_eq)
+  ['classic','equipped','bench','bench_eq'].forEach(k=>{
+    if(glByModal[k]&&glByModal[k].length>1){
+      h+=glChartSVG(glByModal[k], GL_MODAL_LABEL[k]);
+    }
+  });
 
   // ── Peer comparison ─────────────────────────────────────
   if(peer&&pg){
     const pctColor=peer.pct>=75?'var(--green)':peer.pct>=50?'var(--gold)':'var(--accent)';
-    const keyParts=peerKey.split('|');
+    const keyParts=(peer._key||peerKey).split('|'); // usar la key real del grupo (puede ser fallback Open)
     const peerLabel=(keyParts[0]==='F'?'Mujer':'Hombre')+' · '+keyParts[1]+' kg · '+keyParts[2];
     const maxT=pg.members[0]?.total||1;
 
