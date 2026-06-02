@@ -341,6 +341,33 @@ async function trackPage(view){
 }
 
 const _rutNormE=s=>String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();
+// Mapa global de edits indexado por RUT (también por código como fallback).
+// Permite aplicar las ediciones del admin a CUALQUIER colección (nóminas,
+// ranking, etc.), no solo a data.json.
+window.EDITS_BY_RUT={};
+window.EDITS_BY_COD={};
+function _indexEdit(ed){
+  if(ed.rut){const k=_rutNormE(ed.rut);if(k)window.EDITS_BY_RUT[k]=ed;}
+  if(ed.codigo)window.EDITS_BY_COD[ed.codigo]=ed;
+}
+// Aplica el overlay de edits a un objeto cualquiera que tenga rut y/o codigo.
+// Devuelve el objeto modificado (muta in-place). Campos: nombre, club, etc.
+function applyEditOverlay(obj){
+  if(!obj)return obj;
+  let ed=null;
+  if(obj.rut){ed=window.EDITS_BY_RUT[_rutNormE(obj.rut)];}
+  if(!ed&&obj.codigo){ed=window.EDITS_BY_COD[obj.codigo];}
+  if(!ed)return obj;
+  if(ed.nombre)obj.nombre=ed.nombre;
+  if(ed.club!==undefined&&ed.club!=='')obj.club=ed.club;
+  if(ed.codigo)obj.codigo=ed.codigo;
+  if(ed.sexo)obj.sexo=ed.sexo;
+  if(ed.fechaNac)obj.fechaNac=ed.fechaNac;
+  if(ed.zona)obj.zona=ed.zona;
+  if(ed.comuna)obj.comuna=ed.comuna;
+  return obj;
+}
+window.applyEditOverlay=applyEditOverlay;
 function _findByEdit(ed){
   // RUT primero (estable), luego código (compat docs viejos)
   if(ed.rut){const a=D.find(x=>_rutNormE(x.rut)===_rutNormE(ed.rut));if(a)return a;}
@@ -365,8 +392,10 @@ async function loadEdits(){
   try{
     const snap=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'athlete_edits'));
     let count=0;
-    snap.forEach(d=>{const ed=d.data();const a=_findByEdit(ed);if(a&&_applyEditFields(a,ed))count++;});
-    if(count>0){console.log('[FB] Applied',count,'athlete edits');render()}
+    snap.forEach(d=>{const ed=d.data();_indexEdit(ed);const a=_findByEdit(ed);if(a&&_applyEditFields(a,ed))count++;});
+    if(count>0){console.log('[FB] Applied',count,'athlete edits');}
+    // re-aplicar overlay a nóminas ya cargadas y re-render
+    if(window._lastNominasRaw)_applyNominas(window._lastNominasRaw); else render();
   }catch(e){console.warn('Error loading edits',e)}
 }
 function startEditsListener(){
@@ -376,15 +405,19 @@ function startEditsListener(){
       let changed=false;
       snap.docChanges().forEach(ch=>{
         if(ch.type==='added'||ch.type==='modified'){
-          const ed=ch.doc.data();const a=_findByEdit(ed);
-          if(a&&_applyEditFields(a,ed))changed=true;
+          const ed=ch.doc.data();_indexEdit(ed);const a=_findByEdit(ed);
+          if(a&&_applyEditFields(a,ed))changed=true;changed=true;
         }
       });
-      if(changed){if(ST.sel){const up=D.find(x=>x.codigo===ST.sel.codigo);if(up)ST.sel=up}render()}
+      if(changed){
+        if(ST.sel){const up=D.find(x=>x.codigo===ST.sel.codigo);if(up)ST.sel=up}
+        if(window._lastNominasRaw)_applyNominas(window._lastNominasRaw); else render();
+      }
     });
   }catch(e){console.warn('Edits listener error',e)}
 }
 function _applyNominas(all){
+  window._lastNominasRaw=all; // guardar raw para re-aplicar overlay cuando lleguen edits
   const visible=all.filter(i=>i.status==='approved'||i.status==='pending');
   const byEvent={};
   visible.forEach(i=>{if(!byEvent[i.evento])byEvent[i.evento]=[];byEvent[i.evento].push(i)});
@@ -395,13 +428,17 @@ function _applyNominas(all){
     .map(ev=>{
       const fbAths=(byEvent[ev.id]||byEvent[ev.name]||[])
         .sort((a,b)=>(a.timestamp?.seconds||0)-(b.timestamp?.seconds||0))
-        .map((i,idx)=>({
-          id:i.id,nombre:i.nombre,rut:i.rut||'',sexo:i.sexo||'',
-          dob:i.fechaNac||'',division:i.division||'',categoria:i.categoria||'',
-          modalidad:i.modalidad||'',club:i.club==='Otro'?i.clubOtro:i.club||'',
-          universidad:i.universidad||'',status:i.status,
-          sortOrder:idx+1,flight:i.flight||''
-        }));
+        .map((i,idx)=>{
+          const base={
+            id:i.id,nombre:i.nombre,rut:i.rut||'',sexo:i.sexo||'',codigo:i.codigo||'',
+            dob:i.fechaNac||'',fechaNac:i.fechaNac||'',division:i.division||'',categoria:i.categoria||'',
+            modalidad:i.modalidad||'',club:i.club==='Otro'?i.clubOtro:i.club||'',
+            universidad:i.universidad||'',status:i.status,
+            sortOrder:idx+1,flight:i.flight||''
+          };
+          // Overlay: aplicar ediciones del admin (club, nombre, etc.) por RUT
+          return applyEditOverlay(base);
+        });
       const athletes=fbAths;
       const approved=fbAths.filter(a=>a.status==='approved').length;
       const pending=fbAths.filter(a=>a.status==='pending').length;
@@ -470,7 +507,8 @@ function rec(){const ts=[["classic","Classic"],["equipped","Equipado"],["univers
   h+=`<div class="cd2"><div class="ct"><h2>Records ${ln} ${tn}</h2><span class="bg" style="background:var(--gold);color:var(--bg)">${d.length}</span></div>`;
   if(!d.length)h+=`<div class="emp">No hay records registrados</div>`;
   else{h+=`<div class="rr rh"><div>#</div><div>Atleta</div><div>División</div><div>Cat.</div><div>Campeonato</div><div>Marca</div></div>`;
-    d.forEach((r,i)=>{
+    d.forEach((rRaw,i)=>{
+      const r=applyEditOverlay({...rRaw});  // overlay: nombre actualizado por RUT/código
       const evTxt=(r.campeonato||r.evento||'').substring(0,35);
       const nameLink=`<a href="atleta.html?q=${encodeURIComponent(r.nombre||'')}" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(212,168,67,.4);transition:color .15s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${r.nombre}</a>`;
       h+=`<div class="rr"><div class="rpos">${i+1}</div><div>${nameLink}</div><div>${r.division}</div><div>${r.categoria}</div><div style="font-size:11px;color:var(--muted)">${evTxt}</div><div class="rmk">${r.marca} kg</div></div>`;

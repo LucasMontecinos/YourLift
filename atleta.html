@@ -261,11 +261,25 @@ function getPeerKey(a){
 }
 
 function peerPerc(myTotal,key){
-  const g=PEERS[key];
+  let g=PEERS[key];
+  // Fallback: si no hay grupo para la división exacta (ej. Sub-Junior con pocos
+  // atletas), comparar contra el grupo OPEN de la misma categoría/sexo/modalidad.
+  if(!g&&key){
+    const parts=key.split('|'); // sexo|cat|division|modal
+    if(parts.length===4&&parts[2]!=='Open'){
+      const openKey=parts[0]+'|'+parts[1]+'|Open|'+parts[3];
+      g=PEERS[openKey];
+      if(g)key=openKey;
+    }
+  }
   if(!g)return null;
-  const all=[...g.members.map(m=>m.total),myTotal].sort((a,b)=>b-a);
+  // myTotal puede que ya esté en members (mismo atleta) → no duplicar
+  const totals=g.members.map(m=>m.total);
+  const all=[...totals];
+  if(!totals.includes(myTotal))all.push(myTotal);
+  all.sort((a,b)=>b-a);
   const rank=all.indexOf(myTotal)+1;
-  return{rank,n:all.length,pct:Math.round((1-rank/all.length)*100),g};
+  return{rank,n:all.length,pct:Math.round((1-rank/all.length)*100),g,_key:key};
 }
 
 // ── Search ───────────────────────────────────────────────
@@ -571,7 +585,7 @@ window.showProfile=function(codigo){
   // ── Peer comparison ─────────────────────────────────────
   if(peer&&pg){
     const pctColor=peer.pct>=75?'var(--green)':peer.pct>=50?'var(--gold)':'var(--accent)';
-    const keyParts=peerKey.split('|');
+    const keyParts=(peer._key||peerKey).split('|'); // usar la key real del grupo (puede ser fallback Open)
     const peerLabel=(keyParts[0]==='F'?'Mujer':'Hombre')+' · '+keyParts[1]+' kg · '+keyParts[2];
     const maxT=pg.members[0]?.total||1;
 

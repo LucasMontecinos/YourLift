@@ -2528,12 +2528,26 @@ function renderDashboard(){
 
 
 function renderAthletes(){
-  const s=ST.search.toLowerCase();
+  // Búsqueda normalizada (ignora tildes) + por palabras: "lucas montecinos"
+  // matchea "Lucas Andrés Montecinos Alarcón".
+  const sRaw=(ST.search||'').trim();
+  const sNorm=nrmName(sRaw);
+  const words=sNorm.split(' ').filter(Boolean);
   const fl=ST.filterLetter;
   let sorted=[...ST.data].sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
   let list=sorted.filter(a=>{
     if(fl&&!a.nombre.toUpperCase().startsWith(fl))return false;
-    if(s&&!a.nombre.toLowerCase().includes(s)&&!(a.club||'').toLowerCase().includes(s)&&!a.codigo.toLowerCase().includes(s)&&!(a.rut||'').includes(s))return false;
+    if(words.length){
+      const nName=nrmName(a.nombre);
+      const nClub=nrmName(a.club||'');
+      const nCod=(a.codigo||'').toLowerCase();
+      const nRut=(a.rut||'').replace(/[^0-9kK]/gi,'').toLowerCase();
+      const sClean=sNorm.replace(/\s+/g,'');
+      // match si: todas las palabras están en el nombre, O el query está en club/código/rut
+      const byName=words.every(w=>nName.includes(w));
+      const byOther=nClub.includes(sNorm)||nCod.includes(sClean)||nRut.includes(sRaw.replace(/[^0-9kK]/gi,'').toLowerCase());
+      if(!byName&&!byOther)return false;
+    }
     return true;
   }).slice(0,100);
   const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
