@@ -716,7 +716,8 @@ function setAtt(id,l,r,val){
   // Block if change timer has expired for this attempt
   const key=id+'_'+l+'_'+r;
   const ct=DATA.changeTimers[key];
-  if(ct&&ct.expired){
+  // Bloqueo por timer expirado DESACTIVADO: el operador siempre puede cargar el peso.
+  if(false&&ct&&ct.expired){
     showToastLC('\u23F0 Tiempo de cambio expirado para '+a.name+' '+LIFT_S[l]+(r+1)+' — requiere aprobación del jurado');
     // Restore previous value in the input
     const el=document.getElementById('ct_'+key);
@@ -1326,9 +1327,12 @@ setInterval(()=>{
       cellEl.title='Tiempo expirado — requiere aprobación del jurado';
     }
   });
-  // Si un timer recién expiró (changed=true), re-render una vez para actualizar el cambio de estado
+  // Si un timer recién expiró (changed=true), re-render una vez para actualizar el cambio
+  // de estado — PERO no si el operador está escribiendo un peso en un input (no le borres
+  // lo que está tipeando). Se re-renderiza al terminar (en el próximo tick).
   if(changed && DATA.phase==='compete' && typeof R==='function'){
-    setTimeout(R,100);
+    const f=document.activeElement;
+    if(!(f&&(f.tagName==='INPUT'||f.tagName==='SELECT'))) setTimeout(R,100);
   }
 },1000);
 
@@ -4190,7 +4194,7 @@ function renderTxJornada(){
       const td='vertical-align:middle;text-align:center;font-family:Oswald;font-size:'+fs(14)+'px';
       rows+='<tr style="height:'+unit.toFixed(2)+'px;border-bottom:1px solid rgba(212,168,67,.10)">'
         +'<td style="'+td+';font-weight:700;color:#D4A843;padding:0 4px">'+(row.tot>0?(i+1):'—')+'</td>'
-        +'<td style="vertical-align:middle;padding:0 8px;font-family:Inter,sans-serif;font-weight:600;color:#fff;font-size:'+fs(15)+'px;white-space:nowrap;max-width:'+Math.round(260*s)+'px;overflow:hidden;text-overflow:ellipsis">'+a.name+'</td>'
+        +'<td style="vertical-align:middle;padding:0 10px;font-family:Inter,sans-serif;font-weight:600;color:#fff;font-size:'+fs(15)+'px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+a.name+'</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.75)">CHI</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.65)">'+(_yob2(a)||'—')+'</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.9)">'+(a.bw?a.bw.toFixed(1):'—')+'</td>'
@@ -4225,6 +4229,14 @@ function renderTxJornada(){
     +'</div>'
     +'<div style="flex:1;overflow:hidden;padding:0 14px;box-sizing:border-box">'
       +'<table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed">'
+      // Anchos explícitos: ATLETA bien ancha para que el nombre completo entre
+      +'<colgroup>'
+        +'<col style="width:3%"><col style="width:24%"><col style="width:3.4%"><col style="width:3.4%"><col style="width:4.4%">'
+        +'<col style="width:4.6%"><col style="width:4.6%"><col style="width:4.6%"><col style="width:4.8%">'
+        +'<col style="width:4.6%"><col style="width:4.6%"><col style="width:4.6%"><col style="width:4.8%">'
+        +'<col style="width:4.6%"><col style="width:4.6%"><col style="width:4.6%">'
+        +'<col style="width:5.6%"><col style="width:4.6%">'
+      +'</colgroup>'
       +'<thead><tr style="height:'+theadH+'px;background:rgba(10,22,40,.5)">'
         +H('#')+H('ATLETA')+H('PAÍS')+H('AÑO')+H('BW')
         +'<th colspan="4" style="padding:0;font-family:Oswald;font-size:'+fs(12)+'px;letter-spacing:1px;color:#3b82f6;border-bottom:1px solid rgba(59,130,246,.3)">SQUAT</th>'
@@ -5405,21 +5417,26 @@ function renderCompete(){
         const ctRem = (ct && !ct.expired && ct.remaining>0) ? ct.remaining : null;
         const ctExpired = ct && ct.expired;
         h+='<td style="padding:4px;vertical-align:top">';
+        // Indicador de change timer (NO bloquea la edici\u00f3n: el peso se tipea abajo)
         if(ctRem!==null){
-          // Timer corriendo (naranja) \u2014 actualizado in-place por el master tick
-          h+='<div id="ctcell_'+ctKey+'" class="att att-p" onclick="editAtt('+a.id+',\''+DATA.lift+'\','+j+')" style="font-size:18px;font-weight:700;padding:10px 6px;background:rgba(245,158,11,.15);border:2px solid var(--orange);color:var(--orange);text-align:center" title="Tiene '+ctRem+'s para declarar el peso">\u23f1 '+ctRem+'s</div>';
+          h+='<div id="ctcell_'+ctKey+'" style="font-family:Oswald;font-size:11px;font-weight:700;color:var(--orange);text-align:center;margin-bottom:2px" title="'+ctRem+'s para declarar el peso">\u23f1 '+ctRem+'s</div>';
         } else if(ctExpired && !at.w){
-          // Timer EXPIRADO sin peso declarado \u2014 reloj rojo + animaci\u00f3n
-          h+='<div id="ctcell_'+ctKey+'" class="att att-n" onclick="editAtt('+a.id+',\''+DATA.lift+'\','+j+')" style="font-size:20px;font-weight:800;padding:10px 6px;background:rgba(239,68,68,.18);border:2px solid var(--red);color:var(--red);text-align:center;animation:pulse 1.5s ease-in-out infinite" title="Tiempo expirado \u2014 requiere aprobaci\u00f3n del jurado">\u23f0\u2757</div>';
-        } else {
-          // Sin timer activo \u2014 mostrar peso o em-dash
-          h+='<div class="'+c+' att" onclick="editAtt('+a.id+',\''+DATA.lift+'\','+j+')" style="font-size:'+(isCurrentAtt?18:14)+'px;font-weight:700;padding:'+(isCurrentAtt?'14px 6px':'10px 6px')+';'+(isCurrentAtt?'box-shadow:inset 0 0 0 3px '+LIFT_C[DATA.lift]+';':'')+'">'+(at.w||'\u2014')+'</div>';
+          h+='<div id="ctcell_'+ctKey+'" style="font-family:Oswald;font-size:12px;font-weight:800;color:var(--red);text-align:center;margin-bottom:2px;animation:pulse 1.5s ease-in-out infinite" title="Tiempo expirado">\u23f0\u2757</div>';
         }
-        // Solo el atleta EN TARIMA en su intento actual tiene los botones GOOD/NO LIFT
+        // Input de peso SIEMPRE editable: tipear + Enter carga el intento (cualquier intento)
+        const _bc = at.r==='g'?'var(--green)':at.r==='n'?'var(--red)':at.w>0?LIFT_C[DATA.lift]:(ctRem!==null?'var(--orange)':'var(--border)');
+        h+='<input type="text" inputmode="decimal" id="cw_'+ctKey+'" value="'+(at.w||'')+'" placeholder="\u2014" oninput="this.value=this.value.replace(\',\',\'.\')" onchange="setAtt('+a.id+',\''+DATA.lift+'\','+j+',this.value)" style="width:100%;box-sizing:border-box;text-align:center;font-family:Oswald;font-weight:700;font-size:'+(isCurrentAtt?22:15)+'px;padding:'+(isCurrentAtt?'12px 4px':'8px 4px')+';border-radius:6px;border:2px solid '+_bc+';background:'+(isCurrentAtt?LIFT_C[DATA.lift]+'1f':'var(--bg)')+';color:var(--text);'+(at.r==='n'?'text-decoration:line-through;':'')+'">';
+        // Botones V\u00c1LIDO/NULO: grandes en el intento en tarima, chicos en el resto
+        // (permiten corregir CUALQUIER intento \u2014 incluso volver atr\u00e1s al intento 1)
         if(isCurrentAtt){
           h+='<div style="display:flex;gap:3px;margin-top:4px">'
-            +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+DATA.lift+'\','+j+',\'g\')" title="GOOD LIFT" style="flex:1;padding:10px 0;border-radius:6px;border:2px solid '+(gActive?'#5cb37f':'rgba(92,179,127,.5)')+';background:'+(gActive?'rgba(92,179,127,.45)':'rgba(92,179,127,.1)')+';color:'+(gActive?'#fff':'#5cb37f')+';font-size:18px;font-weight:800;cursor:pointer;line-height:1">\u2713</button>'
-            +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+DATA.lift+'\','+j+',\'n\')" title="NO LIFT" style="flex:1;padding:10px 0;border-radius:6px;border:2px solid '+(nActive?'#cc6666':'rgba(204,102,102,.5)')+';background:'+(nActive?'rgba(204,102,102,.45)':'rgba(204,102,102,.1)')+';color:'+(nActive?'#fff':'#cc6666')+';font-size:18px;font-weight:800;cursor:pointer;line-height:1">\u2717</button>'
+            +'<button onclick="overrideResult('+a.id+',\''+DATA.lift+'\','+j+',\'g\')" title="GOOD LIFT" style="flex:1;padding:10px 0;border-radius:6px;border:2px solid '+(gActive?'#5cb37f':'rgba(92,179,127,.5)')+';background:'+(gActive?'rgba(92,179,127,.45)':'rgba(92,179,127,.1)')+';color:'+(gActive?'#fff':'#5cb37f')+';font-size:18px;font-weight:800;cursor:pointer;line-height:1">\u2713</button>'
+            +'<button onclick="overrideResult('+a.id+',\''+DATA.lift+'\','+j+',\'n\')" title="NO LIFT" style="flex:1;padding:10px 0;border-radius:6px;border:2px solid '+(nActive?'#cc6666':'rgba(204,102,102,.5)')+';background:'+(nActive?'rgba(204,102,102,.45)':'rgba(204,102,102,.1)')+';color:'+(nActive?'#fff':'#cc6666')+';font-size:18px;font-weight:800;cursor:pointer;line-height:1">\u2717</button>'
+          +'</div>';
+        } else {
+          h+='<div style="display:flex;gap:2px;margin-top:3px">'
+            +'<button onclick="overrideResult('+a.id+',\''+DATA.lift+'\','+j+',\'g\')" title="Marcar v\u00e1lido" style="flex:1;padding:3px 0;border-radius:4px;border:1px solid '+(gActive?'var(--green)':'rgba(34,197,94,.3)')+';background:'+(gActive?'rgba(34,197,94,.2)':'transparent')+';color:'+(gActive?'var(--green)':'rgba(34,197,94,.5)')+';font-size:11px;font-weight:700;cursor:pointer;line-height:1">\u2713</button>'
+            +'<button onclick="overrideResult('+a.id+',\''+DATA.lift+'\','+j+',\'n\')" title="Marcar nulo" style="flex:1;padding:3px 0;border-radius:4px;border:1px solid '+(nActive?'var(--red)':'rgba(239,68,68,.3)')+';background:'+(nActive?'rgba(239,68,68,.2)':'transparent')+';color:'+(nActive?'var(--red)':'rgba(239,68,68,.5)')+';font-size:11px;font-weight:700;cursor:pointer;line-height:1">\u2717</button>'
           +'</div>';
         }
         h+='</td>';
