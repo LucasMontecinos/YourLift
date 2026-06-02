@@ -1155,6 +1155,7 @@ window.viewInsDocs = function(sid){
               <a href="${esc(d.url)}" target="_blank" rel="noopener" style="flex:1;padding:6px 10px;background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);border-radius:5px;text-align:center;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;text-decoration:none">↗ ABRIR</a>
               <a href="${esc(d.url)}" download style="padding:6px 10px;background:rgba(59,130,246,.15);border:1px solid var(--blue);color:var(--blue);border-radius:5px;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;text-decoration:none">⬇</a>
             </div>
+            <button onclick="replaceInsDocFile('${sid}','${d.key}')" style="width:100%;margin-top:6px;padding:6px 10px;background:rgba(212,168,67,.12);border:1px solid var(--gold);color:var(--gold);border-radius:5px;cursor:pointer;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px">🔄 REEMPLAZAR</button>
           </div>
         </div>
       `).join('')}
@@ -1178,6 +1179,73 @@ window.viewInsDocs = function(sid){
     <div style="overflow:auto">${body}</div>
   </div>`;
   document.body.appendChild(m);
+};
+
+// ════════════════════════════════════════════════════════════════
+// Reemplazar un documento de inscripción: sube el archivo nuevo a
+// Storage y ACTUALIZA la URL en inscripciones_private. No hay que
+// tocar Storage manualmente — esto evita el problema de URLs viejas.
+// docKey: clave nueva ('carnetIdFront'...) o legacy ('carnetURL'...)
+// ════════════════════════════════════════════════════════════════
+// Mapa docKey nuevo → campo legacy + storagePath
+const DOC_STORAGE_MAP = {
+  carnetIdFront:{legacy:'carnetURL',path:'carnet'},
+  fotoBlanco:{legacy:'carnetPhotoURL',path:'carnetPhoto'},
+  pasaporte:{legacy:'passportURL',path:'passport'},
+  wadaIntl:{legacy:'wadeURL',path:'wada'},
+  ipfConsent:{legacy:'ipfConsentURL',path:'ipfConsent'},
+  menorConsent:{legacy:'consentimientoURL',path:'consentimiento'},
+  notas:{legacy:'notasURL',path:'notas'},
+  // legacy keys (cuando el doc viene del sistema viejo)
+  carnetURL:{legacy:'carnetURL',path:'carnet',newKey:'carnetIdFront'},
+  wadeURL:{legacy:'wadeURL',path:'wada',newKey:'wadaIntl'},
+  carnetPhotoURL:{legacy:'carnetPhotoURL',path:'carnetPhoto',newKey:'fotoBlanco'},
+  consentimientoURL:{legacy:'consentimientoURL',path:'consentimiento',newKey:'menorConsent'},
+  passportURL:{legacy:'passportURL',path:'passport',newKey:'pasaporte'},
+  ipfConsentURL:{legacy:'ipfConsentURL',path:'ipfConsent',newKey:'ipfConsent'},
+  notasURL:{legacy:'notasURL',path:'notas',newKey:'notas'}
+};
+window.replaceInsDocFile = function(sid, docKey){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='image/*,.pdf';
+  inp.onchange=async()=>{
+    const file=inp.files&&inp.files[0]; if(!file) return;
+    const insId=decodeURIComponent(sid);
+    const i=ST.inscripciones.find(x=>x.id===insId);
+    if(!i){showToast('Inscripción no encontrada',null,true);return;}
+    const map=DOC_STORAGE_MAP[docKey];
+    if(!map){showToast('Tipo de documento desconocido: '+docKey,null,true);return;}
+    const rutClean=String(i.rut||'').replace(/[^0-9kK]/g,'').toUpperCase();
+    if(!rutClean){showToast('Esta inscripción no tiene RUT',null,true);return;}
+    showToast('Subiendo archivo nuevo…');
+    try{
+      const storage=getStorage(app);
+      const ts=Date.now();
+      const sref=storageRef(storage,`athlete_files/${rutClean}/${map.path}_${ts}`);
+      await uploadBytes(sref,file,{contentType:file.type||'application/octet-stream'});
+      const url=await getDownloadURL(sref);
+      // Actualizar AMBOS: campo legacy y el mapa docs (nuevo sistema)
+      const update={[map.legacy]:url};
+      const newKey=map.newKey||docKey;
+      // si DOC_TYPES_CATALOG tiene newKey, escribir también en docs.{newKey}
+      update['docs.'+newKey]=url;
+      await updateDoc(doc(db,'inscripciones_private',insId),update);
+      // refrescar estado local
+      if(!ST.inscripcionesPrivate[insId])ST.inscripcionesPrivate[insId]={};
+      ST.inscripcionesPrivate[insId][map.legacy]=url;
+      if(!ST.inscripcionesPrivate[insId].docs)ST.inscripcionesPrivate[insId].docs={};
+      ST.inscripcionesPrivate[insId].docs[newKey]=url;
+      await logAction('replace_doc',insId,docKey,'(nuevo archivo)',{nombre:i.nombre});
+      showToast('✅ Documento reemplazado');
+      // re-abrir el modal con los datos frescos
+      document.getElementById('docsModal')?.remove();
+      viewInsDocs(sid);
+    }catch(e){
+      console.error(e);
+      showToast('Error: '+e.message,null,true);
+    }
+  };
+  inp.click();
 };
 
 window.crearPerfilDebutante=async function(sid){
