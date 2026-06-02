@@ -17,9 +17,19 @@ input,select,button{font-family:inherit;outline:none}
 @keyframes pulseRed{0%,100%{opacity:1}50%{opacity:.7}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .fade{animation:fadeIn .3s ease}
-.shell{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
-.side{background:#0d1b30;border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
-.main{padding:20px;overflow-y:auto}
+.shell{min-height:100vh}
+/* Botón hamburguesa: siempre visible arriba a la izquierda */
+.hamb{position:fixed;top:12px;left:12px;z-index:1001;width:46px;height:46px;border-radius:10px;border:1px solid rgba(212,168,67,.45);background:#0d1b30;color:#D4A843;font-size:22px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+.hamb:hover{border-color:#D4A843;background:#12233f}
+body.nav-open .hamb{opacity:0;pointer-events:none}
+.nav-close{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:3}
+.nav-close:hover{color:#fff;border-color:var(--accent)}
+/* Sidebar como cajón deslizante (off-canvas) */
+.side{background:#0d1b30;border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;width:248px;overflow-y:auto;z-index:1000;transform:translateX(-106%);transition:transform .24s cubic-bezier(.4,0,.2,1)}
+body.nav-open .side{transform:translateX(0);box-shadow:0 0 44px rgba(0,0,0,.6)}
+.nav-backdrop{position:fixed;inset:0;background:rgba(2,8,20,.55);opacity:0;pointer-events:none;transition:opacity .24s;z-index:999}
+body.nav-open .nav-backdrop{opacity:1;pointer-events:auto}
+.main{padding:20px;padding-top:70px;min-height:100vh;overflow-y:auto}
 .logo{font-family:'Oswald';font-size:20px;font-weight:700;letter-spacing:2px;margin-bottom:4px}
 .logo span{color:var(--accent)}
 .side-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin:20px 0 8px;font-family:'Oswald'}
@@ -49,17 +59,8 @@ input,select,button{font-family:inherit;outline:none}
 .sb-top{display:flex;justify-content:space-between;align-items:center;padding:12px 30px;background:linear-gradient(90deg,var(--accent),#8B1525);color:#fff}
 .sb-body{display:grid;grid-template-columns:1fr 380px;min-height:calc(100vh - 56px)}
 @media(max-width:900px){
-  .shell{grid-template-columns:1fr}
-  /* Sidebar como barra horizontal arriba en móviles (scrollable) */
-  .side{position:relative;top:auto;height:auto;max-height:none;padding:8px;flex-direction:row;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;gap:6px;border-right:none;border-bottom:1px solid var(--border)}
-  .side .logo{display:none}
-  .side .user{display:none}
-  .side-label{display:none}
-  .event-name-side{display:none}
-  .side-btn{flex-shrink:0;padding:8px 12px;margin:0;font-size:11px;white-space:nowrap;width:auto}
-  .side-btn .icon{margin-right:4px}
-  /* Sin scroll vertical en main para que la barra superior no se pegue */
-  .main{padding:14px}
+  .side{width:84vw;max-width:300px}
+  .main{padding:14px;padding-top:68px}
   .sb-body{grid-template-columns:1fr}
 }
 </style>
@@ -570,7 +571,12 @@ function renderPlates(w){
   return out;
 }
 
-function go(p){DATA.phase=p;save();R()}
+function go(p){DATA.phase=p;save();toggleNav(false);R()}
+function toggleNav(force){
+  const open=(typeof force==='boolean')?force:!document.body.classList.contains('nav-open');
+  document.body.classList.toggle('nav-open',open);
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleNav(false)});
 async function tryLoadFromFB(){
   if(!fbReady||!DATA.event)return false;
   const id=fbDocId();if(!id)return false;
@@ -4319,8 +4325,11 @@ function renderSetup(){
 function renderShell(){
   const flights=[...new Set(DATA.athletes.map(a=>a.flight))].sort();const p=DATA.phase;
   // El botón "Volver a YourLift" sobre el logo (estilo unificado)
-  let h='<div class="shell"><div class="side">';
-  h+='<a href="index.html" class="side-back-yl" style="display:flex;align-items:center;gap:6px;padding:8px 12px;margin-bottom:12px;background:rgba(10,22,40,.6);border:1px solid rgba(212,168,67,.4);border-radius:8px;color:rgba(220,230,245,.85);font-family:Oswald,sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-decoration:none;cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap" onmouseenter="this.style.borderColor=\'#D4A843\';this.style.color=\'#D4A843\'" onmouseleave="this.style.borderColor=\'rgba(212,168,67,.4)\';this.style.color=\'rgba(220,230,245,.85)\'">← YourLift</a>';
+  let h='<button class="hamb" onclick="toggleNav()" aria-label="Menú">☰</button>';
+  h+='<div class="nav-backdrop" onclick="toggleNav(false)"></div>';
+  h+='<div class="shell"><div class="side">';
+  h+='<button class="nav-close" onclick="toggleNav(false)" aria-label="Cerrar menú">✕</button>';
+  h+='<a href="index.html" class="side-back-yl" style="display:flex;align-items:center;gap:6px;padding:8px 12px;margin-bottom:12px;margin-right:42px;background:rgba(10,22,40,.6);border:1px solid rgba(212,168,67,.4);border-radius:8px;color:rgba(220,230,245,.85);font-family:Oswald,sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-decoration:none;cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap" onmouseenter="this.style.borderColor=\'#D4A843\';this.style.color=\'#D4A843\'" onmouseleave="this.style.borderColor=\'rgba(212,168,67,.4)\';this.style.color=\'rgba(220,230,245,.85)\'">← YourLift</a>';
   h+='<div class="logo"><img src="YourLift_logo.png" style="height:28px" onerror="this.remove()"> LC</div><div class="event-name-side" style="font-size:11px;color:var(--muted);margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(DATA.event?.short||DATA.event?.name||'')+'</div>';
   if(isAdmin){
   h+='<div class="side-label">Gesti\u00f3n</div><button class="side-btn '+(p==='manage'?'active':'')+'" onclick="go(\'manage\')"><span class="icon">\uD83D\uDCCB</span>Atletas & Pesaje</button>';
