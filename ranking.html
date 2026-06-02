@@ -220,6 +220,19 @@ function _rebuildPositions(){
   });
 }
 
+// Overlay de ediciones del admin (athlete_edits) indexado por RUT/código.
+var EDITS_BY_RUT={}, EDITS_BY_COD={};
+function _rutN(s){return String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();}
+function applyEdit(o){
+  if(!o)return o;
+  var ed=null;
+  if(o.rut)ed=EDITS_BY_RUT[_rutN(o.rut)];
+  if(!ed&&o.codigo)ed=EDITS_BY_COD[o.codigo];
+  if(!ed)return o;
+  if(ed.nombre)o.n=ed.nombre;             // ranking usa 'n' para nombre
+  if(ed.club!==undefined&&ed.club!=='')o.t=ed.club;  // 't' para club
+  return o;
+}
 (async function loadFirestoreRanking(){
   try{
     var fbApp = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
@@ -227,6 +240,16 @@ function _rebuildPositions(){
     var FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
     var app=fbApp.initializeApp(FB_CFG);
     var db=fb.getFirestore(app);
+    // Cargar athlete_edits primero y escuchar cambios
+    fb.onSnapshot(fb.collection(db,'athlete_edits'),function(esnap){
+      esnap.docs.forEach(function(d){var ed=d.data();if(ed.rut)EDITS_BY_RUT[_rutN(ed.rut)]=ed;if(ed.codigo)EDITS_BY_COD[ed.codigo]=ed;});
+      // re-aplicar a D existente y re-render
+      D.forEach(function(e){
+        var ed=(e.rut&&EDITS_BY_RUT[_rutN(e.rut)])||(e.codigo&&EDITS_BY_COD[e.codigo]);
+        if(ed){if(ed.nombre)e.n=ed.nombre;if(ed.club!==undefined&&ed.club!=='')e.t=ed.club;}
+      });
+      if(typeof R==='function')R();
+    });
     fb.onSnapshot(fb.collection(db,'competition_results'),function(snap){
       // Indexar las entradas hardcoded por nombre normalizado + tab + cat + div
       // para detectar duplicados (mismo atleta en diferente evento) y quedarse
@@ -244,9 +267,11 @@ function _rebuildPositions(){
         if(!cat||!data.sexo)return;
         var tab=_getTab(data.sexo,data.modalidad,data.view,(data.division||'')+' '+(data.evento||''));
         var isBench=tab.indexOf('bench')===0;
-        liveEntries.push({
+        liveEntries.push(applyEdit({
           n:data.nombre||'',
           t:data.club||'',
+          rut:data.rut||'',
+          codigo:data.codigo||'',
           c:cat,
           d:data.division||'Open',
           bw:r.bw||0,
@@ -258,7 +283,7 @@ function _rebuildPositions(){
           tab:tab,
           p:99,
           _live:true
-        });
+        }));
       });
       // Combinar con D existente: por cada liveEntry, si ya hay una del mismo
       // atleta+tab+cat+div, quedarnos con la de mayor GL (la nueva la reemplaza

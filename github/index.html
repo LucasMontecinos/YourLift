@@ -266,8 +266,10 @@ async function initFB(){
     const{initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
     const fb=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     const app=initializeApp(FB_CFG);fbDB=fb.getFirestore(app);
-    window.FBQ={collection:fb.collection,getDocs:fb.getDocs,query:fb.query,orderBy:fb.orderBy,where:fb.where,doc:fb.doc,setDoc:fb.setDoc,getDoc:fb.getDoc,onSnapshot:fb.onSnapshot,updateDoc:fb.updateDoc};
+    window.FBQ={collection:fb.collection,getDocs:fb.getDocs,query:fb.query,orderBy:fb.orderBy,where:fb.where,doc:fb.doc,setDoc:fb.setDoc,getDoc:fb.getDoc,onSnapshot:fb.onSnapshot,updateDoc:fb.updateDoc,increment:fb.increment,serverTimestamp:fb.serverTimestamp};
     fbReady=true;
+    // ── Analytics propio: registrar visita del día (no bloquea el render) ──
+    try{ trackVisit(fb); }catch(e){}
     // Load eventos from Firestore and update NOM_EVENTS
     window.FBQ.onSnapshot(window.FBQ.collection(fbDB,'eventos'),(snap)=>{
       const allEvs=snap.docs.map(d=>({...d.data(),id:d.id}))
@@ -287,22 +289,113 @@ async function initFB(){
     await loadFBNominas();
   }catch(e){console.warn('Firebase not available, using nominas.json',e)}
 }
+
+// ════════════════════════════════════════════════════════════════
+// ANALYTICS PROPIO (Firestore) — visitas día/semana/mes, únicos, páginas
+// Doc por día: analytics_daily/{YYYY-MM-DD}
+//   { total, unique, ts, pages:{home,nominas,ranking,...}, refs:{...} }
+// ════════════════════════════════════════════════════════════════
+async function trackVisit(fb){
+  if(!fbDB)return;
+  const today=new Date();
+  const ymd=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  const ref=fb.doc(fbDB,'analytics_daily',ymd);
+  // ¿visitante único hoy? (localStorage marca 1 vez por día)
+  let isUnique=false;
+  try{
+    const key='yl_visit_'+ymd;
+    if(!localStorage.getItem(key)){ localStorage.setItem(key,'1'); isUnique=true; }
+  }catch(e){ isUnique=true; }
+  // Origen del tráfico (referrer host)
+  let refHost='directo';
+  try{
+    if(document.referrer){
+      const u=new URL(document.referrer);
+      if(!/yourlift\.cl|fechipo-db/.test(u.hostname)) refHost=u.hostname.replace(/^www\./,'');
+      else refHost='interno';
+    }
+  }catch(e){}
+  refHost=refHost.replace(/[.#$/\[\]]/g,'_');
+  window._YL_TRACK_FB=fb; // para registrar páginas en sv()
+  const payload={
+    total: fb.increment(1),
+    ts: fb.serverTimestamp(),
+    date: ymd,
+    refs: { [refHost]: fb.increment(1) }
+  };
+  if(isUnique) payload.unique = fb.increment(1);
+  try{
+    await fb.setDoc(ref, payload, {merge:true});
+    console.log('[analytics] visita registrada',ymd);
+  }catch(e){ console.warn('[analytics] visit error:',e.code,e.message); }
+}
+// Registrar página vista (se llama desde sv)
+async function trackPage(view){
+  const fb=window._YL_TRACK_FB;
+  if(!fb||!fbDB)return;
+  const t=new Date();
+  const ymd=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+  const ref=fb.doc(fbDB,'analytics_daily',ymd);
+  const v=(view||'home').replace(/[.#$/\[\]]/g,'_');
+  try{ await fb.setDoc(ref,{pages:{[v]: fb.increment(1)}},{merge:true}); }catch(e){}
+}
+
+const _rutNormE=s=>String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();
+// Mapa global de edits indexado por RUT (también por código como fallback).
+// Permite aplicar las ediciones del admin a CUALQUIER colección (nóminas,
+// ranking, etc.), no solo a data.json.
+window.EDITS_BY_RUT={};
+window.EDITS_BY_COD={};
+function _indexEdit(ed){
+  if(ed.rut){const k=_rutNormE(ed.rut);if(k)window.EDITS_BY_RUT[k]=ed;}
+  if(ed.codigo)window.EDITS_BY_COD[ed.codigo]=ed;
+}
+// Aplica el overlay de edits a un objeto cualquiera que tenga rut y/o codigo.
+// Devuelve el objeto modificado (muta in-place). Campos: nombre, club, etc.
+function applyEditOverlay(obj){
+  if(!obj)return obj;
+  let ed=null;
+  if(obj.rut){ed=window.EDITS_BY_RUT[_rutNormE(obj.rut)];}
+  if(!ed&&obj.codigo){ed=window.EDITS_BY_COD[obj.codigo];}
+  if(!ed)return obj;
+  if(ed.nombre)obj.nombre=ed.nombre;
+  if(ed.club!==undefined&&ed.club!=='')obj.club=ed.club;
+  if(ed.codigo)obj.codigo=ed.codigo;
+  if(ed.sexo)obj.sexo=ed.sexo;
+  if(ed.fechaNac)obj.fechaNac=ed.fechaNac;
+  if(ed.zona)obj.zona=ed.zona;
+  if(ed.comuna)obj.comuna=ed.comuna;
+  return obj;
+}
+window.applyEditOverlay=applyEditOverlay;
+function _findByEdit(ed){
+  // RUT primero (estable), luego código (compat docs viejos)
+  if(ed.rut){const a=D.find(x=>_rutNormE(x.rut)===_rutNormE(ed.rut));if(a)return a;}
+  if(ed.codigo)return D.find(x=>x.codigo===ed.codigo);
+  return null;
+}
+function _applyEditFields(a,ed){
+  let ch=false;
+  if(ed.nombre&&a.nombre!==ed.nombre){a.nombre=ed.nombre;ch=true}
+  if(ed.club!==undefined&&a.club!==ed.club){a.club=ed.club;ch=true}
+  if(ed.debut!==undefined&&a.debut!==ed.debut){a.debut=ed.debut;ch=true}
+  if(ed.codigo&&a.codigo!==ed.codigo){a.codigo=ed.codigo;ch=true}
+  if(ed.rut&&a.rut!==ed.rut){a.rut=ed.rut;ch=true}
+  if(ed.sexo&&a.sexo!==ed.sexo){a.sexo=ed.sexo;ch=true}
+  if(ed.fechaNac&&a.fechaNac!==ed.fechaNac){a.fechaNac=ed.fechaNac;ch=true}
+  if(ed.zona&&a.zona!==ed.zona){a.zona=ed.zona;ch=true}
+  if(ed.comuna&&a.comuna!==ed.comuna){a.comuna=ed.comuna;ch=true}
+  return ch;
+}
 async function loadEdits(){
   if(!fbReady)return;
   try{
     const snap=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'athlete_edits'));
     let count=0;
-    snap.forEach(d=>{
-      const ed=d.data();
-      const a=D.find(x=>x.codigo===ed.codigo);
-      if(a){
-        if(ed.nombre)a.nombre=ed.nombre;
-        if(ed.club!==undefined)a.club=ed.club;
-        if(ed.debut!==undefined)a.debut=ed.debut;
-        count++;
-      }
-    });
-    if(count>0){console.log('[FB] Applied',count,'athlete edits');render()}
+    snap.forEach(d=>{const ed=d.data();_indexEdit(ed);const a=_findByEdit(ed);if(a&&_applyEditFields(a,ed))count++;});
+    if(count>0){console.log('[FB] Applied',count,'athlete edits');}
+    // re-aplicar overlay a nóminas ya cargadas y re-render
+    if(window._lastNominasRaw)_applyNominas(window._lastNominasRaw); else render();
   }catch(e){console.warn('Error loading edits',e)}
 }
 function startEditsListener(){
@@ -312,20 +405,19 @@ function startEditsListener(){
       let changed=false;
       snap.docChanges().forEach(ch=>{
         if(ch.type==='added'||ch.type==='modified'){
-          const ed=ch.doc.data();
-          const a=D.find(x=>x.codigo===ed.codigo);
-          if(a){
-            if(ed.nombre&&a.nombre!==ed.nombre){a.nombre=ed.nombre;changed=true}
-            if(ed.club!==undefined&&a.club!==ed.club){a.club=ed.club;changed=true}
-            if(ed.debut!==undefined&&a.debut!==ed.debut){a.debut=ed.debut;changed=true}
-          }
+          const ed=ch.doc.data();_indexEdit(ed);const a=_findByEdit(ed);
+          if(a&&_applyEditFields(a,ed))changed=true;changed=true;
         }
       });
-      if(changed){if(ST.sel){const up=D.find(x=>x.codigo===ST.sel.codigo);if(up)ST.sel=up}render()}
+      if(changed){
+        if(ST.sel){const up=D.find(x=>x.codigo===ST.sel.codigo);if(up)ST.sel=up}
+        if(window._lastNominasRaw)_applyNominas(window._lastNominasRaw); else render();
+      }
     });
   }catch(e){console.warn('Edits listener error',e)}
 }
 function _applyNominas(all){
+  window._lastNominasRaw=all; // guardar raw para re-aplicar overlay cuando lleguen edits
   const visible=all.filter(i=>i.status==='approved'||i.status==='pending');
   const byEvent={};
   visible.forEach(i=>{if(!byEvent[i.evento])byEvent[i.evento]=[];byEvent[i.evento].push(i)});
@@ -336,13 +428,17 @@ function _applyNominas(all){
     .map(ev=>{
       const fbAths=(byEvent[ev.id]||byEvent[ev.name]||[])
         .sort((a,b)=>(a.timestamp?.seconds||0)-(b.timestamp?.seconds||0))
-        .map((i,idx)=>({
-          id:i.id,nombre:i.nombre,rut:i.rut||'',sexo:i.sexo||'',
-          dob:i.fechaNac||'',division:i.division||'',categoria:i.categoria||'',
-          modalidad:i.modalidad||'',club:i.club==='Otro'?i.clubOtro:i.club||'',
-          universidad:i.universidad||'',status:i.status,
-          sortOrder:idx+1,flight:i.flight||''
-        }));
+        .map((i,idx)=>{
+          const base={
+            id:i.id,nombre:i.nombre,rut:i.rut||'',sexo:i.sexo||'',codigo:i.codigo||'',
+            dob:i.fechaNac||'',fechaNac:i.fechaNac||'',division:i.division||'',categoria:i.categoria||'',
+            modalidad:i.modalidad||'',club:i.club==='Otro'?i.clubOtro:i.club||'',
+            universidad:i.universidad||'',status:i.status,
+            sortOrder:idx+1,flight:i.flight||''
+          };
+          // Overlay: aplicar ediciones del admin (club, nombre, etc.) por RUT
+          return applyEditOverlay(base);
+        });
       const athletes=fbAths;
       const approved=fbAths.filter(a=>a.status==='approved').length;
       const pending=fbAths.filter(a=>a.status==='pending').length;
@@ -411,7 +507,8 @@ function rec(){const ts=[["classic","Classic"],["equipped","Equipado"],["univers
   h+=`<div class="cd2"><div class="ct"><h2>Records ${ln} ${tn}</h2><span class="bg" style="background:var(--gold);color:var(--bg)">${d.length}</span></div>`;
   if(!d.length)h+=`<div class="emp">No hay records registrados</div>`;
   else{h+=`<div class="rr rh"><div>#</div><div>Atleta</div><div>División</div><div>Cat.</div><div>Campeonato</div><div>Marca</div></div>`;
-    d.forEach((r,i)=>{
+    d.forEach((rRaw,i)=>{
+      const r=applyEditOverlay({...rRaw});  // overlay: nombre actualizado por RUT/código
       const evTxt=(r.campeonato||r.evento||'').substring(0,35);
       const nameLink=`<a href="atleta.html?q=${encodeURIComponent(r.nombre||'')}" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(212,168,67,.4);transition:color .15s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${r.nombre}</a>`;
       h+=`<div class="rr"><div class="rpos">${i+1}</div><div>${nameLink}</div><div>${r.division}</div><div>${r.categoria}</div><div style="font-size:11px;color:var(--muted)">${evTxt}</div><div class="rmk">${r.marca} kg</div></div>`;
@@ -829,51 +926,51 @@ window.glcUpdate=function(){
 // ═══════════════════════════════════════════════════════════════
 function home(){
   const months=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+  const baseName=n=>String(n||'').replace(/\s*[-–]\s*tarima\s*\d+/i,'').trim();
   const evs=(window.ALL_EVENTS||NOM_EVENTS||[])
     .filter(e=>e.status!=='archived'&&e.date)
     .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   const now=new Date();
-  const proximos=evs.filter(e=>{const d=new Date(e.date+'T00:00:00');return !isNaN(d)&&d>=new Date(now.getFullYear(),now.getMonth(),now.getDate());});
-  const next=(proximos.length?proximos[0]:(evs.length?evs[evs.length-1]:null));
-
-  const card=(titulo,txt,color)=>`
-    <div style="background:rgba(17,34,59,.55);backdrop-filter:blur(8px);border:1px solid var(--border);border-left:4px solid ${color};border-radius:14px;padding:24px 26px">
-      <h3 style="font-family:Oswald;font-size:15px;letter-spacing:3px;text-transform:uppercase;color:${color};margin-bottom:12px">${titulo}</h3>
-      <p style="font-size:13px;line-height:1.7;color:rgba(220,230,245,.85)">${txt}</p>
-    </div>`;
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const proximos=evs.filter(e=>{const d=new Date(e.date+'T00:00:00');return !isNaN(d)&&d>=today;});
+  let next=(proximos.length?proximos[0]:(evs.length?evs[evs.length-1]:null));
+  if(next) next={...next, name: baseName(next.name)};
+  const insOpen=[];const seenBase={};
+  evs.forEach(e=>{
+    if(e.status!=='open') return;
+    if(e.preNominaCloseAt){const c=new Date(e.preNominaCloseAt);if(!isNaN(c)&&now>c) return;}
+    const bn=baseName(e.name);
+    if(seenBase[bn]) return; seenBase[bn]=1;
+    insOpen.push({...e,name:bn});
+  });
 
   let h=`
-  <!-- HERO con foto de fondo (hero-bg.jpg). Fallback: gradiente -->
-  <div style="position:relative;margin:-16px -20px 40px;min-height:clamp(420px,60vh,560px);display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:0 0 24px 24px">
-    <div style="position:absolute;inset:0;background-image:linear-gradient(180deg,rgba(6,16,31,.55) 0%,rgba(6,16,31,.75) 60%,rgba(6,16,31,.96) 100%),url('hero-bg.jpg');background-size:cover;background-position:center 30%;background-color:#0a1628"></div>
-    <div style="position:relative;z-index:2;text-align:center;padding:60px 20px">
-      <div style="display:inline-block;background:rgba(196,30,58,.18);border:1px solid rgba(196,30,58,.5);border-radius:30px;padding:7px 20px;font-family:Oswald;font-size:12px;letter-spacing:4px;color:#fff;margin-bottom:24px;backdrop-filter:blur(4px)">PLATAFORMA OFICIAL FECHIPO</div>
-      <h1 style="font-family:Oswald;font-size:clamp(44px,9vw,84px);font-weight:700;letter-spacing:4px;line-height:.98;margin-bottom:18px;text-shadow:0 4px 30px rgba(0,0,0,.6)"><span style="color:var(--accent)">YOUR</span>LIFT</h1>
+  <div style="position:relative;margin:-90px calc(-50vw + 50%) 44px;width:100vw;min-height:clamp(460px,72vh,680px);display:flex;align-items:center;justify-content:center;overflow:hidden">
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,#142a4d 0%,#0a1628 45%,#06101f 100%)"></div>
+    <div style="position:absolute;inset:0;background:radial-gradient(circle at 20% 30%,rgba(196,30,58,.18) 0%,transparent 45%),radial-gradient(circle at 80% 70%,rgba(212,168,67,.14) 0%,transparent 45%)"></div>
+    <div style="position:absolute;inset:0;background:linear-gradient(180deg,transparent 60%,#06101f 100%)"></div>
+    <div style="position:relative;z-index:2;text-align:center;padding:70px 20px">
+      <img src="yourlift_logo_hd.png" alt="YourLift" style="height:clamp(110px,18vw,220px);width:auto;margin:0 auto 22px;display:block;filter:drop-shadow(0 8px 36px rgba(0,0,0,.7))">
       <p style="font-size:clamp(15px,2.5vw,20px);color:rgba(235,242,250,.95);max-width:680px;margin:0 auto 32px;line-height:1.6;text-shadow:0 2px 12px rgba(0,0,0,.6)">La tecnología del powerlifting chileno: inscripciones, nóminas, ranking nacional, récords y transmisión en vivo, todo en un solo lugar.</p>
       <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
         <button onclick="sv('insc')" style="padding:15px 30px;background:var(--green);color:#fff;border:none;border-radius:10px;font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer;box-shadow:0 8px 24px rgba(34,197,94,.35)">INSCRIBIRME</button>
         <button onclick="sv('nominas')" style="padding:15px 30px;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:10px;font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer;backdrop-filter:blur(6px)">VER NÓMINAS</button>
         <button onclick="sv('rank')" style="padding:15px 30px;background:var(--gold);color:#000;border:none;border-radius:10px;font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer;box-shadow:0 8px 24px rgba(212,168,67,.35)">RANKING</button>
       </div>
+      <a href="https://instagram.com/yourlift_oficial" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;margin-top:26px;color:rgba(235,242,250,.9);text-decoration:none;font-family:Oswald;font-size:13px;letter-spacing:2px;padding:8px 16px;border:1px solid rgba(255,255,255,.25);border-radius:30px;background:rgba(255,255,255,.06);backdrop-filter:blur(6px);transition:all .15s" onmouseover="this.style.borderColor='#E1306C';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(255,255,255,.25)';this.style.color='rgba(235,242,250,.9)'">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+        @yourlift_oficial
+      </a>
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:40px">
-    ${card('Qué es YourLift','Sistema integral de gestión de competencias de powerlifting: desde la inscripción del atleta hasta la transmisión en vivo con scoreboard, perfiles y ranking en tiempo real.','var(--blue)')}
-    ${card('Misión','Profesionalizar y digitalizar el powerlifting chileno, entregando herramientas que faciliten la organización de campeonatos y acerquen el deporte a más personas.','var(--accent)')}
-    ${card('Visión','Ser la plataforma de referencia del powerlifting en Chile y Latinoamérica, impulsando el crecimiento del deporte con tecnología de nivel internacional.','var(--gold)')}
-  </div>
-
-  <div style="margin-bottom:30px">
+  <div style="margin-bottom:34px">
     <h2 style="font-family:Oswald;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:18px">Próximo Campeonato</h2>`;
-
   if(!next){
     h+=`<div style="background:rgba(17,34,59,.4);border:1px solid var(--border);border-radius:12px;padding:30px;text-align:center;color:var(--muted)">No hay campeonatos programados por el momento.</div>`;
   }else{
     const d=new Date((next.date||'')+'T00:00:00');
-    const dd=isNaN(d)?'--':d.getDate();
-    const mm=isNaN(d)?'':months[d.getMonth()];
-    const yy=isNaN(d)?'':d.getFullYear();
+    const dd=isNaN(d)?'--':d.getDate();const mm=isNaN(d)?'':months[d.getMonth()];const yy=isNaN(d)?'':d.getFullYear();
     const cd=cdStr(next.date);
     const cdHtml=cd&&!cd.done&&!cd.unknown
       ?`<div style="display:flex;gap:16px;margin-top:18px">
@@ -892,14 +989,39 @@ function home(){
         <div style="font-family:Oswald;font-size:clamp(20px,3vw,28px);font-weight:700;letter-spacing:1px;color:var(--text);text-transform:uppercase;line-height:1.1">${next.name||''}</div>
         <div style="font-size:13px;color:var(--muted);margin-top:8px">${next.organizer||next.org||''}${next.location?' · '+next.location:''}</div>
         ${cdHtml}
-        <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
+        <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;align-items:center">
           <button onclick="sv('nominas')" style="padding:11px 22px;background:var(--accent);color:#fff;border:none;border-radius:9px;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">VER NÓMINA</button>
-          <button onclick="sv('insc')" style="padding:11px 22px;background:transparent;color:var(--green);border:1px solid var(--green);border-radius:9px;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">INSCRIBIRME</button>
         </div>
       </div>
     </div>`;
   }
   h+=`</div>`;
+
+  if(insOpen.length){
+    h+=`<div style="margin-bottom:30px">
+      <h2 style="font-family:Oswald;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:6px">Inscripciones Abiertas</h2>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:18px">Campeonatos con inscripciones disponibles ahora</p>
+      <div style="display:flex;flex-direction:column;gap:10px">`;
+    insOpen.forEach(ev=>{
+      const d=new Date((ev.date||'')+'T00:00:00');
+      const dd=isNaN(d)?'--':d.getDate();const mm=isNaN(d)?'':months[d.getMonth()];const yy=isNaN(d)?'':d.getFullYear();
+      let cierreTxt='';
+      if(ev.preNominaCloseAt){const c=new Date(ev.preNominaCloseAt);if(!isNaN(c)){const diff=c-now;const dias=Math.floor(diff/864e5);cierreTxt=dias>0?`cierra en ${dias} día${dias!==1?'s':''}`:'cierra hoy';}}
+      h+=`<div style="display:flex;align-items:center;gap:16px;background:rgba(17,34,59,.55);backdrop-filter:blur(8px);border:1px solid var(--border);border-left:4px solid var(--green);border-radius:12px;padding:14px 18px">
+        <div style="flex-shrink:0;text-align:center;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:8px 14px;min-width:60px">
+          <div style="font-family:Oswald;font-size:24px;font-weight:700;color:var(--green);line-height:1">${dd}</div>
+          <div style="font-family:Oswald;font-size:10px;letter-spacing:1px;color:rgba(34,197,94,.8)">${mm}</div>
+          <div style="font-size:9px;color:var(--muted)">${yy}</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-family:Oswald;font-size:15px;font-weight:600;letter-spacing:1px;color:var(--text);text-transform:uppercase;line-height:1.15">${ev.name||''}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px">${ev.organizer||ev.org||''}${ev.location?' · '+ev.location:''}${cierreTxt?` · <span style="color:var(--gold)">${cierreTxt}</span>`:''}</div>
+        </div>
+        <button onclick="sv('insc')" style="flex-shrink:0;padding:10px 20px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">INSCRIBIRME</button>
+      </div>`;
+    });
+    h+=`</div></div>`;
+  }
   return h;
 }
 
@@ -980,9 +1102,16 @@ function glcalc(){
   </div>`;
 }
   h+=`<div class="ftr">FECHIPO — Federación Chilena de Powerlifting · Afiliada a IPF & WADA<br>Resultados ⚡ vía <a href="https://www.openpowerlifting.org" target="_blank">OpenPowerlifting.org</a> (Public Domain)</div>`;
-  app.innerHTML=h;if(!ST.sel&&ST.v==="list"){const i=app.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}}
+  app.innerHTML=h;if(!ST.sel&&ST.v==="list"){const i=app.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}
+  // En home: ocultar el logo YourLift de esquina (ya está grande en el hero) pero MANTENER FECHIPO
+  const isHome=(ST.v==='home'&&!ST.sel);
+  const cs=document.querySelector('.corner-stack');
+  if(cs)cs.style.display='flex';
+  const clogo=document.querySelector('.corner-stack .corner-logo');
+  if(clogo)clogo.style.display=isHome?'none':'block';
+}
 
-function sv(v){ST.v=v;ST.sel=null;ST.p=0;render();scrollTo(0,0);if(typeof setBgForSection==='function')setBgForSection(v)}
+function sv(v){ST.v=v;ST.sel=null;ST.p=0;render();scrollTo(0,0);if(typeof setBgForSection==='function')setBgForSection(v);if(typeof trackPage==='function')trackPage(v)}
 let _ssTimer=null;
 function ss(v){ST.s=v;ST.p=0;if(_ssTimer)clearTimeout(_ssTimer);_ssTimer=setTimeout(()=>{render();setTimeout(()=>{const i=document.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},10)},300)}
 function sfc(v){ST.fc=v;ST.p=0;render()}
