@@ -223,6 +223,7 @@ async function initFB(){
     window._fb=fb;window._fbAuth=authMod;fbReady=true;
     window._fbSt=storageMod;window._fbStInst=storageMod.getStorage(app);
     _setupFotoListener(); // in case data.json already loaded before Firebase was ready
+    if(typeof _setupLcMediaListener==='function')_setupLcMediaListener(); // foto/gif persistente por atleta (livecast)
     // Keep LIVE_EVENTS in sync with Firestore eventos
     fb.onSnapshot(fb.collection(fbDB,'eventos'),async (snap)=>{
       const evs={};
@@ -1018,6 +1019,98 @@ function confirmAddAthlete(){
   document.getElementById('addAthModal').remove();
   showToastLC('✓ '+name+' agregado · '+_ctryName(country));
   R();
+}
+
+// ── Foto / GIF persistente por atleta (se guarda y se reutiliza si vuelve) ──────
+// Clave estable: RUT si tiene; si no, país + nombre normalizado. Se guarda en
+// Firestore atleta_fotos/<clave> (reusa colección existente, lectura pública) y
+// los archivos en Storage athlete_photos/ y athlete_gifs/ (reusa paths existentes).
+window._LC_MEDIA = window._LC_MEDIA || {};
+function _mediaKey(a){
+  const rut=String((a&&a.rut)||'').replace(/[^0-9kK]/gi,'').toUpperCase();
+  if(rut) return 'lc_rut_'+rut;
+  const nm=String((a&&a.name)||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+  return 'lc_'+_ctry(a).toLowerCase()+'_'+nm;
+}
+function _lcMediaFor(a){ return (a&&window._LC_MEDIA[_mediaKey(a)])||null; }
+function _setupLcMediaListener(){
+  if(!fbReady||!window._fb||!fbDB||window._lcMediaUnsub)return;
+  try{
+    window._lcMediaUnsub=window._fb.onSnapshot(window._fb.collection(fbDB,'atleta_fotos'),snap=>{
+      snap.docs.forEach(d=>{ if(String(d.id).indexOf('lc_')===0) window._LC_MEDIA[d.id]=d.data(); });
+      if(typeof renderTxWidget==='function')renderTxWidget();
+      if(!TX_MODE && DATA.phase==='manage' && typeof R==='function')R();
+    });
+  }catch(e){console.warn('[lc-media]',e.message);}
+}
+function openAthleteMedia(id){
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  const m0=_lcMediaFor(a)||{};
+  const ex=document.getElementById('athMediaModal');if(ex)ex.remove();
+  const m=document.createElement('div');m.id='athMediaModal';
+  m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;z-index:9999';
+  const prev=(u,isVid)=>u?(isVid?'<video src="'+u+'" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover"></video>':'<img src="'+u+'" style="width:100%;height:100%;object-fit:cover">'):'<span style="color:var(--muted);font-size:11px;font-family:Oswald">sin imagen</span>';
+  m.innerHTML=`
+  <div style="background:#0D1F38;border:2px solid var(--border);border-radius:16px;padding:24px 28px;width:min(560px,94vw);max-height:92vh;overflow-y:auto">
+    <div style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:4px">📷 FOTO / GIF</div>
+    <div style="font-size:12px;color:var(--gold);font-family:Oswald;margin-bottom:4px">${_flagImg(_ctry(a),14)}${a.name}</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:16px">Se guarda y se reutiliza automáticamente si el atleta vuelve a competir.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div style="font-size:10px;color:var(--gold);font-family:Oswald;letter-spacing:1px;margin-bottom:6px">FOTO (imagen)</div>
+        <div id="amPrevFoto" style="aspect-ratio:3/4;background:#0a1628;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:8px">${prev(m0.foto_url,false)}</div>
+        <input id="amFoto" type="file" accept="image/*" onchange="uploadAthleteMedia(${id},'foto',this.files[0])" style="font-size:11px;color:var(--muted);width:100%">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--gold);font-family:Oswald;letter-spacing:1px;margin-bottom:6px">GIF / VIDEO (animado)</div>
+        <div id="amPrevGif" style="aspect-ratio:3/4;background:#000;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:8px">${prev(m0.gif_url,!(String(m0.gif_url||'').toLowerCase().endsWith('.gif')))}</div>
+        <input id="amGif" type="file" accept="video/*,image/gif" onchange="uploadAthleteMedia(${id},'gif',this.files[0])" style="font-size:11px;color:var(--muted);width:100%">
+      </div>
+    </div>
+    <div id="amStatus" style="font-size:11px;color:var(--muted);font-family:Oswald;margin-top:12px;min-height:16px"></div>
+    <div style="display:flex;gap:10px;justify-content:space-between;margin-top:12px">
+      <button onclick="removeAthleteMedia(${id})" style="padding:8px 14px;border-radius:8px;border:1px solid var(--red);background:transparent;color:var(--red);font-family:Oswald;font-size:11px;cursor:pointer">🗑️ Quitar todo</button>
+      <button onclick="document.getElementById('athMediaModal').remove()" style="padding:8px 20px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;cursor:pointer">CERRAR</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+}
+async function uploadAthleteMedia(id,kind,file){
+  if(!file)return;
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía, esperá un momento');return;}
+  if(!isAdmin){alert('Solo admin puede subir fotos');return;}
+  const st=document.getElementById('amStatus');if(st)st.textContent='⏳ Subiendo…';
+  try{
+    const {ref,uploadBytes,getDownloadURL}=window._fbSt;
+    const key=_mediaKey(a);
+    const dot=file.name.lastIndexOf('.');const ext=(dot>=0?file.name.slice(dot+1):'').toLowerCase()||(kind==='foto'?'jpg':'mp4');
+    const folder=kind==='foto'?'athlete_photos/':'athlete_gifs/';
+    const path=folder+key+'_'+Date.now()+'.'+ext;
+    const r=ref(window._fbStInst,path);
+    await uploadBytes(r,file,{contentType:file.type||(kind==='foto'?'image/jpeg':'video/mp4')});
+    const url=await getDownloadURL(r);
+    const patch=kind==='foto'?{foto_url:url}:{gif_url:url};
+    await window._fb.setDoc(window._fb.doc(fbDB,'atleta_fotos',key),Object.assign({codigo:key,name:a.name,country:_ctry(a),ts:Date.now()},patch),{merge:true});
+    window._LC_MEDIA[key]=Object.assign({},window._LC_MEDIA[key]||{},patch);
+    if(st)st.textContent='✓ Guardado';
+    // refrescar preview
+    const isVid=kind==='gif'&&!String(url).toLowerCase().endsWith('.gif');
+    const pv=document.getElementById(kind==='foto'?'amPrevFoto':'amPrevGif');
+    if(pv)pv.innerHTML=isVid?'<video src="'+url+'" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover"></video>':'<img src="'+url+'" style="width:100%;height:100%;object-fit:cover">';
+    R();
+  }catch(e){if(st)st.textContent='❌ '+e.message; console.warn('[lc-media] upload',e);}
+}
+async function removeAthleteMedia(id){
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  if(!confirm('¿Quitar la foto/gif de '+a.name+'?'))return;
+  try{
+    const key=_mediaKey(a);
+    await window._fb.setDoc(window._fb.doc(fbDB,'atleta_fotos',key),{foto_url:'',gif_url:'',ts:Date.now()},{merge:true});
+    delete window._LC_MEDIA[key];
+    document.getElementById('athMediaModal')?.remove();
+    showToastLC('Foto/gif quitada de '+a.name);R();
+  }catch(e){alert('Error: '+e.message);}
 }
 function openWeighIn(id){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
@@ -3820,6 +3913,11 @@ function renderTxLights(){
 
 function renderTxProfile(cur){
   const full=txLookupFull(cur);
+  // Media efectiva: foto/gif subida en el livecast (persistente) tiene prioridad
+  // sobre la de la base de Chile. Permite fotos de atletas internacionales.
+  const _lm=_lcMediaFor(cur);
+  const media=Object.assign({},full||{});
+  if(_lm){ if(_lm.foto_url)media.foto_url=_lm.foto_url; if(_lm.gif_url)media.gif_url=_lm.gif_url; ['gif_blend','gif_zoom','gif_offset_x','gif_offset_y','gif_start','gif_end'].forEach(k=>{if(_lm[k]!==undefined)media[k]=_lm[k];}); }
   const parts=(cur.name||'').trim().split(/\s+/);
   const firstName=parts.slice(0,-2).join(' ')||parts[0]||'';
   const lastName=parts.slice(-2).join(' ').toUpperCase();
@@ -3841,9 +3939,10 @@ function renderTxProfile(cur){
   if(years!==null)rows.push(['AÑOS COMPITIENDO',years+'']);
   if(pb)rows.push([pbLabel,pb.toFixed(1)]);
   const initials=parts.map(p=>p[0]||'').slice(0,2).join('').toUpperCase();
-  const useGif=_txProfileMediaType==='gif'&&!!full?.gif_url;
-  const gifBlend=useGif?(full.gif_blend||'screen'):'normal';
-  const mediaBg=useGif?'#000':(full?.foto_url?'#fff':'linear-gradient(135deg,#1a2e4f,#0e1f3a)');
+  const useGif=_txProfileMediaType==='gif'&&!!media.gif_url;
+  const gifIsImg=useGif&&String(media.gif_url||'').toLowerCase().split('?')[0].endsWith('.gif');
+  const gifBlend=useGif?(media.gif_blend||'screen'):'normal';
+  const mediaBg=useGif?'#000':(media.foto_url?'#fff':'linear-gradient(135deg,#1a2e4f,#0e1f3a)');
   return `
     <div style="position:absolute;inset:0">
     <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;overflow:hidden">
@@ -3853,14 +3952,11 @@ function renderTxProfile(cur){
       <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(8px,1.5vh,22px);max-width:1400px;width:100%;margin:auto">
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:clamp(6px,1vh,16px)">
           <div style="background:${_txC('nameBg')};padding:clamp(10px,1.6vw,18px) clamp(18px,2.2vw,28px);border-radius:6px;display:flex;align-items:center;gap:clamp(10px,1.5vw,18px);box-shadow:0 4px 20px rgba(212,168,67,.35)">
-            <div style="background:rgba(0,0,0,.2);padding:clamp(6px,0.7vw,10px) clamp(10px,1.2vw,16px);border-radius:5px;display:flex;align-items:center">
-              <div style="width:clamp(44px,5vw,72px);height:clamp(30px,3.3vw,48px);position:relative;overflow:hidden;border-radius:2px;flex-shrink:0;box-shadow:0 1px 8px rgba(0,0,0,.5)">
-                <div style="position:absolute;inset:0;background:#d52b1e"></div>
-                <div style="position:absolute;top:0;left:0;right:0;height:50%;background:#fff"></div>
-                <div style="position:absolute;top:0;left:0;width:33.4%;height:50%;background:#0039a6;display:flex;align-items:center;justify-content:center">
-                  <span style="color:#fff;font-size:clamp(9px,1vw,15px);line-height:1">★</span>
-                </div>
+            <div style="background:rgba(0,0,0,.2);padding:clamp(6px,0.7vw,10px) clamp(10px,1.2vw,16px);border-radius:5px;display:flex;align-items:center;gap:clamp(8px,0.9vw,14px)">
+              <div style="width:clamp(44px,5vw,72px);height:clamp(30px,3.3vw,48px);position:relative;overflow:hidden;border-radius:2px;flex-shrink:0;box-shadow:0 1px 8px rgba(0,0,0,.5);background:#0a1628">
+                <img src="https://flagcdn.com/h120/${(COUNTRY[_ctry(cur)]||['cl'])[0]}.png" alt="${_ctry(cur)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">
               </div>
+              <span style="font-family:Oswald;font-weight:700;font-size:clamp(13px,1.4vw,22px);color:${_txC('nameText')};letter-spacing:2px">${_ctry(cur)}</span>
             </div>
             <div style="font-family:Oswald;font-size:clamp(26px,3.2vw,44px);font-weight:700;letter-spacing:2px;color:${_txC('nameText')}">
               <span style="font-weight:400">${firstName}</span> ${lastName}
@@ -3870,9 +3966,11 @@ function renderTxProfile(cur){
         <div style="display:grid;grid-template-columns:auto 1fr;gap:clamp(30px,4vw,70px);align-items:center;margin-top:clamp(10px,2vh,30px)">
           <div style="width:clamp(180px,18vw,280px);aspect-ratio:3/4;background:${mediaBg};border:3px solid ${_txC('accent')};border-radius:4px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(0,0,0,.5);position:relative;overflow:hidden">
             ${useGif
-              ? `<video src="${full.gif_url}" autoplay loop muted playsinline data-gif-trim="1" data-gif-start="${full.gif_start||0}" data-gif-end="${full.gif_end??''}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${full.gif_zoom||1}) translate(${full.gif_offset_x||0}%,${full.gif_offset_y||0}%);transform-origin:center center"></video>`
-              : full?.foto_url
-                ? `<img src="${full.foto_url}" alt="${cur.name||''}" style="width:100%;height:100%;object-fit:cover" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px\\'>${initials}</span>'">`
+              ? (gifIsImg
+                  ? `<img src="${media.gif_url}" alt="${cur.name||''}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center">`
+                  : `<video src="${media.gif_url}" autoplay loop muted playsinline data-gif-trim="1" data-gif-start="${media.gif_start||0}" data-gif-end="${media.gif_end??''}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center"></video>`)
+              : media.foto_url
+                ? `<img src="${media.foto_url}" alt="${cur.name||''}" style="width:100%;height:100%;object-fit:cover" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px\\'>${initials}</span>'">`
                 : `<span style="font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px">${initials}</span>`
             }
           </div>
@@ -5591,6 +5689,7 @@ function renderManage(){
     }else{
       h+='<button onclick="openWeighIn('+a.id+')" style="padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:9px;cursor:pointer">⚖️ Pesar</button>';
     }
+    {const _hasMedia=!!_lcMediaFor(a);h+='<button onclick="openAthleteMedia('+a.id+')" title="Subir foto/GIF del atleta" style="display:block;margin:3px auto 0;padding:2px 8px;border-radius:4px;border:1px solid '+(_hasMedia?'var(--gold)':'var(--border)')+';background:'+(_hasMedia?'rgba(212,168,67,.12)':'transparent')+';color:'+(_hasMedia?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:9px;cursor:pointer;white-space:nowrap">📷 '+(_hasMedia?'Foto ✓':'Foto')+'</button>';}
     h+='</td>';
     ['sq','bp','dl'].forEach(l=>{a.att[l].forEach((at,r)=>{
       const ctKey=a.id+'_'+l+'_'+r;const ct=DATA.changeTimers[ctKey];

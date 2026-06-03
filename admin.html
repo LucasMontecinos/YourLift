@@ -3025,6 +3025,16 @@ function renderCampeonatos(){
           <input class="inp" id="ef_org" value="${editing.org||''}" placeholder="ej: Club Bushido Lifting">
         </label>
         <label class="field">
+          <span>🖼️ Logo del campeonato (URL) <span style="font-weight:400;color:var(--muted)">(opcional)</span></span>
+          <input class="inp" id="ef_logoUrl" value="${editing.logoUrl||''}" placeholder="https://… (PNG/JPG)">
+          <span style="font-size:10px;color:var(--muted);margin-top:2px">Se muestra en la tarjeta del campeonato en la página principal.</span>
+        </label>
+        <label class="field">
+          <span>📸 Instagram del organizador <span style="font-weight:400;color:var(--muted)">(opcional)</span></span>
+          <input class="inp" id="ef_instagram" value="${editing.instagram||''}" placeholder="@cuenta o usuario">
+          <span style="font-size:10px;color:var(--muted);margin-top:2px">Aparece como botón con link en la tarjeta del home.</span>
+        </label>
+        <label class="field">
           <span>📆 Días (texto visible)</span>
           <input class="inp" id="ef_days" value="${editing.days||''}" placeholder="ej: 09 y 10 de Mayo">
         </label>
@@ -3244,6 +3254,8 @@ window.saveEvento = async function(){
   const requiereFoto = !!document.getElementById('ef_requiereFoto')?.checked;
   const livecastVisible = document.getElementById('ef_livecastVisible')?.checked !== false;
   const youtubeUrl = (document.getElementById('ef_youtubeUrl')?.value||'').trim();
+  const logoUrl = (document.getElementById('ef_logoUrl')?.value||'').trim();
+  const instagram = (document.getElementById('ef_instagram')?.value||'').trim().replace(/^@/,'');
   // NUEVO: leer los checkboxes de documentos requeridos
   const requiredDocs = Array.from(document.querySelectorAll('#ef_docs_container input[type="checkbox"]:checked'))
     .map(cb => cb.getAttribute('data-doc-key'));
@@ -3253,6 +3265,7 @@ window.saveEvento = async function(){
 
   const data = {id, name, date, closeDate, preNominaCloseAt, nominaCloseAt, location, org, days, status,
     extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, youtubeUrl,
+    logoUrl, instagram,    // logo del campeonato + IG del organizador (se muestran en el home)
     requiredDocs,    // nuevo: array de docKeys requeridos
     updatedAt: serverTimestamp()};
   if(isNew) data.createdAt = serverTimestamp();
