@@ -646,7 +646,8 @@ function pickEvent(i){
     else mod='classic';
     const _rawSex=(a.sexo||a.sex||'').trim();
     const _normSex=(_rawSex==='Femenino'||_rawSex==='F'||_rawSex==='Mujer')?'Mujer':(_rawSex==='Masculino'||_rawSex==='M'||_rawSex==='Hombre')?'Hombre':_rawSex;
-    return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:_normSex,cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,bw:0,flight:a.flight||fl,rackSQ:'',rackBP:'',bombed:false,
+    const _countryCode=String(a.pais||a.country||a.pais3||'CHI').toUpperCase();
+    return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:_normSex,cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,country:_countryCode,bw:0,flight:a.flight||fl,rackSQ:'',rackBP:'',bombed:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}};
   });
   const allFlights=flightMap?[...new Set(Object.values(flightMap))].filter(_inTarima).sort():[];
@@ -691,6 +692,27 @@ function _normSex(s){
 // Clave única de categoría (sexo|cat|div) normalizada — agrupa correctamente aunque
 // los valores vengan con espacios, mayúsculas o sinónimos distintos.
 function _catGroupKey(a){return _normSex(a&&a.sex)+'|'+_normCat((a&&a.cat)||'?')+'|'+_normDiv((a&&a.div)||'Sin Div');}
+// ── Países (código IPF de 3 letras → ISO2 para bandera + nombre) ──────────────
+// Para campeonatos internacionales (ej. Sudamericano). Default CHI.
+const COUNTRY={
+  CHI:['cl','Chile'], ARG:['ar','Argentina'], BRA:['br','Brasil'], URU:['uy','Uruguay'],
+  PAR:['py','Paraguay'], PER:['pe','Perú'], BOL:['bo','Bolivia'], ECU:['ec','Ecuador'],
+  COL:['co','Colombia'], VEN:['ve','Venezuela'], GUY:['gy','Guyana'], SUR:['sr','Surinam'],
+  PAN:['pa','Panamá'], CRC:['cr','Costa Rica'], GUA:['gt','Guatemala'], MEX:['mx','México'],
+  USA:['us','Estados Unidos'], CAN:['ca','Canadá'], ESP:['es','España'], POR:['pt','Portugal']
+};
+function _ctry(a){const c=(a&&(a.country||a.pais||a.pais3));return (c&&String(c).toUpperCase())||'CHI';}
+function _ctryName(code){const c=COUNTRY[code];return c?c[1]:code;}
+function _flagImg(code,h){
+  const c=COUNTRY[code]; if(!c||!c[0])return '';
+  h=Math.round(h||18);
+  return '<img src="https://flagcdn.com/h'+(h*2)+'/'+c[0]+'.png" alt="'+code+'" style="height:'+h+'px;width:auto;border-radius:2px;vertical-align:middle;margin-right:6px;box-shadow:0 0 2px rgba(0,0,0,.5)" onerror="this.style.display=\'none\'">';
+}
+// <option>s para selects de país (CHI primero)
+function _countryOptions(sel){
+  const keys=Object.keys(COUNTRY).sort((a,b)=>a==='CHI'?-1:b==='CHI'?1:_ctryName(a).localeCompare(_ctryName(b)));
+  return keys.map(k=>'<option value="'+k+'" '+((sel||'CHI')===k?'selected':'')+'>'+k+' — '+_ctryName(k)+'</option>').join('');
+}
 function checkRecord(athlete,lift,round){
   if(!RECORDS)return;
   if(DATA.event && DATA.event.recordsEnabled===false)return;
@@ -940,6 +962,63 @@ async function resetJudgeLights(){
 // ── Category BW limits ─────────────────────────────────────
 const CAT_LIMITS={"47":47,"52":52,"57":57,"63":63,"69":69,"76":76,"84":84,"53":53,"59":59,"66":66,"74":74,"83":83,"93":93,"105":105,"120":120};
 
+// ── Agregar atleta manualmente (atletas internacionales / altas de último momento) ──
+function openAddAthlete(){
+  const ex=document.getElementById('addAthModal');if(ex)ex.remove();
+  const flights=TARIMA?['A','B','C','D','E','F'].map(L=>L+TARIMA):['A','B','C','D','E','F'];
+  const inp='padding:9px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:14px';
+  const lbl='display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)';
+  const m=document.createElement('div');m.id='addAthModal';
+  m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:9999';
+  m.innerHTML=`
+  <div style="background:#0D1F38;border:2px solid var(--border);border-radius:16px;padding:24px 28px;width:min(620px,94vw);max-height:92vh;overflow-y:auto">
+    <div style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:4px">➕ AGREGAR ATLETA</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:18px">Para altas manuales (ej. atletas de otros países en un internacional). No toca la nómina pública.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <label style="${lbl};grid-column:1 / -1">NOMBRE COMPLETO<input id="aa_name" type="text" placeholder="Nombre y apellidos" style="${inp}"></label>
+      <label style="${lbl}">PAÍS<select id="aa_country" style="${inp}">${_countryOptions('CHI')}</select></label>
+      <label style="${lbl}">SEXO<select id="aa_sex" style="${inp}"><option value="Hombre">Hombre</option><option value="Mujer">Mujer</option></select></label>
+      <label style="${lbl}">CATEGORÍA (kg)<input id="aa_cat" type="text" placeholder="ej: 83 o +120" style="${inp}"></label>
+      <label style="${lbl}">DIVISIÓN<select id="aa_div" style="${inp}">
+        <option>Open</option><option>Sub-Junior</option><option>Junior</option>
+        <option>Master I</option><option>Master II</option><option>Master III</option><option>Master IV</option></select></label>
+      <label style="${lbl}">MODALIDAD<select id="aa_mod" style="${inp}">
+        <option value="classic">Classic (Raw)</option><option value="equipped">Equipado</option>
+        <option value="oe_classic">Olimpiadas Especiales (OE)</option><option value="universitario">Universitario</option>
+        <option value="onlybench">Only Bench</option><option value="classic_bench">Classic + Only Bench</option>
+        <option value="equipped_bench">Equipado + Only Bench</option></select></label>
+      <label style="${lbl}">CLUB / EQUIPO<input id="aa_club" type="text" placeholder="Club" style="${inp}"></label>
+      <label style="${lbl}">TANDA / VUELO<select id="aa_flight" style="${inp}">${flights.map(f=>'<option>'+f+'</option>').join('')}</select></label>
+    </div>
+    <div id="aa_alert" style="display:none;background:rgba(196,30,58,.15);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--accent);font-family:Oswald"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="document.getElementById('addAthModal').remove()" style="padding:8px 20px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;cursor:pointer">CANCELAR</button>
+      <button onclick="confirmAddAthlete()" style="padding:10px 24px;border-radius:8px;border:none;background:var(--green);color:#000;font-family:Oswald;font-size:13px;font-weight:700;cursor:pointer">✓ AGREGAR</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+  setTimeout(()=>{const el=document.getElementById('aa_name');if(el)el.focus();},50);
+}
+function confirmAddAthlete(){
+  const g=id=>document.getElementById(id);
+  const name=(g('aa_name').value||'').trim();
+  const alertEl=g('aa_alert');
+  if(name.length<3){alertEl.style.display='block';alertEl.textContent='⚠️ Ingresá el nombre del atleta';return;}
+  const country=(g('aa_country').value||'CHI');
+  const newId=DATA.athletes.length?Math.max(...DATA.athletes.map(a=>a.id))+1:0;
+  const newLot=DATA.athletes.length?Math.max(...DATA.athletes.map(a=>a.lot||0))+1:1;
+  DATA.athletes.push({
+    id:newId, lot:newLot, name, rut:'', sex:g('aa_sex').value,
+    cat:(g('aa_cat').value||'').trim(), div:g('aa_div').value, club:(g('aa_club').value||'').trim(),
+    uni:'', mod:g('aa_mod').value, country,
+    bw:0, flight:g('aa_flight').value, rackSQ:'', rackBP:'', bombed:false,
+    att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}
+  });
+  saveNow();
+  document.getElementById('addAthModal').remove();
+  showToastLC('✓ '+name+' agregado · '+_ctryName(country));
+  R();
+}
 function openWeighIn(id){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   const catKg=parseFloat((a.cat||'').replace(/[^0-9.]/g,''))||0;
@@ -975,6 +1054,10 @@ function openWeighIn(id){
           <option value="classic_bench" ${a.mod==='classic_bench'?'selected':''}>Classic + Only Bench</option>
           <option value="equipped_bench" ${a.mod==='equipped_bench'?'selected':''}>Equipado + Only Bench</option>
         </select>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)">
+        PAÍS
+        <select id="wi_country" style="padding:9px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:13px">${_countryOptions(_ctry(a))}</select>
       </label>
     </div>
     <div style="font-size:10px;color:var(--gold);letter-spacing:1.5px;margin-bottom:6px;font-family:Oswald;font-weight:700">RACK HEIGHTS</div>
@@ -1084,6 +1167,7 @@ function confirmWeighIn(id,catKg,limit){
   const rSQ=(document.getElementById('wi_rackSQ').value||'').trim();
   const rBP=(document.getElementById('wi_rackBP').value||'').trim();
   const mod=document.getElementById('wi_mod').value;
+  const country=(document.getElementById('wi_country')?.value||'CHI');
   const sq1=parseWeight(document.getElementById('wi_sq1')?.value);
   const bp1=parseWeight(document.getElementById('wi_bp1')?.value);
   const dl1=parseWeight(document.getElementById('wi_dl1')?.value);
@@ -1101,7 +1185,7 @@ function confirmWeighIn(id,catKg,limit){
   }
   // Save
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  a.bw=bw;a.rackSQ=rSQ;a.rackBP=rBP;a.mod=mod;
+  a.bw=bw;a.rackSQ=rSQ;a.rackBP=rBP;a.mod=mod;a.country=country;
   a.weighedIn=true;
   // Guardar primeros intentos (apertura) si vinieron en el modal
   if(a.att){
@@ -4155,7 +4239,7 @@ function renderTxJornada(){
       rows+='<tr style="height:'+unit.toFixed(2)+'px;border-bottom:1px solid rgba(212,168,67,.12);background:'+(i%2?'rgba(255,255,255,.035)':'transparent')+'">'
         +'<td style="'+td+';font-weight:700;color:#D4A843;padding:0 4px">'+(row.tot>0?(i+1):'—')+'</td>'
         +'<td style="vertical-align:middle;padding:0 10px;font-family:Inter,sans-serif;font-weight:600;color:#fff;font-size:'+Math.round(fs(15)*nameScale)+'px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+a.name+'</td>'
-        +'<td style="'+td+';color:rgba(220,230,245,.75)">CHI</td>'
+        +'<td style="'+td+';color:rgba(220,230,245,.85);white-space:nowrap">'+_flagImg(_ctry(a),fs(14))+_ctry(a)+'</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.65)">'+(_yob2(a)||'—')+'</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.9)">'+(a.bw?a.bw.toFixed(1):'—')+'</td>'
         // SQ 3 intentos + subtotal
@@ -5487,7 +5571,7 @@ function renderDirector(){
 function renderManage(){
   // Filtrar por tarima si está activo (modo 2 tarimas)
   const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">🎲 Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">🔄 Re-sincronizar con admin</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">⚖️ Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">📏 Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">🏋️ Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">🎫 Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">🎲 Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">🔄 Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">➕ Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">⚖️ Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">📏 Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">🏋️ Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">🎫 Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th><th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:38px">VLO</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:80px">BW + 1ros</th>';
   ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:62px">'+LIFT_S[l]+r+'</th>'})});
@@ -5495,7 +5579,7 @@ function renderManage(){
   ath.forEach(a=>{
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3);'+(a.bombed?'opacity:.4':'')+'">';
     h+='<td style="padding:3px 2px;text-align:center"><input type="number" min="1" value="'+a.lot+'" onchange="setLot('+a.id+',this.value)" title="Editá el número de lote — si ya existe se hace swap" style="width:42px;padding:3px 2px;font-family:Oswald;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:13px"></td>';
-    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+a.name+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
+    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+_flagImg(_ctry(a),13)+a.name+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+_ctry(a)+' \u00b7 '+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
     {
       // Opciones del dropdown de vuelo: si hay tarima, suffix con 1/2; si no, letras simples.
       const _flOpts = TARIMA ? ['A','B','C','D','E','F'].map(L=>L+TARIMA) : ['A','B','C','D','E','F'];
