@@ -924,6 +924,19 @@ window.glcUpdate=function(){
 // ═══════════════════════════════════════════════════════════════
 // PÁGINA DE INICIO (landing)
 // ═══════════════════════════════════════════════════════════════
+// Organizadores de un evento (soporta lista nueva o campo único viejo)
+function _evOrganizers(ev){
+  if(ev&&Array.isArray(ev.organizers)&&ev.organizers.length) return ev.organizers.filter(o=>o&&(o.name||o.instagram));
+  const nm=(ev&&(ev.organizer||ev.org))||''; const ig=(ev&&ev.instagram)||'';
+  return (nm||ig)?[{name:nm,instagram:ig}]:[];
+}
+// Botón Instagram estilo YourLift (pill oscuro, ícono SVG, hover borde rosa)
+function _igPill(handle,small){
+  const h=String(handle||'').replace(/^@/,'').trim(); if(!h)return '';
+  const url='https://instagram.com/'+encodeURIComponent(h);
+  const pad=small?'7px 13px':'9px 16px', fs=small?'11px':'13px', ic=small?15:17;
+  return `<a href="${url}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;color:rgba(235,242,250,.9);text-decoration:none;font-family:Oswald;font-size:${fs};letter-spacing:1px;padding:${pad};border:1px solid rgba(255,255,255,.22);border-radius:30px;background:rgba(255,255,255,.06);backdrop-filter:blur(6px);transition:all .15s;white-space:nowrap" onmouseover="this.style.borderColor='#E1306C';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(255,255,255,.22)';this.style.color='rgba(235,242,250,.9)'"><svg width="${ic}" height="${ic}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>@${h}</a>`;
+}
 function home(){
   const months=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
   const baseName=n=>String(n||'').replace(/\s*[-–]\s*tarima\s*\d+/i,'').trim();
@@ -971,8 +984,9 @@ function home(){
   }else{
     const d=new Date((next.date||'')+'T00:00:00');
     const dd=isNaN(d)?'--':d.getDate();const mm=isNaN(d)?'':months[d.getMonth()];const yy=isNaN(d)?'':d.getFullYear();
-    const nIg=(next.instagram||'').replace(/^@/,'');
-    const nIgUrl=nIg?`https://instagram.com/${encodeURIComponent(nIg)}`:'';
+    const nOrgs=_evOrganizers(next);
+    const nOrgNames=nOrgs.map(o=>o.name).filter(Boolean).join(' · ');
+    const nIgHtml=nOrgs.map(o=>_igPill(o.instagram,false)).join('');
     const nLogo=next.logoUrl||'';
     const cd=cdStr(next.date);
     const cdHtml=cd&&!cd.done&&!cd.unknown
@@ -990,11 +1004,11 @@ function home(){
       </div>
       <div style="flex:1;min-width:240px">
         <div style="font-family:Oswald;font-size:clamp(20px,3vw,28px);font-weight:700;letter-spacing:1px;color:var(--text);text-transform:uppercase;line-height:1.1">${next.name||''}</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:8px">${next.organizer||next.org||''}${next.location?' · '+next.location:''}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:8px">${nOrgNames}${next.location?' · '+next.location:''}</div>
         ${cdHtml}
         <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;align-items:center">
           <button onclick="sv('nominas')" style="padding:11px 22px;background:var(--accent);color:#fff;border:none;border-radius:9px;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">VER NÓMINA</button>
-          ${nIgUrl?`<a href="${nIgUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;padding:11px 18px;background:rgba(225,48,108,.1);border:1px solid rgba(225,48,108,.5);color:#ff7eb0;border-radius:9px;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;text-decoration:none;transition:all .15s" onmouseover="this.style.background='rgba(225,48,108,.2)';this.style.color='#fff'" onmouseout="this.style.background='rgba(225,48,108,.1)';this.style.color='#ff7eb0'">📸 @${nIg}</a>`:''}
+          ${nIgHtml}
         </div>
       </div>
       ${nLogo?`<div style="flex-shrink:0;width:clamp(84px,11vw,124px);height:clamp(84px,11vw,124px);background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:14px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:10px"><img src="${nLogo}" alt="Logo ${next.name||''}" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.parentElement.style.display='none'"></div>`:''}
@@ -1012,20 +1026,21 @@ function home(){
       const dd=isNaN(d)?'--':d.getDate();const mm=isNaN(d)?'':months[d.getMonth()];const yy=isNaN(d)?'':d.getFullYear();
       let cierreTxt='';
       if(ev.preNominaCloseAt){const c=new Date(ev.preNominaCloseAt);if(!isNaN(c)){const diff=c-now;const dias=Math.floor(diff/864e5);cierreTxt=dias>0?`cierra en ${dias} día${dias!==1?'s':''}`:'cierra hoy';}}
-      const eIg=(ev.instagram||'').replace(/^@/,'');
-      const eIgUrl=eIg?`https://instagram.com/${encodeURIComponent(eIg)}`:'';
-      h+=`<div style="display:flex;align-items:center;gap:16px;background:rgba(17,34,59,.55);backdrop-filter:blur(8px);border:1px solid var(--border);border-left:4px solid var(--green);border-radius:12px;padding:14px 18px">
+      const eOrgs=_evOrganizers(ev);
+      const eOrgNames=eOrgs.map(o=>o.name).filter(Boolean).join(' · ');
+      const eIgHtml=eOrgs.map(o=>_igPill(o.instagram,true)).join('');
+      h+=`<div style="display:flex;align-items:center;gap:16px;background:rgba(17,34,59,.55);backdrop-filter:blur(8px);border:1px solid var(--border);border-left:4px solid var(--green);border-radius:12px;padding:14px 18px;flex-wrap:wrap">
         <div style="flex-shrink:0;text-align:center;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:8px 14px;min-width:60px">
           <div style="font-family:Oswald;font-size:24px;font-weight:700;color:var(--green);line-height:1">${dd}</div>
           <div style="font-family:Oswald;font-size:10px;letter-spacing:1px;color:rgba(34,197,94,.8)">${mm}</div>
           <div style="font-size:9px;color:var(--muted)">${yy}</div>
         </div>
         ${ev.logoUrl?`<div style="flex-shrink:0;width:48px;height:48px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:4px"><img src="${ev.logoUrl}" alt="" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.parentElement.style.display='none'"></div>`:''}
-        <div style="flex:1;min-width:0">
+        <div style="flex:1;min-width:160px">
           <div style="font-family:Oswald;font-size:15px;font-weight:600;letter-spacing:1px;color:var(--text);text-transform:uppercase;line-height:1.15">${ev.name||''}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:3px">${ev.organizer||ev.org||''}${ev.location?' · '+ev.location:''}${cierreTxt?` · <span style="color:var(--gold)">${cierreTxt}</span>`:''}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px">${eOrgNames}${ev.location?' · '+ev.location:''}${cierreTxt?` · <span style="color:var(--gold)">${cierreTxt}</span>`:''}</div>
         </div>
-        ${eIgUrl?`<a href="${eIgUrl}" target="_blank" rel="noopener" title="Instagram del organizador" style="flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:9px 14px;background:rgba(225,48,108,.1);border:1px solid rgba(225,48,108,.45);color:#ff7eb0;border-radius:8px;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;text-decoration:none">📸 IG</a>`:''}
+        ${eIgHtml}
         <button onclick="sv('insc')" style="flex-shrink:0;padding:10px 20px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">INSCRIBIRME</button>
       </div>`;
     });
