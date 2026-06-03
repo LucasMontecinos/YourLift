@@ -4087,6 +4087,16 @@ function _attCell(at){
   // pendiente (peso declarado, sin resultado)
   return '<span style="color:rgba(220,230,245,.85)">'+(w?w.toFixed(1):'—')+'</span>';
 }
+// Celda de intento para la PANTALLA DE TARIMA: marca el resultado con COLOR DE FONDO
+// (válido = verde, nulo = rojo), legible a distancia en una proyección grande.
+function _attTd(at, base){
+  if(!at || (!at.w && at.r===null)) return '<td style="'+base+';color:rgba(150,170,200,.30)">—</td>';
+  const w=at.w||0; const val=w?w.toFixed(1):'—';
+  if(at.r==='g') return '<td style="'+base+';background:rgba(34,197,94,.88);color:#06210f;font-weight:800">'+val+'</td>';
+  if(at.r==='n') return '<td style="'+base+';background:rgba(225,40,40,.85);color:#fff;font-weight:800;text-decoration:line-through;text-decoration-thickness:2px">'+val+'</td>';
+  // peso declarado, sin juzgar todavía
+  return '<td style="'+base+';color:#fff;font-weight:700">'+val+'</td>';
+}
 function renderTxJornada(){
   // Determinar qué tandas mostrar: las seleccionadas, o la actual si no hay set.
   let flights=window._JORNADA_FLIGHTS;
@@ -4118,7 +4128,7 @@ function renderTxJornada(){
   const weight=numAth*1.0+numCats*1.32;          // las cabeceras de categoría pesan +
   const unit=availH/weight;                       // alto de una fila de atleta (px)
   const hdrH=unit*1.32;                            // alto de fila de categoría (px)
-  const s=Math.max(.55,Math.min(1.8,unit/30));    // factor de escala de fuente
+  const s=Math.max(.6,Math.min(2.1,unit/26));     // factor de escala de fuente (más grande para proyección)
   const fs=b=>Math.max(8,Math.round(b*s));        // tamaño de fuente escalado
   // Escala extra solo para el NOMBRE, controlable a distancia desde el panel
   const nameScale=(typeof window._JORNADA_NAMESCALE==='number')?window._JORNADA_NAMESCALE:1;
@@ -4142,29 +4152,29 @@ function renderTxJornada(){
       const a=row.a;
       const sub=l=>{const b=bestOf(a,l);return b?b.toFixed(1):'—';};
       const td='vertical-align:middle;text-align:center;font-family:Oswald;font-size:'+fs(14)+'px';
-      rows+='<tr style="height:'+unit.toFixed(2)+'px;border-bottom:1px solid rgba(212,168,67,.10)">'
+      rows+='<tr style="height:'+unit.toFixed(2)+'px;border-bottom:1px solid rgba(212,168,67,.12);background:'+(i%2?'rgba(255,255,255,.035)':'transparent')+'">'
         +'<td style="'+td+';font-weight:700;color:#D4A843;padding:0 4px">'+(row.tot>0?(i+1):'—')+'</td>'
         +'<td style="vertical-align:middle;padding:0 10px;font-family:Inter,sans-serif;font-weight:600;color:#fff;font-size:'+Math.round(fs(15)*nameScale)+'px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+a.name+'</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.75)">CHI</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.65)">'+(_yob2(a)||'—')+'</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.9)">'+(a.bw?a.bw.toFixed(1):'—')+'</td>'
         // SQ 3 intentos + subtotal
-        +'<td style="'+td+'">'+_attCell(a.att.sq[0])+'</td>'
-        +'<td style="'+td+'">'+_attCell(a.att.sq[1])+'</td>'
-        +'<td style="'+td+'">'+_attCell(a.att.sq[2])+'</td>'
-        +'<td style="'+td+';font-weight:700;color:#3b82f6;background:rgba(59,130,246,.06)">'+sub('sq')+'</td>'
+        +_attTd(a.att.sq[0],td)
+        +_attTd(a.att.sq[1],td)
+        +_attTd(a.att.sq[2],td)
+        +'<td style="'+td+';font-weight:700;color:#7fb2ff;background:rgba(59,130,246,.16)">'+sub('sq')+'</td>'
         // BP 3 intentos + subtotal
-        +'<td style="'+td+'">'+_attCell(a.att.bp[0])+'</td>'
-        +'<td style="'+td+'">'+_attCell(a.att.bp[1])+'</td>'
-        +'<td style="'+td+'">'+_attCell(a.att.bp[2])+'</td>'
-        +'<td style="'+td+';font-weight:700;color:#f59e0b;background:rgba(245,158,11,.06)">'+sub('bp')+'</td>'
+        +_attTd(a.att.bp[0],td)
+        +_attTd(a.att.bp[1],td)
+        +_attTd(a.att.bp[2],td)
+        +'<td style="'+td+';font-weight:700;color:#ffc861;background:rgba(245,158,11,.16)">'+sub('bp')+'</td>'
         // DL 3 intentos + total
-        +'<td style="'+td+'">'+_attCell(a.att.dl[0])+'</td>'
-        +'<td style="'+td+'">'+_attCell(a.att.dl[1])+'</td>'
-        +'<td style="'+td+'">'+_attCell(a.att.dl[2])+'</td>'
+        +_attTd(a.att.dl[0],td)
+        +_attTd(a.att.dl[1],td)
+        +_attTd(a.att.dl[2],td)
         // total + GL
-        +'<td style="'+td+';font-size:'+fs(16)+'px;font-weight:700;color:'+(row.tot>0?'#fff':'rgba(150,170,200,.4)')+';background:rgba(212,168,67,.08)">'+(row.tot>0?row.tot.toFixed(1):'—')+'</td>'
-        +'<td style="'+td+';font-weight:700;color:#D4A843">'+(row.gl>0?row.gl.toFixed(2):'—')+'</td>'
+        +'<td style="'+td+';font-size:'+fs(19)+'px;font-weight:800;color:'+(row.tot>0?'#fff':'rgba(150,170,200,.4)')+';background:rgba(212,168,67,.16)">'+(row.tot>0?row.tot.toFixed(1):'—')+'</td>'
+        +'<td style="'+td+';font-size:'+fs(16)+'px;font-weight:800;color:#F0C04A">'+(row.gl>0?row.gl.toFixed(2):'—')+'</td>'
         +'</tr>';
     });
   });
