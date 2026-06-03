@@ -680,6 +680,17 @@ function _normDiv(d){
   if(v.includes('master1')||(v.includes('masteri')&&!v.includes('ii')))return 'Master I';
   return d;
 }
+// Normaliza el sexo a 'M' / 'F' (acepta M, Masculino, Hombre, Varón / F, Femenino, Mujer, Dama).
+// Sirve para agrupar categorías: evita que "M" y "Masculino" caigan en grupos distintos.
+function _normSex(s){
+  const v=(s||'').toString().trim().toLowerCase();
+  if(v.startsWith('f')||v.startsWith('muj')||v.startsWith('dam')||v.startsWith('w'))return 'F';
+  if(v.startsWith('m')||v.startsWith('h')||v.startsWith('v'))return 'M';
+  return v?v.toUpperCase():'?';
+}
+// Clave única de categoría (sexo|cat|div) normalizada — agrupa correctamente aunque
+// los valores vengan con espacios, mayúsculas o sinónimos distintos.
+function _catGroupKey(a){return _normSex(a&&a.sex)+'|'+_normCat((a&&a.cat)||'?')+'|'+_normDiv((a&&a.div)||'Sin Div');}
 function checkRecord(athlete,lift,round){
   if(!RECORDS)return;
   if(DATA.event && DATA.event.recordsEnabled===false)return;
@@ -958,6 +969,7 @@ function openWeighIn(id){
         <select id="wi_mod" style="padding:9px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:13px">
           <option value="classic" ${a.mod==='classic'?'selected':''}>Classic (Raw)</option>
           <option value="equipped" ${a.mod==='equipped'?'selected':''}>Equipado</option>
+          <option value="oe_classic" ${a.mod==='oe_classic'?'selected':''}>Olimpiadas Especiales (OE)</option>
           <option value="universitario" ${a.mod==='universitario'?'selected':''}>Universitario</option>
           <option value="onlybench" ${a.mod==='onlybench'?'selected':''}>Only Bench</option>
           <option value="classic_bench" ${a.mod==='classic_bench'?'selected':''}>Classic + Only Bench</option>
@@ -4083,7 +4095,7 @@ function renderTxJornada(){
   if(!pool.length) return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;color:rgba(220,230,245,.6);font-size:24px;letter-spacing:3px">SIN ATLETAS EN LAS TANDAS SELECCIONADAS</div>';
   // Agrupar por categoría (sexo|cat|div)
   const groups={};
-  pool.forEach(a=>{const k=(a.sex||'')+'|'+(a.cat||'')+'|'+(a.div||'');(groups[k]=groups[k]||[]).push(a);});
+  pool.forEach(a=>{const k=_catGroupKey(a);(groups[k]=groups[k]||[]).push(a);});
   // Orden de grupos: sexo (M antes F), luego peso asc, luego división
   const DIVO={'Sub Junior':0,'Sub-Junior':0,'Subjunior':0,'Junior':1,'Open':2,'Master I':3,'Master II':4,'Master III':5,'Master IV':6};
   const catNum=c=>{const s=String(c||'');return s.includes('+')?1000+(parseFloat(s)||0):(parseFloat(s)||999);};
@@ -5670,9 +5682,9 @@ function _renderResultsTable(opts){
   const isBench=view==='bench';
   const all=opts.athletes.map(a=>({...a,total:totalOf(a,view),gl:calcGL(totalOf(a,view),a.bw,a.sex,a.mod,view)}));
   if(!all.length)return '';
-  const SEP='';
+  const SEP='|';
   const catGroups={};
-  all.forEach(a=>{const k=(a.sex||'?')+SEP+(a.cat||'?')+SEP+(a.div||'Sin Div');if(!catGroups[k])catGroups[k]=[];catGroups[k].push(a);});
+  all.forEach(a=>{const k=_catGroupKey(a);if(!catGroups[k])catGroups[k]=[];catGroups[k].push(a);});
   // Orden dentro de cada cat+div+sex: primero los con total válido (mayor a menor),
   // luego los DQ (3 fails en algún lift), luego los sin total / no clasificados.
   Object.values(catGroups).forEach(arr=>arr.sort((a,b)=>{
@@ -5727,10 +5739,10 @@ function _renderResultsTable(opts){
   h+='</tr></thead><tbody>';
   let prevCat='';
   sorted.forEach(a=>{
-    const catKey=(a.sex||'?')+SEP+(a.cat||'?')+SEP+(a.div||'Sin Div');
+    const catKey=_catGroupKey(a);
     if(catKey!==prevCat){
-      const symb=(a.sex==='Femenino'||a.sex==='Mujer'||a.sex==='F'?'♀':'♂');
-      h+='<tr><td colspan="'+colspanTotal+'" style="padding:7px 8px;background:rgba(196,30,58,.1);border-bottom:2px solid var(--accent);font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--accent)">'+symb+' '+a.cat+' — '+(a.div||'Sin Div')+'</td></tr>';
+      const symb=(_normSex(a.sex)==='F'?'♀':'♂');
+      h+='<tr><td colspan="'+colspanTotal+'" style="padding:7px 8px;background:rgba(196,30,58,.1);border-bottom:2px solid var(--accent);font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--accent)">'+symb+' '+_normCat(a.cat||'?')+' — '+_normDiv(a.div||'Sin Div')+'</td></tr>';
       prevCat=catKey;
     }
     const dq = view==='meet' && isDQ(a);
