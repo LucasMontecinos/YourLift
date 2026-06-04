@@ -234,8 +234,15 @@ function setBgForSection(section){
   const map=window._BG_VIDEOS||{};
   const cfg=(window._BG_SETTINGS||{})[section]||{};
   const url=map[section]||map['default'];
+  const videoOn = !!url && cfg.enabled!==false;
+  // Si el hero del Inicio tiene fondo opaco propio, taparlo cuando hay video
+  // (así el video se ve también detrás del logo/botones, no solo abajo).
+  const heroSolid=document.getElementById('heroSolidBg');
+  const heroFade=document.getElementById('heroFadeBg');
+  if(heroSolid)heroSolid.style.opacity=videoOn?'0':'1';
+  if(heroFade)heroFade.style.opacity=videoOn?'0':'1';
   // Sin video o sección apagada → fondo normal
-  if(!url || cfg.enabled===false){
+  if(!videoOn){
     v.style.display='none';v.style.opacity='0';
     if(ov)ov.style.background='transparent';
     wrap.style.bottom='0';wrap.style.height='';
@@ -997,9 +1004,9 @@ function home(){
 
   let h=`
   <div style="position:relative;margin:-90px calc(-50vw + 50%) 44px;width:100vw;min-height:clamp(460px,72vh,680px);display:flex;align-items:center;justify-content:center;overflow:hidden">
-    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,#142a4d 0%,#0a1628 45%,#06101f 100%)"></div>
+    <div id="heroSolidBg" style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,#142a4d 0%,#0a1628 45%,#06101f 100%);transition:opacity .4s"></div>
     <div style="position:absolute;inset:0;background:radial-gradient(circle at 20% 30%,rgba(196,30,58,.18) 0%,transparent 45%),radial-gradient(circle at 80% 70%,rgba(212,168,67,.14) 0%,transparent 45%)"></div>
-    <div style="position:absolute;inset:0;background:linear-gradient(180deg,transparent 60%,#06101f 100%)"></div>
+    <div id="heroFadeBg" style="position:absolute;inset:0;background:linear-gradient(180deg,transparent 60%,#06101f 100%);transition:opacity .4s"></div>
     <div style="position:relative;z-index:2;text-align:center;padding:70px 20px">
       <img src="yourlift_logo_hd.png" alt="YourLift" style="height:clamp(110px,18vw,220px);width:auto;margin:0 auto 22px;display:block;filter:drop-shadow(0 8px 36px rgba(0,0,0,.7))">
       <p style="font-size:clamp(15px,2.5vw,20px);color:rgba(235,242,250,.95);max-width:680px;margin:0 auto 32px;line-height:1.6;text-shadow:0 2px 12px rgba(0,0,0,.6)">La tecnología del powerlifting chileno: inscripciones, nóminas, ranking nacional, récords y transmisión en vivo, todo en un solo lugar.</p>

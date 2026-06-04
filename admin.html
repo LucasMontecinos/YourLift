@@ -116,10 +116,12 @@ import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged,createUser
 import {initializeApp as initSecondaryApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,getFirestore,collection,getDocs,getDoc,doc,setDoc,updateDoc,deleteDoc,deleteField,addDoc,query,where,orderBy,limit,onSnapshot,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import {getStorage,ref as storageRef,uploadBytes,getDownloadURL,deleteObject,listAll} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js';
 
 const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
 const app=initializeApp(FB_CFG);
 const auth=getAuth(app);
+const fbFunctions=getFunctions(app,'us-central1');
 let db;
 try{
   db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})});
@@ -1466,6 +1468,7 @@ function render(){
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='stats'?'active':''}" onclick="go('stats')"><span class="icon">📈</span>Estadísticas</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='publisher'?'active':''}" onclick="go('publisher')"><span class="icon">🎨</span>Editor publicaciones</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='bgvideos'?'active':''}" onclick="go('bgvideos')"><span class="icon">🎬</span>Videos de Fondo</button>`:''}
+      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='ai'?'active':''}" onclick="go('ai')"><span class="icon">🤖</span>Asistente IA</button>`:''}
       <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')"><span class="icon">✓</span>Aprobaciones</button>
       <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')"><span class="icon">✏️</span>Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
       <button class="side-btn ${ST.view==='entrenadores'?'active':''}" onclick="go('entrenadores')"><span class="icon">👥</span>Entrenadores</button>
@@ -1491,6 +1494,7 @@ function render(){
   else if(ST.view==='nominas')content=renderNominas();
   else if(ST.view==='stats'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderStats();else go('athletes');}
   else if(ST.view==='bgvideos'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderBgVideos();else go('athletes');}
+  else if(ST.view==='ai'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderAi();else go('athletes');}
   else if(ST.view==='publisher'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderPublisher();else go('athletes');}
   else if(ST.view==='approvals')content=renderApprovals();
   else if(ST.view==='editRequests')content=renderEditRequests();
@@ -1739,6 +1743,71 @@ window.exportWebCSV=function(){
   setTimeout(()=>URL.revokeObjectURL(u),1000);
 };
 
+// ════════════ ASISTENTE IA — Fase 1: lectura / diagnóstico (owner) ════════════
+function aiMd(t){
+  let s=String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  s=s.replace(/`([^`]+)`/g,'<code style="background:rgba(212,168,67,.14);padding:1px 5px;border-radius:4px;font-size:12px">$1</code>');
+  s=s.replace(/\n/g,'<br>');
+  return s;
+}
+window._AI_SUG=[
+  '¿Cuántas inscripciones hay por evento?',
+  'Buscá inscripciones con el sexo inconsistente (algunas Hombre y otras Masculino)',
+  '¿Hay inscripciones pendientes? Decime por qué quedaron así.',
+  '¿El doc de livecast_sync del evento del Sudamericano existe y tiene atletas?'
+];
+function renderAi(){
+  if(!ST.aiMessages)ST.aiMessages=[];
+  const msgs=ST.aiMessages;
+  let h='<div style="max-width:920px;margin:0 auto;display:flex;flex-direction:column;height:calc(100vh - 96px)">';
+  h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px"><h1 style="font-family:Oswald;font-size:24px;letter-spacing:1px">🤖 Asistente IA</h1><span style="font-size:11px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:10px">solo lectura · diagnóstico</span>'+(msgs.length?'<button onclick="ST.aiMessages=[];render()" style="margin-left:auto;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:5px 10px;cursor:pointer">Limpiar</button>':'')+'</div>';
+  h+='<p style="color:var(--muted);font-size:12px;margin-bottom:12px">Preguntá sobre el sistema o pedile diagnosticar fallas (inscripciones, livecast, datos). Lee Firestore en vivo; no modifica nada.</p>';
+  h+='<div id="aiMsgs" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--card);display:flex;flex-direction:column;gap:12px">';
+  if(!msgs.length){
+    h+='<div style="color:var(--muted);font-size:13px;text-align:center;margin:auto 0"><div style="font-size:34px;margin-bottom:8px">💬</div>Probá con:<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px">';
+    window._AI_SUG.forEach((s,i)=>{h+=`<button onclick="aiSuggest(${i})" style="padding:8px 13px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:20px;font-size:12px;cursor:pointer">${s}</button>`;});
+    h+='</div></div>';
+  } else {
+    msgs.forEach(m=>{
+      if(m.role==='user') h+=`<div style="align-self:flex-end;max-width:80%;background:var(--accent);color:#fff;padding:10px 14px;border-radius:14px 14px 4px 14px;font-size:14px">${aiMd(m.content)}</div>`;
+      else h+=`<div style="align-self:flex-start;max-width:90%;background:rgba(10,22,40,.6);border:1px solid var(--border);padding:12px 16px;border-radius:14px 14px 14px 4px;font-size:14px;line-height:1.55">${aiMd(m.content)}</div>`;
+    });
+  }
+  if(ST.aiBusy)h+='<div style="align-self:flex-start;color:var(--gold);font-size:13px;font-style:italic">⏳ El asistente está mirando los datos…</div>';
+  h+='</div>';
+  h+='<div style="display:flex;gap:8px;margin-top:12px">';
+  h+=`<textarea id="aiInput" rows="2" placeholder="Escribí tu pregunta… (Enter para enviar)" onkeydown="aiKey(event)" ${ST.aiBusy?'disabled':''} style="flex:1;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;resize:none;font-family:inherit"></textarea>`;
+  h+=`<button onclick="sendAi()" ${ST.aiBusy?'disabled':''} class="btn btn-g" style="padding:0 22px">Enviar</button>`;
+  h+='</div>';
+  h+='<div style="font-size:10px;color:var(--muted);margin-top:6px">Requiere la Cloud Function <code>aiAssistant</code> desplegada con el secreto ANTHROPIC_API_KEY. Fase 1: no modifica datos.</div>';
+  h+='</div>';
+  setTimeout(()=>{const e=document.getElementById('aiMsgs');if(e)e.scrollTop=e.scrollHeight;const i=document.getElementById('aiInput');if(i&&!ST.aiBusy)i.focus();},30);
+  return h;
+}
+window.aiSuggest=function(i){const inp=document.getElementById('aiInput');if(inp){inp.value=window._AI_SUG[i]||'';sendAi();}};
+window.aiKey=function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendAi();}};
+window.sendAi=async function(){
+  if(ST.aiBusy)return;
+  const inp=document.getElementById('aiInput');const text=(inp?.value||'').trim();if(!text)return;
+  if(!ST.aiMessages)ST.aiMessages=[];
+  ST.aiMessages.push({role:'user',content:text});
+  ST.aiBusy=true;render();
+  try{
+    const call=httpsCallable(fbFunctions,'aiAssistant');
+    const res=await call({messages:ST.aiMessages.map(m=>({role:m.role,content:m.content}))});
+    ST.aiMessages.push({role:'assistant',content:(res&&res.data&&res.data.reply)||'(sin respuesta)'});
+  }catch(e){
+    let msg='⚠️ No pude contactar al asistente. ';
+    const em=(e&&e.message)||String(e);
+    if(/not-found|NOT_FOUND/i.test(em)) msg+='La Cloud Function `aiAssistant` no está desplegada. Corré: cd functions && npm install, después firebase deploy --only functions.';
+    else if(/secret|ANTHROPIC|api key/i.test(em)) msg+='Falta cargar el secreto: firebase functions:secrets:set ANTHROPIC_API_KEY';
+    else if(/permission|unauthenticated/i.test(em)) msg+='Permisos: solo admin/owner puede usar el asistente.';
+    else msg+=em;
+    ST.aiMessages.push({role:'assistant',content:msg});
+  }
+  ST.aiBusy=false;render();
+};
 // ════════════ VIDEOS DE FONDO POR SECCIÓN (owner) ════════════
 const BG_SECTIONS=[['home','Inicio (portada)','🏠'],['trans','Transmisiones','📺'],['rank','Ranking','🏆'],['nominas','Nóminas','📋'],['insc','Inscripción','📝'],['records','Records','🏅'],['atletas','Atletas','👤'],['stats','Estadísticas','📊']];
 async function loadBgConfig(){
