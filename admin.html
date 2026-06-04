@@ -115,7 +115,7 @@ import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase
 import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged,createUserWithEmailAndPassword} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {initializeApp as initSecondaryApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,getFirestore,collection,getDocs,getDoc,doc,setDoc,updateDoc,deleteDoc,deleteField,addDoc,query,where,orderBy,limit,onSnapshot,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import {getStorage,ref as storageRef,uploadBytes,getDownloadURL,deleteObject} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+import {getStorage,ref as storageRef,uploadBytes,getDownloadURL,deleteObject,listAll} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
 const app=initializeApp(FB_CFG);
@@ -1465,6 +1465,7 @@ function render(){
       <button class="side-btn ${ST.view==='nominas'?'active':''}" onclick="go('nominas')"><span class="icon">📋</span>Nóminas</button>
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='stats'?'active':''}" onclick="go('stats')"><span class="icon">📈</span>Estadísticas</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='publisher'?'active':''}" onclick="go('publisher')"><span class="icon">🎨</span>Editor publicaciones</button>`:''}
+      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='bgvideos'?'active':''}" onclick="go('bgvideos')"><span class="icon">🎬</span>Videos de Fondo</button>`:''}
       <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')"><span class="icon">✓</span>Aprobaciones</button>
       <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')"><span class="icon">✏️</span>Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
       <button class="side-btn ${ST.view==='entrenadores'?'active':''}" onclick="go('entrenadores')"><span class="icon">👥</span>Entrenadores</button>
@@ -1489,6 +1490,7 @@ function render(){
   if(ST.view==='athletes')content=renderAthletes();
   else if(ST.view==='nominas')content=renderNominas();
   else if(ST.view==='stats'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderStats();else go('athletes');}
+  else if(ST.view==='bgvideos'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderBgVideos();else go('athletes');}
   else if(ST.view==='publisher'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderPublisher();else go('athletes');}
   else if(ST.view==='approvals')content=renderApprovals();
   else if(ST.view==='editRequests')content=renderEditRequests();
@@ -1737,6 +1739,92 @@ window.exportWebCSV=function(){
   setTimeout(()=>URL.revokeObjectURL(u),1000);
 };
 
+// ════════════ VIDEOS DE FONDO POR SECCIÓN (owner) ════════════
+const BG_SECTIONS=[['home','Inicio (portada)','🏠'],['trans','Transmisiones','📺'],['rank','Ranking','🏆'],['nominas','Nóminas','📋'],['insc','Inscripción','📝'],['records','Records','🏅'],['atletas','Atletas','👤'],['stats','Estadísticas','📊']];
+async function loadBgConfig(){
+  const out={settings:{},videos:{}};
+  try{const snap=await getDocs(collection(db,'site_backgrounds'));snap.forEach(d=>out.settings[d.id]=d.data()||{});}catch(e){console.warn('[bg] settings',e.message);}
+  try{const storage=getStorage(app);const l=await listAll(storageRef(storage,'videos/sections'));for(const it of l.items){const m=it.name.match(/^bg_([a-z]+)\./i);if(m)out.videos[m[1].toLowerCase()]=await getDownloadURL(it);}}catch(e){console.warn('[bg] videos',e.message);}
+  ST.bgConfig=out;render();
+}
+function renderBgVideos(){
+  if(!ST.bgConfig){loadBgConfig();return '<div class="ld" style="padding:60px;text-align:center;color:var(--muted)">Cargando configuración…</div>';}
+  const S=ST.bgConfig.settings,V=ST.bgConfig.videos;
+  let h='<div style="max-width:1000px"><h1 style="font-family:Oswald;font-size:26px;letter-spacing:1px">🎬 Videos de Fondo</h1>';
+  h+='<p style="color:var(--muted);font-size:13px;margin:6px 0 22px">Elegí un video de fondo por sección del sitio público. Controlá dónde se ubica, el oscurecido y el desenfoque. Owner-only.</p>';
+  BG_SECTIONS.forEach(([key,label,ic])=>{
+    const c=S[key]||{},vurl=V[key];
+    const en=c.enabled!==false&&!!vurl;
+    const ov=typeof c.overlay==='number'?c.overlay:60;
+    const bl=typeof c.blur==='number'?c.blur:0;
+    const op=c.objPos||'center',pl=c.placement||'full';
+    const sel=(v,want)=>v===want?'selected':'';
+    h+=`<div class="card" style="margin-bottom:16px;padding:18px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <span style="font-size:22px">${ic}</span>
+        <div style="flex:1"><div style="font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:1px">${label}</div>
+        <div style="font-size:11px;color:${vurl?'var(--green)':'var(--muted)'}">${vurl?'✓ video cargado':'sin video'}</div></div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><input type="checkbox" id="bg_en_${key}" ${en?'checked':''} ${vurl?'':'disabled'}> Activo</label>
+      </div>
+      <div style="display:grid;grid-template-columns:200px 1fr;gap:18px;align-items:start">
+        <div>
+          <div style="aspect-ratio:16/9;background:#0a1628;border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;margin-bottom:8px">
+            ${vurl?`<video src="${vurl}" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover"></video>`:'<span style="color:var(--muted);font-size:11px">sin video</span>'}
+          </div>
+          <input type="file" id="bg_file_${key}" accept="video/*" onchange="uploadBgVideo('${key}',this.files[0])" style="font-size:11px;width:100%;color:var(--muted)">
+          <div id="bg_st_${key}" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <label style="font-size:11px;color:var(--muted)">Ubicación
+            <select id="bg_pl_${key}" class="inp"><option value="full" ${sel(pl,'full')}>Fondo completo</option><option value="hero" ${sel(pl,'hero')}>Solo portada (arriba)</option></select></label>
+          <label style="font-size:11px;color:var(--muted)">Encuadre
+            <select id="bg_op_${key}" class="inp"><option value="center" ${sel(op,'center')}>Centro</option><option value="top" ${sel(op,'top')}>Arriba</option><option value="bottom" ${sel(op,'bottom')}>Abajo</option></select></label>
+          <label style="font-size:11px;color:var(--muted)">Oscurecer: <span id="bg_ovv_${key}">${ov}%</span>
+            <input type="range" id="bg_ov_${key}" min="0" max="95" step="5" value="${ov}" oninput="document.getElementById('bg_ovv_${key}').textContent=this.value+'%'" style="width:100%"></label>
+          <label style="font-size:11px;color:var(--muted)">Desenfoque: <span id="bg_blv_${key}">${bl}px</span>
+            <input type="range" id="bg_bl_${key}" min="0" max="14" step="1" value="${bl}" oninput="document.getElementById('bg_blv_${key}').textContent=this.value+'px'" style="width:100%"></label>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-g" onclick="saveBgVideo('${key}')">💾 Guardar ${label}</button>
+      </div>
+    </div>`;
+  });
+  h+='</div>';
+  return h;
+}
+window.uploadBgVideo=async function(section,file){
+  if(!file)return;
+  const st=document.getElementById('bg_st_'+section);if(st)st.textContent='⏳ Subiendo… (puede tardar)';
+  try{
+    const storage=getStorage(app);
+    // Borrar videos viejos de esta sección (cualquier extensión)
+    try{const l=await listAll(storageRef(storage,'videos/sections'));for(const it of l.items){if(it.name.toLowerCase().startsWith('bg_'+section+'.'))await deleteObject(it).catch(()=>{});}}catch(e){}
+    const ext=(file.name.split('.').pop()||'mp4').toLowerCase().replace(/[^a-z0-9]/g,'')||'mp4';
+    const r=storageRef(storage,'videos/sections/bg_'+section+'.'+ext);
+    await uploadBytes(r,file,{contentType:file.type||'video/mp4'});
+    const url=await getDownloadURL(r);
+    ST.bgConfig.videos[section]=url;
+    if(st)st.textContent='✓ Video subido';
+    render();
+  }catch(e){if(st)st.textContent='❌ '+e.message;console.warn('[bg upload]',e);}
+};
+window.saveBgVideo=async function(section){
+  const g=id=>document.getElementById(id);
+  const data={
+    enabled: !!g('bg_en_'+section)?.checked,
+    placement: g('bg_pl_'+section)?.value||'full',
+    objPos: g('bg_op_'+section)?.value||'center',
+    overlay: parseInt(g('bg_ov_'+section)?.value||'60'),
+    blur: parseInt(g('bg_bl_'+section)?.value||'0'),
+    ts: Date.now()
+  };
+  try{
+    await setDoc(doc(db,'site_backgrounds',section),data,{merge:true});
+    ST.bgConfig.settings[section]=Object.assign({},ST.bgConfig.settings[section],data);
+    showToast('✅ Guardado: '+section+' (se aplica en el sitio al recargar)');
+  }catch(e){showToast('Error: '+e.message,null,true);}
+};
 function renderStats(){
   if(!(ST.adminInfo?.role==='superadmin'||ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap))
     return '<div class="h1">Sin acceso</div><p class="subtitle">Solo el owner puede ver las estadísticas.</p>';
