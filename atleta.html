@@ -230,6 +230,31 @@ const PEERS={"M|93|Open|classic":{"n":44,"avg":589.5,"top":740,"p75":680,"p50":5
           });
         });
       }catch(ep){console.warn('[atletas_pending]',ep.message);}
+
+      // Overlay de ediciones del admin (athlete_edits): club, nombre, etc.
+      // Matchea por RUT (estable), fallback a código. Soporta borrado.
+      try{
+        const rutNormE=s=>String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();
+        const editsSnap=await _fbMod.getDocs(_fbMod.collection(_fbDB,'athlete_edits'));
+        editsSnap.forEach(d=>{
+          const ed=d.data();
+          let idx=-1;
+          if(ed.rut) idx=DB.findIndex(x=>rutNormE(x.rut)===rutNormE(ed.rut));
+          if(idx<0 && ed.codigo) idx=DB.findIndex(x=>x.codigo===ed.codigo);
+          if(idx<0) return;
+          if(ed.deleted){ DB.splice(idx,1); return; }
+          const a=DB[idx];
+          if(ed.nombre)a.nombre=ed.nombre;
+          if(ed.club!==undefined)a.club=ed.club;
+          if(ed.debut!==undefined)a.debut=ed.debut;
+          if(ed.rut)a.rut=ed.rut;
+          if(ed.codigo)a.codigo=ed.codigo;
+          if(ed.sexo)a.sexo=ed.sexo;
+          if(ed.fechaNac)a.fechaNac=ed.fechaNac;
+          if(ed.zona)a.zona=ed.zona;
+          if(ed.comuna)a.comuna=ed.comuna;
+        });
+      }catch(ee){console.warn('[athlete_edits]',ee.message);}
     }
 
     const params=new URLSearchParams(location.search);
