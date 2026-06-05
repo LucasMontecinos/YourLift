@@ -823,6 +823,17 @@ function setAtt(id,l,r,val){
   if(typeof R==='function')R();
 }
 
+// Timer de cambio (60s tras marcar un intento) — APAGADO por defecto.
+// El operador lo prende desde Control en Vivo si lo necesita. Con él apagado,
+// las celdas no muestran el reloj y se carga el próximo peso directo.
+window._CT_ENABLED = localStorage.getItem('yl_ct')==='1';
+window.toggleChangeTimers=function(){
+  window._CT_ENABLED=!window._CT_ENABLED;
+  try{localStorage.setItem('yl_ct', window._CT_ENABLED?'1':'0')}catch(e){}
+  if(!window._CT_ENABLED) DATA.changeTimers={}; // limpiar los timers activos al apagar
+  if(typeof saveNow==='function')saveNow();
+  if(typeof R==='function')R();
+};
 function setResult(id,l,r,res){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;a.att[l][r].r=res;
   if(r<2){
@@ -830,7 +841,7 @@ function setResult(id,l,r,res){
     // Solo arrancar el change timer si el próximo intento NO tiene peso declarado.
     // Si el operador ya cargó el peso antes de marcar este intento, no hay que
     // pedirle que lo declare otra vez ni hacer sonar la alarma a los 60s.
-    if(!a.att[l][r+1]||!a.att[l][r+1].w){
+    if(window._CT_ENABLED && (!a.att[l][r+1]||!a.att[l][r+1].w)){
       DATA.changeTimers[key]={remaining:60,expired:false};
       startCT(key);
     } else if(DATA.changeTimers[key]){
@@ -1430,7 +1441,7 @@ function overrideResult(id,l,r,res){
   if(!wasSame && res){
     if(l===DATA.lift && r===DATA.round && r<2){
       const key=id+'_'+l+'_'+(r+1);
-      if(!a.att[l][r+1]||!a.att[l][r+1].w){
+      if(window._CT_ENABLED && (!a.att[l][r+1]||!a.att[l][r+1].w)){
         DATA.changeTimers[key]={remaining:60,expired:false};
         startCT(key);
       } else if(DATA.changeTimers[key]){
@@ -5742,7 +5753,13 @@ function renderCompete(){
   const cw=cur?cur.att[DATA.lift][DATA.round].w:0;
   let h='<div class="fade">';
   h+='<div style="display:flex;gap:6px;margin-bottom:8px">'+LIFTS.map(l=>'<button onclick="DATA.lift=\''+l+'\';DATA.round=0;save();R()" class="os" style="flex:1;padding:9px 0;border-radius:8px;border:2px solid '+(DATA.lift===l?LIFT_C[l]:'var(--border)')+';background:'+(DATA.lift===l?LIFT_C[l]+'20':'transparent')+';color:'+(DATA.lift===l?LIFT_C[l]:'var(--muted)')+';font-size:13px;font-weight:700;letter-spacing:2px;cursor:pointer">'+LIFT_N[l]+'</button>').join('')+'</div>';
-  h+='<div style="display:flex;gap:6px;margin-bottom:14px">'+[0,1,2].map(r=>'<button onclick="DATA.round='+r+';save();R()" class="os" style="flex:1;padding:6px 0;border-radius:6px;border:1px solid '+(DATA.round===r?'var(--gold)':'var(--border)')+';background:'+(DATA.round===r?'rgba(212,168,67,.15)':'transparent')+';color:'+(DATA.round===r?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:600;cursor:pointer">INTENTO '+(r+1)+'</button>').join('')+'</div>';
+  h+='<div style="display:flex;gap:6px;margin-bottom:10px">'+[0,1,2].map(r=>'<button onclick="DATA.round='+r+';save();R()" class="os" style="flex:1;padding:6px 0;border-radius:6px;border:1px solid '+(DATA.round===r?'var(--gold)':'var(--border)')+';background:'+(DATA.round===r?'rgba(212,168,67,.15)':'transparent')+';color:'+(DATA.round===r?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:600;cursor:pointer">INTENTO '+(r+1)+'</button>').join('')+'</div>';
+  // Toggle: timer de cambio (60s tras válido/nulo). Apagado por defecto.
+  {const cton=!!window._CT_ENABLED;
+   h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:7px 12px;border-radius:8px;border:1px solid '+(cton?'rgba(245,158,11,.4)':'var(--border)')+';background:'+(cton?'rgba(245,158,11,.08)':'transparent')+'">'
+     +'<span style="font-size:11px;color:var(--muted)">⏱ Timer de cambio (60s entre intentos) <b style="color:'+(cton?'var(--orange)':'var(--muted)')+'">'+(cton?'ACTIVADO':'APAGADO')+'</b></span>'
+     +'<button onclick="toggleChangeTimers()" style="padding:5px 14px;border-radius:6px;border:1px solid '+(cton?'var(--orange)':'var(--border)')+';background:transparent;color:'+(cton?'var(--orange)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(cton?'APAGAR':'ACTIVAR')+'</button>'
+   +'</div>';}
   h+='<div style="display:grid;grid-template-columns:1fr 300px;gap:14px"><div>';
   if(cur){
     // Info compacta del atleta actual (sin botones grandes - los GOOD/NO LIFT estan en la tabla)
