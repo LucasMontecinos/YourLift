@@ -365,9 +365,13 @@ function startFBSync(){
       const prevSig = (DATA.athletes?JSON.stringify(DATA.athletes):'')+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight;
       DATA.event=d.event||DATA.event;
       DATA.athletes=JSON.parse(d.athletes||'[]');
-      DATA.lift=d.lift||DATA.lift;
-      DATA.round=typeof d.round==='number'?d.round:DATA.round;
-      DATA.flight=d.flight||DATA.flight;
+      // NO pisar la navegación (lift/round/flight) si acabo de cambiarla yo localmente
+      // (evita que un snapshot entrante me devuelva a SQ / Intento 1 / Tanda A).
+      if((Date.now()-(window._lastLocalAction||0))>=2500){
+        DATA.lift=d.lift||DATA.lift;
+        DATA.round=typeof d.round==='number'?d.round:DATA.round;
+        DATA.flight=d.flight||DATA.flight;
+      }
       DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
       DATA.lotsGenerated=d.lotsGenerated||false;
       if(typeof d.timer==='number'){DATA.timer=d.timer;DATA.timerOn=d.timerOn||false;if(DATA.timerOn&&!mainTI)startTimer();if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}}
@@ -578,10 +582,10 @@ function totalOf(a,view){
 }
 function rankings(){return DATA.athletes.map(a=>({...a,total:totalOf(a),gl:calcGL(totalOf(a),a.bw,a.sex,a.mod)})).filter(a=>a.total>0).sort((a,b)=>b.gl-a.gl)}
 function liftQueue(){return DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed).filter(a=>{const at=a.att[DATA.lift][DATA.round];return at.r===null&&at.w>0}).sort((a,b)=>{const wa=a.att[DATA.lift][DATA.round].w,wb=b.att[DATA.lift][DATA.round].w;return wa!==wb?wa-wb:a.lot-b.lot})}
-function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated}))}catch(e){}if(!_fbSyncing)debouncedSync()}
+function save(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated}))}catch(e){}if(!_fbSyncing)debouncedSync()}
 let _syncTimer=null;
 function debouncedSync(){if(_syncTimer)clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>{syncToFB();_syncTimer=null},800)}
-function saveNow(){try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated}))}catch(e){}syncToFB()}
+function saveNow(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated}))}catch(e){}syncToFB()}
 function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);return true}}}catch(e){}return false}
 
 function calcPlates(w){const ps=(w-BAR-COLLARS)/2;if(ps<=0)return[];let rem=ps;const r=[];for(const p of PLATES){while(rem>=p-0.001){r.push(p);rem-=p}}return r}
@@ -620,9 +624,11 @@ async function tryLoadFromFB(){
     if(!snap.exists())return false;
     const d=snap.data();
     DATA.athletes=JSON.parse(d.athletes||'[]');
-    DATA.lift=d.lift||DATA.lift;
-    DATA.round=typeof d.round==='number'?d.round:DATA.round;
-    DATA.flight=d.flight||DATA.flight;
+    if((Date.now()-(window._lastLocalAction||0))>=2500){
+      DATA.lift=d.lift||DATA.lift;
+      DATA.round=typeof d.round==='number'?d.round:DATA.round;
+      DATA.flight=d.flight||DATA.flight;
+    }
     DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
     DATA.lotsGenerated=d.lotsGenerated||false;
     if(typeof d.timer==='number')DATA.timer=d.timer;
