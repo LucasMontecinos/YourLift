@@ -202,8 +202,11 @@ if(window.IS_CONTROLLER){
 }else{
   console.log('[YL] Modo LECTURA — solo lee de Firebase. Agrega ?controller=1 a la URL para escribir.');
 }
-// Cambiar entre Controlador (escribe) y Espectador (lee/espeja). Recarga para
-// reiniciar el listener limpio. UN solo PC debe ser Controlador por competencia.
+// Id único de este equipo/pestaña — para que en multi-controlador cada PC
+// ignore SOLO el eco de su propia escritura, pero aplique las de los demás.
+window._WRITER_ID=(()=>{try{let w=sessionStorage.getItem('yl_writer');if(!w){w='w'+Math.random().toString(36).slice(2)+Date.now().toString(36);sessionStorage.setItem('yl_writer',w);}return w;}catch(e){return 'w'+Math.random().toString(36).slice(2);}})();
+// Cambiar entre Controlador (escribe+lee, sincronizado con otros) y Espectador
+// (solo lee/espeja, ej. PC de OBS o pantalla). Recarga para reiniciar el listener.
 window.setSyncMode=function(on){
   try{localStorage.setItem('yl_controller', on?'1':'0')}catch(e){}
   location.reload();
@@ -321,7 +324,7 @@ async function syncToFB(){
   if(!window.IS_CONTROLLER)return; // Solo el controller escribe — evita conflictos multi-admin
   const id=fbDocId();if(!id)return;
   _fbLastWrite=Date.now();
-  const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,ts:Date.now()};
+  const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,ts:Date.now(),writer:window._WRITER_ID};
   try{
     const ref=window._fb.doc(fbDB,'livecast_sync',id);
     await window._fb.setDoc(ref,payload);
@@ -337,7 +340,7 @@ async function syncTimerOnlyToFB(){
   _fbLastWrite=Date.now();
   try{
     const ref=window._fb.doc(fbDB,'livecast_sync',id);
-    await window._fb.updateDoc(ref,{timer:DATA.timer,timerOn:DATA.timerOn,ts:Date.now()});
+    await window._fb.updateDoc(ref,{timer:DATA.timer,timerOn:DATA.timerOn,ts:Date.now(),writer:window._WRITER_ID});
   }catch(e){/* silencioso: si el doc no existe el setDoc completo lo crea */}
 }
 function startFBSync(){
@@ -348,12 +351,13 @@ function startFBSync(){
   fbUnsub=window._fb.onSnapshot(ref,(snap)=>{
     if(!snap.exists())return;
     _lastFbUpdate=Date.now();
-    // El controller nunca lee de Firebase — sus cambios son la fuente de verdad
-    if(window.IS_CONTROLLER)return;
+    const d=snap.data();
+    // Multi-controlador: ignorar SOLO el eco de mi propia escritura (evita parpadeo),
+    // pero SÍ aplicar lo que escribieron los demás controladores → todos sincronizados.
+    if(d.writer && d.writer===window._WRITER_ID)return;
     // Si hay un input enfocado, no re-renderizar (el usuario está editando)
     const focused=document.activeElement;
     if(focused&&(focused.tagName==='INPUT'||focused.tagName==='SELECT'||focused.tagName==='TEXTAREA'))return;
-    const d=snap.data();
     _fbSyncing=true;
     try{
       // Detectar si SOLO cambió el timer (eso pasa cada segundo y no debe causar re-render
@@ -4702,7 +4706,7 @@ function renderShell(){
   {const ctrl=!!window.IS_CONTROLLER;
    h+='<div style="margin:4px 8px 10px;padding:8px 10px;border-radius:8px;border:1px solid '+(ctrl?'rgba(34,197,94,.4)':'rgba(59,130,246,.4)')+';background:'+(ctrl?'rgba(34,197,94,.08)':'rgba(59,130,246,.08)')+'">'
      +'<div style="font-size:11px;font-weight:700;font-family:Oswald;letter-spacing:1px;color:'+(ctrl?'var(--green)':'#60a5fa')+'">'+(ctrl?'\uD83C\uDF9B CONTROLADOR':'\uD83D\uDC41 ESPECTADOR')+'</div>'
-     +'<div style="font-size:9px;color:var(--muted);margin:3px 0 7px;line-height:1.3">'+(ctrl?'Este PC <b>escribe</b> y manda el estado a los dem\u00E1s.':'Este PC <b>espeja</b> al controlador (no escribe).')+'</div>'
+     +'<div style="font-size:9px;color:var(--muted);margin:3px 0 7px;line-height:1.3">'+(ctrl?'Carga datos y se <b>sincroniza</b> con los dem\u00E1s controladores.':'Solo mira (no escribe). Ej.: pantalla u OBS.')+'</div>'
      +'<button onclick="setSyncMode('+(ctrl?'false':'true')+')" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;font-size:10px;letter-spacing:.5px;cursor:pointer">Cambiar a '+(ctrl?'\uD83D\uDC41 Espectador':'\uD83C\uDF9B Controlador')+'</button>'
    +'</div>';}
   h+='<button class="side-btn" onclick="exportBackupJSON()"><span class="icon">\uD83D\uDCBE</span>Exportar Backup</button>';
