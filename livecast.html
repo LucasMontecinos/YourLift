@@ -5154,10 +5154,16 @@ window.dirToggleBreak=async function(){
 };
 // Atajos de teclado para Stream Deck
 window._dirKeyHandler=function(e){
-  if(DATA.phase!=='director')return;
-  // Ignorar si hay foco en un input/textarea/select (no pisar la edición)
+  // Atajos del director (Stream Deck): funcionan desde CUALQUIER vista admin del
+  // LiveCast (Control en Vivo, Control TX, etc.) — no solo en la vista Director.
+  // Así podés prender/apagar la Tabla Actual del stream con el Stream Deck mientras
+  // operás la competencia. Requiere ser admin y NO tener foco en un input.
+  if(!isAdmin)return;
+  // Ignorar si hay foco en un input/textarea/select (no pisar la edición de pesos)
   const tag=(document.activeElement?.tagName||'').toUpperCase();
   if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;
+  // Solo teclas simples sin modificadores (evita pisar atajos del navegador/SO)
+  if(e.ctrlKey||e.altKey||e.metaKey)return;
   const k=(e.key||'').toLowerCase();
   const map={p:'profile',s:'scoreboard',t:'timer'};
   if(map[k]){e.preventDefault();window.dirToggle(map[k]);return}
