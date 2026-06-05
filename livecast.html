@@ -202,6 +202,12 @@ if(window.IS_CONTROLLER){
 }else{
   console.log('[YL] Modo LECTURA — solo lee de Firebase. Agrega ?controller=1 a la URL para escribir.');
 }
+// Cambiar entre Controlador (escribe) y Espectador (lee/espeja). Recarga para
+// reiniciar el listener limpio. UN solo PC debe ser Controlador por competencia.
+window.setSyncMode=function(on){
+  try{localStorage.setItem('yl_controller', on?'1':'0')}catch(e){}
+  location.reload();
+};
 let _lastFbUpdate=0;
 // Event ID → name mapping (must match inscripcion.html EVENTS)
 let LIVE_EVENTS={'regional_centro_2026':'Campeonato Regional Centro FECHIPO 2026','universitario_2026':'Primer Campeonato Nacional Universitario FECHIPO 2026','Campeonato_de_debutantes':'Campeonato de Debutantes'};
@@ -272,20 +278,22 @@ async function initFB(){
         fb.getDoc(fb.doc(fbDB,'admins',u.uid)).then(snap=>{
           if(snap.exists()){
             isAdmin=true;
-            // Auto-controller: admin = controller (no necesita ?controller=1 en URL)
-            if(!window.IS_CONTROLLER){
+            // Auto-controller SOLO la primera vez (sin preferencia guardada). Si el
+            // usuario eligió "Espectador" (yl_controller='0'), se respeta — así un 2º
+            // PC puede ser solo lectura y espejar al controlador.
+            if(localStorage.getItem('yl_controller')===null){
               window.IS_CONTROLLER=true;
               try{localStorage.setItem('yl_controller','1')}catch(e){}
-              console.log('[LiveCast] Admin session detected:',u.email,'· Modo CONTROLLER activado automáticamente');
+              console.log('[LiveCast] Admin · Modo CONTROLADOR activado (primera vez)');
             } else {
-              console.log('[LiveCast] Admin session detected:',u.email);
+              console.log('[LiveCast] Admin · Modo',window.IS_CONTROLLER?'CONTROLADOR':'ESPECTADOR');
             }
           } else {
             isAdmin=false;
             console.log('[LiveCast] Logged in but not admin:',u.email);
           }
           R();
-        }).catch(()=>{isAdmin=true;if(!window.IS_CONTROLLER){window.IS_CONTROLLER=true;try{localStorage.setItem('yl_controller','1')}catch(e){}}R();}); // fallback: trust auth
+        }).catch(()=>{isAdmin=true;if(localStorage.getItem('yl_controller')===null){window.IS_CONTROLLER=true;try{localStorage.setItem('yl_controller','1')}catch(e){}}R();}); // fallback: trust auth
       } else {
         if(isAdmin){isAdmin=false;DATA.phase='liveView';R();}
       }
@@ -4690,6 +4698,13 @@ function renderShell(){
   h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon">\uD83C\uDFC6</span>Selecci\u00F3n de Campeonato</button>';
   h+='<div style="font-size:10px;color:var(--green);margin-bottom:6px;padding:0 8px">\uD83D\uDD13 Admin</div>';
   h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'\uD83D\uDCE1 Sync activo':'\u23F3 Conectando...')+'</div>';
+  // \u2500\u2500 Modo de sincronizaci\u00F3n: Controlador (escribe) vs Espectador (lee/espeja) \u2500\u2500
+  {const ctrl=!!window.IS_CONTROLLER;
+   h+='<div style="margin:4px 8px 10px;padding:8px 10px;border-radius:8px;border:1px solid '+(ctrl?'rgba(34,197,94,.4)':'rgba(59,130,246,.4)')+';background:'+(ctrl?'rgba(34,197,94,.08)':'rgba(59,130,246,.08)')+'">'
+     +'<div style="font-size:11px;font-weight:700;font-family:Oswald;letter-spacing:1px;color:'+(ctrl?'var(--green)':'#60a5fa')+'">'+(ctrl?'\uD83C\uDF9B CONTROLADOR':'\uD83D\uDC41 ESPECTADOR')+'</div>'
+     +'<div style="font-size:9px;color:var(--muted);margin:3px 0 7px;line-height:1.3">'+(ctrl?'Este PC <b>escribe</b> y manda el estado a los dem\u00E1s.':'Este PC <b>espeja</b> al controlador (no escribe).')+'</div>'
+     +'<button onclick="setSyncMode('+(ctrl?'false':'true')+')" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;font-size:10px;letter-spacing:.5px;cursor:pointer">Cambiar a '+(ctrl?'\uD83D\uDC41 Espectador':'\uD83C\uDF9B Controlador')+'</button>'
+   +'</div>';}
   h+='<button class="side-btn" onclick="exportBackupJSON()"><span class="icon">\uD83D\uDCBE</span>Exportar Backup</button>';
   h+='<button class="side-btn" onclick="resetLiveData()" style="color:#ff8a8a"><span class="icon">🧹</span>Reiniciar datos en vivo</button>';
   h+='<button class="side-btn" onclick="doLogout()"><span class="icon">\uD83D\uDD12</span>Cerrar sesi\u00f3n</button>';
