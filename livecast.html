@@ -364,15 +364,19 @@ function startFBSync(){
       // en la vista pública "Competencia en Vivo")
       const prevSig = (DATA.athletes?JSON.stringify(DATA.athletes):'')+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight;
       DATA.event=d.event||DATA.event;
-      DATA.athletes=JSON.parse(d.athletes||'[]');
-      // NO pisar la navegación (lift/round/flight) si acabo de cambiarla yo localmente
-      // (evita que un snapshot entrante me devuelva a SQ / Intento 1 / Tanda A).
-      if((Date.now()-(window._lastLocalAction||0))>=2500){
+      // NO pisar lo que acabo de editar localmente si la acción local fue hace <2.5s.
+      // Esto cubre: pesos/intentos (DATA.athletes), navegación (lift/round/flight) y
+      // change timers. Sin esto, un snapshot entrante de OTRO controlador (p.ej. su tick
+      // de timer, que viaja con su copia de athletes) borra el peso recién ingresado
+      // ("pongo el número y no sale nada") o me devuelve a SQ / Intento 1 / Tanda A.
+      const _localFresh = (Date.now()-(window._lastLocalAction||0))<2500;
+      if(!_localFresh){
+        DATA.athletes=JSON.parse(d.athletes||'[]');
         DATA.lift=d.lift||DATA.lift;
         DATA.round=typeof d.round==='number'?d.round:DATA.round;
         DATA.flight=d.flight||DATA.flight;
+        DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
       }
-      DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
       DATA.lotsGenerated=d.lotsGenerated||false;
       if(typeof d.timer==='number'){DATA.timer=d.timer;DATA.timerOn=d.timerOn||false;if(DATA.timerOn&&!mainTI)startTimer();if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}}
       const newSig = JSON.stringify(DATA.athletes)+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight;
@@ -1620,7 +1624,7 @@ function editAtt(id,l,r){
     // Si hab\u00eda un change timer corriendo para este intento, cancelarlo
     const key=id+'_'+l+'_'+r;
     if(DATA.changeTimers[key])delete DATA.changeTimers[key];
-    save();R();
+    saveNow();R();
   }
 }
 
