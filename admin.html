@@ -1511,7 +1511,9 @@ function render(){
   
   app.innerHTML=`<div class="shell">${sidebar}<div class="main">${content}</div></div>`;
   if(ST.view==='stats'){
-    if((ST.statsTab||'deporte')==='web') setTimeout(loadWebAnalytics,0);
+    const _st=ST.statsTab||'deporte';
+    if(_st==='web') setTimeout(loadWebAnalytics,0);
+    else if(_st==='demografia'){/* tablas estáticas, sin charts */}
     else setTimeout(initStatsCharts,0);
   }
   if(ST.view==='publisher')setTimeout(()=>{try{pubUpdatePreview()}catch(e){}},50);
@@ -1902,12 +1904,148 @@ function renderStats(){
   return `<div class="h1">📈 Estadísticas</div>
     <div style="display:flex;gap:10px;margin:14px 0 20px">
       ${tabBtn('deporte','🏋️ DEPORTE')}
+      ${tabBtn('demografia','👥 DEMOGRAFÍA')}
       ${tabBtn('web','🌐 TRÁFICO WEB')}
     </div>
     ${tab==='web'
       ? `<div id="statsWebContent"><div style="padding:40px;text-align:center;color:var(--muted)">Cargando analytics…</div></div>`
+      : tab==='demografia'
+      ? `<p class="subtitle">Base completa de atletas · calculado en vivo desde data.json</p><div id="statsContent">${renderDemografia()}</div>`
       : `<p class="subtitle">Dashboard interactivo · Filtros globales · Export para Power BI</p><div id="statsContent">${renderStatsContent()}</div>`}`;
 }
+
+// ── Demografía: total, rangos de edad, zona y sexo (auto desde data.json) ──
+function buildDemoStats(){
+  const today=new Date();
+  const ageOf=fn=>{
+    if(!fn)return null;
+    const p=String(fn).split('/');if(p.length!==3)return null;
+    let dd,mm,yy;
+    const a0=parseInt(p[0]),a2=parseInt(p[2]);
+    if(a2>1920&&a2<2015){dd=a0;mm=parseInt(p[1]);yy=a2;}        // DD/MM/YYYY
+    else if(a0>1920&&a0<2015){yy=a0;mm=parseInt(p[1]);dd=parseInt(p[2]);} // YYYY/MM/DD
+    else return null;
+    if(!yy)return null;
+    let age=today.getFullYear()-yy;
+    const bm=mm-1,bd=dd;
+    if(today.getMonth()<bm||(today.getMonth()===bm&&today.getDate()<bd))age--;
+    return age;
+  };
+  const zoneOf=ev=>{
+    const e=(ev||'').toLowerCase();
+    if(e.includes('sur austral'))return'Sur Austral';
+    if(e.includes('centro norte'))return'Centro Norte';
+    if(e.includes('centro sur'))return'Centro Sur';
+    if(e.includes('zona norte')||e.includes('regional norte')||e.includes('atacama'))return'Norte';
+    if(e.includes('zona sur')||e.includes('osorno'))return'Sur';
+    if(e.includes('zona centro')||e.includes('regional centro'))return'Centro';
+    return null;
+  };
+  const sexOf=s=>{
+    if(!s)return null;s=String(s).toLowerCase().trim();
+    if(s.includes('muj')||s.includes('fem')||s.includes('dama')||s==='f')return'F';
+    if(s.includes('hombre')||s.includes('masc')||s==='m'||s==='varon')return'M';
+    return null;
+  };
+  const rngOf=a=>{
+    if(a===null)return'Sin fecha';
+    if(a<14)return'Menor de 14';if(a<=18)return'14-18';if(a<=23)return'19-23';
+    if(a<=39)return'24-39';if(a<=49)return'40-49';if(a<=59)return'50-59';
+    if(a<=69)return'60-69';return'70+';
+  };
+  const detail=[];
+  (ST.data||[]).forEach(o=>{
+    const a=ageOf(o.fechaNac);
+    const votes={};(o.competencias||[]).forEach(c=>{const z=zoneOf(c.evento);if(z)votes[z]=(votes[z]||0)+1;});
+    let best=null,bn=0;Object.keys(votes).forEach(z=>{if(votes[z]>bn){bn=votes[z];best=z;}});
+    if(!best)best='No determinada';
+    let sx=sexOf(o.sexo);
+    if(!sx)(o.competencias||[]).some(c=>{const s=sexOf(c.sexo);if(s){sx=s;return true;}return false;});
+    detail.push({codigo:o.codigo||'',edad:a===null?'':a,rango:rngOf(a),zona:best,sexo:sx||'N/D',club:o.club||'',debut:(o.debut===true?'':(o.debut||''))});
+  });
+  const tally=k=>{const t={};detail.forEach(r=>{t[r[k]]=(t[r[k]]||0)+1;});return t;};
+  return {total:detail.length,porEdad:tally('rango'),porZona:tally('zona'),porSexo:tally('sexo'),detail};
+}
+
+function renderDemografia(){
+  const D=buildDemoStats();
+  const N=D.total||1;
+  const card='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px';
+  const tableBlock=(title,items,color)=>{
+    const max=Math.max(1,...items.map(i=>i[1]));
+    let rows='';
+    items.forEach(([label,cnt])=>{
+      const pct=(cnt/N*100);
+      rows+=`<tr>
+        <td style="padding:7px 10px;font-size:13px;color:var(--text)">${label}</td>
+        <td style="padding:7px 10px;width:42%">
+          <div style="background:rgba(255,255,255,.06);border-radius:5px;height:16px;position:relative">
+            <div style="background:${color};height:16px;border-radius:5px;width:${(cnt/max*100).toFixed(1)}%;min-width:2px"></div>
+          </div>
+        </td>
+        <td style="padding:7px 10px;text-align:right;font-weight:700;font-size:13px;color:var(--text)">${cnt.toLocaleString()}</td>
+        <td style="padding:7px 10px;text-align:right;font-size:12px;color:var(--muted)">${pct.toFixed(1)}%</td>
+      </tr>`;
+    });
+    return `<div style="${card}">
+      <div style="font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:2px;color:var(--muted);margin-bottom:12px">${title}</div>
+      <table style="width:100%;border-collapse:collapse">${rows}</table>
+    </div>`;
+  };
+  const order=(obj,keys)=>keys.filter(k=>obj[k]>0).map(k=>[k,obj[k]]);
+  const edad=order(D.porEdad,['Menor de 14','14-18','19-23','24-39','40-49','50-59','60-69','70+','Sin fecha']);
+  const zona=order(D.porZona,['Centro','Centro Norte','Centro Sur','Norte','Sur','Sur Austral','No determinada']);
+  const sexoLbl={M:'Hombres',F:'Mujeres','N/D':'Sin dato'};
+  const sexo=order(D.porSexo,['M','F','N/D']).map(([k,v])=>[sexoLbl[k]||k,v]);
+  const ks='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;text-align:center';
+  return `
+  <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+    <button onclick="exportDemoCSV()" title="Descargar resumen + detalle (CSV, abre en Excel)" style="background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);padding:8px 14px;border-radius:8px;font-family:Oswald;font-size:11px;letter-spacing:1px;cursor:pointer;font-weight:700">📥 EXPORTAR (CSV / Excel)</button>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px">
+    <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:var(--gold)">${D.total.toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">ATLETAS TOTALES</div></div>
+    <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:#3b82f6">${(D.porSexo.M||0).toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">HOMBRES</div></div>
+    <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:#ec4899">${(D.porSexo.F||0).toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">MUJERES</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    ${tableBlock('RANGOS DE EDAD',edad,'#d4a843')}
+    ${tableBlock('SEXO',sexo,'#ec4899')}
+  </div>
+  <div style="margin-top:16px">
+    ${tableBlock('ZONA (según campeonato regional)',zona,'#3b82f6')}
+  </div>
+  <p style="color:var(--muted);font-size:11px;margin-top:14px;line-height:1.5">
+    La edad se calcula desde la fecha de nacimiento al día de hoy. La <strong>zona</strong> se deriva del campeonato regional/zonal en que compitió cada atleta (FECHIPO organiza por macro-zona); <strong>"No determinada"</strong> = atletas que solo registran campeonatos nacionales o internacionales. No corresponde necesariamente a la región administrativa de residencia.
+  </p>`;
+}
+
+window.exportDemoCSV=function(){
+  const D=buildDemoStats();const N=D.total||1;
+  const lines=[];
+  lines.push('YourLift - Demografia de atletas');
+  lines.push('Corte,'+new Date().toISOString().slice(0,10));
+  lines.push('Total atletas,'+D.total);
+  lines.push('');
+  const sec=(title,obj,ord,lbl)=>{
+    lines.push(title);lines.push('Categoria,Atletas,%');
+    ord.filter(k=>obj[k]>0).forEach(k=>{
+      const c=obj[k];lines.push((lbl&&lbl[k]||k)+','+c+','+(c/N*100).toFixed(1)+'%');
+    });
+    lines.push('');
+  };
+  sec('RANGOS DE EDAD',D.porEdad,['Menor de 14','14-18','19-23','24-39','40-49','50-59','60-69','70+','Sin fecha']);
+  sec('ZONA',D.porZona,['Centro','Centro Norte','Centro Sur','Norte','Sur','Sur Austral','No determinada']);
+  sec('SEXO',D.porSexo,['M','F','N/D'],{M:'Hombres',F:'Mujeres','N/D':'Sin dato'});
+  lines.push('DETALLE');
+  lines.push('codigo,edad,rango,zona,sexo,club,debut');
+  D.detail.forEach(r=>{
+    lines.push([r.codigo,r.edad,r.rango,r.zona,r.sexo,'"'+String(r.club).replace(/"/g,'""')+'"',r.debut].join(','));
+  });
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const u=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=u;a.download='YourLift_Demografia_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  if(typeof showToast==='function')showToast('📊 Demografía exportada — '+D.total+' atletas');
+};
 
 function renderStatsContent(){
   const rowsAll = buildStatsRows();
