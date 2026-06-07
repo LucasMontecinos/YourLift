@@ -6217,35 +6217,41 @@ window.pubClearLogo = function(){
 };
 
 window.pubDownload = async function(){
-  const node = document.getElementById('pubCanvas');
-  if(!node || !window.html2canvas){ showToast('html2canvas no cargado', null, true); return; }
+  if(!window.html2canvas){ showToast('html2canvas no cargado', null, true); return; }
   const btn = document.getElementById('pubDownloadBtn');
-  if(btn){btn.textContent='⏳ Generando...';btn.disabled=true;}
+  if(btn){btn.textContent='Generando...';btn.disabled=true;}
+  // Renderizar una copia a TAMAÑO REAL fuera de pantalla (sin el escalado del preview),
+  // si no html2canvas captura el lienzo escalado y el texto sale encimado.
+  const holder = document.createElement('div');
+  holder.style.cssText = 'position:fixed;top:0;left:-10000px;width:1080px;height:1350px;overflow:hidden;z-index:-1';
+  let html = pubRenderTemplate(PUB_STATE.template, PUB_STATE.data);
+  html = pubApplyStyle(html, PUB_STATE.data);
+  holder.innerHTML = html;
+  document.body.appendChild(holder);
   try{
-    const canvas = await window.html2canvas(node, {
-      backgroundColor: null,
-      scale: 1,
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      width: 1080,
-      height: 1350
+    const target = holder.firstElementChild || holder;
+    const canvas = await window.html2canvas(target, {
+      backgroundColor: null, scale: 2, useCORS: true, allowTaint: true, logging: false,
+      width: 1080, height: 1350, windowWidth: 1080, windowHeight: 1350
     });
-    canvas.toBlob(blob => {
+    await new Promise(res => canvas.toBlob(blob => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const tplName = PUB_TEMPLATES[PUB_STATE.template]?.label.replace(/\s+/g,'_') || 'post';
+      const tplName = PUB_TEMPLATES[PUB_STATE.template]?.label.replace(/[^a-zA-Z0-9]+/g,'_') || 'post';
       a.href = url;
       a.download = `YL_${tplName}_${Date.now()}.png`;
       a.click();
       setTimeout(()=>URL.revokeObjectURL(url), 1500);
-    }, 'image/png');
+      res();
+    }, 'image/png'));
     showToast('Imagen descargada');
   } catch(e){
     console.error(e);
     showToast('Error generando PNG: '+e.message, null, true);
+  } finally {
+    holder.remove();
+    if(btn){btn.textContent='Descargar PNG';btn.disabled=false;}
   }
-  if(btn){btn.textContent='Descargar PNG';btn.disabled=false;}
 };
 
 window.pubUpdatePreview = function(){
