@@ -236,11 +236,13 @@ function sponsorStrip(){
     return s.link||'#';
   };
   const cell=s=>`<a href="${hrefOf(s)}" target="_blank" rel="noopener" title="${String(s.nombre||'').replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;justify-content:center;padding:0 34px;flex-shrink:0"><img src="${s.logoUrl}" alt="${String(s.nombre||'')}" style="max-height:54px;max-width:170px;object-fit:contain;opacity:.92"></a>`;
-  const row=items.map(cell).join('');
-  const dur=Math.max(18, items.length*6);
+  // Repetir los logos hasta superar el ancho de pantalla, si no queda vacío a la derecha.
+  const reps=Math.max(2, Math.ceil(12/items.length));
+  let group=''; for(let k=0;k<reps;k++) group+=items.map(cell).join('');
+  const dur=Math.max(20, items.length*reps*5);
   return `<div style="margin:6px calc(-50vw + 50%) 30px;width:100vw;background:rgba(8,16,30,.5);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:18px 0;overflow:hidden">
     <div style="text-align:center;font-family:Oswald;font-size:11px;letter-spacing:4px;color:var(--muted);margin-bottom:12px">AUSPICIADORES</div>
-    <div class="yl-marq" style="display:flex;width:max-content;animation:ylmarq ${dur}s linear infinite">${row}${row}</div>
+    <div class="yl-marq" style="display:flex;width:max-content;animation:ylmarq ${dur}s linear infinite">${group}${group}</div>
   </div>
   <style>@keyframes ylmarq{from{transform:translateX(0)}to{transform:translateX(-50%)}}.yl-marq:hover{animation-play-state:paused}</style>`;
 }
