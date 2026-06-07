@@ -621,11 +621,20 @@ function trans(){
       h+=`<img src="https://i.ytimg.com/vi/${ytM[1]}/hqdefault.jpg" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">`;
       h+=`<a href="${ev.youtubeUrl}" target="_blank" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);text-decoration:none">`;
       h+=`<div style="width:60px;height:60px;border-radius:50%;background:rgba(196,30,58,.95);display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;box-shadow:0 4px 12px rgba(0,0,0,.5)">▶</div>`;
-      h+=`</a></div>`;
+      h+=`</a>`;
+      if(ev.streamLogoUrl)h+=`<div style="position:absolute;right:8px;bottom:8px;width:58px;height:58px;display:flex;align-items:center;justify-content:center;pointer-events:none"><img src="${ev.streamLogoUrl}" style="max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.7))"></div>`;
+      h+=`</div>`;
     }
     h+=`<div style="padding:14px"><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:.5px;color:var(--text);margin-bottom:6px;text-transform:uppercase">${ev.name}</div>`;
     h+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px">${ev.organizer||ev.org||'FECHIPO'} · ${ev.location||''} · ${ev.days||ev.date||''}</div>`;
     h+=`<a href="${ev.youtubeUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#FF0000;color:#fff;padding:6px 12px;border-radius:6px;font-family:Oswald;font-size:11px;font-weight:600;letter-spacing:1px;text-decoration:none">▶ VER EN YOUTUBE</a>`;
+    const igRaw=(ev.streamInstagram||ev.instagram||'').trim();
+    if(igRaw){
+      const isUrl=/^https?:\/\//i.test(igRaw);
+      const handle=igRaw.replace(/^@/,'').replace(/^https?:\/\/(www\.)?instagram\.com\//i,'').replace(/\/+$/,'');
+      const href=isUrl?igRaw:('https://instagram.com/'+handle);
+      h+=`<a href="${href}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;margin-left:8px;background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);color:#fff;padding:6px 12px;border-radius:6px;font-family:Oswald;font-size:11px;font-weight:600;letter-spacing:1px;text-decoration:none">📷 @${handle}</a>`;
+    }
     h+=`</div></div>`;
   });
   h+=`</div></div>`;

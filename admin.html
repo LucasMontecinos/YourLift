@@ -3562,6 +3562,30 @@ function renderCampeonatos(){
           <input class="inp" id="ef_youtubeUrl" value="${editing.youtubeUrl||''}" placeholder="ej: https://www.youtube.com/live/abc123xyz">
           <span style="font-size:10px;color:var(--muted);margin-top:2px">Cuando hay URL, se muestra un reproductor embebido en el livecast público y en la página principal — las visitas desde YourLift se suman al contador de YouTube.</span>
         </label>
+        <div style="grid-column:span 2;border-top:1px solid var(--border);padding-top:12px;margin-top:2px">
+          <div style="font-family:Oswald;font-size:12px;letter-spacing:1px;color:var(--gold);margin-bottom:8px">📺 EXTRAS DE TRANSMISIÓN <span style="font-weight:400;color:var(--muted);letter-spacing:0">(se muestran en la tarjeta de Transmisiones del sitio)</span></div>
+          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+            <div>
+              <span style="font-size:11px;color:var(--muted)">Logo en la transmisión (productora)</span>
+              <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+                <div style="width:64px;height:64px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:#0a1628;overflow:hidden">
+                  <img id="ef_streamLogoPreview" src="${editing.streamLogoUrl||''}" style="max-width:100%;max-height:100%;object-fit:contain;${editing.streamLogoUrl?'':'display:none'}" onerror="this.style.display='none'">
+                </div>
+                <input type="hidden" id="ef_streamLogoUrl" value="${editing.streamLogoUrl||''}">
+                <input type="file" id="ef_streamLogoFile" accept="image/*" style="display:none" onchange="uploadStreamLogo(this.files[0])">
+                <div style="display:flex;flex-direction:column;gap:4px">
+                  <button type="button" class="btn" onclick="document.getElementById('ef_streamLogoFile').click()">Subir logo</button>
+                  <button type="button" class="btn" onclick="document.getElementById('ef_streamLogoUrl').value='';var p=document.getElementById('ef_streamLogoPreview');p.src='';p.style.display='none'" style="background:transparent;border:1px solid var(--border);color:var(--muted)">Quitar</button>
+                  <span id="ef_streamLogoStatus" style="font-size:10px;color:var(--muted)"></span>
+                </div>
+              </div>
+            </div>
+            <label class="field" style="flex:1;min-width:200px">
+              <span>Instagram de la transmisión</span>
+              <input class="inp" id="ef_streamIg" value="${editing.streamInstagram||''}" placeholder="@productora">
+            </label>
+          </div>
+        </div>
       </div>
       ${!isNew?`<div style="margin-top:14px;padding:10px 14px;background:rgba(30,58,95,.3);border-radius:8px;font-size:12px;color:var(--muted)">
         <span style="color:var(--text)">📊 Estado actual:</span>
@@ -3713,6 +3737,21 @@ window.uploadEventLogo = async function(file){
     if(st)st.textContent='✓ Logo subido';
   }catch(e){ if(st)st.textContent='❌ '+e.message; console.warn('[logo]',e); }
 };
+window.uploadStreamLogo = async function(file){
+  if(!file)return;
+  const st=document.getElementById('ef_streamLogoStatus'); if(st)st.textContent='⏳ Subiendo…';
+  try{
+    const storage=getStorage(app);
+    const baseId=(document.getElementById('ef_id')?.value||ST.eventoForm?.id||'event').replace(/[^a-zA-Z0-9_]/g,'_').slice(0,50);
+    const dot=file.name.lastIndexOf('.'); const ext=(dot>=0?file.name.slice(dot+1):'png').toLowerCase().replace(/[^a-z0-9]/g,'')||'png';
+    const sref=storageRef(storage,`logos/stream/${baseId}_${Date.now()}.${ext}`);
+    await uploadBytes(sref,file,{contentType:file.type||'image/png'});
+    const url=await getDownloadURL(sref);
+    document.getElementById('ef_streamLogoUrl').value=url;
+    const pv=document.getElementById('ef_streamLogoPreview'); if(pv){pv.src=url;pv.style.display='';}
+    if(st)st.textContent='✓ Logo subido';
+  }catch(e){ if(st)st.textContent='❌ '+e.message; console.warn('[streamlogo]',e); }
+};
 window.saveEvento = async function(){
   const isNew = ST.eventoFormMode === 'create';
   const id  = isNew ? (document.getElementById('ef_id').value||'').trim().replace(/\s+/g,'_') : ST.eventoForm.id;
@@ -3741,6 +3780,8 @@ window.saveEvento = async function(){
   const youtubeUrl = (document.getElementById('ef_youtubeUrl')?.value||'').trim();
   const logoUrl = (document.getElementById('ef_logoUrl')?.value||'').trim();
   const instagram = organizers[0]?.instagram || '';   // compat: IG del primer organizador
+  const streamLogoUrl = (document.getElementById('ef_streamLogoUrl')?.value||'').trim();
+  const streamInstagram = (document.getElementById('ef_streamIg')?.value||'').trim().replace(/^@/,'');
   // NUEVO: leer los checkboxes de documentos requeridos
   const requiredDocs = Array.from(document.querySelectorAll('#ef_docs_container input[type="checkbox"]:checked'))
     .map(cb => cb.getAttribute('data-doc-key'));
@@ -3751,6 +3792,7 @@ window.saveEvento = async function(){
   const data = {id, name, date, closeDate, preNominaCloseAt, nominaCloseAt, location, org, days, status,
     extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, youtubeUrl,
     organizers, logoUrl, instagram,    // organizadores (con IG) + logo del campeonato (se muestran en el home)
+    streamLogoUrl, streamInstagram,    // logo de productora + IG para la tarjeta de Transmisiones
     requiredDocs,    // nuevo: array de docKeys requeridos
     updatedAt: serverTimestamp()};
   if(isNew) data.createdAt = serverTimestamp();
