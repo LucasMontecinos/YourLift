@@ -1999,15 +1999,25 @@ function renderDemografia(){
   const sexo=order(D.porSexo,['M','F','N/D']).map(([k,v])=>[sexoLbl[k]||k,v]);
   const ks='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;text-align:center';
   const A=buildAfilStats();
-  const yMax=Math.max(1,...A.years.map(y=>A.afilCount[y]));
-  const afilRows=A.years.map((y,i)=>{
-    const c=A.afilCount[y];
-    return `<tr>
-      <td style="padding:6px 10px;font-size:13px;color:var(--text)">${y}</td>
-      <td style="padding:6px 10px;width:55%"><div style="background:rgba(255,255,255,.06);border-radius:5px;height:15px"><div style="background:#d4a843;height:15px;border-radius:5px;width:${(c/yMax*100).toFixed(1)}%;min-width:2px"></div></div></td>
-      <td style="padding:6px 10px;text-align:right;font-weight:700;font-size:13px;color:var(--text)">${c.toLocaleString()}</td>
+  const lastY=A.years[A.years.length-1];                 // año en curso (parcial)
+  const yMax=Math.max(1,...A.years.map(y=>A.afilCount[y]),A.proj[2026],A.proj[2027]);
+  const grow=(cur,prev)=>{
+    if(prev===0)return cur===0?'—':'n/a';
+    const p=(cur-prev)/prev*100;return (p>=0?'+':'')+p.toFixed(0)+'%';
+  };
+  const afilRow=(label,c,grw,color,proj)=>`<tr style="${proj?'background:rgba(212,168,67,.06)':''}">
+      <td style="padding:6px 10px;font-size:13px;color:${proj?'var(--gold)':'var(--text)'}">${label}</td>
+      <td style="padding:6px 10px;width:48%"><div style="background:rgba(255,255,255,.06);border-radius:5px;height:15px"><div style="background:${color};height:15px;border-radius:5px;width:${(c/yMax*100).toFixed(1)}%;min-width:2px${proj?';opacity:.6':''}"></div></div></td>
+      <td style="padding:6px 10px;text-align:right;font-weight:700;font-size:13px;color:${proj?'var(--gold)':'var(--text)'}">${c.toLocaleString()}</td>
+      <td style="padding:6px 10px;text-align:right;font-size:11px;color:var(--muted)">${grw}</td>
     </tr>`;
+  let afilRows=A.years.map((y,i)=>{
+    const c=A.afilCount[y];
+    if(y===lastY) return afilRow(y+' <span style="color:var(--muted);font-size:10px">(a la fecha)</span>',c,'parcial','#d4a843',false);
+    return afilRow(y,c,i===0?'—':grow(c,A.afilCount[A.years[i-1]]),'#d4a843',false);
   }).join('');
+  afilRows+=afilRow('2026 <span style="color:var(--muted);font-size:10px">(cierre est.)</span>',A.proj[2026],grow(A.proj[2026],A.afilCount[2025]),'#d4a843',true);
+  afilRows+=afilRow('2027 <span style="color:var(--muted);font-size:10px">(proyección)</span>',A.proj[2027],grow(A.proj[2027],A.proj[2026]),'#d4a843',true);
   const chartCard=(t,id,h='300px')=>`<div style="${card}"><div style="font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:2px;color:var(--muted);margin-bottom:12px">${t}</div><div style="position:relative;height:${h}"><canvas id="${id}"></canvas></div></div>`;
   return `
   <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
@@ -2022,7 +2032,7 @@ function renderDemografia(){
   <div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;color:var(--gold);margin:6px 0 12px">AFILIADOS POR AÑO <span style="color:var(--muted);font-weight:400;letter-spacing:0">· personas únicas que compitieron al menos 1 vez en el año</span></div>
   <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:16px;align-items:start">
     <div style="${card}"><table style="width:100%;border-collapse:collapse">
-      <tr><td style="padding:4px 10px;font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px">AÑO</td><td></td><td style="padding:4px 10px;text-align:right;font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px">AFILIADOS</td></tr>
+      <tr><td style="padding:4px 10px;font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px">AÑO</td><td></td><td style="padding:4px 10px;text-align:right;font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px">AFILIADOS</td><td style="padding:4px 10px;text-align:right;font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px">CREC.</td></tr>
       ${afilRows}
     </table></div>
     ${chartCard('AFILIADOS POR AÑO','dcAfil','300px')}
@@ -2040,7 +2050,7 @@ function renderDemografia(){
     ${tableBlock('ZONA (según campeonato regional)',zona,'#3b82f6')}
   </div>
   <p style="color:var(--muted);font-size:11px;margin-top:14px;line-height:1.5">
-    <strong>Afiliado</strong> = persona que compitió al menos 1 vez ese año (1 ene–31 dic). 2020 = 0 (sin competencias por pandemia); el año en curso es parcial. <strong>Personas únicas</strong> cuenta a cada atleta una sola vez en todo el período; <strong>Total afiliaciones</strong> suma los afiliados de cada año (mide recurrencia). La <strong>zona</strong> se deriva del campeonato regional/zonal; <strong>"No determinada"</strong> = solo nacionales/internacionales. La edad por año es la edad cumplida ese año; en el resumen total es la edad actual. No corresponde necesariamente a la región administrativa de residencia.
+    <strong>Afiliado</strong> = persona que compitió al menos 1 vez ese año (1 ene–31 dic). 2020 = 0 (sin competencias por pandemia); el año en curso es parcial. Las filas <strong>2026 (cierre est.)</strong> y <strong>2027 (proyección)</strong> son estimaciones (según inscritos esperados de los regionales que faltan: Centro oct, Sur Austral, Centro Sur, Norte, Universitario), no datos cerrados. <strong>Personas únicas</strong> cuenta a cada atleta una sola vez en todo el período; <strong>Total afiliaciones</strong> suma los afiliados de cada año (mide recurrencia). La <strong>zona</strong> se deriva del campeonato regional/zonal; <strong>"No determinada"</strong> = solo nacionales/internacionales. La edad por año es la edad cumplida ese año; en el resumen total es la edad actual. No corresponde necesariamente a la región administrativa de residencia.
   </p>`;
 }
 
@@ -2078,7 +2088,13 @@ function buildAfilStats(){
   const afilCount={};let totalAfil=0;years.forEach(y=>{afilCount[y]=afil[y].size;totalAfil+=afil[y].size;});
   const zoneYearC={},ageYearC={};
   years.forEach(y=>{zoneYearC[y]={};zOrder.forEach(z=>zoneYearC[y][z]=zoneYear[y][z].size);ageYearC[y]={};aOrder.forEach(a=>ageYearC[y][a]=ageYear[y][a].size);});
-  return {years,zOrder,aOrder,afilCount,totalAfiliaciones:totalAfil,totalUnicos:uniqAll.size,zoneYear:zoneYearC,ageYear:ageYearC};
+  // Proyección (estimación manual basada en inscritos esperados de los regionales que faltan).
+  // El cierre 2026 nunca baja del real ya cargado; 2027 mantiene la misma tasa 2025→cierre2026.
+  const proj={};
+  proj[2026]=Math.max(690, afilCount[2026]||0);
+  const g26=afilCount[2025]?proj[2026]/afilCount[2025]:1.06;
+  proj[2027]=Math.round(proj[2026]*g26);
+  return {years,zOrder,aOrder,afilCount,totalAfiliaciones:totalAfil,totalUnicos:uniqAll.size,zoneYear:zoneYearC,ageYear:ageYearC,proj};
 }
 
 let _demoCharts={};
@@ -2093,7 +2109,12 @@ function initDemoCharts(){
     const opts={responsive:true,maintainAspectRatio:false,...base,...extra,
       plugins:{...base.plugins,...(extra.plugins||{})},scales:{...base.scales,...(extra.scales||{})}};
     _demoCharts[id]=new Chart(el,{type,data,options:opts});};
-  mk('dcAfil','bar',{labels:A.years,datasets:[{label:'Afiliados',data:A.years.map(y=>A.afilCount[y]),backgroundColor:'rgba(212,168,67,.85)',borderRadius:4}]},{plugins:{legend:{display:false}}});
+  const lastY=A.years[A.years.length-1];
+  const ay=A.years.filter(y=>y<lastY);
+  const afLabels=[...ay.map(String),'2026 (est)','2027 (proy)'];
+  const afVals=[...ay.map(y=>A.afilCount[y]),A.proj[2026],A.proj[2027]];
+  const afCols=[...ay.map(()=>'rgba(212,168,67,.85)'),'rgba(212,168,67,.4)','rgba(212,168,67,.4)'];
+  mk('dcAfil','bar',{labels:afLabels,datasets:[{label:'Afiliados',data:afVals,backgroundColor:afCols,borderRadius:4}]},{plugins:{legend:{display:false}}});
   const ZC=['#3b82f6','#6366f1','#06b6d4','#f59e0b','#22c55e','#a855f7','#64748b'];
   mk('dcZonaY','bar',{labels:A.years,datasets:A.zOrder.map((z,i)=>({label:z,data:A.years.map(y=>A.zoneYear[y][z]),backgroundColor:ZC[i%ZC.length],borderRadius:2}))},
     {scales:{x:{...base.scales.x,stacked:true},y:{...base.scales.y,stacked:true}}});
@@ -2125,6 +2146,8 @@ window.exportDemoCSV=function(){
   lines.push('AFILIADOS POR AÑO (personas únicas)');
   lines.push('Año,'+yh+',Total afiliaciones,Personas únicas');
   lines.push('Afiliados,'+A.years.map(y=>A.afilCount[y]).join(',')+','+A.totalAfiliaciones+','+A.totalUnicos);
+  lines.push('Cierre 2026 (estimado),'+A.proj[2026]);
+  lines.push('Proyección 2027,'+A.proj[2027]);
   lines.push('');
   lines.push('ZONA POR AÑO');
   lines.push('Zona,'+yh);
@@ -3062,29 +3085,53 @@ function renderNominas(){
     </div>`;
 }
 
+function apprListHtml(){
+  const tab=ST.apprTab||'pending';
+  const q=(ST.apprSearch||'').toLowerCase().trim();
+  let list=ST.inscripciones.filter(i=>((i.status||'approved')===tab));
+  if(q) list=list.filter(i=>((i.nombre||'')+' '+(i.club||'')+' '+(i.evento||'')+' '+(i.rut||'')).toLowerCase().includes(q));
+  list.sort((a,b)=>((b.timestamp&&b.timestamp.seconds||0)-(a.timestamp&&a.timestamp.seconds||0)));
+  const acceptBtn=sid=>`<button class="btn btn-g" style="padding:5px 10px;font-size:10px;margin:2px 3px 0 0" onclick="setStatus('${sid}','approved')">✓ Aceptar</button>`;
+  const rejectBtn=(sid,lbl)=>`<button class="btn btn-r" style="padding:5px 10px;font-size:10px;margin:2px 3px 0 0" onclick="setStatus('${sid}','rejected')">✗ ${lbl}</button>`;
+  const reviewBtn=sid=>`<button onclick="setStatus('${sid}','pending')" style="background:rgba(212,168,67,.15);border:1px solid var(--gold);color:var(--gold);padding:5px 10px;font-size:10px;border-radius:6px;cursor:pointer;font-family:Oswald;margin:2px 3px 0 0">↺ A revisión</button>`;
+  const acts=(sid,s)=>{
+    if(s==='pending')  return acceptBtn(sid)+rejectBtn(sid,'Rechazar');
+    if(s==='approved') return reviewBtn(sid)+rejectBtn(sid,'Cancelar');
+    return acceptBtn(sid)+reviewBtn(sid); // rejected
+  };
+  const rows=list.map(i=>{
+    const d=i.timestamp?new Date(i.timestamp.seconds?i.timestamp.seconds*1000:i.timestamp):null;
+    const sid=encodeURIComponent(i.id||'');
+    return `<tr>
+      <td style="font-size:10px;color:var(--muted)">${d?d.toLocaleDateString('es-CL'):'—'}</td>
+      <td>${esc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${esc(i.rut||'')} · ${esc(i.sexo||'')} · ${esc(i.division||'')}</span></td>
+      <td style="font-size:10px">${esc(i.evento||'')}</td>
+      <td><span class="badge b-y">${esc(i.categoria||'?')}</span></td>
+      <td style="font-size:11px"><span style="display:inline-flex;align-items:center;gap:5px">${window.clubLogoImg?window.clubLogoImg(i.club,18,'background:var(--bg);padding:1px;'):''}${esc(i.club||'—')}</span></td>
+      <td style="white-space:nowrap">${acts(sid,tab)}</td>
+    </tr>`;
+  }).join('');
+  return `<table class="tbl">
+      <tr><th>Fecha</th><th>Nombre</th><th>Evento</th><th>Cat.</th><th>Club</th><th>Acción</th></tr>
+      ${rows}
+    </table>
+    ${list.length===0?`<div class="empty">${q?'Sin resultados para la búsqueda':'No hay inscripciones en este estado'}</div>`:''}`;
+}
+window.apprFilter=function(v){ST.apprSearch=v;const el=document.getElementById('apprList');if(el)el.innerHTML=apprListHtml();};
 function renderApprovals(){
-  const pend=ST.inscripciones.filter(i=>i.status==='pending');
+  const tab=ST.apprTab||'pending';
+  const c=s=>ST.inscripciones.filter(i=>((i.status||'approved')===s)).length;
+  const tabBtn=(id,label,n)=>`<button onclick="ST.apprTab='${id}';render()" style="padding:9px 18px;border-radius:9px;border:1px solid ${tab===id?'var(--gold)':'var(--border)'};background:${tab===id?'rgba(212,168,67,.12)':'transparent'};color:${tab===id?'var(--gold)':'var(--muted)'};font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">${label} (${n})</button>`;
   return `
-    <div class="h1">Aprobaciones pendientes</div>
-    <p class="subtitle">${pend.length} inscripciones esperando revisión</p>
-    <div class="card" style="padding:0;overflow-x:auto">
-      <table class="tbl">
-        <tr><th>Fecha</th><th>Nombre</th><th>Evento</th><th>Cat.</th><th>Club</th><th>Acción</th></tr>
-        ${pend.map(i=>{
-          const d=i.timestamp?new Date(i.timestamp.seconds?i.timestamp.seconds*1000:i.timestamp):null;
-          const sid=encodeURIComponent(i.id||'');
-          return `<tr>
-            <td style="font-size:10px;color:var(--muted)">${d?d.toLocaleDateString('es-CL'):'—'}</td>
-            <td>${esc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${esc(i.sexo||'')} · ${esc(i.division||'')}</span></td>
-            <td style="font-size:10px">${esc(i.evento||'')}</td>
-            <td><span class="badge b-y">${esc(i.categoria||'?')}</span></td>
-            <td style="font-size:11px"><span style="display:inline-flex;align-items:center;gap:5px">${window.clubLogoImg?window.clubLogoImg(i.club,18,'background:var(--bg);padding:1px;'):''}${esc(i.club||'—')}</span></td>
-            <td><button class="btn btn-g" style="padding:5px 10px;font-size:10px" onclick="setStatus('${sid}','approved')">✓ APROBAR</button> <button class="btn btn-r" style="padding:5px 10px;font-size:10px" onclick="setStatus('${sid}','rejected')">✗ RECHAZAR</button></td>
-          </tr>`;
-        }).join('')}
-      </table>
-      ${pend.length===0?'<div class="empty">No hay pendientes 🎉</div>':''}
-    </div>`;
+    <div class="h1">Inscripciones</div>
+    <p class="subtitle">Aceptar · dejar en revisión · rechazar (puedes mover una en cualquier dirección)</p>
+    <div style="display:flex;gap:10px;margin:12px 0 14px;flex-wrap:wrap">
+      ${tabBtn('pending','En revisión',c('pending'))}
+      ${tabBtn('approved','Aceptadas',c('approved'))}
+      ${tabBtn('rejected','Rechazadas',c('rejected'))}
+    </div>
+    <input type="text" value="${esc(ST.apprSearch||'')}" oninput="apprFilter(this.value)" placeholder="Buscar por nombre, RUT, club o evento…" style="width:100%;max-width:380px;margin-bottom:12px;background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;font-family:DM Sans">
+    <div class="card" style="padding:0;overflow-x:auto" id="apprList">${apprListHtml()}</div>`;
 }
 
 function renderEditRequests(){
