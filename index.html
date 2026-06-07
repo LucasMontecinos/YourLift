@@ -178,15 +178,15 @@ function toggleMenu(){const m=document.getElementById('sideMenu');const o=docume
 function closeMenu(){document.getElementById('sideMenu').classList.remove('open');document.getElementById('menuOverlay').classList.remove('open');document.getElementById('hamburger').classList.remove('open')}
 function buildMenu(){
   const items=[
-    {v:'home',l:'Inicio',ic:'🏠'},
-    {v:'nominas',l:'Nóminas',ic:'📋'},
-    {v:'stats',l:'Estadísticas',ic:'📊'},
-    {v:'records',l:'Records',ic:'🏅'},
-    {v:'trans',l:'Transmisiones',ic:'📺'},
-    {v:'atletas',l:'Atletas',ic:'👤'},
-    {v:'insc',l:'Inscripción',ic:'📝',cls:'special-g'},
-    {v:'rank',l:'Ranking',ic:'🏆',cls:'special-y'},
-    {v:'glcalc',l:'Calculadora GL',ic:'🧮',cls:'special-b'},
+    {v:'home',l:'Inicio',ic:''},
+    {v:'nominas',l:'Nóminas',ic:''},
+    {v:'stats',l:'Estadísticas',ic:''},
+    {v:'records',l:'Records',ic:''},
+    {v:'trans',l:'Transmisiones',ic:''},
+    {v:'atletas',l:'Atletas',ic:''},
+    {v:'insc',l:'Inscripción',ic:'',cls:'special-g'},
+    {v:'rank',l:'Ranking',ic:'',cls:'special-y'},
+    {v:'glcalc',l:'Calculadora GL',ic:'',cls:'special-b'},
   ];
   const cur=(typeof ST!=='undefined'?ST.v:'nominas');
   document.getElementById('menuItems').innerHTML=items.map(it=>
@@ -226,6 +226,19 @@ window._BG_VIDEOS={};
     setBgForSection(typeof ST!=='undefined'?ST.v:'nominas');
   }catch(e){console.warn('[bgVideo]',e.message);}
 })();
+function sponsorStrip(){
+  const cfg=(window._BG_SETTINGS||{}).sponsors||{};
+  const items=(cfg.items||[]).filter(s=>s&&s.activo!==false&&s.logoUrl);
+  if(!items.length) return '';
+  const cell=s=>`<a href="${s.link||'#'}" target="_blank" rel="noopener" title="${String(s.nombre||'').replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;justify-content:center;padding:0 34px;flex-shrink:0"><img src="${s.logoUrl}" alt="${String(s.nombre||'')}" style="max-height:54px;max-width:170px;object-fit:contain;opacity:.92"></a>`;
+  const row=items.map(cell).join('');
+  const dur=Math.max(18, items.length*6);
+  return `<div style="margin:6px calc(-50vw + 50%) 30px;width:100vw;background:rgba(8,16,30,.5);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:18px 0;overflow:hidden">
+    <div style="text-align:center;font-family:Oswald;font-size:11px;letter-spacing:4px;color:var(--muted);margin-bottom:12px">AUSPICIADORES</div>
+    <div class="yl-marq" style="display:flex;width:max-content;animation:ylmarq ${dur}s linear infinite">${row}${row}</div>
+  </div>
+  <style>@keyframes ylmarq{from{transform:translateX(0)}to{transform:translateX(-50%)}}.yl-marq:hover{animation-play-state:paused}</style>`;
+}
 function setBgForSection(section){
   const wrap=document.getElementById('bgVideoWrap');
   const v=document.getElementById('bgVideo');
@@ -509,7 +522,7 @@ async function loadFBNominas(){
     }
   }catch(e){console.warn('Error loading Firebase nominas',e)}
 }
-const CC={"Campeonato Nacional FECHIPO 2026":{bg:"#fef3c7",b:"#f59e0b",t:"#92400e",n:"Nacional 2026"},"Campeonato Nacional FECHIPO 2025":{bg:"#dbeafe",b:"#3b82f6",t:"#1e40af",n:"Nacional 2025"},"Regional Centro Norte 2025":{bg:"#dcfce7",b:"#22c55e",t:"#166534",n:"Reg. Centro Norte 2025"},"Regional Sur Austral 2025":{bg:"#f3e8ff",b:"#a855f7",t:"#6b21a8",n:"Reg. Sur Austral 2025"},"Zonal Centro Clausura 2024":{bg:"#ffe4e6",b:"#f43f5e",t:"#9f1239",n:"Zonal Centro 2024"},"Campeonato Nacional 2025":{bg:"#fef9c3",b:"#eab308",t:"#713f12",n:"Nacional 2025 ⚡"},"Campeonato Nacional 2023":{bg:"#e0f2fe",b:"#0ea5e9",t:"#0c4a6e",n:"Nacional 2023 ⚡"},"Zonal Sur Los Toros 2025":{bg:"#ecfdf5",b:"#10b981",t:"#064e3b",n:"Zonal Sur 2025 ⚡"},"Regional Centro 2025":{bg:"#fdf4ff",b:"#c084fc",t:"#581c87",n:"Reg. Centro 2025 ⚡"}};
+const CC={"Campeonato Nacional FECHIPO 2026":{bg:"#fef3c7",b:"#f59e0b",t:"#92400e",n:"Nacional 2026"},"Campeonato Nacional FECHIPO 2025":{bg:"#dbeafe",b:"#3b82f6",t:"#1e40af",n:"Nacional 2025"},"Regional Centro Norte 2025":{bg:"#dcfce7",b:"#22c55e",t:"#166534",n:"Reg. Centro Norte 2025"},"Regional Sur Austral 2025":{bg:"#f3e8ff",b:"#a855f7",t:"#6b21a8",n:"Reg. Sur Austral 2025"},"Zonal Centro Clausura 2024":{bg:"#ffe4e6",b:"#f43f5e",t:"#9f1239",n:"Zonal Centro 2024"},"Campeonato Nacional 2025":{bg:"#fef9c3",b:"#eab308",t:"#713f12",n:"Nacional 2025 "},"Campeonato Nacional 2023":{bg:"#e0f2fe",b:"#0ea5e9",t:"#0c4a6e",n:"Nacional 2023 "},"Zonal Sur Los Toros 2025":{bg:"#ecfdf5",b:"#10b981",t:"#064e3b",n:"Zonal Sur 2025 "},"Regional Centro 2025":{bg:"#fdf4ff",b:"#c084fc",t:"#581c87",n:"Reg. Centro 2025 "}};
 let D=[],R={},NM={events:[]},ST={v:"home",s:"",fc:"",fk:"",fl:"",sel:null,p:0,rt:"classic",rl:"sq",ne:0,ns:""};
 function I(n){return n.split(" ").map(w=>w[0]).filter(Boolean).slice(0,2).join("").toUpperCase()}
 function cls(){return[...new Set(D.map(a=>a.club).filter(Boolean))].sort()}
@@ -528,7 +541,7 @@ function prof(a){
   const F=[["Club",clubVal],["Debut",a.debut||"—"]];
   let h=bday?'<div id="balloons"></div>':'';
   h+=`<button class="bb" onclick="bk()">← Volver</button>`;
-  h+=`<div class="pc"><div style="display:flex;align-items:center;gap:16px;margin-bottom:20px"><div style="position:relative;flex-shrink:0"><div class="pa">${I(a.nombre)}</div>${lgBadge}</div><div><div class="pn">${a.nombre}${bday?' 🎂🎉':''}</div><div class="pk">${a.codigo}</div></div></div><div class="pg">${F.map(([l,v])=>`<div class="fd"><div class="lb">${l}</div><div class="vl">${v||"—"}</div></div>`).join("")}</div></div>`;
+  h+=`<div class="pc"><div style="display:flex;align-items:center;gap:16px;margin-bottom:20px"><div style="position:relative;flex-shrink:0"><div class="pa">${I(a.nombre)}</div>${lgBadge}</div><div><div class="pn">${a.nombre}${bday?' ':''}</div><div class="pk">${a.codigo}</div></div></div><div class="pg">${F.map(([l,v])=>`<div class="fd"><div class="lb">${l}</div><div class="vl">${v||"—"}</div></div>`).join("")}</div></div>`;
   if(bday)setTimeout(balloons,300);
   if(a.bestLifts&&Object.keys(a.bestLifts).length){const b=a.bestLifts,L={sq:'Squat',bp:'Bench',dl:'Deadlift',total:'Total',glp:'GL Pts'},U={sq:'kg',bp:'kg',dl:'kg',total:'kg',glp:'pts'};
     h+=`<div class="cd2"><div class="ct"><h2>Mejores Levantamientos (PR)</h2></div><div class="bx">${Object.entries(L).map(([k,l])=>b[k]?`<div class="bi"><div class="bv">${b[k]}<span class="bu"> ${U[k]}</span></div><div class="bl">${l}</div></div>`:'').join('')}</div></div>`}
@@ -576,7 +589,7 @@ function gall(){
   if(!GALLERY.length&&!GALLERY._loading)loadGallery();
   const events=[...new Set(GALLERY.map(p=>p.eventoName).filter(Boolean))];
   const filtered=GALLERY_FILTER?GALLERY.filter(p=>p.eventoName===GALLERY_FILTER):GALLERY;
-  let h=`<div class="cd2"><div class="ct"><h2 style="color:var(--gold)">🖼 Galería</h2><span class="bg" style="background:var(--gold);color:var(--bg)">${filtered.length}</span></div>`;
+  let h=`<div class="cd2"><div class="ct"><h2 style="color:var(--gold)">Galería</h2><span class="bg" style="background:var(--gold);color:var(--bg)">${filtered.length}</span></div>`;
   h+=`<p style="font-size:12px;color:var(--muted);margin-bottom:14px">Fotos de los eventos · Click para ver al fotógrafo</p>`;
   if(events.length>1){
     h+=`<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap"><button class="sb ${!GALLERY_FILTER?'a':''}" onclick="setGalleryFilter('')">Todos</button>`;
@@ -609,7 +622,7 @@ function trans(){
   const all=(window.ALL_EVENTS||NM.events||[]).filter(ev=>ev.youtubeUrl);
   // Ordenar por fecha descendente (más reciente primero)
   const sorted=all.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  let h=`<div class="cd2"><div class="ct"><h2 style="color:var(--gold)">📺 Transmisiones pasadas</h2><span class="bg" style="background:var(--gold);color:var(--bg)">${sorted.length}</span></div>`;
+  let h=`<div class="cd2"><div class="ct"><h2 style="color:var(--gold)">Transmisiones pasadas</h2><span class="bg" style="background:var(--gold);color:var(--bg)">${sorted.length}</span></div>`;
   h+=`<p style="font-size:12px;color:var(--muted);margin-bottom:16px">Archivo de transmisiones desde la implementación de YourLift en FECHIPO</p>`;
   if(!sorted.length){h+=`<div class="emp" style="padding:30px;text-align:center;color:var(--muted)">No hay transmisiones registradas</div></div>`;return h;}
   h+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">`;
@@ -633,7 +646,7 @@ function trans(){
       const isUrl=/^https?:\/\//i.test(igRaw);
       const handle=igRaw.replace(/^@/,'').replace(/^https?:\/\/(www\.)?instagram\.com\//i,'').replace(/\/+$/,'');
       const href=isUrl?igRaw:('https://instagram.com/'+handle);
-      h+=`<a href="${href}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;margin-left:8px;background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);color:#fff;padding:6px 12px;border-radius:6px;font-family:Oswald;font-size:11px;font-weight:600;letter-spacing:1px;text-decoration:none">📷 @${handle}</a>`;
+      h+=`<a href="${href}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;margin-left:8px;background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);color:#fff;padding:6px 12px;border-radius:6px;font-family:Oswald;font-size:11px;font-weight:600;letter-spacing:1px;text-decoration:none">@${handle}</a>`;
     }
     h+=`</div></div>`;
   });
@@ -653,7 +666,7 @@ function nom(){
     const cd=cdStr(ev.date),cc=cdStr(ev.closeDate),cp=cdStrDT(ev.preNominaCloseAt),isUni=ev.extraCols&&ev.extraCols.includes("universidad");
     h+=`<div class="cd2" style="margin-bottom:24px">`;
     const lc=ev.liveCount||{};
-    h+=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px"><div><h2 style="font-family:Oswald;font-size:clamp(16px,3.5vw,20px);letter-spacing:1px;text-transform:uppercase">${ev.name}${ev.fromFirebase?' <span style="font-size:10px;background:var(--green);color:#fff;padding:2px 8px;border-radius:10px;vertical-align:middle;animation:pulse 2s infinite">🔴 EN VIVO</span>':''} ${ev.hasJsonFallback?'<span style="font-size:10px;background:rgba(212,168,67,.2);color:var(--gold);padding:2px 8px;border-radius:10px;vertical-align:middle;border:1px solid rgba(212,168,67,.4)">📋 Nómina manual</span>':''}</h2><p style="font-size:12px;color:var(--muted);margin-top:2px">${ev.organizer||ev.org||''} · ${ev.location} · ${ev.days}</p>${ev.fromFirebase&&lc.pending>0?`<p style="font-size:11px;color:var(--gold);margin-top:2px">⏳ ${lc.pending} inscripción${lc.pending!==1?"es":""} pendiente${lc.pending!==1?"s":""} de aprobación</p>`:''}</div><div style="display:flex;gap:8px;align-items:center">${ev.fromFirebase&&lc.approved?`<span style="font-size:12px;background:rgba(34,197,94,.15);color:var(--green);padding:4px 10px;border-radius:8px;border:1px solid rgba(34,197,94,.3)">✓ ${lc.approved} confirmados</span>`:"" }<span class="bg" style="background:var(--accent);color:#fff;font-size:14px;padding:6px 14px">${ev.athletes.length} inscritos</span></div></div>`;
+    h+=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px"><div><h2 style="font-family:Oswald;font-size:clamp(16px,3.5vw,20px);letter-spacing:1px;text-transform:uppercase">${ev.name}${ev.fromFirebase?' <span style="font-size:10px;background:var(--green);color:#fff;padding:2px 8px;border-radius:10px;vertical-align:middle;animation:pulse 2s infinite">EN VIVO</span>':''} ${ev.hasJsonFallback?'<span style="font-size:10px;background:rgba(212,168,67,.2);color:var(--gold);padding:2px 8px;border-radius:10px;vertical-align:middle;border:1px solid rgba(212,168,67,.4)">Nómina manual</span>':''}</h2><p style="font-size:12px;color:var(--muted);margin-top:2px">${ev.organizer||ev.org||''} · ${ev.location} · ${ev.days}</p>${ev.fromFirebase&&lc.pending>0?`<p style="font-size:11px;color:var(--gold);margin-top:2px">⏳ ${lc.pending} inscripción${lc.pending!==1?"es":""} pendiente${lc.pending!==1?"s":""} de aprobación</p>`:''}</div><div style="display:flex;gap:8px;align-items:center">${ev.fromFirebase&&lc.approved?`<span style="font-size:12px;background:rgba(34,197,94,.15);color:var(--green);padding:4px 10px;border-radius:8px;border:1px solid rgba(34,197,94,.3)">✓ ${lc.approved} confirmados</span>`:"" }<span class="bg" style="background:var(--accent);color:#fff;font-size:14px;padding:6px 14px">${ev.athletes.length} inscritos</span></div></div>`;
     if(ev.fromFirebase)h+=`<div style="display:flex;gap:14px;margin-bottom:10px;padding:8px 12px;background:rgba(30,58,95,.2);border-radius:8px;border:1px solid rgba(30,58,95,.4);flex-wrap:wrap;align-items:center"><span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">LEYENDA:</span><span style="font-size:11px;display:flex;align-items:center;gap:5px;color:var(--green)"><span style="width:10px;height:10px;border-radius:50%;background:var(--green);flex-shrink:0"></span>Confirmado — plaza asegurada</span><span style="font-size:11px;display:flex;align-items:center;gap:5px;color:var(--gold)"><span style="width:10px;height:10px;background:var(--gold);border-radius:2px;flex-shrink:0"></span>Pendiente — inscripción en revisión por el organizador</span></div>`;
     // YouTube embed — si el evento tiene URL configurada
     if(ev.youtubeUrl){
@@ -675,14 +688,14 @@ function nom(){
     h+=`</div>`;
     // Roster close countdown
     h+=`<div style="background:var(--bg);border:1px solid ${cc.done?'var(--accent)':'var(--border)'};border-radius:12px;padding:16px;text-align:center">`;
-    h+=`<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">📋 Cierre de Nómina</div>`;
+    h+=`<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Cierre de Nómina</div>`;
     if(cc.done)h+=`<div style="font-size:18px;font-weight:700;color:var(--accent);font-family:Oswald">NÓMINA CERRADA</div>`;
     else if(cc.unknown)h+=`<div style="font-size:14px;color:var(--muted);padding:12px 0">Por confirmar</div>`;else h+=`<div style="display:flex;justify-content:center;gap:12px"><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--accent);font-family:Oswald">${cc.d}</span><div style="font-size:10px;color:var(--muted)">días</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--accent);font-family:Oswald">${cc.h}</span><div style="font-size:10px;color:var(--muted)">hrs</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--accent);font-family:Oswald">${cc.m}</span><div style="font-size:10px;color:var(--muted)">min</div></div></div>`;
     h+=`</div>`;
     // Pre-nómina close countdown (cierre de inscripciones)
     if(hasCp){
       h+=`<div style="background:var(--bg);border:1px solid ${cp.done?'var(--green)':'rgba(34,197,94,.4)'};border-radius:12px;padding:16px;text-align:center">`;
-      h+=`<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">📝 Cierre Inscripciones</div>`;
+      h+=`<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Cierre Inscripciones</div>`;
       if(cp.done) h+=`<div style="font-size:18px;font-weight:700;color:var(--green);font-family:Oswald">INSCRIPCIONES CERRADAS</div>`;
       else h+=`<div style="display:flex;justify-content:center;gap:12px"><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--green);font-family:Oswald">${cp.d}</span><div style="font-size:10px;color:var(--muted)">días</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--green);font-family:Oswald">${cp.h}</span><div style="font-size:10px;color:var(--muted)">hrs</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--green);font-family:Oswald">${cp.m}</span><div style="font-size:10px;color:var(--muted)">min</div></div></div>`;
       h+=`</div>`;
@@ -755,7 +768,7 @@ function render(){const app=document.getElementById("app");
   let h='';
   if(ST.sel)h+=prof(ST.sel);
   else{
-    if(ST.v==="home")h+=home();
+    if(ST.v==="home")h+=home()+sponsorStrip();
     else if(ST.v==="stats")h+=sts();
     else if(ST.v==="records")h+=rec();
     else if(ST.v==="trans")h+=trans();
@@ -849,9 +862,9 @@ window.glcRenderTop3=async function(eq,sex,wcat){
     el.innerHTML=`<div style="text-align:center;padding:14px;color:var(--muted);font-size:12px">Sin datos de ranking para ${wcat} en esta modalidad</div>`;
     return;
   }
-  const medals=['🥇','🥈','🥉'];
+  const medals=['','',''];
   el.innerHTML=`
-    <div style="font-family:Oswald;font-size:11px;letter-spacing:3px;color:var(--gold);margin-bottom:12px">🏆 TOP 3 · ${wcat} · ${sex==='f'?'MUJERES':'HOMBRES'}</div>
+    <div style="font-family:Oswald;font-size:11px;letter-spacing:3px;color:var(--gold);margin-bottom:12px">TOP 3 · ${wcat} · ${sex==='f'?'MUJERES':'HOMBRES'}</div>
     ${rows.map((r,i)=>`
       <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:rgba(30,58,95,.2);border-radius:8px;margin-bottom:6px;border-left:3px solid ${i===0?'var(--gold)':i===1?'#c0c0c0':'#cd7f32'}">
         <span style="font-size:20px">${medals[i]}</span>
@@ -958,12 +971,12 @@ window.glcUpdate=function(){
   if(res){
     if(gl!==null){
       let cat='',catColor='var(--gold)';
-      if(gl>=100){cat='🌟 Elite Internacional';catColor='#f59e0b';}
-      else if(gl>=90){cat='🔴 Élite Nacional';catColor='#ef4444';}
-      else if(gl>=80){cat='🟠 Alto Rendimiento';catColor='#f97316';}
-      else if(gl>=70){cat='🟡 Avanzado';catColor='#eab308';}
-      else if(gl>=60){cat='🔵 Intermedio';catColor='#3b82f6';}
-      else{cat='⚪ Principiante';catColor='var(--muted)';}
+      if(gl>=100){cat='Elite Internacional';catColor='#f59e0b';}
+      else if(gl>=90){cat='Élite Nacional';catColor='#ef4444';}
+      else if(gl>=80){cat='Alto Rendimiento';catColor='#f97316';}
+      else if(gl>=70){cat='Avanzado';catColor='#eab308';}
+      else if(gl>=60){cat='Intermedio';catColor='#3b82f6';}
+      else{cat='Principiante';catColor='var(--muted)';}
       res.innerHTML=`<div style="font-family:Oswald;font-size:76px;font-weight:700;color:${catColor};line-height:1;text-shadow:0 0 40px ${catColor}55">${gl.toFixed(2)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${gl.toFixed(6)}</div>
         <div style="font-family:Oswald;font-size:13px;letter-spacing:4px;color:rgba(212,168,67,.8);margin-top:8px">GL POINTS</div>
@@ -1179,7 +1192,7 @@ function glcalc(){
     </div>
   </div>`;
 }
-  h+=`<div class="ftr">FECHIPO — Federación Chilena de Powerlifting · Afiliada a IPF & WADA<br>Resultados ⚡ vía <a href="https://www.openpowerlifting.org" target="_blank">OpenPowerlifting.org</a> (Public Domain)</div>`;
+  h+=`<div class="ftr">FECHIPO — Federación Chilena de Powerlifting · Afiliada a IPF & WADA<br>Resultados vía <a href="https://www.openpowerlifting.org" target="_blank">OpenPowerlifting.org</a> (Public Domain)</div>`;
   app.innerHTML=h;if(!ST.sel&&ST.v==="list"){const i=app.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}
   // En home: ocultar el logo YourLift de esquina (ya está grande en el hero) pero MANTENER FECHIPO
   const isHome=(ST.v==='home'&&!ST.sel);

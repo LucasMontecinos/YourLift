@@ -395,6 +395,14 @@ async function loadAll(){
       },(e)=>console.warn('[listener] edit_requests:',e.message));
     }catch(e){console.warn('[loadAll] edit_req listener:',e.message);}
   }
+  if(!window._allCompResListener){
+    try{
+      window._allCompResListener=onSnapshot(collection(db,'competition_results'),(snap)=>{
+        ST.allCompResults=snap.docs.map(d=>({id:d.id,...d.data()}));
+        if(ST.view==='athleteProfile')render();
+      },(e)=>console.warn('[listener] competition_results:',e.message));
+    }catch(e){console.warn('[loadAll] allCompRes listener:',e.message);}
+  }
   if(!window._eventosListener){
     try{
       window._eventosListener=onSnapshot(collection(db,'eventos'),(snap)=>{
@@ -1468,6 +1476,7 @@ function render(){
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='stats'?'active':''}" onclick="go('stats')">Estadísticas</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='publisher'?'active':''}" onclick="go('publisher')">Editor publicaciones</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='bgvideos'?'active':''}" onclick="go('bgvideos')">Videos de Fondo</button>`:''}
+      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='sponsors'?'active':''}" onclick="go('sponsors')">Auspiciadores</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='ai'?'active':''}" onclick="go('ai')">Asistente IA</button>`:''}
       <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')"><span class="icon">✓</span>Aprobaciones</button>
       <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')">Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
@@ -1494,6 +1503,7 @@ function render(){
   else if(ST.view==='nominas')content=renderNominas();
   else if(ST.view==='stats'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderStats();else go('athletes');}
   else if(ST.view==='bgvideos'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderBgVideos();else go('athletes');}
+  else if(ST.view==='sponsors'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderSponsors();else go('athletes');}
   else if(ST.view==='ai'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderAi();else go('athletes');}
   else if(ST.view==='publisher'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderPublisher();else go('athletes');}
   else if(ST.view==='approvals')content=renderApprovals();
@@ -1510,6 +1520,7 @@ function render(){
   else if(ST.view==='athleteProfile')content=renderAthleteProfile();
   
   app.innerHTML=`<div class="shell">${sidebar}<div class="main">${content}</div></div>`;
+  if(ST.view==='sponsors'&&!ST._sponsorsLoaded)setTimeout(loadSponsors,0);
   if(ST.view==='stats'){
     const _st=ST.statsTab||'deporte';
     if(_st==='web') setTimeout(loadWebAnalytics,0);
@@ -1818,6 +1829,56 @@ async function loadBgConfig(){
   try{const storage=getStorage(app);const l=await listAll(storageRef(storage,'videos/sections'));for(const it of l.items){const m=it.name.match(/^bg_([a-z]+)\./i);if(m)out.videos[m[1].toLowerCase()]=await getDownloadURL(it);}}catch(e){console.warn('[bg] videos',e.message);}
   ST.bgConfig=out;render();
 }
+// ── Auspiciadores (carrusel del inicio) — guardado en site_backgrounds/sponsors ──
+async function loadSponsors(){
+  try{ const s=await getDoc(doc(db,'site_backgrounds','sponsors')); ST.sponsors=(s.exists()&&Array.isArray(s.data().items))?s.data().items:[]; }
+  catch(e){ ST.sponsors=[]; }
+  ST._sponsorsLoaded=true; if(ST.view==='sponsors')render();
+}
+window.spAdd=function(){ST.sponsors=ST.sponsors||[];ST.sponsors.push({nombre:'',link:'',logoUrl:'',activo:true});render();};
+window.spDel=function(i){if(!confirm('¿Eliminar este auspiciador?'))return;ST.sponsors.splice(i,1);render();};
+window.spSet=function(i,k,v){if(ST.sponsors&&ST.sponsors[i])ST.sponsors[i][k]=v;};
+window.spUploadLogo=async function(i,inp){
+  const f=inp.files&&inp.files[0];if(!f)return;
+  const st=document.getElementById('sp_status_'+i);if(st)st.textContent='Subiendo…';
+  try{
+    const storage=getStorage(app);
+    const ext=(f.name.split('.').pop()||'png').toLowerCase().replace(/[^a-z0-9]/g,'')||'png';
+    const sref=storageRef(storage,'logos/sponsors/'+Date.now()+'_'+i+'.'+ext);
+    await uploadBytes(sref,f,{contentType:f.type||'image/png'});
+    ST.sponsors[i].logoUrl=await getDownloadURL(sref); render();
+  }catch(e){ if(st)st.textContent='Error: '+e.message; }
+};
+window.spSave=async function(){
+  (ST.sponsors||[]).forEach((s,i)=>{const n=document.getElementById('sp_nom_'+i),l=document.getElementById('sp_link_'+i),a=document.getElementById('sp_act_'+i);if(n)s.nombre=n.value;if(l)s.link=l.value;if(a)s.activo=a.checked;});
+  try{ await setDoc(doc(db,'site_backgrounds','sponsors'),{items:ST.sponsors||[],updatedAt:serverTimestamp()},{merge:true}); showToast('Auspiciadores guardados'); }
+  catch(e){ showToast('Error: '+e.message,null,true); }
+};
+function renderSponsors(){
+  const list=ST.sponsors||[];
+  const rows=list.map((s,i)=>`<div style="display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;flex-wrap:wrap">
+    <div style="width:120px;height:60px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:#0a1628;overflow:hidden;flex-shrink:0">
+      ${s.logoUrl?`<img src="${esc(s.logoUrl)}" style="max-width:100%;max-height:100%;object-fit:contain">`:'<span style="font-size:10px;color:var(--muted)">sin logo</span>'}
+    </div>
+    <div style="flex:1;min-width:240px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <input id="sp_nom_${i}" class="inp" placeholder="Nombre" value="${esc(s.nombre||'')}" onchange="spSet(${i},'nombre',this.value)">
+      <input id="sp_link_${i}" class="inp" placeholder="Link (https://...)" value="${esc(s.link||'')}" onchange="spSet(${i},'link',this.value)">
+    </div>
+    <label class="btn" style="font-size:11px;cursor:pointer;padding:6px 10px">Subir logo<input type="file" accept="image/*" onchange="spUploadLogo(${i},this)" style="display:none"></label>
+    <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)"><input id="sp_act_${i}" type="checkbox" ${s.activo!==false?'checked':''} onchange="spSet(${i},'activo',this.checked)"> Activo</label>
+    <button onclick="spDel(${i})" class="btn btn-r" style="padding:5px 9px;font-size:11px">Eliminar</button>
+    <span id="sp_status_${i}" style="font-size:10px;color:var(--muted)"></span>
+  </div>`).join('');
+  return `<div class="h1">Auspiciadores</div>
+    <p class="subtitle">Logos que avanzan en el carrusel del Inicio de yourlift.cl. Sube el logo, pon el link y actívalo.</p>
+    <div style="margin:14px 0">${rows||'<div style="color:var(--muted);font-size:13px">Sin auspiciadores aún. Usa “+ Agregar”.</div>'}</div>
+    <div style="display:flex;gap:10px">
+      <button onclick="spAdd()" class="btn">+ Agregar auspiciador</button>
+      <button onclick="spSave()" class="btn btn-g">Guardar</button>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-top:12px">Tras guardar, el carrusel aparece en el Inicio. Logos PNG con fondo transparente se ven mejor.</p>`;
+}
+
 function renderBgVideos(){
   if(!ST.bgConfig){loadBgConfig();return '<div class="ld" style="padding:60px;text-align:center;color:var(--muted)">Cargando configuración…</div>';}
   const S=ST.bgConfig.settings,V=ST.bgConfig.videos;
@@ -2975,7 +3036,10 @@ function renderAthletes(){
   // Ya no requieren "publicar data.json" manualmente.
   let bannerPend='';
   return `
-    <div class="h1">Atletas (Base de Datos)</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div class="h1" style="margin:0">Atletas (Base de Datos)</div>
+      ${(['owner','superadmin'].includes(ST.adminInfo?.role)||ST.adminInfo?.bootstrap)?`<button onclick="openCompModal('')" class="btn btn-g" style="padding:8px 14px;font-size:12px">+ Agregar competencia</button>`:''}
+    </div>
     <p class="subtitle">${ST.data.length} atletas · Ordenados A-Z · Click en cualquier campo para editar</p>
     ${bannerPend}
     <div class="search-box">
@@ -4056,6 +4120,115 @@ window.openAthleteProfile = function(codigo){
   go('athleteProfile');
 };
 
+// ═══════════════════════════════════════════
+// AGREGAR / ELIMINAR COMPETENCIAS A ATLETAS (owner) — guardado en vivo
+// ═══════════════════════════════════════════
+function _glPoints(total,bw,sex,modalidad){
+  if(!total||!bw)return 0;
+  const eq=/equip/i.test(modalidad||''); const fem=/muj|fem/i.test(sex||'');
+  let A,B,C;
+  if(eq){ if(fem){A=758.63878;B=949.31382;C=0.02435;} else {A=1236.25115;B=1449.21864;C=0.01644;} }
+  else  { if(fem){A=610.32796;B=1045.59282;C=0.03048;} else {A=1199.72839;B=1025.18162;C=0.00921;} }
+  return +(total*100/(A-B*Math.exp(-C*bw))).toFixed(2);
+}
+function _dotsPoints(total,bw,sex){
+  if(!total||!bw)return 0;
+  const fem=/muj|fem/i.test(sex||'');
+  const c=fem?[-57.96288,13.6175032,-0.1126655495,0.0005158568,-0.0000010706]
+             :[-307.75076,24.0900756,-0.1918759221,0.0007391293,-0.000001093];
+  const den=c[0]+c[1]*bw+c[2]*bw*bw+c[3]*bw**3+c[4]*bw**4;
+  if(!den)return 0;
+  return +(total*500/den).toFixed(2);
+}
+function _bestLift(pfx){
+  let best=0;
+  for(let i=1;i<=3;i++){
+    const el=document.getElementById('cm_'+pfx+i); const ev=document.getElementById('cm_'+pfx+i+'v');
+    if(!el)continue; const w=parseFloat(el.value)||0; const v=ev?ev.checked:true;
+    if(v&&w>best)best=w;
+  }
+  return best;
+}
+window.compRecalc=function(){
+  const sq=_bestLift('sq'),bp=_bestLift('bp'),dl=_bestLift('dl'),total=sq+bp+dl;
+  const bw=parseFloat(document.getElementById('cm_bw').value)||0;
+  const sex=document.getElementById('cm_sex').value, mod=document.getElementById('cm_mod').value;
+  const gl=_glPoints(total,bw,sex,mod), dots=_dotsPoints(total,bw,sex);
+  const out=document.getElementById('cm_out');
+  if(out)out.innerHTML='SQ <b>'+(sq||'-')+'</b> · BP <b>'+(bp||'-')+'</b> · DL <b>'+(dl||'-')+'</b> &nbsp;|&nbsp; Total <b style="color:var(--gold)">'+(total||'-')+'</b> kg &nbsp;|&nbsp; GL <b style="color:var(--gold)">'+(gl||'-')+'</b> &nbsp;|&nbsp; DOTS <b>'+(dots||'-')+'</b>';
+};
+window.compAthPick=function(v){
+  const m=(ST.data||[]).find(a=>a.nombre===v)||(ST.data||[]).find(a=>(a.nombre||'').toLowerCase()===(v||'').toLowerCase());
+  document.getElementById('cm_codigo').value=m?m.codigo||'':'';
+  document.getElementById('cm_rut').value=m?m.rut||'':'';
+  if(m){const sx=(m.competencias||[]).map(c=>c.sexo).find(Boolean);if(sx)document.getElementById('cm_sex').value=/muj|fem/i.test(sx)?'Mujer':'Hombre';}
+};
+window.openCompModal=function(codigo){
+  const a=codigo?(ST.data||[]).find(x=>x.codigo===codigo):null;
+  const dlist=(ST.data||[]).map(x=>`<option value="${esc(x.nombre)}">`).join('');
+  const lift=(pfx,label)=>`<div style="margin-bottom:8px"><div style="font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:3px">${label}</div><div style="display:flex;gap:6px">`+
+    [1,2,3].map(i=>`<div style="flex:1;display:flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 6px"><input id="cm_${pfx}${i}" type="number" step="0.5" placeholder="${i}°" oninput="compRecalc()" style="width:100%;background:transparent;border:none;color:var(--text);font-size:13px;outline:none"><input id="cm_${pfx}${i}v" type="checkbox" checked onchange="compRecalc()" title="válido"></div>`).join('')+`</div></div>`;
+  const ov=document.createElement('div'); ov.id='compModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto';
+  ov.innerHTML=`<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:540px;width:100%;padding:22px">
+    <div style="font-family:Oswald;font-size:19px;font-weight:700;margin-bottom:4px">Agregar competencia</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Elige un atleta cargado o escribe un nombre manual. Marca el check de cada intento válido.</div>
+    <input list="cm_athDL" id="cm_ath" value="${esc(a?a.nombre:'')}" oninput="compAthPick(this.value)" placeholder="Atleta" class="inp" style="width:100%;margin-bottom:8px">
+    <datalist id="cm_athDL">${dlist}</datalist>
+    <input id="cm_codigo" type="hidden" value="${esc(a?a.codigo:'')}"><input id="cm_rut" type="hidden" value="${esc(a?a.rut:'')}">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <input id="cm_evento" placeholder="Campeonato" class="inp">
+      <input id="cm_fecha" type="date" class="inp">
+      <select id="cm_mod" class="inp" onchange="compRecalc()"><option>Powerlifting Classic</option><option>Powerlifting Equipado</option><option>Only Bench</option></select>
+      <select id="cm_sex" class="inp" onchange="compRecalc()"><option>Hombre</option><option>Mujer</option></select>
+      <input id="cm_div" placeholder="División (ej: Open)" class="inp">
+      <input id="cm_cat" placeholder="Categoría (ej: 83)" class="inp">
+      <input id="cm_bw" type="number" step="0.1" placeholder="Peso corporal (kg)" oninput="compRecalc()" class="inp" style="grid-column:span 2">
+    </div>
+    ${lift('sq','SENTADILLA')}${lift('bp','BANCA')}${lift('dl','PESO MUERTO')}
+    <div id="cm_out" style="margin:10px 0;font-size:13px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px">—</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="closeCompModal()" class="btn" style="background:transparent;border:1px solid var(--border);color:var(--muted)">Cancelar</button>
+      <button onclick="saveCompResult()" class="btn btn-g">Guardar</button>
+    </div>
+  </div>`;
+  ov.addEventListener('click',e=>{if(e.target===ov)closeCompModal();});
+  document.body.appendChild(ov);
+  if(a){const sx=(a.competencias||[]).map(c=>c.sexo).find(Boolean);if(sx&&/muj|fem/i.test(sx))document.getElementById('cm_sex').value='Mujer';}
+  compRecalc();
+};
+window.closeCompModal=function(){const m=document.getElementById('compModal');if(m)m.remove();};
+window.saveCompResult=async function(){
+  const g=id=>document.getElementById(id);
+  const nombre=(g('cm_ath').value||'').trim();
+  if(!nombre){showToast('Falta el atleta',null,true);return;}
+  const evento=(g('cm_evento').value||'').trim();
+  if(!evento){showToast('Falta el campeonato',null,true);return;}
+  const codigo=(g('cm_codigo').value||'').trim(), rut=(g('cm_rut').value||'').trim();
+  const fecha=g('cm_fecha').value||'', division=(g('cm_div').value||'').trim(), categoria=(g('cm_cat').value||'').trim();
+  const modalidad=g('cm_mod').value, sexo=g('cm_sex').value, bw=parseFloat(g('cm_bw').value)||0;
+  const sq=_bestLift('sq'),bp=_bestLift('bp'),dl=_bestLift('dl'),total=sq+bp+dl;
+  const glp=_glPoints(total,bw,sexo,modalidad), dots=_dotsPoints(total,bw,sexo);
+  const att=pfx=>{const arr=[];for(let i=1;i<=3;i++){const w=parseFloat(g('cm_'+pfx+i).value)||0;const v=g('cm_'+pfx+i+'v').checked;if(w)arr.push({w,r:v?'g':'n'});}return arr;};
+  const slug=s=>String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,40);
+  const docId=(codigo||('m_'+slug(nombre)))+'__'+slug(evento)+'__'+slug(modalidad||'cl');
+  try{
+    await setDoc(doc(db,'competition_results',docId),{
+      codigo,rut,nombre,evento,fecha,sexo,division,categoria,modalidad,
+      resultado:{sq,bp,dl,total,bw,pesoCorporal:bw,glp,dots,intentos:{sq:att('sq'),bp:att('bp'),dl:att('dl')}},
+      source:'manual', addedBy:(ST.user?.email||'admin'), updatedAt:serverTimestamp()
+    },{merge:true});
+    await logAction('add_comp_result',docId,null,evento+' · '+total+'kg · GL '+glp,{nombre});
+    showToast('Competencia guardada: '+nombre+' · '+total+'kg');
+    closeCompModal();
+  }catch(e){showToast('Error: '+e.message,null,true);}
+};
+window.deleteCompResult=async function(id){
+  if(!confirm('¿Eliminar esta competencia del atleta?\n(Quita solo lo agregado en vivo, no afecta data.json)'))return;
+  try{ await deleteDoc(doc(db,'competition_results',id)); await logAction('delete_comp_result',id,null,'deleted'); showToast('Competencia eliminada'); }
+  catch(e){showToast('Error: '+e.message,null,true);}
+};
+
 function renderAthleteProfile(){
   const a = ST.data?.find(x=>x.codigo===ST.athleteProfile);
   if(!a) return '<div class="h1">Atleta no encontrado</div>';
@@ -4127,6 +4300,33 @@ function renderAthleteProfile(){
       <button onclick="editAthlete('${a.codigo.replace(/'/g,"\\'")}','nombre')" style="padding:6px 12px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer;flex-shrink:0">Editar</button>
     </div>
   </div>`;
+
+  // ── Competencias en vivo (agregar / eliminar) — solo owner ───
+  const _canComp=['owner','superadmin'].includes(ST.adminInfo?.role)||ST.adminInfo?.bootstrap;
+  if(_canComp){
+    const rnorm=s=>String(s||'').replace(/[^0-9kK]/g,'').toLowerCase();
+    const mine=(ST.allCompResults||[]).filter(r=>
+      (a.codigo&&r.codigo===a.codigo) ||
+      (a.rut&&r.rut&&rnorm(r.rut)===rnorm(a.rut)) ||
+      (r.nombre&&(r.nombre||'').toLowerCase().trim()===(a.nombre||'').toLowerCase().trim())
+    );
+    h+=`<div class="card" style="margin-bottom:14px;border-left:4px solid var(--green)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:1px;color:var(--green)">COMPETENCIAS (en vivo)</div>
+        <button onclick="openCompModal('${a.codigo.replace(/'/g,"\\'")}')" class="btn btn-g" style="padding:6px 12px;font-size:11px">+ Agregar competencia</button>
+      </div>
+      ${mine.length?`<table class="tbl"><tr><th>Campeonato</th><th>Cat/Div</th><th>Total</th><th>GL</th><th></th></tr>
+        ${mine.map(r=>`<tr>
+          <td>${esc(r.evento||'')}<br><span style="font-size:9px;color:var(--muted)">${esc(r.fecha||'')} · ${esc(r.modalidad||'')}${r.source==='manual'?' · manual':''}</span></td>
+          <td style="font-size:11px">${esc(r.categoria||'')} ${esc(r.division||'')}</td>
+          <td style="font-weight:700">${r.resultado?.total||'-'}</td>
+          <td>${r.resultado?.glp||r.resultado?.gl||'-'}</td>
+          <td><button onclick="deleteCompResult('${(r.id||'').replace(/'/g,"\\'")}')" style="background:transparent;border:1px solid rgba(239,68,68,.4);color:var(--red);padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer">Eliminar</button></td>
+        </tr>`).join('')}
+      </table>`:'<div style="font-size:12px;color:var(--muted)">Sin competencias agregadas en vivo. Usa “+ Agregar competencia”.</div>'}
+      <div style="font-size:10px;color:var(--muted);margin-top:8px">Se guardan en vivo y aparecen al instante en el perfil público (yourlift.cl/atleta). El total, GL e IPF/DOTS se calculan solos desde los intentos válidos y el peso corporal. Eliminar quita solo lo agregado aquí.</div>
+    </div>`;
+  }
 
   // ── Logros / Medallas ────────────────────────────────────
   const _canAch=['superadmin','owner'].includes(ST.adminInfo?.role);
