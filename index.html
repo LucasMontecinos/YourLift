@@ -230,7 +230,12 @@ function sponsorStrip(){
   const cfg=(window._BG_SETTINGS||{}).sponsors||{};
   const items=(cfg.items||[]).filter(s=>s&&s.activo!==false&&s.logoUrl);
   if(!items.length) return '';
-  const cell=s=>`<a href="${s.link||'#'}" target="_blank" rel="noopener" title="${String(s.nombre||'').replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;justify-content:center;padding:0 34px;flex-shrink:0"><img src="${s.logoUrl}" alt="${String(s.nombre||'')}" style="max-height:54px;max-width:170px;object-fit:contain;opacity:.92"></a>`;
+  const hrefOf=s=>{
+    const ig=String(s.ig||'').trim();
+    if(ig) return /^https?:\/\//i.test(ig)?ig:('https://instagram.com/'+ig.replace(/^@/,''));
+    return s.link||'#';
+  };
+  const cell=s=>`<a href="${hrefOf(s)}" target="_blank" rel="noopener" title="${String(s.nombre||'').replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;justify-content:center;padding:0 34px;flex-shrink:0"><img src="${s.logoUrl}" alt="${String(s.nombre||'')}" style="max-height:54px;max-width:170px;object-fit:contain;opacity:.92"></a>`;
   const row=items.map(cell).join('');
   const dur=Math.max(18, items.length*6);
   return `<div style="margin:6px calc(-50vw + 50%) 30px;width:100vw;background:rgba(8,16,30,.5);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:18px 0;overflow:hidden">

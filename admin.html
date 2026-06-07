@@ -1850,7 +1850,7 @@ window.spUploadLogo=async function(i,inp){
   }catch(e){ if(st)st.textContent='Error: '+e.message; }
 };
 window.spSave=async function(){
-  (ST.sponsors||[]).forEach((s,i)=>{const n=document.getElementById('sp_nom_'+i),l=document.getElementById('sp_link_'+i),a=document.getElementById('sp_act_'+i);if(n)s.nombre=n.value;if(l)s.link=l.value;if(a)s.activo=a.checked;});
+  (ST.sponsors||[]).forEach((s,i)=>{const n=document.getElementById('sp_nom_'+i),g=document.getElementById('sp_ig_'+i),l=document.getElementById('sp_link_'+i),a=document.getElementById('sp_act_'+i);if(n)s.nombre=n.value;if(g)s.ig=g.value;if(l)s.link=l.value;if(a)s.activo=a.checked;});
   try{ await setDoc(doc(db,'site_backgrounds','sponsors'),{items:ST.sponsors||[],updatedAt:serverTimestamp()},{merge:true}); showToast('Auspiciadores guardados'); }
   catch(e){ showToast('Error: '+e.message,null,true); }
 };
@@ -1860,9 +1860,10 @@ function renderSponsors(){
     <div style="width:120px;height:60px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:#0a1628;overflow:hidden;flex-shrink:0">
       ${s.logoUrl?`<img src="${esc(s.logoUrl)}" style="max-width:100%;max-height:100%;object-fit:contain">`:'<span style="font-size:10px;color:var(--muted)">sin logo</span>'}
     </div>
-    <div style="flex:1;min-width:240px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div style="flex:1;min-width:260px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
       <input id="sp_nom_${i}" class="inp" placeholder="Nombre" value="${esc(s.nombre||'')}" onchange="spSet(${i},'nombre',this.value)">
-      <input id="sp_link_${i}" class="inp" placeholder="Link (https://...)" value="${esc(s.link||'')}" onchange="spSet(${i},'link',this.value)">
+      <input id="sp_ig_${i}" class="inp" placeholder="@instagram" value="${esc(s.ig||'')}" onchange="spSet(${i},'ig',this.value)">
+      <input id="sp_link_${i}" class="inp" placeholder="Web (opcional)" value="${esc(s.link||'')}" onchange="spSet(${i},'link',this.value)">
     </div>
     <label class="btn" style="font-size:11px;cursor:pointer;padding:6px 10px">Subir logo<input type="file" accept="image/*" onchange="spUploadLogo(${i},this)" style="display:none"></label>
     <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)"><input id="sp_act_${i}" type="checkbox" ${s.activo!==false?'checked':''} onchange="spSet(${i},'activo',this.checked)"> Activo</label>
