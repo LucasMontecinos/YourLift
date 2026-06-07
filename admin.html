@@ -1513,7 +1513,7 @@ function render(){
   if(ST.view==='stats'){
     const _st=ST.statsTab||'deporte';
     if(_st==='web') setTimeout(loadWebAnalytics,0);
-    else if(_st==='demografia'){/* tablas estáticas, sin charts */}
+    else if(_st==='demografia') setTimeout(initDemoCharts,0);
     else setTimeout(initStatsCharts,0);
   }
   if(ST.view==='publisher')setTimeout(()=>{try{pubUpdatePreview()}catch(e){}},50);
@@ -1998,15 +1998,40 @@ function renderDemografia(){
   const sexoLbl={M:'Hombres',F:'Mujeres','N/D':'Sin dato'};
   const sexo=order(D.porSexo,['M','F','N/D']).map(([k,v])=>[sexoLbl[k]||k,v]);
   const ks='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;text-align:center';
+  const A=buildAfilStats();
+  const yMax=Math.max(1,...A.years.map(y=>A.afilCount[y]));
+  const afilRows=A.years.map((y,i)=>{
+    const c=A.afilCount[y];
+    return `<tr>
+      <td style="padding:6px 10px;font-size:13px;color:var(--text)">${y}</td>
+      <td style="padding:6px 10px;width:55%"><div style="background:rgba(255,255,255,.06);border-radius:5px;height:15px"><div style="background:#d4a843;height:15px;border-radius:5px;width:${(c/yMax*100).toFixed(1)}%;min-width:2px"></div></div></td>
+      <td style="padding:6px 10px;text-align:right;font-weight:700;font-size:13px;color:var(--text)">${c.toLocaleString()}</td>
+    </tr>`;
+  }).join('');
+  const chartCard=(t,id,h='300px')=>`<div style="${card}"><div style="font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:2px;color:var(--muted);margin-bottom:12px">${t}</div><div style="position:relative;height:${h}"><canvas id="${id}"></canvas></div></div>`;
   return `
   <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
-    <button onclick="exportDemoCSV()" title="Descargar resumen + detalle (CSV, abre en Excel)" style="background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);padding:8px 14px;border-radius:8px;font-family:Oswald;font-size:11px;letter-spacing:1px;cursor:pointer;font-weight:700">📥 EXPORTAR (CSV / Excel)</button>
+    <button onclick="exportDemoCSV()" title="Descargar resumen + por año + detalle (CSV, abre en Excel)" style="background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);padding:8px 14px;border-radius:8px;font-family:Oswald;font-size:11px;letter-spacing:1px;cursor:pointer;font-weight:700">📥 EXPORTAR (CSV / Excel)</button>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px">
-    <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:var(--gold)">${D.total.toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">ATLETAS TOTALES</div></div>
-    <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:#3b82f6">${(D.porSexo.M||0).toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">HOMBRES</div></div>
-    <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:#ec4899">${(D.porSexo.F||0).toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">MUJERES</div></div>
+    <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:var(--gold)">${A.totalUnicos.toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">PERSONAS ÚNICAS ${A.years[0]}–${A.years[A.years.length-1]}</div></div>
+    <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:#3b82f6">${A.totalAfiliaciones.toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">TOTAL AFILIACIONES</div></div>
+    <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:var(--muted)">${D.total.toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">ATLETAS EN DB</div></div>
   </div>
+
+  <div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;color:var(--gold);margin:6px 0 12px">AFILIADOS POR AÑO <span style="color:var(--muted);font-weight:400;letter-spacing:0">· personas únicas que compitieron al menos 1 vez en el año</span></div>
+  <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:16px;align-items:start">
+    <div style="${card}"><table style="width:100%;border-collapse:collapse">
+      <tr><td style="padding:4px 10px;font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px">AÑO</td><td></td><td style="padding:4px 10px;text-align:right;font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px">AFILIADOS</td></tr>
+      ${afilRows}
+    </table></div>
+    ${chartCard('AFILIADOS POR AÑO','dcAfil','300px')}
+  </div>
+
+  <div style="margin-top:16px">${chartCard('ZONA POR AÑO (apilado)','dcZonaY','320px')}</div>
+  <div style="margin-top:16px">${chartCard('RANGOS DE EDAD POR AÑO (apilado)','dcEdadY','320px')}</div>
+
+  <div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;color:var(--gold);margin:24px 0 12px">RESUMEN TOTAL <span style="color:var(--muted);font-weight:400;letter-spacing:0">· base completa, cada atleta contado una vez</span></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
     ${tableBlock('RANGOS DE EDAD',edad,'#d4a843')}
     ${tableBlock('SEXO',sexo,'#ec4899')}
@@ -2015,8 +2040,66 @@ function renderDemografia(){
     ${tableBlock('ZONA (según campeonato regional)',zona,'#3b82f6')}
   </div>
   <p style="color:var(--muted);font-size:11px;margin-top:14px;line-height:1.5">
-    La edad se calcula desde la fecha de nacimiento al día de hoy. La <strong>zona</strong> se deriva del campeonato regional/zonal en que compitió cada atleta (FECHIPO organiza por macro-zona); <strong>"No determinada"</strong> = atletas que solo registran campeonatos nacionales o internacionales. No corresponde necesariamente a la región administrativa de residencia.
+    <strong>Afiliado</strong> = persona que compitió al menos 1 vez ese año (1 ene–31 dic). 2020 = 0 (sin competencias por pandemia); el año en curso es parcial. <strong>Personas únicas</strong> cuenta a cada atleta una sola vez en todo el período; <strong>Total afiliaciones</strong> suma los afiliados de cada año (mide recurrencia). La <strong>zona</strong> se deriva del campeonato regional/zonal; <strong>"No determinada"</strong> = solo nacionales/internacionales. La edad por año es la edad cumplida ese año; en el resumen total es la edad actual. No corresponde necesariamente a la región administrativa de residencia.
   </p>`;
+}
+
+// ── Afiliados por año: persona única que compitió ≥1 vez en el año (auto desde data.json) ──
+function buildAfilStats(){
+  const Y0=2017, Y1=new Date().getFullYear();
+  const years=[]; for(let y=Y0;y<=Y1;y++) years.push(y);
+  const zOrder=['Centro','Centro Norte','Centro Sur','Norte','Sur','Sur Austral','No determinada'];
+  const aOrder=['Menor de 14','14-18','19-23','24-39','40-49','50-59','60-69','70+','Sin fecha'];
+  const byOf=fn=>{if(!fn)return null;const p=String(fn).split('/');if(p.length!==3)return null;const a0=+p[0],a2=+p[2];if(a2>1920&&a2<2016)return a2;if(a0>1920&&a0<2016)return a0;return null;};
+  const cy=c=>{if(c.fecha){const s=String(c.fecha).slice(0,4);if(/^\d{4}$/.test(s))return +s;}const m=/20\d{2}/.exec(c.evento||'');return m?+m[0]:null;};
+  const zoneOf=ev=>{const e=(ev||'').toLowerCase();if(e.includes('sur austral'))return'Sur Austral';if(e.includes('centro norte'))return'Centro Norte';if(e.includes('centro sur'))return'Centro Sur';if(e.includes('zona norte')||e.includes('regional norte')||e.includes('atacama'))return'Norte';if(e.includes('zona sur')||e.includes('osorno'))return'Sur';if(e.includes('zona centro')||e.includes('regional centro'))return'Centro';return null;};
+  const rngOf=a=>{if(a===null||a===undefined||isNaN(a))return'Sin fecha';if(a<14)return'Menor de 14';if(a<=18)return'14-18';if(a<=23)return'19-23';if(a<=39)return'24-39';if(a<=49)return'40-49';if(a<=59)return'50-59';if(a<=69)return'60-69';return'70+';};
+  const afil={},zoneYear={},ageYear={};
+  years.forEach(y=>{afil[y]=new Set();zoneYear[y]={};ageYear[y]={};zOrder.forEach(z=>zoneYear[y][z]=new Set());aOrder.forEach(a=>ageYear[y][a]=new Set());});
+  const uniqAll=new Set();
+  (ST.data||[]).forEach((o,idx)=>{
+    const aid=o.rut||o.codigo||('x'+idx);
+    const by=byOf(o.fechaNac);
+    const peryear={};
+    (o.competencias||[]).forEach(c=>{
+      const y=cy(c); if(!y||y<Y0||y>Y1)return;
+      afil[y].add(aid); uniqAll.add(aid);
+      const z=zoneOf(c.evento);
+      if(!peryear[y])peryear[y]={};
+      if(z)peryear[y][z]=(peryear[y][z]||0)+1;
+      ageYear[y][rngOf(by?(y-by):null)].add(aid);
+    });
+    Object.keys(peryear).forEach(y=>{
+      const v=peryear[y];let best=null,bn=0;Object.keys(v).forEach(z=>{if(v[z]>bn){bn=v[z];best=z;}});
+      if(!best)best='No determinada';
+      zoneYear[y][best].add(aid);
+    });
+  });
+  const afilCount={};let totalAfil=0;years.forEach(y=>{afilCount[y]=afil[y].size;totalAfil+=afil[y].size;});
+  const zoneYearC={},ageYearC={};
+  years.forEach(y=>{zoneYearC[y]={};zOrder.forEach(z=>zoneYearC[y][z]=zoneYear[y][z].size);ageYearC[y]={};aOrder.forEach(a=>ageYearC[y][a]=ageYear[y][a].size);});
+  return {years,zOrder,aOrder,afilCount,totalAfiliaciones:totalAfil,totalUnicos:uniqAll.size,zoneYear:zoneYearC,ageYear:ageYearC};
+}
+
+let _demoCharts={};
+function initDemoCharts(){
+  if(typeof Chart==='undefined')return;
+  Object.values(_demoCharts).forEach(c=>{try{c.destroy()}catch(e){}});_demoCharts={};
+  const A=buildAfilStats();
+  const base={color:'#D4E1F0',plugins:{legend:{labels:{color:'#D4E1F0',font:{family:'Oswald',size:10},boxWidth:12}}},
+    scales:{x:{ticks:{color:'#7A8FA6',font:{family:'Oswald',size:10}},grid:{color:'rgba(30,58,95,.5)'}},
+            y:{ticks:{color:'#7A8FA6',font:{family:'Oswald',size:10}},grid:{color:'rgba(30,58,95,.5)'}}}};
+  const mk=(id,type,data,extra={})=>{const el=document.getElementById(id);if(!el)return;
+    const opts={responsive:true,maintainAspectRatio:false,...base,...extra,
+      plugins:{...base.plugins,...(extra.plugins||{})},scales:{...base.scales,...(extra.scales||{})}};
+    _demoCharts[id]=new Chart(el,{type,data,options:opts});};
+  mk('dcAfil','bar',{labels:A.years,datasets:[{label:'Afiliados',data:A.years.map(y=>A.afilCount[y]),backgroundColor:'rgba(212,168,67,.85)',borderRadius:4}]},{plugins:{legend:{display:false}}});
+  const ZC=['#3b82f6','#6366f1','#06b6d4','#f59e0b','#22c55e','#a855f7','#64748b'];
+  mk('dcZonaY','bar',{labels:A.years,datasets:A.zOrder.map((z,i)=>({label:z,data:A.years.map(y=>A.zoneYear[y][z]),backgroundColor:ZC[i%ZC.length],borderRadius:2}))},
+    {scales:{x:{...base.scales.x,stacked:true},y:{...base.scales.y,stacked:true}}});
+  const AC=['#94a3b8','#22c55e','#3b82f6','#d4a843','#f59e0b','#ec4899','#a855f7','#ef4444','#64748b'];
+  mk('dcEdadY','bar',{labels:A.years,datasets:A.aOrder.map((a,i)=>({label:a,data:A.years.map(y=>A.ageYear[y][a]),backgroundColor:AC[i%AC.length],borderRadius:2}))},
+    {scales:{x:{...base.scales.x,stacked:true},y:{...base.scales.y,stacked:true}}});
 }
 
 window.exportDemoCSV=function(){
@@ -2036,6 +2119,23 @@ window.exportDemoCSV=function(){
   sec('RANGOS DE EDAD',D.porEdad,['Menor de 14','14-18','19-23','24-39','40-49','50-59','60-69','70+','Sin fecha']);
   sec('ZONA',D.porZona,['Centro','Centro Norte','Centro Sur','Norte','Sur','Sur Austral','No determinada']);
   sec('SEXO',D.porSexo,['M','F','N/D'],{M:'Hombres',F:'Mujeres','N/D':'Sin dato'});
+  // ── Secciones por año ──
+  const A=buildAfilStats();
+  const yh=A.years.join(',');
+  lines.push('AFILIADOS POR AÑO (personas únicas)');
+  lines.push('Año,'+yh+',Total afiliaciones,Personas únicas');
+  lines.push('Afiliados,'+A.years.map(y=>A.afilCount[y]).join(',')+','+A.totalAfiliaciones+','+A.totalUnicos);
+  lines.push('');
+  lines.push('ZONA POR AÑO');
+  lines.push('Zona,'+yh);
+  A.zOrder.forEach(z=>lines.push(z+','+A.years.map(y=>A.zoneYear[y][z]).join(',')));
+  lines.push('Total afiliados,'+A.years.map(y=>A.afilCount[y]).join(','));
+  lines.push('');
+  lines.push('RANGOS DE EDAD POR AÑO');
+  lines.push('Rango,'+yh);
+  A.aOrder.forEach(a=>lines.push(a+','+A.years.map(y=>A.ageYear[y][a]).join(',')));
+  lines.push('Total afiliados,'+A.years.map(y=>A.afilCount[y]).join(','));
+  lines.push('');
   lines.push('DETALLE');
   lines.push('codigo,edad,rango,zona,sexo,club,debut');
   D.detail.forEach(r=>{
