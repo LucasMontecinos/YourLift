@@ -395,6 +395,14 @@ async function loadAll(){
       },(e)=>console.warn('[listener] edit_requests:',e.message));
     }catch(e){console.warn('[loadAll] edit_req listener:',e.message);}
   }
+  if(!window._entListener){
+    try{
+      window._entListener=onSnapshot(collection(db,'entrenadores'),(snap)=>{
+        ST.entrenadores=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+        if(ST.view==='entrenadoresDB')render();
+      },(e)=>console.warn('[listener] entrenadores:',e.message));
+    }catch(e){console.warn('[loadAll] ent listener:',e.message);}
+  }
   if(!window._allCompResListener){
     try{
       window._allCompResListener=onSnapshot(collection(db,'competition_results'),(snap)=>{
@@ -1480,7 +1488,8 @@ function render(){
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='ai'?'active':''}" onclick="go('ai')">Asistente IA</button>`:''}
       <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')"><span class="icon">✓</span>Aprobaciones</button>
       <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')">Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
-      <button class="side-btn ${ST.view==='entrenadores'?'active':''}" onclick="go('entrenadores')">Entrenadores</button>
+      <button class="side-btn ${ST.view==='entrenadores'?'active':''}" onclick="go('entrenadores')">Entrenadores (cuentas)</button>
+      <button class="side-btn ${ST.view==='entrenadoresDB'?'active':''}" onclick="go('entrenadoresDB')">Base Entrenadores</button>
       <button class="side-btn ${ST.view==='fotos'?'active':''}" onclick="go('fotos')">Fotos Atletas</button>
       <button class="side-btn ${ST.view==='importar'?'active':''}" onclick="go('importar')">Importar LiftingCast</button>
       <button class="side-btn ${ST.view==='cronograma'?'active':''}" onclick="go('cronograma')">Cronograma</button>
@@ -1509,6 +1518,7 @@ function render(){
   else if(ST.view==='approvals')content=renderApprovals();
   else if(ST.view==='editRequests')content=renderEditRequests();
   else if(ST.view==='entrenadores')content=renderEntrenadores();
+  else if(ST.view==='entrenadoresDB')content=renderEntrenadoresDB();
   else if(ST.view==='fotos')content=renderFotos();
   else if(ST.view==='importar')content=renderImportar();
   else if(ST.view==='cronograma')content=renderCronograma();
@@ -1829,6 +1839,146 @@ async function loadBgConfig(){
   try{const storage=getStorage(app);const l=await listAll(storageRef(storage,'videos/sections'));for(const it of l.items){const m=it.name.match(/^bg_([a-z]+)\./i);if(m)out.videos[m[1].toLowerCase()]=await getDownloadURL(it);}}catch(e){console.warn('[bg] videos',e.message);}
   ST.bgConfig=out;render();
 }
+// ═══════════════════════════════════════════
+// BASE DE ENTRENADORES (acreditaciones, vigencia 1 año, categoría) — Firestore
+// ═══════════════════════════════════════════
+function _entRutId(r){return String(r||'').replace(/[^0-9kK]/g,'').toUpperCase();}
+function _entVence(fecha){ if(!fecha)return ''; const p=String(fecha).split('-'); if(p.length<2)return ''; return (parseInt(p[0])+1)+'-'+p[1]; }
+function _entVigente(c){ const m=new Date().toISOString().slice(0,7); return (c.acreditaciones||[]).some(a=>a.vence&&a.vence>=m); }
+let _entWork=null;
+window.openEntModal=function(rut){
+  const src=rut?(ST.entrenadores||[]).find(x=>x.id===rut):null;
+  _entWork=src?JSON.parse(JSON.stringify(src)):{nombre:'',rut:'',club:'',correos:[],categoria:'',acreditaciones:[]};
+  if(!_entWork.acreditaciones)_entWork.acreditaciones=[];
+  const ov=document.createElement('div'); ov.id='entModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto';
+  ov.innerHTML=`<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:600px;width:100%;padding:22px">
+    <div style="font-family:Oswald;font-size:19px;font-weight:700;margin-bottom:14px">${rut?'Editar entrenador':'Nuevo entrenador'}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <input id="ent_nom" class="inp" placeholder="Nombre completo" value="${esc(_entWork.nombre||'')}">
+      <input id="ent_rut" class="inp" placeholder="RUT" value="${esc(_entWork.rut||'')}">
+      <input id="ent_club" class="inp" placeholder="Club" value="${esc(_entWork.club||'')}">
+      <input id="ent_cat" class="inp" placeholder="Categoría actual (ej: Cat. 1)" value="${esc(_entWork.categoria||'')}">
+      <input id="ent_mails" class="inp" placeholder="Correos (separados por coma)" value="${esc((_entWork.correos||[]).join(', '))}" style="grid-column:span 2">
+    </div>
+    <div style="font-family:Oswald;font-size:12px;letter-spacing:1px;color:var(--gold);margin:10px 0 6px">ACREDITACIONES (cada una vence al año)</div>
+    <div id="ent_acreds"></div>
+    <button onclick="entAddAcred()" class="btn" style="margin-top:6px;font-size:11px;padding:5px 10px">+ Agregar acreditación</button>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button onclick="closeEntModal()" class="btn" style="background:transparent;border:1px solid var(--border);color:var(--muted)">Cancelar</button>
+      <button onclick="saveEnt()" class="btn btn-g">Guardar</button>
+    </div>
+  </div>`;
+  ov.addEventListener('click',e=>{if(e.target===ov)closeEntModal();});
+  document.body.appendChild(ov);
+  entRenderAcreds();
+};
+window.closeEntModal=function(){const m=document.getElementById('entModal');if(m)m.remove();_entWork=null;};
+function entRenderAcreds(){
+  const box=document.getElementById('ent_acreds'); if(!box)return;
+  const A=_entWork.acreditaciones;
+  box.innerHTML=A.map((a,i)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+    <input id="ea_proc_${i}" class="inp" type="number" min="1" placeholder="N°" value="${a.proceso||''}" style="width:64px" title="Proceso (1,2,3,4...)">
+    <input id="ea_fecha_${i}" class="inp" type="month" value="${esc(a.fecha||'')}" style="width:150px" title="Mes del proceso">
+    <input id="ea_cat_${i}" class="inp" placeholder="Categoría" value="${esc(a.categoria||'')}" style="width:110px">
+    <select id="ea_cumple_${i}" class="inp" style="width:90px"><option ${/^si/i.test(a.cumple||'')?'selected':''}>SI</option><option ${!/^si/i.test(a.cumple||'')?'selected':''}>NO</option></select>
+    <span style="font-size:10px;color:var(--muted)">vence ${esc(_entVence(a.fecha)||'—')}</span>
+    <button onclick="entDelAcred(${i})" style="background:transparent;border:1px solid rgba(239,68,68,.4);color:var(--red);padding:3px 7px;border-radius:5px;font-size:10px;cursor:pointer">✕</button>
+  </div>`).join('')||'<div style="font-size:11px;color:var(--muted)">Sin acreditaciones.</div>';
+}
+function entSyncAcredsFromDOM(){
+  _entWork.acreditaciones.forEach((a,i)=>{
+    const p=document.getElementById('ea_proc_'+i),f=document.getElementById('ea_fecha_'+i),c=document.getElementById('ea_cat_'+i),cu=document.getElementById('ea_cumple_'+i);
+    if(p)a.proceso=parseInt(p.value)||'';
+    if(f){a.fecha=f.value;a.vence=_entVence(f.value);}
+    if(c)a.categoria=c.value.trim();
+    if(cu)a.cumple=cu.value;
+  });
+}
+window.entAddAcred=function(){entSyncAcredsFromDOM();_entWork.acreditaciones.push({proceso:(_entWork.acreditaciones.length+1),fecha:'',categoria:_entWork.categoria||'',cumple:'SI'});entRenderAcreds();};
+window.entDelAcred=function(i){entSyncAcredsFromDOM();_entWork.acreditaciones.splice(i,1);entRenderAcreds();};
+window.saveEnt=async function(){
+  const g=id=>document.getElementById(id);
+  const nombre=(g('ent_nom').value||'').trim(), rut=(g('ent_rut').value||'').trim();
+  if(!nombre){showToast('Falta el nombre',null,true);return;}
+  if(!rut){showToast('Falta el RUT',null,true);return;}
+  entSyncAcredsFromDOM();
+  const data={
+    nombre, rut, club:(g('ent_club').value||'').trim(),
+    categoria:(g('ent_cat').value||'').trim(),
+    correos:(g('ent_mails').value||'').split(',').map(s=>s.trim()).filter(Boolean),
+    acreditaciones:_entWork.acreditaciones.map(a=>({proceso:a.proceso||'',fecha:a.fecha||'',vence:_entVence(a.fecha),categoria:a.categoria||'',cumple:a.cumple||''})),
+    updatedAt:serverTimestamp()
+  };
+  try{ await setDoc(doc(db,'entrenadores',_entRutId(rut)),data,{merge:true}); await logAction('ent_save',_entRutId(rut),null,nombre); showToast('Entrenador guardado'); closeEntModal(); }
+  catch(e){ showToast('Error: '+e.message,null,true); }
+};
+window.delEnt=async function(rut){
+  const c=(ST.entrenadores||[]).find(x=>x.id===rut);
+  if(!confirm('¿Eliminar a '+(c?c.nombre:'este entrenador')+' de la base?'))return;
+  try{ await deleteDoc(doc(db,'entrenadores',rut)); await logAction('ent_delete',rut,null,'deleted'); showToast('Entrenador eliminado'); }
+  catch(e){ showToast('Error: '+e.message,null,true); }
+};
+window.importEntrenadores=async function(){
+  if(!confirm('Importar la base de entrenadores (entrenadores_db.json) a Firestore?\nLos que ya existan (por RUT) se actualizan.'))return;
+  showToast('Importando…');
+  try{
+    const arr=await fetch('entrenadores_db.json?v='+Date.now()).then(r=>r.json());
+    let n=0;
+    for(const c of arr){
+      const id=_entRutId(c.rut); if(!id)continue;
+      await setDoc(doc(db,'entrenadores',id),{...c,updatedAt:serverTimestamp()},{merge:true}); n++;
+    }
+    await logAction('ent_import','entrenadores',null,n+' registros');
+    showToast('Importados '+n+' entrenadores');
+  }catch(e){ showToast('Error importando: '+e.message,null,true); }
+};
+window.entFilter=function(v){ST.entSearch=v;const el=document.getElementById('entList');if(el)el.innerHTML=entListHtml();};
+function entListHtml(){
+  const q=(ST.entSearch||'').toLowerCase().trim();
+  let list=ST.entrenadores||[];
+  if(q)list=list.filter(c=>((c.nombre||'')+' '+(c.rut||'')+' '+(c.club||'')+' '+(c.categoria||'')+' '+(c.correos||[]).join(' ')).toLowerCase().includes(q));
+  const rows=list.map(c=>{
+    const vig=_entVigente(c);
+    const procs=(c.acreditaciones||[]).map(a=>a.proceso).filter(Boolean).sort((a,b)=>a-b).join(', ');
+    const ult=(c.acreditaciones||[]).reduce((m,a)=>(a.vence&&(!m||a.vence>m.vence)?a:m),null);
+    return `<tr>
+      <td>${esc(c.nombre||'')}<br><span style="font-size:9px;color:var(--muted)">${esc(c.rut||'')}${c.club?' · '+esc(c.club):''}</span></td>
+      <td style="font-size:11px">${esc((c.correos||[]).join(', ')||'—')}</td>
+      <td><span class="badge b-y">${esc(c.categoria||'?')}</span></td>
+      <td style="font-size:11px">P: ${procs||'—'}</td>
+      <td>${vig?`<span class="badge b-g">Vigente</span>`:`<span class="badge b-r">Vencida</span>`}<br><span style="font-size:9px;color:var(--muted)">${ult?('hasta '+esc(ult.vence)):''}</span></td>
+      <td style="white-space:nowrap">
+        <button onclick="openEntModal('${esc(c.id)}')" class="btn" style="padding:3px 9px;font-size:10px">Editar</button>
+        <button onclick="delEnt('${esc(c.id)}')" class="btn btn-r" style="padding:3px 9px;font-size:10px">Eliminar</button>
+      </td>
+    </tr>`;
+  }).join('');
+  return `<table class="tbl"><tr><th>Nombre / RUT</th><th>Correos</th><th>Cat.</th><th>Procesos</th><th>Vigencia</th><th></th></tr>${rows}</table>
+    ${list.length===0?`<div class="empty">${q?'Sin resultados':'Base vacía — usa “Importar base”.'}</div>`:''}`;
+}
+function renderEntrenadoresDB(){
+  const list=ST.entrenadores||[];
+  const total=list.length, vig=list.filter(_entVigente).length;
+  const c1=list.filter(c=>/cat\.?\s*1/i.test(c.categoria||'')).length;
+  const c2=list.filter(c=>/cat\.?\s*2/i.test(c.categoria||'')).length;
+  const ks='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;text-align:center';
+  return `<div class="h1">Base de Entrenadores</div>
+    <p class="subtitle">Acreditaciones por proceso · cada una vigente 1 año · categoría · editable</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin:14px 0 16px">
+      <div style="${ks}"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:var(--gold)">${total}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">ENTRENADORES</div></div>
+      <div style="${ks}"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:#22c55e">${vig}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">VIGENTES</div></div>
+      <div style="${ks}"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:#3b82f6">${c1}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">CAT. 1</div></div>
+      <div style="${ks}"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:#ec4899">${c2}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">CAT. 2</div></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+      <input type="text" value="${esc(ST.entSearch||'')}" oninput="entFilter(this.value)" placeholder="Buscar nombre, RUT, club, correo…" style="flex:1;min-width:220px;background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;font-family:DM Sans">
+      <button onclick="openEntModal('')" class="btn btn-g" style="padding:8px 14px">+ Agregar</button>
+      <button onclick="importEntrenadores()" class="btn" style="padding:8px 14px">Importar base</button>
+    </div>
+    <div class="card" style="padding:0;overflow-x:auto" id="entList">${entListHtml()}</div>`;
+}
+
 // ── Auspiciadores (carrusel del inicio) — guardado en site_backgrounds/sponsors ──
 async function loadSponsors(){
   try{ const s=await getDoc(doc(db,'site_backgrounds','sponsors')); ST.sponsors=(s.exists()&&Array.isArray(s.data().items))?s.data().items:[]; }
