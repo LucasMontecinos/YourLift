@@ -3477,19 +3477,11 @@ window.cronoImport=async function(){
     showToast('Importados '+ST.cronoRows.length+' atletas');
   }catch(e){showToast('Error: '+e.message,null,true);}
 };
-// Deja solo los atletas cuyo FLIGHT termina en el dígito de la tarima dada (1 o 2)
-window.cronoKeepTarima=async function(t){
-  t=String(t);
-  if(!ST.cronoRows||!ST.cronoRows.length){showToast('Nada que filtrar',null,true);return;}
-  const keep=ST.cronoRows.filter(r=>{const f=String(r.flight||'');const suf=f.slice(-1);return suf===t || (String(r.tarima)===t && !/[12]$/.test(f));});
-  const removed=ST.cronoRows.length-keep.length;
-  if(!removed){showToast('No hay atletas de otra tarima',null,true);return;}
-  if(!confirm('Eliminar '+removed+' atletas que NO son de Tarima '+t+'?\n(Quedan '+keep.length+'. Es permanente.)'))return;
-  ST.cronoRows=keep; await cronoSaveDoc(); showToast('Eliminados '+removed+'. Quedan '+keep.length); render();
-};
 window.cronoClear=async function(){
   if(!ST.cronoEv)return;
-  if(!confirm('Vaciar TODO el cronograma de este campeonato? (no afecta inscripciones)'))return;
+  const n=ST.cronoRows?ST.cronoRows.length:0;
+  if(!confirm('¿Vaciar TODO el cronograma de este campeonato?\n('+n+' atletas · no afecta inscripciones)'))return;
+  if(!confirm('Confirma de nuevo: se borrarán los '+n+' atletas del cronograma.\nEsta acción NO se puede deshacer.'))return;
   ST.cronoRows=[]; await cronoSaveDoc(); showToast('Cronograma vaciado'); render();
 };
 // Reglas: cada categoría+división JUNTA en un flight · máx 14 por flight · máx 6 flights por tarima
@@ -3576,7 +3568,7 @@ function renderCronoEditor(){
       <select onchange="cronoPickEvent(this.value)" style="background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;min-width:240px">
         <option value="">— Elegir campeonato —</option>${evOpts}
       </select>
-      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g">Cargar desde nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoKeepTarima('1')" class="btn">Dejar solo Tarima 1</button><button onclick="cronoKeepTarima('2')" class="btn">Dejar solo Tarima 2</button><button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button>`:''}
+      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g">Cargar desde nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button>`:''}
     </div>`;
   if(!ST.cronoEv) return h+`<div class="card" style="color:var(--muted)">Elige un campeonato para ver y editar su cronograma.</div>`;
   if(ST.cronoRows===null) return h+`<div class="card" style="color:var(--muted)">Cargando…</div>`;
