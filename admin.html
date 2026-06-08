@@ -3498,14 +3498,22 @@ window.cronoAutoDistribute=async function(){
   const rows=ST.cronoRows||[]; if(!rows.length){showToast('No hay atletas',null,true);return;}
   if(!confirm('Auto-distribuir '+rows.length+' atletas en flights?\nRegla: cada categoría+división junta, máx 14 por flight, máx 6 flights por tarima.'))return;
   const MAXP=14, MAXF=6, L=['A','B','C','D','E','F'];
+  const sexOf=r=>{
+    if(r.sexo){const s=String(r.sexo).toLowerCase();if(/muj|fem|^f/.test(s))return'F';if(/hom|masc|varon|^m/.test(s))return'M';}
+    const c=parseFloat(String(r.categoria||'').replace(/[^0-9.]/g,''));
+    const F=[43,47,52,57,63,69,76,84], M=[53,59,66,74,83,93,105,120];
+    if(F.includes(c))return'F'; if(M.includes(c))return'M'; return '?';
+  };
   const groups={};
-  rows.forEach(r=>{const k=(r.division||'?')+'|'+(r.categoria||'?');(groups[k]=groups[k]||[]).push(r);});
-  const keys=Object.keys(groups).sort((a,b)=>{const A=a.split('|'),B=b.split('|');return (parseFloat(A[1])||999)-(parseFloat(B[1])||999)||A[0].localeCompare(B[0]);});
-  const flights=[]; let cur=[];
+  rows.forEach(r=>{const k=sexOf(r)+'|'+(r.division||'?')+'|'+(r.categoria||'?');(groups[k]=groups[k]||[]).push(r);});
+  const srank={F:0,M:1,'?':2};
+  const keys=Object.keys(groups).sort((a,b)=>{const A=a.split('|'),B=b.split('|');return (srank[A[0]]-srank[B[0]])||((parseFloat(A[2])||999)-(parseFloat(B[2])||999))||A[1].localeCompare(B[1]);});
+  const flights=[]; let cur=[], curSex=null;
   for(const k of keys){
-    const g=groups[k];
-    if(g.length>MAXP){ if(cur.length){flights.push(cur);cur=[];} for(let i=0;i<g.length;i+=MAXP)flights.push(g.slice(i,i+MAXP)); continue; }
-    if(cur.length+g.length>MAXP){ flights.push(cur); cur=[]; }
+    const sex=k.split('|')[0]; const g=groups[k];
+    if(g.length>MAXP){ if(cur.length){flights.push(cur);cur=[];curSex=null;} for(let i=0;i<g.length;i+=MAXP)flights.push(g.slice(i,i+MAXP)); continue; }
+    if(cur.length && (curSex!==sex || cur.length+g.length>MAXP)){ flights.push(cur); cur=[]; }
+    if(!cur.length)curSex=sex;
     cur=cur.concat(g);
   }
   if(cur.length)flights.push(cur);
@@ -3572,7 +3580,11 @@ function renderCronoEditor(){
   const taOpts=(cur)=>CRONO_TARIMAS.concat(CRONO_TARIMAS.includes(String(cur))?[]:[String(cur)].filter(Boolean)).map(t=>`<option ${String(t)===String(cur)?'selected':''}>${t}</option>`).join('');
   const inp=(i,f,v,w)=>`<input value="${esc(v||'')}" onchange="cronoSet(${i},'${f}',this.value)" style="width:${w||90}px;background:transparent;border:1px solid var(--border);border-radius:5px;padding:3px 5px;color:var(--text);font-size:11px">`;
   const sSel='background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:5px;padding:3px;color:var(--text);font-size:11px';
-  const rows=order.map(i=>{const r=ST.cronoRows[i];return `<tr>
+  let _prevFk=null,_colIdx=-1;
+  const rows=order.map(i=>{const r=ST.cronoRows[i];
+    const _fk=String(r.tarima)+'|'+String(r.flight); let _first=false; if(_fk!==_prevFk){_colIdx++;_prevFk=_fk;_first=true;}
+    const _blue=_colIdx%2===0; const _bg=_blue?'rgba(59,130,246,.12)':'rgba(196,30,58,.12)'; const _bd=_first?('border-top:3px solid '+(_blue?'rgba(59,130,246,.65)':'rgba(196,30,58,.65)')+';'):'';
+    return `<tr style="background:${_bg};${_bd}">
     <td>${inp(i,'nombre',r.nombre,128)}</td>
     <td>${inp(i,'division',r.division,64)}</td>
     <td>${inp(i,'categoria',r.categoria,40)}</td>
