@@ -248,9 +248,10 @@ function sponsorStrip(){
   </div>
   <style>@keyframes ylmarq{from{transform:translateX(0)}to{transform:translateX(-50%)}}.yl-marq:hover{animation-play-state:paused}</style>`;
 }
-function liveEmbed(){
+function liveEmbed(){ try{
   const all=(window.ALL_EVENTS||NOM_EVENTS||[]).filter(e=>e&&e.status!=='archived'&&e.youtubeUrl);
   if(!all.length) return '';
+  const _esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const today=new Date(); today.setHours(0,0,0,0);
   all.sort((a,b)=>{
     const da=new Date((a.date||'')+'T00:00:00'), db=new Date((b.date||'')+'T00:00:00');
@@ -264,7 +265,7 @@ function liveEmbed(){
   const cards=live.map(ev=>{
     const id=vid(ev.youtubeUrl); if(!id)return '';
     const nm=(ev.name||'').trim();
-    return `<div>${nm?`<div style="font-size:13px;color:var(--muted);margin-bottom:6px;font-family:Oswald;letter-spacing:.5px">${_escH(nm)}</div>`:''}
+    return `<div>${nm?`<div style="font-size:13px;color:var(--muted);margin-bottom:6px;font-family:Oswald;letter-spacing:.5px">${_esc(nm)}</div>`:''}
       <div style="position:relative;padding-top:56.25%;border-radius:14px;overflow:hidden;border:1px solid var(--border);background:#000;box-shadow:0 8px 30px rgba(0,0,0,.4)">
         <iframe src="https://www.youtube.com/embed/${id}" style="position:absolute;inset:0;width:100%;height:100%;border:0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen loading="lazy"></iframe>
       </div></div>`;
@@ -274,7 +275,7 @@ function liveEmbed(){
   return `<div style="margin-bottom:34px">
     <h2 style="font-family:Oswald;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:14px"><span style="color:var(--accent)">●</span> Transmisión en vivo</h2>
     <div style="${grid}">${cards.join('')}</div></div>`;
-}
+}catch(e){console.warn('[liveEmbed]',e);return '';} }
 function setBgForSection(section){
   const wrap=document.getElementById('bgVideoWrap');
   const v=document.getElementById('bgVideo');
