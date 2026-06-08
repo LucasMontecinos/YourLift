@@ -823,10 +823,12 @@ function cronoRender(ev,rows,HMAP){
   const _nn=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
   const _slug=s=>_nn(s).replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,50);
   const hNames=r=>{const k=ev+'__'+_slug(r.entrenador||'')+'__'+((r.jornada||'1').toString().trim()||'1');const sub=HMAP[k];if(sub&&Array.isArray(sub.handlers)&&sub.handlers.length)return sub.handlers.map(h=>h.nombre).filter(Boolean);const a=[];if((r.handler1||{}).nombre)a.push(r.handler1.nombre);if((r.handler2||{}).nombre)a.push(r.handler2.nombre);return a;};
-  const groups={}; rows.forEach(r=>{const k=(r.tarima||'?')+'||'+(r.flight||'?');(groups[k]=groups[k]||[]).push(r);});
-  const keys=Object.keys(groups).sort((a,b)=>{const x=a.split('||'),y=b.split('||');return String(x[0]).localeCompare(String(y[0]))||String(x[1]).localeCompare(String(y[1]));});
+  const jr=x=>x==='AM'?0:x==='PM'?1:2;
+  const groups={}; rows.forEach(r=>{const k=(r.tarima||'?')+'||'+(r.jornada||'')+'||'+(r.flight||'?');(groups[k]=groups[k]||[]).push(r);});
+  const keys=Object.keys(groups).sort((a,b)=>{const x=a.split('||'),y=b.split('||');return String(x[0]).localeCompare(String(y[0]))||(jr(x[1])-jr(y[1]))||String(x[2]).localeCompare(String(y[2]));});
   return keys.map((k,gi)=>{
-    const p=k.split('||'),tar=p[0],fl=p[1],aths=groups[k];
+    const p=k.split('||'),tar=p[0],jor=p[1],fl=p[2],aths=groups[k];
+    const jorTxt=(jor==='AM'||jor==='PM')?(' · '+_escH(jor)):'';
     const blue=gi%2===0, bg=blue?'rgba(59,130,246,.10)':'rgba(196,30,58,.10)', hd=blue?'rgba(59,130,246,.22)':'rgba(196,30,58,.22)', bd=blue?'#3b82f6':'#c41e3a';
     const tr=aths.map((r,i)=>{const hs=hNames(r);return `<tr style="border-top:1px solid ${bd}22">
       <td style="padding:6px 10px;color:var(--muted)">${i+1}</td>
@@ -837,7 +839,7 @@ function cronoRender(ev,rows,HMAP){
       <td style="padding:6px 10px">${_escH(r.entrenador||'—')}</td>
       <td style="padding:6px 10px">${hs.length?hs.map(_escH).join('<br>'):'<span style="color:var(--muted)">—</span>'}</td></tr>`;}).join('');
     return `<div style="background:${bg};border:1px solid ${bd}55;border-left:5px solid ${bd};border-radius:12px;margin-bottom:14px;overflow:hidden">
-      <div style="background:${hd};padding:10px 14px;font-family:Oswald;font-weight:700;letter-spacing:1px">Tarima ${_escH(tar)} · Flight ${_escH(fl)} <span style="color:var(--muted);font-weight:400;font-size:12px">· ${aths.length} atleta(s)${aths[0].jornada?(' · Jornada '+_escH(aths[0].jornada)):''}</span></div>
+      <div style="background:${hd};padding:10px 14px;font-family:Oswald;font-weight:700;letter-spacing:1px">Tarima ${_escH(tar)} · Flight ${_escH(fl)}${jorTxt} <span style="color:var(--muted);font-weight:400;font-size:12px">· ${aths.length} atleta(s)</span></div>
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
         <tr style="text-align:left;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;text-transform:uppercase"><th style="padding:6px 10px">#</th><th style="padding:6px 10px">Atleta</th><th style="padding:6px 10px">Div/Cat</th><th style="padding:6px 10px">Club</th><th style="padding:6px 10px">Modalidad</th><th style="padding:6px 10px">Entrenador</th><th style="padding:6px 10px">Handlers</th></tr>
         ${tr}

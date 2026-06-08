@@ -3466,7 +3466,7 @@ window.cronoSet=function(i,field,val){
   else if(field==='h2c'){r.handler2={...(r.handler2||{}),correo:val};}
   else r[field]=val;
   cronoSaveDoc();
-  if(field==='tarima'||field==='flight')setTimeout(()=>{if(ST.view==='cronograma')render();},50);
+  if(field==='tarima'||field==='flight'||field==='jornada')setTimeout(()=>{if(ST.view==='cronograma')render();},50);
 };
 window.cronoImport=async function(){
   if(!ST.cronoEv){showToast('Elige un campeonato primero',null,true);return;}
@@ -3555,7 +3555,8 @@ function _xlsxDownload(aoa, sheetName, filename){
 }
 window.cronoExportXlsx=function(){
   const rows=ST.cronoRows||[]; if(!rows.length){showToast('Nada que exportar',null,true);return;}
-  const order=rows.map((r,i)=>i).sort((a,b)=>String(rows[a].tarima).localeCompare(String(rows[b].tarima))||String(rows[a].flight).localeCompare(String(rows[b].flight)));
+  const _jr=x=>x==='AM'?0:x==='PM'?1:2;
+  const order=rows.map((r,i)=>i).sort((a,b)=>String(rows[a].tarima).localeCompare(String(rows[b].tarima))||(_jr(rows[a].jornada)-_jr(rows[b].jornada))||String(rows[a].flight).localeCompare(String(rows[b].flight)));
   const head=['Nombre','División','Categoría','Sexo','Club','Modalidad','Tarima','Flight','Jornada','Entrenador','Handler 1','Correo handler 1','Handler 2','Correo handler 2'];
   const aoa=[head];
   order.forEach(i=>{const r=rows[i];aoa.push([r.nombre||'',r.division||'',r.categoria||'',r.sexo||'',r.club||'',r.modalidad||'',r.tarima||'',r.flight||'',r.jornada||'',r.entrenador||'',(r.handler1||{}).nombre||'',(r.handler1||{}).correo||'',(r.handler2||{}).nombre||'',(r.handler2||{}).correo||'']);});
@@ -3582,9 +3583,10 @@ function renderCronoEditor(){
   if(ST.cronoRows===null) return h+`<div class="card" style="color:var(--muted)">Cargando…</div>`;
   if(!ST.cronoRows.length) return h+`<div class="card" style="color:var(--muted)">Este campeonato no tiene cronograma. Usa <b>“Cargar desde nómina”</b> (inscripciones aprobadas), <b>“Importar debutantes”</b> (solo debutantes) o <b>“+ Atleta”</b>.</div>`;
   // orden de visualización: tarima, flight
+  const _jr=x=>x==='AM'?0:x==='PM'?1:2;
   const order=ST.cronoRows.map((r,i)=>i).sort((a,b)=>{
     const ra=ST.cronoRows[a],rb=ST.cronoRows[b];
-    return (String(ra.tarima)).localeCompare(String(rb.tarima))||String(ra.flight).localeCompare(String(rb.flight))||0;
+    return (String(ra.tarima)).localeCompare(String(rb.tarima))||(_jr(ra.jornada)-_jr(rb.jornada))||String(ra.flight).localeCompare(String(rb.flight))||0;
   });
   const flOpts=(cur)=>CRONO_FLIGHTS.concat(CRONO_FLIGHTS.includes(cur)?[]:[cur].filter(Boolean)).map(f=>`<option ${f===cur?'selected':''}>${f}</option>`).join('');
   const taOpts=(cur)=>CRONO_TARIMAS.concat(CRONO_TARIMAS.includes(String(cur))?[]:[String(cur)].filter(Boolean)).map(t=>`<option ${String(t)===String(cur)?'selected':''}>${t}</option>`).join('');
@@ -3592,7 +3594,7 @@ function renderCronoEditor(){
   const sSel='background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:5px;padding:3px;color:var(--text);font-size:11px';
   let _prevFk=null,_colIdx=-1;
   const rows=order.map(i=>{const r=ST.cronoRows[i];
-    const _fk=String(r.tarima)+'|'+String(r.flight); let _first=false; if(_fk!==_prevFk){_colIdx++;_prevFk=_fk;_first=true;}
+    const _fk=String(r.tarima)+'|'+String(r.jornada)+'|'+String(r.flight); let _first=false; if(_fk!==_prevFk){_colIdx++;_prevFk=_fk;_first=true;}
     const _blue=_colIdx%2===0; const _bg=_blue?'rgba(59,130,246,.12)':'rgba(196,30,58,.12)'; const _bd=_first?('border-top:3px solid '+(_blue?'rgba(59,130,246,.65)':'rgba(196,30,58,.65)')+';'):'';
     return `<tr style="background:${_bg};${_bd}">
     <td>${inp(i,'nombre',r.nombre,128)}</td>
@@ -3603,7 +3605,7 @@ function renderCronoEditor(){
     <td>${inp(i,'modalidad',r.modalidad,108)}</td>
     <td><select onchange="cronoSet(${i},'tarima',this.value)" style="${sSel}">${taOpts(r.tarima)}</select></td>
     <td><select onchange="cronoSet(${i},'flight',this.value)" style="${sSel}">${flOpts(r.flight)}</select></td>
-    <td>${inp(i,'jornada',r.jornada,40)}</td>
+    <td><select onchange="cronoSet(${i},'jornada',this.value)" style="${sSel}"><option value="" ${(r.jornada!=='AM'&&r.jornada!=='PM')?'selected':''}>—</option><option ${r.jornada==='AM'?'selected':''}>AM</option><option ${r.jornada==='PM'?'selected':''}>PM</option></select></td>
     <td>${inp(i,'entrenador',r.entrenador,104)}</td>
     <td>${inp(i,'h1n',(r.handler1||{}).nombre,98)}<br>${inp(i,'h1c',(r.handler1||{}).correo,124)}</td>
     <td>${inp(i,'h2n',(r.handler2||{}).nombre,98)}<br>${inp(i,'h2c',(r.handler2||{}).correo,124)}</td>
