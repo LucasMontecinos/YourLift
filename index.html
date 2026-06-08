@@ -795,15 +795,17 @@ function embedded(url){return `<iframe src="${url}?embedded=1" style="width:100%
 function _escH(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 window.cronoSel=function(ev){ST.cronoEv=ev;render();};
 function crono(){
-  const evs=(window.ALL_EVENTS||[]).filter(e=>e.status!=='archived').sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const evs=(window.ALL_EVENTS||[]).filter(e=>e.status!=='archived' && e.cronogramaPublic!==false).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const opts=evs.map(e=>`<option value="${_escH(e.id)}" ${ST.cronoEv===e.id?'selected':''}>${_escH(e.name||e.id)}</option>`).join('');
+  if(ST.cronoEv && !evs.some(e=>e.id===ST.cronoEv)) ST.cronoEv='';
   if(ST.cronoEv) setTimeout(()=>loadCronoSection(ST.cronoEv),30);
   return `<div class="cd2"><div class="ct"><h2 style="color:var(--gold)">📋 Cronograma</h2></div>
     <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Start list por tarima y flight · entrenador y handlers</p>
-    <select onchange="cronoSel(this.value)" style="background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;min-width:260px;margin-bottom:8px">
-      <option value="">— Elegir campeonato —</option>${opts}
+    <select onchange="cronoSel(this.value)" style="width:100%;max-width:420px;box-sizing:border-box;background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:8px">
+      <option value="">Selecciona campeonato</option>${opts}
     </select>
-    <div id="cronoMount">${ST.cronoEv?'<div style="color:var(--muted);padding:14px">Cargando…</div>':'<div style="color:var(--muted);padding:14px">Elige un campeonato.</div>'}</div>
+    ${evs.length?'':'<div style="color:var(--muted);padding:6px 0;font-size:13px">No hay cronogramas publicados por el momento.</div>'}
+    <div id="cronoMount">${ST.cronoEv?'<div style="color:var(--muted);padding:14px">Cargando…</div>':'<div style="color:var(--muted);padding:14px">Selecciona un campeonato.</div>'}</div>
   </div>`;
 }
 async function loadCronoSection(ev){
