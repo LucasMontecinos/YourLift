@@ -3477,6 +3477,11 @@ window.cronoImport=async function(){
     showToast('Importados '+ST.cronoRows.length+' atletas');
   }catch(e){showToast('Error: '+e.message,null,true);}
 };
+// Marca AM/PM a TODOS los atletas de un flight (misma tarima + flight) de una vez
+window.cronoSetFlightJornada=function(t,f,j){
+  let n=0;(ST.cronoRows||[]).forEach(r=>{if(String(r.tarima)===String(t)&&String(r.flight)===String(f)){r.jornada=j;n++;}});
+  if(n){cronoSaveDoc();showToast(n+' atletas del Flight '+f+' (Tarima '+t+') → '+j);render();}
+};
 window.cronoClear=async function(){
   if(!ST.cronoEv)return;
   const n=ST.cronoRows?ST.cronoRows.length:0;
@@ -3587,7 +3592,13 @@ function renderCronoEditor(){
   const rows=order.map(i=>{const r=ST.cronoRows[i];
     const _fk=String(r.tarima)+'|'+String(r.jornada)+'|'+String(r.flight); let _first=false; if(_fk!==_prevFk){_colIdx++;_prevFk=_fk;_first=true;}
     const _blue=_colIdx%2===0; const _bg=_blue?'rgba(59,130,246,.12)':'rgba(196,30,58,.12)'; const _bd=_first?('border-top:3px solid '+(_blue?'rgba(59,130,246,.65)':'rgba(196,30,58,.65)')+';'):'';
-    return `<tr style="background:${_bg};${_bd}">
+    let _hdr='';
+    if(_first){
+      const _hbg=_blue?'rgba(59,130,246,.30)':'rgba(196,30,58,.30)';
+      const _jl=(r.jornada==='AM'||r.jornada==='PM')?(' · '+r.jornada):'';
+      _hdr=`<tr><td colspan="13" style="background:${_hbg};padding:6px 10px;font-family:Oswald;font-weight:700;letter-spacing:1px;font-size:12px">Tarima ${esc(r.tarima)} · Flight ${esc(r.flight)}${_jl} <span style="margin-left:8px;font-weight:400;color:var(--muted)">marcar todo el flight:</span> <button onclick="cronoSetFlightJornada('${esc(r.tarima)}','${esc(r.flight)}','AM')" style="padding:2px 10px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:rgba(59,130,246,.25);color:var(--text);cursor:pointer;font-family:Oswald">AM</button> <button onclick="cronoSetFlightJornada('${esc(r.tarima)}','${esc(r.flight)}','PM')" style="padding:2px 10px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:rgba(196,30,58,.25);color:var(--text);cursor:pointer;font-family:Oswald">PM</button></td></tr>`;
+    }
+    return `${_hdr}<tr style="background:${_bg};${_bd}">
     <td>${inp(i,'nombre',r.nombre,128)}</td>
     <td>${inp(i,'division',r.division,64)}</td>
     <td>${inp(i,'categoria',r.categoria,40)}</td>
