@@ -3478,6 +3478,16 @@ window.cronoImport=async function(){
     showToast('Importados '+ST.cronoRows.length+' atletas');
   }catch(e){showToast('Error: '+e.message,null,true);}
 };
+// Deja solo los atletas cuyo FLIGHT termina en el dígito de la tarima dada (1 o 2)
+window.cronoKeepTarima=async function(t){
+  t=String(t);
+  if(!ST.cronoRows||!ST.cronoRows.length){showToast('Nada que filtrar',null,true);return;}
+  const keep=ST.cronoRows.filter(r=>{const f=String(r.flight||'');const suf=f.slice(-1);return suf===t || (String(r.tarima)===t && !/[12]$/.test(f));});
+  const removed=ST.cronoRows.length-keep.length;
+  if(!removed){showToast('No hay atletas de otra tarima',null,true);return;}
+  if(!confirm('Eliminar '+removed+' atletas que NO son de Tarima '+t+'?\n(Quedan '+keep.length+'. Es permanente.)'))return;
+  ST.cronoRows=keep; await cronoSaveDoc(); showToast('Eliminados '+removed+'. Quedan '+keep.length); render();
+};
 window.cronoClear=async function(){
   if(!ST.cronoEv)return;
   if(!confirm('Vaciar TODO el cronograma de este campeonato? (no afecta inscripciones)'))return;
@@ -3548,7 +3558,7 @@ function renderCronoEditor(){
       <select onchange="cronoPickEvent(this.value)" style="background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;min-width:240px">
         <option value="">— Elegir campeonato —</option>${evOpts}
       </select>
-      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g">Cargar desde nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoImport()" class="btn">Importar debutantes</button><button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button>`:''}
+      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g">Cargar desde nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoKeepTarima('1')" class="btn">Dejar solo Tarima 1</button><button onclick="cronoKeepTarima('2')" class="btn">Dejar solo Tarima 2</button><button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button>`:''}
     </div>`;
   if(!ST.cronoEv) return h+`<div class="card" style="color:var(--muted)">Elige un campeonato para ver y editar su cronograma.</div>`;
   if(ST.cronoRows===null) return h+`<div class="card" style="color:var(--muted)">Cargando…</div>`;
@@ -3561,18 +3571,19 @@ function renderCronoEditor(){
   const flOpts=(cur)=>CRONO_FLIGHTS.concat(CRONO_FLIGHTS.includes(cur)?[]:[cur].filter(Boolean)).map(f=>`<option ${f===cur?'selected':''}>${f}</option>`).join('');
   const taOpts=(cur)=>CRONO_TARIMAS.concat(CRONO_TARIMAS.includes(String(cur))?[]:[String(cur)].filter(Boolean)).map(t=>`<option ${String(t)===String(cur)?'selected':''}>${t}</option>`).join('');
   const inp=(i,f,v,w)=>`<input value="${esc(v||'')}" onchange="cronoSet(${i},'${f}',this.value)" style="width:${w||90}px;background:transparent;border:1px solid var(--border);border-radius:5px;padding:3px 5px;color:var(--text);font-size:11px">`;
+  const sSel='background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:5px;padding:3px;color:var(--text);font-size:11px';
   const rows=order.map(i=>{const r=ST.cronoRows[i];return `<tr>
-    <td>${inp(i,'nombre',r.nombre,150)}</td>
-    <td>${inp(i,'division',r.division,80)}</td>
-    <td>${inp(i,'categoria',r.categoria,48)}</td>
-    <td>${inp(i,'club',r.club,130)}</td>
-    <td>${inp(i,'modalidad',r.modalidad,150)}</td>
-    <td><select onchange="cronoSet(${i},'tarima',this.value)" style="background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:5px;padding:3px;color:var(--text);font-size:11px">${taOpts(r.tarima)}</select></td>
-    <td><select onchange="cronoSet(${i},'flight',this.value)" style="background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:5px;padding:3px;color:var(--text);font-size:11px">${flOpts(r.flight)}</select></td>
-    <td>${inp(i,'jornada',r.jornada,48)}</td>
-    <td>${inp(i,'entrenador',r.entrenador,130)}</td>
-    <td>${inp(i,'h1n',(r.handler1||{}).nombre,120)}<br>${inp(i,'h1c',(r.handler1||{}).correo,150)}</td>
-    <td>${inp(i,'h2n',(r.handler2||{}).nombre,120)}<br>${inp(i,'h2c',(r.handler2||{}).correo,150)}</td>
+    <td>${inp(i,'nombre',r.nombre,128)}</td>
+    <td>${inp(i,'division',r.division,64)}</td>
+    <td>${inp(i,'categoria',r.categoria,40)}</td>
+    <td>${inp(i,'club',r.club,98)}</td>
+    <td>${inp(i,'modalidad',r.modalidad,108)}</td>
+    <td><select onchange="cronoSet(${i},'tarima',this.value)" style="${sSel}">${taOpts(r.tarima)}</select></td>
+    <td><select onchange="cronoSet(${i},'flight',this.value)" style="${sSel}">${flOpts(r.flight)}</select></td>
+    <td>${inp(i,'jornada',r.jornada,40)}</td>
+    <td>${inp(i,'entrenador',r.entrenador,104)}</td>
+    <td>${inp(i,'h1n',(r.handler1||{}).nombre,98)}<br>${inp(i,'h1c',(r.handler1||{}).correo,124)}</td>
+    <td>${inp(i,'h2n',(r.handler2||{}).nombre,98)}<br>${inp(i,'h2c',(r.handler2||{}).correo,124)}</td>
     <td><button onclick="cronoDelRow(${i})" style="background:transparent;border:1px solid rgba(239,68,68,.4);color:var(--red);padding:3px 7px;border-radius:5px;font-size:10px;cursor:pointer">✕</button></td>
   </tr>`;}).join('');
   h+=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${ST.cronoRows.length} atletas · cambiar Tarima/Flight mueve al atleta · todo se guarda al instante</div>
