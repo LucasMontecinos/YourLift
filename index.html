@@ -248,6 +248,33 @@ function sponsorStrip(){
   </div>
   <style>@keyframes ylmarq{from{transform:translateX(0)}to{transform:translateX(-50%)}}.yl-marq:hover{animation-play-state:paused}</style>`;
 }
+function liveEmbed(){
+  const all=(window.ALL_EVENTS||NOM_EVENTS||[]).filter(e=>e&&e.status!=='archived'&&e.youtubeUrl);
+  if(!all.length) return '';
+  const today=new Date(); today.setHours(0,0,0,0);
+  all.sort((a,b)=>{
+    const da=new Date((a.date||'')+'T00:00:00'), db=new Date((b.date||'')+'T00:00:00');
+    const fa=da>=today?0:1, fb=db>=today?0:1;
+    if(fa!==fb)return fa-fb;
+    return Math.abs(da-today)-Math.abs(db-today);
+  });
+  const targetDate=all[0].date||'';
+  const live=all.filter(e=>(e.date||'')===targetDate);  // todas las transmisiones del mismo día (ej. Tarima 1 y Tarima 2)
+  const vid=u=>{const m=(u||'').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|live\/|embed\/))([A-Za-z0-9_-]{11})/);return m?m[1]:'';};
+  const cards=live.map(ev=>{
+    const id=vid(ev.youtubeUrl); if(!id)return '';
+    const nm=(ev.name||'').trim();
+    return `<div>${nm?`<div style="font-size:13px;color:var(--muted);margin-bottom:6px;font-family:Oswald;letter-spacing:.5px">${_escH(nm)}</div>`:''}
+      <div style="position:relative;padding-top:56.25%;border-radius:14px;overflow:hidden;border:1px solid var(--border);background:#000;box-shadow:0 8px 30px rgba(0,0,0,.4)">
+        <iframe src="https://www.youtube.com/embed/${id}" style="position:absolute;inset:0;width:100%;height:100%;border:0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen loading="lazy"></iframe>
+      </div></div>`;
+  }).filter(Boolean);
+  if(!cards.length) return '';
+  const grid=cards.length>1?'display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px':'';
+  return `<div style="margin-bottom:34px">
+    <h2 style="font-family:Oswald;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:14px"><span style="color:var(--accent)">●</span> Transmisión en vivo</h2>
+    <div style="${grid}">${cards.join('')}</div></div>`;
+}
 function setBgForSection(section){
   const wrap=document.getElementById('bgVideoWrap');
   const v=document.getElementById('bgVideo');
@@ -1111,6 +1138,7 @@ function home(){
   </div>
 
   ${sponsorStrip()}
+  ${liveEmbed()}
   <div style="margin-bottom:34px">
     <h2 style="font-family:Oswald;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:18px">Próximo Campeonato</h2>`;
   if(!next){
