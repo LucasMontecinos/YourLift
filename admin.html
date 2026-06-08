@@ -3447,6 +3447,7 @@ window.cronoPickEvent=function(ev){
   if(ev){
     window._cronoUnsub=onSnapshot(doc(db,'cronograma',ev),(d)=>{
       ST.cronoRows=(d.exists()&&Array.isArray(d.data().rows))?d.data().rows:[];
+      ST.cronoHideCoaches=(d.exists()&&d.data().hideCoaches)||false;
       if(ST.view==='cronograma')render();
     },(e)=>{console.warn('[crono]',e.message);ST.cronoRows=[];if(ST.view==='cronograma')render();});
   }
@@ -3454,7 +3455,7 @@ window.cronoPickEvent=function(ev){
 };
 async function cronoSaveDoc(){
   if(!ST.cronoEv)return;
-  try{ await setDoc(doc(db,'cronograma',ST.cronoEv),{rows:ST.cronoRows||[],updatedAt:serverTimestamp()},{merge:true}); }
+  try{ await setDoc(doc(db,'cronograma',ST.cronoEv),{rows:ST.cronoRows||[],hideCoaches:!!ST.cronoHideCoaches,updatedAt:serverTimestamp()},{merge:true}); }
   catch(e){ showToast('Error guardando: '+e.message,null,true); }
 }
 window.cronoSet=function(i,field,val){
@@ -3478,6 +3479,7 @@ window.cronoImport=async function(){
   }catch(e){showToast('Error: '+e.message,null,true);}
 };
 // Marca AM/PM a TODOS los atletas de un flight (misma tarima + flight) de una vez
+window.cronoToggleCoaches=function(v){ ST.cronoHideCoaches=!!v; cronoSaveDoc(); showToast(v?'Entrenador/handlers OCULTOS en el público':'Entrenador/handlers visibles en el público'); };
 window.cronoSetFlightJornada=function(t,f,j){
   let n=0;(ST.cronoRows||[]).forEach(r=>{if(String(r.tarima)===String(t)&&String(r.flight)===String(f)){r.jornada=j;n++;}});
   if(n){cronoSaveDoc();showToast(n+' atletas del Flight '+f+' (Tarima '+t+') → '+j);render();}
@@ -3573,7 +3575,7 @@ function renderCronoEditor(){
       <select onchange="cronoPickEvent(this.value)" style="background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;min-width:240px">
         <option value="">— Elegir campeonato —</option>${evOpts}
       </select>
-      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g">Cargar desde nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button>`:''}
+      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g">Cargar desde nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button><label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;margin-left:4px"><input type="checkbox" ${ST.cronoHideCoaches?'checked':''} onchange="cronoToggleCoaches(this.checked)"> Ocultar entrenador/handlers en el público</label>`:''}
     </div>`;
   if(!ST.cronoEv) return h+`<div class="card" style="color:var(--muted)">Elige un campeonato para ver y editar su cronograma.</div>`;
   if(ST.cronoRows===null) return h+`<div class="card" style="color:var(--muted)">Cargando…</div>`;

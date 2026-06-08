@@ -813,12 +813,13 @@ async function loadCronoSection(ev){
   try{
     const d=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'cronograma',ev));
     const rows=(d&&d.exists&&d.exists()&&Array.isArray(d.data().rows))?d.data().rows:[];
+    const hide=(d&&d.exists&&d.exists()&&d.data().hideCoaches)||false;
     const HMAP={};
-    try{ const hs=await window.FBQ.getDocs(window.FBQ.query(window.FBQ.collection(fbDB,'handlers'),window.FBQ.where('evento','==',ev))); hs.forEach(x=>{HMAP[x.id]=x.data();}); }catch(e){}
-    const el=document.getElementById('cronoMount'); if(el) el.innerHTML=cronoRender(ev,rows,HMAP);
+    if(!hide){ try{ const hs=await window.FBQ.getDocs(window.FBQ.query(window.FBQ.collection(fbDB,'handlers'),window.FBQ.where('evento','==',ev))); hs.forEach(x=>{HMAP[x.id]=x.data();}); }catch(e){} }
+    const el=document.getElementById('cronoMount'); if(el) el.innerHTML=cronoRender(ev,rows,HMAP,hide);
   }catch(e){ const el=document.getElementById('cronoMount'); if(el) el.innerHTML='<div style="color:var(--muted);padding:14px">Este campeonato no tiene cronograma publicado.</div>'; }
 }
-function cronoRender(ev,rows,HMAP){
+function cronoRender(ev,rows,HMAP,hide){
   if(!rows.length) return '<div style="color:var(--muted);padding:14px">Sin atletas en este cronograma.</div>';
   const _nn=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
   const _slug=s=>_nn(s).replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,50);
@@ -836,12 +837,11 @@ function cronoRender(ev,rows,HMAP){
       <td style="padding:6px 10px;color:var(--muted)">${_escH(r.division||'')} ${_escH(r.categoria||'')}</td>
       <td style="padding:6px 10px;color:var(--muted)">${_escH(r.club||'')}</td>
       <td style="padding:6px 10px">${_escH(r.modalidad||'')}</td>
-      <td style="padding:6px 10px">${_escH(r.entrenador||'—')}</td>
-      <td style="padding:6px 10px">${hs.length?hs.map(_escH).join('<br>'):'<span style="color:var(--muted)">—</span>'}</td></tr>`;}).join('');
+      ${hide?'':`<td style="padding:6px 10px">${_escH(r.entrenador||'—')}</td><td style="padding:6px 10px">${hs.length?hs.map(_escH).join('<br>'):'<span style="color:var(--muted)">—</span>'}</td>`}</tr>`;}).join('');
     return `<div style="background:${bg};border:1px solid ${bd}55;border-left:5px solid ${bd};border-radius:12px;margin-bottom:14px;overflow:hidden">
       <div style="background:${hd};padding:10px 14px;font-family:Oswald;font-weight:700;letter-spacing:1px">Tarima ${_escH(tar)} · Flight ${_escH(fl)}${jorTxt} <span style="color:var(--muted);font-weight:400;font-size:12px">· ${aths.length} atleta(s)</span></div>
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
-        <tr style="text-align:left;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;text-transform:uppercase"><th style="padding:6px 10px">#</th><th style="padding:6px 10px">Atleta</th><th style="padding:6px 10px">Div/Cat</th><th style="padding:6px 10px">Club</th><th style="padding:6px 10px">Modalidad</th><th style="padding:6px 10px">Entrenador</th><th style="padding:6px 10px">Handlers</th></tr>
+        <tr style="text-align:left;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;text-transform:uppercase"><th style="padding:6px 10px">#</th><th style="padding:6px 10px">Atleta</th><th style="padding:6px 10px">Div/Cat</th><th style="padding:6px 10px">Club</th><th style="padding:6px 10px">Modalidad</th>${hide?'':'<th style="padding:6px 10px">Entrenador</th><th style="padding:6px 10px">Handlers</th>'}</tr>
         ${tr}
       </table></div></div>`;
   }).join('');
