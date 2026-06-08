@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="bg-fechipo.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0A1628;--card:#11223B;--border:#1E3A5F;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A;--blue:#1E5BA8;--gold:#D4A843;--green:#22c55e;--red:#ef4444;--orange:#f59e0b}
@@ -1525,7 +1526,7 @@ function render(){
   else if(ST.view==='entrenadoresDB')content=renderEntrenadoresDB();
   else if(ST.view==='fotos')content=renderFotos();
   else if(ST.view==='importar')content=renderImportar();
-  else if(ST.view==='cronograma')content=renderCronograma();
+  else if(ST.view==='cronograma')content=renderCronoEditor();
   else if(ST.view==='campeonatos')content=renderCampeonatos();
   else if(ST.view==='exports')content=renderExports();
   else if(ST.view==='audit')content=renderAudit();
@@ -1930,6 +1931,18 @@ window.delEnt=async function(rut){
   try{ await deleteDoc(doc(db,'entrenadores',rut)); await logAction('ent_delete',rut,null,'deleted'); showToast('Entrenador eliminado'); }
   catch(e){ showToast('Error: '+e.message,null,true); }
 };
+window.entExportXlsx=function(){
+  const list=ST.entrenadores||[]; if(!list.length){showToast('Nada que exportar',null,true);return;}
+  const head=['Nombre','RUT','Sexo','Club','Categoría','Correos','Procesos','Vigente hasta','Vigente'];
+  const aoa=[head];
+  list.forEach(c=>{
+    const acs=(c.acreditaciones||[]);
+    const procs=acs.map(a=>'P'+(a.proceso||'?')+': '+(a.fecha||'')+'→'+(a.vence||'')+(a.categoria?(' ('+a.categoria+')'):'')).join(' | ');
+    const ult=acs.reduce((m,a)=>(a.vence&&(!m||a.vence>m)?a.vence:m),'');
+    aoa.push([c.nombre||'',c.rut||'',c.sexo||'',c.club||'',c.categoria||'',(c.correos||[]).join(', '),procs,ult,_entVigente(c)?'Sí':'No']);
+  });
+  _xlsxDownload(aoa,'Entrenadores','Entrenadores.xlsx');
+};
 window.importEntrenadores=async function(){
   if(!confirm('Importar la base de entrenadores (entrenadores_db.json) a Firestore?\nLos que ya existan (por RUT) se actualizan.'))return;
   showToast('Importando…');
@@ -2004,6 +2017,7 @@ function renderEntrenadoresDB(){
         <select onchange="entSetFilter('club',this.value)" style="${selS};max-width:170px"><option value="">Club · todos</option>${allClubs.map(cl=>`<option value="${esc(cl)}" ${f.club===cl?'selected':''}>${esc(cl)}</option>`).join('')}</select>
         <button onclick="openEntModal('')" class="btn btn-g" style="padding:8px 14px">+ Agregar</button>
         <button onclick="importEntrenadores()" class="btn" style="padding:8px 14px">Importar base</button>
+        <button onclick="entExportXlsx()" class="btn" style="padding:8px 14px">Exportar Excel</button>
       </div>`;
     })()}
     <div class="card" style="padding:0;overflow-x:auto" id="entList">${entListHtml()}</div>`;
@@ -3421,6 +3435,111 @@ function renderEditRequests(){
       </table>
       ${reqs.length===0?'<div class="empty">No hay solicitudes pendientes </div>':''}
     </div>`;
+}
+
+// ═══════════════════════════════════════════
+// CRONOGRAMA EDITABLE (start list por campeonato, en vivo) — Fase 1
+// ═══════════════════════════════════════════
+const CRONO_FLIGHTS=['A1','A2','B1','B2','C1','C2','D1','D2','E1','E2','F1','F2'];
+const CRONO_TARIMAS=['1','2','3'];
+window.cronoPickEvent=function(ev){
+  ST.cronoEv=ev; ST.cronoRows=null;
+  if(window._cronoUnsub){try{window._cronoUnsub()}catch(e){}window._cronoUnsub=null;}
+  if(ev){
+    window._cronoUnsub=onSnapshot(doc(db,'cronograma',ev),(d)=>{
+      ST.cronoRows=(d.exists()&&Array.isArray(d.data().rows))?d.data().rows:[];
+      if(ST.view==='cronograma')render();
+    },(e)=>{console.warn('[crono]',e.message);ST.cronoRows=[];if(ST.view==='cronograma')render();});
+  }
+  render();
+};
+async function cronoSaveDoc(){
+  if(!ST.cronoEv)return;
+  try{ await setDoc(doc(db,'cronograma',ST.cronoEv),{rows:ST.cronoRows||[],updatedAt:serverTimestamp()},{merge:true}); }
+  catch(e){ showToast('Error guardando: '+e.message,null,true); }
+}
+window.cronoSet=function(i,field,val){
+  const r=(ST.cronoRows||[])[i]; if(!r)return;
+  if(field==='h1n'){r.handler1={...(r.handler1||{}),nombre:val};}
+  else if(field==='h1c'){r.handler1={...(r.handler1||{}),correo:val};}
+  else if(field==='h2n'){r.handler2={...(r.handler2||{}),nombre:val};}
+  else if(field==='h2c'){r.handler2={...(r.handler2||{}),correo:val};}
+  else r[field]=val;
+  cronoSaveDoc();
+  if(field==='tarima'||field==='flight')setTimeout(()=>{if(ST.view==='cronograma')render();},50);
+};
+window.cronoImport=async function(){
+  if(!ST.cronoEv){showToast('Elige un campeonato primero',null,true);return;}
+  if(!confirm('Importar los atletas de debutantes a este campeonato?\nReemplaza el cronograma actual de este evento.'))return;
+  try{
+    const seed=await fetch('cronograma_debutantes_db.json?v='+Date.now()).then(r=>r.json());
+    ST.cronoRows=(seed.atletas||[]).map(a=>({...a}));
+    await cronoSaveDoc();
+    showToast('Importados '+ST.cronoRows.length+' atletas');
+  }catch(e){showToast('Error: '+e.message,null,true);}
+};
+function _xlsxDownload(aoa, sheetName, filename){
+  if(typeof XLSX==='undefined'){ showToast('Excel no cargó (revisa internet)',null,true); return; }
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,(sheetName||'Hoja').slice(0,28));
+  XLSX.writeFile(wb, filename);
+}
+window.cronoExportXlsx=function(){
+  const rows=ST.cronoRows||[]; if(!rows.length){showToast('Nada que exportar',null,true);return;}
+  const order=rows.map((r,i)=>i).sort((a,b)=>String(rows[a].tarima).localeCompare(String(rows[b].tarima))||String(rows[a].flight).localeCompare(String(rows[b].flight)));
+  const head=['Nombre','División','Categoría','Club','Modalidad','Tarima','Flight','Jornada','Entrenador','Handler 1','Correo handler 1','Handler 2','Correo handler 2'];
+  const aoa=[head];
+  order.forEach(i=>{const r=rows[i];aoa.push([r.nombre||'',r.division||'',r.categoria||'',r.club||'',r.modalidad||'',r.tarima||'',r.flight||'',r.jornada||'',r.entrenador||'',(r.handler1||{}).nombre||'',(r.handler1||{}).correo||'',(r.handler2||{}).nombre||'',(r.handler2||{}).correo||'']);});
+  _xlsxDownload(aoa,'Cronograma','Cronograma_'+(ST.cronoEv||'evento')+'.xlsx');
+};
+window.cronoAddRow=function(){
+  ST.cronoRows=ST.cronoRows||[];
+  ST.cronoRows.push({nombre:'',division:'',categoria:'',club:'',modalidad:'',tarima:'1',flight:'A1',jornada:'1',entrenador:'',handler1:{nombre:'',correo:''},handler2:{nombre:'',correo:''}});
+  cronoSaveDoc(); render();
+};
+window.cronoDelRow=function(i){ if(!confirm('Eliminar a este atleta del cronograma?'))return; ST.cronoRows.splice(i,1); cronoSaveDoc(); render(); };
+function renderCronoEditor(){
+  const evs=(ST.eventos||[]).filter(e=>e.status!=='archived');
+  const evOpts=evs.map(e=>`<option value="${esc(e.id)}" ${ST.cronoEv===e.id?'selected':''}>${esc(e.name||e.id)}</option>`).join('');
+  let h=`<div class="h1">Cronograma</div>
+    <p class="subtitle">Start list editable por campeonato · mueve atletas de tarima/flight y se guarda en vivo</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0">
+      <select onchange="cronoPickEvent(this.value)" style="background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;min-width:240px">
+        <option value="">— Elegir campeonato —</option>${evOpts}
+      </select>
+      ${ST.cronoEv?`<button onclick="cronoImport()" class="btn">Importar debutantes</button><button onclick="cronoAddRow()" class="btn btn-g">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button>`:''}
+    </div>`;
+  if(!ST.cronoEv) return h+`<div class="card" style="color:var(--muted)">Elige un campeonato para ver y editar su cronograma.</div>`;
+  if(ST.cronoRows===null) return h+`<div class="card" style="color:var(--muted)">Cargando…</div>`;
+  if(!ST.cronoRows.length) return h+`<div class="card" style="color:var(--muted)">Este campeonato no tiene cronograma. Usa “Importar debutantes” o “+ Atleta”.</div>`;
+  // orden de visualización: tarima, flight
+  const order=ST.cronoRows.map((r,i)=>i).sort((a,b)=>{
+    const ra=ST.cronoRows[a],rb=ST.cronoRows[b];
+    return (String(ra.tarima)).localeCompare(String(rb.tarima))||String(ra.flight).localeCompare(String(rb.flight))||0;
+  });
+  const flOpts=(cur)=>CRONO_FLIGHTS.concat(CRONO_FLIGHTS.includes(cur)?[]:[cur].filter(Boolean)).map(f=>`<option ${f===cur?'selected':''}>${f}</option>`).join('');
+  const taOpts=(cur)=>CRONO_TARIMAS.concat(CRONO_TARIMAS.includes(String(cur))?[]:[String(cur)].filter(Boolean)).map(t=>`<option ${String(t)===String(cur)?'selected':''}>${t}</option>`).join('');
+  const inp=(i,f,v,w)=>`<input value="${esc(v||'')}" onchange="cronoSet(${i},'${f}',this.value)" style="width:${w||90}px;background:transparent;border:1px solid var(--border);border-radius:5px;padding:3px 5px;color:var(--text);font-size:11px">`;
+  const rows=order.map(i=>{const r=ST.cronoRows[i];return `<tr>
+    <td>${inp(i,'nombre',r.nombre,150)}</td>
+    <td>${inp(i,'division',r.division,80)}</td>
+    <td>${inp(i,'categoria',r.categoria,48)}</td>
+    <td>${inp(i,'club',r.club,130)}</td>
+    <td>${inp(i,'modalidad',r.modalidad,150)}</td>
+    <td><select onchange="cronoSet(${i},'tarima',this.value)" style="background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:5px;padding:3px;color:var(--text);font-size:11px">${taOpts(r.tarima)}</select></td>
+    <td><select onchange="cronoSet(${i},'flight',this.value)" style="background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:5px;padding:3px;color:var(--text);font-size:11px">${flOpts(r.flight)}</select></td>
+    <td>${inp(i,'jornada',r.jornada,48)}</td>
+    <td>${inp(i,'entrenador',r.entrenador,130)}</td>
+    <td>${inp(i,'h1n',(r.handler1||{}).nombre,120)}<br>${inp(i,'h1c',(r.handler1||{}).correo,150)}</td>
+    <td>${inp(i,'h2n',(r.handler2||{}).nombre,120)}<br>${inp(i,'h2c',(r.handler2||{}).correo,150)}</td>
+    <td><button onclick="cronoDelRow(${i})" style="background:transparent;border:1px solid rgba(239,68,68,.4);color:var(--red);padding:3px 7px;border-radius:5px;font-size:10px;cursor:pointer">✕</button></td>
+  </tr>`;}).join('');
+  h+=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${ST.cronoRows.length} atletas · cambiar Tarima/Flight mueve al atleta · todo se guarda al instante</div>
+    <div class="card" style="padding:0;overflow-x:auto"><table class="tbl" style="white-space:nowrap">
+      <tr><th>Nombre</th><th>División</th><th>Cat.</th><th>Club</th><th>Modalidad</th><th>Tarima</th><th>Flight</th><th>Jornada</th><th>Entrenador</th><th>Handler 1 (nombre / correo)</th><th>Handler 2 (nombre / correo)</th><th></th></tr>
+      ${rows}
+    </table></div>`;
+  return h;
 }
 
 function renderCronograma(){

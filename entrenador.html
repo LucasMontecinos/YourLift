@@ -1,0 +1,202 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>YourLift — Acceso Entrenadores</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a1424;--card:#111f36;--border:#22304d;--text:#e7ecf3;--muted:#8a96a8;--gold:#d4a843;--green:#22c55e;--red:#ef4444;--accent:#c41e3a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:920px;margin:0 auto;padding:24px 16px 60px}
+.brand{font-family:Oswald;font-weight:700;letter-spacing:2px;font-size:22px;margin:8px 0 2px}
+.brand span{color:var(--accent)}
+.sub{color:var(--muted);font-size:13px;margin-bottom:22px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px}
+label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+input,select{width:100%;background:#0a1424;border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:12px}
+.btn{background:var(--gold);color:#1a1205;border:none;border-radius:9px;padding:11px 18px;font-family:Oswald;font-weight:700;letter-spacing:1px;cursor:pointer;font-size:14px}
+.btn.sec{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn.g{background:var(--green);color:#04210f}
+.msg{font-size:13px;margin:8px 0;min-height:18px}
+.h2{font-family:Oswald;font-size:16px;letter-spacing:1px;color:var(--gold);margin:0 0 4px}
+.tag{display:inline-block;background:#0a1424;border:1px solid var(--border);border-radius:20px;padding:2px 10px;font-size:11px;color:var(--muted);margin:2px}
+.ath{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #1a2742;font-size:13px}
+.hbox{background:#0a1424;border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px}
+.muted{color:var(--muted);font-size:12px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+a.link{color:var(--gold);text-decoration:none}
+</style></head><body>
+<div class="wrap">
+  <div class="top">
+    <div><div class="brand"><span>YOUR</span>LIFT · Entrenadores</div><div class="sub">Registra tus handlers para el campeonato</div></div>
+    <div id="who"></div>
+  </div>
+  <div id="app"></div>
+</div>
+
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import {getAuth,signInWithEmailAndPassword,createUserWithEmailAndPassword,onAuthStateChanged,signOut} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import {getFirestore,collection,getDocs,getDoc,doc,setDoc,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+const app=initializeApp({apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148"});
+const auth=getAuth(app), db=getFirestore(app);
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const nn=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
+const slug=s=>nn(s).replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,50);
+
+let USER=null, CRONO=[], MYNAME='';
+// CRONO = [{eventoId, eventoName, rows:[...]}]
+
+function allowedHandlers(aths){
+  const eq=aths.some(a=>/equip/i.test(a.modalidad||''));
+  if(eq) return 2;            // Powerlifting Equipado: 2 handlers
+  return aths.length>1?2:1;   // Classic: >1 atleta = 2, 1 atleta = 1
+}
+
+// ── Login ──────────────────────────────────────────────
+function renderLogin(){
+  $('who').innerHTML='';
+  $('app').innerHTML=`<div class="card" style="max-width:420px;margin:30px auto">
+    <div class="h2">Ingresar</div>
+    <p class="muted" style="margin:0 0 14px">Entra con tu correo. La primera vez creas tu propia clave.</p>
+    <label>Correo</label><input id="em" type="email" placeholder="tucorreo@gmail.com" autocomplete="username">
+    <label>Clave</label><input id="pw" type="password" placeholder="Tu clave (mín. 6 caracteres)" autocomplete="current-password">
+    <div id="lmsg" class="msg"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="entLogin()">Ingresar</button>
+      <button class="btn sec" onclick="entCreate()">Primera vez · crear clave</button>
+    </div>
+  </div>`;
+}
+window.entLogin=async function(){
+  const em=($('em').value||'').trim().toLowerCase(), pw=$('pw').value||'';
+  if(!em||!pw){$('lmsg').textContent='Completa correo y clave.';return;}
+  $('lmsg').style.color='var(--muted)';$('lmsg').textContent='Ingresando…';
+  try{ await signInWithEmailAndPassword(auth,em,pw); }
+  catch(e){
+    $('lmsg').style.color='var(--red)';
+    if(e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found') $('lmsg').textContent='Correo o clave incorrectos. Si es tu primera vez, usa “crear clave”.';
+    else $('lmsg').textContent='Error: '+e.message;
+  }
+};
+window.entCreate=async function(){
+  const em=($('em').value||'').trim().toLowerCase(), pw=$('pw').value||'';
+  if(!em||!pw){$('lmsg').textContent='Completa correo y una clave de al menos 6 caracteres.';return;}
+  if(pw.length<6){$('lmsg').style.color='var(--red)';$('lmsg').textContent='La clave debe tener al menos 6 caracteres.';return;}
+  $('lmsg').style.color='var(--muted)';$('lmsg').textContent='Creando tu clave…';
+  try{ await createUserWithEmailAndPassword(auth,em,pw); }
+  catch(e){
+    $('lmsg').style.color='var(--red)';
+    if(e.code==='auth/email-already-in-use') $('lmsg').textContent='Ya tienes cuenta. Usa “Ingresar”.';
+    else $('lmsg').textContent='Error: '+e.message;
+  }
+};
+window.entLogout=function(){ signOut(auth); };
+
+// ── Cargar cronogramas (de eventos no archivados) ──────
+async function loadCronos(){
+  CRONO=[];
+  try{
+    const evs=await getDocs(collection(db,'eventos'));
+    for(const d of evs.docs){
+      const ev={id:d.id,...d.data()};
+      if(ev.status==='archived') continue;
+      const c=await getDoc(doc(db,'cronograma',ev.id));
+      if(c.exists() && Array.isArray(c.data().rows) && c.data().rows.length){
+        CRONO.push({eventoId:ev.id, eventoName:ev.name||ev.id, rows:c.data().rows});
+      }
+    }
+  }catch(e){ console.warn('[crono]',e.message); }
+}
+function coachNames(){
+  const set=new Set();
+  CRONO.forEach(c=>c.rows.forEach(r=>{ if(r.entrenador) set.add(r.entrenador.trim()); }));
+  return [...set].sort((a,b)=>a.localeCompare(b));
+}
+
+// ── Portal ─────────────────────────────────────────────
+async function renderPortal(){
+  $('who').innerHTML=`<div style="text-align:right"><div style="font-size:12px">${esc(USER.email)}</div><button class="btn sec" style="padding:5px 10px;font-size:11px;margin-top:4px" onclick="entLogout()">Salir</button></div>`;
+  $('app').innerHTML='<div class="card muted">Cargando cronograma…</div>';
+  if(!CRONO.length) await loadCronos();
+  // nombre del entrenador
+  if(!MYNAME){
+    try{ const lk=await getDoc(doc(db,'coach_links',USER.uid)); if(lk.exists()&&lk.data().nombre) MYNAME=lk.data().nombre; }catch(e){}
+  }
+  if(!MYNAME){ renderNamePicker(); return; }
+  // atletas del entrenador, por evento + jornada
+  let html=`<div class="card"><div class="top"><div class="h2">Hola, ${esc(MYNAME)}</div><button class="btn sec" style="padding:4px 10px;font-size:11px" onclick="entChangeName()">No soy yo</button></div>
+    <p class="muted" style="margin:6px 0 0">Registra los handlers de tus atletas. El número permitido se calcula según las reglas (classic: 1 atleta = 1 handler, 2+ = 2 handlers; equipado = 2 handlers).</p></div>`;
+  let found=false;
+  for(const c of CRONO){
+    const mine=c.rows.filter(r=>nn(r.entrenador)===nn(MYNAME));
+    if(!mine.length) continue;
+    found=true;
+    // agrupar por jornada
+    const byJ={};
+    mine.forEach(r=>{ const j=(r.jornada||'1').toString().trim()||'1'; (byJ[j]=byJ[j]||[]).push(r); });
+    html+=`<div class="card"><div class="h2">${esc(c.eventoName)}</div>`;
+    for(const j of Object.keys(byJ).sort()){
+      const aths=byJ[j]; const n=allowedHandlers(aths);
+      const eq=aths.some(a=>/equip/i.test(a.modalidad||''));
+      html+=`<div class="hbox" data-ev="${esc(c.eventoId)}" data-j="${esc(j)}">
+        <div style="font-family:Oswald;letter-spacing:1px;color:var(--gold)">Jornada ${esc(j)} · ${aths.length} atleta(s) · ${eq?'Equipado':'Classic'} → ${n} handler(s)</div>
+        <div style="margin:6px 0 10px">${aths.map(a=>`<span class="tag">${esc(a.nombre)} · ${esc(a.modalidad||'')} · T${esc(a.tarima)} ${esc(a.flight)}</span>`).join('')}</div>
+        <div id="hf_${esc(c.eventoId)}_${esc(j)}"></div>
+        <button class="btn g" style="padding:8px 14px;font-size:12px;margin-top:8px" onclick="saveHandlers('${esc(c.eventoId)}','${esc(j)}',${n})">Guardar handlers</button>
+        <span id="hmsg_${esc(c.eventoId)}_${esc(j)}" class="msg" style="margin-left:8px"></span>
+      </div>`;
+    }
+    html+=`</div>`;
+  }
+  if(!found) html+=`<div class="card muted">No encontramos atletas asignados a tu nombre en los cronogramas publicados. Si crees que es un error, contacta a la organización.</div>`;
+  $('app').innerHTML=html;
+  // cargar handlers existentes en cada bloque
+  for(const c of CRONO){
+    const mine=c.rows.filter(r=>nn(r.entrenador)===nn(MYNAME));
+    if(!mine.length) continue;
+    const byJ={}; mine.forEach(r=>{const j=(r.jornada||'1').toString().trim()||'1';(byJ[j]=byJ[j]||[]).push(r);});
+    for(const j of Object.keys(byJ)){
+      const n=allowedHandlers(byJ[j]);
+      let existing=[];
+      try{ const hd=await getDoc(doc(db,'handlers',c.eventoId+'__'+slug(MYNAME)+'__'+j)); if(hd.exists()&&Array.isArray(hd.data().handlers)) existing=hd.data().handlers; }catch(e){}
+      const box=$('hf_'+c.eventoId+'_'+j); if(!box) continue;
+      let f='';
+      for(let k=0;k<n;k++){ const h=existing[k]||{};
+        f+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><input id="hn_${c.eventoId}_${j}_${k}" placeholder="Handler ${k+1} · nombre" value="${esc(h.nombre||'')}"><input id="hc_${c.eventoId}_${j}_${k}" placeholder="Handler ${k+1} · correo" value="${esc(h.correo||'')}"></div>`;
+      }
+      box.innerHTML=f;
+    }
+  }
+}
+function renderNamePicker(){
+  const names=coachNames();
+  $('app').innerHTML=`<div class="card"><div class="h2">¿Cuál es tu nombre?</div>
+    <p class="muted">Elige tu nombre tal como aparece en el cronograma (se guardará para la próxima).</p>
+    <select id="namesel"><option value="">— Elegir —</option>${names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select>
+    <button class="btn" onclick="entSetName()">Confirmar</button></div>`;
+}
+window.entSetName=async function(){
+  const v=$('namesel').value; if(!v){return;}
+  MYNAME=v;
+  try{ await setDoc(doc(db,'coach_links',USER.uid),{nombre:v,email:USER.email,updatedAt:serverTimestamp()},{merge:true}); }catch(e){}
+  renderPortal();
+};
+window.entChangeName=function(){ MYNAME=''; renderNamePicker(); };
+window.saveHandlers=async function(ev,j,n){
+  const m=$('hmsg_'+ev+'_'+j); m.style.color='var(--muted)'; m.textContent='Guardando…';
+  const handlers=[];
+  for(let k=0;k<n;k++){
+    const nm=($('hn_'+ev+'_'+j+'_'+k)?.value||'').trim();
+    const co=($('hc_'+ev+'_'+j+'_'+k)?.value||'').trim();
+    if(nm||co) handlers.push({nombre:nm,correo:co});
+  }
+  try{
+    await setDoc(doc(db,'handlers',ev+'__'+slug(MYNAME)+'__'+j),{evento:ev,coach:MYNAME,jornada:j,handlers,by:USER.uid,updatedAt:serverTimestamp()},{merge:true});
+    m.style.color='var(--green)'; m.textContent='Guardado ✓';
+  }catch(e){ m.style.color='var(--red)'; m.textContent='Error: '+e.message; }
+};
+
+onAuthStateChanged(auth,u=>{ USER=u; MYNAME=''; if(u) renderPortal(); else renderLogin(); });
+</script>
+</body></html>
