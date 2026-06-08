@@ -3497,40 +3497,40 @@ window.cronoClear=async function(){
 window.cronoAutoDistribute=async function(){
   const rows=ST.cronoRows||[]; if(!rows.length){showToast('No hay atletas',null,true);return;}
   if(!confirm('Auto-distribuir '+rows.length+' atletas?\nReglas: mujeres y hombres en flights separados · cada categoría+división junta · 8 a 14 por flight · Only Bench puro va aparte y puede pasar de 14 · 6 flights por tarima.'))return;
-  const MAXP=14, MINP=8, MAXF=6, L=['A','B','C','D','E','F'];
+  const MAXP=14, L3=['A','B','C'];
+  // H=hombre, M=mujer (como en la nómina). Si no hay sexo, se infiere de la categoría (IPF).
   const sexOf=r=>{
-    if(r.sexo){const s=String(r.sexo).toLowerCase();if(/muj|fem|^f/.test(s))return'F';if(/hom|masc|varon|^m/.test(s))return'M';}
+    const s=String(r.sexo||'').trim().toLowerCase();
+    if(s==='h'||/hom|masc|varon/.test(s))return'H';
+    if(s==='m'||/muj|fem/.test(s))return'M';
     const c=parseFloat(String(r.categoria||'').replace(/[^0-9.]/g,''));
-    const F=[43,47,52,57,63,69,76,84], M=[53,59,66,74,83,93,105,120];
-    if(F.includes(c))return'F'; if(M.includes(c))return'M'; return '?';
+    const MUJ=[43,47,52,57,63,69,76,84], HOM=[53,59,66,74,83,93,105,120];
+    if(MUJ.includes(c))return'M'; if(HOM.includes(c))return'H'; return '?';
   };
-  // Only Bench PURO = menciona bench/banca y NO es powerlifting (classic/equipado). El "+Only Bench" cuenta como classic/equipado.
+  // Only Bench puro = menciona bench/banca y NO es powerlifting. No cuenta para el 14 (va con su categoría).
   const isBench=m=>{m=(m||'').toLowerCase();return (/bench|banca/.test(m))&&!/powerlifting/.test(m);};
-  const srank={F:0,M:1,'?':2};
-  const fullRows=rows.filter(r=>!isBench(r.modalidad));
-  const benchRows=rows.filter(r=>isBench(r.modalidad));
+  const fullN=g=>g.filter(r=>!isBench(r.modalidad)).length;
+  const srank={H:0,M:1,'?':2};
   const groups={};
-  fullRows.forEach(r=>{const k=sexOf(r)+'|'+(r.division||'?')+'|'+(r.categoria||'?');(groups[k]=groups[k]||[]).push(r);});
+  rows.forEach(r=>{const k=sexOf(r)+'|'+(r.division||'?')+'|'+(r.categoria||'?');(groups[k]=groups[k]||[]).push(r);});
   const keys=Object.keys(groups).sort((a,b)=>{const A=a.split('|'),B=b.split('|');return (srank[A[0]]-srank[B[0]])||((parseFloat(A[2])||999)-(parseFloat(B[2])||999))||A[1].localeCompare(B[1]);});
-  const flights=[]; let cur=[], curSex=null;
+  const flights=[]; let cur=[], curFull=0, curSex=null;
   for(const k of keys){
-    const sex=k.split('|')[0]; const g=groups[k];
-    if(g.length>MAXP){ if(cur.length){flights.push(cur);cur=[];curSex=null;} for(let i=0;i<g.length;i+=MAXP)flights.push(g.slice(i,i+MAXP)); continue; }
-    if(cur.length && (curSex!==sex || cur.length+g.length>MAXP)){ flights.push(cur); cur=[]; }
+    const sex=k.split('|')[0]; const g=groups[k]; const gf=fullN(g);
+    if(gf>MAXP){ if(cur.length){flights.push(cur);cur=[];curFull=0;curSex=null;} for(let i=0;i<g.length;i+=MAXP)flights.push(g.slice(i,i+MAXP)); continue; }
+    if(cur.length && (curSex!==sex || curFull+gf>MAXP)){ flights.push(cur); cur=[]; curFull=0; }
     if(!cur.length)curSex=sex;
-    cur=cur.concat(g);
+    cur=cur.concat(g); curFull+=gf;
   }
   if(cur.length)flights.push(cur);
-  // Only Bench puro: una tanda por sexo (puede pasar de 14), ordenada por peso
-  const bgrp={}; benchRows.forEach(r=>{const s=sexOf(r);(bgrp[s]=bgrp[s]||[]).push(r);});
-  Object.keys(bgrp).sort((a,b)=>srank[a]-srank[b]).forEach(s=>{
-    bgrp[s].sort((a,b)=>(parseFloat(String(a.categoria))||999)-(parseFloat(String(b.categoria))||999));
-    flights.push(bgrp[s]);
+  // Asignar: por tarima 6 flights = 3 AM (A,B,C) + 3 PM (A,B,C)
+  flights.forEach((fl,idx)=>{
+    const tar=String(Math.floor(idx/6)+1); const pos=idx%6; const jor=pos<3?'AM':'PM'; const let_=L3[pos%3];
+    fl.forEach(r=>{r.tarima=tar;r.flight=let_;r.jornada=jor;});
   });
-  flights.forEach((fl,idx)=>{ const tar=String(Math.floor(idx/MAXF)+1); const let_=L[idx%MAXF]||('X'+(idx%MAXF)); fl.forEach(r=>{r.tarima=tar;r.flight=let_;}); });
   await cronoSaveDoc();
-  const ntar=Math.ceil(flights.length/MAXF);
-  showToast(flights.length+' flights en '+ntar+' tarima(s)'); render();
+  const ntar=Math.ceil(flights.length/6);
+  showToast(flights.length+' flights · '+ntar+' tarima(s) (3 AM / 3 PM c/u)'); render();
 };
 window.cronoLoadFromNomina=async function(){
   if(!ST.cronoEv){showToast('Elige un campeonato primero',null,true);return;}
@@ -3540,7 +3540,7 @@ window.cronoLoadFromNomina=async function(){
   if(!list.length){showToast('No hay inscripciones aprobadas en este campeonato',null,true);return;}
   if(!confirm('Cargar '+list.length+' atletas desde la nómina (inscripciones aprobadas)?\nReemplaza el cronograma actual de este evento.\nLuego ajustas tarima/flight/jornada y handlers.'))return;
   ST.cronoRows=list.map(i=>({
-    nombre:i.nombre||'', rut:i.rut||'', division:i.division||'', categoria:i.categoria||'',
+    nombre:i.nombre||'', rut:i.rut||'', division:i.division||'', categoria:i.categoria||'', sexo:(i.sexo||'').toString().trim().toUpperCase().slice(0,1),
     club:i.club||'', modalidad:i.modalidad||'', tarima:'1', flight:(i.flight||'A'), jornada:'',
     entrenador:'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
   })).sort((a,b)=>String(a.flight).localeCompare(String(b.flight))||(a.nombre||'').localeCompare(b.nombre||''));
@@ -3556,9 +3556,9 @@ function _xlsxDownload(aoa, sheetName, filename){
 window.cronoExportXlsx=function(){
   const rows=ST.cronoRows||[]; if(!rows.length){showToast('Nada que exportar',null,true);return;}
   const order=rows.map((r,i)=>i).sort((a,b)=>String(rows[a].tarima).localeCompare(String(rows[b].tarima))||String(rows[a].flight).localeCompare(String(rows[b].flight)));
-  const head=['Nombre','División','Categoría','Club','Modalidad','Tarima','Flight','Jornada','Entrenador','Handler 1','Correo handler 1','Handler 2','Correo handler 2'];
+  const head=['Nombre','División','Categoría','Sexo','Club','Modalidad','Tarima','Flight','Jornada','Entrenador','Handler 1','Correo handler 1','Handler 2','Correo handler 2'];
   const aoa=[head];
-  order.forEach(i=>{const r=rows[i];aoa.push([r.nombre||'',r.division||'',r.categoria||'',r.club||'',r.modalidad||'',r.tarima||'',r.flight||'',r.jornada||'',r.entrenador||'',(r.handler1||{}).nombre||'',(r.handler1||{}).correo||'',(r.handler2||{}).nombre||'',(r.handler2||{}).correo||'']);});
+  order.forEach(i=>{const r=rows[i];aoa.push([r.nombre||'',r.division||'',r.categoria||'',r.sexo||'',r.club||'',r.modalidad||'',r.tarima||'',r.flight||'',r.jornada||'',r.entrenador||'',(r.handler1||{}).nombre||'',(r.handler1||{}).correo||'',(r.handler2||{}).nombre||'',(r.handler2||{}).correo||'']);});
   _xlsxDownload(aoa,'Cronograma','Cronograma_'+(ST.cronoEv||'evento')+'.xlsx');
 };
 window.cronoAddRow=function(){
@@ -3598,6 +3598,7 @@ function renderCronoEditor(){
     <td>${inp(i,'nombre',r.nombre,128)}</td>
     <td>${inp(i,'division',r.division,64)}</td>
     <td>${inp(i,'categoria',r.categoria,40)}</td>
+    <td><select onchange="cronoSet(${i},'sexo',this.value)" style="${sSel}"><option ${!r.sexo?'selected':''}></option><option ${r.sexo==='H'?'selected':''}>H</option><option ${r.sexo==='M'?'selected':''}>M</option></select></td>
     <td>${inp(i,'club',r.club,98)}</td>
     <td>${inp(i,'modalidad',r.modalidad,108)}</td>
     <td><select onchange="cronoSet(${i},'tarima',this.value)" style="${sSel}">${taOpts(r.tarima)}</select></td>
@@ -3610,7 +3611,7 @@ function renderCronoEditor(){
   </tr>`;}).join('');
   h+=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${ST.cronoRows.length} atletas · cambiar Tarima/Flight mueve al atleta · todo se guarda al instante</div>
     <div class="card" style="padding:0;overflow-x:auto"><table class="tbl" style="white-space:nowrap">
-      <tr><th>Nombre</th><th>División</th><th>Cat.</th><th>Club</th><th>Modalidad</th><th>Tarima</th><th>Flight</th><th>Jornada</th><th>Entrenador</th><th>Handler 1 (nombre / correo)</th><th>Handler 2 (nombre / correo)</th><th></th></tr>
+      <tr><th>Nombre</th><th>División</th><th>Cat.</th><th>Sexo</th><th>Club</th><th>Modalidad</th><th>Tarima</th><th>Flight</th><th>Jornada</th><th>Entrenador</th><th>Handler 1 (nombre / correo)</th><th>Handler 2 (nombre / correo)</th><th></th></tr>
       ${rows}
     </table></div>`;
   return h;
