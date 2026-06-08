@@ -3496,17 +3496,21 @@ window.cronoClear=async function(){
 // Reglas: cada categoría+división JUNTA en un flight · máx 14 por flight · máx 6 flights por tarima
 window.cronoAutoDistribute=async function(){
   const rows=ST.cronoRows||[]; if(!rows.length){showToast('No hay atletas',null,true);return;}
-  if(!confirm('Auto-distribuir '+rows.length+' atletas en flights?\nRegla: cada categoría+división junta, máx 14 por flight, máx 6 flights por tarima.'))return;
-  const MAXP=14, MAXF=6, L=['A','B','C','D','E','F'];
+  if(!confirm('Auto-distribuir '+rows.length+' atletas?\nReglas: mujeres y hombres en flights separados · cada categoría+división junta · 8 a 14 por flight · Only Bench puro va aparte y puede pasar de 14 · 6 flights por tarima.'))return;
+  const MAXP=14, MINP=8, MAXF=6, L=['A','B','C','D','E','F'];
   const sexOf=r=>{
     if(r.sexo){const s=String(r.sexo).toLowerCase();if(/muj|fem|^f/.test(s))return'F';if(/hom|masc|varon|^m/.test(s))return'M';}
     const c=parseFloat(String(r.categoria||'').replace(/[^0-9.]/g,''));
     const F=[43,47,52,57,63,69,76,84], M=[53,59,66,74,83,93,105,120];
     if(F.includes(c))return'F'; if(M.includes(c))return'M'; return '?';
   };
-  const groups={};
-  rows.forEach(r=>{const k=sexOf(r)+'|'+(r.division||'?')+'|'+(r.categoria||'?');(groups[k]=groups[k]||[]).push(r);});
+  // Only Bench PURO = menciona bench/banca y NO es powerlifting (classic/equipado). El "+Only Bench" cuenta como classic/equipado.
+  const isBench=m=>{m=(m||'').toLowerCase();return (/bench|banca/.test(m))&&!/powerlifting/.test(m);};
   const srank={F:0,M:1,'?':2};
+  const fullRows=rows.filter(r=>!isBench(r.modalidad));
+  const benchRows=rows.filter(r=>isBench(r.modalidad));
+  const groups={};
+  fullRows.forEach(r=>{const k=sexOf(r)+'|'+(r.division||'?')+'|'+(r.categoria||'?');(groups[k]=groups[k]||[]).push(r);});
   const keys=Object.keys(groups).sort((a,b)=>{const A=a.split('|'),B=b.split('|');return (srank[A[0]]-srank[B[0]])||((parseFloat(A[2])||999)-(parseFloat(B[2])||999))||A[1].localeCompare(B[1]);});
   const flights=[]; let cur=[], curSex=null;
   for(const k of keys){
@@ -3517,6 +3521,12 @@ window.cronoAutoDistribute=async function(){
     cur=cur.concat(g);
   }
   if(cur.length)flights.push(cur);
+  // Only Bench puro: una tanda por sexo (puede pasar de 14), ordenada por peso
+  const bgrp={}; benchRows.forEach(r=>{const s=sexOf(r);(bgrp[s]=bgrp[s]||[]).push(r);});
+  Object.keys(bgrp).sort((a,b)=>srank[a]-srank[b]).forEach(s=>{
+    bgrp[s].sort((a,b)=>(parseFloat(String(a.categoria))||999)-(parseFloat(String(b.categoria))||999));
+    flights.push(bgrp[s]);
+  });
   flights.forEach((fl,idx)=>{ const tar=String(Math.floor(idx/MAXF)+1); const let_=L[idx%MAXF]||('X'+(idx%MAXF)); fl.forEach(r=>{r.tarima=tar;r.flight=let_;}); });
   await cronoSaveDoc();
   const ntar=Math.ceil(flights.length/MAXF);

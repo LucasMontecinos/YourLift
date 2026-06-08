@@ -184,6 +184,7 @@ function buildMenu(){
     {v:'stats',l:'Estadísticas',ic:''},
     {v:'records',l:'Records',ic:''},
     {v:'trans',l:'Transmisiones',ic:''},
+    {v:'crono',l:'Cronograma',ic:''},
     {v:'atletas',l:'Atletas',ic:''},
     {v:'insc',l:'Inscripción',ic:'',cls:'special-g'},
     {v:'rank',l:'Ranking',ic:'',cls:'special-y'},
@@ -780,6 +781,7 @@ function render(){const app=document.getElementById("app");
     else if(ST.v==="stats")h+=sts();
     else if(ST.v==="records")h+=rec();
     else if(ST.v==="trans")h+=trans();
+    else if(ST.v==="crono")h+=crono();
     else if(ST.v==="atletas")h+=embedded('atleta.html');
     else if(ST.v==="insc")h+=embedded('inscripcion.html');
     else if(ST.v==="rank")h+=embedded('ranking.html');
@@ -788,6 +790,58 @@ function render(){const app=document.getElementById("app");
     if(typeof buildMenu==='function')buildMenu();
   }
 function embedded(url){return `<iframe src="${url}?embedded=1" style="width:100%;height:calc(100vh - 110px);min-height:600px;border:0;background:transparent;display:block" loading="lazy"></iframe>`}
+
+// ── Cronograma público (lee colección cronograma + overlay de handlers) ──
+function _escH(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+window.cronoSel=function(ev){ST.cronoEv=ev;render();};
+function crono(){
+  const evs=(window.ALL_EVENTS||[]).filter(e=>e.status!=='archived').sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const opts=evs.map(e=>`<option value="${_escH(e.id)}" ${ST.cronoEv===e.id?'selected':''}>${_escH(e.name||e.id)}</option>`).join('');
+  if(ST.cronoEv) setTimeout(()=>loadCronoSection(ST.cronoEv),30);
+  return `<div class="cd2"><div class="ct"><h2 style="color:var(--gold)">📋 Cronograma</h2></div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Start list por tarima y flight · entrenador y handlers</p>
+    <select onchange="cronoSel(this.value)" style="background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;min-width:260px;margin-bottom:8px">
+      <option value="">— Elegir campeonato —</option>${opts}
+    </select>
+    <div id="cronoMount">${ST.cronoEv?'<div style="color:var(--muted);padding:14px">Cargando…</div>':'<div style="color:var(--muted);padding:14px">Elige un campeonato.</div>'}</div>
+  </div>`;
+}
+async function loadCronoSection(ev){
+  const mount=document.getElementById('cronoMount'); if(!mount)return;
+  try{
+    const d=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'cronograma',ev));
+    const rows=(d&&d.exists&&d.exists()&&Array.isArray(d.data().rows))?d.data().rows:[];
+    const HMAP={};
+    try{ const hs=await window.FBQ.getDocs(window.FBQ.query(window.FBQ.collection(fbDB,'handlers'),window.FBQ.where('evento','==',ev))); hs.forEach(x=>{HMAP[x.id]=x.data();}); }catch(e){}
+    const el=document.getElementById('cronoMount'); if(el) el.innerHTML=cronoRender(ev,rows,HMAP);
+  }catch(e){ const el=document.getElementById('cronoMount'); if(el) el.innerHTML='<div style="color:var(--muted);padding:14px">Este campeonato no tiene cronograma publicado.</div>'; }
+}
+function cronoRender(ev,rows,HMAP){
+  if(!rows.length) return '<div style="color:var(--muted);padding:14px">Sin atletas en este cronograma.</div>';
+  const _nn=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
+  const _slug=s=>_nn(s).replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,50);
+  const hNames=r=>{const k=ev+'__'+_slug(r.entrenador||'')+'__'+((r.jornada||'1').toString().trim()||'1');const sub=HMAP[k];if(sub&&Array.isArray(sub.handlers)&&sub.handlers.length)return sub.handlers.map(h=>h.nombre).filter(Boolean);const a=[];if((r.handler1||{}).nombre)a.push(r.handler1.nombre);if((r.handler2||{}).nombre)a.push(r.handler2.nombre);return a;};
+  const groups={}; rows.forEach(r=>{const k=(r.tarima||'?')+'||'+(r.flight||'?');(groups[k]=groups[k]||[]).push(r);});
+  const keys=Object.keys(groups).sort((a,b)=>{const x=a.split('||'),y=b.split('||');return String(x[0]).localeCompare(String(y[0]))||String(x[1]).localeCompare(String(y[1]));});
+  return keys.map((k,gi)=>{
+    const p=k.split('||'),tar=p[0],fl=p[1],aths=groups[k];
+    const blue=gi%2===0, bg=blue?'rgba(59,130,246,.10)':'rgba(196,30,58,.10)', hd=blue?'rgba(59,130,246,.22)':'rgba(196,30,58,.22)', bd=blue?'#3b82f6':'#c41e3a';
+    const tr=aths.map((r,i)=>{const hs=hNames(r);return `<tr style="border-top:1px solid ${bd}22">
+      <td style="padding:6px 10px;color:var(--muted)">${i+1}</td>
+      <td style="padding:6px 10px;font-weight:600">${_escH(r.nombre||'')}</td>
+      <td style="padding:6px 10px;color:var(--muted)">${_escH(r.division||'')} ${_escH(r.categoria||'')}</td>
+      <td style="padding:6px 10px;color:var(--muted)">${_escH(r.club||'')}</td>
+      <td style="padding:6px 10px">${_escH(r.modalidad||'')}</td>
+      <td style="padding:6px 10px">${_escH(r.entrenador||'—')}</td>
+      <td style="padding:6px 10px">${hs.length?hs.map(_escH).join('<br>'):'<span style="color:var(--muted)">—</span>'}</td></tr>`;}).join('');
+    return `<div style="background:${bg};border:1px solid ${bd}55;border-left:5px solid ${bd};border-radius:12px;margin-bottom:14px;overflow:hidden">
+      <div style="background:${hd};padding:10px 14px;font-family:Oswald;font-weight:700;letter-spacing:1px">Tarima ${_escH(tar)} · Flight ${_escH(fl)} <span style="color:var(--muted);font-weight:400;font-size:12px">· ${aths.length} atleta(s)${aths[0].jornada?(' · Jornada '+_escH(aths[0].jornada)):''}</span></div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="text-align:left;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;text-transform:uppercase"><th style="padding:6px 10px">#</th><th style="padding:6px 10px">Atleta</th><th style="padding:6px 10px">Div/Cat</th><th style="padding:6px 10px">Club</th><th style="padding:6px 10px">Modalidad</th><th style="padding:6px 10px">Entrenador</th><th style="padding:6px 10px">Handlers</th></tr>
+        ${tr}
+      </table></div></div>`;
+  }).join('');
+}
 
 // ═══════════════════════════════════════════════════════════════
 // CALCULADORA GL POINTS (IPF Good Lift Points 2020)
