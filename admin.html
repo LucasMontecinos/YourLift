@@ -1878,19 +1878,24 @@ function entRenderAcreds(){
   const box=document.getElementById('ent_acreds'); if(!box)return;
   const A=_entWork.acreditaciones;
   box.innerHTML=A.map((a,i)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
-    <input id="ea_proc_${i}" class="inp" type="number" min="1" placeholder="N°" value="${a.proceso||''}" style="width:64px" title="Proceso (1,2,3,4...)">
-    <input id="ea_fecha_${i}" class="inp" type="month" value="${esc(a.fecha||'')}" style="width:150px" title="Mes del proceso">
-    <input id="ea_cat_${i}" class="inp" placeholder="Categoría" value="${esc(a.categoria||'')}" style="width:110px">
-    <select id="ea_cumple_${i}" class="inp" style="width:90px"><option ${/^si/i.test(a.cumple||'')?'selected':''}>SI</option><option ${!/^si/i.test(a.cumple||'')?'selected':''}>NO</option></select>
-    <span style="font-size:10px;color:var(--muted)">vence ${esc(_entVence(a.fecha)||'—')}</span>
+    <input id="ea_proc_${i}" class="inp" type="number" min="1" placeholder="N°" value="${a.proceso||''}" style="width:58px" title="Proceso (1,2,3,4...)">
+    <label style="font-size:9px;color:var(--muted)">Inicio<input id="ea_fecha_${i}" class="inp" type="month" value="${esc(a.fecha||'')}" oninput="entSuggestVence(${i})" style="width:140px;display:block" title="Fecha de inicio"></label>
+    <label style="font-size:9px;color:var(--muted)">Término<input id="ea_vence_${i}" class="inp" type="month" value="${esc(a.vence||'')}" style="width:140px;display:block" title="Fecha de término / vencimiento"></label>
+    <input id="ea_cat_${i}" class="inp" placeholder="Categoría" value="${esc(a.categoria||'')}" style="width:100px">
+    <select id="ea_cumple_${i}" class="inp" style="width:84px"><option ${/^si/i.test(a.cumple||'')?'selected':''}>SI</option><option ${!/^si/i.test(a.cumple||'')?'selected':''}>NO</option></select>
     <button onclick="entDelAcred(${i})" style="background:transparent;border:1px solid rgba(239,68,68,.4);color:var(--red);padding:3px 7px;border-radius:5px;font-size:10px;cursor:pointer">✕</button>
   </div>`).join('')||'<div style="font-size:11px;color:var(--muted)">Sin acreditaciones.</div>';
 }
+window.entSuggestVence=function(i){
+  const f=document.getElementById('ea_fecha_'+i), v=document.getElementById('ea_vence_'+i);
+  if(f&&v&&!v.value) v.value=_entVence(f.value);
+};
 function entSyncAcredsFromDOM(){
   _entWork.acreditaciones.forEach((a,i)=>{
-    const p=document.getElementById('ea_proc_'+i),f=document.getElementById('ea_fecha_'+i),c=document.getElementById('ea_cat_'+i),cu=document.getElementById('ea_cumple_'+i);
+    const p=document.getElementById('ea_proc_'+i),f=document.getElementById('ea_fecha_'+i),v=document.getElementById('ea_vence_'+i),c=document.getElementById('ea_cat_'+i),cu=document.getElementById('ea_cumple_'+i);
     if(p)a.proceso=parseInt(p.value)||'';
-    if(f){a.fecha=f.value;a.vence=_entVence(f.value);}
+    if(f)a.fecha=f.value;
+    if(v)a.vence=v.value;
     if(c)a.categoria=c.value.trim();
     if(cu)a.cumple=cu.value;
   });
@@ -1907,7 +1912,7 @@ window.saveEnt=async function(){
     nombre, rut, club:(g('ent_club').value||'').trim(),
     categoria:(g('ent_cat').value||'').trim(),
     correos:(g('ent_mails').value||'').split(',').map(s=>s.trim()).filter(Boolean),
-    acreditaciones:_entWork.acreditaciones.map(a=>({proceso:a.proceso||'',fecha:a.fecha||'',vence:_entVence(a.fecha),categoria:a.categoria||'',cumple:a.cumple||''})),
+    acreditaciones:_entWork.acreditaciones.map(a=>({proceso:a.proceso||'',fecha:a.fecha||'',vence:a.vence||_entVence(a.fecha),categoria:a.categoria||'',cumple:a.cumple||''})),
     updatedAt:serverTimestamp()
   };
   try{ await setDoc(doc(db,'entrenadores',_entRutId(rut)),data,{merge:true}); await logAction('ent_save',_entRutId(rut),null,nombre); showToast('Entrenador guardado'); closeEntModal(); }
