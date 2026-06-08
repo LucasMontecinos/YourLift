@@ -16,8 +16,13 @@ body{font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh;-webkit
 .os{font-family:'Oswald',sans-serif}
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 input,select,button,textarea{font-family:inherit;outline:none}
-.shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
-.side{background:#0d1b30;border-right:1px solid var(--border);padding:18px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.shell{min-height:100vh}
+.side{background:#0d1b30;border-right:1px solid var(--border);padding:18px 14px;display:flex;flex-direction:column;position:fixed;top:0;left:0;width:264px;height:100vh;overflow-y:auto;z-index:1000;transform:translateX(-100%);transition:transform .22s ease}
+body.nav-open .side{transform:translateX(0);box-shadow:2px 0 24px rgba(0,0,0,.55)}
+.nav-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:999;opacity:0;pointer-events:none;transition:opacity .2s}
+body.nav-open .nav-backdrop{opacity:1;pointer-events:auto}
+.adm-burger{display:inline-flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 15px;font-family:Oswald;font-weight:700;letter-spacing:1px;font-size:13px;cursor:pointer;margin-bottom:18px}
+.adm-burger:hover{border-color:var(--accent)}
 .logo{font-family:Oswald;font-size:20px;font-weight:700;letter-spacing:2px;margin-bottom:4px}
 .logo span{color:var(--accent)}
 .user{font-size:11px;color:var(--green);margin-bottom:18px;padding:6px 10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:6px}
@@ -78,7 +83,7 @@ input,select,button,textarea{font-family:inherit;outline:none}
 .empty{text-align:center;padding:40px;color:var(--muted);font-size:13px}
 .search-box{display:flex;gap:8px;margin-bottom:14px}
 .search-box input{flex:1}
-@media(max-width:768px){.shell{grid-template-columns:1fr}.side{position:static;height:auto}.stat-grid{grid-template-columns:repeat(2,1fr)}.tbl{font-size:10px}.tbl th,.tbl td{padding:5px 4px}}
+@media(max-width:768px){.side{width:84vw}.stat-grid{grid-template-columns:repeat(2,1fr)}.tbl{font-size:10px}.tbl th,.tbl td{padding:5px 4px}}
 </style>
 </head>
 <body>
@@ -1436,7 +1441,8 @@ window.assignFlight=async function(insId,flight){
 // ═══════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════
-window.go=function(view){ST.view=view;if(view==='admins')loadAdminsList().then(()=>render());else render();}
+window.admNav=function(open){document.body.classList.toggle('nav-open',!!open);};
+window.go=function(view){ST.view=view;document.body.classList.remove('nav-open');if(view==='admins')loadAdminsList().then(()=>render());else render();}
 
 // ═══════════════════════════════════════════
 // RENDER
@@ -1486,12 +1492,10 @@ function render(){
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='bgvideos'?'active':''}" onclick="go('bgvideos')">Videos de Fondo</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='sponsors'?'active':''}" onclick="go('sponsors')">Auspiciadores</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='ai'?'active':''}" onclick="go('ai')">Asistente IA</button>`:''}
-      <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')"><span class="icon">✓</span>Aprobaciones</button>
+      <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')">Revisión inscripciones</button>
       <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')">Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
-      <button class="side-btn ${ST.view==='entrenadores'?'active':''}" onclick="go('entrenadores')">Entrenadores (cuentas)</button>
       <button class="side-btn ${ST.view==='entrenadoresDB'?'active':''}" onclick="go('entrenadoresDB')">Base Entrenadores</button>
       <button class="side-btn ${ST.view==='fotos'?'active':''}" onclick="go('fotos')">Fotos Atletas</button>
-      <button class="side-btn ${ST.view==='importar'?'active':''}" onclick="go('importar')">Importar LiftingCast</button>
       <button class="side-btn ${ST.view==='cronograma'?'active':''}" onclick="go('cronograma')">Cronograma</button>
       <div class="side-label">Sistema</div>
       <a href="cronograma.html" target="_blank" class="side-btn" style="text-decoration:none">Cronograma</a>
@@ -1529,7 +1533,7 @@ function render(){
   else if(ST.view==='mergeResults')content=renderMergeResults();
   else if(ST.view==='athleteProfile')content=renderAthleteProfile();
   
-  app.innerHTML=`<div class="shell">${sidebar}<div class="main">${content}</div></div>`;
+  app.innerHTML=`<div class="shell"><div class="nav-backdrop" onclick="admNav(false)"></div>${sidebar}<div class="main"><button class="adm-burger" onclick="admNav(true)">☰ Menú</button>${content}</div></div>`;
   if(ST.view==='sponsors'&&!ST._sponsorsLoaded)setTimeout(loadSponsors,0);
   if(ST.view==='stats'){
     const _st=ST.statsTab||'deporte';
@@ -1858,8 +1862,9 @@ window.openEntModal=function(rut){
       <input id="ent_nom" class="inp" placeholder="Nombre completo" value="${esc(_entWork.nombre||'')}">
       <input id="ent_rut" class="inp" placeholder="RUT" value="${esc(_entWork.rut||'')}">
       <input id="ent_club" class="inp" placeholder="Club" value="${esc(_entWork.club||'')}">
+      <select id="ent_sexo" class="inp"><option value="" ${!_entWork.sexo?'selected':''}>Sexo…</option><option ${/^h|hombre|masc/i.test(_entWork.sexo||'')?'selected':''}>Hombre</option><option ${/muj|fem/i.test(_entWork.sexo||'')?'selected':''}>Mujer</option></select>
       <input id="ent_cat" class="inp" placeholder="Categoría actual (ej: Cat. 1)" value="${esc(_entWork.categoria||'')}">
-      <input id="ent_mails" class="inp" placeholder="Correos (separados por coma)" value="${esc((_entWork.correos||[]).join(', '))}" style="grid-column:span 2">
+      <input id="ent_mails" class="inp" placeholder="Correos (separados por coma)" value="${esc((_entWork.correos||[]).join(', '))}">
     </div>
     <div style="font-family:Oswald;font-size:12px;letter-spacing:1px;color:var(--gold);margin:10px 0 6px">ACREDITACIONES (cada una vence al año)</div>
     <div id="ent_acreds"></div>
@@ -1910,6 +1915,7 @@ window.saveEnt=async function(){
   entSyncAcredsFromDOM();
   const data={
     nombre, rut, club:(g('ent_club').value||'').trim(),
+    sexo:(g('ent_sexo').value||'').trim(),
     categoria:(g('ent_cat').value||'').trim(),
     correos:(g('ent_mails').value||'').split(',').map(s=>s.trim()).filter(Boolean),
     acreditaciones:_entWork.acreditaciones.map(a=>({proceso:a.proceso||'',fecha:a.fecha||'',vence:a.vence||_entVence(a.fecha),categoria:a.categoria||'',cumple:a.cumple||''})),
@@ -1939,10 +1945,19 @@ window.importEntrenadores=async function(){
   }catch(e){ showToast('Error importando: '+e.message,null,true); }
 };
 window.entFilter=function(v){ST.entSearch=v;const el=document.getElementById('entList');if(el)el.innerHTML=entListHtml();};
+window.entSetFilter=function(k,v){ST.entFilters=ST.entFilters||{};ST.entFilters[k]=v;const el=document.getElementById('entList');if(el)el.innerHTML=entListHtml();};
 function entListHtml(){
   const q=(ST.entSearch||'').toLowerCase().trim();
-  let list=ST.entrenadores||[];
+  const f=ST.entFilters||{};
+  const catDig=s=>((/cat\.?\s*(\d)/i.exec(s||'')||[])[1]||'');
+  const minProc=c=>{const ps=(c.acreditaciones||[]).map(a=>parseInt(a.proceso)).filter(n=>n);return ps.length?Math.min(...ps):99;};
+  let list=(ST.entrenadores||[]).slice();
   if(q)list=list.filter(c=>((c.nombre||'')+' '+(c.rut||'')+' '+(c.club||'')+' '+(c.categoria||'')+' '+(c.correos||[]).join(' ')).toLowerCase().includes(q));
+  if(f.proceso)list=list.filter(c=>(c.acreditaciones||[]).some(a=>String(a.proceso)===String(f.proceso)));
+  if(f.sexo)list=list.filter(c=>{const s=(c.sexo||'').toLowerCase();return f.sexo==='H'?/^h|hombre|masc/.test(s):/muj|fem/.test(s);});
+  if(f.cat)list=list.filter(c=>catDig(c.categoria)===f.cat);
+  if(f.club)list=list.filter(c=>(c.club||'')===f.club);
+  list.sort((a,b)=>(minProc(a)-minProc(b))||(a.nombre||'').localeCompare(b.nombre||''));
   const rows=list.map(c=>{
     const vig=_entVigente(c);
     const procs=(c.acreditaciones||[]).map(a=>a.proceso).filter(Boolean).sort((a,b)=>a-b).join(', ');
@@ -1976,11 +1991,21 @@ function renderEntrenadoresDB(){
       <div style="${ks}"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:#3b82f6">${c1}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">CAT. 1</div></div>
       <div style="${ks}"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:#ec4899">${c2}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">CAT. 2</div></div>
     </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
-      <input type="text" value="${esc(ST.entSearch||'')}" oninput="entFilter(this.value)" placeholder="Buscar nombre, RUT, club, correo…" style="flex:1;min-width:220px;background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;font-family:DM Sans">
-      <button onclick="openEntModal('')" class="btn btn-g" style="padding:8px 14px">+ Agregar</button>
-      <button onclick="importEntrenadores()" class="btn" style="padding:8px 14px">Importar base</button>
-    </div>
+    ${(()=>{
+      const f=ST.entFilters||{};
+      const selS='background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;font-family:DM Sans';
+      const allProcs=[...new Set(list.flatMap(c=>(c.acreditaciones||[]).map(a=>parseInt(a.proceso)).filter(n=>n)))].sort((a,b)=>a-b);
+      const allClubs=[...new Set(list.map(c=>c.club).filter(Boolean))].sort();
+      return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+        <input type="text" value="${esc(ST.entSearch||'')}" oninput="entFilter(this.value)" placeholder="Buscar nombre, RUT, correo…" style="flex:1;min-width:180px;${selS}">
+        <select onchange="entSetFilter('proceso',this.value)" style="${selS}"><option value="">Proceso · todos</option>${allProcs.map(p=>`<option value="${p}" ${String(f.proceso)===String(p)?'selected':''}>Proceso ${p}</option>`).join('')}</select>
+        <select onchange="entSetFilter('sexo',this.value)" style="${selS}"><option value="">Sexo · todos</option><option value="H" ${f.sexo==='H'?'selected':''}>Hombres</option><option value="M" ${f.sexo==='M'?'selected':''}>Mujeres</option></select>
+        <select onchange="entSetFilter('cat',this.value)" style="${selS}"><option value="">Cat. · todas</option><option value="1" ${f.cat==='1'?'selected':''}>Cat. 1</option><option value="2" ${f.cat==='2'?'selected':''}>Cat. 2</option><option value="3" ${f.cat==='3'?'selected':''}>Cat. 3</option></select>
+        <select onchange="entSetFilter('club',this.value)" style="${selS};max-width:170px"><option value="">Club · todos</option>${allClubs.map(cl=>`<option value="${esc(cl)}" ${f.club===cl?'selected':''}>${esc(cl)}</option>`).join('')}</select>
+        <button onclick="openEntModal('')" class="btn btn-g" style="padding:8px 14px">+ Agregar</button>
+        <button onclick="importEntrenadores()" class="btn" style="padding:8px 14px">Importar base</button>
+      </div>`;
+    })()}
     <div class="card" style="padding:0;overflow-x:auto" id="entList">${entListHtml()}</div>`;
 }
 
@@ -3343,7 +3368,7 @@ function renderApprovals(){
   const c=s=>ST.inscripciones.filter(i=>((i.status||'approved')===s)).length;
   const tabBtn=(id,label,n)=>`<button onclick="ST.apprTab='${id}';render()" style="padding:9px 18px;border-radius:9px;border:1px solid ${tab===id?'var(--gold)':'var(--border)'};background:${tab===id?'rgba(212,168,67,.12)':'transparent'};color:${tab===id?'var(--gold)':'var(--muted)'};font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">${label} (${n})</button>`;
   return `
-    <div class="h1">Inscripciones</div>
+    <div class="h1">Revisión inscripciones</div>
     <p class="subtitle">Aceptar · dejar en revisión · rechazar (puedes mover una en cualquier dirección)</p>
     <div style="display:flex;gap:10px;margin:12px 0 14px;flex-wrap:wrap">
       ${tabBtn('pending','En revisión',c('pending'))}
