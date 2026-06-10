@@ -3332,7 +3332,15 @@ function renderNominas(){
             <td><span class="${cls}" ${click('division')}>${esc(i.division||'—')}</span></td>
             <td><span class="${cls}" ${click('categoria')}>${esc(i.categoria||'—')}</span></td>
             <td><span class="${cls}" ${click('modalidad')}>${esc(i.modalidad||'—')}</span></td>
-            <td><span class="${cls}" ${click('club')} style="display:inline-flex;align-items:center;gap:5px">${window.clubLogoImg?window.clubLogoImg(i.club,18,'background:var(--bg);padding:1px;'):''}${esc(i.club||'—')}</span></td>
+            ${(()=>{
+              // Si el atleta eligió "Otro" en el formulario, el nombre real del
+              // club quedó en clubOtro (p.ej. "Wolf Strength"). Mostrar ese y
+              // editar ese campo, no la etiqueta "Otro".
+              const isOtro=i.club==='Otro';
+              const eclub=isOtro?(i.clubOtro||'Otro'):(i.club||'');
+              const fld=isOtro?'clubOtro':'club';
+              return `<td><span class="${cls}" ${click(fld)} style="display:inline-flex;align-items:center;gap:5px">${window.clubLogoImg?window.clubLogoImg(eclub,18,'background:var(--bg);padding:1px;'):''}${esc(eclub||'—')}</span></td>`;
+            })()}
             <td style="font-size:11px;color:var(--muted);max-width:160px"><span class="${cls}" ${click('comuna')} title="${esc(i.comuna||'')}">${esc(i.comuna||'—')}</span></td>
             <td style="text-align:center">${docsCell}</td>
             <td><span class="badge ${i.status==='approved'?'b-g':i.status==='pending'?'b-y':'b-r'}">${esc(i.status||'approved')}</span></td>

@@ -524,15 +524,20 @@ function _applyNominas(all){
       const fbAths=(byEvent[ev.id]||byEvent[ev.name]||[])
         .sort((a,b)=>(a.timestamp?.seconds||0)-(b.timestamp?.seconds||0))
         .map((i,idx)=>{
+          const inscClub=i.club==='Otro'?i.clubOtro:i.club||'';
           const base={
             id:i.id,nombre:i.nombre,rut:i.rut||'',sexo:i.sexo||'',codigo:i.codigo||'',
             dob:i.fechaNac||'',fechaNac:i.fechaNac||'',division:i.division||'',categoria:i.categoria||'',
-            modalidad:i.modalidad||'',club:i.club==='Otro'?i.clubOtro:i.club||'',
+            modalidad:i.modalidad||'',club:inscClub,
             universidad:i.universidad||'',status:i.status,
             sortOrder:idx+1,flight:i.flight||''
           };
-          // Overlay: aplicar ediciones del admin (club, nombre, etc.) por RUT
-          return applyEditOverlay(base);
+          // Overlay: aplicar ediciones del admin (nombre, código, etc.) por RUT.
+          const out=applyEditOverlay(base);
+          // El club de la INSCRIPCIÓN manda en la nómina: si el atleta se cambió
+          // de club para este evento, no dejar que el overlay del perfil lo pise.
+          if(inscClub)out.club=inscClub;
+          return out;
         });
       const athletes=fbAths;
       const approved=fbAths.filter(a=>a.status==='approved').length;
