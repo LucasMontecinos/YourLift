@@ -3217,9 +3217,12 @@ function renderAthletes(){
       const nCod=(a.codigo||'').toLowerCase();
       const nRut=(a.rut||'').replace(/[^0-9kK]/gi,'').toLowerCase();
       const sClean=sNorm.replace(/\s+/g,'');
-      // match si: todas las palabras están en el nombre, O el query está en club/código/rut
+      const qRut=sRaw.replace(/[^0-9kK]/gi,'').toLowerCase();
+      // match si: todas las palabras están en el nombre, O el query está en club/código/rut.
+      // OJO: qRut/sClean pueden quedar vacíos al buscar un nombre puro — sin el guard,
+      // `incluye('')` es siempre true y dejaría pasar a TODOS (no filtraría nada).
       const byName=words.every(w=>nName.includes(w));
-      const byOther=nClub.includes(sNorm)||nCod.includes(sClean)||nRut.includes(sRaw.replace(/[^0-9kK]/gi,'').toLowerCase());
+      const byOther=nClub.includes(sNorm)||(sClean&&nCod.includes(sClean))||(qRut&&nRut.includes(qRut));
       if(!byName&&!byOther)return false;
     }
     return true;
