@@ -363,6 +363,12 @@ async function initFB(){
     const app=initializeApp(FB_CFG);fbDB=fb.getFirestore(app);
     window.FBQ={collection:fb.collection,getDocs:fb.getDocs,query:fb.query,orderBy:fb.orderBy,where:fb.where,doc:fb.doc,setDoc:fb.setDoc,getDoc:fb.getDoc,onSnapshot:fb.onSnapshot,updateDoc:fb.updateDoc,increment:fb.increment,serverTimestamp:fb.serverTimestamp};
     fbReady=true;
+    // ── Récords en vivo: si existe records/data en Firestore, reemplaza records.json ──
+    try{
+      window.FBQ.onSnapshot(window.FBQ.doc(fbDB,'records','data'),(snap)=>{
+        if(snap.exists()){ const r=snap.data(); if(r&&(r.classic||r.equipped)){ R=r; if(ST.v==='records')render(); } }
+      },(e)=>{ console.warn('[records] sub',e); });
+    }catch(e){ console.warn('[records] sub',e); }
     // ── Analytics propio: registrar visita del día (no bloquea el render) ──
     try{ trackVisit(fb); }catch(e){}
     // Load eventos from Firestore and update NOM_EVENTS
