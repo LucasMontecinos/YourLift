@@ -7017,11 +7017,40 @@ window.pubFlagHtml = function(code){
   return '';
 };
 
+window.pubHexToRgb = function(hex){
+  hex=String(hex||'').replace('#','');
+  if(hex.length===3) hex=hex.split('').map(c=>c+c).join('');
+  return [parseInt(hex.slice(0,2),16)||0, parseInt(hex.slice(2,4),16)||0, parseInt(hex.slice(4,6),16)||0];
+};
+
 // ─── Carta de Atleta (estilo coleccionable / FUT) ──────────
 // Lienzo 1080×1350. Solo CSS soportado por html2canvas: linear/radial-gradient,
 // border-radius, box-shadow, background-image. Sin clip-path, sin background-clip:text.
+// El color de fondo se controla con el selector "Fondo" de ESTILO (d.bgPreset / d.bgColor).
 window.pubCardHtml = function(d){
   const e=window.esc||(s=>String(s==null?'':s));
+  // Fondo de la carta: preset o color personalizado (reusa el control "Fondo").
+  const BG_CARD={
+    azul:   {top:'#16263f', mid:'#0b1628', bot:'#050b16'},
+    negro:  {top:'#24262b', mid:'#0d0e11', bot:'#020203'},
+    rojo:   {top:'#3a141c', mid:'#19070c', bot:'#080205'},
+    dorado: {top:'#3a2e10', mid:'#191305', bot:'#070500'},
+    violeta:{top:'#281c44', mid:'#120b26', bot:'#06040f'},
+    verde:  {top:'#103a2a', mid:'#071a13', bot:'#020a07'}
+  };
+  let C, midRgb;
+  if(d.bgColor){
+    const b=pubHexToRgb(d.bgColor);
+    const sh=f=>'rgb('+b.map(v=>Math.round(v*(1-f))).join(',')+')';
+    C={top:d.bgColor, mid:sh(.5), bot:sh(.8)};
+    midRgb=b.map(v=>Math.round(v*.5));
+  } else {
+    const p=BG_CARD[d.bgPreset]||BG_CARD.azul;
+    C={top:p.top, mid:p.mid, bot:p.bot};
+    midRgb=pubHexToRgb(p.mid);
+  }
+  const innerBg=`radial-gradient(ellipse at 50% 0%,${C.top} 0%,${C.mid} 52%,${C.bot} 100%)`;
+  const fade=`linear-gradient(to bottom,rgba(${midRgb[0]},${midRgb[1]},${midRgb[2]},.12) 0%,rgba(${midRgb[0]},${midRgb[1]},${midRgb[2]},0) 34%,rgba(${midRgb[0]},${midRgb[1]},${midRgb[2]},.55) 70%,${C.mid} 100%)`;
   const parts=String(d.cardName||'').trim().split(/\s+/);
   const lastName=(parts.pop()||'').toUpperCase();
   const firstName=parts.join(' ');
@@ -7037,7 +7066,7 @@ window.pubCardHtml = function(d){
   const pz=+d.cardPhotoZoom||100;
   const bgSize=pz<=100?'cover':(pz+'%');
   const photoLayer = d.cardPhoto
-    ? `<div style="position:absolute;top:0;left:0;right:0;height:842px;background-color:#0b1628;background-image:url(${d.cardPhoto});background-size:${bgSize};background-position:${px}% ${py}%;background-repeat:no-repeat"></div>`
+    ? `<div style="position:absolute;top:0;left:0;right:0;height:842px;background-color:${C.mid};background-image:url(${d.cardPhoto});background-size:${bgSize};background-position:${px}% ${py}%;background-repeat:no-repeat"></div>`
     : `<div style="position:absolute;top:0;left:0;right:0;height:842px;background:linear-gradient(180deg,#1a2c4a,#0b1628);display:flex;align-items:center;justify-content:center;font-family:Oswald;letter-spacing:4px;color:rgba(255,255,255,.35);font-size:34px">SUBE LA FOTO</div>`;
   // Nombre: altura (Y) y tamaño (%) controlables.
   const ny=+d.cardNameY||720;
@@ -7047,9 +7076,9 @@ window.pubCardHtml = function(d){
   const logoYL=`<div style="font-family:Oswald;font-weight:700;letter-spacing:7px;color:#fff;font-size:36px"><span style="color:#C41E3A">YOUR</span>LIFT</div>`;
   return `
   <div style="width:1080px;height:1350px;position:relative;font-family:'DM Sans',sans-serif;background:linear-gradient(135deg,#9fe9ff 0%,#c3a3ff 17%,#ffb0e0 34%,#b8ffd2 52%,#ffe6a8 70%,#a9ecff 88%,#c3a3ff 100%);border-radius:54px;overflow:hidden">
-    <div style="position:absolute;top:22px;left:22px;right:22px;bottom:22px;border-radius:42px;background:radial-gradient(ellipse at 50% 0%,#16263f 0%,#0b1628 52%,#050b16 100%);overflow:hidden">
+    <div style="position:absolute;top:22px;left:22px;right:22px;bottom:22px;border-radius:42px;background:${innerBg};overflow:hidden">
       ${photoLayer}
-      <div style="position:absolute;top:0;left:0;right:0;height:842px;background:linear-gradient(to bottom,rgba(8,16,30,.12) 0%,rgba(8,16,30,0) 34%,rgba(8,16,30,.55) 70%,#0b1628 100%)"></div>
+      <div style="position:absolute;top:0;left:0;right:0;height:842px;background:${fade}"></div>
       ${badgeHtml}
       <div style="position:absolute;top:46px;right:46px;display:flex;flex-direction:column;align-items:flex-end;gap:14px">
         <div style="text-align:right">
