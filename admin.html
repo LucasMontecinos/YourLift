@@ -6745,6 +6745,11 @@ window.verDetalleComp = function(compId){
 // Autocompleta desde Firestore (eventos/) y usa logoUrl del evento si existe
 // ════════════════════════════════════════════════════════════════
 window.PUB_TEMPLATES = {
+  cartaAtleta: {
+    label: 'Carta de Atleta',
+    icon: '★',
+    desc: 'Carta coleccionable (estilo FUT) con marcas, bandera y foto'
+  },
   estaremosPresentes: {
     label: 'Estaremos presentes',
     icon: '',
@@ -6823,7 +6828,20 @@ window.PUB_STATE = window.PUB_STATE || {
     secTitle: '',
     secText: '',
     secUrl: 'yourlift.cl',
-    customLogoUrl: ''   // si el user sube un logo, se almacena aquí
+    customLogoUrl: '',   // si el user sube un logo, se almacena aquí
+    // ── Carta de Atleta (estilo FUT) ──
+    cardName: 'María Paz Sáez',
+    cardNick: '@paaaxi',
+    cardPhoto: '',
+    cardSquat: '170',
+    cardBench: '92.5',
+    cardDeadlift: '190',
+    cardTotal: '452.5',
+    cardGLP: '106.32',
+    cardCategory: '−57 KG',
+    cardBadge: 'CAMPEONA / MUNDIAL JR',
+    cardEvent: 'MUNDIAL JR IPF 2025',
+    cardFlag: 'CL'
   }
 };
 
@@ -6874,6 +6892,47 @@ window.pubClearLogo = function(){
   PUB_STATE.data.customLogoUrl = '';
   document.getElementById('pubEditorRoot').innerHTML = renderPublisherInner();
   setTimeout(pubUpdatePreview, 50);
+};
+
+// ── Carta de Atleta: cargar marcas/categoría desde la base de datos ──
+window.pubFmtCat = function(cat){
+  const s=String(cat||'');
+  const num=(s.match(/\d+\.?\d*/)||[''])[0];
+  if(!num) return s.toUpperCase();
+  return '−'+num+(s.includes('+')?'+':'')+' KG';
+};
+window.pubLoadAthleteCard = function(name){
+  if(!name) return;
+  const data=ST.data||[];
+  const a=data.find(x=>x.nombre===name)||data.find(x=>(x.nombre||'').toLowerCase()===String(name).toLowerCase());
+  if(!a){ showToast('Atleta no encontrado en la base',null,true); return; }
+  const bl=a.bestLifts||{};
+  PUB_STATE.data.cardName=a.nombre||'';
+  PUB_STATE.data.cardSquat=bl.sq||'';
+  PUB_STATE.data.cardBench=bl.bp||'';
+  PUB_STATE.data.cardDeadlift=bl.dl||'';
+  PUB_STATE.data.cardTotal=bl.total||'';
+  PUB_STATE.data.cardGLP=bl.glp||'';
+  // Categoría/evento: tomar la competencia cuyo total coincide con bestLifts.total;
+  // si no, la de mayor total.
+  const comps=a.competencias||[]; let best=null;
+  comps.forEach(c=>{ const r=c.resultado||{}; if(r.total&&Math.abs((+r.total)-(+bl.total))<0.01) best=c; });
+  if(!best) comps.forEach(c=>{ const r=c.resultado||{}; if(r.total&&(!best||(+r.total)>(+((best.resultado||{}).total)||0))) best=c; });
+  if(best){ const r=best.resultado||{}; PUB_STATE.data.cardCategory=pubFmtCat(best.categoria||r.categoria||''); if(best.evento) PUB_STATE.data.cardEvent=String(best.evento).toUpperCase(); }
+  PUB_STATE.data.cardFlag=PUB_STATE.data.cardFlag||'CL';
+  document.getElementById('pubEditorRoot').innerHTML=renderPublisherInner();
+  setTimeout(pubUpdatePreview,50);
+};
+window.pubUploadCardPhoto = function(inp){
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=e=>{ PUB_STATE.data.cardPhoto=e.target.result; document.getElementById('pubEditorRoot').innerHTML=renderPublisherInner(); setTimeout(pubUpdatePreview,50); };
+  r.readAsDataURL(f);
+};
+window.pubClearCardPhoto = function(){
+  PUB_STATE.data.cardPhoto='';
+  document.getElementById('pubEditorRoot').innerHTML=renderPublisherInner();
+  setTimeout(pubUpdatePreview,50);
 };
 
 window.pubDownload = async function(){
@@ -6944,6 +7003,67 @@ window.pubClearBg = function(){ PUB_STATE.data.bgImageUrl=''; PUB_STATE.data.bgC
 window.pubSetBgPreset = function(v){ PUB_STATE.data.bgPreset=v; PUB_STATE.data.bgImageUrl=''; PUB_STATE.data.bgColor=''; document.getElementById('pubEditorRoot').innerHTML=renderPublisherInner(); setTimeout(pubUpdatePreview,50); };
 window.pubSetBgColor = function(v){ PUB_STATE.data.bgColor=v; PUB_STATE.data.bgImageUrl=''; pubUpdatePreview(); };
 
+// ─── Bandera (CSS, sin emojis — html2canvas no renderiza emojis) ──
+window.pubFlagHtml = function(code){
+  if(code==='CL') return `<div style="width:104px;height:70px;border:2px solid rgba(255,255,255,.55);border-radius:6px;overflow:hidden;position:relative;box-shadow:0 4px 14px rgba(0,0,0,.5)">
+    <div style="position:absolute;top:0;left:0;width:100%;height:50%;background:#ffffff"></div>
+    <div style="position:absolute;bottom:0;left:0;width:100%;height:50%;background:#D52B1E"></div>
+    <div style="position:absolute;top:0;left:0;width:34%;height:50%;background:#0039A6;display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px;line-height:1">★</div>
+  </div>`;
+  return '';
+};
+
+// ─── Carta de Atleta (estilo coleccionable / FUT) ──────────
+// Lienzo 1080×1350. Solo CSS soportado por html2canvas: linear/radial-gradient,
+// border-radius, box-shadow, background-image. Sin clip-path, sin background-clip:text.
+window.pubCardHtml = function(d){
+  const e=window.esc||(s=>String(s==null?'':s));
+  const parts=String(d.cardName||'').trim().split(/\s+/);
+  const lastName=(parts.pop()||'').toUpperCase();
+  const firstName=parts.join(' ');
+  const badge=(d.cardBadge||'').split('/').map(s=>s.trim()).filter(Boolean);
+  const badgeHtml = badge.length ? `
+    <div style="position:absolute;top:42px;left:42px;width:152px;height:182px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,rgba(20,30,52,.94),rgba(10,18,34,.94));border:3px solid #e8c573;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.55)">
+      <div style="color:#ffd86b;font-size:42px;line-height:1">★</div>
+      ${badge.map((l,i)=>`<div style="font-family:Oswald;font-weight:700;letter-spacing:2px;color:#fff;font-size:${i===0?19:13}px;text-align:center;line-height:1.15;margin-top:${i===0?8:3}px;padding:0 6px">${e(l)}</div>`).join('')}
+    </div>` : '';
+  const photoLayer = d.cardPhoto
+    ? `<div style="position:absolute;top:0;left:0;right:0;height:842px;background-image:url(${d.cardPhoto});background-size:cover;background-position:center top;background-repeat:no-repeat"></div>`
+    : `<div style="position:absolute;top:0;left:0;right:0;height:842px;background:linear-gradient(180deg,#1a2c4a,#0b1628);display:flex;align-items:center;justify-content:center;font-family:Oswald;letter-spacing:4px;color:rgba(255,255,255,.35);font-size:34px">SUBE LA FOTO</div>`;
+  const stats=[['SQUAT',d.cardSquat],['BENCH',d.cardBench],['DEADLIFT',d.cardDeadlift],['TOTAL',d.cardTotal]];
+  return `
+  <div style="width:1080px;height:1350px;position:relative;font-family:'DM Sans',sans-serif;background:linear-gradient(135deg,#9fe9ff 0%,#c3a3ff 17%,#ffb0e0 34%,#b8ffd2 52%,#ffe6a8 70%,#a9ecff 88%,#c3a3ff 100%);border-radius:54px;overflow:hidden">
+    <div style="position:absolute;top:22px;left:22px;right:22px;bottom:22px;border-radius:42px;background:radial-gradient(ellipse at 50% 0%,#16263f 0%,#0b1628 52%,#050b16 100%);overflow:hidden">
+      ${photoLayer}
+      <div style="position:absolute;top:0;left:0;right:0;height:842px;background:linear-gradient(to bottom,rgba(8,16,30,.12) 0%,rgba(8,16,30,0) 34%,rgba(8,16,30,.55) 70%,#0b1628 100%)"></div>
+      ${badgeHtml}
+      <div style="position:absolute;top:46px;right:46px;display:flex;flex-direction:column;align-items:flex-end;gap:14px">
+        <div style="text-align:right">
+          <div style="font-family:Oswald;font-weight:700;letter-spacing:4px;color:#ffd86b;font-size:26px;line-height:1">GLP</div>
+          <div style="font-family:Oswald;font-weight:700;color:#fff;font-size:66px;line-height:.9;text-shadow:0 2px 10px rgba(0,0,0,.6)">${e(d.cardGLP)}</div>
+        </div>
+        ${d.cardCategory?`<div style="font-family:Oswald;font-weight:700;letter-spacing:2px;color:#fff;font-size:30px;background:rgba(8,16,30,.7);border:2px solid #e8c573;border-radius:12px;padding:6px 16px">${e(d.cardCategory)}</div>`:''}
+        ${pubFlagHtml(d.cardFlag)}
+      </div>
+      <div style="position:absolute;left:56px;right:56px;top:790px">
+        ${firstName?`<div style="font-family:'DM Sans';font-style:italic;font-weight:500;color:#d7e6ff;font-size:46px;line-height:1;margin-bottom:2px;text-shadow:0 2px 8px rgba(0,0,0,.6)">${e(firstName)}</div>`:''}
+        <div style="font-family:Oswald;font-weight:700;color:#ffffff;font-size:118px;letter-spacing:3px;line-height:.92;text-shadow:0 3px 16px rgba(0,0,0,.65)">${e(lastName)}</div>
+        ${d.cardNick?`<div style="font-family:Oswald;font-weight:700;letter-spacing:3px;color:#ffd86b;font-size:30px;margin-top:8px">${e(d.cardNick)}</div>`:''}
+      </div>
+      <div style="position:absolute;left:0;right:0;bottom:300px;text-align:center;color:#ffd86b;font-size:30px">★</div>
+      <div style="position:absolute;left:40px;right:40px;bottom:150px;background:linear-gradient(180deg,rgba(10,20,36,.92),rgba(6,12,22,.96));border:1px solid rgba(232,197,115,.5);border-radius:18px;padding:22px 8px;display:flex">
+        ${stats.map((s,i)=>`<div style="flex:1;text-align:center;${i>0?'border-left:1px solid rgba(255,255,255,.12)':''}">
+          <div style="font-family:Oswald;font-style:italic;font-weight:700;letter-spacing:1px;color:#ffd86b;font-size:24px">${s[0]}</div>
+          <div style="font-family:Oswald;font-weight:700;color:#fff;font-size:62px;line-height:1.1">${e(s[1])||'—'}</div>
+          <div style="font-family:Oswald;letter-spacing:2px;color:rgba(220,230,245,.6);font-size:18px">kg</div>
+        </div>`).join('')}
+      </div>
+      <div style="position:absolute;left:0;right:0;bottom:54px;text-align:center;font-family:Oswald;font-weight:700;letter-spacing:8px;color:rgba(220,232,250,.92);font-size:26px">${e(d.cardEvent)}</div>
+    </div>
+    <div style="position:absolute;top:22px;left:22px;right:22px;bottom:22px;border-radius:42px;border:2px solid rgba(255,255,255,.18);pointer-events:none"></div>
+  </div>`;
+};
+
 // ─── Renderer de templates ─────────────────────────────────
 window.pubRenderTemplate = function(tpl, d){
   const BG_PRESETS = {
@@ -6991,6 +7111,8 @@ window.pubRenderTemplate = function(tpl, d){
     </div>
     <div style="text-align:center;margin-top:14px;font-family:Oswald;font-size:13px;letter-spacing:2px;color:rgba(180,200,220,.7)">${d.igHandles||'@yourlift_oficial'}</div>
   </div>`;
+
+  if(tpl === 'cartaAtleta') return pubCardHtml(d);
 
   if(tpl === 'estaremosPresentes'){
     return common(
@@ -7181,6 +7303,33 @@ function renderPublisherInner(){
   </div>`;
 
   // Campos específicos por template
+  if(tpl==='cartaAtleta'){
+    const athOpts=(ST.data||[]).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')).map(a=>`<option value="${esc(a.nombre||'')}">`).join('');
+    fields += `<div class="field"><label>Cargar atleta desde la base (autocompleta marcas, GLP y categoría)</label>
+      <input class="inp" list="pubAthCard" placeholder="Escribe el nombre y elígelo de la lista..." onchange="pubLoadAthleteCard(this.value)">
+      <datalist id="pubAthCard">${athOpts}</datalist></div>`;
+    fields += `<div class="field"><label>Foto del atleta (ideal: recortada / fondo transparente)</label>
+      ${d.cardPhoto
+        ? `<div style="display:flex;gap:10px;align-items:center;padding:10px;background:rgba(34,197,94,.08);border:1px solid var(--green);border-radius:8px"><img src="${d.cardPhoto}" style="height:64px;border-radius:6px;object-fit:cover"><div style="flex:1;font-size:11px;color:var(--green);font-family:Oswald">✓ Foto cargada</div><button onclick="pubClearCardPhoto()" style="background:transparent;border:1px solid var(--red);color:var(--red);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer">✕ Quitar</button></div>`
+        : `<input type="file" accept="image/*" onchange="pubUploadCardPhoto(this)" style="padding:8px;border:1px dashed var(--border);border-radius:6px;background:rgba(10,22,40,.4);color:var(--muted);width:100%">`}
+    </div>`;
+    fields += inp('cardName','Nombre (la última palabra va grande, ej: "María Paz Sáez")',d.cardName);
+    fields += inp('cardNick','Sobrenombre / IG (ej: @paaaxi)',d.cardNick);
+    fields += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${inp('cardSquat','Sentadilla (kg)',d.cardSquat)}
+      ${inp('cardBench','Banca (kg)',d.cardBench)}
+      ${inp('cardDeadlift','Peso muerto (kg)',d.cardDeadlift)}
+      ${inp('cardTotal','Total (kg)',d.cardTotal)}
+    </div>`;
+    fields += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${inp('cardGLP','GLP',d.cardGLP)}
+      ${inp('cardCategory','Categoría (ej: −57 KG)',d.cardCategory)}
+    </div>`;
+    fields += inp('cardBadge','Insignia — 2 líneas separadas por "/" (ej: CAMPEONA / MUNDIAL JR). Vacío = sin insignia',d.cardBadge);
+    fields += inp('cardEvent','Banner inferior (ej: MUNDIAL JR IPF 2025)',d.cardEvent);
+    const FLAGS=[['CL','Chile'],['none','Sin bandera']];
+    fields += `<div class="field"><label>Bandera</label><select class="inp" onchange="pubSetField('cardFlag',this.value)">${FLAGS.map(([v,l])=>`<option value="${v}" ${d.cardFlag===v?'selected':''}>${l}</option>`).join('')}</select></div>`;
+  }
   if(/^(inicio|nomina|transmisiones|atletas|records|ranking|calculadora)$/.test(tpl)){
     fields += inp('secTitle','Título grande',d.secTitle);
     fields += inp('secText','Texto (multilínea)',d.secText,true);
