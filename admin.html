@@ -3775,40 +3775,67 @@ window.searchDebounced=function(val){
   },300);
 }
 
-// ── Exportar Nómina del evento seleccionado como Excel filtrable ──────────────
+// ── Exportar Nómina del evento seleccionado como Excel filtrable y con estilo ──
 // Columnas: Nombre, Modalidad, División, Categoría, Club. Disponible para
 // CUALQUIER rol admin (la vista Nóminas no está restringida a owner).
+// Estilo (pedido por el owner): negrita + tamaño 12, bordes finos en todas las
+// celdas, header azul-gris (#D6DCE4), datos gris claro (#EDEDED), header
+// congelado y AutoFilter. Usamos ExcelJS porque SheetJS community NO escribe
+// estilos (colores/bordes/negrita).
 window.exportNominaExcel = async function(){
   const btn=document.getElementById('btnExportNomina');
   const ev=ST.filterEv;
   if(!ev){ showToast('Selecciona un campeonato primero',null,true); return; }
   if(btn){ btn.textContent='Generando...'; btn.disabled=true; }
   try{
-    if(!window.XLSX){
+    if(!window.ExcelJS){
       await new Promise((res,rej)=>{
         const s=document.createElement('script');
-        s.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
         s.onload=res; s.onerror=rej; document.head.appendChild(s);
       });
     }
-    const XLSX=window.XLSX;
+    const ExcelJS=window.ExcelJS;
     // Mismos datos que muestra la nómina del evento seleccionado.
     let list=(ST.inscripciones||[]).filter(i=>i.evento===ev&&i.status!=='rejected');
     list.sort((a,b)=>(a.sortOrder||999)-(b.sortOrder||999));
-    const rows=[['NOMBRE','MODALIDAD','DIVISIÓN','CATEGORÍA','CLUB']];
+
+    const wb=new ExcelJS.Workbook();
+    const ws=wb.addWorksheet('Nómina',{views:[{state:'frozen',ySplit:1}]});
+    ws.columns=[
+      {header:'NOMBRE',    key:'nombre',    width:34.8},
+      {header:'MODALIDAD', key:'modalidad', width:34.5},
+      {header:'DIVISIÓN',  key:'division',  width:16.8},
+      {header:'CATEGORÍA', key:'categoria', width:12.8},
+      {header:'CLUB',      key:'club',      width:26.8}
+    ];
     list.forEach(i=>{
       // Si eligió "Otro", el nombre real del club está en clubOtro.
       const club=i.club==='Otro'?(i.clubOtro||'Otro'):(i.club||'');
-      rows.push([i.nombre||'', i.modalidad||'', i.division||'', i.categoria||'', club]);
+      ws.addRow({nombre:i.nombre||'',modalidad:i.modalidad||'',division:i.division||'',categoria:i.categoria||'',club});
     });
-    const ws=XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols']=[{wch:34},{wch:18},{wch:16},{wch:12},{wch:26}];
-    ws['!autofilter']={ref:`A1:E${rows.length}`};   // filtros activados en el header
-    ws['!freeze']={xSplit:0,ySplit:1};
-    const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,'Nómina');
+
+    const thin={style:'thin',color:{argb:'FF000000'}};
+    const allBorders={top:thin,left:thin,bottom:thin,right:thin};
+    const headerFill={type:'pattern',pattern:'solid',fgColor:{argb:'FFD6DCE4'}};
+    const dataFill  ={type:'pattern',pattern:'solid',fgColor:{argb:'FFEDEDED'}};
+    ws.eachRow({includeEmpty:false},(row,rn)=>{
+      row.eachCell({includeEmpty:true},cell=>{
+        cell.font={name:'Calibri',size:12,bold:true,color:{argb:'FF000000'}};
+        cell.border=allBorders;
+        cell.fill=(rn===1)?headerFill:dataFill;
+        cell.alignment={vertical:'middle'};
+      });
+    });
+    ws.autoFilter='A1:E'+ws.rowCount;   // filtros en todas las columnas
+
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const safe=String(ev).replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,60).trim()||'evento';
-    XLSX.writeFile(wb,`Nomina_${safe}.xlsx`);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download=`Nomina_${safe}.xlsx`;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
     showToast(`Excel exportado: ${list.length} atletas`);
   }catch(e){ console.error(e); showToast('Error al exportar: '+e.message,null,true); }
   finally{ if(btn){ btn.textContent='Exportar Excel'; btn.disabled=false; } }
