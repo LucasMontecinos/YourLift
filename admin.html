@@ -3300,6 +3300,7 @@ function renderNominas(){
       </select>
       ${inFirebase?`<button class="btn btn-b" onclick="sortNominaByEvent('${ST.filterEv}')">⇅ ORDENAR</button>`:''}
       <button class="btn btn-g" onclick="openInscribirModal()" style="padding:8px 16px;font-size:12px">Inscribir atleta</button>
+      <button id="btnExportNomina" class="btn btn-b" onclick="exportNominaExcel()" style="padding:8px 16px;font-size:12px">Exportar Excel</button>
     </div>
     ${needsMetaSync?'<div class="card" style="background:rgba(212,168,67,.08);border-color:rgba(212,168,67,.3);padding:12px 16px;margin-bottom:12px"><span style="color:var(--gold);font-size:12px">Las inscripciones están en Firebase pero falta el doc de evento en <code>eventos/</code>. Sin eso no podés editar fecha/cierre/ubicación desde <b>Campeonatos</b>. Creá el evento desde el panel de Campeonatos.</span></div>':''}
     <div class="card" style="padding:0;overflow-x:auto">
@@ -3773,6 +3774,45 @@ window.searchDebounced=function(val){
     },10);
   },300);
 }
+
+// ── Exportar Nómina del evento seleccionado como Excel filtrable ──────────────
+// Columnas: Nombre, Modalidad, División, Categoría, Club. Disponible para
+// CUALQUIER rol admin (la vista Nóminas no está restringida a owner).
+window.exportNominaExcel = async function(){
+  const btn=document.getElementById('btnExportNomina');
+  const ev=ST.filterEv;
+  if(!ev){ showToast('Selecciona un campeonato primero',null,true); return; }
+  if(btn){ btn.textContent='Generando...'; btn.disabled=true; }
+  try{
+    if(!window.XLSX){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+        s.onload=res; s.onerror=rej; document.head.appendChild(s);
+      });
+    }
+    const XLSX=window.XLSX;
+    // Mismos datos que muestra la nómina del evento seleccionado.
+    let list=(ST.inscripciones||[]).filter(i=>i.evento===ev&&i.status!=='rejected');
+    list.sort((a,b)=>(a.sortOrder||999)-(b.sortOrder||999));
+    const rows=[['NOMBRE','MODALIDAD','DIVISIÓN','CATEGORÍA','CLUB']];
+    list.forEach(i=>{
+      // Si eligió "Otro", el nombre real del club está en clubOtro.
+      const club=i.club==='Otro'?(i.clubOtro||'Otro'):(i.club||'');
+      rows.push([i.nombre||'', i.modalidad||'', i.division||'', i.categoria||'', club]);
+    });
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:34},{wch:18},{wch:16},{wch:12},{wch:26}];
+    ws['!autofilter']={ref:`A1:E${rows.length}`};   // filtros activados en el header
+    ws['!freeze']={xSplit:0,ySplit:1};
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Nómina');
+    const safe=String(ev).replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,60).trim()||'evento';
+    XLSX.writeFile(wb,`Nomina_${safe}.xlsx`);
+    showToast(`Excel exportado: ${list.length} atletas`);
+  }catch(e){ console.error(e); showToast('Error al exportar: '+e.message,null,true); }
+  finally{ if(btn){ btn.textContent='Exportar Excel'; btn.disabled=false; } }
+};
 
 // ── Exportar data.json como Excel ─────────────────────────────────────────────
 window.exportDataExcel = async function(){
