@@ -5330,7 +5330,7 @@ function renderFotos(){
   }).slice(0,20) : [];
 
   let h = '<div class="h1">Fotos de Atletas</div>';
-  h += '<p style="color:var(--muted);font-size:13px;margin-bottom:18px">Sube fotos de atletas. El sistema les quita el fondo automáticamente y deja fondo blanco estilo IPF. Las fotos se ven en perfiles públicos y en la transmisión OBS.</p>';
+  h += '<p style="color:var(--muted);font-size:13px;margin-bottom:18px">Sube fotos de atletas. Puedes <b>quitar el fondo</b> (estilo IPF fondo blanco) o subir la foto <b>tal cual, con su fondo</b> (la que mandó el atleta). Las fotos se ven en perfiles públicos y en la transmisión OBS.</p>';
 
   // Atletas con foto pendiente de inscripción (sin foto_url todavía)
   // Match: cada atleta con RUT que tenga carnetPhotoURL en alguna inscripción privada
@@ -5435,7 +5435,8 @@ function renderFotos(){
       h += '<img src="'+escapeHtml(F.pendingPhotoUrl)+'" style="width:120px;height:160px;object-fit:cover;border-radius:4px;border:1px solid var(--border)">';
       h += '<div style="flex:1"><div style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:8px">El atleta subió esta foto al inscribirse. <b>NO está publicada todavía</b>. Revisala y decidí:</div>';
       h += '<div style="display:flex;flex-direction:column;gap:6px">';
-      h += '<button onclick="importarFotoInscripcion()" '+(F.processing?'disabled':'')+' style="padding:10px;background:var(--gold);color:#000;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">Importar para procesar</button>';
+      h += '<button onclick="importarFotoInscripcion()" '+(F.processing?'disabled':'')+' style="padding:10px;background:var(--gold);color:#000;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">Importar y quitar fondo</button>';
+      h += '<button onclick="importarFotoInscripcionSinFondo()" '+(F.processing?'disabled':'')+' title="Sube la foto del atleta tal cual, sin quitarle el fondo" style="padding:10px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">Importar tal cual (con fondo)</button>';
       h += '<button onclick="rechazarFotoInscripcion()" '+(F.processing?'disabled':'')+' style="padding:8px;background:transparent;color:var(--red);border:1px solid var(--red);border-radius:6px;cursor:pointer;font-size:11px">✗ Rechazar foto</button>';
       h += '</div></div></div>';
       h += '</div>';
@@ -5800,6 +5801,40 @@ window.importarFotoInscripcion = async function(){
   } catch(e){
     console.error('[Fotos] importar inscripcion error:', e);
     F.error = 'Error importando: '+e.message+' — alternativa: descargá la foto manualmente del enlace Ver en Nóminas y subila con "Elegir otra foto".';
+    F.processing = false;
+    F.status = '';
+    render();
+  }
+};
+
+// Importa la foto que mandó el atleta TAL CUAL — sin quitarle el fondo.
+window.importarFotoInscripcionSinFondo = async function(){
+  const F = window._fotosState;
+  if(!F.pendingPhotoUrl){F.error='No hay foto de inscripción pendiente'; render(); return;}
+  F.processing = true;
+  F.status = 'Descargando foto del atleta...';
+  F.error = '';
+  F.bgRemovedImg = null;
+  render();
+  try{
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.crossOrigin = 'anonymous';
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('No se pudo cargar la imagen (revisar CORS o URL)'));
+      i.src = F.pendingPhotoUrl;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+    F.preview = canvas.toDataURL('image/jpeg', 0.95);   // tal cual, con su fondo
+    F.status = '✓ Lista para subir (foto del atleta, sin modificar).';
+    F.processing = false;
+    render();
+  } catch(e){
+    console.error('[Fotos] importar sin fondo error:', e);
+    F.error = 'Error importando: '+e.message+' — alternativa: descargá la foto del enlace Ver en Nóminas y subila con "Sin procesar (tal cual)".';
     F.processing = false;
     F.status = '';
     render();
