@@ -1498,6 +1498,7 @@ function render(){
       <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')">Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
       <button class="side-btn ${ST.view==='entrenadoresDB'?'active':''}" onclick="go('entrenadoresDB')">Base Entrenadores</button>
       <button class="side-btn ${ST.view==='fotos'?'active':''}" onclick="go('fotos')">Fotos Atletas</button>
+      <button class="side-btn ${ST.view==='records'?'active':''}" onclick="go('records')">Récords</button>
       <button class="side-btn ${ST.view==='cronograma'?'active':''}" onclick="go('cronograma')">Cronograma</button>
       <div class="side-label">Sistema</div>
       <a href="livecast.html" target="_blank" class="side-btn" style="text-decoration:none">LiveCast</a>
@@ -1525,6 +1526,7 @@ function render(){
   else if(ST.view==='entrenadores')content=renderEntrenadores();
   else if(ST.view==='entrenadoresDB')content=renderEntrenadoresDB();
   else if(ST.view==='fotos')content=renderFotos();
+  else if(ST.view==='records')content=renderRecordsEditor();
   else if(ST.view==='importar')content=renderImportar();
   else if(ST.view==='cronograma')content=renderCronoEditor();
   else if(ST.view==='campeonatos')content=renderCampeonatos();
@@ -7093,6 +7095,102 @@ window.pubFlagHtml = function(code){
   </div>`;
   return '';
 };
+
+// ═══════════════════════════════════════════
+// EDITOR DE RÉCORDS NACIONALES (Firestore: records/data) — cualquier admin
+// El sitio público lee records/data de Firestore si existe; si no, records.json.
+// ═══════════════════════════════════════════
+const REC_EMPTY={classic:{sq:[],bp:[],dl:[],total:[]},equipped:{sq:[],bp:[],dl:[],total:[]},universitario:{sq:[],bp:[],dl:[],total:[]}};
+async function recEnsureLoaded(){
+  if(ST._recLoaded) return;
+  ST._recLoaded='loading';
+  try{
+    const snap=await getDoc(doc(db,'records','data'));
+    if(snap.exists() && (snap.data().classic||snap.data().equipped)){
+      ST.recR=snap.data();
+    }else{
+      ST.recR=await fetch('records.json',{cache:'no-store'}).then(x=>x.json()).catch(()=>JSON.parse(JSON.stringify(REC_EMPTY)));
+    }
+  }catch(e){ console.warn('[records] load',e); ST.recR=ST.recR||JSON.parse(JSON.stringify(REC_EMPTY)); }
+  ST._recLoaded=true; render();
+}
+window.recReloadJson=async function(){
+  if(!confirm('Recargar desde records.json descartará cambios no guardados. ¿Continuar?')) return;
+  const r=await fetch('records.json',{cache:'no-store'}).then(x=>x.json()).catch(()=>null);
+  if(!r){ showToast('No se pudo leer records.json',null,true); return; }
+  ST.recR=r; ST.recDirty=true; render(); showToast('Cargado desde records.json — recuerda Guardar');
+};
+window.recSetTipo=function(v){ ST.recTipo=v; render(); };
+window.recSetLift=function(v){ ST.recLift=v; render(); };
+window.recField=function(tipo,lift,idx,field,value){
+  const arr=ST.recR&&ST.recR[tipo]&&ST.recR[tipo][lift]; if(!arr||!arr[idx]) return;
+  arr[idx][field]=(field==='marca')?(parseFloat(value)||0):value;
+  ST.recDirty=true;
+  const ind=document.getElementById('recDirtyInd'); if(ind) ind.style.display='inline';
+};
+window.recAdd=function(tipo,lift){
+  if(!ST.recR) ST.recR=JSON.parse(JSON.stringify(REC_EMPTY));
+  ST.recR[tipo]=ST.recR[tipo]||{}; ST.recR[tipo][lift]=ST.recR[tipo][lift]||[];
+  ST.recR[tipo][lift].unshift({nombre:'',division:'Open',categoria:'',campeonato:'',marca:0});
+  ST.recDirty=true; render();
+};
+window.recDelete=function(tipo,lift,idx){
+  const arr=ST.recR&&ST.recR[tipo]&&ST.recR[tipo][lift]; if(!arr) return;
+  if(!confirm('¿Eliminar este récord?')) return;
+  arr.splice(idx,1); ST.recDirty=true; render();
+};
+window.recSave=async function(){
+  if(!ST.recR){ return; }
+  const btn=document.getElementById('recSaveBtn'); if(btn){btn.textContent='Guardando...';btn.disabled=true;}
+  try{
+    await setDoc(doc(db,'records','data'), ST.recR);
+    ST.recDirty=false;
+    try{ await logAction('save_records','records/data','','',{}); }catch(_){}
+    showToast('Récords guardados — ya se ven en la web');
+  }catch(e){ console.error(e); showToast('Error al guardar: '+e.message,null,true); }
+  finally{ if(btn){btn.textContent='Guardar en la web';btn.disabled=false;} render(); }
+};
+function renderRecordsEditor(){
+  if(ST._recLoaded!==true){ setTimeout(recEnsureLoaded,0); return '<div class="h1">Récords nacionales</div><p class="subtitle">Cargando récords…</p>'; }
+  const tipo=ST.recTipo||'classic', lift=ST.recLift||'sq';
+  const TIPOS=[['classic','Classic'],['equipped','Equipado'],['universitario','Universitario']];
+  const LIFTS=[['sq','Sentadilla'],['bp','Press Banca'],['dl','Peso Muerto'],['total','Total']];
+  const DIVS=['Open','Sub-Junior','Junior','Master I','Master II','Master III','Master IV'];
+  const arr=(ST.recR&&ST.recR[tipo]&&ST.recR[tipo][lift])||[];
+  const catW=c=>{const s=String(c||'');if(s.includes('+'))return 1000+(parseFloat(s.replace(/[^0-9.]/g,''))||0);return parseFloat(s.replace(/[^0-9.]/g,''))||999;};
+  const rows=arr.map((r,idx)=>({r,idx})).sort((a,b)=>catW(a.r.categoria)-catW(b.r.categoria)||String(a.r.division||'').localeCompare(String(b.r.division||'')));
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <div class="h1" style="margin:0">Récords nacionales</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span id="recDirtyInd" style="display:${ST.recDirty?'inline':'none'};color:var(--gold);font-size:12px;font-family:Oswald">● cambios sin guardar</span>
+      <button onclick="recReloadJson()" class="btn btn-b" style="padding:8px 12px;font-size:12px">Recargar de records.json</button>
+      <button id="recSaveBtn" onclick="recSave()" class="btn btn-g" style="padding:8px 14px;font-size:12px">Guardar en la web</button>
+    </div>
+  </div>
+  <p class="subtitle">Edita en vivo. Al guardar, los récords se publican al instante en yourlift.cl. Cualquier admin puede editar.</p>
+  <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">
+    <div><div style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:4px">TIPO</div>
+      <div style="display:flex;gap:4px">${TIPOS.map(([k,l])=>`<button onclick="recSetTipo('${k}')" class="btn ${tipo===k?'btn-g':'btn-b'}" style="padding:6px 12px;font-size:12px">${l}</button>`).join('')}</div></div>
+    <div><div style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:4px">MOVIMIENTO</div>
+      <div style="display:flex;gap:4px">${LIFTS.map(([k,l])=>`<button onclick="recSetLift('${k}')" class="btn ${lift===k?'btn-g':'btn-b'}" style="padding:6px 12px;font-size:12px">${l}</button>`).join('')}</div></div>
+  </div>
+  <button onclick="recAdd('${tipo}','${lift}')" class="btn btn-b" style="padding:6px 12px;font-size:12px;margin-bottom:10px">+ Agregar récord</button>
+  <div class="card" style="padding:0;overflow-x:auto">
+    <table class="tbl">
+      <tr><th>Atleta</th><th>División</th><th>Cat.</th><th>Campeonato</th><th>Marca (kg)</th><th></th></tr>
+      ${rows.map(({r,idx})=>`<tr>
+        <td><input class="inp" style="min-width:180px;font-size:12px" value="${esc(r.nombre||'')}" oninput="recField('${tipo}','${lift}',${idx},'nombre',this.value)"></td>
+        <td><select class="inp" style="font-size:12px" onchange="recField('${tipo}','${lift}',${idx},'division',this.value)">${DIVS.includes(r.division)?'':`<option selected>${esc(r.division||'')}</option>`}${DIVS.map(dv=>`<option ${r.division===dv?'selected':''}>${dv}</option>`).join('')}</select></td>
+        <td><input class="inp" style="width:64px;font-size:12px" value="${esc(r.categoria||'')}" oninput="recField('${tipo}','${lift}',${idx},'categoria',this.value)"></td>
+        <td><input class="inp" style="min-width:220px;font-size:11px" value="${esc(r.campeonato||r.evento||'')}" oninput="recField('${tipo}','${lift}',${idx},'campeonato',this.value)"></td>
+        <td><input class="inp" style="width:84px;font-size:13px;font-weight:700" value="${esc(r.marca!=null?r.marca:'')}" oninput="recField('${tipo}','${lift}',${idx},'marca',this.value)"></td>
+        <td><button onclick="recDelete('${tipo}','${lift}',${idx})" style="background:transparent;border:1px solid rgba(239,68,68,.3);color:var(--red);padding:4px 8px;border-radius:5px;font-size:11px;cursor:pointer">✕</button></td>
+      </tr>`).join('')}
+    </table>
+    ${rows.length===0?'<div class="empty">Sin récords en esta categoría. Usa "+ Agregar récord".</div>':''}
+  </div>`;
+}
 
 window.pubHexToRgb = function(hex){
   hex=String(hex||'').replace('#','');
