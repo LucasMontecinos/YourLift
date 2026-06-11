@@ -6840,9 +6840,11 @@ window.PUB_STATE = window.PUB_STATE || {
     cardGLP: '106.32',
     cardCategory: '−57 KG',
     cardBadge: 'WORLD CHAMPION',
+    cardShowBadge: true,
     cardFlag: 'CL',
-    cardPhotoX: 50,
-    cardPhotoY: 35,
+    cardPhotoBlur: '',
+    cardPhotoOX: 0,
+    cardPhotoOY: 0,
     cardPhotoZoom: 100,
     cardNameY: 720,
     cardNameScale: 100
@@ -6927,16 +6929,65 @@ window.pubLoadAthleteCard = function(name){
   document.getElementById('pubEditorRoot').innerHTML=renderPublisherInner();
   setTimeout(pubUpdatePreview,50);
 };
+// Genera una versión difuminada (en canvas, porque html2canvas no soporta filter:blur).
+window.pubMakeBlur = function(src, cb){
+  try{
+    const img=new Image();
+    img.onload=function(){
+      const w=560, h=Math.max(1,Math.round(w*img.height/img.width));
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      const ctx=c.getContext('2d');
+      try{ ctx.filter='blur(22px)'; }catch(_){}
+      // dibujar un poco más grande para evitar bordes claros del blur
+      ctx.drawImage(img,-30,-30,w+60,h+60);
+      try{ cb(c.toDataURL('image/jpeg',0.82)); }catch(_){ cb(src); }
+    };
+    img.onerror=function(){ cb(src); };
+    img.src=src;
+  }catch(_){ cb(src); }
+};
 window.pubUploadCardPhoto = function(inp){
   const f=inp.files&&inp.files[0]; if(!f) return;
   const r=new FileReader();
-  r.onload=e=>{ PUB_STATE.data.cardPhoto=e.target.result; document.getElementById('pubEditorRoot').innerHTML=renderPublisherInner(); setTimeout(pubUpdatePreview,50); };
+  r.onload=e=>{
+    PUB_STATE.data.cardPhoto=e.target.result;
+    PUB_STATE.data.cardPhotoBlur='';
+    PUB_STATE.data.cardPhotoOX=0; PUB_STATE.data.cardPhotoOY=0;
+    pubMakeBlur(e.target.result,function(burl){ PUB_STATE.data.cardPhotoBlur=burl; pubUpdatePreview(); });
+    document.getElementById('pubEditorRoot').innerHTML=renderPublisherInner();
+    setTimeout(pubUpdatePreview,50);
+  };
   r.readAsDataURL(f);
 };
 window.pubClearCardPhoto = function(){
-  PUB_STATE.data.cardPhoto='';
+  PUB_STATE.data.cardPhoto=''; PUB_STATE.data.cardPhotoBlur='';
   document.getElementById('pubEditorRoot').innerHTML=renderPublisherInner();
   setTimeout(pubUpdatePreview,50);
+};
+// Arrastrar la foto con el mouse sobre el preview (el preview está a escala 1/3.5).
+window._pubPhotoDrag=null;
+window.pubPhotoDragStart = function(ev){
+  ev.preventDefault();
+  const d=PUB_STATE.data;
+  window._pubPhotoDrag={sx:ev.clientX, sy:ev.clientY, ox:+(d.cardPhotoOX||0), oy:+(d.cardPhotoOY||0)};
+  document.addEventListener('mousemove',pubPhotoDragMove);
+  document.addEventListener('mouseup',pubPhotoDragEnd);
+};
+window.pubPhotoDragMove = function(ev){
+  const g=window._pubPhotoDrag; if(!g) return;
+  const k=3.5, d=PUB_STATE.data;
+  const ox=Math.round(g.ox+(ev.clientX-g.sx)*k);
+  const oy=Math.round(g.oy+(ev.clientY-g.sy)*k);
+  d.cardPhotoOX=ox; d.cardPhotoOY=oy;
+  const img=document.querySelector('#pubCanvas img');
+  if(img){ img.style.transform='translate(-50%,-50%) translate('+ox+'px,'+oy+'px) scale('+((+d.cardPhotoZoom||100)/100)+')'; }
+  else pubUpdatePreview();
+};
+window.pubPhotoDragEnd = function(){
+  window._pubPhotoDrag=null;
+  document.removeEventListener('mousemove',pubPhotoDragMove);
+  document.removeEventListener('mouseup',pubPhotoDragEnd);
+  pubUpdatePreview();
 };
 
 window.pubDownload = async function(){
@@ -7029,7 +7080,6 @@ window.pubHexToRgb = function(hex){
 // El color de fondo se controla con el selector "Fondo" de ESTILO (d.bgPreset / d.bgColor).
 window.pubCardHtml = function(d){
   const e=window.esc||(s=>String(s==null?'':s));
-  // Fondo de la carta: preset o color personalizado (reusa el control "Fondo").
   const BG_CARD={
     azul:   {top:'#16263f', mid:'#0b1628', bot:'#050b16'},
     negro:  {top:'#24262b', mid:'#0d0e11', bot:'#020203'},
@@ -7038,70 +7088,71 @@ window.pubCardHtml = function(d){
     violeta:{top:'#281c44', mid:'#120b26', bot:'#06040f'},
     verde:  {top:'#103a2a', mid:'#071a13', bot:'#020a07'}
   };
-  let C, midRgb;
-  if(d.bgColor){
-    const b=pubHexToRgb(d.bgColor);
-    const sh=f=>'rgb('+b.map(v=>Math.round(v*(1-f))).join(',')+')';
-    C={top:d.bgColor, mid:sh(.5), bot:sh(.8)};
-    midRgb=b.map(v=>Math.round(v*.5));
-  } else {
-    const p=BG_CARD[d.bgPreset]||BG_CARD.azul;
-    C={top:p.top, mid:p.mid, bot:p.bot};
-    midRgb=pubHexToRgb(p.mid);
-  }
-  const innerBg=`radial-gradient(ellipse at 50% 0%,${C.top} 0%,${C.mid} 52%,${C.bot} 100%)`;
-  const fade=`linear-gradient(to bottom,rgba(${midRgb[0]},${midRgb[1]},${midRgb[2]},.12) 0%,rgba(${midRgb[0]},${midRgb[1]},${midRgb[2]},0) 34%,rgba(${midRgb[0]},${midRgb[1]},${midRgb[2]},.55) 70%,${C.mid} 100%)`;
+  // Color elegido (control "Fondo") → BRILLOS/glows + fondo de respaldo si no hay foto.
+  const glowHex=d.bgColor||(BG_CARD[d.bgPreset]||BG_CARD.azul).top;
+  const G=pubHexToRgb(glowHex), gl=a=>`rgba(${G[0]},${G[1]},${G[2]},${a})`;
+  let innerBg;
+  if(d.bgColor){ const b=pubHexToRgb(d.bgColor); const sh=f=>'rgb('+b.map(v=>Math.round(v*(1-f))).join(',')+')'; innerBg=`radial-gradient(ellipse at 50% 0%,${d.bgColor} 0%,${sh(.5)} 52%,${sh(.8)} 100%)`; }
+  else { const p=BG_CARD[d.bgPreset]||BG_CARD.azul; innerBg=`radial-gradient(ellipse at 50% 0%,${p.top} 0%,${p.mid} 52%,${p.bot} 100%)`; }
   const parts=String(d.cardName||'').trim().split(/\s+/);
   const lastName=(parts.pop()||'').toUpperCase();
   const firstName=parts.join(' ');
-  // Insignia: estrella grande + texto debajo (ej: WORLD CHAMPION). Vacío = solo estrella.
+  // Insignia (estrella + texto). Se puede ocultar con cardShowBadge=false.
   const badgeSub=String(d.cardBadge||'').trim();
-  const badgeHtml = `
-    <div style="position:absolute;top:42px;left:42px;width:150px;height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,rgba(20,30,52,.94),rgba(10,18,34,.94));border:3px solid #e8c573;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.55)">
+  const badgeHtml = (d.cardShowBadge!==false) ? `
+    <div style="position:absolute;top:42px;left:42px;width:150px;height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,rgba(20,30,52,.9),rgba(10,18,34,.9));border:3px solid #e8c573;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.55)">
       <div style="color:#ffd86b;font-size:${badgeSub?54:78}px;line-height:1">★</div>
       ${badgeSub?`<div style="font-family:Oswald;font-weight:700;letter-spacing:2px;color:#fff;font-size:15px;text-align:center;line-height:1.15;margin-top:8px;padding:0 8px">${e(badgeSub)}</div>`:''}
-    </div>`;
-  // Foto: posición (X/Y %) y zoom (100% = cubrir, >100% = acercar) controlables.
-  const px=(d.cardPhotoX==null?50:d.cardPhotoX), py=(d.cardPhotoY==null?35:d.cardPhotoY);
-  const pz=+d.cardPhotoZoom||100;
-  const bgSize=pz<=100?'cover':(pz+'%');
-  const photoLayer = d.cardPhoto
-    ? `<div style="position:absolute;top:0;left:0;right:0;height:842px;background-color:${C.mid};background-image:url(${d.cardPhoto});background-size:${bgSize};background-position:${px}% ${py}%;background-repeat:no-repeat"></div>`
-    : `<div style="position:absolute;top:0;left:0;right:0;height:842px;background:linear-gradient(180deg,#1a2c4a,#0b1628);display:flex;align-items:center;justify-content:center;font-family:Oswald;letter-spacing:4px;color:rgba(255,255,255,.35);font-size:34px">SUBE LA FOTO</div>`;
-  // Nombre: altura (Y) y tamaño (%) controlables.
+    </div>` : '';
+  // Foto: base difuminada (cubre toda la carta) + foto nítida arrastrable (offset px + zoom).
+  const ox=+d.cardPhotoOX||0, oy=+d.cardPhotoOY||0, pz=(+d.cardPhotoZoom||100)/100;
+  const blurSrc=d.cardPhotoBlur||d.cardPhoto;
+  const baseLayer = d.cardPhoto
+    ? `<div style="position:absolute;top:0;left:0;right:0;bottom:0;background-image:url(${blurSrc});background-size:cover;background-position:center center;background-repeat:no-repeat"></div>`
+    : '';
+  const focal = d.cardPhoto
+    ? `<div style="position:absolute;top:0;left:0;right:0;height:1015px;overflow:hidden">
+         <img src="${d.cardPhoto}" alt="" draggable="false" onmousedown="pubPhotoDragStart(event)" style="position:absolute;left:50%;top:46%;width:1036px;height:auto;transform:translate(-50%,-50%) translate(${ox}px,${oy}px) scale(${pz});cursor:grab;user-select:none"></div>`
+    : `<div style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;letter-spacing:4px;color:rgba(255,255,255,.4);font-size:34px">SUBE LA FOTO</div>`;
+  // Brillos del color elegido (sobre la foto) — pointer-events:none para no bloquear el arrastre.
+  const glowLayer = `<div style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;background:radial-gradient(circle 620px at 120px 120px,${gl(.34)},${gl(0)}),radial-gradient(circle 680px at 940px 1180px,${gl(.30)},${gl(0)}),radial-gradient(circle 780px at 540px 1430px,${gl(.20)},${gl(0)})"></div>`;
+  // Oscurecido suave solo para legibilidad (no es un fondo sólido; la foto sigue visible).
+  const shade = `<div style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;background:linear-gradient(to bottom,rgba(4,9,18,.36) 0%,rgba(4,9,18,0) 15%,rgba(4,9,18,0) 48%,rgba(4,9,18,.40) 72%,rgba(4,9,18,.70) 100%)"></div>`;
   const ny=+d.cardNameY||720;
   const ns=(+d.cardNameScale||100)/100;
   const F1=Math.round(46*ns), F2=Math.round(118*ns), F3=Math.round(30*ns);
   const stats=[['SQUAT',d.cardSquat],['BENCH',d.cardBench],['DEADLIFT',d.cardDeadlift],['TOTAL',d.cardTotal]];
-  const logoYL=`<div style="font-family:Oswald;font-weight:700;letter-spacing:7px;color:#fff;font-size:36px"><span style="color:#C41E3A">YOUR</span>LIFT</div>`;
+  const logoYL=`<img src="yourlift_logo_hd.png" alt="YourLift" style="height:66px;object-fit:contain;filter:drop-shadow(0 2px 8px rgba(0,0,0,.55))" onerror="this.onerror=null;this.src='YourLift_logo.png'">`;
   return `
   <div style="width:1080px;height:1350px;position:relative;font-family:'DM Sans',sans-serif;background:linear-gradient(135deg,#9fe9ff 0%,#c3a3ff 17%,#ffb0e0 34%,#b8ffd2 52%,#ffe6a8 70%,#a9ecff 88%,#c3a3ff 100%);border-radius:54px;overflow:hidden">
-    <div style="position:absolute;top:22px;left:22px;right:22px;bottom:22px;border-radius:42px;background:${innerBg};overflow:hidden">
-      ${photoLayer}
-      <div style="position:absolute;top:0;left:0;right:0;height:842px;background:${fade}"></div>
+    <div style="position:absolute;top:22px;left:22px;right:22px;bottom:22px;border-radius:42px;overflow:hidden;background:${innerBg}">
+      ${baseLayer}
+      ${focal}
+      ${glowLayer}
+      ${shade}
       ${badgeHtml}
       <div style="position:absolute;top:46px;right:46px;display:flex;flex-direction:column;align-items:flex-end;gap:14px">
         <div style="text-align:right">
           <div style="font-family:Oswald;font-weight:700;letter-spacing:4px;color:#ffd86b;font-size:26px;line-height:1">GLP</div>
-          <div style="font-family:Oswald;font-weight:700;color:#fff;font-size:66px;line-height:.9;text-shadow:0 2px 10px rgba(0,0,0,.6)">${e(d.cardGLP)}</div>
+          <div style="font-family:Oswald;font-weight:700;color:#fff;font-size:66px;line-height:.9;text-shadow:0 2px 12px rgba(0,0,0,.8)">${e(d.cardGLP)}</div>
         </div>
-        ${d.cardCategory?`<div style="font-family:Oswald;font-weight:700;letter-spacing:2px;color:#fff;font-size:30px;background:rgba(8,16,30,.7);border:2px solid #e8c573;border-radius:12px;padding:6px 16px">${e(d.cardCategory)}</div>`:''}
+        ${d.cardCategory?`<div style="font-family:Oswald;font-weight:700;letter-spacing:2px;color:#fff;font-size:30px;background:rgba(8,16,30,.62);border:2px solid #e8c573;border-radius:12px;padding:6px 16px">${e(d.cardCategory)}</div>`:''}
         ${pubFlagHtml(d.cardFlag)}
       </div>
       <div style="position:absolute;left:56px;right:40px;top:${ny}px">
-        ${firstName?`<div style="font-family:'DM Sans';font-style:italic;font-weight:500;color:#d7e6ff;font-size:${F1}px;line-height:1;margin-bottom:2px;text-shadow:0 2px 8px rgba(0,0,0,.6)">${e(firstName)}</div>`:''}
-        <div style="font-family:Oswald;font-weight:700;color:#ffffff;font-size:${F2}px;letter-spacing:3px;line-height:.92;text-shadow:0 3px 16px rgba(0,0,0,.65)">${e(lastName)}</div>
-        ${d.cardNick?`<div style="font-family:Oswald;font-weight:700;letter-spacing:3px;color:#ffd86b;font-size:${F3}px;margin-top:8px">${e(d.cardNick)}</div>`:''}
+        ${firstName?`<div style="font-family:'DM Sans';font-style:italic;font-weight:500;color:#d7e6ff;font-size:${F1}px;line-height:1;margin-bottom:2px;text-shadow:0 2px 12px rgba(0,0,0,.85)">${e(firstName)}</div>`:''}
+        <div style="font-family:Oswald;font-weight:700;color:#ffffff;font-size:${F2}px;letter-spacing:3px;line-height:.92;text-shadow:0 3px 20px rgba(0,0,0,.9)">${e(lastName)}</div>
+        ${d.cardNick?`<div style="font-family:Oswald;font-weight:700;letter-spacing:3px;color:#ffd86b;font-size:${F3}px;margin-top:8px;text-shadow:0 2px 10px rgba(0,0,0,.7)">${e(d.cardNick)}</div>`:''}
       </div>
       <div style="position:absolute;left:0;right:0;bottom:300px;text-align:center;color:#ffd86b;font-size:30px">★</div>
-      <div style="position:absolute;left:40px;right:40px;bottom:150px;background:linear-gradient(180deg,rgba(10,20,36,.92),rgba(6,12,22,.96));border:1px solid rgba(232,197,115,.5);border-radius:18px;padding:22px 8px;display:flex">
+      <div style="position:absolute;left:40px;right:40px;bottom:150px;background:linear-gradient(180deg,rgba(10,20,36,.86),rgba(6,12,22,.92));border:1px solid rgba(232,197,115,.5);border-radius:18px;padding:22px 8px;display:flex;box-shadow:0 8px 30px rgba(0,0,0,.45)">
         ${stats.map((s,i)=>`<div style="flex:1;text-align:center;${i>0?'border-left:1px solid rgba(255,255,255,.12)':''}">
           <div style="font-family:Oswald;font-style:italic;font-weight:700;letter-spacing:1px;color:#ffd86b;font-size:24px">${s[0]}</div>
           <div style="font-family:Oswald;font-weight:700;color:#fff;font-size:62px;line-height:1.1">${e(s[1])||'—'}</div>
           <div style="font-family:Oswald;letter-spacing:2px;color:rgba(220,230,245,.6);font-size:18px">kg</div>
         </div>`).join('')}
       </div>
-      <div style="position:absolute;left:0;right:0;bottom:50px;text-align:center">${logoYL}</div>
+      <div style="position:absolute;left:0;right:0;bottom:46px;text-align:center">${logoYL}</div>
     </div>
     <div style="position:absolute;top:22px;left:22px;right:22px;bottom:22px;border-radius:42px;border:2px solid rgba(255,255,255,.18);pointer-events:none"></div>
   </div>`;
@@ -7368,16 +7419,18 @@ function renderPublisherInner(){
       ${inp('cardGLP','GLP',d.cardGLP)}
       ${inp('cardCategory','Categoría (ej: −57 KG)',d.cardCategory)}
     </div>`;
-    fields += inp('cardBadge','Insignia — texto bajo la estrella (ej: WORLD CHAMPION). Vacío = solo la estrella',d.cardBadge);
+    fields += `<div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" ${d.cardShowBadge!==false?'checked':''} onchange="pubSetField('cardShowBadge',this.checked)"> Mostrar insignia (estrella + texto)</label></div>`;
+    fields += inp('cardBadge','Texto de la insignia (ej: WORLD CHAMPION). Vacío = solo la estrella',d.cardBadge);
     const FLAGS=[['CL','Chile'],['none','Sin bandera']];
     fields += `<div class="field"><label>Bandera</label><select class="inp" onchange="pubSetField('cardFlag',this.value)">${FLAGS.map(([v,l])=>`<option value="${v}" ${d.cardFlag===v?'selected':''}>${l}</option>`).join('')}</select></div>`;
-    // Sliders de posición / tamaño (mueven foto y nombre sin re-renderizar el form)
+    // Sliders de ajuste fino (la foto también se arrastra con el mouse en el preview)
     const sl=(key,label,min,max,step,val,unit)=>`<div class="field"><label>${label} (${val}${unit||''})</label><input type="range" min="${min}" max="${max}" step="${step}" value="${val}" oninput="pubSetField('${key}',this.value);this.previousElementSibling.textContent='${label} ('+this.value+'${unit||''}')'"></div>`;
     fields += `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;background:rgba(10,22,40,.4)">
-      <div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:10px">POSICIÓN Y TAMAÑO</div>
-      ${sl('cardPhotoX','Foto · horizontal',0,100,1,(d.cardPhotoX==null?50:d.cardPhotoX),'%')}
-      ${sl('cardPhotoY','Foto · vertical',0,100,1,(d.cardPhotoY==null?35:d.cardPhotoY),'%')}
-      ${sl('cardPhotoZoom','Foto · zoom',100,240,1,(d.cardPhotoZoom||100),'%')}
+      <div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">POSICIÓN Y TAMAÑO</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Arrastra la foto con el mouse en el preview para moverla. Estos sliders son para ajuste fino.</div>
+      ${sl('cardPhotoOX','Foto · horizontal',-500,500,5,(d.cardPhotoOX||0),'px')}
+      ${sl('cardPhotoOY','Foto · vertical',-500,500,5,(d.cardPhotoOY||0),'px')}
+      ${sl('cardPhotoZoom','Foto · zoom',50,250,1,(d.cardPhotoZoom||100),'%')}
       ${sl('cardNameY','Nombre · altura',560,1010,2,(d.cardNameY||720),'px')}
       ${sl('cardNameScale','Nombre · tamaño',60,140,1,(d.cardNameScale||100),'%')}
     </div>`;
