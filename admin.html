@@ -6839,9 +6839,13 @@ window.PUB_STATE = window.PUB_STATE || {
     cardTotal: '452.5',
     cardGLP: '106.32',
     cardCategory: '−57 KG',
-    cardBadge: 'CAMPEONA / MUNDIAL JR',
-    cardEvent: 'MUNDIAL JR IPF 2025',
-    cardFlag: 'CL'
+    cardBadge: 'WORLD CHAMPION',
+    cardFlag: 'CL',
+    cardPhotoX: 50,
+    cardPhotoY: 35,
+    cardPhotoZoom: 100,
+    cardNameY: 720,
+    cardNameScale: 100
   }
 };
 
@@ -7021,16 +7025,26 @@ window.pubCardHtml = function(d){
   const parts=String(d.cardName||'').trim().split(/\s+/);
   const lastName=(parts.pop()||'').toUpperCase();
   const firstName=parts.join(' ');
-  const badge=(d.cardBadge||'').split('/').map(s=>s.trim()).filter(Boolean);
-  const badgeHtml = badge.length ? `
-    <div style="position:absolute;top:42px;left:42px;width:152px;height:182px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,rgba(20,30,52,.94),rgba(10,18,34,.94));border:3px solid #e8c573;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.55)">
-      <div style="color:#ffd86b;font-size:42px;line-height:1">★</div>
-      ${badge.map((l,i)=>`<div style="font-family:Oswald;font-weight:700;letter-spacing:2px;color:#fff;font-size:${i===0?19:13}px;text-align:center;line-height:1.15;margin-top:${i===0?8:3}px;padding:0 6px">${e(l)}</div>`).join('')}
-    </div>` : '';
+  // Insignia: estrella grande + texto debajo (ej: WORLD CHAMPION). Vacío = solo estrella.
+  const badgeSub=String(d.cardBadge||'').trim();
+  const badgeHtml = `
+    <div style="position:absolute;top:42px;left:42px;width:150px;height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,rgba(20,30,52,.94),rgba(10,18,34,.94));border:3px solid #e8c573;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.55)">
+      <div style="color:#ffd86b;font-size:${badgeSub?54:78}px;line-height:1">★</div>
+      ${badgeSub?`<div style="font-family:Oswald;font-weight:700;letter-spacing:2px;color:#fff;font-size:15px;text-align:center;line-height:1.15;margin-top:8px;padding:0 8px">${e(badgeSub)}</div>`:''}
+    </div>`;
+  // Foto: posición (X/Y %) y zoom (100% = cubrir, >100% = acercar) controlables.
+  const px=(d.cardPhotoX==null?50:d.cardPhotoX), py=(d.cardPhotoY==null?35:d.cardPhotoY);
+  const pz=+d.cardPhotoZoom||100;
+  const bgSize=pz<=100?'cover':(pz+'%');
   const photoLayer = d.cardPhoto
-    ? `<div style="position:absolute;top:0;left:0;right:0;height:842px;background-image:url(${d.cardPhoto});background-size:cover;background-position:center top;background-repeat:no-repeat"></div>`
+    ? `<div style="position:absolute;top:0;left:0;right:0;height:842px;background-color:#0b1628;background-image:url(${d.cardPhoto});background-size:${bgSize};background-position:${px}% ${py}%;background-repeat:no-repeat"></div>`
     : `<div style="position:absolute;top:0;left:0;right:0;height:842px;background:linear-gradient(180deg,#1a2c4a,#0b1628);display:flex;align-items:center;justify-content:center;font-family:Oswald;letter-spacing:4px;color:rgba(255,255,255,.35);font-size:34px">SUBE LA FOTO</div>`;
+  // Nombre: altura (Y) y tamaño (%) controlables.
+  const ny=+d.cardNameY||720;
+  const ns=(+d.cardNameScale||100)/100;
+  const F1=Math.round(46*ns), F2=Math.round(118*ns), F3=Math.round(30*ns);
   const stats=[['SQUAT',d.cardSquat],['BENCH',d.cardBench],['DEADLIFT',d.cardDeadlift],['TOTAL',d.cardTotal]];
+  const logoYL=`<div style="font-family:Oswald;font-weight:700;letter-spacing:7px;color:#fff;font-size:36px"><span style="color:#C41E3A">YOUR</span>LIFT</div>`;
   return `
   <div style="width:1080px;height:1350px;position:relative;font-family:'DM Sans',sans-serif;background:linear-gradient(135deg,#9fe9ff 0%,#c3a3ff 17%,#ffb0e0 34%,#b8ffd2 52%,#ffe6a8 70%,#a9ecff 88%,#c3a3ff 100%);border-radius:54px;overflow:hidden">
     <div style="position:absolute;top:22px;left:22px;right:22px;bottom:22px;border-radius:42px;background:radial-gradient(ellipse at 50% 0%,#16263f 0%,#0b1628 52%,#050b16 100%);overflow:hidden">
@@ -7045,10 +7059,10 @@ window.pubCardHtml = function(d){
         ${d.cardCategory?`<div style="font-family:Oswald;font-weight:700;letter-spacing:2px;color:#fff;font-size:30px;background:rgba(8,16,30,.7);border:2px solid #e8c573;border-radius:12px;padding:6px 16px">${e(d.cardCategory)}</div>`:''}
         ${pubFlagHtml(d.cardFlag)}
       </div>
-      <div style="position:absolute;left:56px;right:56px;top:790px">
-        ${firstName?`<div style="font-family:'DM Sans';font-style:italic;font-weight:500;color:#d7e6ff;font-size:46px;line-height:1;margin-bottom:2px;text-shadow:0 2px 8px rgba(0,0,0,.6)">${e(firstName)}</div>`:''}
-        <div style="font-family:Oswald;font-weight:700;color:#ffffff;font-size:118px;letter-spacing:3px;line-height:.92;text-shadow:0 3px 16px rgba(0,0,0,.65)">${e(lastName)}</div>
-        ${d.cardNick?`<div style="font-family:Oswald;font-weight:700;letter-spacing:3px;color:#ffd86b;font-size:30px;margin-top:8px">${e(d.cardNick)}</div>`:''}
+      <div style="position:absolute;left:56px;right:40px;top:${ny}px">
+        ${firstName?`<div style="font-family:'DM Sans';font-style:italic;font-weight:500;color:#d7e6ff;font-size:${F1}px;line-height:1;margin-bottom:2px;text-shadow:0 2px 8px rgba(0,0,0,.6)">${e(firstName)}</div>`:''}
+        <div style="font-family:Oswald;font-weight:700;color:#ffffff;font-size:${F2}px;letter-spacing:3px;line-height:.92;text-shadow:0 3px 16px rgba(0,0,0,.65)">${e(lastName)}</div>
+        ${d.cardNick?`<div style="font-family:Oswald;font-weight:700;letter-spacing:3px;color:#ffd86b;font-size:${F3}px;margin-top:8px">${e(d.cardNick)}</div>`:''}
       </div>
       <div style="position:absolute;left:0;right:0;bottom:300px;text-align:center;color:#ffd86b;font-size:30px">★</div>
       <div style="position:absolute;left:40px;right:40px;bottom:150px;background:linear-gradient(180deg,rgba(10,20,36,.92),rgba(6,12,22,.96));border:1px solid rgba(232,197,115,.5);border-radius:18px;padding:22px 8px;display:flex">
@@ -7058,7 +7072,7 @@ window.pubCardHtml = function(d){
           <div style="font-family:Oswald;letter-spacing:2px;color:rgba(220,230,245,.6);font-size:18px">kg</div>
         </div>`).join('')}
       </div>
-      <div style="position:absolute;left:0;right:0;bottom:54px;text-align:center;font-family:Oswald;font-weight:700;letter-spacing:8px;color:rgba(220,232,250,.92);font-size:26px">${e(d.cardEvent)}</div>
+      <div style="position:absolute;left:0;right:0;bottom:50px;text-align:center">${logoYL}</div>
     </div>
     <div style="position:absolute;top:22px;left:22px;right:22px;bottom:22px;border-radius:42px;border:2px solid rgba(255,255,255,.18);pointer-events:none"></div>
   </div>`;
@@ -7325,10 +7339,19 @@ function renderPublisherInner(){
       ${inp('cardGLP','GLP',d.cardGLP)}
       ${inp('cardCategory','Categoría (ej: −57 KG)',d.cardCategory)}
     </div>`;
-    fields += inp('cardBadge','Insignia — 2 líneas separadas por "/" (ej: CAMPEONA / MUNDIAL JR). Vacío = sin insignia',d.cardBadge);
-    fields += inp('cardEvent','Banner inferior (ej: MUNDIAL JR IPF 2025)',d.cardEvent);
+    fields += inp('cardBadge','Insignia — texto bajo la estrella (ej: WORLD CHAMPION). Vacío = solo la estrella',d.cardBadge);
     const FLAGS=[['CL','Chile'],['none','Sin bandera']];
     fields += `<div class="field"><label>Bandera</label><select class="inp" onchange="pubSetField('cardFlag',this.value)">${FLAGS.map(([v,l])=>`<option value="${v}" ${d.cardFlag===v?'selected':''}>${l}</option>`).join('')}</select></div>`;
+    // Sliders de posición / tamaño (mueven foto y nombre sin re-renderizar el form)
+    const sl=(key,label,min,max,step,val,unit)=>`<div class="field"><label>${label} (${val}${unit||''})</label><input type="range" min="${min}" max="${max}" step="${step}" value="${val}" oninput="pubSetField('${key}',this.value);this.previousElementSibling.textContent='${label} ('+this.value+'${unit||''}')'"></div>`;
+    fields += `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;background:rgba(10,22,40,.4)">
+      <div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:10px">POSICIÓN Y TAMAÑO</div>
+      ${sl('cardPhotoX','Foto · horizontal',0,100,1,(d.cardPhotoX==null?50:d.cardPhotoX),'%')}
+      ${sl('cardPhotoY','Foto · vertical',0,100,1,(d.cardPhotoY==null?35:d.cardPhotoY),'%')}
+      ${sl('cardPhotoZoom','Foto · zoom',100,240,1,(d.cardPhotoZoom||100),'%')}
+      ${sl('cardNameY','Nombre · altura',560,1010,2,(d.cardNameY||720),'px')}
+      ${sl('cardNameScale','Nombre · tamaño',60,140,1,(d.cardNameScale||100),'%')}
+    </div>`;
   }
   if(/^(inicio|nomina|transmisiones|atletas|records|ranking|calculadora)$/.test(tpl)){
     fields += inp('secTitle','Título grande',d.secTitle);
