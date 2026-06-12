@@ -319,6 +319,12 @@ function fbDocId(){
 // Sufijo para docs auxiliares (record alerts, director scene) cuando hay 2 tarimas
 // → cada tarima maneja sus widgets sin pisar a la otra.
 function txDocId(base){return TARIMA?`${base}_T${TARIMA}`:base;}
+// Id de los docs de ESTADO de transmisión (director, record) — separado POR EVENTO
+// (y por tarima si aplica). Así dos competencias DISTINTAS y simultáneas no se pisan:
+// cada evento tiene su propio director/record. Control y widget calculan el mismo id
+// porque ambos usan fbDocId() (basado en el nombre del evento). Si no hay evento, cae
+// al id viejo (compatibilidad).
+function evStateDocId(base){const ev=fbDocId();return ev?(base+'__'+ev):txDocId(base);}
 async function syncToFB(){
   if(!fbReady||!isAdmin||_fbSyncing)return;
   if(!window.IS_CONTROLLER)return; // Solo el controller escribe — evita conflictos multi-admin
@@ -765,7 +771,7 @@ function checkRecord(athlete,lift,round){
 async function pushRecordToFB(rec){
   if(!fbReady||!isAdmin||!window._fb)return;
   try{
-    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_record',txDocId('current')),rec);
+    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_record',evStateDocId('current')),rec);
   }catch(e){console.warn('[FB] pushRecord',e)}
 }
 function closeRecAlert(){const e=document.getElementById('recAlert');if(e)e.remove();}
@@ -2857,7 +2863,7 @@ function renderObsTx(){
   //    a los datos de SU tarima. Sin esto, dos PCs (2 tarimas) leen el mismo doc y se cruzan.
   h+='<div class="card" style="margin-bottom:14px;padding:12px 16px;background:rgba(212,168,67,.08);border-color:rgba(212,168,67,.45)">';
   h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:1px;color:var(--gold);margin-bottom:6px">🎚 TARIMA DE ESTE EQUIPO</div>';
-  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Elige tu tarima. Tu control y los links de OBS de abajo quedan vinculados SOLO a los datos de esa tarima (Tarima 1 en tu PC, Tarima 2 en el de tu socio). Al elegir, la página se recarga en ese modo.</div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Usa Tarima 1/2 SOLO si es <b>una misma competencia</b> dividida en 2 tarimas físicas (mismo evento, flights A1/A2). Si son <b>2 competencias distintas</b> al mismo tiempo, deja <b>"Una sola tarima"</b> y abre el evento que corresponda en cada PC — los datos y el director ya se separan por evento automáticamente.</div>';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap">';
   [['1','Tarima 1'],['2','Tarima 2'],['','Una sola tarima']].forEach(function(o){
     var t=o[0],l=o[1];
@@ -3050,7 +3056,7 @@ let _txCerLastSig=null;            // signature p/ saltarse re-renders innecesar
 function _txCerStartRecordListener(){
   if(_txCerRecordUnsub||!fbReady||!window._fb)return;
   try{
-    _txCerRecordUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_record',txDocId('current')),(snap)=>{
+    _txCerRecordUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_record',evStateDocId('current')),(snap)=>{
       if(!snap.exists())return;
       const d=snap.data();if(!d||!d.ts)return;
       if(d.ts===_txCerRecordSeenTs)return;
@@ -3414,7 +3420,7 @@ function _txStartDirectorListener(){
     return;
   }
   try{
-    _txDirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',txDocId('current')),(snap)=>{
+    _txDirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',evStateDocId('current')),(snap)=>{
       if(snap.exists()){
         const d=snap.data();
         _txDirState=Object.assign({},TX_DIR_DEFAULT,d.show||{});
@@ -5044,7 +5050,7 @@ window.dirBtDeleteVideo=async function(name){
 function _dirEnsureListener(){
   if(_dirUnsub||!fbReady||!window._fb)return;
   try{
-    _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',txDocId('current')),(snap)=>{
+    _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',evStateDocId('current')),(snap)=>{
       const DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[]}};
       if(snap.exists()){
         const d=snap.data();
@@ -5059,7 +5065,7 @@ function _dirEnsureListener(){
 async function _dirPush(){
   if(!fbReady||!isAdmin||!window._fb)return;
   try{
-    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director',txDocId('current')),{show:_dirState,ts:Date.now()});
+    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director',evStateDocId('current')),{show:_dirState,ts:Date.now()});
   }catch(e){alert('Error pusheando comando: '+(e.message||e))}
   _obsWsBroadcastSync();
 }
