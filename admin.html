@@ -1499,6 +1499,7 @@ function render(){
       <button class="side-btn ${ST.view==='entrenadoresDB'?'active':''}" onclick="go('entrenadoresDB')">Base Entrenadores</button>
       <button class="side-btn ${ST.view==='fotos'?'active':''}" onclick="go('fotos')">Fotos Atletas</button>
       <button class="side-btn ${ST.view==='records'?'active':''}" onclick="go('records')">Récords</button>
+      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='certificados'?'active':''}" onclick="go('certificados')">Certificados</button>`:''}
       <button class="side-btn ${ST.view==='cronograma'?'active':''}" onclick="go('cronograma')">Cronograma</button>
       <div class="side-label">Sistema</div>
       <a href="livecast.html" target="_blank" class="side-btn" style="text-decoration:none">LiveCast</a>
@@ -1527,6 +1528,7 @@ function render(){
   else if(ST.view==='entrenadoresDB')content=renderEntrenadoresDB();
   else if(ST.view==='fotos')content=renderFotos();
   else if(ST.view==='records')content=renderRecordsEditor();
+  else if(ST.view==='certificados'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderCertificados();else go('athletes');}
   else if(ST.view==='importar')content=renderImportar();
   else if(ST.view==='cronograma')content=renderCronoEditor();
   else if(ST.view==='campeonatos')content=renderCampeonatos();
@@ -7225,6 +7227,174 @@ function renderRecordsEditor(){
     </table>
     ${rows.length===0?'<div class="empty">Sin récords en esta categoría. Usa "+ Agregar récord".</div>':''}
   </div>`;
+}
+
+// ═══════════════════════════════════════════
+// CERTIFICADOS FECHIPO (owner) — config + solicitudes + generador
+// Firestore: cert_config/main (config) y cert_requests/{id} (solicitudes públicas).
+// ═══════════════════════════════════════════
+window.CERT_DEFAULT={
+  champs:[], signature:'', signerName:'Felipe Romero Diaz', signerCargo:'Presidente de Directorio',
+  destinatario:'Estimados:', fedRut:'65.191.787-5', fedWeb:'www.fechipo.com',
+  fedEmail:'fechipocontacto@gmail.com', fedPhone:'+56950036212'
+};
+async function certEnsureLoaded(){
+  if(ST._certLoaded) return; ST._certLoaded='loading';
+  try{
+    const snap=await getDoc(doc(db,'cert_config','main'));
+    ST.certCfg = snap.exists()? Object.assign({}, window.CERT_DEFAULT, snap.data()) : JSON.parse(JSON.stringify(window.CERT_DEFAULT));
+    if(!Array.isArray(ST.certCfg.champs)) ST.certCfg.champs=[];
+  }catch(e){ console.warn('[cert] cfg',e); ST.certCfg=JSON.parse(JSON.stringify(window.CERT_DEFAULT)); }
+  if(!window._certReqListener){
+    try{ window._certReqListener=onSnapshot(collection(db,'cert_requests'),(snap)=>{
+      ST.certReqs=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.ts||0)-(a.ts||0));
+      if(ST.view==='certificados') render();
+    }); }catch(e){ console.warn('[cert] req listener',e); }
+  }
+  ST._certLoaded=true; render();
+}
+window.certCfgSet=function(k,v){ ST.certCfg[k]=v; ST._certDirty=true; const i=document.getElementById('certDirty'); if(i)i.style.display='inline'; };
+window.certCfgSave=async function(){
+  const btn=document.getElementById('certSaveBtn'); if(btn){btn.textContent='Guardando...';btn.disabled=true;}
+  try{ await setDoc(doc(db,'cert_config','main'), ST.certCfg); ST._certDirty=false; showToast('Configuración de certificados guardada'); }
+  catch(e){ console.error(e); showToast('Error: '+e.message,null,true); }
+  finally{ if(btn){btn.textContent='Guardar configuración';btn.disabled=false;} render(); }
+};
+window.certChampAdd=function(){ ST.certCfg.champs.unshift({id:'c'+Date.now(),name:'',ciudad:'',fechas:'',pais:'Chile',nivel:'Nacional'}); ST._certDirty=true; render(); };
+window.certChampSet=function(idx,k,v){ if(ST.certCfg.champs[idx]){ ST.certCfg.champs[idx][k]=v; ST._certDirty=true; const i=document.getElementById('certDirty'); if(i)i.style.display='inline'; } };
+window.certChampDel=function(idx){ if(!confirm('¿Eliminar este campeonato de la lista?'))return; ST.certCfg.champs.splice(idx,1); ST._certDirty=true; render(); };
+window.certChampSetSel=function(idx,value){ if(ST.certCfg.champs[idx]){ ST.certCfg.champs[idx].seleccionados=String(value||'').split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean); ST._certDirty=true; const i=document.getElementById('certDirty'); if(i)i.style.display='inline'; } };
+window.certUploadSign=function(inp){ const f=inp.files&&inp.files[0]; if(!f)return; const r=new FileReader(); r.onload=e=>{ ST.certCfg.signature=e.target.result; ST._certDirty=true; render(); }; r.readAsDataURL(f); };
+window.certClearSign=function(){ ST.certCfg.signature=''; ST._certDirty=true; render(); };
+window.certTab=function(t){ ST.certTab=t; render(); };
+window.certReqSet=function(id,field,value){
+  const r=(ST.certReqs||[]).find(x=>x.id===id); if(!r)return;
+  if(field.indexOf('marcas.')===0){ r.marcas=r.marcas||{}; r.marcas[field.split('.')[1]]=value; } else r[field]=value;
+};
+window.certReqDone=async function(id){ try{ await updateDoc(doc(db,'cert_requests',id),{status:'done'}); showToast('Marcada como lista'); }catch(e){ showToast('Error: '+e.message,null,true);} };
+window.certReqDelete=async function(id){ if(!confirm('¿Eliminar esta solicitud?'))return; try{ await deleteDoc(doc(db,'cert_requests',id)); showToast('Solicitud eliminada'); }catch(e){ showToast('Error: '+e.message,null,true);} };
+// Genera el certificado (HTML imprimible / Guardar PDF) en una pestaña nueva.
+window.certGenerate=function(id){
+  const req=(ST.certReqs||[]).find(r=>r.id===id); if(!req){ showToast('Solicitud no encontrada',null,true); return; }
+  const c=ST.certCfg||window.CERT_DEFAULT;
+  const E=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const trato=/^f|^m(ujer)?$/i.test(String(req.sexo||''))&&/^(f|m)/i.test(String(req.sexo||''))? (/^f|mujer/i.test(String(req.sexo||''))?'Sra.':'Sr.') : 'Sr.';
+  const m=req.marcas||{};
+  const meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const hoy=new Date(); const fechaEmision='Santiago, '+hoy.getDate()+' de '+meses[hoy.getMonth()]+' de '+hoy.getFullYear()+'.';
+  let clasif='';
+  if(req.motivo==='clasificacion' && req.destinoName){
+    clasif=`<p>${E(trato)} ${E(req.nombre)} ha sido elegido como seleccionado nacional para ser parte del equipo nacional de Powerlifting ${E(req.modalidad||'Classic')} para representar a Chile en el "${E(req.destinoName)}", a realizarse ${req.destinoFechas?('entre los días '+E(req.destinoFechas)+' '):''}en ${E(req.destinoCiudad||'')}${req.destinoPais?(', '+E(req.destinoPais)):''}.</p>`;
+  }
+  const sign=c.signature?`<img src="${c.signature}" style="height:84px;object-fit:contain">`:'<div style="height:50px"></div>';
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Certificado ${E(req.nombre)}</title>
+  <style>@page{size:A4;margin:2.4cm 2.2cm}body{font-family:'Times New Roman',Georgia,serif;color:#111;font-size:13.5px;line-height:1.55;margin:0}.doc{max-width:720px;margin:0 auto}.fecha{text-align:right;margin-bottom:22px}p{margin:0 0 12px;text-align:justify}ul{margin:0 0 12px 0;padding-left:26px}li{margin:2px 0}.firma{margin-top:38px}.firma .n{font-weight:bold}.pie{margin-top:6px;font-size:12px;color:#333}.noprint{position:fixed;top:10px;right:10px}.noprint button{padding:9px 16px;font-family:Arial;cursor:pointer;font-size:13px}@media print{.noprint{display:none}}</style>
+  </head><body>
+  <div class="noprint"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>
+  <div class="doc">
+    <div class="fecha">${E(fechaEmision)}</div>
+    <p>${E(c.destinatario||'Estimados:')}</p>
+    <p>Mediante el presente documento la Federación Chilena de Powerlifting, FECHIPO, RUT ${E(c.fedRut||'65.191.787-5')}, entidad afiliada al IND y a la IPF (International Powerlifting Federation) certifica que ${E(trato)} ${E(req.nombre)}, RUT: ${E(req.rut)}, es atleta miembro de la federación${req.club?(' y del Club deportivo '+E(req.club)):''} que cuenta con los siguientes registros oficiales:</p>
+    <ul>
+      <li>SENTADILLA: ${E(m.sq||'—')} kilos levantados.</li>
+      <li>PRESS DE BANCA: ${E(m.bp||'—')} kilos levantados.</li>
+      <li>PESO MUERTO: ${E(m.dl||'—')} kilos levantados.</li>
+      <li>TOTAL: ${E(m.total||'—')} kilos levantados.</li>
+    </ul>
+    <p>Con la validación de estas marcas, obtenidas en el "${E(req.origenName||'')}", realizado en ${E(req.ciudad||'')}${req.fechas?(', los días '+E(req.fechas)):''}, obtuvo el ${E(req.lugar||'')} lugar en la categoría ${E(req.categoria||'')} ${E(req.division||'')}.</p>
+    ${clasif}
+    <p>Además, se deja constancia que ${E(trato)} ${E(req.nombre)} no cuenta con sanciones disciplinarias ni restricciones de participaciones por parte de la federación y que cumple con todas las condiciones de un atleta federado.</p>
+    <p>Se otorga el presente certificado a petición del interesado para los fines que estime pertinentes.</p>
+    <div class="firma">
+      <p style="margin-bottom:4px">Atentamente,</p>
+      ${sign}
+      <div class="n">${E(c.signerName||'')}</div>
+      <div>${E(c.signerCargo||'')}</div>
+      <div>Federación Chilena de Powerlifting</div>
+      <div class="pie">${E(c.fedWeb||'')}&nbsp;&nbsp;${E(c.fedEmail||'')}&nbsp;&nbsp;${E(c.fedPhone||'')}</div>
+    </div>
+  </div></body></html>`;
+  const w=window.open('','_blank');
+  if(!w){ showToast('Permite ventanas emergentes para ver el certificado',null,true); return; }
+  w.document.write(html); w.document.close();
+};
+function renderCertificados(){
+  if(!(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)) return '<div class="h1">Sin acceso</div><p class="subtitle">Solo el owner gestiona certificados.</p>';
+  if(ST._certLoaded!==true){ setTimeout(certEnsureLoaded,0); return '<div class="h1">Certificados</div><p class="subtitle">Cargando…</p>'; }
+  const tab=ST.certTab||'solicitudes', c=ST.certCfg, reqs=ST.certReqs||[], pend=reqs.filter(r=>r.status!=='done');
+  const fld=(label,key,val,ph)=>`<div class="field"><label>${label}</label><input class="inp" value="${esc(val||'')}" placeholder="${ph||''}" oninput="certCfgSet('${key}',this.value)"></div>`;
+  let h=`<div class="h1">Certificados</div>
+  <p class="subtitle">Solicitudes de certificados FECHIPO y su configuración. Solo owner.</p>
+  <div style="display:flex;gap:6px;margin-bottom:14px;align-items:center">
+    <button onclick="certTab('solicitudes')" class="btn ${tab==='solicitudes'?'btn-g':'btn-b'}" style="padding:8px 14px;font-size:12px">Solicitudes ${pend.length?`(${pend.length})`:''}</button>
+    <button onclick="certTab('config')" class="btn ${tab==='config'?'btn-g':'btn-b'}" style="padding:8px 14px;font-size:12px">Configuración</button>
+    <span id="certDirty" style="display:${ST._certDirty?'inline':'none'};color:var(--gold);font-size:12px;font-family:Oswald;margin-left:6px">● cambios sin guardar</span>
+  </div>`;
+  if(tab==='config'){
+    h+=`<div class="card" style="padding:16px 18px;max-width:760px">
+      <div class="field" style="background:rgba(34,197,94,.06);border:1px solid var(--border);border-radius:8px;padding:10px 12px"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0"><input type="checkbox" ${c.enabled?'checked':''} onchange="certCfgSet('enabled',this.checked)"> <b>Habilitar la sección "Solicitud de certificado" en el sitio público</b> (recuerda Guardar)</label></div>
+      <div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:var(--gold);margin:14px 0 10px">FIRMANTE Y FEDERACIÓN</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        ${fld('Nombre del firmante','signerName',c.signerName)}
+        ${fld('Cargo','signerCargo',c.signerCargo)}
+        ${fld('Encabezado / destinatario','destinatario',c.destinatario,'Estimados:')}
+        ${fld('RUT FECHIPO','fedRut',c.fedRut)}
+        ${fld('Web','fedWeb',c.fedWeb)}
+        ${fld('Email','fedEmail',c.fedEmail)}
+        ${fld('Teléfono','fedPhone',c.fedPhone)}
+      </div>
+      <div class="field"><label>Firma (imagen PNG con fondo transparente recomendado)</label>
+        ${c.signature?`<div style="display:flex;gap:10px;align-items:center;padding:10px;background:#fff;border:1px solid var(--border);border-radius:8px"><img src="${c.signature}" style="height:60px;object-fit:contain"><button onclick="certClearSign()" style="background:transparent;border:1px solid var(--red);color:var(--red);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer">✕ Quitar firma</button></div>`
+          :`<input type="file" accept="image/*" onchange="certUploadSign(this)" style="padding:8px;border:1px dashed var(--border);border-radius:6px;background:rgba(10,22,40,.4);color:var(--muted);width:100%">`}
+      </div>
+      <div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:var(--gold);margin:16px 0 8px">CAMPEONATOS DISPONIBLES (para que el atleta elija)</div>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 8px">Sirven como campeonato de origen (donde compitió) y como destino (clasificación). El nivel se usa en el texto de clasificación.</p>
+      <button onclick="certChampAdd()" class="btn btn-b" style="padding:6px 12px;font-size:12px;margin-bottom:8px">+ Agregar campeonato</button>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${(c.champs||[]).map((ch,i)=>`<div style="border:1px solid var(--border);border-radius:8px;padding:10px">
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;align-items:end">
+            <div class="field" style="margin:0"><label>Nombre del campeonato</label><input class="inp" value="${esc(ch.name||'')}" oninput="certChampSet(${i},'name',this.value)"></div>
+            <div class="field" style="margin:0"><label>Sede/Ciudad</label><input class="inp" value="${esc(ch.ciudad||'')}" oninput="certChampSet(${i},'ciudad',this.value)"></div>
+            <div class="field" style="margin:0"><label>Fechas</label><input class="inp" value="${esc(ch.fechas||'')}" placeholder="23 y 24 de mayo" oninput="certChampSet(${i},'fechas',this.value)"></div>
+            <div class="field" style="margin:0"><label>País</label><input class="inp" value="${esc(ch.pais||'')}" oninput="certChampSet(${i},'pais',this.value)"></div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <select class="inp" onchange="certChampSet(${i},'nivel',this.value)" style="font-size:11px">${['Regional','Nacional','Sudamericano','Mundial','Otro'].map(n=>`<option ${ch.nivel===n?'selected':''}>${n}</option>`).join('')}</select>
+              <button onclick="certChampDel(${i})" style="background:transparent;border:1px solid rgba(239,68,68,.3);color:var(--red);padding:6px 8px;border-radius:5px;font-size:11px;cursor:pointer">✕</button>
+            </div>
+          </div>
+          <div class="field" style="margin:8px 0 0"><label>Seleccionados / clasificados — RUTs (uno por línea o coma). SOLO estos podrán pedir el certificado de clasificación a ESTE campeonato. Vacío = nadie puede pedir clasificación a este.</label><textarea oninput="certChampSetSel(${i},this.value)" style="min-height:54px;font-size:12px;font-family:monospace" placeholder="12.345.678-9, 9.876.543-2">${esc((ch.seleccionados||[]).join('\n'))}</textarea></div>
+        </div>`).join('')}
+      </div>
+      <button id="certSaveBtn" onclick="certCfgSave()" class="btn btn-g" style="width:100%;padding:12px;margin-top:14px;font-family:Oswald;letter-spacing:1px">Guardar configuración</button>
+    </div>`;
+  } else {
+    if(!reqs.length){ h+='<div class="empty">Sin solicitudes todavía.</div>'; }
+    else{
+      h+=reqs.map(r=>{
+        const done=r.status==='done'; const m=r.marcas||{};
+        const ri=(label,field,val,w)=>`<div class="field" style="margin:0"><label>${label}</label><input class="inp" style="${w?'width:'+w+';':''}font-size:12px" value="${esc(val!=null?val:'')}" oninput="certReqSet('${r.id}','${field}',this.value)"></div>`;
+        return `<div class="card" style="padding:14px 16px;margin-bottom:12px;${done?'opacity:.6':''}">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+            <div><span style="font-family:Oswald;font-weight:700;font-size:15px">${esc(r.nombre||'')}</span> <span style="color:var(--muted);font-size:12px">· ${esc(r.rut||'')}</span> ${done?'<span class="badge b-g" style="margin-left:6px">LISTA</span>':'<span class="badge b-y" style="margin-left:6px">PENDIENTE</span>'}</div>
+            <div style="font-size:11px;color:var(--muted)">${esc(r.motivo==='clasificacion'?'Clasificación':'Fines varios')}${r.contacto?(' · '+esc(r.contacto)):''}</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+            ${ri('Nombre','nombre',r.nombre)}${ri('RUT','rut',r.rut)}${ri('Club','club',r.club)}${ri('Sexo (H/M)','sexo',r.sexo)}
+            ${ri('Campeonato (origen)','origenName',r.origenName)}${ri('Sede/Ciudad','ciudad',r.ciudad)}${ri('Fechas','fechas',r.fechas)}${ri('Modalidad','modalidad',r.modalidad)}
+            ${ri('Lugar','lugar',r.lugar)}${ri('Categoría','categoria',r.categoria)}${ri('División','division',r.division)}<div></div>
+            ${ri('SQ','marcas.sq',m.sq)}${ri('BP','marcas.bp',m.bp)}${ri('DL','marcas.dl',m.dl)}${ri('TOTAL','marcas.total',m.total)}
+            ${r.motivo==='clasificacion'?`${ri('Destino','destinoName',r.destinoName)}${ri('Sede destino','destinoCiudad',r.destinoCiudad)}${ri('Fechas destino','destinoFechas',r.destinoFechas)}${ri('País destino','destinoPais',r.destinoPais)}`:''}
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button onclick="certGenerate('${r.id}')" class="btn btn-g" style="padding:8px 14px;font-size:12px">Generar certificado (PDF)</button>
+            ${!done?`<button onclick="certReqDone('${r.id}')" class="btn btn-b" style="padding:8px 12px;font-size:12px">Marcar lista</button>`:''}
+            <button onclick="certReqDelete('${r.id}')" style="background:transparent;border:1px solid rgba(239,68,68,.3);color:var(--red);padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer">Eliminar</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+  return h;
 }
 
 window.pubHexToRgb = function(hex){

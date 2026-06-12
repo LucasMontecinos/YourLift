@@ -186,12 +186,15 @@ function buildMenu(){
     {v:'trans',l:'Transmisiones',ic:''},
     {v:'crono',l:'Cronograma',ic:''},
     {v:'atletas',l:'Atletas',ic:''},
+    {v:'cert',l:'Certificados',ic:''},
     {v:'insc',l:'Inscripción',ic:'',cls:'special-g'},
     {v:'rank',l:'Ranking',ic:'',cls:'special-y'},
     {v:'glcalc',l:'Calculadora GL',ic:'',cls:'special-b'},
   ];
   const cur=(typeof ST!=='undefined'?ST.v:'nominas');
-  document.getElementById('menuItems').innerHTML=items.map(it=>
+  document.getElementById('menuItems').innerHTML=items
+    .filter(it=>it.v!=='cert'||(CERTCFG&&CERTCFG.enabled))
+    .map(it=>
     `<div class="mi ${it.cls||''} ${cur===it.v?'active':''}" onclick="sv('${it.v}');closeMenu()"><span class="ic">${it.ic}</span>${it.l}</div>`
   ).join('');
 }
@@ -369,6 +372,13 @@ async function initFB(){
         if(snap.exists()){ const r=snap.data(); if(r&&(r.classic||r.equipped)){ R=r; if(ST.v==='records')render(); } }
       },(e)=>{ console.warn('[records] sub',e); });
     }catch(e){ console.warn('[records] sub',e); }
+    // ── Certificados: config (campeonatos disponibles + firma) para el formulario ──
+    try{
+      window.FBQ.onSnapshot(window.FBQ.doc(fbDB,'cert_config','main'),(snap)=>{
+        CERTCFG = snap.exists()? snap.data() : {champs:[]};
+        if(ST.v==='cert')render();
+      },(e)=>{ console.warn('[cert] cfg sub',e); });
+    }catch(e){ console.warn('[cert] cfg sub',e); }
     // ── Analytics propio: registrar visita del día (no bloquea el render) ──
     try{ trackVisit(fb); }catch(e){}
     // Load eventos from Firestore and update NOM_EVENTS
@@ -572,6 +582,7 @@ async function loadFBNominas(){
 }
 const CC={"Campeonato Nacional FECHIPO 2026":{bg:"#fef3c7",b:"#f59e0b",t:"#92400e",n:"Nacional 2026"},"Campeonato Nacional FECHIPO 2025":{bg:"#dbeafe",b:"#3b82f6",t:"#1e40af",n:"Nacional 2025"},"Regional Centro Norte 2025":{bg:"#dcfce7",b:"#22c55e",t:"#166534",n:"Reg. Centro Norte 2025"},"Regional Sur Austral 2025":{bg:"#f3e8ff",b:"#a855f7",t:"#6b21a8",n:"Reg. Sur Austral 2025"},"Zonal Centro Clausura 2024":{bg:"#ffe4e6",b:"#f43f5e",t:"#9f1239",n:"Zonal Centro 2024"},"Campeonato Nacional 2025":{bg:"#fef9c3",b:"#eab308",t:"#713f12",n:"Nacional 2025 "},"Campeonato Nacional 2023":{bg:"#e0f2fe",b:"#0ea5e9",t:"#0c4a6e",n:"Nacional 2023 "},"Zonal Sur Los Toros 2025":{bg:"#ecfdf5",b:"#10b981",t:"#064e3b",n:"Zonal Sur 2025 "},"Regional Centro 2025":{bg:"#fdf4ff",b:"#c084fc",t:"#581c87",n:"Reg. Centro 2025 "}};
 let D=[],R={},NM={events:[]},ST={v:"home",s:"",fc:"",fk:"",fl:"",sel:null,p:0,rt:"classic",rl:"sq",ne:0,ns:""};
+let CERTCFG=null,CERTF={q:'',athlete:null,champId:'',motivo:'fines',destinoId:'',marcas:{sq:'',bp:'',dl:'',total:''},lugar:'',categoria:'',division:'',modalidad:'',ciudad:'',fechas:'',contacto:'',sent:false,err:''};
 function I(n){return n.split(" ").map(w=>w[0]).filter(Boolean).slice(0,2).join("").toUpperCase()}
 function cls(){return[...new Set(D.map(a=>a.club).filter(Boolean))].sort()}
 function cps(){return[...new Set(D.flatMap(a=>a.competencias.map(c=>c.evento)))].sort()}
@@ -814,6 +825,7 @@ function render(){const app=document.getElementById("app");
     else if(ST.v==="trans")h+=trans();
     else if(ST.v==="crono")h+=crono();
     else if(ST.v==="atletas")h+=embedded('atleta.html');
+    else if(ST.v==="cert")h+=certForm();
     else if(ST.v==="insc")h+=embedded('inscripcion.html');
     else if(ST.v==="rank")h+=embedded('ranking.html');
     else if(ST.v==="glcalc")h+=glcalc();
@@ -821,6 +833,119 @@ function render(){const app=document.getElementById("app");
     if(typeof buildMenu==='function')buildMenu();
   }
 function embedded(url){return `<iframe src="${url}?embedded=1" style="width:100%;height:calc(100vh - 110px);min-height:600px;border:0;background:transparent;display:block" loading="lazy"></iframe>`}
+
+// ── Solicitud de certificado (público, moderado) ──
+function _certNorm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
+function _certRut(s){return String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();}
+function _certSelectedOk(a,champ){const list=(champ&&champ.seleccionados)||[];if(!list.length)return false;const ar=_certRut(a&&a.rut);return list.some(x=>_certRut(x)===ar);}
+function _certLugar(p){const n=parseInt(p);return ({1:'Primer',2:'Segundo',3:'Tercer',4:'Cuarto',5:'Quinto',6:'Sexto'})[n]||(p?(p+'°'):'');}
+function _certResultsHtml(){
+  const q=_certNorm(CERTF.q).trim(); if(q.length<2) return '';
+  const ws=q.split(/\s+/), qn=q.replace(/[^0-9k]/g,'');
+  const list=(D||[]).filter(a=>{const n=_certNorm(a.nombre);return ws.every(w=>n.includes(w))||(qn.length>=4&&_certRut(a.rut).toLowerCase().includes(qn));}).slice(0,8);
+  if(!list.length) return '<div style="color:var(--muted);font-size:12px;padding:6px">Sin resultados</div>';
+  return list.map(a=>`<div onclick="certSel('${a.codigo.replace(/'/g,"\\'")}')" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:4px;cursor:pointer;display:flex;justify-content:space-between"><span>${_escH(a.nombre)}</span><span style="color:var(--muted);font-size:11px">${_escH(a.codigo)}</span></div>`).join('');
+}
+window.certSetQ=function(v){CERTF.q=v;const b=document.getElementById('certResults');if(b)b.innerHTML=_certResultsHtml();};
+window.certSel=function(cod){const a=(D||[]).find(x=>x.codigo===cod);if(!a)return;CERTF.athlete=a;CERTF.q=a.nombre;CERTF.champId='';CERTF.err='';render();};
+window.certSetChamp=function(id){CERTF.champId=id;certAutofill();render();};
+function certAutofill(){
+  const a=CERTF.athlete;if(!a)return;
+  const champ=((CERTCFG&&CERTCFG.champs)||[]).find(c=>c.id===CERTF.champId);
+  CERTF.ciudad=champ?champ.ciudad:'';CERTF.fechas=champ?champ.fechas:'';
+  let comp=null;
+  if(champ){const cn=_certNorm(champ.name);comp=(a.competencias||[]).find(c=>{const en=_certNorm(c.evento);return en&&(en.includes(cn)||cn.includes(en));});}
+  const r=(comp&&comp.resultado)||{};
+  CERTF.marcas={sq:r.sq||'',bp:r.bp||'',dl:r.dl||'',total:r.total||''};
+  CERTF.lugar=comp&&comp.place?_certLugar(comp.place):'';
+  CERTF.categoria=(comp&&comp.categoria)||r.categoria||'';
+  CERTF.division=(comp&&comp.division)||r.division||'';
+  CERTF.modalidad=(comp&&comp.modalidad)||'';
+}
+window.certSetMotivo=function(v){CERTF.motivo=v;CERTF.err='';render();};
+window.certSetDestino=function(id){CERTF.destinoId=id;CERTF.err='';render();};
+window.certSetF=function(k,v){CERTF[k]=v;};
+window.certSetMarca=function(k,v){CERTF.marcas[k]=v;};
+window.certSubmit=async function(){
+  CERTF.err='';
+  if(!CERTF.athlete){CERTF.err='Busca y selecciona tu nombre.';render();return;}
+  if(!CERTF.champId){CERTF.err='Selecciona el campeonato.';render();return;}
+  const champs=(CERTCFG&&CERTCFG.champs)||[];
+  const champ=champs.find(c=>c.id===CERTF.champId)||{};
+  let dest={};
+  if(CERTF.motivo==='clasificacion'){
+    dest=champs.find(c=>c.id===CERTF.destinoId)||{};
+    if(!dest.id){CERTF.err='Selecciona el campeonato al que clasificaste.';render();return;}
+    if(!_certSelectedOk(CERTF.athlete,dest)){CERTF.err='No figuras como seleccionado para ese campeonato, así que no puedes solicitar este certificado. Si crees que es un error, contacta a FECHIPO.';render();return;}
+  }
+  if(!CERTF.contacto.trim()){CERTF.err='Deja un correo o teléfono para enviarte el certificado.';render();return;}
+  if(!window.FBQ||!fbDB){CERTF.err='Conexión no lista, intenta de nuevo.';render();return;}
+  const a=CERTF.athlete;
+  const payload={
+    nombre:a.nombre||'',rut:a.rut||'',codigo:a.codigo||'',club:a.club||'',sexo:a.sexo||'',
+    origenId:CERTF.champId,origenName:champ.name||'',ciudad:CERTF.ciudad||champ.ciudad||'',fechas:CERTF.fechas||champ.fechas||'',
+    modalidad:CERTF.modalidad||'',categoria:CERTF.categoria||'',division:CERTF.division||'',lugar:CERTF.lugar||'',
+    marcas:{sq:CERTF.marcas.sq||'',bp:CERTF.marcas.bp||'',dl:CERTF.marcas.dl||'',total:CERTF.marcas.total||''},
+    motivo:CERTF.motivo,
+    destinoId:dest.id||'',destinoName:dest.name||'',destinoCiudad:dest.ciudad||'',destinoFechas:dest.fechas||'',destinoPais:dest.pais||'',destinoNivel:dest.nivel||'',
+    contacto:CERTF.contacto||'',status:'pending',ts:Date.now()
+  };
+  try{
+    const id='cert_'+String(a.rut||a.codigo||'x').replace(/[^0-9a-zA-Z]/g,'')+'_'+Date.now();
+    await window.FBQ.setDoc(window.FBQ.doc(fbDB,'cert_requests',id),payload);
+    CERTF.sent=true;render();
+  }catch(e){CERTF.err='No se pudo enviar: '+e.message;render();}
+};
+function certForm(){
+  if(!(CERTCFG&&CERTCFG.enabled)){
+    return `<div class="cd2" style="max-width:600px;margin:0 auto;text-align:center;padding:30px"><h2>Certificados</h2><p style="color:var(--muted);line-height:1.6">La solicitud de certificados no está habilitada por ahora. Vuelve más tarde o consulta con FECHIPO.</p></div>`;
+  }
+  if(CERTF.sent){
+    return `<div class="cd2" style="max-width:640px;margin:0 auto;text-align:center;padding:30px"><h2>✓ Solicitud enviada</h2><p style="color:var(--muted);line-height:1.6">Tu solicitud fue enviada a FECHIPO. Te harán llegar el certificado al contacto que dejaste, una vez revisado.</p><button class="tab" onclick="CERTF.sent=false;CERTF.athlete=null;CERTF.q='';CERTF.champId='';render()" style="margin-top:14px">Nueva solicitud</button></div>`;
+  }
+  const champs=(CERTCFG&&CERTCFG.champs)||[];
+  const inp=(label,val,fn,ph)=>`<div style="margin-bottom:10px"><div style="font-size:11px;color:var(--muted);margin-bottom:3px">${label}</div><input value="${_escH(val||'')}" placeholder="${ph||''}" oninput="${fn}" style="width:100%;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px"></div>`;
+  let h=`<div class="cd2" style="max-width:680px;margin:0 auto"><div class="ct"><h2>Solicitud de certificado</h2></div>
+   <p style="color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:16px">Solicita tu certificado oficial FECHIPO. Búscate, elige el campeonato y el motivo. Lo revisamos y te lo enviamos.</p>
+   <div style="margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:3px">1 · Tu nombre o RUT</div>
+     <input value="${_escH(CERTF.q)}" oninput="certSetQ(this.value)" placeholder="Escribe tu nombre..." style="width:100%;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">
+     ${CERTF.athlete?`<div style="margin-top:6px;color:var(--green);font-size:12px">✓ ${_escH(CERTF.athlete.nombre)} · ${_escH(CERTF.athlete.rut||'')} ${CERTF.athlete.club?('· '+_escH(CERTF.athlete.club)):''} <a onclick="CERTF.athlete=null;CERTF.q='';render()" style="color:var(--accent);cursor:pointer;margin-left:6px">cambiar</a></div>`:`<div id="certResults" style="margin-top:6px">${_certResultsHtml()}</div>`}</div>`;
+  if(CERTF.athlete){
+    h+=`<div style="margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:3px">2 · Campeonato donde competiste</div>
+      <select onchange="certSetChamp(this.value)" style="width:100%;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">
+        <option value="">Selecciona un campeonato...</option>
+        ${champs.map(c=>`<option value="${_escH(c.id)}" ${CERTF.champId===c.id?'selected':''}>${_escH(c.name)}${c.ciudad?(' — '+_escH(c.ciudad)):''}</option>`).join('')}
+      </select>${!champs.length?'<div style="color:var(--muted);font-size:11px;margin-top:4px">Aún no hay campeonatos disponibles.</div>':''}</div>`;
+    if(CERTF.champId){
+      h+=`<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px">
+        <div style="font-size:11px;color:var(--gold);margin-bottom:8px;font-family:Oswald;letter-spacing:1px">TUS MARCAS Y RESULTADO ${CERTF.marcas.total?'(autocompletadas — revísalas)':'(complétalas)'}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+          ${inp('Sentadilla',CERTF.marcas.sq,"certSetMarca('sq',this.value)")}${inp('Banca',CERTF.marcas.bp,"certSetMarca('bp',this.value)")}${inp('Peso muerto',CERTF.marcas.dl,"certSetMarca('dl',this.value)")}${inp('Total',CERTF.marcas.total,"certSetMarca('total',this.value)")}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          ${inp('Lugar',CERTF.lugar,"certSetF('lugar',this.value)",'Primer')}${inp('Categoría',CERTF.categoria,"certSetF('categoria',this.value)")}${inp('División',CERTF.division,"certSetF('division',this.value)")}
+        </div></div>`;
+      h+=`<div style="margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:6px">3 · ¿Para qué lo necesitas?</div>
+        <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;cursor:pointer"><input type="radio" name="cm" ${CERTF.motivo==='fines'?'checked':''} onchange="certSetMotivo('fines')"> Para los fines que estime conveniente</label>
+        <label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="radio" name="cm" ${CERTF.motivo==='clasificacion'?'checked':''} onchange="certSetMotivo('clasificacion')"> Certificar que clasifiqué a un campeonato</label>`;
+      if(CERTF.motivo==='clasificacion'){
+        const dchamp=champs.find(c=>c.id===CERTF.destinoId);
+        const ok=dchamp?_certSelectedOk(CERTF.athlete,dchamp):true;
+        h+=`<select onchange="certSetDestino(this.value)" style="width:100%;margin-top:8px;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">
+          <option value="">Campeonato al que clasificaste...</option>
+          ${champs.map(c=>`<option value="${_escH(c.id)}" ${CERTF.destinoId===c.id?'selected':''}>${_escH(c.name)}${c.nivel?(' ('+_escH(c.nivel)+')'):''}</option>`).join('')}
+        </select>`;
+        if(dchamp&&!ok){h+=`<div style="color:var(--accent);font-size:12px;margin-top:6px;line-height:1.5">No figuras como seleccionado para este campeonato, así que no puedes solicitar este certificado. Si crees que es un error, contacta a FECHIPO.</div>`;}
+      }
+      h+=`</div>`;
+      h+=inp('4 · Tu correo o teléfono (para enviarte el certificado)',CERTF.contacto,"certSetF('contacto',this.value)",'correo@ejemplo.cl');
+      const blocked=CERTF.motivo==='clasificacion'&&CERTF.destinoId&&!_certSelectedOk(CERTF.athlete,champs.find(c=>c.id===CERTF.destinoId));
+      h+=`${CERTF.err?`<div style="color:var(--accent);font-size:12px;margin-bottom:8px;line-height:1.5">${_escH(CERTF.err)}</div>`:''}<button class="tab" onclick="certSubmit()" ${blocked?'disabled style="opacity:.5;cursor:not-allowed;width:100%;padding:12px"':'style="width:100%;border-color:var(--gold);color:var(--gold);padding:12px;font-weight:700"'}>Enviar solicitud</button>`;
+    }
+  }
+  h+=`</div>`;
+  return h;
+}
 
 // ── Cronograma público (lee colección cronograma + overlay de handlers) ──
 function _escH(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
