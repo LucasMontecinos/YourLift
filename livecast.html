@@ -17,19 +17,9 @@ input,select,button{font-family:inherit;outline:none}
 @keyframes pulseRed{0%,100%{opacity:1}50%{opacity:.7}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .fade{animation:fadeIn .3s ease}
-.shell{min-height:100vh}
-/* Botón hamburguesa: siempre visible arriba a la izquierda */
-.hamb{position:fixed;top:12px;left:12px;z-index:1001;width:46px;height:46px;border-radius:10px;border:1px solid rgba(212,168,67,.45);background:#0d1b30;color:#D4A843;font-size:22px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;box-shadow:0 2px 10px rgba(0,0,0,.35)}
-.hamb:hover{border-color:#D4A843;background:#12233f}
-body.nav-open .hamb{opacity:0;pointer-events:none}
-.nav-close{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:3}
-.nav-close:hover{color:#fff;border-color:var(--accent)}
-/* Sidebar como cajón deslizante (off-canvas) */
-.side{background:#0d1b30;border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;width:248px;overflow-y:auto;z-index:1000;transform:translateX(-106%);transition:transform .24s cubic-bezier(.4,0,.2,1)}
-body.nav-open .side{transform:translateX(0);box-shadow:0 0 44px rgba(0,0,0,.6)}
-.nav-backdrop{position:fixed;inset:0;background:rgba(2,8,20,.55);opacity:0;pointer-events:none;transition:opacity .24s;z-index:999}
-body.nav-open .nav-backdrop{opacity:1;pointer-events:auto}
-.main{padding:20px;padding-top:70px;min-height:100vh;overflow-y:auto}
+.shell{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+.side{background:#0d1b30;border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.main{padding:20px;overflow-y:auto}
 .logo{font-family:'Oswald';font-size:20px;font-weight:700;letter-spacing:2px;margin-bottom:4px}
 .logo span{color:var(--accent)}
 .side-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin:20px 0 8px;font-family:'Oswald'}
@@ -59,8 +49,17 @@ body.nav-open .nav-backdrop{opacity:1;pointer-events:auto}
 .sb-top{display:flex;justify-content:space-between;align-items:center;padding:12px 30px;background:linear-gradient(90deg,var(--accent),#8B1525);color:#fff}
 .sb-body{display:grid;grid-template-columns:1fr 380px;min-height:calc(100vh - 56px)}
 @media(max-width:900px){
-  .side{width:84vw;max-width:300px}
-  .main{padding:14px;padding-top:68px}
+  .shell{grid-template-columns:1fr}
+  /* Sidebar como barra horizontal arriba en móviles (scrollable) */
+  .side{position:relative;top:auto;height:auto;max-height:none;padding:8px;flex-direction:row;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;gap:6px;border-right:none;border-bottom:1px solid var(--border)}
+  .side .logo{display:none}
+  .side .user{display:none}
+  .side-label{display:none}
+  .event-name-side{display:none}
+  .side-btn{flex-shrink:0;padding:8px 12px;margin:0;font-size:11px;white-space:nowrap;width:auto}
+  .side-btn .icon{margin-right:4px}
+  /* Sin scroll vertical en main para que la barra superior no se pegue */
+  .main{padding:14px}
   .sb-body{grid-template-columns:1fr}
 }
 </style>
@@ -156,7 +155,7 @@ if(TX_MODE){
   `;
   document.head.appendChild(css);
   const ready=()=>{
-    if(TX_MODE==='profile'||TX_MODE==='leaderboard'||TX_MODE==='jornada'||TX_MODE==='screen')document.body.classList.add('tx-opaque');
+    if(TX_MODE==='profile'||TX_MODE==='leaderboard')document.body.classList.add('tx-opaque');
     const d=document.createElement('div');d.id='txWidget';document.body.appendChild(d);
     // Sin placeholder: queda transparente hasta que llegan los datos.
   };
@@ -172,12 +171,6 @@ if(TX_MODE){
   window.addEventListener('obsSourceActiveChanged',e=>{if(e&&e.detail&&e.detail.active)window.txReplay()});
   window.addEventListener('obsSourceVisibleChanged',e=>{if(e&&e.detail&&e.detail.visible)window.txReplay()});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)window.txReplay()});
-  // Pantalla de tarima: reajustar el escalado de la tabla al cambiar el tamaño.
-  let _rsT=null;
-  window.addEventListener('resize',()=>{
-    if(TX_MODE!=='jornada'&&TX_MODE!=='screen')return;
-    clearTimeout(_rsT);_rsT=setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},120);
-  });
 }
 
 // ══════════════════════════════════════════════
@@ -202,15 +195,6 @@ if(window.IS_CONTROLLER){
 }else{
   console.log('[YL] Modo LECTURA — solo lee de Firebase. Agrega ?controller=1 a la URL para escribir.');
 }
-// Id único de este equipo/pestaña — para que en multi-controlador cada PC
-// ignore SOLO el eco de su propia escritura, pero aplique las de los demás.
-window._WRITER_ID=(()=>{try{let w=sessionStorage.getItem('yl_writer');if(!w){w='w'+Math.random().toString(36).slice(2)+Date.now().toString(36);sessionStorage.setItem('yl_writer',w);}return w;}catch(e){return 'w'+Math.random().toString(36).slice(2);}})();
-// Cambiar entre Controlador (escribe+lee, sincronizado con otros) y Espectador
-// (solo lee/espeja, ej. PC de OBS o pantalla). Recarga para reiniciar el listener.
-window.setSyncMode=function(on){
-  try{localStorage.setItem('yl_controller', on?'1':'0')}catch(e){}
-  location.reload();
-};
 let _lastFbUpdate=0;
 // Event ID → name mapping (must match inscripcion.html EVENTS)
 let LIVE_EVENTS={'regional_centro_2026':'Campeonato Regional Centro FECHIPO 2026','universitario_2026':'Primer Campeonato Nacional Universitario FECHIPO 2026','Campeonato_de_debutantes':'Campeonato de Debutantes'};
@@ -232,7 +216,6 @@ async function initFB(){
     window._fb=fb;window._fbAuth=authMod;fbReady=true;
     window._fbSt=storageMod;window._fbStInst=storageMod.getStorage(app);
     _setupFotoListener(); // in case data.json already loaded before Firebase was ready
-    if(typeof _setupLcMediaListener==='function')_setupLcMediaListener(); // foto/gif persistente por atleta (livecast)
     // Keep LIVE_EVENTS in sync with Firestore eventos
     fb.onSnapshot(fb.collection(fbDB,'eventos'),async (snap)=>{
       const evs={};
@@ -281,22 +264,20 @@ async function initFB(){
         fb.getDoc(fb.doc(fbDB,'admins',u.uid)).then(snap=>{
           if(snap.exists()){
             isAdmin=true;
-            // Auto-controller SOLO la primera vez (sin preferencia guardada). Si el
-            // usuario eligió "Espectador" (yl_controller='0'), se respeta — así un 2º
-            // PC puede ser solo lectura y espejar al controlador.
-            if(localStorage.getItem('yl_controller')===null){
+            // Auto-controller: admin = controller (no necesita ?controller=1 en URL)
+            if(!window.IS_CONTROLLER){
               window.IS_CONTROLLER=true;
               try{localStorage.setItem('yl_controller','1')}catch(e){}
-              console.log('[LiveCast] Admin · Modo CONTROLADOR activado (primera vez)');
+              console.log('[LiveCast] Admin session detected:',u.email,'· Modo CONTROLLER activado automáticamente');
             } else {
-              console.log('[LiveCast] Admin · Modo',window.IS_CONTROLLER?'CONTROLADOR':'ESPECTADOR');
+              console.log('[LiveCast] Admin session detected:',u.email);
             }
           } else {
             isAdmin=false;
             console.log('[LiveCast] Logged in but not admin:',u.email);
           }
           R();
-        }).catch(()=>{isAdmin=true;if(localStorage.getItem('yl_controller')===null){window.IS_CONTROLLER=true;try{localStorage.setItem('yl_controller','1')}catch(e){}}R();}); // fallback: trust auth
+        }).catch(()=>{isAdmin=true;if(!window.IS_CONTROLLER){window.IS_CONTROLLER=true;try{localStorage.setItem('yl_controller','1')}catch(e){}}R();}); // fallback: trust auth
       } else {
         if(isAdmin){isAdmin=false;DATA.phase='liveView';R();}
       }
@@ -324,7 +305,7 @@ async function syncToFB(){
   if(!window.IS_CONTROLLER)return; // Solo el controller escribe — evita conflictos multi-admin
   const id=fbDocId();if(!id)return;
   _fbLastWrite=Date.now();
-  const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,ts:Date.now(),writer:window._WRITER_ID};
+  const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,ts:Date.now()};
   try{
     const ref=window._fb.doc(fbDB,'livecast_sync',id);
     await window._fb.setDoc(ref,payload);
@@ -340,7 +321,7 @@ async function syncTimerOnlyToFB(){
   _fbLastWrite=Date.now();
   try{
     const ref=window._fb.doc(fbDB,'livecast_sync',id);
-    await window._fb.updateDoc(ref,{timer:DATA.timer,timerOn:DATA.timerOn,ts:Date.now(),writer:window._WRITER_ID});
+    await window._fb.updateDoc(ref,{timer:DATA.timer,timerOn:DATA.timerOn,ts:Date.now()});
   }catch(e){/* silencioso: si el doc no existe el setDoc completo lo crea */}
 }
 function startFBSync(){
@@ -351,32 +332,23 @@ function startFBSync(){
   fbUnsub=window._fb.onSnapshot(ref,(snap)=>{
     if(!snap.exists())return;
     _lastFbUpdate=Date.now();
-    const d=snap.data();
-    // Multi-controlador: ignorar SOLO el eco de mi propia escritura (evita parpadeo),
-    // pero SÍ aplicar lo que escribieron los demás controladores → todos sincronizados.
-    if(d.writer && d.writer===window._WRITER_ID)return;
+    // El controller nunca lee de Firebase — sus cambios son la fuente de verdad
+    if(window.IS_CONTROLLER)return;
     // Si hay un input enfocado, no re-renderizar (el usuario está editando)
     const focused=document.activeElement;
     if(focused&&(focused.tagName==='INPUT'||focused.tagName==='SELECT'||focused.tagName==='TEXTAREA'))return;
+    const d=snap.data();
     _fbSyncing=true;
     try{
       // Detectar si SOLO cambió el timer (eso pasa cada segundo y no debe causar re-render
       // en la vista pública "Competencia en Vivo")
       const prevSig = (DATA.athletes?JSON.stringify(DATA.athletes):'')+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight;
       DATA.event=d.event||DATA.event;
-      // NO pisar lo que acabo de editar localmente si la acción local fue hace <2.5s.
-      // Esto cubre: pesos/intentos (DATA.athletes), navegación (lift/round/flight) y
-      // change timers. Sin esto, un snapshot entrante de OTRO controlador (p.ej. su tick
-      // de timer, que viaja con su copia de athletes) borra el peso recién ingresado
-      // ("pongo el número y no sale nada") o me devuelve a SQ / Intento 1 / Tanda A.
-      const _localFresh = (Date.now()-(window._lastLocalAction||0))<2500;
-      if(!_localFresh){
-        DATA.athletes=JSON.parse(d.athletes||'[]');
-        DATA.lift=d.lift||DATA.lift;
-        DATA.round=typeof d.round==='number'?d.round:DATA.round;
-        DATA.flight=d.flight||DATA.flight;
-        DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
-      }
+      DATA.athletes=JSON.parse(d.athletes||'[]');
+      DATA.lift=d.lift||DATA.lift;
+      DATA.round=typeof d.round==='number'?d.round:DATA.round;
+      DATA.flight=d.flight||DATA.flight;
+      DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
       DATA.lotsGenerated=d.lotsGenerated||false;
       if(typeof d.timer==='number'){DATA.timer=d.timer;DATA.timerOn=d.timerOn||false;if(DATA.timerOn&&!mainTI)startTimer();if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}}
       const newSig = JSON.stringify(DATA.athletes)+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight;
@@ -586,10 +558,10 @@ function totalOf(a,view){
 }
 function rankings(){return DATA.athletes.map(a=>({...a,total:totalOf(a),gl:calcGL(totalOf(a),a.bw,a.sex,a.mod)})).filter(a=>a.total>0).sort((a,b)=>b.gl-a.gl)}
 function liftQueue(){return DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed).filter(a=>{const at=a.att[DATA.lift][DATA.round];return at.r===null&&at.w>0}).sort((a,b)=>{const wa=a.att[DATA.lift][DATA.round].w,wb=b.att[DATA.lift][DATA.round].w;return wa!==wb?wa-wb:a.lot-b.lot})}
-function save(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated}))}catch(e){}if(!_fbSyncing)debouncedSync()}
+function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated}))}catch(e){}if(!_fbSyncing)debouncedSync()}
 let _syncTimer=null;
 function debouncedSync(){if(_syncTimer)clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>{syncToFB();_syncTimer=null},800)}
-function saveNow(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated}))}catch(e){}syncToFB()}
+function saveNow(){try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated}))}catch(e){}syncToFB()}
 function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);return true}}}catch(e){}return false}
 
 function calcPlates(w){const ps=(w-BAR-COLLARS)/2;if(ps<=0)return[];let rem=ps;const r=[];for(const p of PLATES){while(rem>=p-0.001){r.push(p);rem-=p}}return r}
@@ -613,12 +585,7 @@ function renderPlates(w){
   return out;
 }
 
-function go(p){DATA.phase=p;save();toggleNav(false);R()}
-function toggleNav(force){
-  const open=(typeof force==='boolean')?force:!document.body.classList.contains('nav-open');
-  document.body.classList.toggle('nav-open',open);
-}
-document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleNav(false)});
+function go(p){DATA.phase=p;save();R()}
 async function tryLoadFromFB(){
   if(!fbReady||!DATA.event)return false;
   const id=fbDocId();if(!id)return false;
@@ -628,11 +595,9 @@ async function tryLoadFromFB(){
     if(!snap.exists())return false;
     const d=snap.data();
     DATA.athletes=JSON.parse(d.athletes||'[]');
-    if((Date.now()-(window._lastLocalAction||0))>=2500){
-      DATA.lift=d.lift||DATA.lift;
-      DATA.round=typeof d.round==='number'?d.round:DATA.round;
-      DATA.flight=d.flight||DATA.flight;
-    }
+    DATA.lift=d.lift||DATA.lift;
+    DATA.round=typeof d.round==='number'?d.round:DATA.round;
+    DATA.flight=d.flight||DATA.flight;
     DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
     DATA.lotsGenerated=d.lotsGenerated||false;
     if(typeof d.timer==='number')DATA.timer=d.timer;
@@ -669,8 +634,7 @@ function pickEvent(i){
     else mod='classic';
     const _rawSex=(a.sexo||a.sex||'').trim();
     const _normSex=(_rawSex==='Femenino'||_rawSex==='F'||_rawSex==='Mujer')?'Mujer':(_rawSex==='Masculino'||_rawSex==='M'||_rawSex==='Hombre')?'Hombre':_rawSex;
-    const _countryCode=String(a.pais||a.country||a.pais3||'CHI').toUpperCase();
-    return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:_normSex,cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,country:_countryCode,bw:0,flight:a.flight||fl,rackSQ:'',rackBP:'',bombed:false,
+    return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:_normSex,cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,bw:0,flight:a.flight||fl,rackSQ:'',rackBP:'',bombed:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}};
   });
   const allFlights=flightMap?[...new Set(Object.values(flightMap))].filter(_inTarima).sort():[];
@@ -703,38 +667,6 @@ function _normDiv(d){
   if(v.includes('master2')||(v.includes('masterii')&&!v.includes('iii')))return 'Master II';
   if(v.includes('master1')||(v.includes('masteri')&&!v.includes('ii')))return 'Master I';
   return d;
-}
-// Normaliza el sexo a 'M' / 'F' (acepta M, Masculino, Hombre, Varón / F, Femenino, Mujer, Dama).
-// Sirve para agrupar categorías: evita que "M" y "Masculino" caigan en grupos distintos.
-function _normSex(s){
-  const v=(s||'').toString().trim().toLowerCase();
-  if(v.startsWith('f')||v.startsWith('muj')||v.startsWith('dam')||v.startsWith('w'))return 'F';
-  if(v.startsWith('m')||v.startsWith('h')||v.startsWith('v'))return 'M';
-  return v?v.toUpperCase():'?';
-}
-// Clave única de categoría (sexo|cat|div) normalizada — agrupa correctamente aunque
-// los valores vengan con espacios, mayúsculas o sinónimos distintos.
-function _catGroupKey(a){return _normSex(a&&a.sex)+'|'+_normCat((a&&a.cat)||'?')+'|'+_normDiv((a&&a.div)||'Sin Div');}
-// ── Países (código IPF de 3 letras → ISO2 para bandera + nombre) ──────────────
-// Para campeonatos internacionales (ej. Sudamericano). Default CHI.
-const COUNTRY={
-  CHI:['cl','Chile'], ARG:['ar','Argentina'], BRA:['br','Brasil'], URU:['uy','Uruguay'],
-  PAR:['py','Paraguay'], PER:['pe','Perú'], BOL:['bo','Bolivia'], ECU:['ec','Ecuador'],
-  COL:['co','Colombia'], VEN:['ve','Venezuela'], GUY:['gy','Guyana'], SUR:['sr','Surinam'],
-  PAN:['pa','Panamá'], CRC:['cr','Costa Rica'], GUA:['gt','Guatemala'], MEX:['mx','México'],
-  USA:['us','Estados Unidos'], CAN:['ca','Canadá'], ESP:['es','España'], POR:['pt','Portugal']
-};
-function _ctry(a){const c=(a&&(a.country||a.pais||a.pais3));return (c&&String(c).toUpperCase())||'CHI';}
-function _ctryName(code){const c=COUNTRY[code];return c?c[1]:code;}
-function _flagImg(code,h){
-  const c=COUNTRY[code]; if(!c||!c[0])return '';
-  h=Math.round(h||18);
-  return '<img src="https://flagcdn.com/h'+(h*2)+'/'+c[0]+'.png" alt="'+code+'" style="height:'+h+'px;width:auto;border-radius:2px;vertical-align:middle;margin-right:6px;box-shadow:0 0 2px rgba(0,0,0,.5)" onerror="this.style.display=\'none\'">';
-}
-// <option>s para selects de país (CHI primero)
-function _countryOptions(sel){
-  const keys=Object.keys(COUNTRY).sort((a,b)=>a==='CHI'?-1:b==='CHI'?1:_ctryName(a).localeCompare(_ctryName(b)));
-  return keys.map(k=>'<option value="'+k+'" '+((sel||'CHI')===k?'selected':'')+'>'+k+' — '+_ctryName(k)+'</option>').join('');
 }
 function checkRecord(athlete,lift,round){
   if(!RECORDS)return;
@@ -833,17 +765,6 @@ function setAtt(id,l,r,val){
   if(typeof R==='function')R();
 }
 
-// Timer de cambio (60s tras marcar un intento) — APAGADO por defecto.
-// El operador lo prende desde Control en Vivo si lo necesita. Con él apagado,
-// las celdas no muestran el reloj y se carga el próximo peso directo.
-window._CT_ENABLED = localStorage.getItem('yl_ct')==='1';
-window.toggleChangeTimers=function(){
-  window._CT_ENABLED=!window._CT_ENABLED;
-  try{localStorage.setItem('yl_ct', window._CT_ENABLED?'1':'0')}catch(e){}
-  if(!window._CT_ENABLED) DATA.changeTimers={}; // limpiar los timers activos al apagar
-  if(typeof saveNow==='function')saveNow();
-  if(typeof R==='function')R();
-};
 function setResult(id,l,r,res){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;a.att[l][r].r=res;
   if(r<2){
@@ -851,7 +772,7 @@ function setResult(id,l,r,res){
     // Solo arrancar el change timer si el próximo intento NO tiene peso declarado.
     // Si el operador ya cargó el peso antes de marcar este intento, no hay que
     // pedirle que lo declare otra vez ni hacer sonar la alarma a los 60s.
-    if(window._CT_ENABLED && (!a.att[l][r+1]||!a.att[l][r+1].w)){
+    if(!a.att[l][r+1]||!a.att[l][r+1].w){
       DATA.changeTimers[key]={remaining:60,expired:false};
       startCT(key);
     } else if(DATA.changeTimers[key]){
@@ -996,155 +917,6 @@ async function resetJudgeLights(){
 // ── Category BW limits ─────────────────────────────────────
 const CAT_LIMITS={"47":47,"52":52,"57":57,"63":63,"69":69,"76":76,"84":84,"53":53,"59":59,"66":66,"74":74,"83":83,"93":93,"105":105,"120":120};
 
-// ── Agregar atleta manualmente (atletas internacionales / altas de último momento) ──
-function openAddAthlete(){
-  const ex=document.getElementById('addAthModal');if(ex)ex.remove();
-  const flights=TARIMA?['A','B','C','D','E','F'].map(L=>L+TARIMA):['A','B','C','D','E','F'];
-  const inp='padding:9px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:14px';
-  const lbl='display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)';
-  const m=document.createElement('div');m.id='addAthModal';
-  m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:9999';
-  m.innerHTML=`
-  <div style="background:#0D1F38;border:2px solid var(--border);border-radius:16px;padding:24px 28px;width:min(620px,94vw);max-height:92vh;overflow-y:auto">
-    <div style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:4px">➕ AGREGAR ATLETA</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:18px">Para altas manuales (ej. atletas de otros países en un internacional). No toca la nómina pública.</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-      <label style="${lbl};grid-column:1 / -1">NOMBRE COMPLETO<input id="aa_name" type="text" placeholder="Nombre y apellidos" style="${inp}"></label>
-      <label style="${lbl}">PAÍS<select id="aa_country" style="${inp}">${_countryOptions('CHI')}</select></label>
-      <label style="${lbl}">SEXO<select id="aa_sex" style="${inp}"><option value="Hombre">Hombre</option><option value="Mujer">Mujer</option></select></label>
-      <label style="${lbl}">CATEGORÍA (kg)<input id="aa_cat" type="text" placeholder="ej: 83 o +120" style="${inp}"></label>
-      <label style="${lbl}">DIVISIÓN<select id="aa_div" style="${inp}">
-        <option>Open</option><option>Sub-Junior</option><option>Junior</option>
-        <option>Master I</option><option>Master II</option><option>Master III</option><option>Master IV</option></select></label>
-      <label style="${lbl}">MODALIDAD<select id="aa_mod" style="${inp}">
-        <option value="classic">Classic (Raw)</option><option value="equipped">Equipado</option>
-        <option value="oe_classic">Olimpiadas Especiales (OE)</option><option value="universitario">Universitario</option>
-        <option value="onlybench">Only Bench</option><option value="classic_bench">Classic + Only Bench</option>
-        <option value="equipped_bench">Equipado + Only Bench</option></select></label>
-      <label style="${lbl}">CLUB / EQUIPO<input id="aa_club" type="text" placeholder="Club" style="${inp}"></label>
-      <label style="${lbl}">TANDA / VUELO<select id="aa_flight" style="${inp}">${flights.map(f=>'<option>'+f+'</option>').join('')}</select></label>
-    </div>
-    <div id="aa_alert" style="display:none;background:rgba(196,30,58,.15);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--accent);font-family:Oswald"></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button onclick="document.getElementById('addAthModal').remove()" style="padding:8px 20px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;cursor:pointer">CANCELAR</button>
-      <button onclick="confirmAddAthlete()" style="padding:10px 24px;border-radius:8px;border:none;background:var(--green);color:#000;font-family:Oswald;font-size:13px;font-weight:700;cursor:pointer">✓ AGREGAR</button>
-    </div>
-  </div>`;
-  document.body.appendChild(m);
-  setTimeout(()=>{const el=document.getElementById('aa_name');if(el)el.focus();},50);
-}
-function confirmAddAthlete(){
-  const g=id=>document.getElementById(id);
-  const name=(g('aa_name').value||'').trim();
-  const alertEl=g('aa_alert');
-  if(name.length<3){alertEl.style.display='block';alertEl.textContent='⚠️ Ingresá el nombre del atleta';return;}
-  const country=(g('aa_country').value||'CHI');
-  const newId=DATA.athletes.length?Math.max(...DATA.athletes.map(a=>a.id))+1:0;
-  const newLot=DATA.athletes.length?Math.max(...DATA.athletes.map(a=>a.lot||0))+1:1;
-  DATA.athletes.push({
-    id:newId, lot:newLot, name, rut:'', sex:g('aa_sex').value,
-    cat:(g('aa_cat').value||'').trim(), div:g('aa_div').value, club:(g('aa_club').value||'').trim(),
-    uni:'', mod:g('aa_mod').value, country,
-    bw:0, flight:g('aa_flight').value, rackSQ:'', rackBP:'', bombed:false,
-    att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}
-  });
-  saveNow();
-  document.getElementById('addAthModal').remove();
-  showToastLC('✓ '+name+' agregado · '+_ctryName(country));
-  R();
-}
-
-// ── Foto / GIF persistente por atleta (se guarda y se reutiliza si vuelve) ──────
-// Clave estable: RUT si tiene; si no, país + nombre normalizado. Se guarda en
-// Firestore atleta_fotos/<clave> (reusa colección existente, lectura pública) y
-// los archivos en Storage athlete_photos/ y athlete_gifs/ (reusa paths existentes).
-window._LC_MEDIA = window._LC_MEDIA || {};
-function _mediaKey(a){
-  const rut=String((a&&a.rut)||'').replace(/[^0-9kK]/gi,'').toUpperCase();
-  if(rut) return 'lc_rut_'+rut;
-  const nm=String((a&&a.name)||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
-  return 'lc_'+_ctry(a).toLowerCase()+'_'+nm;
-}
-function _lcMediaFor(a){ return (a&&window._LC_MEDIA[_mediaKey(a)])||null; }
-function _setupLcMediaListener(){
-  if(!fbReady||!window._fb||!fbDB||window._lcMediaUnsub)return;
-  try{
-    window._lcMediaUnsub=window._fb.onSnapshot(window._fb.collection(fbDB,'atleta_fotos'),snap=>{
-      snap.docs.forEach(d=>{ if(String(d.id).indexOf('lc_')===0) window._LC_MEDIA[d.id]=d.data(); });
-      if(typeof renderTxWidget==='function')renderTxWidget();
-      if(!TX_MODE && DATA.phase==='manage' && typeof R==='function')R();
-    });
-  }catch(e){console.warn('[lc-media]',e.message);}
-}
-function openAthleteMedia(id){
-  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  const m0=_lcMediaFor(a)||{};
-  const ex=document.getElementById('athMediaModal');if(ex)ex.remove();
-  const m=document.createElement('div');m.id='athMediaModal';
-  m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;z-index:9999';
-  const prev=(u,isVid)=>u?(isVid?'<video src="'+u+'" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover"></video>':'<img src="'+u+'" style="width:100%;height:100%;object-fit:cover">'):'<span style="color:var(--muted);font-size:11px;font-family:Oswald">sin imagen</span>';
-  m.innerHTML=`
-  <div style="background:#0D1F38;border:2px solid var(--border);border-radius:16px;padding:24px 28px;width:min(560px,94vw);max-height:92vh;overflow-y:auto">
-    <div style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:4px">📷 FOTO / GIF</div>
-    <div style="font-size:12px;color:var(--gold);font-family:Oswald;margin-bottom:4px">${_flagImg(_ctry(a),14)}${a.name}</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:16px">Se guarda y se reutiliza automáticamente si el atleta vuelve a competir.</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div>
-        <div style="font-size:10px;color:var(--gold);font-family:Oswald;letter-spacing:1px;margin-bottom:6px">FOTO (imagen)</div>
-        <div id="amPrevFoto" style="aspect-ratio:3/4;background:#0a1628;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:8px">${prev(m0.foto_url,false)}</div>
-        <input id="amFoto" type="file" accept="image/*" onchange="uploadAthleteMedia(${id},'foto',this.files[0])" style="font-size:11px;color:var(--muted);width:100%">
-      </div>
-      <div>
-        <div style="font-size:10px;color:var(--gold);font-family:Oswald;letter-spacing:1px;margin-bottom:6px">GIF / VIDEO (animado)</div>
-        <div id="amPrevGif" style="aspect-ratio:3/4;background:#000;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:8px">${prev(m0.gif_url,!(String(m0.gif_url||'').toLowerCase().endsWith('.gif')))}</div>
-        <input id="amGif" type="file" accept="video/*,image/gif" onchange="uploadAthleteMedia(${id},'gif',this.files[0])" style="font-size:11px;color:var(--muted);width:100%">
-      </div>
-    </div>
-    <div id="amStatus" style="font-size:11px;color:var(--muted);font-family:Oswald;margin-top:12px;min-height:16px"></div>
-    <div style="display:flex;gap:10px;justify-content:space-between;margin-top:12px">
-      <button onclick="removeAthleteMedia(${id})" style="padding:8px 14px;border-radius:8px;border:1px solid var(--red);background:transparent;color:var(--red);font-family:Oswald;font-size:11px;cursor:pointer">🗑️ Quitar todo</button>
-      <button onclick="document.getElementById('athMediaModal').remove()" style="padding:8px 20px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;cursor:pointer">CERRAR</button>
-    </div>
-  </div>`;
-  document.body.appendChild(m);
-}
-async function uploadAthleteMedia(id,kind,file){
-  if(!file)return;
-  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía, esperá un momento');return;}
-  if(!isAdmin){alert('Solo admin puede subir fotos');return;}
-  const st=document.getElementById('amStatus');if(st)st.textContent='⏳ Subiendo…';
-  try{
-    const {ref,uploadBytes,getDownloadURL}=window._fbSt;
-    const key=_mediaKey(a);
-    const dot=file.name.lastIndexOf('.');const ext=(dot>=0?file.name.slice(dot+1):'').toLowerCase()||(kind==='foto'?'jpg':'mp4');
-    const folder=kind==='foto'?'athlete_photos/':'athlete_gifs/';
-    const path=folder+key+'_'+Date.now()+'.'+ext;
-    const r=ref(window._fbStInst,path);
-    await uploadBytes(r,file,{contentType:file.type||(kind==='foto'?'image/jpeg':'video/mp4')});
-    const url=await getDownloadURL(r);
-    const patch=kind==='foto'?{foto_url:url}:{gif_url:url};
-    await window._fb.setDoc(window._fb.doc(fbDB,'atleta_fotos',key),Object.assign({codigo:key,name:a.name,country:_ctry(a),ts:Date.now()},patch),{merge:true});
-    window._LC_MEDIA[key]=Object.assign({},window._LC_MEDIA[key]||{},patch);
-    if(st)st.textContent='✓ Guardado';
-    // refrescar preview
-    const isVid=kind==='gif'&&!String(url).toLowerCase().endsWith('.gif');
-    const pv=document.getElementById(kind==='foto'?'amPrevFoto':'amPrevGif');
-    if(pv)pv.innerHTML=isVid?'<video src="'+url+'" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover"></video>':'<img src="'+url+'" style="width:100%;height:100%;object-fit:cover">';
-    R();
-  }catch(e){if(st)st.textContent='❌ '+e.message; console.warn('[lc-media] upload',e);}
-}
-async function removeAthleteMedia(id){
-  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  if(!confirm('¿Quitar la foto/gif de '+a.name+'?'))return;
-  try{
-    const key=_mediaKey(a);
-    await window._fb.setDoc(window._fb.doc(fbDB,'atleta_fotos',key),{foto_url:'',gif_url:'',ts:Date.now()},{merge:true});
-    delete window._LC_MEDIA[key];
-    document.getElementById('athMediaModal')?.remove();
-    showToastLC('Foto/gif quitada de '+a.name);R();
-  }catch(e){alert('Error: '+e.message);}
-}
 function openWeighIn(id){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   const catKg=parseFloat((a.cat||'').replace(/[^0-9.]/g,''))||0;
@@ -1174,16 +946,11 @@ function openWeighIn(id){
         <select id="wi_mod" style="padding:9px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:13px">
           <option value="classic" ${a.mod==='classic'?'selected':''}>Classic (Raw)</option>
           <option value="equipped" ${a.mod==='equipped'?'selected':''}>Equipado</option>
-          <option value="oe_classic" ${a.mod==='oe_classic'?'selected':''}>Olimpiadas Especiales (OE)</option>
           <option value="universitario" ${a.mod==='universitario'?'selected':''}>Universitario</option>
           <option value="onlybench" ${a.mod==='onlybench'?'selected':''}>Only Bench</option>
           <option value="classic_bench" ${a.mod==='classic_bench'?'selected':''}>Classic + Only Bench</option>
           <option value="equipped_bench" ${a.mod==='equipped_bench'?'selected':''}>Equipado + Only Bench</option>
         </select>
-      </label>
-      <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)">
-        PAÍS
-        <select id="wi_country" style="padding:9px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:13px">${_countryOptions(_ctry(a))}</select>
       </label>
     </div>
     <div style="font-size:10px;color:var(--gold);letter-spacing:1.5px;margin-bottom:6px;font-family:Oswald;font-weight:700">RACK HEIGHTS</div>
@@ -1293,7 +1060,6 @@ function confirmWeighIn(id,catKg,limit){
   const rSQ=(document.getElementById('wi_rackSQ').value||'').trim();
   const rBP=(document.getElementById('wi_rackBP').value||'').trim();
   const mod=document.getElementById('wi_mod').value;
-  const country=(document.getElementById('wi_country')?.value||'CHI');
   const sq1=parseWeight(document.getElementById('wi_sq1')?.value);
   const bp1=parseWeight(document.getElementById('wi_bp1')?.value);
   const dl1=parseWeight(document.getElementById('wi_dl1')?.value);
@@ -1311,7 +1077,7 @@ function confirmWeighIn(id,catKg,limit){
   }
   // Save
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  a.bw=bw;a.rackSQ=rSQ;a.rackBP=rBP;a.mod=mod;a.country=country;
+  a.bw=bw;a.rackSQ=rSQ;a.rackBP=rBP;a.mod=mod;
   a.weighedIn=true;
   // Guardar primeros intentos (apertura) si vinieron en el modal
   if(a.att){
@@ -1451,7 +1217,7 @@ function overrideResult(id,l,r,res){
   if(!wasSame && res){
     if(l===DATA.lift && r===DATA.round && r<2){
       const key=id+'_'+l+'_'+(r+1);
-      if(window._CT_ENABLED && (!a.att[l][r+1]||!a.att[l][r+1].w)){
+      if(!a.att[l][r+1]||!a.att[l][r+1].w){
         DATA.changeTimers[key]={remaining:60,expired:false};
         startCT(key);
       } else if(DATA.changeTimers[key]){
@@ -1472,19 +1238,6 @@ function overrideResult(id,l,r,res){
       }, 3000);
     }
   }
-}
-// Cambiar / revocar la decisión de un intento YA juzgado (corrección del jurado),
-// SIN efectos colaterales: no reinicia el cronómetro de tarima, no arranca change
-// timers ni auto-avanza la ronda. Alterna: tocar la misma decisión la borra.
-function changeResult(id,l,r,res){
-  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  const wasSame=(a.att[l][r].r===res);
-  a.att[l][r].r=wasSame?null:res;
-  a.bombed=a.att.sq.every(x=>x.r==='n')&&a.att.bp.every(x=>x.r==='n')&&a.att.dl.every(x=>x.r==='n');
-  saveNow();R();
-  showToastLC(wasSame?'↺ '+a.name+' — '+LIFT_S[l]+(r+1)+': decisión revocada'
-    :(res==='g'?'✓ '+a.name+' — '+LIFT_S[l]+(r+1)+': cambiado a VÁLIDO'
-                :'✗ '+a.name+' — '+LIFT_S[l]+(r+1)+': cambiado a NULO'));
 }
 
 // Helper: ¿el atleta quedó descalificado del TOTAL?
@@ -1624,7 +1377,7 @@ function editAtt(id,l,r){
     // Si hab\u00eda un change timer corriendo para este intento, cancelarlo
     const key=id+'_'+l+'_'+r;
     if(DATA.changeTimers[key])delete DATA.changeTimers[key];
-    saveNow();R();
+    save();R();
   }
 }
 
@@ -2951,8 +2704,6 @@ function renderTxWidget(){
   if(TX_MODE==='slam'){c.innerHTML=renderTxSlam();return true}
   if(TX_MODE==='lbauto'){c.innerHTML=renderTxLbAuto();return true}
   if(TX_MODE==='ceremony'){renderTxCeremony(c);return true}
-  if(TX_MODE==='jornada'){c.innerHTML=renderTxJornada();return true}
-  if(TX_MODE==='screen'){renderTxScreen(c);return true}
   // Widgets que dependen del lifter actual
   const cur=liftQueue()[0];
   if(!cur&&TX_MODE!=='leaderboard'&&TX_MODE!=='tablaactual'){
@@ -3946,11 +3697,6 @@ function renderTxLights(){
 
 function renderTxProfile(cur){
   const full=txLookupFull(cur);
-  // Media efectiva: foto/gif subida en el livecast (persistente) tiene prioridad
-  // sobre la de la base de Chile. Permite fotos de atletas internacionales.
-  const _lm=_lcMediaFor(cur);
-  const media=Object.assign({},full||{});
-  if(_lm){ if(_lm.foto_url)media.foto_url=_lm.foto_url; if(_lm.gif_url)media.gif_url=_lm.gif_url; ['gif_blend','gif_zoom','gif_offset_x','gif_offset_y','gif_start','gif_end'].forEach(k=>{if(_lm[k]!==undefined)media[k]=_lm[k];}); }
   const parts=(cur.name||'').trim().split(/\s+/);
   const firstName=parts.slice(0,-2).join(' ')||parts[0]||'';
   const lastName=parts.slice(-2).join(' ').toUpperCase();
@@ -3972,10 +3718,9 @@ function renderTxProfile(cur){
   if(years!==null)rows.push(['AÑOS COMPITIENDO',years+'']);
   if(pb)rows.push([pbLabel,pb.toFixed(1)]);
   const initials=parts.map(p=>p[0]||'').slice(0,2).join('').toUpperCase();
-  const useGif=_txProfileMediaType==='gif'&&!!media.gif_url;
-  const gifIsImg=useGif&&String(media.gif_url||'').toLowerCase().split('?')[0].endsWith('.gif');
-  const gifBlend=useGif?(media.gif_blend||'screen'):'normal';
-  const mediaBg=useGif?'#000':(media.foto_url?'#fff':'linear-gradient(135deg,#1a2e4f,#0e1f3a)');
+  const useGif=_txProfileMediaType==='gif'&&!!full?.gif_url;
+  const gifBlend=useGif?(full.gif_blend||'screen'):'normal';
+  const mediaBg=useGif?'#000':(full?.foto_url?'#fff':'linear-gradient(135deg,#1a2e4f,#0e1f3a)');
   return `
     <div style="position:absolute;inset:0">
     <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;overflow:hidden">
@@ -3985,11 +3730,14 @@ function renderTxProfile(cur){
       <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(8px,1.5vh,22px);max-width:1400px;width:100%;margin:auto">
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:clamp(6px,1vh,16px)">
           <div style="background:${_txC('nameBg')};padding:clamp(10px,1.6vw,18px) clamp(18px,2.2vw,28px);border-radius:6px;display:flex;align-items:center;gap:clamp(10px,1.5vw,18px);box-shadow:0 4px 20px rgba(212,168,67,.35)">
-            <div style="background:rgba(0,0,0,.2);padding:clamp(6px,0.7vw,10px) clamp(10px,1.2vw,16px);border-radius:5px;display:flex;align-items:center;gap:clamp(8px,0.9vw,14px)">
-              <div style="width:clamp(44px,5vw,72px);height:clamp(30px,3.3vw,48px);position:relative;overflow:hidden;border-radius:2px;flex-shrink:0;box-shadow:0 1px 8px rgba(0,0,0,.5);background:#0a1628">
-                <img src="https://flagcdn.com/h120/${(COUNTRY[_ctry(cur)]||['cl'])[0]}.png" alt="${_ctry(cur)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">
+            <div style="background:rgba(0,0,0,.2);padding:clamp(6px,0.7vw,10px) clamp(10px,1.2vw,16px);border-radius:5px;display:flex;align-items:center">
+              <div style="width:clamp(44px,5vw,72px);height:clamp(30px,3.3vw,48px);position:relative;overflow:hidden;border-radius:2px;flex-shrink:0;box-shadow:0 1px 8px rgba(0,0,0,.5)">
+                <div style="position:absolute;inset:0;background:#d52b1e"></div>
+                <div style="position:absolute;top:0;left:0;right:0;height:50%;background:#fff"></div>
+                <div style="position:absolute;top:0;left:0;width:33.4%;height:50%;background:#0039a6;display:flex;align-items:center;justify-content:center">
+                  <span style="color:#fff;font-size:clamp(9px,1vw,15px);line-height:1">★</span>
+                </div>
               </div>
-              <span style="font-family:Oswald;font-weight:700;font-size:clamp(13px,1.4vw,22px);color:${_txC('nameText')};letter-spacing:2px">${_ctry(cur)}</span>
             </div>
             <div style="font-family:Oswald;font-size:clamp(26px,3.2vw,44px);font-weight:700;letter-spacing:2px;color:${_txC('nameText')}">
               <span style="font-weight:400">${firstName}</span> ${lastName}
@@ -3999,11 +3747,9 @@ function renderTxProfile(cur){
         <div style="display:grid;grid-template-columns:auto 1fr;gap:clamp(30px,4vw,70px);align-items:center;margin-top:clamp(10px,2vh,30px)">
           <div style="width:clamp(180px,18vw,280px);aspect-ratio:3/4;background:${mediaBg};border:3px solid ${_txC('accent')};border-radius:4px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(0,0,0,.5);position:relative;overflow:hidden">
             ${useGif
-              ? (gifIsImg
-                  ? `<img src="${media.gif_url}" alt="${cur.name||''}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center">`
-                  : `<video src="${media.gif_url}" autoplay loop muted playsinline data-gif-trim="1" data-gif-start="${media.gif_start||0}" data-gif-end="${media.gif_end??''}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center"></video>`)
-              : media.foto_url
-                ? `<img src="${media.foto_url}" alt="${cur.name||''}" style="width:100%;height:100%;object-fit:cover" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px\\'>${initials}</span>'">`
+              ? `<video src="${full.gif_url}" autoplay loop muted playsinline data-gif-trim="1" data-gif-start="${full.gif_start||0}" data-gif-end="${full.gif_end??''}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${full.gif_zoom||1}) translate(${full.gif_offset_x||0}%,${full.gif_offset_y||0}%);transform-origin:center center"></video>`
+              : full?.foto_url
+                ? `<img src="${full.foto_url}" alt="${cur.name||''}" style="width:100%;height:100%;object-fit:cover" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px\\'>${initials}</span>'">`
                 : `<span style="font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px">${initials}</span>`
             }
           </div>
@@ -4108,318 +3854,6 @@ function renderTxScoreboard(cur,lifterChanged){
         <div style="padding:9px 14px;text-align:center;background:${isDQ(cur)?_txC('noLift'):_txC('accent')};color:${isDQ(cur)?'#fff':_txC('nameText')};font-family:Oswald;font-size:24px;font-weight:700;letter-spacing:1px">${isDQ(cur)?'DQ':(st||newSub||0).toFixed(1)}</div>
       </div>
     </div>`;
-}
-
-// ════════════════════════════════════════════════════════════════
-// PANTALLA DE TARIMA (?tx=screen) — canal de control INDEPENDIENTE
-// del Control TX. Lee livecast_screen/{evento} y alterna entre el
-// PERFIL del atleta en tarima y la TABLA DE JORNADA. Se controla a
-// distancia desde el panel "🖥 Pantalla Tarima".
-// ════════════════════════════════════════════════════════════════
-// ─── Panel de control de la Pantalla de Tarima (admin) ──────────
-window._SCREEN_LOCAL={mode:'jornada',flights:[],nameScale:1};
-async function _screenPush(){
-  if(!fbReady||!DATA.event){showToastLC('⚠️ Sin evento activo');return;}
-  const id=(DATA.event.name||'comp').replace(/[^a-zA-Z0-9]/g,'_').substring(0,60);
-  try{
-    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_screen',id),{
-      mode:window._SCREEN_LOCAL.mode,
-      flights:window._SCREEN_LOCAL.flights,
-      nameScale:window._SCREEN_LOCAL.nameScale||1,
-      ts:Date.now()
-    });
-  }catch(e){showToastLC('Error: '+e.message);}
-}
-window.screenSetMode=function(m){window._SCREEN_LOCAL.mode=m;_screenPush();R();};
-window.screenSetNameScale=function(v){
-  let n=parseFloat(v)||1; n=Math.max(0.6,Math.min(2.2,n)); n=Math.round(n*100)/100;
-  window._SCREEN_LOCAL.nameScale=n; window._JORNADA_NAMESCALE=n;
-  _screenPush();
-  // Actualizar el panel SIN re-render (para no cortar el arrastre del slider)
-  const sl=document.getElementById('scrNameRange'); if(sl&&parseFloat(sl.value)!==n)sl.value=n;
-  const lb=document.getElementById('scrNamePct'); if(lb)lb.textContent=Math.round(n*100)+'%';
-  const pv=document.getElementById('scrNamePrev'); if(pv)pv.style.fontSize=Math.round(15*n)+'px';
-};
-window.screenNudgeNameScale=function(d){window.screenSetNameScale((window._SCREEN_LOCAL.nameScale||1)+d);};
-window.screenToggleFlight=function(f){
-  const arr=window._SCREEN_LOCAL.flights;
-  const i=arr.indexOf(f);
-  if(i>=0)arr.splice(i,1);else arr.push(f);
-  _screenPush();R();
-};
-window.screenAllFlights=function(){
-  const all=[...new Set(DATA.athletes.map(a=>a.flight))].sort();
-  window._SCREEN_LOCAL.flights=all;_screenPush();R();
-};
-function renderScreenControl(){
-  if(fbReady&&!_screenUnsub)subscribeScreenChannel(); // cargar estado guardado (modo/tandas/tamaño)
-  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].sort();
-  const sel=window._SCREEN_LOCAL.flights;
-  const mode=window._SCREEN_LOCAL.mode;
-  const base=location.origin+location.pathname.replace(/[^/]*$/,'');
-  const enc=encodeURIComponent(DATA.event?.name||'');
-  const screenUrl=base+'livecast.html?tx=screen&evento='+enc;
-  const jornadaUrl=base+'livecast.html?tx=jornada&evento='+enc;
-  let h='<div style="max-width:920px">';
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px">';
-  h+='<div><h2 class="os" style="font-size:22px;letter-spacing:1px">🖥 PANTALLA DE TARIMA</h2><p style="color:var(--muted);font-size:12px">Control independiente del Control TX. Alterná entre el perfil del atleta y la tabla de la jornada. Se actualiza en vivo en la pantalla.</p></div>';
-  h+='</div>';
-
-  // URL de la pantalla
-  h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">📺 URL PARA LA PANTALLA (abrila en el navegador de la pantalla / OBS)</div>';
-  h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
-  h+='<input readonly value="'+screenUrl+'" onclick="this.select()" style="flex:1;min-width:280px;padding:10px 12px;background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:monospace">';
-  h+='<button onclick="navigator.clipboard.writeText(\''+screenUrl+'\');showToastLC(\'✓ Copiado\')" style="padding:10px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">COPIAR</button>';
-  h+='<a href="'+screenUrl+'" target="_blank" style="padding:10px 16px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;text-decoration:none">ABRIR ↗</a>';
-  h+='</div>';
-  h+='<div style="font-size:11px;color:var(--muted);margin-top:8px">Esta pantalla obedece los botones de abajo en tiempo real. También podés usar la URL fija de solo-tabla: <span style="color:var(--gold);font-family:monospace;font-size:11px;cursor:pointer" onclick="navigator.clipboard.writeText(\''+jornadaUrl+'\');showToastLC(\'✓ Copiado\')">…?tx=jornada</span></div>';
-  h+='</div>';
-
-  // Modo
-  const mb=(m,lbl,ic,col)=>'<button onclick="screenSetMode(\''+m+'\')" style="flex:1;min-width:160px;padding:18px;border-radius:12px;border:2px solid '+(mode===m?col:'var(--border)')+';background:'+(mode===m?col+'22':'transparent')+';color:'+(mode===m?col:'var(--text)')+';font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px;cursor:pointer">'+ic+' '+lbl+(mode===m?' ●':'')+'</button>';
-  h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:12px">QUÉ MOSTRAR EN LA PANTALLA</div>';
-  h+='<div style="display:flex;gap:12px;flex-wrap:wrap">';
-  h+=mb('profile','PERFIL ATLETA','👤','#3b82f6');
-  h+=mb('jornada','TABLA JORNADA','📊','#D4A843');
-  h+=mb('off','APAGAR','⬛','#ef4444');
-  h+='</div></div>';
-
-  // Tamaño de los nombres en la tabla
-  const nscale=window._SCREEN_LOCAL.nameScale||1;
-  h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">TAMAÑO DE LOS NOMBRES EN LA TABLA</div>';
-  h+='<p style="font-size:11px;color:var(--muted);margin-bottom:12px">Ajustá qué tan grandes se ven los nombres de los atletas en la pantalla. Se aplica en vivo.</p>';
-  h+='<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
-  h+='<button onclick="screenNudgeNameScale(-0.1)" style="width:42px;height:42px;border-radius:10px;border:2px solid var(--border);background:transparent;color:var(--text);font-size:22px;font-weight:700;cursor:pointer;line-height:1">−</button>';
-  h+='<input id="scrNameRange" type="range" min="0.6" max="2.2" step="0.05" value="'+nscale+'" oninput="screenSetNameScale(this.value)" style="flex:1;min-width:200px;accent-color:#D4A843;cursor:pointer">';
-  h+='<button onclick="screenNudgeNameScale(0.1)" style="width:42px;height:42px;border-radius:10px;border:2px solid var(--border);background:transparent;color:var(--text);font-size:22px;font-weight:700;cursor:pointer;line-height:1">+</button>';
-  h+='<span id="scrNamePct" style="font-family:Oswald;font-size:18px;font-weight:700;color:#D4A843;min-width:60px;text-align:center">'+Math.round(nscale*100)+'%</span>';
-  h+='<button onclick="screenSetNameScale(1)" style="padding:8px 14px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:8px;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">100%</button>';
-  h+='</div>';
-  h+='<div style="margin-top:12px;padding:10px 14px;background:rgba(10,22,40,.5);border:1px solid var(--border);border-radius:8px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"><span style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">VISTA PREVIA:&nbsp;</span><span id="scrNamePrev" style="font-family:Inter,sans-serif;font-weight:600;color:#fff;font-size:'+Math.round(15*nscale)+'px">Catalina Ignacia Gomez Rearte</span></div>';
-  h+='</div>';
-
-  // Selector de tandas
-  h+='<div class="card"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">TANDAS EN LA TABLA (la "jornada")</div>';
-  h+='<p style="font-size:11px;color:var(--muted);margin-bottom:12px">Elegí qué tandas entran en la tabla. Marcá las de la sesión AM o PM. Si no marcás ninguna, muestra la tanda activa actual.</p>';
-  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
-  flights.forEach(f=>{
-    const on=sel.includes(f);
-    const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;
-    h+='<button onclick="screenToggleFlight(\''+f+'\')" style="padding:12px 18px;border-radius:10px;border:2px solid '+(on?'var(--green)':'var(--border)')+';background:'+(on?'rgba(34,197,94,.12)':'transparent')+';color:'+(on?'var(--green)':'var(--text)')+';font-family:Oswald;font-size:15px;font-weight:700;cursor:pointer">'+(on?'✓ ':'')+'Tanda '+f+'<span style="font-size:10px;opacity:.7;display:block">'+n+' atletas</span></button>';
-  });
-  h+='</div>';
-  h+='<button onclick="screenAllFlights()" style="padding:8px 16px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">SELECCIONAR TODAS</button>';
-  h+='<span style="margin-left:12px;font-size:12px;color:var(--muted)">'+(sel.length?sel.length+' tanda(s): '+sel.join(', '):'ninguna (usa tanda activa)')+'</span>';
-  h+='</div>';
-
-  h+='</div>';
-  return h;
-}
-
-window._SCREEN_STATE={mode:'jornada',flights:null}; // mode: 'profile' | 'jornada' | 'off'
-async function loadBirthYears(){
-  if(!fbReady||!DATA.event)return;
-  try{
-    // Las inscripciones se buscan por RUT sin filtrar por evento: traemos TODAS
-    // y cruzamos por RUT. Así funciona para sub-tarimas y cualquier evento.
-    const snap=await window._fb.getDocs(window._fb.collection(fbDB,'inscripciones'));
-    snap.docs.forEach(d=>{
-      const x=d.data();
-      const k=String(x.rut||'').replace(/[^0-9kK]/gi,'').toUpperCase();
-      if(k&&x.fechaNac)window.BIRTH_BY_RUT[k]=x.fechaNac;
-    });
-    console.log('[screen] fechaNac cargadas:',Object.keys(window.BIRTH_BY_RUT).length);
-    if(TX_MODE==='jornada'||TX_MODE==='screen')R();
-  }catch(e){console.warn('[screen] loadBirthYears',e.message);}
-}
-function _screenDocId(){
-  if(!DATA.event)return null;
-  return (DATA.event.name||'comp').replace(/[^a-zA-Z0-9]/g,'_').substring(0,60);
-}
-let _screenUnsub=null, _screenFirstSnap=true;
-function subscribeScreenChannel(){
-  if(!fbReady)return;
-  const id=_screenDocId();if(!id)return;
-  if(_screenUnsub)return; // evitar suscripciones duplicadas
-  try{
-    _screenUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_screen',id),(snap)=>{
-      const d=snap.data()||{};
-      window._SCREEN_STATE={mode:d.mode||'jornada',flights:Array.isArray(d.flights)?d.flights:null,nameScale:typeof d.nameScale==='number'?d.nameScale:1};
-      window._JORNADA_FLIGHTS=window._SCREEN_STATE.flights;
-      window._JORNADA_NAMESCALE=window._SCREEN_STATE.nameScale;
-      if(window._SCREEN_LOCAL){
-        window._SCREEN_LOCAL.nameScale=window._SCREEN_STATE.nameScale;
-        if(window._SCREEN_STATE.mode)window._SCREEN_LOCAL.mode=window._SCREEN_STATE.mode;
-        if(Array.isArray(window._SCREEN_STATE.flights))window._SCREEN_LOCAL.flights=window._SCREEN_STATE.flights;
-      }
-      if(TX_MODE==='screen'||TX_MODE==='jornada')R();
-      else if(!TX_MODE&&DATA.phase==='screen'&&_screenFirstSnap)R(); // cargar estado guardado una vez
-      _screenFirstSnap=false;
-    });
-  }catch(e){console.warn('[screen] subscribe',e.message);}
-}
-// El widget screen: alterna perfil / jornada según el canal de control
-function renderTxScreen(c){
-  const st=window._SCREEN_STATE||{mode:'jornada'};
-  window._JORNADA_FLIGHTS=st.flights;
-  window._JORNADA_NAMESCALE=typeof st.nameScale==='number'?st.nameScale:1;
-  if(st.mode==='off'){c.innerHTML='';return;}
-  if(st.mode==='profile'){
-    const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
-    document.body.classList.add('tx-opaque');
-    c.innerHTML=cur?renderTxProfile(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>';
-    return;
-  }
-  // jornada (default)
-  document.body.classList.add('tx-opaque');
-  c.innerHTML=renderTxJornada();
-}
-
-// ════════════════════════════════════════════════════════════════
-// TABLA DE JORNADA (estilo IPF) — pantalla de tarima, todas las
-// categorías de las tandas seleccionadas. Filas con país, año nac,
-// BW, SQ/BP/DL (3 intentos c/u + subtotal), total y GL.
-// Las tandas a mostrar se eligen vía window._JORNADA_FLIGHTS (set
-// por el control de pantalla). Año de nacimiento via BIRTH_BY_RUT.
-// ════════════════════════════════════════════════════════════════
-window.BIRTH_BY_RUT = window.BIRTH_BY_RUT || {};
-function _rutN(s){return String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();}
-function _yob2(a){
-  // 2 dígitos del año de nacimiento. Busca por RUT en BIRTH_BY_RUT.
-  const k=_rutN(a.rut);
-  let fn=k&&window.BIRTH_BY_RUT[k];
-  if(!fn) return '';
-  const m=String(fn).match(/(\d{4})/);
-  if(!m) return '';
-  return m[1].slice(2);
-}
-// celda de un intento: peso con color válido/nulo
-function _attCell(at){
-  if(!at||(!at.w&&at.r===null)) return '<span style="color:rgba(150,170,200,.35)">—</span>';
-  const w=at.w||0;
-  if(at.r==='g') return '<span style="color:#22c55e;font-weight:700">'+(w?w.toFixed(1):'—')+'</span>';
-  if(at.r==='n') return '<span style="color:#ef4444;font-weight:700;text-decoration:line-through;text-decoration-color:rgba(239,68,68,.6)">'+(w?w.toFixed(1):'—')+'</span>';
-  // pendiente (peso declarado, sin resultado)
-  return '<span style="color:rgba(220,230,245,.85)">'+(w?w.toFixed(1):'—')+'</span>';
-}
-// Celda de intento para la PANTALLA DE TARIMA: marca el resultado con COLOR DE FONDO
-// (válido = verde, nulo = rojo), legible a distancia en una proyección grande.
-function _attTd(at, base){
-  if(!at || (!at.w && at.r===null)) return '<td style="'+base+';color:rgba(150,170,200,.30)">—</td>';
-  const w=at.w||0; const val=w?w.toFixed(1):'—';
-  if(at.r==='g') return '<td style="'+base+';background:rgba(34,197,94,.88);color:#06210f;font-weight:800">'+val+'</td>';
-  if(at.r==='n') return '<td style="'+base+';background:rgba(225,40,40,.85);color:#fff;font-weight:800;text-decoration:line-through;text-decoration-thickness:2px">'+val+'</td>';
-  // peso declarado, sin juzgar todavía
-  return '<td style="'+base+';color:#fff;font-weight:700">'+val+'</td>';
-}
-function renderTxJornada(){
-  // Determinar qué tandas mostrar: las seleccionadas, o la actual si no hay set.
-  let flights=window._JORNADA_FLIGHTS;
-  if(!flights||!flights.length) flights=[DATA.flight];
-  const pool=DATA.athletes.filter(a=>flights.includes(a.flight)&&!a.bombed);
-  if(!pool.length) return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;color:rgba(220,230,245,.6);font-size:24px;letter-spacing:3px">SIN ATLETAS EN LAS TANDAS SELECCIONADAS</div>';
-  // Agrupar por categoría (sexo|cat|div)
-  const groups={};
-  pool.forEach(a=>{const k=_catGroupKey(a);(groups[k]=groups[k]||[]).push(a);});
-  // Orden de grupos: sexo (M antes F), luego peso asc, luego división
-  const DIVO={'Sub Junior':0,'Sub-Junior':0,'Subjunior':0,'Junior':1,'Open':2,'Master I':3,'Master II':4,'Master III':5,'Master IV':6};
-  const catNum=c=>{const s=String(c||'');return s.includes('+')?1000+(parseFloat(s)||0):(parseFloat(s)||999);};
-  const sexO=s=>(s==='Femenino'||s==='Mujer'||s==='F')?1:0;
-  const keys=Object.keys(groups).sort((A,B)=>{
-    const a=A.split('|'),b=B.split('|');
-    if(sexO(a[0])!==sexO(b[0]))return sexO(a[0])-sexO(b[0]);
-    if(catNum(a[1])!==catNum(b[1]))return catNum(a[1])-catNum(b[1]);
-    return (DIVO[a[2]]??9)-(DIVO[b[2]]??9);
-  });
-
-  // ── Escalado dinámico: la tabla SIEMPRE llena toda la pantalla ──
-  // Calculamos el alto de cada fila según cuántos atletas/categorías hay,
-  // de modo que ocupen exactamente el alto disponible (sin sobra ni overflow).
-  const VH=(window.innerHeight||1080);
-  const numCats=keys.length, numAth=pool.length;
-  const topBarH=Math.round(VH*0.075);            // barra de título
-  const theadH=Math.round(VH*0.032);             // fila de encabezados de columna
-  const availH=Math.max(120,VH-topBarH-theadH-2);
-  const weight=numAth*1.0+numCats*1.32;          // las cabeceras de categoría pesan +
-  const unit=availH/weight;                       // alto de una fila de atleta (px)
-  const hdrH=unit*1.32;                            // alto de fila de categoría (px)
-  const s=Math.max(.6,Math.min(2.1,unit/26));     // factor de escala de fuente (más grande para proyección)
-  const fs=b=>Math.max(8,Math.round(b*s));        // tamaño de fuente escalado
-  // Escala extra solo para el NOMBRE, controlable a distancia desde el panel
-  const nameScale=(typeof window._JORNADA_NAMESCALE==='number')?window._JORNADA_NAMESCALE:1;
-
-  const H=(t)=>'<th style="padding:0 4px;font-family:Oswald;font-size:'+fs(12)+'px;letter-spacing:1px;color:rgba(220,230,245,.65);font-weight:600">'+t+'</th>';
-  let rows='';
-  keys.forEach(k=>{
-    const parts=k.split('|');
-    const sexLabel=sexO(parts[0])? '♀':'♂';
-    const divS=txDivShort(parts[2]);
-    // ranking dentro del grupo por total (luego GL)
-    const list=groups[k].map(a=>{
-      const tot=totalOf(a);
-      return {a,tot,gl:calcGL(tot,a.bw,a.sex,a.mod)};
-    }).sort((x,y)=>(y.tot-x.tot)||(y.gl-x.gl));
-    // header de categoría
-    rows+='<tr style="height:'+hdrH.toFixed(2)+'px"><td colspan="16" style="padding:0 12px;background:linear-gradient(90deg,rgba(196,30,58,.32),rgba(196,30,58,.05));border-left:'+Math.max(3,Math.round(4*s))+'px solid #C41E3A;vertical-align:middle">'
-      +'<span style="font-family:Oswald;font-size:'+fs(16)+'px;font-weight:700;letter-spacing:2px;color:#fff">'+sexLabel+' '+parts[1]+' kg · '+divS+'</span>'
-      +'<span style="font-family:Oswald;font-size:'+fs(12)+'px;color:rgba(212,168,67,.85);margin-left:10px">'+list.length+' atletas</span></td></tr>';
-    list.forEach((row,i)=>{
-      const a=row.a;
-      const sub=l=>{const b=bestOf(a,l);return b?b.toFixed(1):'—';};
-      const td='vertical-align:middle;text-align:center;font-family:Oswald;font-size:'+fs(14)+'px';
-      rows+='<tr style="height:'+unit.toFixed(2)+'px;border-bottom:1px solid rgba(212,168,67,.12);background:'+(i%2?'rgba(255,255,255,.035)':'transparent')+'">'
-        +'<td style="'+td+';font-weight:700;color:#D4A843;padding:0 4px">'+(row.tot>0?(i+1):'—')+'</td>'
-        +'<td style="vertical-align:middle;padding:0 10px;font-family:Inter,sans-serif;font-weight:600;color:#fff;font-size:'+Math.round(fs(15)*nameScale)+'px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+a.name+'</td>'
-        +'<td style="'+td+';color:rgba(220,230,245,.85);white-space:nowrap">'+_flagImg(_ctry(a),fs(14))+_ctry(a)+'</td>'
-        +'<td style="'+td+';color:rgba(220,230,245,.65)">'+(_yob2(a)||'—')+'</td>'
-        +'<td style="'+td+';color:rgba(220,230,245,.9)">'+(a.bw?a.bw.toFixed(1):'—')+'</td>'
-        // SQ 3 intentos + subtotal
-        +_attTd(a.att.sq[0],td)
-        +_attTd(a.att.sq[1],td)
-        +_attTd(a.att.sq[2],td)
-        +'<td style="'+td+';font-weight:700;color:#7fb2ff;background:rgba(59,130,246,.16)">'+sub('sq')+'</td>'
-        // BP 3 intentos + subtotal
-        +_attTd(a.att.bp[0],td)
-        +_attTd(a.att.bp[1],td)
-        +_attTd(a.att.bp[2],td)
-        +'<td style="'+td+';font-weight:700;color:#ffc861;background:rgba(245,158,11,.16)">'+sub('bp')+'</td>'
-        // DL 3 intentos + total
-        +_attTd(a.att.dl[0],td)
-        +_attTd(a.att.dl[1],td)
-        +_attTd(a.att.dl[2],td)
-        // total + GL
-        +'<td style="'+td+';font-size:'+fs(19)+'px;font-weight:800;color:'+(row.tot>0?'#fff':'rgba(150,170,200,.4)')+';background:rgba(212,168,67,.16)">'+(row.tot>0?row.tot.toFixed(1):'—')+'</td>'
-        +'<td style="'+td+';font-size:'+fs(16)+'px;font-weight:800;color:#F0C04A">'+(row.gl>0?row.gl.toFixed(2):'—')+'</td>'
-        +'</tr>';
-    });
-  });
-
-  const evName=(DATA.event&&DATA.event.name)||'';
-  const flLabel=flights.join(' · ');
-  return '<div style="position:absolute;inset:0;background:linear-gradient(135deg,#0A1628 0%,#0E1F3A 55%,#0A1628 100%);display:flex;flex-direction:column;overflow:hidden">'
-    +'<div style="height:'+topBarH+'px;box-sizing:border-box;padding:0 26px;background:rgba(10,22,40,.6);border-bottom:2px solid #D4A843;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">'
-      +'<div><div style="font-family:Oswald;font-size:'+Math.round(VH*0.013)+'px;letter-spacing:4px;color:rgba(212,168,67,.85)">TABLA DE CLASIFICACIÓN · JORNADA</div>'
-      +'<div style="font-family:Oswald;font-size:'+Math.round(VH*0.024)+'px;font-weight:700;letter-spacing:1px;color:#fff;margin-top:2px">'+evName+' <span style="font-size:'+Math.round(VH*0.015)+'px;color:rgba(212,168,67,.8);margin-left:8px">Tandas: '+flLabel+'</span></div></div>'
-      +'<img src="yourlift_logo_hd.png" alt="YourLift" style="height:'+Math.round(VH*0.04)+'px;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))" onerror="this.outerHTML=\'<span style=&quot;font-family:Oswald;color:#D4A843;letter-spacing:2px&quot;>⚡ YourLift</span>\'">'
-    +'</div>'
-    +'<div style="flex:1;overflow:hidden;padding:0 14px;box-sizing:border-box">'
-      +'<table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed">'
-      // Anchos explícitos: ATLETA bien ancha para que el nombre completo entre
-      +'<colgroup>'
-        +'<col style="width:3%"><col style="width:24%"><col style="width:3.4%"><col style="width:3.4%"><col style="width:4.4%">'
-        +'<col style="width:4.6%"><col style="width:4.6%"><col style="width:4.6%"><col style="width:4.8%">'
-        +'<col style="width:4.6%"><col style="width:4.6%"><col style="width:4.6%"><col style="width:4.8%">'
-        +'<col style="width:4.6%"><col style="width:4.6%"><col style="width:4.6%">'
-        +'<col style="width:5.6%"><col style="width:4.6%">'
-      +'</colgroup>'
-      +'<thead><tr style="height:'+theadH+'px;background:rgba(10,22,40,.5)">'
-        +H('#')+H('ATLETA')+H('PAÍS')+H('AÑO')+H('BW')
-        +'<th colspan="4" style="padding:0;font-family:Oswald;font-size:'+fs(12)+'px;letter-spacing:1px;color:#3b82f6;border-bottom:1px solid rgba(59,130,246,.3)">SQUAT</th>'
-        +'<th colspan="4" style="padding:0;font-family:Oswald;font-size:'+fs(12)+'px;letter-spacing:1px;color:#f59e0b;border-bottom:1px solid rgba(245,158,11,.3)">BENCH</th>'
-        +'<th colspan="3" style="padding:0;font-family:Oswald;font-size:'+fs(12)+'px;letter-spacing:1px;color:#ef4444;border-bottom:1px solid rgba(239,68,68,.3)">DEADLIFT</th>'
-        +H('TOTAL')+H('GL')
-      +'</tr></thead><tbody>'+rows+'</tbody></table>'
-    +'</div></div>';
 }
 
 function renderTxLeaderboard(cur,lifterChanged,opts){
@@ -4696,11 +4130,8 @@ function renderSetup(){
 function renderShell(){
   const flights=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort();const p=DATA.phase;
   // El botón "Volver a YourLift" sobre el logo (estilo unificado)
-  let h='<button class="hamb" onclick="toggleNav()" aria-label="Menú">☰</button>';
-  h+='<div class="nav-backdrop" onclick="toggleNav(false)"></div>';
-  h+='<div class="shell"><div class="side">';
-  h+='<button class="nav-close" onclick="toggleNav(false)" aria-label="Cerrar menú">✕</button>';
-  h+='<a href="index.html" class="side-back-yl" style="display:flex;align-items:center;gap:6px;padding:8px 12px;margin-bottom:12px;margin-right:42px;background:rgba(10,22,40,.6);border:1px solid rgba(212,168,67,.4);border-radius:8px;color:rgba(220,230,245,.85);font-family:Oswald,sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-decoration:none;cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap" onmouseenter="this.style.borderColor=\'#D4A843\';this.style.color=\'#D4A843\'" onmouseleave="this.style.borderColor=\'rgba(212,168,67,.4)\';this.style.color=\'rgba(220,230,245,.85)\'">← YourLift</a>';
+  let h='<div class="shell"><div class="side">';
+  h+='<a href="index.html" class="side-back-yl" style="display:flex;align-items:center;gap:6px;padding:8px 12px;margin-bottom:12px;background:rgba(10,22,40,.6);border:1px solid rgba(212,168,67,.4);border-radius:8px;color:rgba(220,230,245,.85);font-family:Oswald,sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-decoration:none;cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap" onmouseenter="this.style.borderColor=\'#D4A843\';this.style.color=\'#D4A843\'" onmouseleave="this.style.borderColor=\'rgba(212,168,67,.4)\';this.style.color=\'rgba(220,230,245,.85)\'">← YourLift</a>';
   h+='<div class="logo"><img src="YourLift_logo.png" style="height:28px" onerror="this.remove()"> LC</div><div class="event-name-side" style="font-size:11px;color:var(--muted);margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(DATA.event?.short||DATA.event?.name||'')+'</div>';
   if(isAdmin){
   h+='<div class="side-label">Gesti\u00f3n</div><button class="side-btn '+(p==='manage'?'active':'')+'" onclick="go(\'manage\')"><span class="icon">\uD83D\uDCCB</span>Atletas & Pesaje</button>';
@@ -4709,7 +4140,6 @@ function renderShell(){
   h+='<button class="side-btn '+(p==='transmision'?'active':'')+'" onclick="go(\'transmision\')"><span class="icon">\uD83D\uDCE1</span>Transmisi\u00f3n</button>';
   h+='<button class="side-btn '+(p==='obsTx'?'active':'')+'" onclick="go(\'obsTx\')"><span class="icon">\uD83C\uDFAC</span>Widgets OBS</button>';
   h+='<button class="side-btn '+(p==='director'?'active':'')+'" onclick="go(\'director\')"><span class="icon">🎮</span>Control TX</button>';
-  h+='<button class="side-btn '+(p==='screen'?'active':'')+'" onclick="go(\'screen\')"><span class="icon">🖥</span>Pantalla Tarima</button>';
   }
   h+='<div class="side-label">P\u00fablico</div>';
   h+='<button class="side-btn '+(p==='liveView'?'active':'')+'" onclick="go(\'liveView\')"><span class="icon">\uD83D\uDCFA</span>Competencia en Vivo</button>';
@@ -4723,13 +4153,6 @@ function renderShell(){
   h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon">\uD83C\uDFC6</span>Selecci\u00F3n de Campeonato</button>';
   h+='<div style="font-size:10px;color:var(--green);margin-bottom:6px;padding:0 8px">\uD83D\uDD13 Admin</div>';
   h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'\uD83D\uDCE1 Sync activo':'\u23F3 Conectando...')+'</div>';
-  // \u2500\u2500 Modo de sincronizaci\u00F3n: Controlador (escribe) vs Espectador (lee/espeja) \u2500\u2500
-  {const ctrl=!!window.IS_CONTROLLER;
-   h+='<div style="margin:4px 8px 10px;padding:8px 10px;border-radius:8px;border:1px solid '+(ctrl?'rgba(34,197,94,.4)':'rgba(59,130,246,.4)')+';background:'+(ctrl?'rgba(34,197,94,.08)':'rgba(59,130,246,.08)')+'">'
-     +'<div style="font-size:11px;font-weight:700;font-family:Oswald;letter-spacing:1px;color:'+(ctrl?'var(--green)':'#60a5fa')+'">'+(ctrl?'\uD83C\uDF9B CONTROLADOR':'\uD83D\uDC41 ESPECTADOR')+'</div>'
-     +'<div style="font-size:9px;color:var(--muted);margin:3px 0 7px;line-height:1.3">'+(ctrl?'Carga datos y se <b>sincroniza</b> con los dem\u00E1s controladores.':'Solo mira (no escribe). Ej.: pantalla u OBS.')+'</div>'
-     +'<button onclick="setSyncMode('+(ctrl?'false':'true')+')" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;font-size:10px;letter-spacing:.5px;cursor:pointer">Cambiar a '+(ctrl?'\uD83D\uDC41 Espectador':'\uD83C\uDF9B Controlador')+'</button>'
-   +'</div>';}
   h+='<button class="side-btn" onclick="exportBackupJSON()"><span class="icon">\uD83D\uDCBE</span>Exportar Backup</button>';
   h+='<button class="side-btn" onclick="resetLiveData()" style="color:#ff8a8a"><span class="icon">🧹</span>Reiniciar datos en vivo</button>';
   h+='<button class="side-btn" onclick="doLogout()"><span class="icon">\uD83D\uDD12</span>Cerrar sesi\u00f3n</button>';
@@ -4742,7 +4165,7 @@ function renderShell(){
   h+='</div>';
   }
   h+='</div><div class="main">';
-  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='screen'&&isAdmin)h+=renderScreenControl();else if(p==='results')h+=renderResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director'||p==='screen')){DATA.phase='liveView';h+=renderLiveView();}
+  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='results')h+=renderResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director')){DATA.phase='liveView';h+=renderLiveView();}
   h+='</div></div>';return h;
 }
 
@@ -5175,16 +4598,10 @@ window.dirToggleBreak=async function(){
 };
 // Atajos de teclado para Stream Deck
 window._dirKeyHandler=function(e){
-  // Atajos del director (Stream Deck): funcionan desde CUALQUIER vista admin del
-  // LiveCast (Control en Vivo, Control TX, etc.) — no solo en la vista Director.
-  // Así podés prender/apagar la Tabla Actual del stream con el Stream Deck mientras
-  // operás la competencia. Requiere ser admin y NO tener foco en un input.
-  if(!isAdmin)return;
-  // Ignorar si hay foco en un input/textarea/select (no pisar la edición de pesos)
+  if(DATA.phase!=='director')return;
+  // Ignorar si hay foco en un input/textarea/select (no pisar la edición)
   const tag=(document.activeElement?.tagName||'').toUpperCase();
   if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;
-  // Solo teclas simples sin modificadores (evita pisar atajos del navegador/SO)
-  if(e.ctrlKey||e.altKey||e.metaKey)return;
   const k=(e.key||'').toLowerCase();
   const map={p:'profile',s:'scoreboard',t:'timer'};
   if(map[k]){e.preventDefault();window.dirToggle(map[k]);return}
@@ -5715,7 +5132,7 @@ function renderDirector(){
 function renderManage(){
   // Filtrar por tarima si está activo (modo 2 tarimas)
   const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">🎲 Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">🔄 Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">➕ Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">⚖️ Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">📏 Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">🏋️ Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">🎫 Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">🎲 Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">🔄 Re-sincronizar con admin</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">⚖️ Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">📏 Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">🏋️ Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">🎫 Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th><th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:38px">VLO</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:80px">BW + 1ros</th>';
   ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:62px">'+LIFT_S[l]+r+'</th>'})});
@@ -5723,7 +5140,7 @@ function renderManage(){
   ath.forEach(a=>{
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3);'+(a.bombed?'opacity:.4':'')+'">';
     h+='<td style="padding:3px 2px;text-align:center"><input type="number" min="1" value="'+a.lot+'" onchange="setLot('+a.id+',this.value)" title="Editá el número de lote — si ya existe se hace swap" style="width:42px;padding:3px 2px;font-family:Oswald;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:13px"></td>';
-    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+_flagImg(_ctry(a),13)+a.name+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+_ctry(a)+' \u00b7 '+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
+    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+a.name+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
     {
       // Opciones del dropdown de vuelo: si hay tarima, suffix con 1/2; si no, letras simples.
       const _flOpts = TARIMA ? ['A','B','C','D','E','F'].map(L=>L+TARIMA) : ['A','B','C','D','E','F'];
@@ -5735,7 +5152,6 @@ function renderManage(){
     }else{
       h+='<button onclick="openWeighIn('+a.id+')" style="padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:9px;cursor:pointer">⚖️ Pesar</button>';
     }
-    {const _hasMedia=!!_lcMediaFor(a);h+='<button onclick="openAthleteMedia('+a.id+')" title="Subir foto/GIF del atleta" style="display:block;margin:3px auto 0;padding:2px 8px;border-radius:4px;border:1px solid '+(_hasMedia?'var(--gold)':'var(--border)')+';background:'+(_hasMedia?'rgba(212,168,67,.12)':'transparent')+';color:'+(_hasMedia?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:9px;cursor:pointer;white-space:nowrap">📷 '+(_hasMedia?'Foto ✓':'Foto')+'</button>';}
     h+='</td>';
     ['sq','bp','dl'].forEach(l=>{a.att[l].forEach((at,r)=>{
       const ctKey=a.id+'_'+l+'_'+r;const ct=DATA.changeTimers[ctKey];
@@ -5763,13 +5179,7 @@ function renderCompete(){
   const cw=cur?cur.att[DATA.lift][DATA.round].w:0;
   let h='<div class="fade">';
   h+='<div style="display:flex;gap:6px;margin-bottom:8px">'+LIFTS.map(l=>'<button onclick="DATA.lift=\''+l+'\';DATA.round=0;save();R()" class="os" style="flex:1;padding:9px 0;border-radius:8px;border:2px solid '+(DATA.lift===l?LIFT_C[l]:'var(--border)')+';background:'+(DATA.lift===l?LIFT_C[l]+'20':'transparent')+';color:'+(DATA.lift===l?LIFT_C[l]:'var(--muted)')+';font-size:13px;font-weight:700;letter-spacing:2px;cursor:pointer">'+LIFT_N[l]+'</button>').join('')+'</div>';
-  h+='<div style="display:flex;gap:6px;margin-bottom:10px">'+[0,1,2].map(r=>'<button onclick="DATA.round='+r+';save();R()" class="os" style="flex:1;padding:6px 0;border-radius:6px;border:1px solid '+(DATA.round===r?'var(--gold)':'var(--border)')+';background:'+(DATA.round===r?'rgba(212,168,67,.15)':'transparent')+';color:'+(DATA.round===r?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:600;cursor:pointer">INTENTO '+(r+1)+'</button>').join('')+'</div>';
-  // Toggle: timer de cambio (60s tras válido/nulo). Apagado por defecto.
-  {const cton=!!window._CT_ENABLED;
-   h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:7px 12px;border-radius:8px;border:1px solid '+(cton?'rgba(245,158,11,.4)':'var(--border)')+';background:'+(cton?'rgba(245,158,11,.08)':'transparent')+'">'
-     +'<span style="font-size:11px;color:var(--muted)">⏱ Timer de cambio (60s entre intentos) <b style="color:'+(cton?'var(--orange)':'var(--muted)')+'">'+(cton?'ACTIVADO':'APAGADO')+'</b></span>'
-     +'<button onclick="toggleChangeTimers()" style="padding:5px 14px;border-radius:6px;border:1px solid '+(cton?'var(--orange)':'var(--border)')+';background:transparent;color:'+(cton?'var(--orange)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(cton?'APAGAR':'ACTIVAR')+'</button>'
-   +'</div>';}
+  h+='<div style="display:flex;gap:6px;margin-bottom:14px">'+[0,1,2].map(r=>'<button onclick="DATA.round='+r+';save();R()" class="os" style="flex:1;padding:6px 0;border-radius:6px;border:1px solid '+(DATA.round===r?'var(--gold)':'var(--border)')+';background:'+(DATA.round===r?'rgba(212,168,67,.15)':'transparent')+';color:'+(DATA.round===r?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:600;cursor:pointer">INTENTO '+(r+1)+'</button>').join('')+'</div>';
   h+='<div style="display:grid;grid-template-columns:1fr 300px;gap:14px"><div>';
   if(cur){
     // Info compacta del atleta actual (sin botones grandes - los GOOD/NO LIFT estan en la tabla)
@@ -5877,18 +5287,11 @@ function renderCompete(){
           // Sin timer activo \u2014 mostrar peso o em-dash
           h+='<div class="'+c+' att" onclick="editAtt('+a.id+',\''+DATA.lift+'\','+j+')" style="font-size:'+(isCurrentAtt?18:14)+'px;font-weight:700;padding:'+(isCurrentAtt?'14px 6px':'10px 6px')+';'+(isCurrentAtt?'box-shadow:inset 0 0 0 3px '+LIFT_C[DATA.lift]+';':'')+'">'+(at.w||'\u2014')+'</div>';
         }
-        // Solo el atleta EN TARIMA en su intento actual tiene los botones GOOD/NO LIFT grandes
+        // Solo el atleta EN TARIMA en su intento actual tiene los botones GOOD/NO LIFT
         if(isCurrentAtt){
           h+='<div style="display:flex;gap:3px;margin-top:4px">'
             +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+DATA.lift+'\','+j+',\'g\')" title="GOOD LIFT" style="flex:1;padding:10px 0;border-radius:6px;border:2px solid '+(gActive?'#5cb37f':'rgba(92,179,127,.5)')+';background:'+(gActive?'rgba(92,179,127,.45)':'rgba(92,179,127,.1)')+';color:'+(gActive?'#fff':'#5cb37f')+';font-size:18px;font-weight:800;cursor:pointer;line-height:1">\u2713</button>'
             +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+DATA.lift+'\','+j+',\'n\')" title="NO LIFT" style="flex:1;padding:10px 0;border-radius:6px;border:2px solid '+(nActive?'#cc6666':'rgba(204,102,102,.5)')+';background:'+(nActive?'rgba(204,102,102,.45)':'rgba(204,102,102,.1)')+';color:'+(nActive?'#fff':'#cc6666')+';font-size:18px;font-weight:800;cursor:pointer;line-height:1">\u2717</button>'
-          +'</div>';
-        } else if(at.w>0){
-          // Cualquier otro intento con peso: botones chicos para CAMBIAR / REVOCAR la decisi\u00f3n.
-          // overrideResult alterna: clickear la decisi\u00f3n ya marcada la borra (deja sin juzgar).
-          h+='<div style="display:flex;gap:2px;margin-top:4px" title="Cambiar o revocar la decisi\u00f3n de este intento">'
-            +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+DATA.lift+'\','+j+',\'g\')" title="Cambiar a V\u00c1LIDO (volver a tocar = revocar)" style="flex:1;padding:4px 0;border-radius:4px;border:1px solid '+(gActive?'var(--green)':'rgba(34,197,94,.35)')+';background:'+(gActive?'rgba(34,197,94,.25)':'transparent')+';color:'+(gActive?'var(--green)':'rgba(34,197,94,.6)')+';font-size:12px;font-weight:700;cursor:pointer;line-height:1">\u2713</button>'
-            +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+DATA.lift+'\','+j+',\'n\')" title="Cambiar a NULO (volver a tocar = revocar)" style="flex:1;padding:4px 0;border-radius:4px;border:1px solid '+(nActive?'var(--red)':'rgba(239,68,68,.35)')+';background:'+(nActive?'rgba(239,68,68,.25)':'transparent')+';color:'+(nActive?'var(--red)':'rgba(239,68,68,.6)')+';font-size:12px;font-weight:700;cursor:pointer;line-height:1">\u2717</button>'
           +'</div>';
         }
         h+='</td>';
@@ -5927,9 +5330,9 @@ function _renderResultsTable(opts){
   const isBench=view==='bench';
   const all=opts.athletes.map(a=>({...a,total:totalOf(a,view),gl:calcGL(totalOf(a,view),a.bw,a.sex,a.mod,view)}));
   if(!all.length)return '';
-  const SEP='|';
+  const SEP='';
   const catGroups={};
-  all.forEach(a=>{const k=_catGroupKey(a);if(!catGroups[k])catGroups[k]=[];catGroups[k].push(a);});
+  all.forEach(a=>{const k=(a.sex||'?')+SEP+(a.cat||'?')+SEP+(a.div||'Sin Div');if(!catGroups[k])catGroups[k]=[];catGroups[k].push(a);});
   // Orden dentro de cada cat+div+sex: primero los con total válido (mayor a menor),
   // luego los DQ (3 fails en algún lift), luego los sin total / no clasificados.
   Object.values(catGroups).forEach(arr=>arr.sort((a,b)=>{
@@ -5984,10 +5387,10 @@ function _renderResultsTable(opts){
   h+='</tr></thead><tbody>';
   let prevCat='';
   sorted.forEach(a=>{
-    const catKey=_catGroupKey(a);
+    const catKey=(a.sex||'?')+SEP+(a.cat||'?')+SEP+(a.div||'Sin Div');
     if(catKey!==prevCat){
-      const symb=(_normSex(a.sex)==='F'?'♀':'♂');
-      h+='<tr><td colspan="'+colspanTotal+'" style="padding:7px 8px;background:rgba(196,30,58,.1);border-bottom:2px solid var(--accent);font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--accent)">'+symb+' '+_normCat(a.cat||'?')+' — '+_normDiv(a.div||'Sin Div')+'</td></tr>';
+      const symb=(a.sex==='Femenino'||a.sex==='Mujer'||a.sex==='F'?'♀':'♂');
+      h+='<tr><td colspan="'+colspanTotal+'" style="padding:7px 8px;background:rgba(196,30,58,.1);border-bottom:2px solid var(--accent);font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--accent)">'+symb+' '+a.cat+' — '+(a.div||'Sin Div')+'</td></tr>';
       prevCat=catKey;
     }
     const dq = view==='meet' && isDQ(a);
@@ -6807,18 +6210,6 @@ function applyEventURLParam(){
     const p=new URLSearchParams(location.search).get('evento');
     if(!p)return;
     const want=decodeURIComponent(p);
-    // Para widgets TX (incluye jornada/screen): el widget solo necesita el
-    // name para armar el docId de livecast_sync. Si el evento no está en la
-    // lista (ej. una sub-tarima generada), construirlo directo del parámetro.
-    if(TX_MODE){
-      DATA.event={id:want,name:want,athletes:[],_fromUrl:true};
-      const tryStart=()=>{if(!fbReady){setTimeout(tryStart,300);return}startFBSync();
-        if(TX_MODE==='jornada'||TX_MODE==='screen'){loadBirthYears();}
-        if(TX_MODE==='screen'||TX_MODE==='jornada'){subscribeScreenChannel();}
-        R();};
-      tryStart();
-      return;
-    }
     // 1) Buscar en DATA.events (ya populado desde Firestore via LIVE_EVENT_META)
     let i=(DATA.events||[]).findIndex(e=>e.id===want||e.name===want);
     let wanted=i>=0?DATA.events[i]:null;
@@ -6849,11 +6240,7 @@ function applyEventURLParam(){
     // TX widget mode: read-only. Just set DATA.event y suscribir a livecast_sync.
     if(TX_MODE){
       DATA.event=wanted;
-      const tryStart=()=>{if(!fbReady){setTimeout(tryStart,300);return}startFBSync();
-        // jornada/screen necesitan fechaNac (año nac) y el canal de control de pantalla
-        if(TX_MODE==='jornada'||TX_MODE==='screen'){loadBirthYears();}
-        if(TX_MODE==='screen'||TX_MODE==='jornada'){subscribeScreenChannel();}
-        R();};
+      const tryStart=()=>{if(!fbReady){setTimeout(tryStart,300);return}startFBSync();R();};
       tryStart();
       return;
     }
@@ -6869,10 +6256,6 @@ function applyEventURLParam(){
     pickEvent(i);
   }catch(e){console.warn('[LC] preselect err',e)}
 }
-// Arranque: resolver el evento desde ?evento= en la URL. Imprescindible para
-// los widgets TX (profile/jornada/screen/etc.) abiertos en un navegador fresco
-// (OBS, pantalla de tarima) que no tienen sesión en localStorage.
-applyEventURLParam();
 
 
 function showLogin(){
