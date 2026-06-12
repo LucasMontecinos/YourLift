@@ -79,7 +79,6 @@ let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,fligh
 const TX_URL=new URLSearchParams(location.search);
 const TX_MODE=TX_URL.get('tx')||null; // 'profile' | 'scoreboard' | 'leaderboard' | 'lbauto' | 'slam' | 'timer' | 'lights' | 'ceremony' | null
 const TARIMA=TX_URL.get('tarima')||null; // '1' o '2' para modo 2 tarimas; null = todas
-const DEMO_MODE=TX_URL.get('demo')==='1'; // Modo demo para grabar videos promocionales
 function _inTarima(flightLetter){if(!TARIMA)return true;return String(flightLetter||'').endsWith(TARIMA);}
 if(TX_MODE){
   const css=document.createElement('style');
@@ -117,22 +116,6 @@ if(TX_MODE){
     @keyframes txSlideOutBottom{0%{transform:translateY(0);opacity:1}100%{transform:translateY(260px);opacity:0}}
     @keyframes txBuildRow{0%{transform:translateX(-30px) scaleY(0);opacity:0;transform-origin:left center}60%{transform:translateX(0) scaleY(1);opacity:1}100%{transform:translateX(0) scaleY(1);opacity:1}}
     @keyframes txSbRowIn{0%{opacity:0;transform:scaleY(0)}60%{opacity:1;transform:scaleY(1.04)}100%{opacity:1;transform:scaleY(1)}}
-    /* Logo del campeonato: aparece primero, hace un mini-bounce, queda fijo */
-    @keyframes txLogoBuildIn{0%{transform:scale(0) rotate(-20deg);opacity:0;filter:blur(8px)}55%{transform:scale(1.18) rotate(4deg);opacity:1;filter:blur(0)}80%{transform:scale(.95) rotate(-2deg)}100%{transform:scale(1) rotate(0);opacity:1;filter:blur(0)}}
-    /* Para el wrapper del scoreboard: comienza colapsado en el ancho del logo y se expande */
-    @keyframes txSbRevealFromLogo{0%{clip-path:inset(0 calc(100% - 80px) 0 0);opacity:.9}55%{clip-path:inset(0 0 0 0);opacity:1}100%{clip-path:inset(0 0 0 0);opacity:1}}
-    @keyframes txTaRevealFromLogo{0%{clip-path:inset(0 calc(100% - 90px) 0 0);opacity:.9;transform:translateY(20px)}55%{clip-path:inset(0 0 0 0);opacity:1;transform:translateY(0)}100%{clip-path:inset(0 0 0 0);opacity:1;transform:translateY(0)}}
-    @keyframes txFadeUpDelay{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
-    /* Tabla Actual: explode from logo (top-left header, logo center ~52px,50px del card) */
-    @keyframes txTaCardExplode{0%{clip-path:circle(55px at 70px 64px)}100%{clip-path:circle(180% at 70px 64px)}}
-    /* Scoreboard: explode from logo (top-left header) */
-    @keyframes txSbCardExplode{0%{clip-path:circle(34px at 50px 32px)}100%{clip-path:circle(180% at 50px 32px)}}
-    /* Animaciones SOLO cuando el wrapper tiene la clase de entrada.
-       Así, si el componente re-renderiza por update de datos, no replay. */
-    .ta-wrap-anim .ta-card-explode{animation:txTaCardExplode .95s cubic-bezier(.3,0,.2,1) .15s both}
-    .ta-wrap-anim .ta-logo-anim{animation:txLogoBuildIn .7s cubic-bezier(.2,.85,.3,1.05) both}
-    .sb-wrap-anim .sb-card-explode{animation:txSbCardExplode .9s cubic-bezier(.3,0,.2,1) .15s both}
-    .sb-wrap-anim .sb-logo-anim{animation:txLogoBuildIn .7s cubic-bezier(.2,.85,.3,1.05) both;display:inline-block}
     @keyframes txSbRowOut{0%{opacity:1;transform:scaleY(1)}100%{opacity:0;transform:scaleY(0)}}
     @keyframes txScoreboardCycle{0%{transform:translateY(110%);opacity:0}3%{transform:translateY(0);opacity:1}97%{transform:translateY(0);opacity:1}100%{transform:translateY(110%);opacity:0}}
     @keyframes txLbCycle{0%{transform:scale(.92);opacity:0}5%{transform:scale(1);opacity:1}95%{transform:scale(1);opacity:1}100%{transform:scale(1.04);opacity:0;filter:blur(4px)}}
@@ -191,6 +174,13 @@ let fbDB=null,fbReady=false,fbUnsub=null,_fbSyncing=false,_fbLastWrite=0,fbAuth=
 // Los demás (productor, viewers) solo leen. Evita conflictos entre admins.
 window.IS_CONTROLLER=(new URLSearchParams(location.search).get('controller')==='1')||localStorage.getItem('yl_controller')==='1';
 if(window.IS_CONTROLLER){
+  // Badge visible
+  setTimeout(()=>{
+    const b=document.createElement('div');
+    b.style.cssText='position:fixed;top:8px;left:8px;z-index:99999;background:#22c55e;color:#000;font-family:Oswald;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;pointer-events:none;letter-spacing:1px';
+    b.textContent='🎮 CONTROLLER';
+    document.body.appendChild(b);
+  },1500);
   console.log('[YL] Modo CONTROLLER activo — esta PC escribe a Firebase');
 }else{
   console.log('[YL] Modo LECTURA — solo lee de Firebase. Agrega ?controller=1 a la URL para escribir.');
@@ -217,12 +207,11 @@ async function initFB(){
     window._fbSt=storageMod;window._fbStInst=storageMod.getStorage(app);
     _setupFotoListener(); // in case data.json already loaded before Firebase was ready
     // Keep LIVE_EVENTS in sync with Firestore eventos
-    fb.onSnapshot(fb.collection(fbDB,'eventos'),async (snap)=>{
+    fb.onSnapshot(fb.collection(fbDB,'eventos'),(snap)=>{
       const evs={};
       window.LIVE_EVENT_META=window.LIVE_EVENT_META||{};
       window.LIVE_EVENT_HIDDEN=new Set();
       window.LIVE_EVENT_HIDDEN_NAMES=new Set();
-      const activeIds=[];
       snap.docs.forEach(d=>{
         const e=d.data();
         if(e.status==='archived'||e.livecastVisible===false){
@@ -231,31 +220,18 @@ async function initFB(){
           return;
         }
         evs[d.id]=e.name;
-        activeIds.push(d.id);
+        // Default récords activos; en "Universitario" arrancan apagados.
         const recordsEnabled=(typeof e.recordsEnabled==='boolean')
           ? e.recordsEnabled
           : !/universitar/i.test(e.name||'');
-        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0,logoUrl:e.logoUrl||''};
+        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||''};
+        // Sync flag al evento activo
         if(DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
           DATA.event.recordsEnabled=recordsEnabled;
-          DATA.event.logoUrl=e.logoUrl||'';
         }
       });
       if(Object.keys(evs).length)LIVE_EVENTS=evs;
       if(DATA.phase==='setup'&&DATA.events.length>0)R();
-      if(!window._autoEvtTried){window._autoEvtTried=true;try{applyEventURLParam()}catch(e){console.warn('[LC] auto-pick',e)}}
-      // Contar atletas por evento desde inscripciones (para mostrar en el picker)
-      for(const evId of activeIds){
-        try{
-          const q=fb.query(fb.collection(fbDB,'inscripciones'),fb.where('evento','==',evId),fb.where('status','in',['approved','pending']));
-          const insSnap=await fb.getDocs(q);
-          if(window.LIVE_EVENT_META[evId]){
-            window.LIVE_EVENT_META[evId].athleteCount=insSnap.size;
-          }
-          // Refrescar el picker si está activo
-          if(DATA.phase==='setup')R();
-        }catch(e){/* silencioso */}
-      }
     });
     // Check if already logged in (session persists)
     authMod.onAuthStateChanged(fbAuth,(u)=>{
@@ -264,20 +240,13 @@ async function initFB(){
         fb.getDoc(fb.doc(fbDB,'admins',u.uid)).then(snap=>{
           if(snap.exists()){
             isAdmin=true;
-            // Auto-controller: admin = controller (no necesita ?controller=1 en URL)
-            if(!window.IS_CONTROLLER){
-              window.IS_CONTROLLER=true;
-              try{localStorage.setItem('yl_controller','1')}catch(e){}
-              console.log('[LiveCast] Admin session detected:',u.email,'· Modo CONTROLLER activado automáticamente');
-            } else {
-              console.log('[LiveCast] Admin session detected:',u.email);
-            }
+            console.log('[LiveCast] Admin session detected:',u.email);
           } else {
             isAdmin=false;
             console.log('[LiveCast] Logged in but not admin:',u.email);
           }
           R();
-        }).catch(()=>{isAdmin=true;if(!window.IS_CONTROLLER){window.IS_CONTROLLER=true;try{localStorage.setItem('yl_controller','1')}catch(e){}}R();}); // fallback: trust auth
+        }).catch(()=>{isAdmin=true;R();}); // fallback: trust auth
       } else {
         if(isAdmin){isAdmin=false;DATA.phase='liveView';R();}
       }
@@ -297,9 +266,6 @@ function fbDocId(){
   // Así dos PCs (uno por tarima) escriben a docs separados y NO se pisan datos.
   return TARIMA?`${base}_T${TARIMA}`:base;
 }
-// Sufijo para docs auxiliares (record alerts, director scene) cuando hay 2 tarimas
-// → cada tarima maneja sus widgets sin pisar a la otra.
-function txDocId(base){return TARIMA?`${base}_T${TARIMA}`:base;}
 async function syncToFB(){
   if(!fbReady||!isAdmin||_fbSyncing)return;
   if(!window.IS_CONTROLLER)return; // Solo el controller escribe — evita conflictos multi-admin
@@ -697,7 +663,7 @@ function checkRecord(athlete,lift,round){
 async function pushRecordToFB(rec){
   if(!fbReady||!isAdmin||!window._fb)return;
   try{
-    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_record',txDocId('current')),rec);
+    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_record','current'),rec);
   }catch(e){console.warn('[FB] pushRecord',e)}
 }
 function closeRecAlert(){const e=document.getElementById('recAlert');if(e)e.remove();}
@@ -2589,7 +2555,6 @@ function renderObsTx(){
     {id:'scoreboard',icon:'📊',title:'Scoreboard (lower-third)',desc:'Barra inferior con categoría, rank, timer, nombre, club e intentos. Aparece al cambiar levantador / intento / peso, queda 20s en pantalla y se va con animación. Hasta el próximo cambio queda oculto.',obsBg:'Transparente (superpuesto sobre cámara).',size:'1920×320 (parte inferior)'},
     {id:'barbell',icon:'🏋️',title:'Barra con discos (lower-third)',desc:'Franja inferior que muestra la barra con discos IPF a color, nombre del atleta, club, categoría, peso del intento en kg/lbs, ronda y pronóstico de posición ("Si es válido pasará del X° al Y° lugar"). Se anima al entrar cuando cambia el levantador.',obsBg:'Transparente (overlay sobre cámara). Fondo se fusiona hacia abajo.',size:'1920×1080 (contenido en el tercio inferior)'},
     {id:'leaderboard',icon:'🏆',title:'Tabla de clasificación (FIJO)',desc:'Ranking completo de la categoría actual. Cascada fila por fila. SIEMPRE visible mientras la escena esté activa — usalo para escenas de pausa entre rondas que vos manejás manualmente.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
-    {id:'tablaactual',icon:'📋',title:'Tabla actual (corner)',desc:'Ranking de la categoría del lifter en pantalla, esquina inferior derecha. Entra deslizando desde abajo, queda fijo. El levantador actual se resalta y muestra una flecha de proyección: posición actual → posición que tendría si el intento es válido (ej. 2→1 si se mueve al primer lugar). Activá/desactivá con el botón "Tabla actual" en Control TX o tecla A.',obsBg:'Transparente (overlay sobre cámara). Solo ocupa el cuadrante inferior derecho.',size:'1920×1080 (overlay)'},
     {id:'lbauto',icon:'🔁',title:'Tabla de clasificación (AUTO)',desc:'Igual al leaderboard fijo, pero APARECE SOLO al detectar fin de ronda (cuando cambia lift/round/flight). Queda 10s en pantalla y se va. Ideal como overlay siempre activo en una escena de cámara.',obsBg:'Transparente (overlay sobre cámara).',size:'1920×1080 (overlay fullscreen)'},
     {id:'slam',icon:'⚡',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activá una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcás ✓/✗ en Control en Vivo. Volvé a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
     {id:'timer',icon:'⏱',title:'Timer independiente',desc:'Reloj 1:00 → 0:00 en grande. Verde/ámbar/rojo según se acerca a 0. Pulsa cuando quedan ≤10s. Sincronizado con el timer del operador.',obsBg:'Transparente. Posicionalo donde quieras (esquina, banner, etc).',size:'1920×1080 (autoescala)'},
@@ -2706,7 +2671,7 @@ function renderTxWidget(){
   if(TX_MODE==='ceremony'){renderTxCeremony(c);return true}
   // Widgets que dependen del lifter actual
   const cur=liftQueue()[0];
-  if(!cur&&TX_MODE!=='leaderboard'&&TX_MODE!=='tablaactual'){
+  if(!cur&&TX_MODE!=='leaderboard'){
     c.innerHTML='';
     return true;
   }
@@ -2717,13 +2682,7 @@ function renderTxWidget(){
   else if(TX_MODE==='scoreboard')html=renderTxScoreboard(cur,lifterChanged);
   else if(TX_MODE==='leaderboard')html=renderTxLeaderboard(cur,lifterChanged);
   else if(TX_MODE==='barbell')html=renderTxBarbell(cur,lifterChanged);
-  else if(TX_MODE==='tablaactual'){
-    const inner=renderTxTablaActual(cur);
-    // En modo standalone, animar el slide-in cada vez que cambia el lifter
-    const anim=lifterChanged?'animation:txSlideInBottom .75s cubic-bezier(.2,.85,.3,1.05) both':'';
-    html=anim?'<div style="'+anim+'">'+inner+'</div>':inner;
-  }
-  else html='<div style="color:#fff;padding:40px;font-family:Oswald">Widget desconocido: '+TX_MODE+'. Valores: profile | scoreboard | leaderboard | lbauto | slam | timer | lights | barbell | tablaactual</div>';
+  else html='<div style="color:#fff;padding:40px;font-family:Oswald">Widget desconocido: '+TX_MODE+'. Valores: profile | scoreboard | leaderboard | lbauto | slam | timer | lights | barbell</div>';
   c.innerHTML=html;
   // Setup GIF trim loop after DOM insertion
   const _gifVid=c.querySelector('video[data-gif-trim]');
@@ -2784,7 +2743,7 @@ let _txCerLastSig=null;            // signature p/ saltarse re-renders innecesar
 function _txCerStartRecordListener(){
   if(_txCerRecordUnsub||!fbReady||!window._fb)return;
   try{
-    _txCerRecordUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_record',txDocId('current')),(snap)=>{
+    _txCerRecordUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_record','current'),(snap)=>{
       if(!snap.exists())return;
       const d=snap.data();if(!d||!d.ts)return;
       if(d.ts===_txCerRecordSeenTs)return;
@@ -2968,11 +2927,9 @@ function _renderTxCerScoreboardBL(cur,opts){
   const animOrTx=noAnimate
     ? (scale!==1?'transform:scale('+scale+');transform-origin:bottom left;':'')
     : 'animation:txScoreboardCycle '+(TX_CEREMONY.scoreboardMs/1000)+'s ease-in-out forwards;';
-  const champLogo=DATA.event?.logoUrl||'';
-  const champLogoHtml=champLogo?'<img src="'+champLogo+'" alt="" class="sb-logo-anim" style="height:46px;width:46px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 6px rgba(0,0,0,.7))" onerror="this.style.display=\'none\'">':'';
-  return '<div class="sb-card-explode" style="position:fixed;bottom:24px;left:24px;width:min(640px,55vw);'+animOrTx+'border-radius:8px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.6)">'
-    +'<div style="'+_sbRowAnim(animDir,0)+'display:flex;justify-content:space-between;align-items:center;background:'+_txC('headerBg')+';border-top:2px solid '+_txC('accent')+';padding:6px 14px;gap:12px">'
-      +'<div style="display:flex;align-items:center;gap:12px;font-family:Oswald;font-size:12px;color:rgba(200,215,240,.85);letter-spacing:1px">'+champLogoHtml+'<span>'+catLabel+'</span></div>'
+  return '<div style="position:fixed;bottom:24px;left:24px;width:min(640px,55vw);'+animOrTx+'border-radius:8px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.6)">'
+    +'<div style="'+_sbRowAnim(animDir,0)+'display:flex;justify-content:space-between;align-items:center;background:'+_txC('headerBg')+';border-top:2px solid '+_txC('accent')+';padding:6px 14px">'
+      +'<div style="font-family:Oswald;font-size:12px;color:rgba(200,215,240,.85);letter-spacing:1px">'+catLabel+'</div>'
       +'<div style="font-family:Oswald;font-size:18px;font-weight:800;color:'+_forecastColor+';letter-spacing:2px">'+_forecastTxt+'</div>'
     +'</div>'
     +'<div style="'+_sbRowAnim(animDir,1)+'background:linear-gradient(90deg,'+_txC('nameBg')+','+_txC('nameBg2')+');padding:5px 14px;display:flex;align-items:center;gap:10px">'
@@ -3084,11 +3041,6 @@ function _widgetHandleDirectObsEvent(d){
           }
         }
       });
-      // Apagar tambien Tabla Actual al activar fullscreen — no reaparece sola
-      const ta=_txDirState.tablaActual;
-      if(ta && ta.active){
-        _txDirState.tablaActual=Object.assign({},ta,{active:false,until:0});
-      }
     }
     _txDirState[d.component]=Object.assign({},c,{active:willActivate,until:0});
     mark();return;
@@ -3148,7 +3100,7 @@ function _txStartDirectorListener(){
     return;
   }
   try{
-    _txDirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',txDocId('current')),(snap)=>{
+    _txDirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director','current'),(snap)=>{
       if(snap.exists()){
         const d=snap.data();
         _txDirState=Object.assign({},TX_DIR_DEFAULT,d.show||{});
@@ -3250,7 +3202,7 @@ function _startBarrido(dir){
   setTimeout(()=>{if(_txBarridoEl&&_txBarridoEl.parentNode){_txBarridoEl.parentNode.removeChild(_txBarridoEl);_txBarridoEl=null;}},TX_ANIM_MS.fullscreen+200);
 }
 function _txDetectTransitions(){
-  const comps=['profile','scoreboard','leaderboard','timer','breakTimer','tablaActual'];
+  const comps=['profile','scoreboard','leaderboard','timer','breakTimer'];
   const fullscreen=new Set(['profile','leaderboard','breakTimer']);
   const fsJustActivated=[...fullscreen].some(c=>!_txDirPrevActive[c]&&_txDirActive(c));
   const fsCurrentlyExiting=Object.keys(_txDirAnims).some(c=>fullscreen.has(c)&&_txDirAnims[c].dir==='out');
@@ -3285,18 +3237,9 @@ function _txDetectTransitions(){
           delete _txDirAnims[c]; // hide instantáneo, sin animación de salida
         } else {
           _txDirAnims[c]={dir:now?'in':'out',startedAt:Date.now(),dur};
-          const _animDirCur=now?'in':'out';
           setTimeout(()=>{
             if(_txDirAnims[c]&&Date.now()-_txDirAnims[c].startedAt>=dur-50){
-              delete _txDirAnims[c];
-              // Para entradas IN de scoreboard/tablaActual: NO forzar re-render.
-              // El wrapper-anim class se quita en el próximo render natural (sin replay
-              // de animaciones internas como ta-logo-anim que están gateadas en .ta-wrap-anim).
-              if(_animDirCur==='in' && (c==='scoreboard'||c==='tablaActual')){
-                _txDirLastSig=null; // marca para que el próximo render compute la nueva sig
-                return;
-              }
-              _txDirLastSig=null;
+              delete _txDirAnims[c];_txDirLastSig=null;
               if(typeof renderTxWidget==='function')renderTxWidget();
             }
           },dur+50);
@@ -3345,7 +3288,7 @@ function renderTxDirector(container){
   // Detectar transiciones (cambios on↔off) para reproducir animaciones
   _txDetectTransitions();
   // Signature p/ evitar flicker por timer cada 1s
-  const sig=[showProf,showSb,showLb,showTm,showSlam,showBreak,_txDirActive('tablaActual')].join('|')
+  const sig=[showProf,showSb,showLb,showTm,showSlam,showBreak].join('|')
     +'|'+(cur?cur.id+'|'+(cur.att?.[DATA.lift]||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
     +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
     +'|'+(_txDirState.leaderboard?.cat||'')+'|'+(_txDirState.slam?.type||'')
@@ -3444,43 +3387,19 @@ function renderTxDirector(container){
       +'</div>';
     }
   }
-  // Scoreboard (corner) — anim "explode from logo" si HAY logo, cascade original si no.
+  // Scoreboard (corner) — slide-in/out desde la derecha (mismo estilo que el timer)
   if((showSb||(animSb&&animSb.dir==='out'))&&cur){
-    const hasLogoSb = !!(DATA.event?.logoUrl);
+    // Scoreboard entra subiendo desde abajo y sale bajando.
+    // Pasamos la animación al render del scoreboard (no a un wrapper) porque
+    // el scoreboard usa position:fixed y el wrapper tendría altura 0.
     const sbHtml=_renderTxCerScoreboardBL(cur,{noAnimate:true,scale:_txDirState.scoreboard?.scale||1,animDir:animSb?.dir||null});
-    const isSbEnter = animSb && animSb.dir==='in';
-    // Sin logo: usar el HTML directo (la cascada _sbRowAnim ya viene del render con animDir)
-    // Con logo: envolvemos para gatear logo zoom + explode, sin replay en updates
-    html += (hasLogoSb && isSbEnter) ? '<div class="sb-wrap-anim">'+sbHtml+'</div>' : sbHtml;
+    html+=sbHtml;
   }
   // Timer (corner) — slide-in/out desde la derecha
   if(showTm||(animTm&&animTm.dir==='out')){
     const tmAnim=animTm?(animTm.dir==='in'?'animation:txSlideInRight .65s cubic-bezier(.2,.85,.3,1) forwards;':'animation:txSlideOutRight .55s cubic-bezier(.5,0,.7,.5) forwards;'):'';
     const tmHtml=_renderTxCerTimerCorner(_txDirState.timer?.scale||1);
     html+=tmAnim?'<div style="'+tmAnim+'">'+tmHtml+'</div>':tmHtml;
-  }
-  // Tabla Actual (corner inferior derecha) — anim "explode from logo" si HAY logo, slide-up si no.
-  const showTabla=_txDirActive('tablaActual');
-  const animTabla=_txAnimActive('tablaActual');
-  if((showTabla||(animTabla&&animTabla.dir==='out'))&&cur){
-    const hasLogo = !!(DATA.event?.logoUrl);
-    const isEntering = animTabla && animTabla.dir==='in';
-    const isExiting  = animTabla && animTabla.dir==='out';
-    let wrapClass = '';
-    let taAnim = '';
-    if(hasLogo){
-      wrapClass = isEntering ? 'ta-wrap-anim' : '';
-      taAnim = isExiting ? 'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;' : '';
-    } else {
-      // Sin logo: animación original slide-up desde abajo
-      taAnim = isEntering
-        ? 'animation:txSlideInBottom .75s cubic-bezier(.2,.85,.3,1.05) forwards;'
-        : (isExiting ? 'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;' : '');
-    }
-    const taScale=_txDirState.tablaActual?.scale||1;
-    const taHtml=renderTxTablaActual(cur);
-    const wrap='<div class="'+wrapClass+'" style="position:fixed;inset:0;pointer-events:none;'+(taScale!==1?'transform:scale('+taScale+');transform-origin:bottom right;':'')+taAnim+'">'+taHtml+'</div>';
-    html+=wrap;
   }
   if(showSlam){
     // Slam armado: cuando el operador marca ✓/✗ en Control en Vivo,
@@ -3761,8 +3680,7 @@ function renderTxProfile(cur){
               </div>`).join('')}
           </div>
         </div>
-        <div style="position:absolute;top:clamp(20px,2.5vw,40px);right:clamp(20px,2.5vw,40px);display:flex;align-items:center;gap:12px;padding:8px 14px;background:rgba(10,22,40,.55);border:2px solid rgba(212,168,67,.4);border-radius:8px">
-          ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="Campeonato" style="height:clamp(32px,3.4vw,50px);width:auto;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))" onerror="this.style.display='none'"><div style="width:1px;height:clamp(24px,2.8vw,40px);background:rgba(212,168,67,.4)"></div>`:''}
+        <div style="position:absolute;top:clamp(20px,2.5vw,40px);right:clamp(20px,2.5vw,40px);display:flex;align-items:center;gap:8px;padding:8px 14px;background:rgba(10,22,40,.55);border:2px solid rgba(212,168,67,.4);border-radius:8px">
           <img src="YourLift_logo.png" alt="YourLift" style="height:clamp(28px,3vw,44px);filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(14px,1.4vw,20px);letter-spacing:3px;color:rgba(212,168,67,.7)\\'>⚡ YourLift</span>'">
         </div>
       </div>
@@ -3822,12 +3740,9 @@ function renderTxScoreboard(cur,lifterChanged){
   }
   const _animDir=TX_MODE==='scoreboard'?null:(lifterChanged?'in':null);
   return `
-    <div class="sb-card-explode" style="position:absolute;bottom:0;left:0;right:0;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
-      <div style="${_sbRowAnim(_animDir,0)}display:grid;grid-template-columns:240px 1fr 180px;background:${_txC('headerBg')};border-top:2px solid ${_txC('accent')};padding:10px 22px;align-items:center">
-        <div style="display:flex;align-items:center;gap:14px;font-family:Oswald;font-size:15px;color:rgba(200,215,240,.85);letter-spacing:1px">
-          ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" class="sb-logo-anim" style="height:54px;width:54px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 8px rgba(0,0,0,.7))" onerror="this.style.display='none'">`:''}
-          <span>${catLabel}</span>
-        </div>
+    <div style="position:absolute;bottom:0;left:0;right:0;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
+      <div style="${_sbRowAnim(_animDir,0)}display:grid;grid-template-columns:180px 1fr 180px;background:${_txC('headerBg')};border-top:2px solid ${_txC('accent')};padding:10px 22px;align-items:center">
+        <div style="font-family:Oswald;font-size:15px;color:rgba(200,215,240,.85);letter-spacing:1px">${catLabel}</div>
         <div style="text-align:center;font-family:Oswald;font-size:14px;letter-spacing:1px;color:rgba(200,215,240,.7)">${(rk.pos&&totalAth?rk.pos+'/'+totalAth+' en categoría':'')}</div>
         <div style="font-family:Oswald;font-size:${willChange?'16px':'20px'};font-weight:800;color:${forecastColor};letter-spacing:${willChange?'1px':'2px'};text-align:right;white-space:nowrap" title="Posición forecast en su sexo+categoría+división">${forecastTxt}</div>
       </div>
@@ -3902,89 +3817,6 @@ function renderTxLeaderboard(cur,lifterChanged,opts){
             return '<div style="display:flex;gap:8px;align-items:center"><span style="font-family:Oswald;font-size:clamp(11px,1.1vw,14px);color:rgba(220,230,245,.7);letter-spacing:2px">'+LIFT_S[l]+'</span><span style="font-family:Oswald;font-size:clamp(16px,1.8vw,24px);font-weight:700;color:'+(b?LIFT_C[l]:'rgba(180,200,220,.4)')+';text-shadow:0 1px 3px rgba(0,0,0,.5)">'+(b?b.toFixed(1):'—')+'</span></div>';
           }).join('')}
         </div>
-      </div>
-    </div>`;
-}
-
-// ══════════════════════════════════════════════
-// TX: TABLA ACTUAL — ranking de la cat actual en esquina inferior derecha
-// Slide-in desde abajo. Resalta al lifter actual con flecha de posición proyectada.
-// ══════════════════════════════════════════════
-function renderTxTablaActual(cur,opts){
-  opts=opts||{};
-  const ref=cur||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
-  if(!ref)return '';
-  const sameCat=DATA.athletes.filter(a=>a.cat===ref.cat&&a.div===ref.div&&a.sex===ref.sex&&!a.bombed);
-  // 1) Ranking ACTUAL: por total ya levantado (solo lifts válidos)
-  const curRank=sameCat.map(a=>({id:a.id,total:totalOf(a)})).sort((a,b)=>b.total-a.total);
-  const curPosOf={}; curRank.forEach((a,i)=>curPosOf[a.id]=i+1);
-  // 2) Ranking PROYECTADO: si el intento pendiente del lifter actual resulta válido
-  const fcRank=sameCat.map(a=>({id:a.id,total:a.id===ref.id?forecastTotal(a):totalOf(a)})).sort((a,b)=>b.total-a.total);
-  const fcPosOf={}; fcRank.forEach((a,i)=>fcPosOf[a.id]=i+1);
-  // Tabla ordenada por proyección
-  const ranked=fcRank.map(r=>{
-    const ath=sameCat.find(a=>a.id===r.id);
-    return {...ath,total:totalOf(ath),fTotal:r.total,curPos:curPosOf[r.id],fPos:fcPosOf[r.id]};
-  });
-  const divS=txDivShort(ref.div);
-  const sexLabel=(ref.sex==='Femenino'||ref.sex==='Mujer'||ref.sex==='F')?'Mujer':'Hombre';
-  const curRow=ranked.find(a=>a.id===ref.id);
-  const curPos=curRow?curRow.curPos:0;
-  const fcPos=curRow?curRow.fPos:0;
-  const arrow=curPos===fcPos?'=':(fcPos<curPos?'▲':'▼');
-  const arrowColor=fcPos<curPos?'#22c55e':(fcPos>curPos?'#ef4444':'#D4A843');
-  const pendingW=(ref.att?.[DATA.lift]?.[DATA.round]?.w)||0;
-  const liftN=LIFT_N[DATA.lift]||DATA.lift;
-  return `
-    <div style="position:fixed;bottom:30px;right:30px;width:min(520px,38vw);z-index:50;font-family:'Inter',sans-serif">
-      <div class="ta-card-explode" style="background:linear-gradient(180deg,rgba(10,22,40,.96) 0%,rgba(4,12,26,.96) 100%);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:2px solid #D4A843;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.7),0 0 30px rgba(212,168,67,.25)">
-        <!-- Header -->
-        <div data-ta-header style="padding:14px 20px;background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:2px solid #D4A843;overflow:hidden">
-          <div style="display:flex;align-items:center;gap:16px;flex:1;min-width:0">
-            ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" class="ta-logo-anim" style="height:100px;width:100px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 4px 14px rgba(0,0,0,.7))" onerror="this.style.display='none'">`:''}
-            <div data-ta-title style="min-width:0">
-              <div style="font-family:Oswald;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.75);font-weight:600">TABLA ACTUAL · ${liftN} · R${(DATA.round||0)+1}</div>
-              <div style="font-family:Oswald;font-size:18px;letter-spacing:1.5px;color:#fff;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,.4);margin-top:2px">${divS} • ${ref.cat} ${sexLabel==='Mujer'?'♀':'♂'}</div>
-            </div>
-          </div>
-          <div style="text-align:right;flex-shrink:0">
-            <div style="font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.65)">PROYECCIÓN</div>
-            <div style="font-family:Oswald;font-size:24px;font-weight:700;color:#fff;letter-spacing:1px;line-height:1">
-              <span style="color:rgba(255,255,255,.7)">${curPos||'—'}</span>
-              <span style="color:${arrowColor};margin:0 6px;font-size:22px">${arrow}</span>
-              <span style="color:#D4A843;text-shadow:0 0 12px rgba(212,168,67,.6)">${fcPos||'—'}</span>
-            </div>
-          </div>
-        </div>
-        <!-- Column header -->
-        <div style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:6px 18px;background:rgba(10,22,40,.7);font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(220,230,245,.5);border-bottom:1px solid rgba(212,168,67,.15)">
-          <div>#</div><div>NOMBRE</div><div style="text-align:right">TOTAL</div><div style="text-align:center">POS</div>
-        </div>
-        <!-- Rows -->
-        <div>
-        ${ranked.map((a,idx)=>{
-          const isCur=a.id===ref.id;
-          const rowBg=isCur?'background:linear-gradient(90deg,rgba(212,168,67,.32) 0%,rgba(212,168,67,.18) 100%);border-left:4px solid #D4A843':'background:'+(idx%2===0?'rgba(10,22,40,.4)':'transparent');
-          const nameC=isCur?'#fff':'rgba(240,245,255,.85)';
-          const fS=isCur?'15px':'13px';
-          const fW=isCur?'700':'500';
-          const totalShown=isCur?a.fTotal:a.total;
-          const posShown=isCur?a.fPos:a.curPos;
-          const posColor=isCur?'#D4A843':'rgba(220,230,245,.7)';
-          const extra=isCur?'<div style="font-family:Oswald;font-size:9px;color:#D4A843;letter-spacing:2px;margin-top:2px;font-weight:600">⚡ EN TARIMA · '+(pendingW||'—')+' kg</div>':'';
-          return `<div style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:${isCur?'14px 18px':'8px 18px'};${rowBg};border-bottom:1px solid rgba(212,168,67,.08);align-items:center">
-            <div style="font-family:Oswald;font-size:${isCur?'18px':'13px'};font-weight:700;color:${isCur?'#D4A843':'rgba(220,230,245,.5)'};text-shadow:${isCur?'0 0 8px rgba(212,168,67,.5)':'none'}">${posShown}</div>
-            <div style="overflow:hidden">
-              <div style="font-family:Oswald;font-size:${fS};font-weight:${fW};color:${nameC};letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.5)">${a.name}</div>
-              ${extra}
-            </div>
-            <div style="font-family:Oswald;font-size:${isCur?'17px':'13px'};font-weight:${fW};text-align:right;color:${isCur?'#D4A843':'rgba(220,230,245,.75)'};text-shadow:${isCur?'0 0 8px rgba(212,168,67,.4)':'none'}">${(totalShown||0).toFixed(1)}</div>
-            <div style="font-family:Oswald;font-size:${isCur?'18px':'13px'};font-weight:700;text-align:center;color:${posColor}">${isCur?(a.curPos+'→'+a.fPos):''}</div>
-          </div>`;
-        }).join('')}
-        </div>
-        <!-- Footer mini-strip -->
-        <div style="padding:6px 18px;background:rgba(10,22,40,.7);font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(220,230,245,.5);text-align:center;border-top:1px solid rgba(212,168,67,.15)">YOURLIFT · LIVE</div>
       </div>
     </div>`;
 }
@@ -4120,10 +3952,7 @@ function renderSetup(){
   const _hidden=window.LIVE_EVENT_HIDDEN,_hiddenN=window.LIVE_EVENT_HIDDEN_NAMES;
   DATA.events.forEach((ev,i)=>{
     if(_hidden&&(_hidden.has(ev.id)||_hiddenN?.has(ev.name)))return;
-    // Conteo de atletas: usa el de Firestore (LIVE_EVENT_META) si el local es 0
-    const fbCount = (window.LIVE_EVENT_META && window.LIVE_EVENT_META[ev.id] && window.LIVE_EVENT_META[ev.id].athleteCount) || 0;
-    const athCount = ev.athletes.length || fbCount;
-    h+='<div class="card" style="cursor:pointer;transition:all .2s" onclick="pickEvent('+i+')" onmouseenter="this.style.borderColor=\'var(--accent)\'" onmouseleave="this.style.borderColor=\'var(--border)\'"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="os" style="font-size:18px;font-weight:700">'+ev.name+'</div><p style="color:var(--muted);font-size:12px;margin-top:4px">'+(ev.organizer||'')+' \u00b7 '+(ev.location||'')+(ev._fromFirestore?' \u00b7 <span style="color:var(--gold)">creado en admin</span>':'')+'</p></div><div style="text-align:right"><div style="background:var(--accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;font-family:Oswald">'+athCount+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">atletas</div></div></div></div>'});
+    h+='<div class="card" style="cursor:pointer;transition:all .2s" onclick="pickEvent('+i+')" onmouseenter="this.style.borderColor=\'var(--accent)\'" onmouseleave="this.style.borderColor=\'var(--border)\'"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="os" style="font-size:18px;font-weight:700">'+ev.name+'</div><p style="color:var(--muted);font-size:12px;margin-top:4px">'+(ev.organizer||'')+' \u00b7 '+(ev.location||'')+(ev._fromFirestore?' \u00b7 <span style="color:var(--gold)">creado en admin</span>':'')+'</p></div><div style="text-align:right"><div style="background:var(--accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;font-family:Oswald">'+ev.athletes.length+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">atletas</div></div></div></div>'});
   h+='</div>';return h;
 }
 
@@ -4371,46 +4200,6 @@ window.dirBtUploadVideo=async function(){
   };
   inp.click();
 };
-// Logo DEL CAMPEONATO (no del break timer): persiste en Firestore eventos/{evId}.logoUrl
-// y se muestra en scoreboard, perfil y tabla actual.
-window.dirUploadChampionshipLogo=async function(){
-  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía');return;}
-  if(!DATA.event){alert('Primero elegí un evento');return;}
-  const evId = DATA.event.id || DATA.event.name;
-  const inp=document.createElement('input');inp.type='file';inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
-  inp.onchange=async()=>{
-    const f=inp.files&&inp.files[0];if(!f)return;
-    const btn=document.getElementById('dirChampLogoBtn');if(btn)btn.textContent='⏳ Subiendo...';
-    try{
-      const {ref,uploadBytes,getDownloadURL}=window._fbSt;
-      const safeId=evId.replace(/[^a-zA-Z0-9_]/g,'_');
-      const r=ref(window._fbStInst,'logos/event/'+safeId+'_'+f.name);
-      await uploadBytes(r,f,{contentType:f.type});
-      const url=await getDownloadURL(r);
-      // Guardar en el doc del evento
-      await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{logoUrl:url});
-      DATA.event.logoUrl=url;
-      // Forzar sync inmediato a livecast_sync para que los widgets de OBS lo vean
-      try{ if(typeof syncToFB==='function') await syncToFB(); }catch(e){}
-      R();
-      if(btn)btn.textContent='✓ Subido';
-      setTimeout(()=>{if(btn)btn.textContent='⬆ Cambiar logo'},2000);
-    }catch(e){alert('Error subiendo logo: '+e.message); if(btn)btn.textContent='⬆ Cambiar logo';}
-  };
-  inp.click();
-};
-window.dirClearChampionshipLogo=async function(){
-  if(!DATA.event)return;
-  if(!confirm('¿Quitar el logo del campeonato?'))return;
-  const evId = DATA.event.id || DATA.event.name;
-  try{
-    await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{logoUrl:''});
-    DATA.event.logoUrl='';
-    try{ if(typeof syncToFB==='function') await syncToFB(); }catch(e){}
-    R();
-  }catch(e){alert('Error: '+e.message);}
-};
-
 window.dirBtUploadEventLogo=async function(){
   if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía');return;}
   const inp=document.createElement('input');inp.type='file';inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
@@ -4450,7 +4239,7 @@ window.dirBtDeleteVideo=async function(name){
 function _dirEnsureListener(){
   if(_dirUnsub||!fbReady||!window._fb)return;
   try{
-    _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',txDocId('current')),(snap)=>{
+    _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director','current'),(snap)=>{
       const DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[]}};
       if(snap.exists()){
         const d=snap.data();
@@ -4465,7 +4254,7 @@ function _dirEnsureListener(){
 async function _dirPush(){
   if(!fbReady||!isAdmin||!window._fb)return;
   try{
-    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director',txDocId('current')),{show:_dirState,ts:Date.now()});
+    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director','current'),{show:_dirState,ts:Date.now()});
   }catch(e){alert('Error pusheando comando: '+(e.message||e))}
   _obsWsBroadcastSync();
 }
@@ -4498,12 +4287,6 @@ window.dirShow=async function(comp,seconds,opts){
         }
       }
     });
-    // Al activar un fullscreen (perfil/leaderboard), apagar tambien la Tabla Actual.
-    // Asi cuando se quite el fullscreen la tabla NO reaparece sola; debe re-activarse a mano.
-    const ta=_dirState.tablaActual;
-    if(ta && ta.active){
-      _dirState.tablaActual=Object.assign({},ta,{active:false,until:0});
-    }
   }
   _dirState[comp]=Object.assign({},_dirState[comp]||{},{active:true,until},opts||{});
   await _dirPush();R();
@@ -4514,7 +4297,7 @@ window.dirHide=async function(comp){
   await _dirPush();R();
 };
 window.dirHideAll=async function(){
-  ['profile','scoreboard','leaderboard','timer','slam','tablaActual'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
+  ['profile','scoreboard','leaderboard','timer','slam'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
   await _dirPush();R();
 };
 window.dirShowLb=async function(cat,seconds){
@@ -4606,7 +4389,6 @@ window._dirKeyHandler=function(e){
   const map={p:'profile',s:'scoreboard',t:'timer'};
   if(map[k]){e.preventDefault();window.dirToggle(map[k]);return}
   if(k==='l'){e.preventDefault();window.dirToggleLb();return}
-  if(k==='a'){e.preventDefault();window.dirToggle('tablaActual');return}
   if(k==='g'){e.preventDefault();window.dirShowSlam('g');return}
   if(k==='n'){e.preventDefault();window.dirShowSlam('n');return}
   if(k==='b'){e.preventDefault();window.dirToggleBreak();return}
@@ -4832,23 +4614,6 @@ function renderDirector(){
     h+='👤 <b>Levantador actual:</b> <span style="color:var(--gold);font-family:Oswald">'+cur.name+'</span> · '+cur.cat+' · '+cur.div+' · Vuelo '+cur.flight+' · '+LIFT_S[DATA.lift]+(DATA.round+1);
     h+='</div>';
   }
-  // ── Logo del campeonato (se muestra en perfil/scoreboard/tabla actual)
-  {
-    const champLogo=DATA.event?.logoUrl||'';
-    h+='<div class="card" style="padding:14px 18px;border-left:4px solid var(--gold);background:rgba(212,168,67,.06);margin-bottom:12px">';
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">';
-    h+='<div style="flex:1;min-width:200px;display:flex;align-items:center;gap:14px">';
-    h+='<div style="width:64px;height:64px;background:rgba(10,22,40,.5);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">'
-      +(champLogo?'<img src="'+champLogo+'" style="max-width:100%;max-height:100%;object-fit:contain">':'<span style="font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:1px;text-align:center;line-height:1.2">SIN<br>LOGO</span>')
-      +'</div>';
-    h+='<div><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">🏆 Logo del campeonato</div>';
-    h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Aparece en el Perfil, Scoreboard y Tabla Actual. Recomendado: PNG transparente, 256×256+.</div></div>';
-    h+='</div>';
-    h+='<div style="display:flex;gap:6px">';
-    h+='<button id="dirChampLogoBtn" class="btn btn-o" onclick="dirUploadChampionshipLogo()" style="padding:10px 16px;font-size:12px;font-family:Oswald;letter-spacing:1.5px">⬆ '+(champLogo?'Cambiar logo':'Subir logo')+'</button>';
-    if(champLogo) h+='<button class="btn" onclick="dirClearChampionshipLogo()" style="padding:10px 14px;font-size:12px;background:transparent;border:1px solid var(--red);color:var(--red);font-family:Oswald;letter-spacing:1.5px">✕ Quitar</button>';
-    h+='</div></div></div>';
-  }
   // Componentes — TOGGLES (1 botón / 1 tecla por componente, listo para Stream Deck)
   h+='<div style="display:grid;gap:12px">';
   h+=compToggle('profile','🪪','Perfil del atleta','Pantalla completa con nombre, categoría, club, edad, PB del atleta actual.','P','dirToggle(\'profile\')');
@@ -4883,7 +4648,6 @@ function renderDirector(){
   h+='</div>';
   h+='<button class="btn '+(lbActive?'btn-r':'btn-g')+'" onclick="dirToggleLb()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(lbActive?'⏸ DESACTIVAR':'▶ ACTIVAR')+'</button>';
   h+='</div>'+scaleSlider('leaderboard')+'</div>';
-  h+=compToggle('tablaActual','📋','Tabla actual (corner)','Ranking de la categoría del lifter actual, esquina inferior derecha. Entra desde abajo, queda fijo. El levantador en pantalla se resalta y muestra la flecha de proyección (pos actual → pos si lo levanta).','A','dirToggle(\'tablaActual\')');
   h+=compToggle('timer','⏱','Timer grande','Reloj 1:00 → 0:00 en la esquina superior derecha. Sincronizado con el del operador.','T','dirToggle(\'timer\')');
   // Slam — dos botones momentáneos (GOOD / NO LIFT, no toggle)
   h+='<div class="card" style="padding:14px 18px;border-left:4px solid var(--border)">';
@@ -5130,9 +4894,7 @@ function renderDirector(){
 }
 
 function renderManage(){
-  // Filtrar por tarima si está activo (modo 2 tarimas)
-  const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">🎲 Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">🔄 Re-sincronizar con admin</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">⚖️ Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">📏 Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">🏋️ Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">🎫 Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  const ath=DATA.athletes;let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">🎲 Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">🔄 Re-sincronizar con admin</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">⚖️ Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">📏 Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">🏋️ Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">🎫 Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th><th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:38px">VLO</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:80px">BW + 1ros</th>';
   ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:62px">'+LIFT_S[l]+r+'</th>'})});
@@ -5141,11 +4903,7 @@ function renderManage(){
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3);'+(a.bombed?'opacity:.4':'')+'">';
     h+='<td style="padding:3px 2px;text-align:center"><input type="number" min="1" value="'+a.lot+'" onchange="setLot('+a.id+',this.value)" title="Editá el número de lote — si ya existe se hace swap" style="width:42px;padding:3px 2px;font-family:Oswald;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:13px"></td>';
     h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+a.name+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
-    {
-      // Opciones del dropdown de vuelo: si hay tarima, suffix con 1/2; si no, letras simples.
-      const _flOpts = TARIMA ? ['A','B','C','D','E','F'].map(L=>L+TARIMA) : ['A','B','C','D','E','F'];
-      h+='<td style="padding:3px 2px"><select class="inp-sm" onchange="updA('+a.id+',\'flight\',this.value);R()" style="width:42px;padding:4px 1px;font-size:11px">'+_flOpts.map(f=>'<option value="'+f+'" '+(a.flight===f?'selected':'')+'>'+f+'</option>').join('')+'</select></td>';
-    }
+    h+='<td style="padding:3px 2px"><select class="inp-sm" onchange="updA('+a.id+',\'flight\',this.value);R()" style="width:38px;padding:4px 1px;font-size:11px">'+['A','B','C','D','E','F'].map(f=>'<option '+(a.flight===f?'selected':'')+'>'+f+'</option>').join('')+'</select></td>';
     h+='<td style="padding:3px 2px;text-align:center">';
     if(a.weighedIn){
       h+='<button onclick="openWeighIn('+a.id+')" style="padding:2px 6px;border-radius:4px;border:1px solid var(--green);background:rgba(34,197,94,.1);color:var(--green);font-family:Oswald;font-size:9px;cursor:pointer;white-space:nowrap">'+a.bw+'kg ✓</button>';
@@ -6010,12 +5768,6 @@ try{localStorage.removeItem('fechipo_lc2');localStorage.removeItem('fechipo_live
 const loaded=load();
 let DB_FULL=[];
 
-// Auto-pick event si vino ?evento= en la URL (fallback por si los eventos
-// ya están en DATA.events de nominas.json antes de que el listener Firestore corra)
-if(!TX_MODE){
-  setTimeout(()=>{try{if(!window._autoEvtTried){window._autoEvtTried=true;applyEventURLParam()}}catch(e){}},150);
-}
-
 // ── Auto-backup every 30 seconds ─────────────────────────────
 const BACKUP_KEY='fechipo_lc3_backup';
 setInterval(()=>{
@@ -6084,122 +5836,6 @@ fetch('data.json').then(r=>r.json()).then(d=>{
 fetch('records.json').then(r=>r.json()).then(d=>{RECORDS=d}).catch(()=>console.warn('[FECHIPO] records.json no cargado'));
 // DATA.events se construye desde Firestore via LIVE_EVENT_META en renderSetup()
 if(!loaded)R();
-
-// ════════════════════════════════════════════════════════════════
-// DEMO MODE — para grabar videos promocionales sin compe real
-// URL: livecast.html?demo=1
-// ════════════════════════════════════════════════════════════════
-if(DEMO_MODE){
-  console.log('🎬 DEMO MODE activo');
-  // Atletas demo con datos realistas
-  const DEMO_ATHLETES=[
-    {nombre:'Felipe Rieutord',rut:'20540088-5',sexo:'Hombre',categoria:'-83',division:'Universitario',modalidad:'Powerlifting Classic',club:'All Power CD',universidad:'Universidad de Chile',bw:82.5,att:{sq:[{w:240,r:'g'},{w:255,r:'g'},{w:265,r:'g'}],bp:[{w:155,r:'g'},{w:165,r:'g'},{w:170,r:null}],dl:[{w:280,r:'g'},{w:295,r:null},{w:0,r:null}]}},
-    {nombre:'Andrés Landon Osorio',rut:'21030894-6',sexo:'Hombre',categoria:'-120',division:'Universitario',modalidad:'Powerlifting Classic',club:'Bushido Lifting',universidad:'UTEM',bw:118.4,att:{sq:[{w:290,r:'g'},{w:310,r:'g'},{w:320,r:null}],bp:[{w:180,r:'g'},{w:195,r:'g'},{w:200,r:null}],dl:[{w:270,r:'g'},{w:285,r:'g'},{w:295,r:null}]}},
-    {nombre:'Francisco Pérez Tapia',rut:'22604383-7',sexo:'Hombre',categoria:'-83',division:'Universitario',modalidad:'Powerlifting Classic',club:'South Side Club',universidad:'PUC',bw:82.8,att:{sq:[{w:225,r:'g'},{w:240,r:'g'},{w:250,r:null}],bp:[{w:140,r:'g'},{w:150,r:'g'},{w:0,r:null}],dl:[{w:275,r:'g'},{w:0,r:null},{w:0,r:null}]}},
-    {nombre:'Karen Pulecio Girón',rut:'22863335-6',sexo:'Mujer',categoria:'-69',division:'Universitario',modalidad:'Powerlifting Classic',club:'All Power CD',universidad:'USACH',bw:68.5,att:{sq:[{w:157.5,r:'g'},{w:167.5,r:'g'},{w:177.5,r:'g'}],bp:[{w:72.5,r:'g'},{w:78,r:'g'},{w:0,r:null}],dl:[{w:170,r:'g'},{w:185,r:'g'},{w:0,r:null}]}},
-    {nombre:'Luna Mora Báez',rut:'20724095-8',sexo:'Mujer',categoria:'-63',division:'Universitario',modalidad:'Powerlifting Classic',club:'Himalaya Powerlifting',universidad:'PUC',bw:62.8,att:{sq:[{w:140,r:'g'},{w:150,r:'g'},{w:160,r:'g'}],bp:[{w:75,r:'g'},{w:82,r:null},{w:0,r:null}],dl:[{w:155,r:'g'},{w:165,r:null},{w:0,r:null}]}},
-    {nombre:'Keily Rojas Peraza',rut:'26312215-1',sexo:'Mujer',categoria:'-57',division:'Universitario',modalidad:'Powerlifting Classic',club:'Himalaya Powerlifting',universidad:'UV',bw:55.5,att:{sq:[{w:115,r:'g'},{w:122.5,r:'g'},{w:0,r:null}],bp:[{w:65,r:'g'},{w:72.5,r:'g'},{w:0,r:null}],dl:[{w:155,r:'g'},{w:162.5,r:'g'},{w:0,r:null}]}},
-    {nombre:'José Conejera Figueroa',rut:'20758484-3',sexo:'Hombre',categoria:'-74',division:'Universitario',modalidad:'Powerlifting Classic',club:'All Power CD',universidad:'UDP',bw:73.8,att:{sq:[{w:185,r:'g'},{w:200,r:'g'},{w:205,r:'g'}],bp:[{w:125,r:'g'},{w:132.5,r:null},{w:0,r:null}],dl:[{w:215,r:'g'},{w:230,r:'g'},{w:0,r:null}]}},
-    {nombre:'Emilio Galvez Ramos',rut:'20870444-3',sexo:'Hombre',categoria:'-93',division:'Universitario',modalidad:'Powerlifting Classic',club:'South Side Club',universidad:'UTEM',bw:91.2,att:{sq:[{w:220,r:'g'},{w:240,r:'g'},{w:0,r:null}],bp:[{w:140,r:'g'},{w:147.5,r:'g'},{w:0,r:null}],dl:[{w:265,r:'g'},{w:280,r:'g'},{w:0,r:null}]}},
-  ];
-  DEMO_ATHLETES.forEach((a,i)=>{
-    a.id=i; a.lot=i+1;
-    a.flight='A'; a.mod='universitario'; a.bombed=false;
-    a.cat=a.categoria; a.div=a.division; a.sex=a.sexo;
-    a.uni=a.universidad; a.name=a.nombre;
-    a.rackSQ='14'; a.rackBP='6';
-  });
-  DATA.event={name:'DEMO — Campeonato Universitario FECHIPO 2026',id:'demo_event',recordsEnabled:true};
-  DATA.athletes=DEMO_ATHLETES;
-  DATA.phase='compete';
-  DATA.lift='sq'; DATA.round=2; DATA.flight='A';
-  DATA.timer=60; DATA.timerOn=false;
-  DATA.changeTimers={};
-  save && save();
-
-  // Panel flotante con botones de demo
-  setTimeout(()=>{
-    const panel=document.createElement('div');
-    panel.id='demoPanel';
-    panel.innerHTML=`
-      <div style="position:fixed;top:14px;right:14px;z-index:99998;background:rgba(8,16,30,.95);border:2px solid #D4A843;border-radius:12px;padding:14px;backdrop-filter:blur(8px);min-width:280px;font-family:Oswald,sans-serif">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid rgba(212,168,67,.3);padding-bottom:8px">
-          <span style="color:#D4A843;font-size:12px;font-weight:700;letter-spacing:2px">🎬 DEMO MODE</span>
-          <button onclick="document.getElementById('demoPanel').style.display='none'" style="background:none;border:0;color:#7A8FA6;font-size:18px;cursor:pointer;padding:0 4px">×</button>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
-          <button onclick="demoShow('profile')" style="padding:8px;background:rgba(196,30,58,.2);border:1px solid #C41E3A;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px">👤 PERFIL</button>
-          <button onclick="demoShow('scoreboard')" style="padding:8px;background:rgba(59,130,246,.2);border:1px solid #3B82F6;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px">📊 SCOREBOARD</button>
-          <button onclick="demoShow('leaderboard')" style="padding:8px;background:rgba(212,168,67,.2);border:1px solid #D4A843;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px">🏆 LEADERBOARD</button>
-          <button onclick="demoShow('timer')" style="padding:8px;background:rgba(34,197,94,.2);border:1px solid #22c55e;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px">⏱ TIMER</button>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
-          <button onclick="demoSlam('g')" style="padding:8px;background:#16a34a;border:0;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">✓ GOOD LIFT</button>
-          <button onclick="demoSlam('r')" style="padding:8px;background:#dc2626;border:0;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">✗ NO LIFT</button>
-        </div>
-        <button onclick="demoRecord()" style="width:100%;padding:10px;background:linear-gradient(90deg,#D4A843,#C41E3A);border:0;border-radius:6px;color:#fff;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:2px;margin-bottom:8px">🏆 SIMULAR RÉCORD</button>
-        <button onclick="demoBreak()" style="width:100%;padding:8px;background:rgba(168,85,247,.2);border:1px solid #a855f7;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px;margin-bottom:8px">⏸ BREAK TIMER</button>
-        <div style="display:flex;gap:6px;margin-bottom:8px">
-          <button onclick="demoPrev()" style="flex:1;padding:6px;background:rgba(122,143,166,.15);border:1px solid #7A8FA6;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;cursor:pointer">← ANTERIOR</button>
-          <button onclick="demoNext()" style="flex:1;padding:6px;background:rgba(122,143,166,.15);border:1px solid #7A8FA6;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;cursor:pointer">SIGUIENTE →</button>
-        </div>
-        <div id="demoCurrent" style="color:#7A8FA6;font-size:10px;text-align:center;padding-top:8px;border-top:1px solid rgba(122,143,166,.2);letter-spacing:1px"></div>
-      </div>
-    `;
-    document.body.appendChild(panel);
-    window._demoIdx=0;
-    window.demoUpdate=function(){
-      const a=DATA.athletes[window._demoIdx];
-      document.getElementById('demoCurrent').textContent=`Atleta: ${a.name} · ${a.cat}kg`;
-    };
-    window.demoNext=function(){window._demoIdx=(window._demoIdx+1)%DATA.athletes.length;window.demoUpdate();R&&R();};
-    window.demoPrev=function(){window._demoIdx=(window._demoIdx-1+DATA.athletes.length)%DATA.athletes.length;window.demoUpdate();R&&R();};
-    window.demoShow=function(type){
-      const a=DATA.athletes[window._demoIdx];
-      if(!_txDirState[type])_txDirState[type]={};
-      _txDirState[type].active=true;
-      _txDirState[type].until=Date.now()+15000;
-      if(type==='leaderboard')_txDirState[type].cat=a.cat;
-      R&&R();
-      if(typeof renderTxWidget==='function')renderTxWidget();
-      showToastLC&&showToastLC('🎬 Mostrando '+type);
-    };
-    window.demoSlam=function(t){
-      const a=DATA.athletes[window._demoIdx];
-      if(typeof showRecordAlert==='function'){
-        // Trigger slam visual
-        _txDirState.slam={active:true,type:t,until:Date.now()+2500,scale:1};
-        R&&R();
-        if(typeof renderTxWidget==='function')renderTxWidget();
-        showToastLC&&showToastLC(t==='g'?'✓ GOOD LIFT':'✗ NO LIFT');
-      }
-    };
-    window.demoRecord=function(){
-      const a=DATA.athletes[window._demoIdx];
-      const att=a.att[DATA.lift][DATA.round]||{w:0};
-      const w=att.w||a.att.sq[1].w||220;
-      if(typeof showRecordAlert==='function'){
-        showRecordAlert(a.name,DATA.lift,DATA.round,w,w-15,'Record Anterior',a.cat,a.div,'universitario');
-        if(typeof pushRecordToFB==='function'){
-          // No push real, solo trigger local
-          _txCerRecordUntil=Date.now()+TX_CEREMONY.recordMs;
-          _txCerRecordData={athName:a.name,lift:DATA.lift,round:DATA.round,newMark:w,oldMark:w-15,holder:'Record Anterior',cat:a.cat,div:a.div,mod:'universitario',ts:Date.now()};
-        }
-        R&&R();
-        if(typeof renderTxWidget==='function')renderTxWidget();
-      }
-    };
-    window.demoBreak=function(){
-      if(typeof window.dirBreakStart==='function'){
-        _dirState.breakTimer={active:true,startedAt:Date.now(),durationSec:300,label:'BREAK ENTRE LIFTS',pausedAt:0,videos:[],movement:'Squat → Bench Press',style:{}};
-        R&&R();
-        if(typeof renderTxWidget==='function')renderTxWidget();
-        showToastLC&&showToastLC('⏸ Break activado (5 min)');
-      }
-    };
-    window.demoUpdate();
-  },800);
-}
 
 // ── Accept ?evento=<id|name> URL param ──
 // If the URL asks for a specific event and it differs from the saved session,
