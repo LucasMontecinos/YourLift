@@ -771,7 +771,7 @@ function checkRecord(athlete,lift,round){
 async function pushRecordToFB(rec){
   if(!fbReady||!isAdmin||!window._fb)return;
   try{
-    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_record',evStateDocId('current')),rec);
+    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_record',txDocId('current')),rec);
   }catch(e){console.warn('[FB] pushRecord',e)}
 }
 function closeRecAlert(){const e=document.getElementById('recAlert');if(e)e.remove();}
@@ -3053,18 +3053,10 @@ let _txCerRecordData=null;
 let _txCerRecordUnsub=null;
 let _txCerRecordSeenTs=0;
 let _txCerLastSig=null;            // signature p/ saltarse re-renders innecesarios
-let _txCerRecPoll=null,_txCerRecDocId=null;
 function _txCerStartRecordListener(){
-  if(!fbReady||!window._fb||!DATA.event){
-    if(!_txCerRecPoll)_txCerRecPoll=setInterval(()=>{if(fbReady&&window._fb&&DATA.event){clearInterval(_txCerRecPoll);_txCerRecPoll=null;_txCerStartRecordListener()}},300);
-    return;
-  }
-  const want=evStateDocId('current');
-  if(_txCerRecordUnsub&&_txCerRecDocId===want)return;
-  if(_txCerRecordUnsub){try{_txCerRecordUnsub()}catch(e){}_txCerRecordUnsub=null;}
-  _txCerRecDocId=want;
+  if(_txCerRecordUnsub||!fbReady||!window._fb)return;
   try{
-    _txCerRecordUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_record',want),(snap)=>{
+    _txCerRecordUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_record',txDocId('current')),(snap)=>{
       if(!snap.exists())return;
       const d=snap.data();if(!d||!d.ts)return;
       if(d.ts===_txCerRecordSeenTs)return;
@@ -3423,19 +3415,13 @@ let _txDirPoll=null;
 let _txDirLastSig=null;
 function _txStartDirectorListener(){
   if(!_txDirState)_txDirState={...TX_DIR_DEFAULT};
-  // Esperar fbReady Y el evento: el id del doc depende del evento (current__<evento>).
-  // Si nos suscribimos antes de que cargue el evento, usaríamos el id de respaldo
-  // ('current') y NO recibiríamos los comandos que el Control TX escribe a current__<evento>.
-  if(!fbReady||!window._fb||!DATA.event){
-    if(!_txDirPoll)_txDirPoll=setInterval(()=>{if(fbReady&&window._fb&&DATA.event){clearInterval(_txDirPoll);_txDirPoll=null;_txStartDirectorListener()}},300);
+  if(_txDirUnsub)return;
+  if(!fbReady||!window._fb){
+    if(!_txDirPoll)_txDirPoll=setInterval(()=>{if(fbReady&&window._fb){clearInterval(_txDirPoll);_txDirPoll=null;_txStartDirectorListener()}},300);
     return;
   }
-  const want=evStateDocId('current');
-  if(_txDirUnsub&&_txDirDocId===want)return;       // ya suscrito al doc correcto
-  if(_txDirUnsub){try{_txDirUnsub()}catch(e){}_txDirUnsub=null;}  // re-suscribir si cambió el evento
-  _txDirDocId=want;
   try{
-    _txDirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',want),(snap)=>{
+    _txDirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',txDocId('current')),(snap)=>{
       if(snap.exists()){
         const d=snap.data();
         _txDirState=Object.assign({},TX_DIR_DEFAULT,d.show||{});
@@ -5062,15 +5048,10 @@ window.dirBtDeleteVideo=async function(name){
     await _dirLoadBtVideos();
   }catch(e){alert('Error al eliminar: '+e.message);}
 };
-let _dirDocId=null;
 function _dirEnsureListener(){
-  if(!fbReady||!window._fb||!DATA.event)return;
-  const want=evStateDocId('current');
-  if(_dirUnsub&&_dirDocId===want)return;
-  if(_dirUnsub){try{_dirUnsub()}catch(e){}_dirUnsub=null;}
-  _dirDocId=want;
+  if(_dirUnsub||!fbReady||!window._fb)return;
   try{
-    _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',want),(snap)=>{
+    _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',txDocId('current')),(snap)=>{
       const DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[]}};
       if(snap.exists()){
         const d=snap.data();
@@ -5085,7 +5066,7 @@ function _dirEnsureListener(){
 async function _dirPush(){
   if(!fbReady||!isAdmin||!window._fb)return;
   try{
-    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director',evStateDocId('current')),{show:_dirState,ts:Date.now()});
+    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director',txDocId('current')),{show:_dirState,ts:Date.now()});
   }catch(e){alert('Error pusheando comando: '+(e.message||e))}
   _obsWsBroadcastSync();
 }
