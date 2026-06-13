@@ -1162,8 +1162,25 @@ function loadLiveAthletes(ev){
     if(!fbAthletes.length)return; // no Firestore data — keep nominas.json data
 
     if(DATA.phase==='setup'){
-      // Full replace: Firestore is source of truth during setup
-      DATA.athletes=fbAthletes.map((a,j)=>({...a,id:j,lot:a.lot||j+1}));
+      // Firestore es la fuente para la nómina (nombre, club, categoría…), PERO preservamos
+      // lo que se edita en livecast y NO existe en el admin: lote, BW, alturas de rack y
+      // pesos de apertura ya cargados. Sin esto, al refrescar la nómina (o al volver a entrar)
+      // se perdían los lotes/BW manuales. Se cruza por RUT.
+      const _rk=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
+      const prevByRut={};
+      (DATA.athletes||[]).forEach(p=>{const k=_rk(p.rut);if(k)prevByRut[k]=p;});
+      DATA.athletes=fbAthletes.map((a,j)=>{
+        const m={...a,id:j,lot:a.lot||j+1};
+        const prev=prevByRut[_rk(a.rut)];
+        if(prev){
+          if(prev.lot)m.lot=prev.lot;
+          if(prev.bw)m.bw=prev.bw;
+          if(prev.rackSQ)m.rackSQ=prev.rackSQ;
+          if(prev.rackBP)m.rackBP=prev.rackBP;
+          if(prev.att)m.att=prev.att;
+        }
+        return m;
+      });
       const firstFlight=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort()[0]||(TARIMA?'A'+TARIMA:'A');
       DATA.flight=firstFlight;
       save();R();
@@ -4071,7 +4088,7 @@ window.setLot=function(id,val){
   } else {
     a.lot=n;
   }
-  save();R();
+  saveNow();R();   // saveNow = guarda local + sincroniza a Firebase de inmediato (no se pierde al salir)
 };
 
 // Helper para escapar HTML en strings interpolados (usado en renderDirector)
