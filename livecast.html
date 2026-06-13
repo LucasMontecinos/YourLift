@@ -172,7 +172,11 @@ let fbDB=null,fbReady=false,fbUnsub=null,_fbSyncing=false,_fbLastWrite=0,fbAuth=
 // ══════════════════════════════════════════════
 // CONTROLLER MODE: solo el PC que tenga ?controller=1 en la URL escribe a Firebase.
 // Los demás (productor, viewers) solo leen. Evita conflictos entre admins.
-window.IS_CONTROLLER=(new URLSearchParams(location.search).get('controller')==='1')||localStorage.getItem('yl_controller')==='1';
+// Un widget de transmisión (TX_MODE) es SOLO LECTURA: nunca debe ser "controlador",
+// aunque corra en un navegador donde yl_controller='1'. Si fuera controlador, no leería
+// los updates de Firebase en vivo y el widget se quedaría fijo en el primer atleta
+// (solo avanzaría con F5). Por eso forzamos IS_CONTROLLER=false cuando hay TX_MODE.
+window.IS_CONTROLLER=(!TX_MODE)&&((new URLSearchParams(location.search).get('controller')==='1')||localStorage.getItem('yl_controller')==='1');
 if(window.IS_CONTROLLER){
   // Badge visible
   setTimeout(()=>{
