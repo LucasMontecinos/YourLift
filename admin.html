@@ -3811,12 +3811,17 @@ window.exportNominaExcel = async function(){
       {header:'MODALIDAD', key:'modalidad', width:34.5},
       {header:'DIVISIÓN',  key:'division',  width:16.8},
       {header:'CATEGORÍA', key:'categoria', width:12.8},
-      {header:'CLUB',      key:'club',      width:26.8}
+      {header:'CLUB',      key:'club',      width:26.8},
+      {header:'RUT',       key:'rut',       width:15},
+      {header:'FECHA DE NACIMIENTO', key:'fechaNac', width:20}
     ];
+    // fechaNac llega como ISO (AAAA-MM-DD); se muestra DD/MM/AAAA (formato chileno).
+    const fmtFN=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(s||''));return m?`${m[3]}/${m[2]}/${m[1]}`:(s||'');};
     list.forEach(i=>{
       // Si eligió "Otro", el nombre real del club está en clubOtro.
       const club=i.club==='Otro'?(i.clubOtro||'Otro'):(i.club||'');
-      ws.addRow({nombre:i.nombre||'',modalidad:i.modalidad||'',division:i.division||'',categoria:i.categoria||'',club});
+      ws.addRow({nombre:i.nombre||'',modalidad:i.modalidad||'',division:i.division||'',categoria:i.categoria||'',club,
+        rut:i.rut||'',fechaNac:fmtFN(i.fechaNac||i.fechanac)});
     });
 
     const thin={style:'thin',color:{argb:'FF000000'}};
@@ -3831,7 +3836,7 @@ window.exportNominaExcel = async function(){
         cell.alignment={vertical:'middle'};
       });
     });
-    ws.autoFilter='A1:E'+ws.rowCount;   // filtros en todas las columnas
+    ws.autoFilter='A1:G'+ws.rowCount;   // filtros en todas las columnas
 
     const buf=await wb.xlsx.writeBuffer();
     const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
