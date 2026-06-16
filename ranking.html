@@ -216,7 +216,7 @@ function _rebuildPositions(){
     byKey[k].push(e);
   });
   Object.keys(byKey).forEach(function(k){
-    byKey[k].sort(function(a,b){return (b.tt||0)-(a.tt||0)});
+    byKey[k].sort(function(a,b){return ((b.tt||0)-(a.tt||0)) || ((b.dt||0)-(a.dt||0)) || ((a.bw||0)-(b.bw||0));});
     byKey[k].forEach(function(e,i){e.p=i+1});
   });
 }
@@ -265,6 +265,11 @@ function applyEdit(o){
         if(total<=0)return;
         var glp=r.glp||r.gl||0;
         var cat=_normCat(data.categoria);
+        // Superpesado: si el peso corporal supera la categoría tope, es la categoría "+"
+        // (mujeres 84+, hombres 120+). Corrige resultados guardados sin el "+".
+        var _bwC=r.bw||0, _maleC=(data.sexo==='Hombre'||data.sexo==='Masculino'||data.sexo==='M');
+        if(cat==='84' && !_maleC && _bwC>84) cat='84+';
+        if(cat==='120' && _maleC && _bwC>120) cat='120+';
         if(!cat||!data.sexo)return;
         var tab=_getTab(data.sexo,data.modalidad,data.view,(data.division||'')+' '+(data.evento||''));
         var isBench=tab.indexOf('bench')===0;
