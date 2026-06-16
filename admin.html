@@ -6794,6 +6794,11 @@ window.PUB_TEMPLATES = {
     icon: '★',
     desc: 'Carta coleccionable (estilo FUT) con marcas, bandera y foto'
   },
+  atletaFuerte: {
+    label: 'Atletas más fuertes',
+    icon: '★',
+    desc: 'Campeón/a overall: foto del sistema, club, marcas y GL'
+  },
   estaremosPresentes: {
     label: 'Estaremos presentes',
     icon: '',
@@ -6971,6 +6976,16 @@ window.pubLoadAthleteCard = function(name){
   if(!best) comps.forEach(c=>{ const r=c.resultado||{}; if(r.total&&(!best||(+r.total)>(+((best.resultado||{}).total)||0))) best=c; });
   if(best){ const r=best.resultado||{}; PUB_STATE.data.cardCategory=pubFmtCat(best.categoria||r.categoria||''); if(best.evento) PUB_STATE.data.cardEvent=String(best.evento).toUpperCase(); }
   PUB_STATE.data.cardFlag=PUB_STATE.data.cardFlag||'CL';
+  // ── Para el template "Atletas más fuertes": club, sexo (título) y foto del sistema ──
+  PUB_STATE.data.cardClub = (a.club==='Otro'?(a.clubOtro||''):(a.club||''));
+  const _fem=/^(f|m|muj|w)/i.test(String(a.sexo||a.sex||''));
+  PUB_STATE.data.cardOverall = (_fem?'CAMPEONA':'CAMPEÓN')+' OVERALL';
+  if(PUB_STATE.template==='atletaFuerte'){
+    if(a.foto_url){
+      PUB_STATE.data.cardPhoto=a.foto_url; PUB_STATE.data.cardPhotoBlur='';
+      pubMakeBlur(a.foto_url,function(b){ PUB_STATE.data.cardPhotoBlur=b; pubUpdatePreview(); });
+    } else { PUB_STATE.data.cardPhoto=''; }
+  }
   document.getElementById('pubEditorRoot').innerHTML=renderPublisherInner();
   setTimeout(pubUpdatePreview,50);
 };
@@ -7494,6 +7509,62 @@ window.pubCardHtml = function(d){
 };
 
 // ─── Renderer de templates ─────────────────────────────────
+// ─── Atletas más fuertes (campeón overall: foto del sistema + marcas + GL) ───
+window.pubFuerteHtml = function(d){
+  const e=window.esc||(s=>String(s==null?'':s));
+  const BG_CARD={azul:{top:'#16263f',mid:'#0b1628',bot:'#050b16'},negro:{top:'#24262b',mid:'#0d0e11',bot:'#020203'},rojo:{top:'#3a141c',mid:'#19070c',bot:'#080205'},dorado:{top:'#3a2e10',mid:'#191305',bot:'#070500'},violeta:{top:'#281c44',mid:'#120b26',bot:'#06040f'},verde:{top:'#103a2a',mid:'#071a13',bot:'#020a07'}};
+  const glowHex=d.bgColor||(BG_CARD[d.bgPreset]||BG_CARD.azul).top;
+  const G=pubHexToRgb(glowHex), gl=a=>`rgba(${G[0]},${G[1]},${G[2]},${a})`;
+  let bg;
+  if(d.bgColor){const b=pubHexToRgb(d.bgColor);const sh=f=>'rgb('+b.map(v=>Math.round(v*(1-f))).join(',')+')';bg=`radial-gradient(ellipse at 50% 0%,${d.bgColor} 0%,${sh(.55)} 55%,${sh(.85)} 100%)`;}
+  else {const p=BG_CARD[d.bgPreset]||BG_CARD.azul;bg=`radial-gradient(ellipse at 50% 0%,${p.top} 0%,${p.mid} 55%,${p.bot} 100%)`;}
+  const parts=String(d.cardName||'').trim().split(/\s+/);
+  const first=(parts.shift()||'').toUpperCase();
+  const rest=parts.join(' ').toUpperCase();
+  const photo = d.cardPhoto
+    ? `<img src="${e(d.cardPhoto)}" crossorigin="anonymous" alt="" style="width:100%;height:100%;object-fit:cover">`
+    : `<div style="width:100%;height:100%;background:#2a3c56;position:relative;overflow:hidden">
+         <div style="position:absolute;left:50%;top:66px;transform:translateX(-50%);width:130px;height:130px;border-radius:50%;background:#8aa0bd"></div>
+         <div style="position:absolute;left:50%;bottom:-28px;transform:translateX(-50%);width:230px;height:180px;border-radius:115px 115px 0 0;background:#8aa0bd"></div>
+       </div>`;
+  const stat=(lbl,val)=>`<div style="flex:1;background:rgba(10,22,40,.7);border:1px solid rgba(212,168,67,.45);border-radius:14px;padding:16px 6px">
+      <div style="font-family:Oswald;font-weight:700;font-size:54px;line-height:1;color:#D4A843">${e(val)||'—'}<span style="font-size:22px;color:rgba(212,168,67,.7)">kg</span></div>
+      <div style="font-family:Oswald;letter-spacing:3px;font-size:17px;color:rgba(200,214,230,.8);margin-top:6px">${lbl}</div>
+    </div>`;
+  const logoYL=`<img src="yourlift_logo_hd.png" alt="YourLift" crossorigin="anonymous" style="height:60px;object-fit:contain" onerror="this.onerror=null;this.src='YourLift_logo.png'">`;
+  return `
+  <div style="width:1080px;height:1350px;position:relative;font-family:'DM Sans',sans-serif;color:#fff;background:${bg};overflow:hidden">
+    <div style="position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle 620px at 120px 120px,${gl(.26)},${gl(0)}),radial-gradient(circle 680px at 960px 1180px,${gl(.22)},${gl(0)})"></div>
+    <div style="position:relative;z-index:2;height:100%;display:flex;flex-direction:column">
+      <div style="background:linear-gradient(90deg,#caa23e,#e9c766,#caa23e);text-align:center;padding:24px 0;font-family:Oswald;font-weight:700;font-size:34px;letter-spacing:7px;color:#241803">★ ${e(d.cardOverall||'CAMPEÓN OVERALL')} ★</div>
+      <div style="height:6px;background:#D4A843"></div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 60px">
+        <div style="width:360px;height:360px;border-radius:50%;overflow:hidden;border:8px solid #D4A843;box-shadow:0 0 0 10px rgba(212,168,67,.14),0 20px 50px rgba(0,0,0,.5);background:#0a1628">${photo}</div>
+        <div style="margin-top:28px">
+          ${first?`<div style="font-family:Oswald;font-weight:700;font-size:52px;line-height:1;color:#fff">${e(first)}</div>`:''}
+          <div style="font-family:Oswald;font-weight:700;font-size:80px;line-height:1.02;color:#fff;letter-spacing:1px">${e(rest)}</div>
+        </div>
+        <div style="margin-top:14px;font-family:Oswald;font-size:32px;letter-spacing:3px;color:#D4A843">${e(d.cardClub||'')}</div>
+        ${d.cardCategory?`<div style="margin-top:14px;display:inline-block;border:2px solid rgba(212,168,67,.7);color:#ffd86b;border-radius:40px;padding:8px 26px;font-family:Oswald;font-size:24px;letter-spacing:4px">${e(d.cardCategory)}</div>`:''}
+        <div style="display:flex;gap:14px;margin-top:24px;width:100%;max-width:860px">
+          ${stat('SENTADILLA',d.cardSquat)}${stat('BANCA',d.cardBench)}${stat('PESO MUERTO',d.cardDeadlift)}
+        </div>
+        <div style="display:flex;gap:14px;margin-top:14px">
+          <div style="background:rgba(8,16,30,.85);border:2px solid #D4A843;border-radius:14px;padding:14px 38px;min-width:280px">
+            <div style="font-family:Oswald;font-weight:700;font-size:60px;line-height:1;color:#fff">${e(d.cardTotal)||'—'}<span style="font-size:24px;color:rgba(235,240,250,.7)">kg</span></div>
+            <div style="font-family:Oswald;letter-spacing:4px;font-size:17px;color:rgba(200,214,230,.8);margin-top:4px">TOTAL</div>
+          </div>
+          <div style="background:rgba(212,168,67,.12);border:2px solid #D4A843;border-radius:14px;padding:14px 38px;min-width:280px">
+            <div style="font-family:Oswald;font-weight:700;font-size:60px;line-height:1;color:#ffd86b">${e(d.cardGLP)||'—'}</div>
+            <div style="font-family:Oswald;letter-spacing:4px;font-size:17px;color:rgba(200,214,230,.8);margin-top:4px">GL POINTS</div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:0 0 40px;text-align:center">${logoYL}</div>
+    </div>
+  </div>`;
+};
+
 window.pubRenderTemplate = function(tpl, d){
   const BG_PRESETS = {
     azul:    'radial-gradient(ellipse at top left,#0F2444 0%,#06101F 50%,#040912 100%)',
@@ -7542,6 +7613,7 @@ window.pubRenderTemplate = function(tpl, d){
   </div>`;
 
   if(tpl === 'cartaAtleta') return pubCardHtml(d);
+  if(tpl === 'atletaFuerte') return pubFuerteHtml(d);
 
   if(tpl === 'estaremosPresentes'){
     return common(
@@ -7769,6 +7841,30 @@ function renderPublisherInner(){
       ${sl('cardNameX','Nombre · horizontal',-400,400,5,(d.cardNameX||0),'px')}
       ${sl('cardNameY','Nombre · altura',560,1010,2,(d.cardNameY||720),'px')}
       ${sl('cardNameScale','Nombre · tamaño',60,140,1,(d.cardNameScale||100),'%')}
+    </div>`;
+  }
+  if(tpl==='atletaFuerte'){
+    const athOpts=(ST.data||[]).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')).map(a=>`<option value="${esc(a.nombre||'')}">`).join('');
+    fields += `<div class="field"><label>Cargar atleta desde la base (trae foto del sistema, club, marcas y categoría)</label>
+      <input class="inp" list="pubAthFuerte" placeholder="Escribe el nombre y elígelo de la lista..." onchange="pubLoadAthleteCard(this.value)">
+      <datalist id="pubAthFuerte">${athOpts}</datalist></div>`;
+    fields += `<div class="field"><label>Foto del atleta — se carga sola del sistema. Si quieres, súbela manual:</label>
+      ${d.cardPhoto
+        ? `<div style="display:flex;gap:10px;align-items:center;padding:10px;background:rgba(34,197,94,.08);border:1px solid var(--green);border-radius:8px"><img src="${d.cardPhoto}" crossorigin="anonymous" style="height:64px;border-radius:6px;object-fit:cover"><div style="flex:1;font-size:11px;color:var(--green);font-family:Oswald">✓ Foto cargada</div><button onclick="pubClearCardPhoto()" style="background:transparent;border:1px solid var(--red);color:var(--red);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer">✕ Quitar</button></div>`
+        : `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Este atleta no tiene foto en el sistema → saldrá el placeholder de perfil.</div><input type="file" accept="image/*" onchange="pubUploadCardPhoto(this)" style="padding:8px;border:1px dashed var(--border);border-radius:6px;background:rgba(10,22,40,.4);color:var(--muted);width:100%">`}
+    </div>`;
+    fields += inp('cardOverall','Título (banda dorada, ej: CAMPEONA OVERALL JUNIOR)',d.cardOverall);
+    fields += inp('cardName','Nombre completo',d.cardName);
+    fields += inp('cardClub','Club',d.cardClub);
+    fields += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${inp('cardSquat','Sentadilla (kg)',d.cardSquat)}
+      ${inp('cardBench','Banca (kg)',d.cardBench)}
+      ${inp('cardDeadlift','Peso muerto (kg)',d.cardDeadlift)}
+      ${inp('cardTotal','Total (kg)',d.cardTotal)}
+    </div>`;
+    fields += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${inp('cardGLP','GL points',d.cardGLP)}
+      ${inp('cardCategory','Categoría de peso (ej: −83 KG, opcional)',d.cardCategory)}
     </div>`;
   }
   if(/^(inicio|nomina|transmisiones|atletas|records|ranking|calculadora)$/.test(tpl)){
