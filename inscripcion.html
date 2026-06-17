@@ -422,13 +422,36 @@ function autoFillCode() {
   }
 }
 
+// Autorellena ciudad/región (comuna, zona) desde la última inscripción del atleta.
+// El correo NO se autorrellena (es privado). No sobreescribe lo que el atleta ya escribió.
+async function autoFillContact() {
+  const f = state.form;
+  const rut = formatRut(f.rut);
+  if (!rut || !firebaseReady) return;
+  if (f.comuna && f.zona) return; // ya tiene ambos, no consultar
+  try {
+    const q = window.FB.query(window.FB.collection(db, 'inscripciones'), window.FB.where('rut', '==', rut));
+    const snap = await window.FB.getDocs(q);
+    let cands = [];
+    snap.forEach(d => cands.push(d.data()));
+    cands = cands.filter(c => c.status !== 'rejected' && (c.comuna || c.zona));
+    if (!cands.length) return;
+    cands.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+    const last = cands[0];
+    let changed = false;
+    if (!f.comuna && last.comuna) { f.comuna = last.comuna; changed = true; }
+    if (!f.zona && last.zona) { f.zona = last.zona; changed = true; }
+    if (changed) render();
+  } catch (e) { /* silencioso: si falla, el atleta llena a mano */ }
+}
+
 // ══════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════
 let state = {
   view: 'form', // form, confirm, admin, edit_lookup, edit, admin_eventos, admin_evento_form
   step: 0,
-  form: {evento:'',nombre:'',rut:'',codigo:'',sexo:'',fechaNac:'',division:'',categoria:'',modalidad:'',club:'',clubOtro:'',zona:'',comuna:'',pin:'',universidad:''},
+  form: {evento:'',nombre:'',rut:'',codigo:'',sexo:'',fechaNac:'',division:'',categoria:'',modalidad:'',club:'',clubOtro:'',zona:'',comuna:'',correo:'',posNacMod:'',posNacLugar:'',pin:'',universidad:''},
   carnetFile: null, carnetName: '',
   wadeFile: null, wadeName: '',
   carnetPhotoFile: null, carnetPhotoName: '',
@@ -614,7 +637,7 @@ function renderForm() {
     <div class="row">
       <div class="field">
         <label>RUT <span class="req">*</span></label>
-        <input class="input ${f.rut?(validateRut(f.rut).valid?'ok':'err'):''}" type="text" placeholder="12345678-9" value="${f.rut}" oninput="upd('rut',this.value)" onblur="upd('rut',formatRut(this.value));autoFillCode();this.value=state.form.rut">
+        <input class="input ${f.rut?(validateRut(f.rut).valid?'ok':'err'):''}" type="text" placeholder="12345678-9" value="${f.rut}" oninput="upd('rut',this.value)" onblur="upd('rut',formatRut(this.value));autoFillCode();autoFillContact();this.value=state.form.rut">
         ${f.rut&&!validateRut(f.rut).valid?`<div style="font-size:10px;color:var(--red,#ef4444);margin-top:3px">⚠️ ${validateRut(f.rut).msg}</div>`:''}
       </div>
       <div class="field">
@@ -654,18 +677,44 @@ function renderForm() {
       <label>Nombre del Club</label>
       <input class="input" type="text" placeholder="Nombre de tu club" value="${f.clubOtro}" oninput="upd('clubOtro',this.value)">
     </div>`:''}
+    <div class="field">
+      <label>Correo de Contacto <span class="req">*</span></label>
+      <input class="input ${f.correo&&/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.correo)?'ok':''}" type="email" inputmode="email" placeholder="tucorreo@ejemplo.com" value="${f.correo||''}" oninput="upd('correo',this.value.trim())">
+      <div style="font-size:10px;color:var(--muted);margin-top:3px">Lo usa FECHIPO para contactarte. No se muestra públicamente.</div>
+    </div>
     <div class="field" style="margin-top:8px;padding-top:12px;border-top:1px solid var(--border)">
       <label>PIN de Edición (4 dígitos) <span class="req">*</span> — <span style="color:var(--muted);font-size:10px;text-transform:none;letter-spacing:0">Guarda este PIN para modificar tu inscripción después</span></label>
       <input class="input ${f.pin&&f.pin.length===4?'ok':''}" type="password" inputmode="numeric" maxlength="4" placeholder="Crea un PIN de 4 dígitos" value="${f.pin}" oninput="upd('pin',this.value.replace(/[^0-9]/g,'').slice(0,4))" style="max-width:200px;text-align:center;font-size:20px;letter-spacing:8px">
     </div>
     <div style="display:flex;justify-content:space-between;margin-top:16px">
       <button class="btn btn-outline" onclick="prevStep()">← Atrás</button>
-      <button id="step1NextBtn" class="btn btn-accent" onclick="nextStep()" ${!(f.nombre&&f.rut&&f.sexo&&f.fechaNac&&f.club&&f.comuna&&f.pin&&f.pin.length===4)?'disabled':''}>Siguiente →</button>
+      <button id="step1NextBtn" class="btn btn-accent" onclick="nextStep()" ${!(f.nombre&&f.rut&&f.sexo&&f.fechaNac&&f.club&&f.comuna&&f.correo&&/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.correo)&&f.pin&&f.pin.length===4)?'disabled':''}>Siguiente →</button>
     </div></div>`;
   }
 
   // STEP 2: Competition details
   if (s === 2) {
+    // Pregunta "Posición en el Nacional 2026" (solo si el evento la activa). Se arma
+    // por concatenación (sin template literals anidados) para no romper el render.
+    const _posNacOn = !!(EVENTS.find(e=>e.id===f.evento)||{}).posNac2026;
+    let _posNacBlock = '';
+    if (_posNacOn) {
+      const _mo = ['Classic','Equipado','OE','Universitario']
+        .map(m => '<option '+(f.posNacMod===m?'selected':'')+'>'+m+'</option>').join('');
+      const _lo = [1,2,3,4,5]
+        .map(n => '<option value="'+n+'" '+(String(f.posNacLugar)===String(n)?'selected':'')+'>'+n+'° lugar</option>').join('');
+      _posNacBlock =
+        '<div class="field" style="margin-top:8px;padding-top:12px;border-top:1px solid var(--border)">'
+        + '<label>Posición en el Nacional 2026 <span class="req">*</span></label>'
+        + '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Clasificación al Sudamericano. Indica la modalidad y el lugar que obtuviste.</div>'
+        + '<div class="row"><div class="field">'
+        +   '<label style="font-size:11px;text-transform:none;letter-spacing:0">Modalidad</label>'
+        +   '<select class="input '+(f.posNacMod?'ok':'')+'" onchange="updR(\'posNacMod\',this.value)"><option value="">Seleccionar...</option>'+_mo+'</select>'
+        + '</div><div class="field">'
+        +   '<label style="font-size:11px;text-transform:none;letter-spacing:0">Lugar</label>'
+        +   '<select class="input '+(f.posNacLugar?'ok':'')+'" onchange="updR(\'posNacLugar\',this.value)"><option value="">Seleccionar...</option>'+_lo+'</select>'
+        + '</div></div></div>';
+    }
     h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Datos de Competencia</h3>
     <div class="row">
       <div class="field">
@@ -695,9 +744,10 @@ function renderForm() {
       <label>Universidad <span class="req">*</span></label>
       <input class="input ${f.universidad?'ok':''}" type="text" placeholder="Nombre completo de tu universidad" value="${f.universidad||''}" oninput="upd('universidad',this.value)">
     </div>` : ''}
+    ${_posNacBlock}
     <div style="display:flex;justify-content:space-between;margin-top:16px">
       <button class="btn btn-outline" onclick="prevStep()">← Atrás</button>
-      <button class="btn btn-accent" onclick="nextStep()" ${!(f.division&&f.categoria&&f.modalidad)?'disabled':''}>Siguiente →</button>
+      <button class="btn btn-accent" onclick="nextStep()" ${!(f.division&&f.categoria&&f.modalidad && (!_posNacOn || (f.posNacMod&&f.posNacLugar)))?'disabled':''}>Siguiente →</button>
     </div></div>`;
   }
 
@@ -1434,6 +1484,8 @@ async function submitForm() {
       zona: f.zona,
       comuna: sanitizeInput(f.comuna),
       universidad: sanitizeInput(f.universidad || ''),
+      posNacMod: sanitizeInput(f.posNacMod || ''),
+      posNacLugar: sanitizeInput(f.posNacLugar || ''),
       carnetName: state.carnetName,
       wadeName: state.wadeName,
       status: 'pending',
@@ -1443,6 +1495,7 @@ async function submitForm() {
     const privateEntry = {
       pin: f.pin,
       rut: sanitizeInput(f.rut),
+      correo: sanitizeInput(f.correo || ''),
     };
 
     // storageWarning se declara aquí (fuera del bloque if) para que sea accesible
@@ -1598,7 +1651,7 @@ async function submitForm() {
 }
 
 function resetForm() {
-  state = {...state, view:'form', step:0, form:{evento:'',nombre:'',rut:'',codigo:'',sexo:'',fechaNac:'',division:'',categoria:'',modalidad:'',club:'',clubOtro:'',zona:'',comuna:'',pin:'',universidad:''}, carnetFile:null, carnetName:'', wadeFile:null, wadeName:'', carnetPhotoFile:null, carnetPhotoName:'', consentimientoFile:null, consentimientoName:'', submitting:false, storageWarning:false, error:'', success:'', editDoc:null, editId:null};
+  state = {...state, view:'form', step:0, form:{evento:'',nombre:'',rut:'',codigo:'',sexo:'',fechaNac:'',division:'',categoria:'',modalidad:'',club:'',clubOtro:'',zona:'',comuna:'',correo:'',posNacMod:'',posNacLugar:'',pin:'',universidad:''}, carnetFile:null, carnetName:'', wadeFile:null, wadeName:'', carnetPhotoFile:null, carnetPhotoName:'', consentimientoFile:null, consentimientoName:'', submitting:false, storageWarning:false, error:'', success:'', editDoc:null, editId:null};
   render();
 }
 

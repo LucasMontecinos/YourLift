@@ -3305,6 +3305,7 @@ function renderNominas(){
       ${inFirebase?`<button class="btn btn-b" onclick="sortNominaByEvent('${ST.filterEv}')">⇅ ORDENAR</button>`:''}
       <button class="btn btn-g" onclick="openInscribirModal()" style="padding:8px 16px;font-size:12px">Inscribir atleta</button>
       <button id="btnExportNomina" class="btn btn-b" onclick="exportNominaExcel()" style="padding:8px 16px;font-size:12px">Exportar Excel</button>
+      <button id="btnExportDocs" class="btn btn-b" onclick="exportNominaDocsZip()" style="padding:8px 16px;font-size:12px" title="ZIP con una carpeta por atleta (con su nombre) y adentro sus documentos subidos">Descargar Docs (ZIP)</button>
     </div>
     ${needsMetaSync?'<div class="card" style="background:rgba(212,168,67,.08);border-color:rgba(212,168,67,.3);padding:12px 16px;margin-bottom:12px"><span style="color:var(--gold);font-size:12px">Las inscripciones están en Firebase pero falta el doc de evento en <code>eventos/</code>. Sin eso no podés editar fecha/cierre/ubicación desde <b>Campeonatos</b>. Creá el evento desde el panel de Campeonatos.</span></div>':''}
     <div class="card" style="padding:0;overflow-x:auto">
@@ -3803,6 +3804,8 @@ window.exportNominaExcel = async function(){
     // Mismos datos que muestra la nómina del evento seleccionado.
     let list=(ST.inscripciones||[]).filter(i=>i.evento===ev&&i.status!=='rejected');
     list.sort((a,b)=>(a.sortOrder||999)-(b.sortOrder||999));
+    // Columna "Pos. Nacional 2026" solo si el evento activó esa pregunta (Sudamericano).
+    const posNacOn = !!(ST.eventos||[]).find(e=>e.id===ev)?.posNac2026;
 
     const wb=new ExcelJS.Workbook();
     const ws=wb.addWorksheet('Nómina',{views:[{state:'frozen',ySplit:1}]});
@@ -3813,15 +3816,18 @@ window.exportNominaExcel = async function(){
       {header:'CATEGORÍA', key:'categoria', width:12.8},
       {header:'CLUB',      key:'club',      width:26.8},
       {header:'RUT',       key:'rut',       width:15},
-      {header:'FECHA DE NACIMIENTO', key:'fechaNac', width:20}
+      {header:'FECHA DE NACIMIENTO', key:'fechaNac', width:20},
+      ...(posNacOn ? [{header:'POS. NACIONAL 2026', key:'posNac', width:22}] : [])
     ];
     // fechaNac llega como ISO (AAAA-MM-DD); se muestra DD/MM/AAAA (formato chileno).
     const fmtFN=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(s||''));return m?`${m[3]}/${m[2]}/${m[1]}`:(s||'');};
     list.forEach(i=>{
       // Si eligió "Otro", el nombre real del club está en clubOtro.
       const club=i.club==='Otro'?(i.clubOtro||'Otro'):(i.club||'');
+      const posNacVal = i.posNacLugar ? (i.posNacMod ? i.posNacMod+' · '+i.posNacLugar+'°' : i.posNacLugar+'°') : '';
       ws.addRow({nombre:i.nombre||'',modalidad:i.modalidad||'',division:i.division||'',categoria:i.categoria||'',club,
-        rut:i.rut||'',fechaNac:fmtFN(i.fechaNac||i.fechanac)});
+        rut:i.rut||'',fechaNac:fmtFN(i.fechaNac||i.fechanac),
+        ...(posNacOn ? {posNac:posNacVal} : {})});
     });
 
     const thin={style:'thin',color:{argb:'FF000000'}};
@@ -3836,7 +3842,7 @@ window.exportNominaExcel = async function(){
         cell.alignment={vertical:'middle'};
       });
     });
-    ws.autoFilter='A1:G'+ws.rowCount;   // filtros en todas las columnas
+    ws.autoFilter='A1:'+String.fromCharCode(64+ws.columns.length)+ws.rowCount;   // filtros en todas las columnas
 
     const buf=await wb.xlsx.writeBuffer();
     const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -3848,6 +3854,65 @@ window.exportNominaExcel = async function(){
     showToast(`Excel exportado: ${list.length} atletas`);
   }catch(e){ console.error(e); showToast('Error al exportar: '+e.message,null,true); }
   finally{ if(btn){ btn.textContent='Exportar Excel'; btn.disabled=false; } }
+};
+
+// ── Descargar todos los documentos del evento como ZIP ────────────────────────
+// Una carpeta por atleta (con su nombre) y adentro sus documentos subidos.
+window.exportNominaDocsZip = async function(){
+  const btn=document.getElementById('btnExportDocs');
+  const ev=ST.filterEv;
+  if(!ev){ showToast('Selecciona un campeonato primero',null,true); return; }
+  const list=(ST.inscripciones||[]).filter(i=>i.evento===ev && i.status!=='rejected');
+  if(!list.length){ showToast('No hay inscripciones en este campeonato',null,true); return; }
+  if(btn){ btn.textContent='Preparando...'; btn.disabled=true; }
+  try{
+    if(!window.JSZip){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        s.onload=res; s.onerror=rej; document.head.appendChild(s);
+      });
+    }
+    const LEGACY_MAP={carnetURL:'Carnet de Identidad',wadeURL:'ADEL-WADA',carnetPhotoURL:'Foto fondo blanco',consentimientoURL:'Consentimiento Menor',passportURL:'Pasaporte',ipfConsentURL:'Consentimiento IPF',notasURL:'Concentracion de Notas'};
+    const NEW_MAP=window.DOC_TYPES_CATALOG||{};
+    const MIME_EXT={'image/jpeg':'jpg','image/jpg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','application/pdf':'pdf'};
+    const safe=s=>String(s||'').replace(/[\\/:*?"<>|]/g,'').replace(/\s+/g,' ').trim().slice(0,80)||'atleta';
+    // Recolectar docs por atleta (mismo criterio que viewInsDocs: nuevos + legacy)
+    const tasks=[];
+    list.forEach(i=>{
+      const priv=ST.inscripcionesPrivate?.[i.id]||{};
+      const docs=[];
+      if(priv.docs && typeof priv.docs==='object') Object.entries(priv.docs).forEach(([k,url])=>{ if(url) docs.push({label:(NEW_MAP[k]?.label||k), url}); });
+      Object.entries(LEGACY_MAP).forEach(([field,label])=>{ const url=priv[field]; if(url && !docs.some(d=>d.url===url)) docs.push({label, url}); });
+      if(docs.length) tasks.push({nombre:i.nombre||i.rut||i.id, docs});
+    });
+    const totDocs=tasks.reduce((n,t)=>n+t.docs.length,0);
+    if(!totDocs){ showToast('No hay documentos subidos en este campeonato',null,true); if(btn){btn.textContent='Descargar Docs (ZIP)';btn.disabled=false;} return; }
+    const zip=new JSZip();
+    let ok=0, fail=0, done=0;
+    for(const t of tasks){
+      const folder=zip.folder(safe(t.nombre));
+      const used={};
+      for(const d of t.docs){
+        try{
+          const resp=await fetch(d.url); if(!resp.ok) throw new Error('HTTP '+resp.status);
+          const blob=await resp.blob();
+          const ext=MIME_EXT[blob.type] || (String(blob.type||'').split('/')[1]||'bin');
+          let base=safe(d.label); used[base]=(used[base]||0)+1; if(used[base]>1) base+=' '+used[base];
+          folder.file(base+'.'+ext, blob); ok++;
+        }catch(e){ fail++; console.warn('[docs zip]',t.nombre,d.label,e.message); }
+        done++; if(btn) btn.textContent='Descargando '+done+'/'+totDocs;
+      }
+    }
+    if(!ok){ showToast('No se pudo descargar ningún documento (revisa permisos/CORS)',null,true); return; }
+    if(btn) btn.textContent='Comprimiendo...';
+    const content=await zip.generateAsync({type:'blob'});
+    const safeEv=String(ev).replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,60).trim()||'evento';
+    const a=document.createElement('a'); a.href=URL.createObjectURL(content); a.download='Documentos_'+safeEv+'.zip';
+    document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
+    showToast('ZIP listo: '+ok+' documentos'+(fail?' · '+fail+' fallaron':''));
+  }catch(e){ console.error(e); showToast('Error: '+e.message,null,true); }
+  finally{ if(btn){ btn.textContent='Descargar Docs (ZIP)'; btn.disabled=false; } }
 };
 
 // ── Exportar data.json como Excel ─────────────────────────────────────────────
@@ -4057,6 +4122,13 @@ function renderCampeonatos(){
             <div style="font-size:11px;color:var(--muted);margin-top:2px">Si está activo, el campeonato aparece en el selector de eventos de <b>livecast.html</b>. <b>Desactivá para ocultarlo del LiveCast</b> (ej. campeonatos ya terminados que no querés mostrar).</div>
           </div>
         </label>
+        <label class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.3);border-radius:8px">
+          <input type="checkbox" id="ef_posNac2026" ${(editing.posNac2026===true)?'checked':''} style="width:18px;height:18px;cursor:pointer">
+          <div>
+            <div style="font-weight:600;color:var(--text)">Pedir posición en el Nacional 2026 (clasificación Sudamericano)</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Si está activo, al inscribirse el atleta indica su <b>modalidad</b> (Classic/Equipado/OE/Universitario) y <b>lugar</b> (1° a 5°) obtenido en el Nacional 2026. Útil para el proceso del Sudamericano.</div>
+          </div>
+        </label>
 
         <!-- Sección NUEVA: Documentos requeridos en inscripción ──────────────────── -->
         <div class="field" style="grid-column:span 2">
@@ -4189,7 +4261,7 @@ function renderCampeonatos(){
 
 // ── CRUD helpers ────────────────────────────────────────────
 window.newEvento = function(){
-  ST.eventoForm = {id:'',name:'',date:'',closeDate:'',preNominaCloseAt:'',nominaCloseAt:'',location:'',org:'',days:'',status:'open',extraCols:['modalidad'],recordsEnabled:true,cronogramaPublic:true,requiereFoto:false,livecastVisible:true,youtubeUrl:''};
+  ST.eventoForm = {id:'',name:'',date:'',closeDate:'',preNominaCloseAt:'',nominaCloseAt:'',location:'',org:'',days:'',status:'open',extraCols:['modalidad'],recordsEnabled:true,cronogramaPublic:true,requiereFoto:false,livecastVisible:true,posNac2026:false,youtubeUrl:''};
   ST.eventoFormMode = 'create';
   render();
 };
@@ -4310,6 +4382,7 @@ window.saveEvento = async function(){
   const cronogramaPublic = document.getElementById('ef_cronogramaPublic')?.checked !== false;
   const requiereFoto = !!document.getElementById('ef_requiereFoto')?.checked;
   const livecastVisible = document.getElementById('ef_livecastVisible')?.checked !== false;
+  const posNac2026 = !!document.getElementById('ef_posNac2026')?.checked;
   const youtubeUrl = (document.getElementById('ef_youtubeUrl')?.value||'').trim();
   const logoUrl = (document.getElementById('ef_logoUrl')?.value||'').trim();
   const instagram = organizers[0]?.instagram || '';   // compat: IG del primer organizador
@@ -4323,7 +4396,7 @@ window.saveEvento = async function(){
   if(isNew && ST.eventos.find(e=>e.id===id)){ showToast('Ya existe un campeonato con ese ID', null, true); return; }
 
   const data = {id, name, date, closeDate, preNominaCloseAt, nominaCloseAt, location, org, days, status,
-    extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, youtubeUrl,
+    extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, posNac2026, youtubeUrl,
     organizers, logoUrl, instagram,    // organizadores (con IG) + logo del campeonato (se muestran en el home)
     streamLogoUrl, streamInstagram,    // logo de productora + IG para la tarjeta de Transmisiones
     requiredDocs,    // nuevo: array de docKeys requeridos
