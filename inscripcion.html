@@ -216,12 +216,20 @@ let EVENTS = [];
 // ════════════════════════════════════════════════════════════════
 const DOC_TYPES = {
   carnetIdFront: {
-    label: 'Carnet de Identidad',
+    label: 'Carnet de Identidad (frente)',
     icon: '📷',
     desc: 'Cara frontal del carnet de identidad',
     accept: 'image/*,.pdf',
     stateKey: 'carnetFile', nameKey: 'carnetName', urlKey: 'carnetURL',
     storagePath: 'carnet'
+  },
+  carnetIdReverso: {
+    label: 'Carnet de Identidad (reverso)',
+    icon: '📷',
+    desc: 'Cara trasera del carnet de identidad',
+    accept: 'image/*,.pdf',
+    stateKey: 'carnetBackFile', nameKey: 'carnetBackName', urlKey: 'carnetBackURL',
+    storagePath: 'carnetBack'
   },
   fotoBlanco: {
     label: 'Foto fondo blanco',
@@ -286,8 +294,8 @@ const MODALITIES = [
   "Powerlifting Equipado",
   "Only Bench Equipado",
   "Powerlifting Equipado + Only Bench Equipado",
-  "Powerlifting Universitario",
-  "Powerlifting Classic Special Olympics"
+  "Olimpiadas Especiales",
+  "Powerlifting Universitario"
 ];
 
 const ZONAS = ["Zona Norte","Zona Centro","Zona Sur","Internacional"];
@@ -454,6 +462,7 @@ let state = {
   step: 0,
   form: {evento:'',nombre:'',rut:'',codigo:'',sexo:'',fechaNac:'',division:'',categoria:'',modalidad:'',club:'',clubOtro:'',zona:'',comuna:'',correo:'',posNacMod:'',posNacLugar:'',pin:'',universidad:''},
   carnetFile: null, carnetName: '',
+  carnetBackFile: null, carnetBackName: '',
   wadeFile: null, wadeName: '',
   carnetPhotoFile: null, carnetPhotoName: '',
   consentimientoFile: null, consentimientoName: '',
@@ -1405,8 +1414,14 @@ function handleFile(input, type) {
   const file = input.files[0];
   if (!file) return;
   if (file.size > 10 * 1024 * 1024) { state.error = 'Archivo demasiado grande (máx 10MB)'; render(); return; }
-  if (type === 'carnet') { state.carnetFile = file; state.carnetName = file.name; }
-  else if (type === 'wade') { state.wadeFile = file; state.wadeName = file.name; }
+  state.error = '';
+  // Genérico: ubica el documento por su storagePath en el catálogo (sirve para
+  // wada, carnetBack y cualquier doc nuevo, sin tener que agregar un caso a mano).
+  const meta = Object.values(DOC_TYPES).find(m => m.storagePath === type);
+  if (meta) { state[meta.stateKey] = file; state[meta.nameKey] = file.name; }
+  // Compatibilidad con llamadas legacy (nombres viejos del sistema anterior).
+  else if (type === 'carnet') { state.carnetFile = file; state.carnetName = file.name; }
+  else if (type === 'wade' || type === 'wada') { state.wadeFile = file; state.wadeName = file.name; }
   else if (type === 'carnetPhoto') { state.carnetPhotoFile = file; state.carnetPhotoName = file.name; }
   else if (type === 'consentimiento') { state.consentimientoFile = file; state.consentimientoName = file.name; }
   else if (type === 'ipfConsent') { state.ipfConsentFile = file; state.ipfConsentName = file.name; }
@@ -1540,6 +1555,9 @@ async function submitForm() {
       if (state.carnetFile) {
         privateEntry.carnetURL = await uploadOne(state.carnetFile, 'carnet');
       }
+      if (state.carnetBackFile) {
+        privateEntry.carnetBackURL = await uploadOne(state.carnetBackFile, 'carnetBack');
+      }
       if (state.wadeFile) {
         privateEntry.wadeURL = await uploadOne(state.wadeFile, 'wada');
       }
@@ -1652,7 +1670,7 @@ async function submitForm() {
 }
 
 function resetForm() {
-  state = {...state, view:'form', step:0, form:{evento:'',nombre:'',rut:'',codigo:'',sexo:'',fechaNac:'',division:'',categoria:'',modalidad:'',club:'',clubOtro:'',zona:'',comuna:'',correo:'',posNacMod:'',posNacLugar:'',pin:'',universidad:''}, carnetFile:null, carnetName:'', wadeFile:null, wadeName:'', carnetPhotoFile:null, carnetPhotoName:'', consentimientoFile:null, consentimientoName:'', submitting:false, storageWarning:false, error:'', success:'', editDoc:null, editId:null};
+  state = {...state, view:'form', step:0, form:{evento:'',nombre:'',rut:'',codigo:'',sexo:'',fechaNac:'',division:'',categoria:'',modalidad:'',club:'',clubOtro:'',zona:'',comuna:'',correo:'',posNacMod:'',posNacLugar:'',pin:'',universidad:''}, carnetFile:null, carnetName:'', carnetBackFile:null, carnetBackName:'', wadeFile:null, wadeName:'', carnetPhotoFile:null, carnetPhotoName:'', consentimientoFile:null, consentimientoName:'', submitting:false, storageWarning:false, error:'', success:'', editDoc:null, editId:null};
   render();
 }
 
