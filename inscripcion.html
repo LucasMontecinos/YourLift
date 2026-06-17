@@ -460,7 +460,7 @@ async function autoFillContact() {
 let state = {
   view: 'form', // form, confirm, admin, edit_lookup, edit, admin_eventos, admin_evento_form
   step: 0,
-  form: {evento:'',nombre:'',rut:'',codigo:'',sexo:'',fechaNac:'',division:'',categoria:'',modalidad:'',club:'',clubOtro:'',zona:'',comuna:'',correo:'',posNacMod:'',posNacLugar:'',pin:'',universidad:''},
+  form: {evento:'',nombre:'',rut:'',codigo:'',sexo:'',fechaNac:'',division:'',categoria:'',modalidad:'',club:'',clubOtro:'',zona:'',comuna:'',correo:'',posNacMod:'',posNacLugar:'',posNacSQ:'',posNacBP:'',posNacDL:'',pin:'',universidad:''},
   carnetFile: null, carnetName: '',
   carnetBackFile: null, carnetBackName: '',
   wadeFile: null, wadeName: '',
@@ -711,18 +711,27 @@ function renderForm() {
     if (_posNacOn) {
       const _mo = ['Classic','Equipado','OE','Universitario']
         .map(m => '<option '+(f.posNacMod===m?'selected':'')+'>'+m+'</option>').join('');
-      const _lo = [1,2,3,4,5]
+      const _lo = [1,2,3]
         .map(n => '<option value="'+n+'" '+(String(f.posNacLugar)===String(n)?'selected':'')+'>'+n+'° lugar</option>').join('');
+      const _np = (k)=> '<input class="input" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" value="'+(f[k]||'')+'" oninput="upd(\''+k+'\',this.value)">';
       _posNacBlock =
         '<div class="field" style="margin-top:8px;padding-top:12px;border-top:1px solid var(--border)">'
         + '<label>Posición en el Nacional 2026 <span class="req">*</span></label>'
-        + '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Clasificación al Sudamericano. Indica la modalidad y el lugar que obtuviste.</div>'
+        + '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Clasificación al Sudamericano. Indica tu modalidad, lugar y las marcas que levantaste en esa competencia.</div>'
         + '<div class="row"><div class="field">'
         +   '<label style="font-size:11px;text-transform:none;letter-spacing:0">Modalidad</label>'
         +   '<select class="input '+(f.posNacMod?'ok':'')+'" onchange="updR(\'posNacMod\',this.value)"><option value="">Seleccionar...</option>'+_mo+'</select>'
         + '</div><div class="field">'
         +   '<label style="font-size:11px;text-transform:none;letter-spacing:0">Lugar</label>'
         +   '<select class="input '+(f.posNacLugar?'ok':'')+'" onchange="updR(\'posNacLugar\',this.value)"><option value="">Seleccionar...</option>'+_lo+'</select>'
+        + '</div></div>'
+        + '<div style="font-size:11px;color:var(--muted);margin:10px 0 6px">Marcas levantadas en el Nacional 2026 (kg):</div>'
+        + '<div class="row"><div class="field">'
+        +   '<label style="font-size:11px;text-transform:none;letter-spacing:0">Sentadilla</label>'+_np('posNacSQ')
+        + '</div><div class="field">'
+        +   '<label style="font-size:11px;text-transform:none;letter-spacing:0">Banca</label>'+_np('posNacBP')
+        + '</div><div class="field">'
+        +   '<label style="font-size:11px;text-transform:none;letter-spacing:0">Peso muerto</label>'+_np('posNacDL')
         + '</div></div></div>';
     }
     h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Datos de Competencia</h3>
@@ -1502,6 +1511,9 @@ async function submitForm() {
       universidad: sanitizeInput(f.universidad || ''),
       posNacMod: sanitizeInput(f.posNacMod || ''),
       posNacLugar: sanitizeInput(f.posNacLugar || ''),
+      posNacSQ: sanitizeInput(f.posNacSQ || ''),
+      posNacBP: sanitizeInput(f.posNacBP || ''),
+      posNacDL: sanitizeInput(f.posNacDL || ''),
       carnetName: state.carnetName,
       wadeName: state.wadeName,
       status: 'pending',
@@ -1670,7 +1682,7 @@ async function submitForm() {
 }
 
 function resetForm() {
-  state = {...state, view:'form', step:0, form:{evento:'',nombre:'',rut:'',codigo:'',sexo:'',fechaNac:'',division:'',categoria:'',modalidad:'',club:'',clubOtro:'',zona:'',comuna:'',correo:'',posNacMod:'',posNacLugar:'',pin:'',universidad:''}, carnetFile:null, carnetName:'', carnetBackFile:null, carnetBackName:'', wadeFile:null, wadeName:'', carnetPhotoFile:null, carnetPhotoName:'', consentimientoFile:null, consentimientoName:'', submitting:false, storageWarning:false, error:'', success:'', editDoc:null, editId:null};
+  state = {...state, view:'form', step:0, form:{evento:'',nombre:'',rut:'',codigo:'',sexo:'',fechaNac:'',division:'',categoria:'',modalidad:'',club:'',clubOtro:'',zona:'',comuna:'',correo:'',posNacMod:'',posNacLugar:'',posNacSQ:'',posNacBP:'',posNacDL:'',pin:'',universidad:''}, carnetFile:null, carnetName:'', carnetBackFile:null, carnetBackName:'', wadeFile:null, wadeName:'', carnetPhotoFile:null, carnetPhotoName:'', consentimientoFile:null, consentimientoName:'', submitting:false, storageWarning:false, error:'', success:'', editDoc:null, editId:null};
   render();
 }
 
