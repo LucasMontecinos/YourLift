@@ -3356,7 +3356,7 @@ function renderNominas(){
             <td style="font-size:11px;color:var(--muted);max-width:160px"><span class="${cls}" ${click('comuna')} title="${esc(i.comuna||'')}">${esc(i.comuna||'—')}</span></td>
             ${_posNacCol?('<td style="font-size:11px;white-space:nowrap">'
               +(i.posNacLugar?('<b style="color:var(--gold)">'+esc(i.posNacMod||'')+' '+esc(i.posNacLugar)+'°</b>'):'<span style="color:var(--muted);opacity:.5">—</span>')
-              +((i.posNacSQ||i.posNacBP||i.posNacDL)?('<br><span style="color:var(--muted)">SQ '+esc(i.posNacSQ||'-')+' · BP '+esc(i.posNacBP||'-')+' · DL '+esc(i.posNacDL||'-')+'</span>'):'')
+              +((i.posNacSQ||i.posNacBP||i.posNacDL)?('<br><span style="color:var(--muted)">SQ '+esc(i.posNacSQ||'-')+' · BP '+esc(i.posNacBP||'-')+' · DL '+esc(i.posNacDL||'-')+' · <b style="color:var(--text)">T '+esc(i.posNacTotal||(((parseFloat(i.posNacSQ)||0)+(parseFloat(i.posNacBP)||0)+(parseFloat(i.posNacDL)||0))||'-'))+'</b></span>'):'')
               +'</td>'):''}
             <td style="text-align:center">${docsCell}</td>
             <td><span class="badge ${i.status==='approved'?'b-g':i.status==='pending'?'b-y':'b-r'}">${esc(i.status||'approved')}</span></td>
@@ -3829,7 +3829,8 @@ window.exportNominaExcel = async function(){
         {header:'POS. NACIONAL 2026', key:'posNac', width:22},
         {header:'SQ NAC.', key:'posNacSQ', width:10},
         {header:'BP NAC.', key:'posNacBP', width:10},
-        {header:'DL NAC.', key:'posNacDL', width:10}
+        {header:'DL NAC.', key:'posNacDL', width:10},
+        {header:'TOTAL NAC.', key:'posNacTotal', width:12}
       ] : [])
     ];
     // fechaNac llega como ISO (AAAA-MM-DD); se muestra DD/MM/AAAA (formato chileno).
@@ -3841,7 +3842,7 @@ window.exportNominaExcel = async function(){
       const posNacVal = i.posNacLugar ? (i.posNacMod ? i.posNacMod+' · '+i.posNacLugar+'°' : i.posNacLugar+'°') : '';
       ws.addRow({nombre:i.nombre||'',modalidad:i.modalidad||'',division:i.division||'',categoria:i.categoria||'',club,
         rut:i.rut||'',fechaNac:fmtFN(i.fechaNac||i.fechanac),correo:priv.correo||'',
-        ...(posNacOn ? {posNac:posNacVal,posNacSQ:i.posNacSQ||'',posNacBP:i.posNacBP||'',posNacDL:i.posNacDL||''} : {})});
+        ...(posNacOn ? {posNac:posNacVal,posNacSQ:i.posNacSQ||'',posNacBP:i.posNacBP||'',posNacDL:i.posNacDL||'',posNacTotal:(i.posNacTotal||(((parseFloat(i.posNacSQ)||0)+(parseFloat(i.posNacBP)||0)+(parseFloat(i.posNacDL)||0))||''))} : {})});
     });
 
     const thin={style:'thin',color:{argb:'FF000000'}};
