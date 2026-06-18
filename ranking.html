@@ -174,7 +174,7 @@ var TABS=[
 {id:'oe_f',lb:'OE Femenino',s:'sf'}
 ];
 
-var DO={'Sub Junior':0,'Junior':1,'Open':2,'Master I':3,'Master II':4};
+var DO={'Sub Junior':0,'Junior':1,'Open':2,'Master I':3,'Master II':4,'Master III':5,'Master IV':6,'Universitario':7};
 var CUR='cl_m';
 
 // ════════════════════════════════════════════════════════════════
@@ -189,6 +189,23 @@ function _normCat(cat){
   var m=s.match(/(\d+(?:\.\d+)?)/);
   if(!m)return '';
   return m[1]+(isPlus?'+':'');
+}
+// Normaliza la división de edad: "Subjunior"/"Sub-Junior"/"sub junior" → "Sub Junior", etc.
+// Evita que la misma división aparezca duplicada en el ranking por diferencias de
+// escritura entre data.json (estática) y los resultados en vivo (Firestore).
+function _normDiv(d){
+  var s=String(d||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[-_.]/g,' ').replace(/\s+/g,' ').trim();
+  if(s.indexOf('sub')===0 || /sub\s*jr|sub\s*junior/.test(s)) return 'Sub Junior';
+  if(s.indexOf('junior')===0 || s==='jr') return 'Junior';
+  if(s.indexOf('open')===0) return 'Open';
+  if(s.indexOf('universitar')>=0 || s==='uni') return 'Universitario';
+  if(s.indexOf('master')===0 || s.indexOf('mastr')===0){
+    if(/\b(iv|4)\b/.test(s)) return 'Master IV';
+    if(/\b(iii|3)\b/.test(s)) return 'Master III';
+    if(/\b(ii|2)\b/.test(s)) return 'Master II';
+    return 'Master I';
+  }
+  return String(d||'').trim();
 }
 function _getTab(sex,modalidad,view,divOrEvento){
   var isMale=(sex==='Hombre'||sex==='Masculino'||sex==='M');
@@ -211,7 +228,7 @@ function _rebuildPositions(){
   // Recalcular posiciones dentro de cada (tab,cat,div) por tt desc
   var byKey={};
   D.forEach(function(e){
-    var k=e.tab+'|'+e.c+'|'+e.d;
+    var k=e.tab+'|'+e.c+'|'+_normDiv(e.d);
     if(!byKey[k])byKey[k]=[];
     byKey[k].push(e);
   });
@@ -314,7 +331,7 @@ function R(){
 var E=D.filter(function(e){return e.tab===CUR&&e.tt>0&&e.p<99});
 var ib=CUR.indexOf('bench')>=0;
 var G={};
-E.forEach(function(e){var k=e.c+'|'+e.d;if(!G[k])G[k]=[];G[k].push(e)});
+E.forEach(function(e){var k=e.c+'|'+_normDiv(e.d);if(!G[k])G[k]=[];G[k].push(e)});
 var K=Object.keys(G).sort(function(a,b){
   var ca=a.split('|'),cb=b.split('|');
   if(cn(ca[0])!==cn(cb[0]))return cn(ca[0])-cn(cb[0]);
