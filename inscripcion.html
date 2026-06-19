@@ -713,8 +713,8 @@ function renderForm() {
         .map(m => '<option '+(f.posNacMod===m?'selected':'')+'>'+m+'</option>').join('');
       const _lo = [1,2,3]
         .map(n => '<option value="'+n+'" '+(String(f.posNacLugar)===String(n)?'selected':'')+'>'+n+'° lugar</option>').join('');
-      const _np = (k)=> '<input class="input" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" value="'+(f[k]||'')+'" oninput="upd(\''+k+'\',this.value);nacTotal()">';
-      const _sumT = (parseFloat(f.posNacSQ)||0)+(parseFloat(f.posNacBP)||0)+(parseFloat(f.posNacDL)||0);
+      const _np = (k)=> '<input class="input" type="text" inputmode="decimal" placeholder="kg" value="'+(f[k]||'')+'" oninput="upd(\''+k+'\',this.value);nacTotal()">';
+      const _sumT = _numCL(f.posNacSQ)+_numCL(f.posNacBP)+_numCL(f.posNacDL);
       _posNacBlock =
         '<div class="field" style="margin-top:8px;padding-top:12px;border-top:1px solid var(--border)">'
         + '<label>Posición en el Nacional 2026 <span class="req">*</span></label>'
@@ -1392,10 +1392,13 @@ function _refreshStep1Btn() {
   btn.disabled = !(f.nombre && f.rut && f.sexo && f.fechaNac && f.club && f.comuna && f.pin && f.pin.length === 4);
 }
 function updR(key, val) { state.form[key] = val; render(); _refreshStep1Btn(); }
+// Parsea números con coma O punto decimal (locale chileno usa coma). Evita que "270,5" se lea como 0.
+function _numCL(v) { const n = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isNaN(n) ? 0 : n; }
+window._numCL = _numCL;
 // Suma automática del total del Nacional (SQ+BP+DL) sin re-renderizar (no pierde foco).
 function nacTotal() {
   const f = state.form;
-  const t = (parseFloat(f.posNacSQ)||0)+(parseFloat(f.posNacBP)||0)+(parseFloat(f.posNacDL)||0);
+  const t = _numCL(f.posNacSQ)+_numCL(f.posNacBP)+_numCL(f.posNacDL);
   f.posNacTotal = t>0 ? String(t) : '';
   const el = document.getElementById('nacTotalField');
   if (el) el.value = f.posNacTotal;
@@ -1525,10 +1528,10 @@ async function submitForm() {
       universidad: sanitizeInput(f.universidad || ''),
       posNacMod: sanitizeInput(f.posNacMod || ''),
       posNacLugar: sanitizeInput(f.posNacLugar || ''),
-      posNacSQ: sanitizeInput(f.posNacSQ || ''),
-      posNacBP: sanitizeInput(f.posNacBP || ''),
-      posNacDL: sanitizeInput(f.posNacDL || ''),
-      posNacTotal: String(((parseFloat(f.posNacSQ)||0)+(parseFloat(f.posNacBP)||0)+(parseFloat(f.posNacDL)||0))||''),
+      posNacSQ: String(_numCL(f.posNacSQ) || ''),
+      posNacBP: String(_numCL(f.posNacBP) || ''),
+      posNacDL: String(_numCL(f.posNacDL) || ''),
+      posNacTotal: String((_numCL(f.posNacSQ)+_numCL(f.posNacBP)+_numCL(f.posNacDL))||''),
       carnetName: state.carnetName,
       wadeName: state.wadeName,
       status: 'pending',
