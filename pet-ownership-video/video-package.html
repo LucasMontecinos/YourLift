@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Tenencia Responsable — Video Package 12s</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #0a0a0a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  gap: 14px;
+  user-select: none;
+}
+
+.label {
+  font-size: 10px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: #333;
+}
+
+/* ========= STAGE ========= */
+#stage {
+  width: 960px;
+  height: 540px;
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+
+#stage:-webkit-full-screen { width: 100vw; height: 100vh; }
+#stage:-moz-full-screen    { width: 100vw; height: 100vh; }
+#stage:fullscreen          { width: 100vw; height: 100vh; }
+
+/* Grain */
+#grain-svg {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  z-index: 90; pointer-events: none;
+  opacity: 0.07;
+}
+
+/* Vignette */
+#vignette {
+  position: absolute; inset: 0; z-index: 89; pointer-events: none;
+  background: radial-gradient(ellipse 85% 85% at 50% 50%,
+    transparent 40%, rgba(0,0,0,0.55) 80%, rgba(0,0,0,0.88) 100%);
+}
+
+/* Cut flash */
+#flash {
+  position: absolute; inset: 0; z-index: 95;
+  background: #000; opacity: 0; pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+/* Progress bar */
+#progress {
+  position: absolute; bottom: 0; left: 0;
+  height: 3px; width: 0%;
+  background: rgba(255,255,255,0.45);
+  z-index: 98; pointer-events: none;
+  transition: none;
+}
+
+/* ========= SCENES ========= */
+.scene {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: none;
+}
+
+/* ---- SCENE 1: single SE BUSCA poster ---- */
+#s1 { background: #100e0b; }
+
+.wall {
+  position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(90deg, transparent, transparent 58px,
+      rgba(0,0,0,0.12) 58px, rgba(0,0,0,0.12) 60px),
+    repeating-linear-gradient(0deg, transparent, transparent 28px,
+      rgba(0,0,0,0.08) 28px, rgba(0,0,0,0.08) 30px),
+    linear-gradient(135deg, #1e1912 0%, #15110d 60%, #110e0a 100%);
+}
+
+/* tape strip at top of poster */
+.poster {
+  position: relative;
+  background: #f4eedc;
+  padding: 18px 22px 22px;
+  box-shadow: 3px 6px 30px rgba(0,0,0,0.85), inset 0 0 80px rgba(0,0,0,0.08);
+  z-index: 2;
+  width: 270px;
+}
+.poster::before {
+  content: '';
+  position: absolute;
+  top: -5px; left: 50%; transform: translateX(-50%);
+  width: 36px; height: 10px;
+  background: rgba(200,200,180,0.7);
+  border-radius: 2px;
+}
+
+.ph { font-size: 11px; font-weight: 800; letter-spacing: 5px; text-transform: uppercase; text-align: center; padding: 6px 0; margin-bottom: 10px; color: #fff; }
+.ph-red   { background: #b52e2e; }
+.ph-blue  { background: #1a5a8a; }
+.ph-dark  { background: #2c2c2c; }
+
+.pdiv { border: none; border-top: 2px dashed rgba(0,0,0,0.25); margin: 8px 0; }
+
+.pname {
+  font-size: 20px; font-weight: 900; color: #1a1a1a;
+  text-align: center; letter-spacing: 2px; margin-bottom: 4px;
+}
+.pinfo {
+  font-size: 11px; color: #444; text-align: center; line-height: 1.65;
+}
+.preward {
+  font-size: 13px; font-weight: 700; color: #b52e2e;
+  text-align: center; margin-top: 7px;
+}
+.preward span { display: block; font-size: 10px; font-weight: 400; color: #555; }
+
+/* ---- SCENE 2: wall of posters ---- */
+#s2 { background: #0e0c09; }
+#s2 .wall { opacity: 0.9; }
+#s2-inner {
+  position: absolute; inset: 0;
+  animation: zoomout 2.2s ease forwards;
+}
+@keyframes zoomout {
+  from { transform: scale(1.18); }
+  to   { transform: scale(1); }
+}
+
+/* ---- SCENE 3: dog on street ---- */
+#s3 {
+  background: linear-gradient(180deg,
+    #1b2130 0%, #252b36 38%,
+    #2a2a2a 39%, #242424 100%);
+}
+.s3-cold {
+  position: absolute; inset: 0; pointer-events: none;
+  background: rgba(30,50,90,0.12);
+}
+
+/* ---- SCENE 4: vet ---- */
+#s4 { background: #c8d8dc; }
+
+/* ---- SCENE 5: alley cat ---- */
+#s5 { background: #080810; }
+.alley-bg {
+  position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(90deg, transparent, transparent 76px,
+      rgba(255,255,255,0.018) 76px, rgba(255,255,255,0.018) 78px),
+    repeating-linear-gradient(0deg, transparent, transparent 38px,
+      rgba(255,255,255,0.012) 38px, rgba(255,255,255,0.012) 40px),
+    #080810;
+}
+
+/* ---- SCENE 6: final ---- */
+#s6 { background: #000; flex-direction: column; }
+.final-q {
+  font-size: 44px; font-weight: 900; color: #fff;
+  text-align: center; letter-spacing: 0.5px; line-height: 1.1;
+  opacity: 0;
+}
+.final-sub {
+  font-size: 16px; font-weight: 300; color: rgba(255,255,255,0.45);
+  letter-spacing: 7px; text-transform: uppercase;
+  margin-top: 14px; opacity: 0;
+}
+
+/* ---- RAIN ---- */
+.rain { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.rl {
+  position: absolute;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(180,210,240,0.3), transparent);
+  animation: rf linear infinite;
+}
+@keyframes rf { from { transform: translateY(-40px); } to { transform: translateY(580px); } }
+
+/* ---- TRASH ---- */
+.can {
+  position: absolute; bottom: 55px;
+  background: linear-gradient(135deg, #3c3c3c, #252525);
+  border-radius: 3px 3px 6px 6px;
+}
+.can::after {
+  content: ''; position: absolute; top: -12px; left: -6px; right: -6px;
+  height: 10px; background: #484848; border-radius: 3px;
+}
+.debris {
+  position: absolute; bottom: 52px;
+  background: rgba(90,78,55,0.45);
+  border-radius: 2px;
+}
+
+/* ---- CONTROLS ---- */
+#controls { display: flex; gap: 10px; align-items: center; }
+button {
+  background: transparent;
+  border: 1px solid #2a2a2a;
+  color: #666; padding: 7px 18px;
+  font-size: 10px; letter-spacing: 3px;
+  text-transform: uppercase; cursor: pointer;
+  transition: all 0.15s; font-family: inherit;
+}
+button:hover { border-color: #666; color: #ccc; }
+#timer { font-size: 11px; letter-spacing: 2px; color: #333; min-width: 46px; text-align: center; }
+
+/* ---- PLAY OVERLAY ---- */
+#play-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.72);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 200; cursor: pointer;
+}
+#play-btn {
+  width: 76px; height: 76px;
+  border: 2.5px solid rgba(255,255,255,0.75);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 18px;
+  transition: transform 0.2s, border-color 0.2s;
+}
+#play-btn:hover { transform: scale(1.1); border-color: #fff; }
+#play-btn div {
+  width: 0; height: 0;
+  border-style: solid;
+  border-width: 14px 0 14px 26px;
+  border-color: transparent transparent transparent rgba(255,255,255,0.88);
+  margin-left: 5px;
+}
+#play-label {
+  font-size: 10px; letter-spacing: 5px;
+  color: rgba(255,255,255,0.45); text-transform: uppercase;
+}
+</style>
+</head>
+<body>
+
+<div class="label">Tenencia Responsable · Video Package · 12 seg</div>
+
+<div id="stage">
+
+  <!-- Grain -->
+  <svg id="grain-svg" xmlns="http://www.w3.org/2000/svg">
+    <filter id="noise">
+      <feTurbulence id="turb" type="fractalNoise" baseFrequency="0.68" numOctaves="3" seed="1" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+    </filter>
+    <rect width="100%" height="100%" filter="url(#noise)"/>
+  </svg>
+
+  <!-- Vignette -->
+  <div id="vignette"></div>
+
+  <!-- Cut flash -->
+  <div id="flash"></div>
+
+  <!-- Progress -->
+  <div id="progress"></div>
+
+  <!-- ===================== SCENE 1 ===================== -->
+  <div class="scene" id="s1">
+    <div class="wall"></div>
+    <div class="poster" style="transform: rotate(-2deg);">
+      <div class="ph ph-red">SE BUSCA</div>
+      <hr class="pdiv">
+      <!-- Dog SVG -->
+      <svg width="190" height="175" viewBox="0 0 200 185" style="display:block; margin: 0 auto 10px;" xmlns="http://www.w3.org/2000/svg">
+        <!-- body -->
+        <ellipse cx="98" cy="130" rx="58" ry="46" fill="#1c1c1c"/>
+        <!-- neck -->
+        <rect x="116" y="90" width="28" height="38" rx="13" fill="#1c1c1c"/>
+        <!-- head -->
+        <ellipse cx="144" cy="76" rx="34" ry="30" fill="#1c1c1c"/>
+        <!-- snout -->
+        <ellipse cx="170" cy="88" rx="20" ry="13" fill="#1c1c1c"/>
+        <!-- floppy ear -->
+        <ellipse cx="122" cy="59" rx="13" ry="27" fill="#1c1c1c" transform="rotate(-18 122 59)"/>
+        <!-- tail (raised happy, now drooping sad) -->
+        <path d="M44 118 Q16 100 20 72 Q23 58 32 66" stroke="#1c1c1c" stroke-width="13" fill="none" stroke-linecap="round"/>
+        <!-- front legs -->
+        <rect x="86" y="166" width="17" height="17" rx="8" fill="#1c1c1c"/>
+        <rect x="110" y="166" width="17" height="17" rx="8" fill="#1c1c1c"/>
+        <!-- nose -->
+        <ellipse cx="182" cy="87" rx="7" ry="6" fill="#2a2a2a"/>
+        <!-- eye -->
+        <ellipse cx="152" cy="70" rx="7" ry="8" fill="#fff"/>
+        <ellipse cx="153" cy="71" rx="4" ry="6" fill="#111"/>
+        <!-- collar -->
+        <path d="M116 108 Q144 116 162 106" stroke="#c0392b" stroke-width="5" fill="none" stroke-linecap="round"/>
+      </svg>
+      <hr class="pdiv">
+      <div class="pname">MAX</div>
+      <div class="pinfo">
+        Labrador dorado · 3 años · collar rojo<br>
+        Último visto: Av. Providencia / Manuel Montt<br>
+        Muy amigable, responde a su nombre
+      </div>
+      <div class="preward">RECOMPENSA: $300.000
+        <span>Cel: +56 9 8 ● ● ● ● ● ● ●</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== SCENE 2 ===================== -->
+  <div class="scene" id="s2">
+    <div class="wall"></div>
+    <div id="s2-inner">
+
+      <!-- Poster A — left, dog -->
+      <div class="poster" style="position:absolute; left:95px; top:90px; width:230px; transform:rotate(2.5deg); z-index:2;">
+        <div class="ph ph-dark" style="font-size:9px; letter-spacing:4px;">PERDIDO</div>
+        <hr class="pdiv">
+        <svg width="150" height="138" viewBox="0 0 200 185" style="display:block; margin:0 auto 8px;" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="98" cy="130" rx="58" ry="46" fill="#222"/>
+          <rect x="116" y="90" width="28" height="38" rx="13" fill="#222"/>
+          <ellipse cx="144" cy="76" rx="34" ry="30" fill="#222"/>
+          <ellipse cx="170" cy="88" rx="20" ry="13" fill="#222"/>
+          <ellipse cx="122" cy="59" rx="13" ry="27" fill="#222" transform="rotate(-18 122 59)"/>
+          <path d="M44 118 Q16 100 20 72 Q23 58 32 66" stroke="#222" stroke-width="13" fill="none" stroke-linecap="round"/>
+          <rect x="86" y="166" width="17" height="17" rx="8" fill="#222"/>
+          <rect x="110" y="166" width="17" height="17" rx="8" fill="#222"/>
+          <ellipse cx="152" cy="70" rx="7" ry="8" fill="#ddd"/>
+          <ellipse cx="153" cy="71" rx="4" ry="6" fill="#111"/>
+        </svg>
+        <hr class="pdiv">
+        <div class="pname" style="font-size:15px;">LUNA</div>
+        <div class="pinfo" style="font-size:9.5px;">Beagle hembra · 2 años<br>Sin collar · muy tímida</div>
+        <div class="preward" style="font-size:11px;">RECOMPENSA
+          <span>+56 9 7 ● ● ● ● ● ● ●</span>
+        </div>
+      </div>
+
+      <!-- Poster B — center, cat -->
+      <div class="poster" style="position:absolute; left:340px; top:68px; width:255px; transform:rotate(-1.2deg); z-index:4;">
+        <div class="ph ph-blue">SE BUSCA</div>
+        <hr class="pdiv">
+        <svg width="175" height="175" viewBox="0 0 200 200" style="display:block; margin:0 auto 10px;" xmlns="http://www.w3.org/2000/svg">
+          <!-- body -->
+          <ellipse cx="100" cy="148" rx="48" ry="46" fill="#1c1c1c"/>
+          <!-- head -->
+          <circle cx="100" cy="82" r="44" fill="#1c1c1c"/>
+          <!-- ears -->
+          <polygon points="68,52 55,14 86,42" fill="#1c1c1c"/>
+          <polygon points="132,52 145,14 114,42" fill="#1c1c1c"/>
+          <!-- eyes -->
+          <ellipse cx="84"  cy="80" rx="9" ry="11" fill="#fff"/>
+          <ellipse cx="116" cy="80" rx="9" ry="11" fill="#fff"/>
+          <ellipse cx="84"  cy="81" rx="5.5" ry="9" fill="#111"/>
+          <ellipse cx="116" cy="81" rx="5.5" ry="9" fill="#111"/>
+          <!-- nose -->
+          <polygon points="100,93 96,100 104,100" fill="#888"/>
+          <!-- whisker lines -->
+          <line x1="78" y1="96" x2="52" y2="92" stroke="#555" stroke-width="1.5"/>
+          <line x1="78" y1="100" x2="52" y2="100" stroke="#555" stroke-width="1.5"/>
+          <line x1="122" y1="96" x2="148" y2="92" stroke="#555" stroke-width="1.5"/>
+          <line x1="122" y1="100" x2="148" y2="100" stroke="#555" stroke-width="1.5"/>
+          <!-- tail -->
+          <path d="M148 175 Q178 162 174 136 Q170 118 150 128" stroke="#1c1c1c" stroke-width="14" fill="none" stroke-linecap="round"/>
+          <!-- paws -->
+          <ellipse cx="82"  cy="188" rx="18" ry="10" fill="#1c1c1c"/>
+          <ellipse cx="118" cy="188" rx="18" ry="10" fill="#1c1c1c"/>
+        </svg>
+        <hr class="pdiv">
+        <div class="pname">MICHI</div>
+        <div class="pinfo">Gato siamés · 5 años · collar azul<br>Muy cariñoso, responde a silbidos</div>
+        <div class="preward">RECOMPENSA: $200.000
+          <span>+56 9 9 ● ● ● ● ● ● ●</span>
+        </div>
+      </div>
+
+      <!-- Poster C — right, dog -->
+      <div class="poster" style="position:absolute; right:75px; top:100px; width:215px; transform:rotate(-2.8deg); z-index:3;">
+        <div class="ph ph-red" style="font-size:9px; letter-spacing:4px;">¿ME VIO?</div>
+        <hr class="pdiv">
+        <svg width="140" height="128" viewBox="0 0 200 185" style="display:block; margin:0 auto 8px;" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="98" cy="130" rx="58" ry="46" fill="#222"/>
+          <rect x="116" y="90" width="28" height="38" rx="13" fill="#222"/>
+          <ellipse cx="144" cy="76" rx="34" ry="30" fill="#222"/>
+          <ellipse cx="170" cy="88" rx="20" ry="13" fill="#222"/>
+          <ellipse cx="122" cy="59" rx="13" ry="27" fill="#222" transform="rotate(-18 122 59)"/>
+          <path d="M44 118 Q18 96 22 68" stroke="#222" stroke-width="13" fill="none" stroke-linecap="round"/>
+          <rect x="86" y="166" width="17" height="17" rx="8" fill="#222"/>
+          <rect x="110" y="166" width="17" height="17" rx="8" fill="#222"/>
+        </svg>
+        <hr class="pdiv">
+        <div class="pname" style="font-size:14px;">ROCKY</div>
+        <div class="pinfo" style="font-size:9.5px;">Mestizo negro · 4 años<br>Sin microchip</div>
+        <div class="preward" style="font-size:11px;">Por favor llame
+          <span>+56 9 6 ● ● ● ● ● ● ●</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== SCENE 3: dog on rainy street ===================== -->
+  <div class="scene" id="s3">
+    <!-- Sky -->
+    <div style="position:absolute; inset:0; background: linear-gradient(180deg, #18202e 0%, #222836 36%, #2a2a2a 37%, #222 100%);"></div>
+    <!-- Distant building silhouettes -->
+    <svg style="position:absolute; top:0; left:0; width:100%; height:55%;" viewBox="0 0 960 300" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0"   y="60"  width="80"  height="240" fill="#1a1a22"/>
+      <rect x="85"  y="100" width="55"  height="200" fill="#161620"/>
+      <rect x="145" y="40"  width="95"  height="260" fill="#1c1c26"/>
+      <rect x="245" y="80"  width="60"  height="220" fill="#181820"/>
+      <rect x="310" y="110" width="80"  height="190" fill="#141418"/>
+      <rect x="600" y="50"  width="110" height="250" fill="#1a1a22"/>
+      <rect x="715" y="90"  width="70"  height="210" fill="#161620"/>
+      <rect x="790" y="30"  width="90"  height="270" fill="#1c1c26"/>
+      <rect x="885" y="75"  width="75"  height="225" fill="#141418"/>
+      <!-- windows (a few lit) -->
+      <rect x="160" y="80"  width="8" height="6" fill="rgba(255,230,150,0.3)"/>
+      <rect x="180" y="80"  width="8" height="6" fill="rgba(255,230,150,0.2)"/>
+      <rect x="160" y="100" width="8" height="6" fill="rgba(255,230,150,0.25)"/>
+      <rect x="620" y="90"  width="8" height="6" fill="rgba(255,230,150,0.3)"/>
+      <rect x="645" y="70"  width="8" height="6" fill="rgba(255,230,150,0.2)"/>
+      <rect x="805" y="60"  width="8" height="6" fill="rgba(255,230,150,0.25)"/>
+    </svg>
+    <!-- Street surface -->
+    <div style="position:absolute; bottom:0; left:0; right:0; height:200px; background: linear-gradient(180deg, #252525 0%, #1e1e1e 100%);"></div>
+    <!-- Wet reflections on street -->
+    <div style="position:absolute; bottom:40px; left:0; right:0; height:100px; background: linear-gradient(180deg, transparent, rgba(40,60,100,0.12));"></div>
+    <!-- White sidewalk line -->
+    <div style="position:absolute; bottom:178px; left:0; right:0; height:2px; background:rgba(255,255,255,0.12);"></div>
+    <!-- Center road dashes -->
+    <svg style="position:absolute; bottom:60px; left:50%; transform:translateX(-50%);" width="12" height="180" xmlns="http://www.w3.org/2000/svg">
+      <line x1="6" y1="0"   x2="6" y2="50"  stroke="rgba(255,210,0,0.4)" stroke-width="4"/>
+      <line x1="6" y1="70"  x2="6" y2="120" stroke="rgba(255,210,0,0.4)" stroke-width="4"/>
+      <line x1="6" y1="140" x2="6" y2="180" stroke="rgba(255,210,0,0.4)" stroke-width="4"/>
+    </svg>
+    <!-- Dog (small, alone, center) -->
+    <svg style="position:absolute; bottom:175px; left:50%; transform:translateX(-50%);" width="110" height="100" viewBox="0 0 200 185" xmlns="http://www.w3.org/2000/svg" opacity="0.55">
+      <ellipse cx="98" cy="130" rx="58" ry="46" fill="#555"/>
+      <rect x="116" y="90" width="28" height="38" rx="13" fill="#555"/>
+      <ellipse cx="144" cy="76" rx="34" ry="30" fill="#555"/>
+      <ellipse cx="170" cy="88" rx="20" ry="13" fill="#555"/>
+      <ellipse cx="122" cy="59" rx="13" ry="27" fill="#555" transform="rotate(-18 122 59)"/>
+      <!-- tail down (sad) -->
+      <path d="M44 130 Q30 148 36 162" stroke="#555" stroke-width="11" fill="none" stroke-linecap="round"/>
+      <rect x="86" y="166" width="17" height="17" rx="8" fill="#555"/>
+      <rect x="110" y="166" width="17" height="17" rx="8" fill="#555"/>
+    </svg>
+    <!-- Rain -->
+    <div class="rain" id="rain-s3"></div>
+    <!-- Cold blue overlay -->
+    <div class="s3-cold"></div>
+    <!-- Ground fog -->
+    <div style="position:absolute; bottom:0; left:0; right:0; height:80px; background:linear-gradient(180deg, transparent, rgba(20,20,20,0.7));"></div>
+  </div>
+
+  <!-- ===================== SCENE 4: veterinario ===================== -->
+  <div class="scene" id="s4">
+    <!-- Clinical bg -->
+    <div style="position:absolute; inset:0; background: linear-gradient(180deg, #cddee2 0%, #b8ced4 100%);"></div>
+    <!-- Upper wall -->
+    <div style="position:absolute; top:0; left:0; right:0; height:52%; background: linear-gradient(180deg, #bfd2d8 0%, #cde0e5 100%); border-bottom:3px solid rgba(0,0,0,0.1);"></div>
+    <!-- Tile grid upper wall -->
+    <svg style="position:absolute; top:0; left:0; width:100%; height:52%; opacity:0.15;" viewBox="0 0 960 280" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <line x1="0" y1="70"  x2="960" y2="70"  stroke="#888" stroke-width="1"/>
+      <line x1="0" y1="140" x2="960" y2="140" stroke="#888" stroke-width="1"/>
+      <line x1="0" y1="210" x2="960" y2="210" stroke="#888" stroke-width="1"/>
+      <line x1="80"  y1="0" x2="80"  y2="280" stroke="#888" stroke-width="1"/>
+      <line x1="160" y1="0" x2="160" y2="280" stroke="#888" stroke-width="1"/>
+      <line x1="240" y1="0" x2="240" y2="280" stroke="#888" stroke-width="1"/>
+      <line x1="320" y1="0" x2="320" y2="280" stroke="#888" stroke-width="1"/>
+      <line x1="400" y1="0" x2="400" y2="280" stroke="#888" stroke-width="1"/>
+      <line x1="480" y1="0" x2="480" y2="280" stroke="#888" stroke-width="1"/>
+      <line x1="560" y1="0" x2="560" y2="280" stroke="#888" stroke-width="1"/>
+      <line x1="640" y1="0" x2="640" y2="280" stroke="#888" stroke-width="1"/>
+      <line x1="720" y1="0" x2="720" y2="280" stroke="#888" stroke-width="1"/>
+      <line x1="800" y1="0" x2="800" y2="280" stroke="#888" stroke-width="1"/>
+      <line x1="880" y1="0" x2="880" y2="280" stroke="#888" stroke-width="1"/>
+    </svg>
+    <!-- Medical cross -->
+    <svg style="position:absolute; top:44px; right:90px; opacity:0.18;" width="86" height="86" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+      <rect x="28" y="0"  width="24" height="80" rx="5" fill="#1a6090"/>
+      <rect x="0"  y="28" width="80" height="24" rx="5" fill="#1a6090"/>
+    </svg>
+    <!-- Exam table -->
+    <div style="position:absolute; bottom:75px; left:50%; transform:translateX(-50%); width:580px;">
+      <div style="height:18px; background:linear-gradient(180deg, #7aa0a6, #689096); border-radius:5px 5px 0 0; box-shadow: 0 5px 20px rgba(0,0,0,0.35);"></div>
+      <div style="width:22px; height:65px; background:#628890; margin:0 auto;"></div>
+      <div style="height:12px; width:110px; background:#628890; margin:0 auto; border-radius:4px;"></div>
+    </div>
+    <!-- Cat lying on table (sick) -->
+    <svg style="position:absolute; bottom:93px; left:calc(50% - 100px);" width="200" height="100" viewBox="0 0 260 130" xmlns="http://www.w3.org/2000/svg">
+      <!-- body lying down -->
+      <ellipse cx="138" cy="75" rx="90" ry="38" fill="#2a2a2a" opacity="0.72"/>
+      <!-- head drooping low -->
+      <circle cx="38" cy="68" r="35" fill="#2a2a2a" opacity="0.72"/>
+      <!-- ears pinned (sick/scared) -->
+      <polygon points="20,38 14,16 34,30" fill="#2a2a2a" opacity="0.72"/>
+      <polygon points="46,36 54,16 36,30" fill="#2a2a2a" opacity="0.72"/>
+      <!-- eye half-shut -->
+      <ellipse cx="30" cy="66" rx="9" ry="5" fill="#fff" opacity="0.55"/>
+      <ellipse cx="30" cy="67" rx="9" ry="3" fill="#1a1a1a" opacity="0.55"/>
+      <!-- paws limp -->
+      <ellipse cx="95"  cy="108" rx="22" ry="9" fill="#2a2a2a" opacity="0.72"/>
+      <ellipse cx="140" cy="108" rx="22" ry="9" fill="#2a2a2a" opacity="0.72"/>
+      <!-- tail flat -->
+      <path d="M228 75 Q252 85 248 100" stroke="#2a2a2a" stroke-width="12" fill="none" stroke-linecap="round" opacity="0.72"/>
+    </svg>
+    <!-- Doctor hand (gloved, white) -->
+    <div style="position:absolute; bottom:120px; left:calc(50% + 80px); width:46px; height:68px; background:linear-gradient(180deg, #e8e8e8, #d0d0d0); border-radius:22px 22px 6px 6px; box-shadow:2px 3px 10px rgba(0,0,0,0.25);"></div>
+    <!-- Stethoscope -->
+    <svg style="position:absolute; bottom:118px; left:calc(50% + 26px);" width="110" height="70" viewBox="0 0 110 70" xmlns="http://www.w3.org/2000/svg">
+      <path d="M85 6 Q96 35 72 52 Q48 62 36 48" stroke="#444" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+      <circle cx="36" cy="48" r="10" fill="none" stroke="#444" stroke-width="3"/>
+      <circle cx="85" cy="6"  r="5"  fill="#444"/>
+    </svg>
+    <!-- Soft green light feel -->
+    <div style="position:absolute; inset:0; background:rgba(0,20,10,0.05); pointer-events:none;"></div>
+  </div>
+
+  <!-- ===================== SCENE 5: alley cat ===================== -->
+  <div class="scene" id="s5">
+    <div class="alley-bg"></div>
+    <!-- Floor -->
+    <div style="position:absolute; bottom:0; left:0; right:0; height:55px; background:#060608;"></div>
+    <!-- Trash cans -->
+    <div class="can" style="left:110px; width:68px; height:95px;"></div>
+    <div class="can" style="left:188px; width:58px; height:78px; bottom:60px;"></div>
+    <div class="can" style="right:130px; width:72px; height:100px;"></div>
+    <!-- Debris/garbage on floor -->
+    <div class="debris" style="left:155px; width:55px; height:7px; transform:rotate(-14deg);"></div>
+    <div class="debris" style="left:290px; width:70px; height:5px; transform:rotate(9deg);"></div>
+    <div class="debris" style="right:220px; width:48px; height:6px; transform:rotate(-6deg); bottom:53px;"></div>
+    <div class="debris" style="right:100px; width:85px; height:5px; transform:rotate(11deg);"></div>
+    <!-- Cat silhouette low and hunched (survivor mode) -->
+    <svg style="position:absolute; bottom:50px; left:50%; transform:translateX(-48%);" width="155" height="130" viewBox="0 0 220 185" xmlns="http://www.w3.org/2000/svg">
+      <!-- hunched body -->
+      <ellipse cx="118" cy="138" rx="75" ry="38" fill="#2c2c2c"/>
+      <!-- head low -->
+      <circle cx="50" cy="118" r="40" fill="#2c2c2c"/>
+      <!-- ears alert, upright -->
+      <polygon points="32,84 22,55 50,78"  fill="#2c2c2c"/>
+      <polygon points="62,80 76,52 70,78"  fill="#2c2c2c"/>
+      <!-- glowing eyes (survival) -->
+      <ellipse cx="37" cy="116" rx="10" ry="12" fill="#6db840" opacity="0.92"/>
+      <ellipse cx="63" cy="116" rx="10" ry="12" fill="#6db840" opacity="0.92"/>
+      <ellipse cx="37" cy="117" rx="6"  ry="10" fill="#0a0a0a"/>
+      <ellipse cx="63" cy="117" rx="6"  ry="10" fill="#0a0a0a"/>
+      <!-- tight reflection in eye -->
+      <circle cx="39" cy="113" r="2" fill="rgba(255,255,255,0.6)"/>
+      <circle cx="65" cy="113" r="2" fill="rgba(255,255,255,0.6)"/>
+      <!-- tail curled tight around body -->
+      <path d="M193 152 Q215 138 210 112 Q204 94 188 106" stroke="#2c2c2c" stroke-width="15" fill="none" stroke-linecap="round"/>
+      <!-- paws tucked -->
+      <ellipse cx="95"  cy="170" rx="22" ry="12" fill="#2c2c2c"/>
+      <ellipse cx="136" cy="172" rx="22" ry="12" fill="#2c2c2c"/>
+    </svg>
+    <!-- Rain in alley -->
+    <div class="rain" id="rain-s5"></div>
+    <!-- Dark atmospheric overlay -->
+    <div style="position:absolute; inset:0; background:rgba(4,4,14,0.45); pointer-events:none;"></div>
+    <!-- Ground puddle reflection -->
+    <div style="position:absolute; bottom:0; left:35%; width:200px; height:50px; background:rgba(100,150,200,0.06); border-radius:50%;"></div>
+  </div>
+
+  <!-- ===================== SCENE 6: final message ===================== -->
+  <div class="scene" id="s6">
+    <div style="text-align:center;">
+      <svg style="display:block; margin:0 auto 22px;" width="52" height="52" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" id="paw-icon" opacity="0">
+        <circle cx="50" cy="72" r="28" fill="#fff"/>
+        <circle cx="22" cy="50" r="12" fill="#fff"/>
+        <circle cx="78" cy="50" r="12" fill="#fff"/>
+        <circle cx="34" cy="28" r="10" fill="#fff"/>
+        <circle cx="66" cy="28" r="10" fill="#fff"/>
+      </svg>
+      <div class="final-q" id="fq">¿Qué tan responsable eres?</div>
+      <div class="final-sub" id="fs">con tu mascota</div>
+    </div>
+  </div>
+
+  <!-- Play overlay -->
+  <div id="play-overlay" onclick="startVideo()">
+    <div id="play-btn"><div></div></div>
+    <div id="play-label">Reproducir · 12 segundos</div>
+  </div>
+
+</div><!-- #stage -->
+
+<div id="controls">
+  <button onclick="replayVideo()">↺ &nbsp;Reproducir de nuevo</button>
+  <div id="timer">0.0s</div>
+  <button onclick="goFullscreen()">⤢ &nbsp;Pantalla completa</button>
+</div>
+
+<div class="label" style="color:#1e1e1e; font-size:9px;">
+  Pantalla completa → graba con OBS / QuickTime / Xbox Game Bar / Screenshot Tool
+</div>
+
+<script>
+// ── Grain animation ──────────────────────────────────────────
+const turb = document.getElementById('turb');
+let gf = 0;
+(function grainLoop() {
+  if (++gf % 4 === 0) turb.setAttribute('seed', Math.random() * 99 | 0);
+  requestAnimationFrame(grainLoop);
+})();
+
+// ── Rain generator ───────────────────────────────────────────
+function makeRain(id, count) {
+  const c = document.getElementById(id);
+  for (let i = 0; i < count; i++) {
+    const d = document.createElement('div');
+    d.className = 'rl';
+    const h = Math.random() * 18 + 9;
+    d.style.cssText =
+      `left:${Math.random()*100}%;` +
+      `top:${Math.random()*100}%;` +
+      `height:${h}px;` +
+      `opacity:${(Math.random()*0.22+0.08).toFixed(2)};` +
+      `animation-delay:${(Math.random()*0.7).toFixed(2)}s;` +
+      `animation-duration:${(Math.random()*0.35+0.38).toFixed(2)}s;`;
+    c.appendChild(d);
+  }
+}
+makeRain('rain-s3', 70);
+makeRain('rain-s5', 45);
+
+// ── Timeline ─────────────────────────────────────────────────
+const TOTAL = 12200; // ms
+
+const SCENES = [
+  // [id, startMs, endMs]
+  ['s1', 0,     2400],
+  ['s2', 2400,  4800],
+  ['s3', 4800,  7000],
+  ['s4', 7000,  9200],
+  ['s5', 9200,  11100],
+  ['s6', 11100, 12500],
+];
+
+const els = {};
+SCENES.forEach(([id]) => { els[id] = document.getElementById(id); });
+
+const flash       = document.getElementById('flash');
+const progressEl  = document.getElementById('progress');
+const timerEl     = document.getElementById('timer');
+const fq          = document.getElementById('fq');
+const fs          = document.getElementById('fs');
+const pawIcon     = document.getElementById('paw-icon');
+const playOverlay = document.getElementById('play-overlay');
+
+let t0 = null, raf = null;
+let finalShown = false;
+const CUT_TIMES = SCENES.slice(1).map(s => s[1]);
+
+function flash_cut(atMs) {
+  setTimeout(() => {
+    flash.style.transition = 'none';
+    flash.style.opacity = '1';
+    setTimeout(() => {
+      flash.style.transition = 'opacity 0.22s ease';
+      flash.style.opacity = '0';
+    }, 45);
+  }, atMs);
+}
+
+function fadeIn(el, dur = 400) {
+  el.style.transition = `opacity ${dur}ms ease`;
+  el.style.opacity = '1';
+}
+
+function tick(ts) {
+  if (!t0) t0 = ts;
+  const e = ts - t0;
+
+  progressEl.style.width = Math.min(e / TOTAL * 100, 100) + '%';
+  timerEl.textContent = (Math.min(e, TOTAL) / 1000).toFixed(1) + 's';
+
+  SCENES.forEach(([id, start, end]) => {
+    els[id].style.opacity = (e >= start && e < end) ? '1' : '0';
+  });
+
+  // Final text fade-in
+  if (e >= 11400 && !finalShown) {
+    finalShown = true;
+    fadeIn(pawIcon, 500);
+    setTimeout(() => fadeIn(fq, 600), 180);
+    setTimeout(() => fadeIn(fs, 600), 500);
+  }
+
+  if (e < TOTAL + 400) {
+    raf = requestAnimationFrame(tick);
+  }
+}
+
+function reset() {
+  if (raf) { cancelAnimationFrame(raf); raf = null; }
+  t0 = null; finalShown = false;
+  SCENES.forEach(([id]) => { els[id].style.opacity = '0'; });
+  fq.style.opacity = '0';
+  fs.style.opacity = '0';
+  pawIcon.style.opacity = '0';
+  fq.style.transition = fs.style.transition = pawIcon.style.transition = 'none';
+  progressEl.style.width = '0%';
+  timerEl.textContent = '0.0s';
+}
+
+function startVideo() {
+  playOverlay.style.display = 'none';
+  reset();
+  CUT_TIMES.forEach(t => flash_cut(t));
+  raf = requestAnimationFrame(tick);
+}
+
+function replayVideo() {
+  reset();
+  CUT_TIMES.forEach(t => flash_cut(t));
+  raf = requestAnimationFrame(tick);
+}
+
+function goFullscreen() {
+  const s = document.getElementById('stage');
+  (s.requestFullscreen || s.webkitRequestFullscreen || s.mozRequestFullScreen).call(s);
+}
+</script>
+</body>
+</html>
