@@ -702,7 +702,10 @@ window.showProfile=function(codigo){
       const prevTotal=sorted[ci+1]?.resultado?.total||0;
       const delta=(prevTotal && !isDQ && r.total)?r.total-prevTotal:null;
       const glVal=isDQ?null:(r.glp||r.gl||null);
-      const _pos=c.posicion;
+      // Posición: 1º la calculada en vivo (LiveCast); si no, el puesto real registrado (place de OpenPowerlifting/LiftingCast).
+      // No se calcula por agrupación en históricos porque data.json no trae el meet completo (daría puestos falsos).
+      const _placeRec=parseInt(c.place!=null?c.place:(r.place!=null?r.place:''),10);
+      const _pos=c.posicion || (_placeRec>0?_placeRec:null);
       const _posCol=_pos===1?'#D4A843':_pos===2?'#c0c0c0':_pos===3?'#cd7f32':'var(--muted)';
       const posBadge=(_pos&&!isDQ)?'<span style="display:inline-block;background:'+_posCol+'22;border:1px solid '+_posCol+';color:'+_posCol+';font-family:Oswald;font-weight:700;font-size:11px;letter-spacing:1px;padding:2px 9px;border-radius:5px">'+(_pos<=3?_pos+'° LUGAR':'#'+_pos+' LUGAR')+'</span>':'';
       h+='<div class="comp-row"'+(isDQ?' style="opacity:.85"':'')+'>'
