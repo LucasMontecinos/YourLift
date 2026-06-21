@@ -160,7 +160,7 @@ const PEERS={"M|93|Open|classic":{"n":44,"avg":589.5,"top":740,"p75":680,"p50":5
       const _catPlus=(c,bw,sx)=>{var s=String(c||'').trim();if(s.indexOf('+')>=0)return s;var m=s.match(/(\d+(?:\.\d+)?)/);if(!m)return s;var n=parseFloat(m[1]);var f=/^(f|muj|w)/i.test(String(sx||''));if(n===84&&f&&(bw||0)>84)return '84+';if(n===120&&!f&&(bw||0)>120)return '120+';return s;};
       const _placeTab=(sx,mod,view)=>{const s=/^(f|muj|w)/i.test(String(sx||''))?'f':'m';const m=String(mod||'');const isOE=/special olympics|olimpiadas|\bOE\b/i.test(m);const isEq=/equipado|equipped/i.test(m);const isUni=/universitar/i.test(m);const isBench=view==='bench'||/only ?bench/i.test(m);if(isUni&&!isBench&&!isOE)return 'uni_'+s;if(isOE)return 'oe_'+s;if(isBench)return (isEq?'bch_eq_':'bch_cl_')+s;return (isEq?'eq_':'cl_')+s;};
       const _grp={};
-      snap.docs.forEach(d=>{const x=d.data();if(!x.evento)return;const r=x.resultado||{};if(r.status==='DQ'||(r.total||0)<=0)return;const cat=_catPlus(x.categoria,r.bw,x.sexo);const div=String(x.division||'').toLowerCase().normalize('NFD').replace(/[^a-z]/g,'');const key=[x.evento_id||x.evento,_placeTab(x.sexo,x.modalidad,x.view),cat,div].join('|');(_grp[key]=_grp[key]||[]).push({id:d.id,total:r.total||0,bw:r.bw||0});});
+      snap.docs.forEach(d=>{const x=d.data();if(!x.evento)return;const r=x.resultado||{};if(r.status==='DQ'||(r.total||0)<=0)return;if(x.source==='manual')return;/* manual: solo posición fijada a mano, no auto-rankear (suele ir solo) */const cat=_catPlus(x.categoria,r.bw,x.sexo);const div=String(x.division||'').toLowerCase().normalize('NFD').replace(/[^a-z]/g,'');const key=[x.evento_id||x.evento,_placeTab(x.sexo,x.modalidad,x.view),cat,div].join('|');(_grp[key]=_grp[key]||[]).push({id:d.id,total:r.total||0,bw:r.bw||0});});
       const _placeMap={};
       Object.keys(_grp).forEach(k=>{_grp[k].sort((a,b)=>(b.total-a.total)||(a.bw-b.bw));_grp[k].forEach((e,i)=>{_placeMap[e.id]=i+1;});});
       snap.docs.forEach(d=>{
@@ -200,7 +200,8 @@ const PEERS={"M|93|Open|classic":{"n":44,"avg":589.5,"top":740,"p75":680,"p50":5
           // Superpesado: si el peso corporal supera la categoría tope, es la "+" (mujeres 84+, hombres 120+).
           categoria: _catPlus(data.categoria||'',(data.resultado||{}).bw||0,data.sexo||''),
           modalidad: data.modalidad || '',
-          posicion: _placeMap[d.id] || null,
+          // La posición fijada a mano en admin (data.posicion) tiene prioridad sobre la calculada por agrupación.
+          posicion: ((data.posicion!=null&&data.posicion!=='')?parseInt(data.posicion,10):0) || _placeMap[d.id] || null,
           resultado: data.resultado || {},
           source: data.source || 'yourlift_livecast'
         };
