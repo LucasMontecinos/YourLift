@@ -2127,6 +2127,16 @@ function renderBgVideos(){
 }
 window.uploadBgVideo=async function(section,file){
   if(!file)return;
+  // Aviso preventivo: videos pesados o en formato no-web cargan lento / no se ven en algunos navegadores.
+  const _mb=file.size/1048576;
+  const _fext=(file.name.split('.').pop()||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const _avisos=[];
+  if(!/^(mp4|webm)$/.test(_fext)) _avisos.push('• Formato .'+(_fext||'?')+': los .mov/.avi no se reproducen bien en Chrome/Android. Lo ideal es MP4 (H.264).');
+  if(_mb>25) _avisos.push('• Pesa '+_mb.toFixed(0)+' MB. Para un fondo conviene menos de ~10 MB para que cargue rápido. Comprímelo a MP4 1080p o 720p.');
+  if(_avisos.length && !confirm('Aviso sobre este video:\n\n'+_avisos.join('\n\n')+'\n\n¿Subirlo de todas formas?')){
+    const _stc=document.getElementById('bg_st_'+section); if(_stc)_stc.textContent='Subida cancelada';
+    return;
+  }
   const st=document.getElementById('bg_st_'+section);if(st)st.textContent='⏳ Subiendo… (puede tardar)';
   try{
     const storage=getStorage(app);
