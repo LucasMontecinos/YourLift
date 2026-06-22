@@ -3307,6 +3307,9 @@ function renderNominas(){
   }
   // Mostrar columna "Nacional 2026" (modalidad/lugar + marcas SQ/BP/DL) solo si el evento la pide.
   const _posNacCol = !!(ST.eventos||[]).find(e=>e.id===ST.filterEv)?.posNac2026;
+  // Columna "Universidad": si el evento la configuró (extraCols) o si algún inscrito trae universidad (modalidad Universitario).
+  const _uniEvObj = (ST.eventos||[]).find(e=>e.id===ST.filterEv||e.name===ST.filterEv);
+  const _uniCol = (_uniEvObj?.extraCols||[]).includes('universidad') || filtered.some(i=>i.universidad);
 
   return `
     <div class="h1">Nóminas</div>
@@ -3323,7 +3326,7 @@ function renderNominas(){
     ${needsMetaSync?'<div class="card" style="background:rgba(212,168,67,.08);border-color:rgba(212,168,67,.3);padding:12px 16px;margin-bottom:12px"><span style="color:var(--gold);font-size:12px">Las inscripciones están en Firebase pero falta el doc de evento en <code>eventos/</code>. Sin eso no podés editar fecha/cierre/ubicación desde <b>Campeonatos</b>. Creá el evento desde el panel de Campeonatos.</span></div>':''}
     <div class="card" style="padding:0;overflow-x:auto">
       <table class="tbl">
-        <tr><th>#</th><th>Nombre</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Modalidad</th><th>Club</th><th title="Comuna / Región">Zona</th>${_posNacCol?'<th title="Posición y marcas del Nacional 2026">Nacional 2026</th>':''}<th title="Documentos subidos">Docs</th><th>Estado</th><th></th></tr>
+        <tr><th>#</th><th>Nombre</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Modalidad</th><th>Club</th><th title="Comuna / Región">Zona</th>${_uniCol?'<th title="Universidad del atleta (modalidad Universitario)">Universidad</th>':''}${_posNacCol?'<th title="Posición y marcas del Nacional 2026">Nacional 2026</th>':''}<th title="Documentos subidos">Docs</th><th>Estado</th><th></th></tr>
         ${filtered.map((i,idx)=>{
           const editable=!i._json;
           const click=(f)=>editable?`onclick="editInsc('${i.id}','${f}')"`:'';
@@ -3364,6 +3367,7 @@ function renderNominas(){
               return `<td><span class="${cls}" ${click(fld)} style="display:inline-flex;align-items:center;gap:5px">${window.clubLogoImg?window.clubLogoImg(eclub,18,'background:var(--bg);padding:1px;'):''}${esc(eclub||'—')}</span></td>`;
             })()}
             <td style="font-size:11px;color:var(--muted);max-width:160px"><span class="${cls}" ${click('comuna')} title="${esc(i.comuna||'')}">${esc(i.comuna||'—')}</span></td>
+            ${_uniCol?('<td style="font-size:11px"><span class="'+cls+'" '+click('universidad')+'>'+esc(i.universidad||'—')+'</span></td>'):''}
             ${_posNacCol?('<td style="font-size:11px;white-space:nowrap">'
               +(i.posNacLugar?('<b style="color:var(--gold)">'+esc(i.posNacMod||'')+' '+esc(i.posNacLugar)+'°</b>'):'<span style="color:var(--muted);opacity:.5">—</span>')
               +((i.posNacSQ||i.posNacBP||i.posNacDL)?('<br><span style="color:var(--muted)">SQ '+esc(i.posNacSQ||'-')+' · BP '+esc(i.posNacBP||'-')+' · DL '+esc(i.posNacDL||'-')+' · <b style="color:var(--text)">T '+esc(i.posNacTotal||(((parseFloat(i.posNacSQ)||0)+(parseFloat(i.posNacBP)||0)+(parseFloat(i.posNacDL)||0))||'-'))+'</b></span>'):'')
@@ -3823,6 +3827,8 @@ window.exportNominaExcel = async function(){
     list.sort((a,b)=>(a.sortOrder||999)-(b.sortOrder||999));
     // Columna "Pos. Nacional 2026" solo si el evento activó esa pregunta (Sudamericano).
     const posNacOn = !!(ST.eventos||[]).find(e=>e.id===ev)?.posNac2026;
+    // Columna "Universidad": si el evento la configuró o si algún inscrito trae universidad.
+    const uniOn = (((ST.eventos||[]).find(e=>e.id===ev||e.name===ev)?.extraCols)||[]).includes('universidad') || list.some(i=>i.universidad);
 
     const wb=new ExcelJS.Workbook();
     const ws=wb.addWorksheet('Nómina',{views:[{state:'frozen',ySplit:1}]});
@@ -3835,6 +3841,7 @@ window.exportNominaExcel = async function(){
       {header:'RUT',       key:'rut',       width:15},
       {header:'FECHA DE NACIMIENTO', key:'fechaNac', width:20},
       {header:'CORREO', key:'correo', width:30},
+      ...(uniOn ? [{header:'UNIVERSIDAD', key:'universidad', width:30}] : []),
       ...(posNacOn ? [
         {header:'POS. NACIONAL 2026', key:'posNac', width:22},
         {header:'SQ NAC.', key:'posNacSQ', width:10},
@@ -3851,7 +3858,7 @@ window.exportNominaExcel = async function(){
       const priv=(ST.inscripcionesPrivate||{})[i.id]||{};
       const posNacVal = i.posNacLugar ? (i.posNacMod ? i.posNacMod+' · '+i.posNacLugar+'°' : i.posNacLugar+'°') : '';
       ws.addRow({nombre:i.nombre||'',modalidad:i.modalidad||'',division:i.division||'',categoria:i.categoria||'',club,
-        rut:i.rut||'',fechaNac:fmtFN(i.fechaNac||i.fechanac),correo:priv.correo||'',
+        rut:i.rut||'',fechaNac:fmtFN(i.fechaNac||i.fechanac),correo:priv.correo||'',universidad:i.universidad||'',
         ...(posNacOn ? {posNac:posNacVal,posNacSQ:i.posNacSQ||'',posNacBP:i.posNacBP||'',posNacDL:i.posNacDL||'',posNacTotal:(i.posNacTotal||(((parseFloat(i.posNacSQ)||0)+(parseFloat(i.posNacBP)||0)+(parseFloat(i.posNacDL)||0))||''))} : {})});
     });
 
