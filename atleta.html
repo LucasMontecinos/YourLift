@@ -297,7 +297,21 @@ function getPeerKey(a){
   const l=comps[0];
   const sex=(l.sexo||'').match(/mujer|fem/i)?'F':'M';
   const modal=(l.modalidad||'').toLowerCase().includes('equip')?'equipped':'classic';
-  return sex+'|'+(l.categoria||'').trim()+'|'+(l.division||'Open').trim()+'|'+modal;
+  const cat=(l.categoria||'').trim();
+  const div=(l.division||'Open').trim();
+  // Si el resultado más reciente (por fecha) es de división etaria (Junior, Sub-Junior,
+  // Master…) pero el atleta tiene alguna competencia Open en la misma categoría,
+  // usar Open. Ocurre cuando la comp Open no tiene fecha registrada y queda al final
+  // del sort, pero representa la división actual del atleta.
+  if(div!=='Open'){
+    const hasOpen=comps.some(c=>
+      (c.division||'').trim()==='Open'&&
+      (c.categoria||'').trim()===cat&&
+      (c.resultado||{}).total>0
+    );
+    if(hasOpen)return sex+'|'+cat+'|Open|'+modal;
+  }
+  return sex+'|'+cat+'|'+div+'|'+modal;
 }
 
 function peerPerc(myTotal,key){
