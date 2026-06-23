@@ -213,9 +213,14 @@ const PEERS={"M|93|Open|classic":{"n":44,"avg":589.5,"top":740,"p75":680,"p50":5
   }catch(e){console.warn('Firebase unavailable',e)}
 
   try{
-    DB=await fetch('data.json?v='+Date.now()).then(r=>r.json());
+    const _STOR='https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/';
+    DB=await fetch(_STOR+'public%2Fdata.json?alt=media',{cache:'no-cache'})
+      .then(r=>r.ok?r.json():fetch('data.json?v='+Date.now()).then(r=>r.json()))
+      .catch(()=>fetch('data.json?v='+Date.now()).then(r=>r.json()));
     // Cargar records.json para mostrar reconocimientos
-    try{window.RECORDS=await fetch('records.json?v='+Date.now()).then(r=>r.json());}catch(e){window.RECORDS={};}
+    try{window.RECORDS=await fetch(_STOR+'public%2Frecords.json?alt=media',{cache:'no-cache'})
+      .then(r=>r.ok?r.json():fetch('records.json?v='+Date.now()).then(r=>r.json()))
+      .catch(()=>fetch('records.json?v='+Date.now()).then(r=>r.json()));}catch(e){window.RECORDS={};}
 
     // Merge debutant athletes from Firestore (inscribed but not yet in data.json)
     if(_fbDB && _fbMod){
