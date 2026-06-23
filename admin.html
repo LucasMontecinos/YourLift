@@ -3309,7 +3309,15 @@ function renderNominas(){
   const _posNacCol = !!(ST.eventos||[]).find(e=>e.id===ST.filterEv)?.posNac2026;
   // Columna "Universidad": si el evento la configuró (extraCols) o si algún inscrito trae universidad (modalidad Universitario).
   const _uniEvObj = (ST.eventos||[]).find(e=>e.id===ST.filterEv||e.name===ST.filterEv);
-  const _uniCol = (_uniEvObj?.extraCols||[]).includes('universidad') || filtered.some(i=>i.universidad);
+  const _esUni = x => /universitar/i.test(String((x&&x.division)||'')+' '+String((x&&x.modalidad)||''));
+  // Universidad por RUT/nombre desde CUALQUIER inscripción que la tenga (ej. nómina del Nacional Universitario),
+  // para rellenar automáticamente a los del Sudamericano (división Universitario) que no la traen.
+  const _uNN=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
+  const _uNR=s=>String(s||'').replace(/[^0-9kK]/g,'').toLowerCase();
+  const _uByRut={}, _uByName={};
+  (ST.inscripciones||[]).forEach(x=>{ if(!x.universidad)return; if(x.rut)_uByRut[_uNR(x.rut)]=x.universidad; if(x.nombre)_uByName[_uNN(x.nombre)]=x.universidad; });
+  const _resolveUni=i=> i.universidad || _uByRut[_uNR(i.rut)] || _uByName[_uNN(i.nombre)] || '';
+  const _uniCol = (_uniEvObj?.extraCols||[]).includes('universidad') || filtered.some(i=>_resolveUni(i)) || filtered.some(_esUni);
 
   return `
     <div class="h1">Nóminas</div>
@@ -3367,7 +3375,7 @@ function renderNominas(){
               return `<td><span class="${cls}" ${click(fld)} style="display:inline-flex;align-items:center;gap:5px">${window.clubLogoImg?window.clubLogoImg(eclub,18,'background:var(--bg);padding:1px;'):''}${esc(eclub||'—')}</span></td>`;
             })()}
             <td style="font-size:11px;color:var(--muted);max-width:160px"><span class="${cls}" ${click('comuna')} title="${esc(i.comuna||'')}">${esc(i.comuna||'—')}</span></td>
-            ${_uniCol?('<td style="font-size:11px"><span class="'+cls+'" '+click('universidad')+'>'+esc(i.universidad||'—')+'</span></td>'):''}
+            ${_uniCol?('<td style="font-size:11px"><span class="'+cls+'" '+click('universidad')+'>'+esc(_resolveUni(i)||'—')+'</span></td>'):''}
             ${_posNacCol?('<td style="font-size:11px;white-space:nowrap">'
               +(i.posNacLugar?('<b style="color:var(--gold)">'+esc(i.posNacMod||'')+' '+esc(i.posNacLugar)+'°</b>'):'<span style="color:var(--muted);opacity:.5">—</span>')
               +((i.posNacSQ||i.posNacBP||i.posNacDL)?('<br><span style="color:var(--muted)">SQ '+esc(i.posNacSQ||'-')+' · BP '+esc(i.posNacBP||'-')+' · DL '+esc(i.posNacDL||'-')+' · <b style="color:var(--text)">T '+esc(i.posNacTotal||(((parseFloat(i.posNacSQ)||0)+(parseFloat(i.posNacBP)||0)+(parseFloat(i.posNacDL)||0))||'-'))+'</b></span>'):'')
@@ -3827,8 +3835,14 @@ window.exportNominaExcel = async function(){
     list.sort((a,b)=>(a.sortOrder||999)-(b.sortOrder||999));
     // Columna "Pos. Nacional 2026" solo si el evento activó esa pregunta (Sudamericano).
     const posNacOn = !!(ST.eventos||[]).find(e=>e.id===ev)?.posNac2026;
-    // Columna "Universidad": si el evento la configuró o si algún inscrito trae universidad.
-    const uniOn = (((ST.eventos||[]).find(e=>e.id===ev||e.name===ev)?.extraCols)||[]).includes('universidad') || list.some(i=>i.universidad);
+    // Universidad cruzada por RUT/nombre desde cualquier inscripción que la tenga (ej. nómina del Nacional Universitario).
+    const _xNN=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
+    const _xNR=s=>String(s||'').replace(/[^0-9kK]/g,'').toLowerCase();
+    const _xByRut={}, _xByName={};
+    (ST.inscripciones||[]).forEach(x=>{ if(!x.universidad)return; if(x.rut)_xByRut[_xNR(x.rut)]=x.universidad; if(x.nombre)_xByName[_xNN(x.nombre)]=x.universidad; });
+    const _xResolveUni=i=> i.universidad || _xByRut[_xNR(i.rut)] || _xByName[_xNN(i.nombre)] || '';
+    // Columna "Universidad": si el evento la configuró, si algún inscrito la trae (directa o cruzada), o si hay división Universitario.
+    const uniOn = (((ST.eventos||[]).find(e=>e.id===ev||e.name===ev)?.extraCols)||[]).includes('universidad') || list.some(i=>_xResolveUni(i)) || list.some(i=>/universitar/i.test(String(i.division||'')+' '+String(i.modalidad||'')));
 
     const wb=new ExcelJS.Workbook();
     const ws=wb.addWorksheet('Nómina',{views:[{state:'frozen',ySplit:1}]});
@@ -3858,7 +3872,7 @@ window.exportNominaExcel = async function(){
       const priv=(ST.inscripcionesPrivate||{})[i.id]||{};
       const posNacVal = i.posNacLugar ? (i.posNacMod ? i.posNacMod+' · '+i.posNacLugar+'°' : i.posNacLugar+'°') : '';
       ws.addRow({nombre:i.nombre||'',modalidad:i.modalidad||'',division:i.division||'',categoria:i.categoria||'',club,
-        rut:i.rut||'',fechaNac:fmtFN(i.fechaNac||i.fechanac),correo:priv.correo||'',universidad:i.universidad||'',
+        rut:i.rut||'',fechaNac:fmtFN(i.fechaNac||i.fechanac),correo:priv.correo||'',universidad:_xResolveUni(i),
         ...(posNacOn ? {posNac:posNacVal,posNacSQ:i.posNacSQ||'',posNacBP:i.posNacBP||'',posNacDL:i.posNacDL||'',posNacTotal:(i.posNacTotal||(((parseFloat(i.posNacSQ)||0)+(parseFloat(i.posNacBP)||0)+(parseFloat(i.posNacDL)||0))||''))} : {})});
     });
 
