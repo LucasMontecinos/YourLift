@@ -6697,11 +6697,15 @@ function _setupFotoListener(){
     });
   }catch(e){console.warn('[livecast] atleta_fotos:',e.message);}
 }
-fetch('data.json').then(r=>r.json()).then(d=>{
-  DB_FULL=d;
-  _setupFotoListener();
-}).catch(()=>{});
-fetch('records.json').then(r=>r.json()).then(d=>{RECORDS=d}).catch(()=>console.warn('[FECHIPO] records.json no cargado'));
+const _STOR='https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/';
+fetch(_STOR+'public%2Fdata.json?alt=media',{cache:'no-cache'})
+  .then(r=>r.ok?r.json():fetch('data.json').then(r=>r.json()))
+  .catch(()=>fetch('data.json').then(r=>r.json()))
+  .then(d=>{DB_FULL=d;_setupFotoListener();}).catch(()=>{});
+fetch(_STOR+'public%2Frecords.json?alt=media',{cache:'no-cache'})
+  .then(r=>r.ok?r.json():fetch('records.json').then(r=>r.json()))
+  .catch(()=>fetch('records.json').then(r=>r.json()))
+  .then(d=>{RECORDS=d}).catch(()=>console.warn('[FECHIPO] records.json no cargado'));
 // DATA.events se construye desde Firestore via LIVE_EVENT_META en renderSetup()
 if(!loaded)R();
 

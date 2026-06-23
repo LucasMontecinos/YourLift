@@ -1122,6 +1122,37 @@ window.exportData=function(){
   logAction('export','data.json',null,`${clean.length} athletes`);
 }
 
+// Sube data.json y opcionalmente records.json a Firebase Storage (public/data.json)
+// para que el sitio los sirva automáticamente sin pasar por GitHub.
+async function _uploadToStorage(dataArr, recObj){
+  const _stg=getStorage(app);
+  await uploadBytes(storageRef(_stg,'public/data.json'),
+    new Blob([JSON.stringify(dataArr,null,2)],{type:'application/json'}),
+    {contentType:'application/json',cacheControl:'public,max-age=60'});
+  if(recObj){
+    await uploadBytes(storageRef(_stg,'public/records.json'),
+      new Blob([JSON.stringify(recObj,null,2)],{type:'application/json'}),
+      {contentType:'application/json',cacheControl:'public,max-age=60'});
+  }
+}
+
+window.syncDataJsonToStorage=async function(){
+  if(ST.adminInfo?.role!=='owner'&&!ST.adminInfo?.bootstrap){showToast('Solo el Owner puede sincronizar',null,true);return;}
+  if(!ST.data?.length){showToast('No hay datos cargados',null,true);return;}
+  const btn=document.getElementById('btnSyncStorage');
+  if(btn){btn.disabled=true;btn.textContent='Subiendo...';}
+  try{
+    const clean=ST.data.map(({_isPending,...a})=>a);
+    await _uploadToStorage(clean,null);
+    showToast(`data.json publicado en Storage (${clean.length} atletas). El sitio lo sirve automáticamente.`);
+    await logAction('sync_storage','data.json',null,`${clean.length} athletes`);
+  }catch(e){
+    showToast('Error al subir a Storage: '+e.message,null,true);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Publicar data.json al sitio';}
+  }
+}
+
 // ════════════════════════════════════════════════════════════════
 // Ver TODOS los documentos subidos por un atleta (modal con previews)
 // ════════════════════════════════════════════════════════════════
@@ -1315,7 +1346,7 @@ window.publicarDataJson=async function(){
   if(ST.adminInfo?.role!=='owner'&&!ST.adminInfo?.bootstrap){showToast('Solo el Owner puede publicar data.json',null,true);return;}
   const pendientes=(ST.data||[]).filter(a=>a._isPending);
   if(!pendientes.length){showToast('No hay debutantes pendientes',null,true);return;}
-  if(!confirm(`¿Incorporar ${pendientes.length} debutante(s) al data.json?\n\n${pendientes.map(a=>a.nombre).join('\n')}\n\nSe descargará el archivo actualizado. Súbelo al servidor para publicarlo.`))return;
+  if(!confirm(`¿Incorporar ${pendientes.length} debutante(s) al data.json?\n\n${pendientes.map(a=>a.nombre).join('\n')}\n\nSe publicará automáticamente en el sitio.`))return;
 
   // Build clean data.json: all athletes without internal flags
   const clean=ST.data.map(({_isPending,...a})=>{
@@ -1335,11 +1366,19 @@ window.publicarDataJson=async function(){
     return a;
   });
 
-  // Download locally
-  const blob=new Blob([JSON.stringify(clean,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const link=document.createElement('a');link.href=url;link.download='data.json';link.click();
-  URL.revokeObjectURL(url);
+  // Auto-upload to Firebase Storage (publish without GitHub)
+  let _uploaded=false;
+  try{
+    await _uploadToStorage(clean,null);
+    _uploaded=true;
+  }catch(e){
+    console.warn('[publicar] Storage upload failed:',e.message);
+    // Fallback: download locally
+    const blob=new Blob([JSON.stringify(clean,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');link.href=url;link.download='data.json';link.click();
+    URL.revokeObjectURL(url);
+  }
 
   // Mark as incorporated in Firestore
   const rutNorm=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
@@ -1357,7 +1396,7 @@ window.publicarDataJson=async function(){
   ST.data.forEach(a=>delete a._isPending);
 
   await logAction('publicar_data_json',`${clean.length} atletas`,null,`${pendientes.length} debutantes`);
-  showToast(`data.json descargado (${clean.length} atletas). ${marcados} debutante(s) marcados como incorporados. Sube el archivo al servidor.`);
+  showToast(_uploaded?`Publicado automáticamente (${clean.length} atletas). ${marcados} debutante(s) incorporados.`:`Descargado (${clean.length} atletas). ${marcados} debutante(s) incorporados. Sube el archivo al servidor.`);
   render();
 }
 
@@ -3752,7 +3791,8 @@ function renderExports(){
       <div class="h2">Descargas disponibles</div>
       <div style="display:flex;flex-direction:column;gap:10px">
         ${isOwner
-          ?`<button class="btn btn-b" onclick="exportData()" style="text-align:left;padding:14px">data.json (${ST.data.length} atletas)</button>`
+          ?`<button class="btn btn-b" onclick="exportData()" style="text-align:left;padding:14px">data.json (${ST.data.length} atletas) — Descargar</button>
+            <button id="btnSyncStorage" class="btn btn-g" onclick="syncDataJsonToStorage()" style="text-align:left;padding:14px">Publicar data.json al sitio (sin GitHub)</button>`
           :`<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:12px"><strong>data.json</strong> — Solo el Owner puede descargar la base de datos raw</div>`
         }
         <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">
@@ -6859,18 +6899,24 @@ window.procesarMerge = async function(compId){
     });
   });
 
-  // Download data.json
-  const dataBlob=new Blob([JSON.stringify(newData,null,2)],{type:'application/json'});
-  const dataUrl=URL.createObjectURL(dataBlob);
-  const a1=document.createElement('a');a1.href=dataUrl;a1.download='data.json';a1.click();
-  
-  // Download records.json if updated
-  if(recordsUpdated>0){
-    setTimeout(()=>{
-      const recBlob=new Blob([JSON.stringify(newRecords,null,2)],{type:'application/json'});
-      const recUrl=URL.createObjectURL(recBlob);
-      const a2=document.createElement('a');a2.href=recUrl;a2.download='records.json';a2.click();
-    },500);
+  // Auto-upload to Firebase Storage (publish without GitHub)
+  let _mergeUploaded=false;
+  try{
+    await _uploadToStorage(newData, recordsUpdated>0 ? newRecords : null);
+    _mergeUploaded=true;
+  }catch(e){
+    console.warn('[merge] Storage upload failed:',e.message);
+    // Fallback: download locally
+    const dataBlob=new Blob([JSON.stringify(newData,null,2)],{type:'application/json'});
+    const dataUrl=URL.createObjectURL(dataBlob);
+    const a1=document.createElement('a');a1.href=dataUrl;a1.download='data.json';a1.click();
+    if(recordsUpdated>0){
+      setTimeout(()=>{
+        const recBlob=new Blob([JSON.stringify(newRecords,null,2)],{type:'application/json'});
+        const recUrl=URL.createObjectURL(recBlob);
+        const a2=document.createElement('a');a2.href=recUrl;a2.download='records.json';a2.click();
+      },500);
+    }
   }
 
   // Mark as processed in Firestore
@@ -6887,8 +6933,8 @@ window.procesarMerge = async function(compId){
   ST.data=newData;
   RECORDS_DATA=newRecords;
 
-  showToast(`Procesado: ${added} atletas nuevos, ${updated} actualizados, ${recordsUpdated} records. Sube data.json y records.json a GitHub.`);
-  if(btn){btn.disabled=false;btn.textContent='Descargado — sube a GitHub';}
+  showToast(_mergeUploaded?`Publicado automáticamente: ${added} nuevos, ${updated} actualizados${recordsUpdated>0?`, ${recordsUpdated} records`:''}.`:`Procesado: ${added} nuevos, ${updated} actualizados. Descarga y sube a GitHub.`);
+  if(btn){btn.disabled=false;btn.textContent=_mergeUploaded?'Publicado ✓':'Descargado — sube a GitHub';}
 };
 
 window.descartarResultados = async function(compId){

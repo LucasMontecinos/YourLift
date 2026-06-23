@@ -341,7 +341,11 @@ function validateRut(val){
 // ATHLETE DB & AUTO-CODE
 // ══════════════════════════════════════════════
 let athleteDB = [];
-fetch('data.json?v='+Date.now()).then(r => r.json()).then(d => { athleteDB = d; }).catch(() => {});
+const _STOR='https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/';
+fetch(_STOR+'public%2Fdata.json?alt=media',{cache:'no-cache'})
+  .then(r=>r.ok?r.json():fetch('data.json?v='+Date.now()).then(r=>r.json()))
+  .catch(()=>fetch('data.json?v='+Date.now()).then(r=>r.json()))
+  .then(d=>{athleteDB=d;}).catch(()=>{});
 
 function findAthleteByRut(rut) {
   if (!rut) return null;
