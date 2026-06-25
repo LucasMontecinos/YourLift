@@ -4870,14 +4870,6 @@ window.setCompPos=async function(id,val){
     showToast(p>0?('Posición fijada: '+p+'°'):'Posición vuelta a automática');
   }catch(e){showToast('Error: '+e.message,null,true);}
 };
-window.setCompGLRank=async function(id,val){
-  const p=parseInt(val,10);
-  try{
-    await updateDoc(doc(db,'competition_results',id),{'resultado.pos':(p>0?p:deleteField()),updatedAt:serverTimestamp()});
-    await logAction('set_comp_gl_rank',id,null,'gl_rank='+(p>0?'#'+p:'(none)'));
-    showToast(p>0?('Pos. GL fijada: #'+p):'Pos. GL eliminada');
-  }catch(e){showToast('Error: '+e.message,null,true);}
-};
 const _histSlug=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,40);
 window.setHistPos=async function(codigo,evento,modalidad,val){
   const p=parseInt(val,10);
@@ -4885,14 +4877,6 @@ window.setHistPos=async function(codigo,evento,modalidad,val){
   try{
     await setDoc(doc(db,'comp_pos_overrides',docId),{codigo,evento,modalidad:modalidad||'',posicion:p>0?p:deleteField(),updatedAt:serverTimestamp()},{merge:true});
     showToast(p>0?('Posición fijada: '+p+'°'):'Posición eliminada');
-  }catch(e){showToast('Error: '+e.message,null,true);}
-};
-window.setHistGLRank=async function(codigo,evento,modalidad,val){
-  const p=parseInt(val,10);
-  const docId=codigo+'__'+_histSlug(evento)+(modalidad?'__'+_histSlug(modalidad):'');
-  try{
-    await setDoc(doc(db,'comp_pos_overrides',docId),{codigo,evento,modalidad:modalidad||'',gl_rank:p>0?p:deleteField(),updatedAt:serverTimestamp()},{merge:true});
-    showToast(p>0?('Pos. GL fijada: #'+p):'Pos. GL eliminada');
   }catch(e){showToast('Error: '+e.message,null,true);}
 };
 
@@ -4989,7 +4973,6 @@ function renderAthleteProfile(){
           <td style="font-weight:700">${r.resultado?.total||'-'}</td>
           <td>${r.resultado?.glp||r.resultado?.gl||'-'}</td>
           <td><input type="number" min="1" value="${r.posicion!=null?r.posicion:''}" placeholder="auto" onchange="setCompPos('${(r.id||'').replace(/'/g,"\\'")}',this.value)" title="Posición obtenida (1°, 2°...). Vacío = calculada automáticamente." style="width:52px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px;text-align:center"></td>
-          <td><input type="number" min="1" value="${r.resultado?.pos!=null?r.resultado.pos:''}" placeholder="—" onchange="setCompGLRank('${(r.id||'').replace(/'/g,"\\'")}',this.value)" title="Ranking por puntos GL" style="width:52px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px;text-align:center"></td>
           <td><button onclick="deleteCompResult('${(r.id||'').replace(/'/g,"\\'")}')" style="background:transparent;border:1px solid rgba(239,68,68,.4);color:var(--red);padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer">Eliminar</button></td>
         </tr>`).join('')}
       </table>`:'<div style="font-size:12px;color:var(--muted)">Sin competencias agregadas en vivo. Usa “+ Agregar competencia”.</div>'}
@@ -5003,13 +4986,12 @@ function renderAthleteProfile(){
     const _iStyle='width:52px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px;text-align:center';
     h+=`<div class="card" style="margin-bottom:14px;border-left:4px solid #6366f1">
       <div style="font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:1px;color:#6366f1;margin-bottom:10px">POSICIONES HISTÓRICAS</div>
-      <table class="tbl"><tr><th>Campeonato</th><th>Total</th><th>GL</th><th title="Posición en categoría">Pos. Cat.</th><th title="Ranking general por puntos GL">Pos. GL</th></tr>
+      <table class="tbl"><tr><th>Campeonato</th><th>Total</th><th>GL</th><th title="Posición en categoría">Pos. Cat.</th></tr>
       ${_hist.map(c=>`<tr>
         <td>${esc(c.evento||'')}<br><span style="font-size:9px;color:var(--muted)">${esc(c.fecha||'')} · ${esc(c.modalidad||'')} · ${esc(c.division||'')} ${esc(c.categoria||'')}</span></td>
         <td style="font-weight:700">${c.resultado?.total||'—'}</td>
         <td>${c.resultado?.glp||'—'}</td>
         <td><input type="number" min="1" value="${c.posicion!=null?c.posicion:(c.place||c.resultado?.rank||'')}" placeholder="—" onchange="setHistPos('${esc(a.codigo)}','${esc(c.evento||'')}','${esc(c.modalidad||'')}',this.value)" title="Posición en categoría" style="${_iStyle}"></td>
-        <td><input type="number" min="1" value="${c.resultado?.pos||''}" placeholder="—" onchange="setHistGLRank('${esc(a.codigo)}','${esc(c.evento||'')}','${esc(c.modalidad||'')}',this.value)" title="Ranking general por puntos GL" style="${_iStyle}"></td>
       </tr>`).join('')}
       </table>
       <div style="font-size:10px;color:var(--muted);margin-top:8px">Historial del atleta en data.json. Fija la posición o pos. GL y aparecerá al instante en el perfil público.</div>
