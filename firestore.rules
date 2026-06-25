@@ -1,0 +1,158 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════
+// YourLift — Firestore Security Rules
+// ═══════════════════════════════════════════════════════════════
+// Despliegue:
+//   firebase deploy --only firestore:rules
+//   o pegar en Firebase Console → Firestore → Reglas
+//
+// Modelo de roles:
+//   - admins/{uid} en Firestore → administradores con acceso completo
+//   - usuarios autenticados → pueden leer perfiles públicos y enviar solicitudes
+//   - público (sin autenticación) → solo lectura de datos públicos
+// ═══════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: verifica si el usuario actual es admin
+    function isAdmin() {
+      return request.auth != null
+          && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Helper: usuario autenticado
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // ── Admins ─────────────────────────────────────────────────
+    match /admins/{uid} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ── Atletas (data.json mirror / perfiles) ──────────────────
+    // Lectura pública; escritura solo admin
+    match /atletas/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Atletas pendientes de revisión ─────────────────────────
+    match /atletas_pending/{doc} {
+      allow read: if isAdmin();
+      allow create: if isAuth();
+      allow update, delete: if isAdmin();
+    }
+
+    // ── Solicitudes de edición de perfil ───────────────────────
+    match /edit_requests/{doc} {
+      allow read: if isAdmin() || (isAuth() && request.auth.uid == resource.data.uid);
+      allow create: if isAuth();
+      allow update, delete: if isAdmin();
+    }
+
+    // ── Ediciones de atletas (campos editados por el atleta) ───
+    match /athlete_edits/{doc} {
+      allow read: if isAdmin() || isAuth();
+      allow write: if isAdmin();
+    }
+
+    // ── Inscripciones (datos públicos) ─────────────────────────
+    match /inscripciones/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Inscripciones privadas (datos sensibles) ───────────────
+    match /inscripciones_private/{doc} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ── Eventos / Competencias ─────────────────────────────────
+    match /eventos/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Cronograma ─────────────────────────────────────────────
+    match /cronograma/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Resultados de competencia (livecast) ───────────────────
+    match /competition_results/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Posiciones históricas (overrides manuales) ─────────────
+    match /comp_pos_overrides/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Livecast sync ──────────────────────────────────────────
+    match /livecast_sync/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Records ────────────────────────────────────────────────
+    match /records/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Entrenadores / Coaches ─────────────────────────────────
+    match /coaches/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /entrenadores/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Logros de atletas ──────────────────────────────────────
+    match /atleta_achievements/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Fotos de atletas ───────────────────────────────────────
+    match /atleta_fotos/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Configuración de certificados ──────────────────────────
+    match /cert_config/{doc} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ── Solicitudes de certificados ────────────────────────────
+    match /cert_requests/{doc} {
+      allow read: if isAdmin() || (isAuth() && request.auth.uid == resource.data.uid);
+      allow create: if isAuth();
+      allow update, delete: if isAdmin();
+    }
+
+    // ── Fondos del sitio ───────────────────────────────────────
+    match /site_backgrounds/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Default deny ───────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
