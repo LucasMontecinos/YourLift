@@ -16,7 +16,7 @@
 window.CLUBS_LOGOS = {
   'allpower':         'clubs/AllPower.png',
   'atacama':          'clubs/Atacama.png',
-  'beersandlifts':    'clubs/Beers%26lifts.png',     // % 26 = & (URL-encoded)
+  'beersandlifts':    'clubs/BeersLifts.png',
   'blackbars':        'clubs/Blackbars.jpg',
   'bushido':          'clubs/Bushido.png',
   'hannya':           'clubs/Hannya.png',

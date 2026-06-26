@@ -1,5 +1,5 @@
-// YourLift Service Worker — v1
-const CACHE = 'yourlift-v1';
+// YourLift Service Worker — v2
+const CACHE = 'yourlift-v2';
 
 const PRECACHE_URLS = [
   '/',
@@ -59,7 +59,7 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       fetch(req)
         .then(res => {
-          if (res.ok) caches.open(CACHE).then(c => c.put(req, res.clone()));
+          if (res.ok) { const clone = res.clone(); caches.open(CACHE).then(c => c.put(req, clone)); }
           return res;
         })
         .catch(() => caches.match(req))
@@ -72,7 +72,7 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       caches.open(CACHE).then(async cache => {
         const cached = await cache.match(req);
-        const network = fetch(req).then(res => { cache.put(req, res.clone()); return res; }).catch(() => null);
+        const network = fetch(req).then(res => { const clone = res.clone(); cache.put(req, clone); return res; }).catch(() => null);
         return cached || network;
       })
     );
@@ -83,7 +83,7 @@ self.addEventListener('fetch', e => {
   if (url.hostname.includes('gstatic.com') || url.hostname.includes('cdn.jsdelivr.net')) {
     e.respondWith(
       caches.match(req).then(cached => cached || fetch(req).then(res => {
-        caches.open(CACHE).then(c => c.put(req, res.clone()));
+        const clone = res.clone(); caches.open(CACHE).then(c => c.put(req, clone));
         return res;
       }))
     );
@@ -95,7 +95,7 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       fetch(req)
         .then(res => {
-          if (res.ok) caches.open(CACHE).then(c => c.put(req, res.clone()));
+          if (res.ok) { const clone = res.clone(); caches.open(CACHE).then(c => c.put(req, clone)); }
           return res;
         })
         .catch(() => caches.match(req))
@@ -108,7 +108,7 @@ self.addEventListener('fetch', e => {
     caches.match(req).then(cached => {
       if (cached) return cached;
       return fetch(req).then(res => {
-        if (res.ok) caches.open(CACHE).then(c => c.put(req, res.clone()));
+        if (res.ok) { const clone = res.clone(); caches.open(CACHE).then(c => c.put(req, clone)); }
         return res;
       });
     })
