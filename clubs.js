@@ -1,17 +1,9 @@
 // ═══════════════════════════════════════════════════════════════
 // YourLift — Logos de clubes afiliados FECHIPO
 // ═══════════════════════════════════════════════════════════════
-// Los logos se sirven desde /clubs/<key>.png (local).
-// Si el archivo no existe el helper oculta la imagen sin romper
-// el layout (onerror => display:none).
-//
-// Para agregar un logo nuevo:
-//   1) Guardá el PNG en YourLift/clubs/<key>.png (240px de ancho aprox).
-//   2) Sumá la entrada al objeto CLUBS_LOGOS más abajo.
-//   3) Si querés mapear varias variantes del nombre del club a la
-//      misma key, el match es por substring normalizado: "All Power CD",
-//      "All Power" y "ALL POWER" todos matchean a 'allpower'.
-// ═══════════════════════════════════════════════════════════════
+// Logos locales (fallback estático). Los logos subidos desde admin
+// se guardan en Firestore 'clubs/{slug}' y tienen prioridad via
+// window._CLUBS_FS, que cada página carga después de init Firebase.
 
 window.CLUBS_LOGOS = {
   'allpower':         'clubs/AllPower.png',
@@ -23,13 +15,17 @@ window.CLUBS_LOGOS = {
   'himalaya':         'clubs/Himalaya.png',
   'ironforces':       'clubs/IronForces.png',
   'jacquesoliger':    'clubs/Jacques.png',
-  'jaquesoliger':     'clubs/Jacques.png',           // alias por si queda escrito sin "c"
+  'jaquesoliger':     'clubs/Jacques.png',
   'kaizen':           'clubs/Kaizen.png',
   'lostoros':         'clubs/Lostoros.png',
   'potenciamuscular': 'clubs/PotenciaMuscular.png',
   'rema':             'clubs/Rema.jpg',
   'southside':        'clubs/SouthSide.png'
 };
+
+// Logos subidos desde admin (Firestore 'clubs'). Cada página lo popula
+// tras inicializar Firebase. Estructura: { [slug]: { logoUrl, name } }
+window._CLUBS_FS = {};
 
 // Normaliza nombre: minúsculas, sin acentos, sin espacios ni símbolos
 window.normClub = function(s){
@@ -38,11 +34,15 @@ window.normClub = function(s){
     .replace(/[^a-z0-9]/g,'');
 };
 
-// Devuelve URL del logo o '' si no hay match
+// Devuelve URL del logo o '' si no hay match.
+// Prioridad: Firestore (admin subió logo) → archivo local estático.
 window.clubLogo = function(name){
   if(!name) return '';
   const n = window.normClub(name);
-  // Match por substring: 'allpowercd' contiene 'allpower'
+  const fs = window._CLUBS_FS || {};
+  for(const key in fs){
+    if(n.indexOf(key) >= 0 && fs[key].logoUrl) return fs[key].logoUrl;
+  }
   const map = window.CLUBS_LOGOS;
   for(const key in map){
     if(n.indexOf(key) >= 0) return map[key];

@@ -1074,6 +1074,15 @@ function _mediaKey(a){
 function _lcMediaFor(a){ return (a&&window._LC_MEDIA[_mediaKey(a)])||null; }
 function _setupLcMediaListener(){
   if(!fbReady||!window._fb||!fbDB||window._lcMediaUnsub)return;
+  // Logos de clubes desde admin
+  try{
+    if(!window._lcClubsUnsub){
+      window._lcClubsUnsub=window._fb.onSnapshot(window._fb.collection(fbDB,'clubs'),snap=>{
+        window._CLUBS_FS={};
+        snap.docs.forEach(d=>{const v=d.data();if(v.slug&&v.logoUrl)window._CLUBS_FS[v.slug]=v;});
+      });
+    }
+  }catch(e){}
   try{
     window._lcMediaUnsub=window._fb.onSnapshot(window._fb.collection(fbDB,'atleta_fotos'),snap=>{
       snap.docs.forEach(d=>{ if(String(d.id).indexOf('lc_')===0) window._LC_MEDIA[d.id]=d.data(); });

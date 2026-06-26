@@ -418,6 +418,16 @@ async function loadAll(){
       },(e)=>console.warn('[listener] competition_results:',e.message));
     }catch(e){console.warn('[loadAll] allCompRes listener:',e.message);}
   }
+  if(!window._clubsListener){
+    try{
+      window._clubsListener=onSnapshot(collection(db,'clubs'),(snap)=>{
+        ST.clubs=snap.docs.map(d=>({id:d.id,...d.data()}));
+        window._CLUBS_FS={};
+        ST.clubs.forEach(c=>{if(c.slug&&c.logoUrl)window._CLUBS_FS[c.slug]=c;});
+        if(ST.view==='clubs')render();
+      },(e)=>console.warn('[listener] clubs:',e.message));
+    }catch(e){console.warn('[loadAll] clubs listener:',e.message);}
+  }
   if(!window._eventosListener){
     try{
       window._eventosListener=onSnapshot(collection(db,'eventos'),(snap)=>{
@@ -518,7 +528,11 @@ window.openEditModal=function(title,field,currentValue,onSave){
   const opts=FIELD_OPTS[field];
   const m=document.createElement('div');m.className='modal';
   let inner=`<div class="modal-c"><h3>${title}</h3><div class="field"><label>${field}</label>`;
-  if(opts){
+  if(field==='club'){
+    const allClubs=[...new Set((ST.data||[]).map(a=>a.club).filter(Boolean))].sort();
+    inner+=`<input type="text" id="emInp" list="emClubList" value="${(currentValue||'').replace(/"/g,'&quot;')}" placeholder="Escribe o selecciona un club" autocomplete="off" style="width:100%">
+    <datalist id="emClubList">${allClubs.map(c=>`<option value="${c.replace(/"/g,'&quot;')}">`).join('')}</datalist>`;
+  } else if(opts){
     inner+=`<select id="emInp">${opts.map(o=>`<option value="${o}" ${o===currentValue?'selected':''}>${o}</option>`).join('')}</select>`;
   }else{
     inner+=`<input type="text" id="emInp" value="${(currentValue||'').replace(/"/g,'&quot;')}">`;
@@ -1537,6 +1551,7 @@ function render(){
       <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')">Revisión inscripciones</button>
       <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')">Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
       <button class="side-btn ${ST.view==='entrenadoresDB'?'active':''}" onclick="go('entrenadoresDB')">Base Entrenadores</button>
+      <button class="side-btn ${ST.view==='clubs'?'active':''}" onclick="go('clubs')">Clubes</button>
       <button class="side-btn ${ST.view==='fotos'?'active':''}" onclick="go('fotos')">Fotos Atletas</button>
       <button class="side-btn ${ST.view==='records'?'active':''}" onclick="go('records')">Récords</button>
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='certificados'?'active':''}" onclick="go('certificados')">Certificados</button>`:''}
@@ -1566,6 +1581,7 @@ function render(){
   else if(ST.view==='editRequests')content=renderEditRequests();
   else if(ST.view==='entrenadores')content=renderEntrenadores();
   else if(ST.view==='entrenadoresDB')content=renderEntrenadoresDB();
+  else if(ST.view==='clubs')content=renderClubs();
   else if(ST.view==='fotos')content=renderFotos();
   else if(ST.view==='records')content=renderRecordsEditor();
   else if(ST.view==='certificados'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderCertificados();else go('athletes');}
@@ -5591,6 +5607,71 @@ window.editorFotoReset = function(){
 window.editorFotoSetZoom = function(v){
   window._fotosState.transform.zoom = parseFloat(v);
   _redrawFotoPreview();
+};
+
+// ── Clubes ────────────────────────────────────────────────────────────────────
+function renderClubs(){
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const allClubs=[...new Set((ST.data||[]).map(a=>a.club).filter(Boolean))].sort();
+  const athletesByClub={};
+  (ST.data||[]).forEach(a=>{if(a.club)(athletesByClub[a.club]=athletesByClub[a.club]||[]).push(a);});
+  const expanded=ST._clubExpanded||null;
+  let h=`<div style="font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:2px;margin-bottom:18px">CLUBES</div>`;
+  h+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">`;
+  for(const club of allClubs){
+    const slug=window.normClub(club);
+    const fsData=(window._CLUBS_FS||{})[slug];
+    const logoUrl=fsData?.logoUrl||window.clubLogo(club)||'';
+    const athletes=athletesByClub[club]||[];
+    const isOpen=expanded===club;
+    h+=`<div class="card" style="padding:14px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <div style="width:52px;height:52px;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          ${logoUrl?`<img src="${esc(logoUrl)}" style="width:100%;height:100%;object-fit:contain" onerror="this.parentElement.innerHTML='<span style=font-size:22px>🏋️</span>'">`:'<span style="font-size:22px">🏋️</span>'}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(club)}">${esc(club)}</div>
+          <div style="font-size:11px;color:var(--muted)">${athletes.length} atleta${athletes.length!==1?'s':''}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <label class="btn btn-b" style="padding:5px 10px;font-size:11px;cursor:pointer" title="Subir o reemplazar logo">
+          <input type="file" accept="image/*" style="display:none" onchange="uploadClubLogo('${esc(club)}','${esc(slug)}',this)">
+          ${logoUrl?'Cambiar logo':'+ Logo'}
+        </label>
+        <button class="btn btn-b" style="padding:5px 10px;font-size:11px" onclick="ST._clubExpanded=ST._clubExpanded==='${esc(club)}'?null:'${esc(club)}';render()">
+          ${isOpen?'Ocultar':'Ver atletas'}
+        </button>
+      </div>
+      ${isOpen?`<div style="margin-top:10px;max-height:220px;overflow-y:auto;border-top:1px solid var(--border);padding-top:8px">
+        ${athletes.sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')).map(a=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer" onclick="go('athleteProfile');ST.athleteProfile='${a.codigo.replace(/'/g,"\\'")}';render()">
+            ${a.foto_url?`<img src="${esc(a.foto_url)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display='none'">`:
+              `<div style="width:28px;height:28px;border-radius:50%;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:700;color:var(--muted)">${(a.nombre||'?')[0].toUpperCase()}</div>`}
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.nombre||'')}</div>
+              <div style="font-size:10px;color:var(--muted)">${esc(a.division||'')} · ${esc(a.codigo||'')}</div>
+            </div>
+          </div>`).join('')}
+      </div>`:''}
+    </div>`;
+  }
+  h+=`</div>`;
+  return h;
+}
+
+window.uploadClubLogo=async function(club,slug,input){
+  const file=input.files?.[0]; if(!file)return;
+  const btn=input.closest('label'); if(btn)btn.textContent='Subiendo...';
+  try{
+    const ext=file.name.split('.').pop()||'png';
+    const sref=storageRef(storage,`logos/clubs/${slug}.${ext}`);
+    await uploadBytes(sref,file);
+    const url=await getDownloadURL(sref);
+    await setDoc(doc(db,'clubs',slug),{name:club,slug,logoUrl:url,updatedAt:serverTimestamp()},{merge:true});
+    showToast('Logo de '+club+' actualizado');
+  }catch(e){showToast('Error: '+e.message,null,true);}
+  finally{if(btn){btn.innerHTML='<input type="file" accept="image/*" style="display:none" onchange="uploadClubLogo(\''+club.replace(/'/g,"\\'")+'\',\''+slug+'\',this)">Cambiar logo';}}
 };
 
 function renderFotos(){

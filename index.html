@@ -186,6 +186,7 @@ function buildMenu(){
     {v:'trans',l:'Transmisiones',ic:''},
     {v:'crono',l:'Cronograma',ic:''},
     {v:'atletas',l:'Atletas',ic:''},
+    {v:'entrenadores',l:'Entrenadores',ic:''},
     {v:'cert',l:'Certificados',ic:''},
     {v:'insc',l:'Inscripción',ic:'',cls:'special-g'},
     {v:'rank',l:'Ranking',ic:'',cls:'special-y'},
@@ -398,6 +399,21 @@ async function initFB(){
     await loadEdits();
     startEditsListener();
     await loadFBNominas();
+    // Logos de clubes subidos desde admin
+    try{
+      window.FBQ.onSnapshot(window.FBQ.collection(fbDB,'clubs'),snap=>{
+        window._CLUBS_FS={};
+        snap.docs.forEach(d=>{const v=d.data();if(v.slug&&v.logoUrl)window._CLUBS_FS[v.slug]=v;});
+      });
+    }catch(e){}
+    // Entrenadores acreditados (público)
+    try{
+      window.FBQ.onSnapshot(window.FBQ.collection(fbDB,'entrenadores'),snap=>{
+        window._ENTRENADORES_PUB=snap.docs.map(d=>d.data()).filter(e=>e.nombre)
+          .sort((a,b)=>(a.club||'').localeCompare(b.club||'')||(a.nombre||'').localeCompare(b.nombre||''));
+        if(ST.v==='entrenadores')render();
+      });
+    }catch(e){}
   }catch(e){console.warn('Firebase not available, using nominas.json',e)}
 }
 
@@ -829,6 +845,7 @@ function render(){const app=document.getElementById("app");
     else if(ST.v==="insc")h+=embedded('inscripcion.html');
     else if(ST.v==="rank")h+=embedded('ranking.html');
     else if(ST.v==="glcalc")h+=glcalc();
+    else if(ST.v==="entrenadores")h+=renderEntrenadoresPub();
     else h+=nom();
     if(typeof buildMenu==='function')buildMenu();
   }
@@ -1336,6 +1353,39 @@ function home(){
       </div>`;
     });
     h+=`</div></div>`;
+  }
+  return h;
+}
+
+function renderEntrenadoresPub(){
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const list=window._ENTRENADORES_PUB||[];
+  if(!list.length){
+    return `<div style="padding:40px 20px;text-align:center">
+      <div style="font-family:Oswald;font-size:20px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">ENTRENADORES ACREDITADOS</div>
+      <div style="color:var(--muted);font-size:13px">Cargando…</div>
+    </div>`;
+  }
+  const clubs=[...new Set(list.map(e=>e.club).filter(Boolean))].sort();
+  let h=`<div style="font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:2px;margin-bottom:6px">ENTRENADORES <span style="color:var(--gold)">ACREDITADOS</span></div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:20px">${list.length} entrenador${list.length!==1?'es':''} · FECHIPO</div>`;
+  for(const club of clubs){
+    const members=list.filter(e=>e.club===club);
+    const lg=window.clubLogoImg?window.clubLogoImg(club,22,'background:rgba(10,22,40,.4);padding:1px;vertical-align:middle;margin-right:6px;'):'';
+    h+=`<div style="margin-bottom:20px">
+      <div style="font-family:Oswald;font-size:13px;letter-spacing:1.5px;color:var(--gold);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:8px;display:flex;align-items:center;gap:6px">${lg}${esc(club)}</div>
+      ${members.map(e=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+        <div style="font-size:14px">${esc(e.nombre||'')}</div>
+        ${e.categoria?`<div style="font-size:11px;color:var(--muted);background:rgba(212,168,67,.1);border:1px solid rgba(212,168,67,.2);border-radius:6px;padding:2px 8px">${esc(e.categoria)}</div>`:''}
+      </div>`).join('')}
+    </div>`;
+  }
+  const sinClub=list.filter(e=>!e.club);
+  if(sinClub.length){
+    h+=`<div style="margin-bottom:20px">
+      <div style="font-family:Oswald;font-size:13px;letter-spacing:1.5px;color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:8px">SIN CLUB</div>
+      ${sinClub.map(e=>`<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:14px">${esc(e.nombre||'')}</div>`).join('')}
+    </div>`;
   }
   return h;
 }
