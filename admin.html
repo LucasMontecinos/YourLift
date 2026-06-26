@@ -3369,6 +3369,7 @@ function renderNominas(){
       <button class="btn btn-g" onclick="openInscribirModal()" style="padding:8px 16px;font-size:12px">Inscribir atleta</button>
       <button id="btnExportNomina" class="btn btn-b" onclick="exportNominaExcel()" style="padding:8px 16px;font-size:12px">Exportar Excel</button>
       <button id="btnExportDocs" class="btn btn-b" onclick="exportNominaDocsZip()" style="padding:8px 16px;font-size:12px" title="ZIP con una carpeta por atleta (con su nombre) y adentro sus documentos subidos">Descargar Docs (ZIP)</button>
+      <button id="btnExportFotos" class="btn btn-b" onclick="exportNominaFotosZip()" style="padding:8px 16px;font-size:12px" title="ZIP con las fotos de perfil de todos los atletas inscritos (nombre del atleta.png)">Descargar Fotos (ZIP)</button>
     </div>
     ${needsMetaSync?'<div class="card" style="background:rgba(212,168,67,.08);border-color:rgba(212,168,67,.3);padding:12px 16px;margin-bottom:12px"><span style="color:var(--gold);font-size:12px">Las inscripciones están en Firebase pero falta el doc de evento en <code>eventos/</code>. Sin eso no podés editar fecha/cierre/ubicación desde <b>Campeonatos</b>. Creá el evento desde el panel de Campeonatos.</span></div>':''}
     <div class="card" style="padding:0;overflow-x:auto">
@@ -3999,6 +4000,73 @@ window.exportNominaDocsZip = async function(){
     showToast('ZIP listo: '+ok+' documentos'+(fail?' · '+fail+' fallaron':''));
   }catch(e){ console.error(e); showToast('Error: '+e.message,null,true); }
   finally{ if(btn){ btn.textContent='Descargar Docs (ZIP)'; btn.disabled=false; } }
+};
+
+// ── Descargar fotos de atletas de una nómina en ZIP ───────────────────────────
+window.exportNominaFotosZip = async function(){
+  const btn=document.getElementById('btnExportFotos');
+  const ev=ST.filterEv;
+  if(!ev){ showToast('Selecciona un campeonato primero',null,true); return; }
+  const list=(ST.inscripciones||[]).filter(i=>i.evento===ev&&i.status!=='rejected');
+  if(!list.length){ showToast('No hay inscripciones en este campeonato',null,true); return; }
+  if(btn){ btn.textContent='Preparando...'; btn.disabled=true; }
+  try{
+    if(!window.JSZip){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        s.onload=res; s.onerror=rej; document.head.appendChild(s);
+      });
+    }
+    const rutNorm=s=>String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();
+    const safe=s=>String(s||'').replace(/[\\/:*?"<>|]/g,'').replace(/\s+/g,' ').trim().slice(0,80)||'atleta';
+    const MIME_EXT={'image/jpeg':'jpg','image/jpg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif'};
+
+    // Construir lista de atletas con foto_url: primero busca en fotosByCodigo,
+    // luego en ST.data por RUT como fallback.
+    const tasks=[];
+    const seen=new Set();
+    for(const i of list){
+      if(seen.has(i.id)) continue; seen.add(i.id);
+      // Buscar atleta en ST.data por RUT o por codigo
+      const rutI=rutNorm(i.rut);
+      const ath=(ST.data||[]).find(a=>(i.codigo&&a.codigo===i.codigo)||(rutI&&rutNorm(a.rut)===rutI));
+      const codigo=ath?.codigo||i.codigo||null;
+      const fotoDoc=codigo?(ST.fotosByCodigo||{})[codigo]:null;
+      const fotoUrl=fotoDoc?.foto_url||(ath?.foto_url||null);
+      tasks.push({nombre:i.nombre||i.rut||i.id, fotoUrl});
+    }
+
+    const conFoto=tasks.filter(t=>t.fotoUrl);
+    const sinFoto=tasks.filter(t=>!t.fotoUrl);
+    if(!conFoto.length){
+      showToast('Ningún atleta de esta nómina tiene foto subida',null,true);
+      if(btn){ btn.textContent='Descargar Fotos (ZIP)'; btn.disabled=false; }
+      return;
+    }
+
+    const zip=new JSZip();
+    let ok=0, fail=0, done=0;
+    for(const t of conFoto){
+      try{
+        const resp=await fetch(t.fotoUrl); if(!resp.ok) throw new Error('HTTP '+resp.status);
+        const blob=await resp.blob();
+        const ext=MIME_EXT[blob.type]||'png';
+        zip.file(safe(t.nombre)+'.'+ext, blob); ok++;
+      }catch(e){ fail++; console.warn('[fotos zip]',t.nombre,e.message); }
+      done++; if(btn) btn.textContent='Descargando '+done+'/'+conFoto.length;
+    }
+
+    if(!ok){ showToast('No se pudo descargar ninguna foto (revisa permisos/CORS)',null,true); return; }
+    if(btn) btn.textContent='Comprimiendo...';
+    const content=await zip.generateAsync({type:'blob'});
+    const safeEv=String(ev).replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,60).trim()||'evento';
+    const a=document.createElement('a'); a.href=URL.createObjectURL(content); a.download='Fotos_'+safeEv+'.zip';
+    document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
+    const msg='ZIP listo: '+ok+' fotos'+(fail?' · '+fail+' fallaron':'')+(sinFoto.length?' · '+sinFoto.length+' sin foto':'');
+    showToast(msg);
+  }catch(e){ console.error(e); showToast('Error: '+e.message,null,true); }
+  finally{ if(btn){ btn.textContent='Descargar Fotos (ZIP)'; btn.disabled=false; } }
 };
 
 // ── Exportar data.json como Excel ─────────────────────────────────────────────
