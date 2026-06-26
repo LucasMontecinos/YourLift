@@ -478,6 +478,7 @@ let state = {
   passportFile: null, passportName: '',          // pasaporte (eventos IPF Worlds)
   ipfConsentFile: null, ipfConsentName: '',      // IPF consentimiento firmado
   notasFile: null, notasName: '',                // concentración de notas (IPF Worlds)
+  privacyConsent: false,
   submitting: false,
   storageWarning: false,
   adminAuth: false,
@@ -846,9 +847,13 @@ function renderForm() {
           ${allDocsCheck}
         </div>
       </div>
-      <div style="display:flex;justify-content:space-between;margin-top:20px">
+      <label style="display:flex;align-items:flex-start;gap:10px;margin-top:18px;cursor:pointer;padding:12px;background:rgba(212,168,67,.06);border:1px solid rgba(212,168,67,.2);border-radius:8px">
+        <input type="checkbox" id="privacyChkNew" onchange="state.privacyConsent=this.checked;render()" ${state.privacyConsent?'checked':''} style="margin-top:2px;width:16px;height:16px;accent-color:#D4A843;flex-shrink:0">
+        <span style="font-size:12px;color:rgba(180,200,230,.8);line-height:1.6">He leído y acepto la <span onclick="event.preventDefault();(window.parent&&window.parent.sv?window.parent.sv('terminos'):window.open('./'))" style="color:#D4A843;cursor:pointer;text-decoration:underline">Política de Privacidad</span> de FECHIPO. Autorizo el tratamiento de mis datos personales para la gestión de competencias de powerlifting, conforme a la Ley N° 19.628 y Ley N° 21.719.</span>
+      </label>
+      <div style="display:flex;justify-content:space-between;margin-top:14px">
         <button class="btn btn-outline" onclick="prevStep()">← Atrás</button>
-        <button class="btn btn-green" onclick="submitForm()" ${allDocsDisabled}>${state.submitting?'<span class="sp"></span> Enviando...':'✓ Enviar Inscripción'}</button>
+        <button class="btn btn-green" onclick="submitForm()" ${allDocsDisabled||!state.privacyConsent?'disabled':''}>${state.submitting?'<span class="sp"></span> Enviando...':'✓ Enviar Inscripción'}</button>
       </div></div>`;
     } else {
     // ─── SISTEMA VIEJO (backward compat) — el bloque IPF/menor/foto sigue como estaba ───
@@ -985,9 +990,14 @@ function renderForm() {
       </div>
     </div>
 
-    <div style="display:flex;justify-content:space-between;margin-top:20px">
+    <label style="display:flex;align-items:flex-start;gap:10px;margin-top:18px;cursor:pointer;padding:12px;background:rgba(212,168,67,.06);border:1px solid rgba(212,168,67,.2);border-radius:8px">
+      <input type="checkbox" id="privacyChkLeg" onchange="state.privacyConsent=this.checked;render()" ${state.privacyConsent?'checked':''} style="margin-top:2px;width:16px;height:16px;accent-color:#D4A843;flex-shrink:0">
+      <span style="font-size:12px;color:rgba(180,200,230,.8);line-height:1.6">He leído y acepto la <span onclick="event.preventDefault();(window.parent&&window.parent.sv?window.parent.sv('terminos'):window.open('./'))" style="color:#D4A843;cursor:pointer;text-decoration:underline">Política de Privacidad</span> de FECHIPO. Autorizo el tratamiento de mis datos personales para la gestión de competencias de powerlifting, conforme a la Ley N° 19.628 y Ley N° 21.719.</span>
+    </label>
+    <div style="display:flex;justify-content:space-between;margin-top:14px">
       <button class="btn btn-outline" onclick="prevStep()">← Atrás</button>
       <button class="btn btn-green" onclick="submitForm()" ${(()=>{
+        if(!state.privacyConsent) return 'disabled';
         if(!state.carnetName) return 'disabled';
         if(!state.wadeName) return 'disabled';
         if(state.submitting) return 'disabled';
@@ -1543,6 +1553,8 @@ async function submitForm() {
       posNacTotal: String((_numCL(f.posNacSQ)+_numCL(f.posNacBP)+_numCL(f.posNacDL))||''),
       carnetName: state.carnetName,
       wadeName: state.wadeName,
+      privacyConsent: true,
+      privacyConsentTs: new Date().toISOString(),
       status: 'pending',
     };
 
