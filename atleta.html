@@ -207,16 +207,15 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
     if(_fbDB && _fbMod){
       try{
         const rutNorm=s=>String(s||'').replace(/[^0-9kK]/g,'').toLowerCase();
-        const pendSnap=await _fbMod.getDocs(_fbMod.collection(_fbDB,'atletas_pending'));
-        pendSnap.forEach(d=>{
-          const pd=d.data();
+        // atletas_pending: getDocs + caché 30min
+        let pendDocs=_aC('atl_pend',30*60*1000);
+        if(!pendDocs){const pendSnap=await _fbMod.getDocs(_fbMod.collection(_fbDB,'atletas_pending'));pendDocs=pendSnap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_pend',pendDocs);}
+        pendDocs.forEach(pd=>{
           if(!pd.nombre||!pd.codigo) return;
-          if(DB.find(a=>rutNorm(a.rut)===rutNorm(pd.rut))) return; // ya está
-          // fechaNac: yyyy-mm-dd → dd/mm/yyyy
+          if(DB.find(a=>rutNorm(a.rut)===rutNorm(pd.rut))) return;
           let fn=pd.fechaNac||'';
           const fm=fn.match(/^(\d{4})-(\d{2})-(\d{2})$/);
           if(fm) fn=`${fm[3]}/${fm[2]}/${fm[1]}`;
-          // Buscar inscripción para armar la competencia
           const insc=INSC.find(i=>rutNorm(i.rut)===rutNorm(pd.rut));
           const ev=insc?NOM_EVENTS.find(e=>e.id===insc.evento):null;
           DB.push({
@@ -232,13 +231,12 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
         });
       }catch(ep){console.warn('[atletas_pending]',ep.message);}
 
-      // Overlay de ediciones del admin (athlete_edits): club, nombre, etc.
-      // Matchea por RUT (estable), fallback a código. Soporta borrado.
+      // Overlay de ediciones del admin (athlete_edits): getDocs + caché 20min (shared key con index.html)
       try{
         const rutNormE=s=>String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();
-        const editsSnap=await _fbMod.getDocs(_fbMod.collection(_fbDB,'athlete_edits'));
-        editsSnap.forEach(d=>{
-          const ed=d.data();
+        let edDocs=_aC('edits',20*60*1000);
+        if(!edDocs){const editsSnap=await _fbMod.getDocs(_fbMod.collection(_fbDB,'athlete_edits'));edDocs=editsSnap.docs.map(d=>({...d.data(),id:d.id}));_aSC('edits',edDocs);}
+        edDocs.forEach(ed=>{
           let idx=-1;
           if(ed.rut) idx=DB.findIndex(x=>rutNormE(x.rut)===rutNormE(ed.rut));
           if(idx<0 && ed.codigo) idx=DB.findIndex(x=>x.codigo===ed.codigo);
