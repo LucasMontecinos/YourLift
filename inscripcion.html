@@ -411,8 +411,14 @@ function autoFillCode() {
       if (m) fn = `${m[3]}-${m[2]}-${m[1]}`;
       f.fechaNac = fn;
     }
-    // Club
-    if (!f.club && found.club) f.club = found.club;
+    // Club — aplicar override de athlete_edits si existe
+    {
+      const rk = String(found.rut||'').replace(/[^0-9kK]/g,'').toLowerCase();
+      const ed = (window._INS_EDITS_RUT&&rk&&window._INS_EDITS_RUT[rk])
+               || (window._INS_EDITS_COD&&found.codigo&&window._INS_EDITS_COD[found.codigo]);
+      if (ed && ed.club) f.club = ed.club;
+      else if (!f.club && found.club) f.club = found.club;
+    }
     // Sexo y ciudad: el atleta los completa manualmente
     // Re-renderizar para reflejar los datos autocompletados
     render();
@@ -494,42 +500,64 @@ let state = {
   eventoFormMode: 'create', // create | edit
 };
 
+// ── Cache helpers para reducir lecturas Firestore ──────────────────────
+function _ifsCache(k,ttl){try{const v=localStorage.getItem('_yfc_'+k);if(!v)return null;const o=JSON.parse(v);if(Date.now()-o.ts<ttl)return o.d;}catch(e){}return null;}
+function _ifsSetCache(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.now(),d}));}catch(e){}}
+
 // ── Firestore eventos ────────────────────────────────────────
 async function loadEventos() {
   if (!firebaseReady) {
-    // Without Firebase, show nothing — events only come from admin
     EVENTS = [];
     render();
     return;
   }
   try {
-    if (!window._eventosListener) {
-      window._eventosListener = window.FB.onSnapshot(
-        window.FB.collection(db, 'eventos'),
-        (snap) => {
-          EVENTS = snap.docs.map(d => ({...d.data(), id: d.id}))
-            .sort((a,b) => (a.date||'').localeCompare(b.date||''));
-          render();
-        }
-      );
+    // Eventos: getDocs + caché 5min (evita onSnapshot en página pública)
+    const ce = _ifsCache('ins_eventos', 5*60*1000);
+    if (ce) { EVENTS = ce; render(); }
+    else {
+      const snap = await window.FB.getDocs(window.FB.collection(db, 'eventos'));
+      EVENTS = snap.docs.map(d => ({...d.data(), id: d.id}))
+        .sort((a,b) => (a.date||'').localeCompare(b.date||''));
+      _ifsSetCache('ins_eventos', EVENTS);
+      render();
     }
-    // Cargar fotos ya aprobadas (atleta_fotos) — si el atleta ya tiene foto
-    // no le pediremos otra al inscribirse.
-    if (!window._fotosListener) {
-      window.FOTOS_BY_RUT = window.FOTOS_BY_RUT || {};
-      window._fotosListener = window.FB.onSnapshot(
-        window.FB.collection(db, 'atleta_fotos'),
-        (snap) => {
-          window.FOTOS_BY_RUT = {};
-          snap.docs.forEach(d => {
-            const data = d.data();
-            if (data.foto_url && data.status !== 'rejected' && data.rut) {
-              const key = String(data.rut).replace(/[^0-9kK]/g,'').toLowerCase();
-              if (key) window.FOTOS_BY_RUT[key] = data.foto_url;
-            }
-          });
-        }
-      );
+    // Fotos aprobadas: getDocs + caché 30min
+    window.FOTOS_BY_RUT = window.FOTOS_BY_RUT || {};
+    const cf = _ifsCache('ins_fotos', 30*60*1000);
+    if (cf) { window.FOTOS_BY_RUT = cf; }
+    else {
+      window.FB.getDocs(window.FB.collection(db, 'atleta_fotos')).then(snap => {
+        window.FOTOS_BY_RUT = {};
+        snap.docs.forEach(d => {
+          const data = d.data();
+          if (data.foto_url && data.status !== 'rejected' && data.rut) {
+            const key = String(data.rut).replace(/[^0-9kK]/g,'').toLowerCase();
+            if (key) window.FOTOS_BY_RUT[key] = data.foto_url;
+          }
+        });
+        _ifsSetCache('ins_fotos', window.FOTOS_BY_RUT);
+      });
+    }
+    // Edits de atletas: getDocs una vez para pre-llenar club actualizado
+    window._INS_EDITS_RUT = window._INS_EDITS_RUT || {};
+    window._INS_EDITS_COD = window._INS_EDITS_COD || {};
+    const ce2 = _ifsCache('ins_edits', 20*60*1000);
+    if (ce2) {
+      ce2.forEach(e => {
+        if (e.rut) window._INS_EDITS_RUT[String(e.rut).replace(/[^0-9kK]/g,'').toLowerCase()] = e;
+        if (e.codigo) window._INS_EDITS_COD[e.codigo] = e;
+      });
+    } else {
+      window.FB.getDocs(window.FB.collection(db, 'athlete_edits')).then(snap => {
+        const eds = [];
+        snap.docs.forEach(d => {
+          const e = d.data(); eds.push(e);
+          if (e.rut) window._INS_EDITS_RUT[String(e.rut).replace(/[^0-9kK]/g,'').toLowerCase()] = e;
+          if (e.codigo) window._INS_EDITS_COD[e.codigo] = e;
+        });
+        _ifsSetCache('ins_edits', eds);
+      });
     }
   } catch(e) {
     console.warn('Eventos load error', e);

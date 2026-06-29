@@ -211,23 +211,33 @@ window._BG_VIDEOS={};
     const FB_CFG2={apiKey:"AIzaSyC3xWxxxLpkkbz_h9HxOSeg7C25wfh9KQ8",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"841056301810",appId:"1:841056301810:web:f6d62c0d4d22e88f7af2dd"};
     let app2;try{app2=initializeApp(FB_CFG2,'bgApp');}catch(e){app2=initializeApp(FB_CFG2,'bgApp_'+Date.now());}
     const storage=getStorage(app2);
-    // Intentar cargar de videos/sections (uno por seccion: bg_nominas.mp4, bg_stats.mp4, etc)
+    // URLs de videos de fondo — caché 6h para evitar listAll + getDownloadURL en cada visita
     let sectionMap={};
     try{
-      const sec=await listAll(ref(storage,'videos/sections'));
-      for(const it of sec.items){
-        const m=it.name.match(/^bg_([a-z]+)\./i);
-        if(m)sectionMap[m[1].toLowerCase()]=await getDownloadURL(it);
+      const vcached=_fsCache('bgVideos',6*60*60*1000);
+      if(vcached){sectionMap=vcached;}
+      else{
+        const sec=await listAll(ref(storage,'videos/sections'));
+        for(const it of sec.items){
+          const m=it.name.match(/^bg_([a-z]+)\./i);
+          if(m)sectionMap[m[1].toLowerCase()]=await getDownloadURL(it);
+        }
+        _fsSetCache('bgVideos',sectionMap);
       }
     }catch(e){}
     window._BG_VIDEOS=sectionMap;
-    // Settings por sección (overlay/blur/encuadre/ubicación/on-off) desde Firestore
+    // Settings por sección desde Firestore — caché 24h para evitar lecturas repetidas
     try{
-      const {getFirestore,collection,getDocs}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-      const db2=getFirestore(app2);
-      const snap=await getDocs(collection(db2,'site_backgrounds'));
-      const s={};snap.forEach(d=>{s[d.id]=d.data()||{}});
-      window._BG_SETTINGS=s;
+      const bgCached=_fsCache('bgSettings',24*60*60*1000);
+      if(bgCached){window._BG_SETTINGS=bgCached;}
+      else{
+        const {getFirestore,collection,getDocs}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+        const db2=getFirestore(app2);
+        const snap=await getDocs(collection(db2,'site_backgrounds'));
+        const s={};snap.forEach(d=>{s[d.id]=d.data()||{}});
+        window._BG_SETTINGS=s;
+        _fsSetCache('bgSettings',s);
+      }
     }catch(e){window._BG_SETTINGS=window._BG_SETTINGS||{}}
     // Solo videos de sections (gestionados desde admin). Sin fallback automático a break/.
     setBgForSection(typeof ST!=='undefined'?ST.v:'nominas');
@@ -361,6 +371,16 @@ let NOM_EVENTS=[
   {id:"Campeonato_de_debutantes",name:"Campeonato de Debutantes",date:"2026-XX-XX",closeDate:"2026-XX-XX",location:"Santiago, Ñuñoa",org:"All Power",days:"Por definir",extraCols:["modalidad"]},
 ];
 let fbDB=null,fbReady=false;
+// ── Cache localStorage para reducir lecturas Firestore ──────────────────
+function _fsCache(k,ttl){try{const v=localStorage.getItem('_yfc_'+k);if(!v)return null;const o=JSON.parse(v);if(Date.now()-o.ts<ttl)return o.d;}catch(e){}return null;}
+function _fsSetCache(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.now(),d}));}catch(e){}}
+function _applyEventos(docs){
+  const allEvs=docs.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  window.ALL_EVENTS=allEvs;
+  const evs=allEvs.filter(e=>e.status!=='archived');
+  if(evs.length){NOM_EVENTS=evs;loadFBNominas();}
+  if(ST.v==='trans')render();
+}
 async function initFB(){
   try{
     const{initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
@@ -368,52 +388,41 @@ async function initFB(){
     const app=initializeApp(FB_CFG);fbDB=fb.getFirestore(app);
     window.FBQ={collection:fb.collection,getDocs:fb.getDocs,query:fb.query,orderBy:fb.orderBy,where:fb.where,doc:fb.doc,setDoc:fb.setDoc,getDoc:fb.getDoc,onSnapshot:fb.onSnapshot,updateDoc:fb.updateDoc,increment:fb.increment,serverTimestamp:fb.serverTimestamp};
     fbReady=true;
-    // ── Récords en vivo: si existe records/data en Firestore, reemplaza records.json ──
-    try{
-      window.FBQ.onSnapshot(window.FBQ.doc(fbDB,'records','data'),(snap)=>{
-        if(snap.exists()){ const r=snap.data(); if(r&&(r.classic||r.equipped)){ R=r; if(ST.v==='records')render(); } }
-      },(e)=>{ console.warn('[records] sub',e); });
-    }catch(e){ console.warn('[records] sub',e); }
-    // ── Certificados: config (campeonatos disponibles + firma) para el formulario ──
-    try{
-      window.FBQ.onSnapshot(window.FBQ.doc(fbDB,'cert_config','main'),(snap)=>{
-        CERTCFG = snap.exists()? snap.data() : {champs:[]};
-        if(ST.v==='cert')render();
-      },(e)=>{ console.warn('[cert] cfg sub',e); });
-    }catch(e){ console.warn('[cert] cfg sub',e); }
-    // ── Analytics propio: registrar visita del día (no bloquea el render) ──
+    // ── Analytics propio ──
     try{ trackVisit(fb); }catch(e){}
-    // Load eventos from Firestore and update NOM_EVENTS
-    window.FBQ.onSnapshot(window.FBQ.collection(fbDB,'eventos'),(snap)=>{
-      const allEvs=snap.docs.map(d=>({...d.data(),id:d.id}))
-        .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-      // Para transmisiones y galería: incluir TODOS los eventos (también archivados)
-      window.ALL_EVENTS=allEvs;
-      const evs=allEvs.filter(e=>e.status!=='archived');
-      if(evs.length){
-        NOM_EVENTS=evs;
-        // Rebuild nóminas with updated event list
-        loadFBNominas();
-      }
-      if(ST.v==='trans')render();
-    });
+    // ── Récords: getDocs + caché 1h ──
+    try{
+      const cr=_fsCache('records',60*60*1000);
+      if(cr){if(cr.classic||cr.equipped){R=cr;if(ST.v==='records')render();}}
+      else{const rs=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'records','data'));if(rs.exists()){const r=rs.data();if(r&&(r.classic||r.equipped)){R=r;_fsSetCache('records',r);if(ST.v==='records')render();}}}
+    }catch(e){console.warn('[records]',e);}
+    // ── Cert config: getDocs + caché 1h ──
+    try{
+      const cc=_fsCache('certcfg',60*60*1000);
+      if(cc){CERTCFG=cc;if(ST.v==='cert')render();}
+      else{const cs=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'cert_config','main'));CERTCFG=cs.exists()?cs.data():{champs:[]};_fsSetCache('certcfg',CERTCFG);if(ST.v==='cert')render();}
+    }catch(e){console.warn('[cert]',e);}
+    // ── Eventos: getDocs + caché 10min ──
+    try{
+      const ce=_fsCache('eventos',10*60*1000);
+      if(ce){_applyEventos(ce);}
+      else{const es=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'eventos'));const docs=es.docs.map(d=>({...d.data(),id:d.id}));_fsSetCache('eventos',docs);_applyEventos(docs);}
+    }catch(e){console.warn('[eventos]',e);}
+    // ── Edits de atletas ──
     await loadEdits();
-    startEditsListener();
     await loadFBNominas();
-    // Logos de clubes subidos desde admin
+    // ── Clubes: getDocs + caché 24h ──
     try{
-      window.FBQ.onSnapshot(window.FBQ.collection(fbDB,'clubs'),snap=>{
-        window._CLUBS_FS={};
-        snap.docs.forEach(d=>{const v=d.data();if(v.slug&&v.logoUrl)window._CLUBS_FS[v.slug]=v;});
-      });
+      const cl=_fsCache('clubs',24*60*60*1000);
+      const docs=cl||(await window.FBQ.getDocs(window.FBQ.collection(fbDB,'clubs'))).docs.map(d=>d.data());
+      if(!cl)_fsSetCache('clubs',docs);
+      window._CLUBS_FS={};docs.forEach(v=>{if(v.slug&&v.logoUrl)window._CLUBS_FS[v.slug]=v;});
     }catch(e){}
-    // Entrenadores acreditados (público)
+    // ── Entrenadores: getDocs + caché 2h ──
     try{
-      window.FBQ.onSnapshot(window.FBQ.collection(fbDB,'entrenadores'),snap=>{
-        window._ENTRENADORES_PUB=snap.docs.map(d=>d.data()).filter(e=>e.nombre)
-          .sort((a,b)=>(a.club||'').localeCompare(b.club||'')||(a.nombre||'').localeCompare(b.nombre||''));
-        if(ST.v==='entrenadores')render();
-      });
+      const et=_fsCache('entrenadores',2*60*60*1000);
+      if(et){window._ENTRENADORES_PUB=et;if(ST.v==='entrenadores')render();}
+      else{const es=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'entrenadores'));const list=es.docs.map(d=>d.data()).filter(e=>e.nombre).sort((a,b)=>(a.club||'').localeCompare(b.club||'')||(a.nombre||'').localeCompare(b.nombre||''));_fsSetCache('entrenadores',list);window._ENTRENADORES_PUB=list;if(ST.v==='entrenadores')render();}
     }catch(e){}
   }catch(e){console.warn('Firebase not available, using nominas.json',e)}
 }
@@ -517,33 +526,23 @@ function _applyEditFields(a,ed){
 }
 async function loadEdits(){
   if(!fbReady)return;
-  try{
-    const snap=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'athlete_edits'));
-    let count=0;
-    snap.forEach(d=>{const ed=d.data();_indexEdit(ed);const a=_findByEdit(ed);if(a&&_applyEditFields(a,ed))count++;});
-    if(count>0){console.log('[FB] Applied',count,'athlete edits');}
-    // re-aplicar overlay a nóminas ya cargadas y re-render
-    if(window._lastNominasRaw)_applyNominas(window._lastNominasRaw); else render();
-  }catch(e){console.warn('Error loading edits',e)}
+  const TTL=20*60*1000; // 20 min cache
+  const cached=_fsCache('edits',TTL);
+  let eds=cached;
+  if(!cached){
+    try{
+      const snap=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'athlete_edits'));
+      eds=[];snap.forEach(d=>eds.push(d.data()));
+      _fsSetCache('edits',eds);
+    }catch(e){console.warn('Error loading edits',e);return;}
+  }
+  if(!eds)return;
+  let count=0;
+  eds.forEach(ed=>{_indexEdit(ed);const a=_findByEdit(ed);if(a&&_applyEditFields(a,ed))count++;});
+  if(count>0)console.log('[FB] Applied',count,'athlete edits');
+  if(window._lastNominasRaw)_applyNominas(window._lastNominasRaw); else render();
 }
-function startEditsListener(){
-  if(!fbReady)return;
-  try{
-    window.FBQ.onSnapshot(window.FBQ.collection(fbDB,'athlete_edits'),(snap)=>{
-      let changed=false;
-      snap.docChanges().forEach(ch=>{
-        if(ch.type==='added'||ch.type==='modified'){
-          const ed=ch.doc.data();_indexEdit(ed);const a=_findByEdit(ed);
-          if(a&&_applyEditFields(a,ed))changed=true;changed=true;
-        }
-      });
-      if(changed){
-        if(ST.sel){const up=D.find(x=>x.codigo===ST.sel.codigo);if(up)ST.sel=up}
-        if(window._lastNominasRaw)_applyNominas(window._lastNominasRaw); else render();
-      }
-    });
-  }catch(e){console.warn('Edits listener error',e)}
-}
+function startEditsListener(){ /* eliminado: onSnapshot reemplazado por getDocs+caché */ }
 function _applyNominas(all){
   window._lastNominasRaw=all; // guardar raw para re-aplicar overlay cuando lleguen edits
   const visible=all.filter(i=>i.status==='approved'||i.status==='pending');
@@ -583,18 +582,9 @@ function _applyNominas(all){
 async function loadFBNominas(){
   if(!fbReady)return;
   try{
-    // Initial load
     const snap=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'inscripciones'));
     const all=[];snap.forEach(d=>all.push({id:d.id,...d.data()}));
     _applyNominas(all);
-    // Real-time listener — processes snapshot data directly, no extra getDocs
-    if(!window._inscListenerStarted){
-      window._inscListenerStarted=true;
-      window.FBQ.onSnapshot(window.FBQ.collection(fbDB,'inscripciones'),(snap)=>{
-        const all=[];snap.forEach(d=>all.push({id:d.id,...d.data()}));
-        _applyNominas(all);
-      });
-    }
   }catch(e){console.warn('Error loading Firebase nominas',e)}
 }
 const CC={"Campeonato Nacional FECHIPO 2026":{bg:"#fef3c7",b:"#f59e0b",t:"#92400e",n:"Nacional 2026"},"Campeonato Nacional FECHIPO 2025":{bg:"#dbeafe",b:"#3b82f6",t:"#1e40af",n:"Nacional 2025"},"Regional Centro Norte 2025":{bg:"#dcfce7",b:"#22c55e",t:"#166534",n:"Reg. Centro Norte 2025"},"Regional Sur Austral 2025":{bg:"#f3e8ff",b:"#a855f7",t:"#6b21a8",n:"Reg. Sur Austral 2025"},"Zonal Centro Clausura 2024":{bg:"#ffe4e6",b:"#f43f5e",t:"#9f1239",n:"Zonal Centro 2024"},"Campeonato Nacional 2025":{bg:"#fef9c3",b:"#eab308",t:"#713f12",n:"Nacional 2025 "},"Campeonato Nacional 2023":{bg:"#e0f2fe",b:"#0ea5e9",t:"#0c4a6e",n:"Nacional 2023 "},"Zonal Sur Los Toros 2025":{bg:"#ecfdf5",b:"#10b981",t:"#064e3b",n:"Zonal Sur 2025 "},"Regional Centro 2025":{bg:"#fdf4ff",b:"#c084fc",t:"#581c87",n:"Reg. Centro 2025 "}};
@@ -656,8 +646,11 @@ function loadGallery(){
   if(!window.FBQ||!fbDB)return setTimeout(loadGallery,500);
   if(GALLERY._loading)return;
   GALLERY._loading=true;
-  window.FBQ.onSnapshot(window.FBQ.collection(fbDB,'gallery_photos'),snap=>{
+  const cached=_fsCache('gallery',30*60*1000); // 30 min
+  if(cached){GALLERY=cached;if(ST.v==='gall')render();return;}
+  window.FBQ.getDocs(window.FBQ.collection(fbDB,'gallery_photos')).then(snap=>{
     GALLERY=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.ts?.seconds||0)-(a.ts?.seconds||0));
+    _fsSetCache('gallery',GALLERY);
     if(ST.v==='gall')render();
   });
 }

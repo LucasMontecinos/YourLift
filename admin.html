@@ -2097,9 +2097,9 @@ window.spUploadLogo=async function(i,inp){
   const st=document.getElementById('sp_status_'+i);if(st)st.textContent='Subiendo…';
   try{
     const storage=getStorage(app);
-    const ext=(f.name.split('.').pop()||'png').toLowerCase().replace(/[^a-z0-9]/g,'')||'png';
-    const sref=storageRef(storage,'logos/sponsors/'+Date.now()+'_'+i+'.'+ext);
-    await uploadBytes(sref,f,{contentType:f.type||'image/png'});
+    const fc=await compressImg(f,400,0.85);
+    const sref=storageRef(storage,'logos/sponsors/'+Date.now()+'_'+i+'.webp');
+    await uploadBytes(sref,fc,{contentType:'image/webp'});
     ST.sponsors[i].logoUrl=await getDownloadURL(sref); render();
   }catch(e){ if(st)st.textContent='Error: '+e.message; }
 };
@@ -4505,9 +4505,9 @@ window.uploadEventLogo = async function(file){
   try{
     const storage=getStorage(app);
     const baseId=(document.getElementById('ef_id')?.value||ST.eventoForm?.id||'event').replace(/[^a-zA-Z0-9_]/g,'_').slice(0,50);
-    const dot=file.name.lastIndexOf('.'); const ext=(dot>=0?file.name.slice(dot+1):'png').toLowerCase().replace(/[^a-z0-9]/g,'')||'png';
-    const sref=storageRef(storage,`logos/event/${baseId}_${Date.now()}.${ext}`);
-    await uploadBytes(sref,file,{contentType:file.type||'image/png'});
+    const compressed=await compressImg(file,500,0.85);
+    const sref=storageRef(storage,`logos/event/${baseId}_${Date.now()}.webp`);
+    await uploadBytes(sref,compressed,{contentType:'image/webp'});
     const url=await getDownloadURL(sref);
     document.getElementById('ef_logoUrl').value=url;
     const pv=document.getElementById('ef_logoPreview'); if(pv){pv.src=url;pv.style.display='';}
@@ -4520,9 +4520,9 @@ window.uploadStreamLogo = async function(file){
   try{
     const storage=getStorage(app);
     const baseId=(document.getElementById('ef_id')?.value||ST.eventoForm?.id||'event').replace(/[^a-zA-Z0-9_]/g,'_').slice(0,50);
-    const dot=file.name.lastIndexOf('.'); const ext=(dot>=0?file.name.slice(dot+1):'png').toLowerCase().replace(/[^a-z0-9]/g,'')||'png';
-    const sref=storageRef(storage,`logos/stream/${baseId}_${Date.now()}.${ext}`);
-    await uploadBytes(sref,file,{contentType:file.type||'image/png'});
+    const compressed=await compressImg(file,500,0.85);
+    const sref=storageRef(storage,`logos/stream/${baseId}_${Date.now()}.webp`);
+    await uploadBytes(sref,compressed,{contentType:'image/webp'});
     const url=await getDownloadURL(sref);
     document.getElementById('ef_streamLogoUrl').value=url;
     const pv=document.getElementById('ef_streamLogoPreview'); if(pv){pv.src=url;pv.style.display='';}
@@ -5660,13 +5660,31 @@ function renderClubs(){
   return h;
 }
 
+// Comprime imágenes en el navegador antes de subir a Storage
+async function compressImg(file,maxPx=900,quality=0.80){
+  return new Promise(res=>{
+    if(!file||!file.type.startsWith('image/')){res(file);return;}
+    const img=new Image(),u=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(u);
+      let w=img.width,h=img.height;
+      if(w>maxPx||h>maxPx){if(w>h){h=Math.round(h*maxPx/w);w=maxPx;}else{w=Math.round(w*maxPx/h);h=maxPx;}}
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      c.toBlob(b=>res(b||file),'image/webp',quality);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(u);res(file);};
+    img.src=u;
+  });
+}
+
 window.uploadClubLogo=async function(club,slug,input){
   const file=input.files?.[0]; if(!file)return;
   const btn=input.closest('label'); if(btn)btn.textContent='Subiendo...';
   try{
-    const ext=file.name.split('.').pop()||'png';
-    const sref=storageRef(storage,`logos/clubs/${slug}.${ext}`);
-    await uploadBytes(sref,file);
+    const compressed=await compressImg(file,400,0.85);
+    const sref=storageRef(storage,`logos/clubs/${slug}.webp`);
+    await uploadBytes(sref,compressed,{contentType:'image/webp'});
     const url=await getDownloadURL(sref);
     await setDoc(doc(db,'clubs',slug),{name:club,slug,logoUrl:url,updatedAt:serverTimestamp()},{merge:true});
     showToast('Logo de '+club+' actualizado');
