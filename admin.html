@@ -3825,6 +3825,11 @@ function renderExports(){
           <button class="btn btn-w" id="btnExportExcel" onclick="exportDataExcel()" style="text-align:left;padding:14px;width:100%">Descargar data.json como Excel (${ST.data.length} atletas)</button>
           <p style="font-size:10px;color:var(--muted);margin-top:6px">Incluye: base de atletas · histórico de competencias · records por categoría</p>
         </div>
+        <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-family:Oswald;letter-spacing:1px">MANTENIMIENTO DE STORAGE</div>
+          <button id="btnMigrarWebP" class="btn" onclick="migrarFotosWebP(this)" style="text-align:left;padding:14px;width:100%;background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.4);color:#c084fc">Convertir fotos de atletas a WebP (reduce peso hasta 70%)</button>
+          <p style="font-size:10px;color:var(--muted);margin-top:6px">Convierte las fotos ya subidas en Firebase Storage al formato WebP. No cierre la página mientras se ejecuta.</p>
+        </div>
       </div>
       <p style="color:var(--muted);font-size:11px;margin-top:14px">Los archivos descargados incluyen las ediciones de admin aplicadas.</p>
     </div>`;
@@ -5704,6 +5709,59 @@ async function compressImg(file,maxPx=900,quality=0.80){
     img.src=u;
   });
 }
+
+window.migrarFotosWebP = async function(btn){
+  const colecciones=[
+    {col:'atleta_fotos', campo:'foto_url', maxPx:900, q:0.82, label:'fotos de atletas'},
+    {col:'clubs',        campo:'logoUrl',  maxPx:400, q:0.85, label:'logos de clubes'},
+    {col:'eventos',      campo:'logoUrl',  maxPx:500, q:0.85, label:'logos de campeonatos'},
+  ];
+  if(!confirm('¿Convertir a WebP las fotos/logos ya subidos a Firebase Storage?\n\nSe procesarán:\n• Fotos de atletas\n• Logos de clubes\n• Logos de campeonatos\n\nNo cierres la página. Puede tardar varios minutos.'))return;
+  if(btn){btn.disabled=true;btn.textContent='Iniciando…';}
+  const storage=getStorage(app);
+  let totalConv=0,totalSkip=0,totalErr=0;
+  for(const {col,campo,maxPx,q,label} of colecciones){
+    const snap=await getDocs(collection(db,col));
+    const docs=snap.docs.filter(d=>{const url=d.data()[campo];return url&&url.includes('firebasestorage')&&!url.toLowerCase().includes('.webp');});
+    if(!docs.length)continue;
+    if(btn)btn.textContent=`Convirtiendo ${label} (0/${docs.length})…`;
+    let i=0;
+    for(const d of docs){
+      const url=d.data()[campo];
+      try{
+        // Extraer path del Storage desde la URL
+        const m=url.match(/\/o\/(.+?)(\?|$)/);
+        if(!m){totalSkip++;i++;continue;}
+        const oldPath=decodeURIComponent(m[1]);
+        // Fetch imagen
+        const resp=await fetch(url);
+        if(!resp.ok){totalSkip++;i++;continue;}
+        const blob=await resp.blob();
+        // Convertir a WebP
+        const tmpFile=new File([blob],'tmp',{type:blob.type||'image/jpeg'});
+        const webpBlob=await compressImg(tmpFile,maxPx,q);
+        if(!webpBlob||webpBlob===tmpFile){totalSkip++;i++;continue;}
+        // Nueva ruta: reemplaza extensión por .webp o agrega .webp
+        const newPath=oldPath.replace(/\.(jpg|jpeg|png|gif|bmp|webp)$/i,'')+'.webp';
+        // Subir
+        const newRef=storageRef(storage,newPath);
+        await uploadBytes(newRef,webpBlob,{contentType:'image/webp'});
+        const newUrl=await getDownloadURL(newRef);
+        // Actualizar Firestore
+        await updateDoc(doc(db,col,d.id),{[campo]:newUrl});
+        // Borrar archivo viejo (solo si el path cambió)
+        if(oldPath!==newPath){try{await deleteObject(storageRef(storage,oldPath));}catch(_){}}
+        totalConv++;
+      }catch(e){console.error('[migrarWebP]',col,d.id,e.message);totalErr++;}
+      i++;
+      if(btn)btn.textContent=`Convirtiendo ${label} (${i}/${docs.length})…`;
+    }
+  }
+  const msg=`Conversión completada: ${totalConv} convertidas, ${totalSkip} omitidas, ${totalErr} errores`;
+  showToast(msg);
+  if(btn){btn.disabled=false;btn.textContent='Convertir fotos de atletas a WebP (reduce peso hasta 70%)';}
+  await logAction('migrar_fotos_webp',`${totalConv} convertidas`,null,`${totalErr} errores`);
+};
 
 window.uploadClubLogo=async function(club,slug,input){
   const file=input.files?.[0]; if(!file)return;
