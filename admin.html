@@ -5772,17 +5772,20 @@ window.migrarDocsInscripcionWebP = async function(btn){
   const storage=getStorage(app);
   const snap=await getDocs(collection(db,'inscripciones_private'));
   let totalConv=0,totalSkip=0,totalErr=0,processed=0;
-  const compress=(blob)=>new Promise(res=>{
-    const img=new Image(),u=URL.createObjectURL(blob);
+  // Intenta convertir un blob a WebP cargándolo como imagen en el navegador.
+  // Retorna null si el archivo no es una imagen (ej: PDF).
+  const tryConvert=(blob)=>new Promise(res=>{
+    const u=URL.createObjectURL(blob);
+    const img=new Image();
     img.onload=()=>{
       URL.revokeObjectURL(u);
       let w=img.width,h=img.height;const MAX=1400;
       if(w>MAX||h>MAX){const r=Math.min(MAX/w,MAX/h);w=Math.round(w*r);h=Math.round(h*r);}
       const c=document.createElement('canvas');c.width=w;c.height=h;
       c.getContext('2d').drawImage(img,0,0,w,h);
-      c.toBlob(b=>res(b),'image/webp',0.82);
+      c.toBlob(b=>res(b||null),'image/webp',0.82);
     };
-    img.onerror=()=>{URL.revokeObjectURL(u);res(null);};
+    img.onerror=()=>{URL.revokeObjectURL(u);res(null);}; // PDF u otro no-imagen
     img.src=u;
   });
   for(const d of snap.docs){
@@ -5791,22 +5794,20 @@ window.migrarDocsInscripcionWebP = async function(btn){
     const updates={};
     for(const [key,url] of Object.entries(docsMap)){
       if(!url||typeof url!=='string'||!url.includes('firebasestorage'))continue;
-      // Detectar tipo por Content-Type (HEAD request)
+      // Saltar los que ya son webp
+      const m=url.match(/\/o\/(.+?)(\?|$)/);
+      if(!m){totalSkip++;continue;}
+      const oldPath=decodeURIComponent(m[1]);
+      if(oldPath.endsWith('.webp')){totalSkip++;continue;}
       try{
-        const head=await fetch(url,{method:'HEAD'});
-        const ct=head.headers.get('content-type')||'';
-        if(!ct.startsWith('image/')){totalSkip++;continue;} // PDF u otro
-        if(ct.includes('webp')){totalSkip++;continue;} // ya es webp
-        // Descargar, comprimir y re-subir
+        // Descargar el archivo
         const resp=await fetch(url);
         if(!resp.ok){totalErr++;continue;}
         const blob=await resp.blob();
-        const webp=await compress(blob);
-        if(!webp){totalErr++;continue;}
-        // Extraer path viejo
-        const m=url.match(/\/o\/(.+?)(\?|$)/);
-        if(!m){totalErr++;continue;}
-        const oldPath=decodeURIComponent(m[1]);
+        // Intentar convertir — retorna null si es PDF u otro formato no-imagen
+        const webp=await tryConvert(blob);
+        if(!webp){totalSkip++;continue;}
+        // Re-subir como .webp
         const newPath=oldPath.replace(/(\.[a-z0-9]{1,6})?$/i,'.webp');
         const newRef=storageRef(storage,newPath);
         await uploadBytes(newRef,webp,{contentType:'image/webp'});
