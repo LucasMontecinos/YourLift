@@ -263,70 +263,42 @@ function applyEdit(o){
     var FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
     var app=fbApp.initializeApp(FB_CFG);
     var db=fb.getFirestore(app);
-    // Cargar athlete_edits primero y escuchar cambios
-    fb.onSnapshot(fb.collection(db,'athlete_edits'),function(esnap){
-      esnap.docs.forEach(function(d){var ed=d.data();if(ed.rut)EDITS_BY_RUT[_rutN(ed.rut)]=ed;if(ed.codigo)EDITS_BY_COD[ed.codigo]=ed;});
-      // re-aplicar a D existente y re-render
-      D.forEach(function(e){
-        var ed=(e.rut&&EDITS_BY_RUT[_rutN(e.rut)])||(e.codigo&&EDITS_BY_COD[e.codigo]);
-        if(ed){if(ed.nombre)e.n=ed.nombre;if(ed.club!==undefined&&ed.club!=='')e.t=ed.club;}
-      });
+    function _applyEdits(docs){
+      docs.forEach(function(ed){if(ed.rut)EDITS_BY_RUT[_rutN(ed.rut)]=ed;if(ed.codigo)EDITS_BY_COD[ed.codigo]=ed;});
+      D.forEach(function(e){var ed=(e.rut&&EDITS_BY_RUT[_rutN(e.rut)])||(e.codigo&&EDITS_BY_COD[e.codigo]);if(ed){if(ed.nombre)e.n=ed.nombre;if(ed.club!==undefined&&ed.club!=='')e.t=ed.club;}});
       if(typeof R==='function')R();
-    });
-    fb.onSnapshot(fb.collection(db,'competition_results'),function(snap){
-      // Indexar las entradas hardcoded por nombre normalizado + tab + cat + div
-      // para detectar duplicados (mismo atleta en diferente evento) y quedarse
-      // con el mejor GL.
+    }
+    function _applyCompRes(docs){
       var liveEntries=[];
-      snap.docs.forEach(function(doc){
-        var data=doc.data();
+      docs.forEach(function(data){
         var r=data.resultado||{};
-        var status=r.status||'';
-        if(status==='DQ')return;       // DQ no entra al ranking
-        var total=r.total||0;
-        if(total<=0)return;
+        if((r.status||'')==='DQ'||(r.total||0)<=0)return;
         var glp=r.glp||r.gl||0;
         var cat=_normCat(data.categoria);
-        // Superpesado: si el peso corporal supera la categoría tope, es la categoría "+"
-        // (mujeres 84+, hombres 120+). Corrige resultados guardados sin el "+".
         var _bwC=r.bw||0, _maleC=(data.sexo==='Hombre'||data.sexo==='Masculino'||data.sexo==='M');
         if(cat==='84' && !_maleC && _bwC>84) cat='84+';
         if(cat==='120' && _maleC && _bwC>120) cat='120+';
         if(!cat||!data.sexo)return;
         var tab=_getTab(data.sexo,data.modalidad,data.view,(data.division||'')+' '+(data.evento||''));
         var isBench=tab.indexOf('bench')===0;
-        liveEntries.push(applyEdit({
-          n:data.nombre||'',
-          t:data.club||'',
-          rut:data.rut||'',
-          codigo:data.codigo||'',
-          c:cat,
-          d:data.division||'Open',
-          bw:r.bw||0,
-          sq:isBench?0:(r.sq||0),
-          bp:r.bp||0,
-          dl:isBench?0:(r.dl||0),
-          tt:total,
-          dt:glp,
-          tab:tab,
-          p:99,
-          _live:true
-        }));
+        liveEntries.push(applyEdit({n:data.nombre||'',t:data.club||'',rut:data.rut||'',codigo:data.codigo||'',c:cat,d:data.division||'Open',bw:_bwC,sq:isBench?0:(r.sq||0),bp:r.bp||0,dl:isBench?0:(r.dl||0),tt:r.total||0,dt:glp,tab:tab,p:99,_live:true}));
       });
-      // Combinar con D existente: por cada liveEntry, si ya hay una del mismo
-      // atleta+tab+cat+div, quedarnos con la de mayor GL (la nueva la reemplaza
-      // solo si supera). Sino, agregar.
       liveEntries.forEach(function(le){
         var nName=_normName(le.n);
-        var idx=D.findIndex(function(e){
-          return _normName(e.n)===nName && e.tab===le.tab && e.c===le.c && e.d===le.d;
-        });
-        if(idx<0){D.push(le);}
-        else if((le.dt||0) > (D[idx].dt||0)){D[idx]=le;}
+        var idx=D.findIndex(function(e){return _normName(e.n)===nName&&e.tab===le.tab&&e.c===le.c&&e.d===le.d;});
+        if(idx<0){D.push(le);}else if((le.dt||0)>(D[idx].dt||0)){D[idx]=le;}
       });
       _rebuildPositions();
       if(typeof R==='function')R();
-    });
+    }
+    // athlete_edits: caché 2h
+    var _edOk=false;
+    try{var _ec=localStorage.getItem('_rkEd');if(_ec){var _eo=JSON.parse(_ec);if(Date.now()-_eo.ts<7200000){_applyEdits(_eo.d);_edOk=true;}}}catch(e){}
+    if(!_edOk){fb.getDocs(fb.collection(db,'athlete_edits')).then(function(s){var a=s.docs.map(function(d){return d.data();});try{localStorage.setItem('_rkEd',JSON.stringify({ts:Date.now(),d:a}));}catch(e){}_applyEdits(a);}).catch(function(e){console.warn('edits',e);});}
+    // competition_results: caché 30min
+    var _crOk=false;
+    try{var _cc=localStorage.getItem('_rkCR');if(_cc){var _co=JSON.parse(_cc);if(Date.now()-_co.ts<1800000){_applyCompRes(_co.d);_crOk=true;}}}catch(e){}
+    if(!_crOk){fb.getDocs(fb.collection(db,'competition_results')).then(function(s){var a=s.docs.map(function(d){return d.data();});try{localStorage.setItem('_rkCR',JSON.stringify({ts:Date.now(),d:a}));}catch(e){}_applyCompRes(a);}).catch(function(e){console.warn('compres',e);});}
   }catch(e){console.warn('Firestore ranking load failed',e)}
 })();
 
