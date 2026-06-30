@@ -3829,7 +3829,9 @@ function renderExports(){
         <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-family:Oswald;letter-spacing:1px">MANTENIMIENTO DE STORAGE</div>
           <button id="btnMigrarWebP" class="btn" onclick="migrarFotosWebP(this)" style="text-align:left;padding:14px;width:100%;background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.4);color:#c084fc">Convertir fotos de atletas a WebP (reduce peso hasta 70%)</button>
-          <p style="font-size:10px;color:var(--muted);margin-top:6px">Convierte las fotos ya subidas en Firebase Storage al formato WebP. No cierre la página mientras se ejecuta.</p>
+          <p style="font-size:10px;color:var(--muted);margin-top:6px">Convierte las fotos ya subidas en Firebase Storage al formato WebP (atleta_fotos, logos). No cierre la página mientras se ejecuta.</p>
+          <button id="btnMigrarDocsWebP" class="btn" onclick="migrarDocsInscripcionWebP(this)" style="text-align:left;padding:14px;width:100%;margin-top:8px;background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.3);color:#c084fc">Convertir documentos de inscripciones a WebP</button>
+          <p style="font-size:10px;color:var(--muted);margin-top:6px">Convierte las fotos de carnet, foto fondo blanco, etc. ya subidas por atletas. PDFs se omiten. Puede tardar varios minutos.</p>
         </div>
       </div>
       <p style="color:var(--muted);font-size:11px;margin-top:14px">Los archivos descargados incluyen las ediciones de admin aplicadas.</p>
@@ -5762,6 +5764,68 @@ window.migrarFotosWebP = async function(btn){
   showToast(msg);
   if(btn){btn.disabled=false;btn.textContent='Convertir fotos de atletas a WebP (reduce peso hasta 70%)';}
   await logAction('migrar_fotos_webp',`${totalConv} convertidas`,null,`${totalErr} errores`);
+};
+
+window.migrarDocsInscripcionWebP = async function(btn){
+  if(!confirm('¿Convertir a WebP las fotos de documentos de inscripciones (carnet, foto fondo blanco, etc.)?\n\nLos PDFs se omiten automáticamente. Puede tardar varios minutos.\nNo cierres la página.'))return;
+  if(btn){btn.disabled=true;btn.textContent='Cargando inscripciones…';}
+  const storage=getStorage(app);
+  const snap=await getDocs(collection(db,'inscripciones_private'));
+  let totalConv=0,totalSkip=0,totalErr=0,processed=0;
+  const compress=(blob)=>new Promise(res=>{
+    const img=new Image(),u=URL.createObjectURL(blob);
+    img.onload=()=>{
+      URL.revokeObjectURL(u);
+      let w=img.width,h=img.height;const MAX=1400;
+      if(w>MAX||h>MAX){const r=Math.min(MAX/w,MAX/h);w=Math.round(w*r);h=Math.round(h*r);}
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      c.toBlob(b=>res(b),'image/webp',0.82);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(u);res(null);};
+    img.src=u;
+  });
+  for(const d of snap.docs){
+    const data=d.data();
+    const docsMap=data.docs||{};
+    const updates={};
+    for(const [key,url] of Object.entries(docsMap)){
+      if(!url||typeof url!=='string'||!url.includes('firebasestorage'))continue;
+      // Detectar tipo por Content-Type (HEAD request)
+      try{
+        const head=await fetch(url,{method:'HEAD'});
+        const ct=head.headers.get('content-type')||'';
+        if(!ct.startsWith('image/')){totalSkip++;continue;} // PDF u otro
+        if(ct.includes('webp')){totalSkip++;continue;} // ya es webp
+        // Descargar, comprimir y re-subir
+        const resp=await fetch(url);
+        if(!resp.ok){totalErr++;continue;}
+        const blob=await resp.blob();
+        const webp=await compress(blob);
+        if(!webp){totalErr++;continue;}
+        // Extraer path viejo
+        const m=url.match(/\/o\/(.+?)(\?|$)/);
+        if(!m){totalErr++;continue;}
+        const oldPath=decodeURIComponent(m[1]);
+        const newPath=oldPath.replace(/(\.[a-z0-9]{1,6})?$/i,'.webp');
+        const newRef=storageRef(storage,newPath);
+        await uploadBytes(newRef,webp,{contentType:'image/webp'});
+        const newUrl=await getDownloadURL(newRef);
+        updates[`docs.${key}`]=newUrl;
+        if(oldPath!==newPath){try{await deleteObject(storageRef(storage,oldPath));}catch(_){}}
+        totalConv++;
+      }catch(e){console.error('[migrarDocs]',d.id,key,e.message);totalErr++;}
+    }
+    if(Object.keys(updates).length){
+      try{await updateDoc(doc(db,'inscripciones_private',d.id),updates);}catch(e){console.error(e);}
+    }
+    processed++;
+    if(btn)btn.textContent=`Procesando… (${processed}/${snap.docs.length}) — ${totalConv} convertidas`;
+  }
+  const msg=`Documentos: ${totalConv} convertidos, ${totalSkip} omitidos (PDF/ya webp), ${totalErr} errores`;
+  showToast(msg);
+  await logAction('migrar_docs_webp',`${totalConv} convertidos`,null,`${totalErr} errores`);
+  if(btn){btn.disabled=false;btn.textContent='Convertir documentos de inscripciones a WebP';}
 };
 
 window.uploadClubLogo=async function(club,slug,input){

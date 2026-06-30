@@ -1602,9 +1602,9 @@ async function submitForm() {
       const ts = Date.now();
       const rutClean = f.rut.replace(/[^0-9kK]/g, '').toUpperCase();
 
-      // Comprime imagen si es muy grande (> 800KB) para mejorar tasa de éxito
+      // Comprime imágenes a WebP antes de subir (PDFs se suben sin cambios)
       const compressImage = (file) => new Promise(resolve => {
-        if (!file.type.startsWith('image/') || file.size < 800 * 1024) { resolve(file); return; }
+        if (!file.type.startsWith('image/')) { resolve(file); return; }
         const img = new Image();
         const url = URL.createObjectURL(file);
         img.onload = () => {
@@ -1615,17 +1615,19 @@ async function submitForm() {
           if (w > MAX || h > MAX) { const r = Math.min(MAX/w, MAX/h); w = Math.round(w*r); h = Math.round(h*r); }
           canvas.width = w; canvas.height = h;
           canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          canvas.toBlob(blob => resolve(blob || file), 'image/jpeg', 0.82);
+          canvas.toBlob(blob => resolve(blob || file), 'image/webp', 0.82);
         };
         img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
         img.src = url;
       });
 
-      // Subir archivos — usa el snapshot.ref para getDownloadURL (más confiable)
+      // Subir archivos — comprime imágenes a WebP, PDFs se suben tal cual
       async function uploadOne(file, name) {
-        const r = window.FB.ref(storage, `athlete_files/${rutClean}/${name}_${ts}`);
-        console.log('[upload]', name, 'starting...', file.size, 'bytes', file.type);
-        const snap = await window.FB.uploadBytes(r, file);
+        const compressed = await compressImage(file);
+        const isWebP = compressed !== file && file.type.startsWith('image/');
+        const r = window.FB.ref(storage, `athlete_files/${rutClean}/${name}_${ts}${isWebP?'.webp':''}`);
+        console.log('[upload]', name, 'starting...', compressed.size, 'bytes', compressed.type);
+        const snap = await window.FB.uploadBytes(r, compressed, {contentType: compressed.type});
         console.log('[upload]', name, 'uploaded OK, getting URL...');
         const url = await window.FB.getDownloadURL(snap.ref);
         console.log('[upload]', name, 'URL:', url.substring(0,80)+'...');
