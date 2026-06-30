@@ -4434,6 +4434,7 @@ function renderCampeonatos(){
           <a href="livecast.html?evento=${encodeURIComponent(ev.id)}" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">LiveCast (operador)</a>
           <button onclick="copyPublicLink('${ev.id}',this)" style="font-size:10px;color:var(--gold);background:transparent;text-decoration:none;padding:3px 8px;border:1px solid rgba(212,168,67,.4);border-radius:4px;cursor:pointer;font-family:inherit">Link público en vivo</button>
           <button onclick="toggleLivecastVisible('${ev.id}',${ev.livecastVisible!==false})" style="font-size:10px;padding:3px 10px;border-radius:4px;border:1px solid ${ev.livecastVisible!==false?'rgba(34,197,94,.4)':'rgba(239,68,68,.4)'};background:${ev.livecastVisible!==false?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)'};color:${ev.livecastVisible!==false?'var(--green)':'var(--red)'};cursor:pointer;font-family:inherit;font-weight:700" title="Visible en el selector de eventos del LiveCast">${ev.livecastVisible!==false?'LiveCast: ON':'LiveCast: OFF'}</button>
+          <button onclick="purgarDocsNomina('${ev.id}','${escapeHtml(ev.name).replace(/'/g,"\\'")}',this)" style="font-size:10px;padding:3px 10px;border-radius:4px;border:1px solid rgba(168,85,247,.4);background:rgba(168,85,247,.06);color:#c084fc;cursor:pointer;font-family:inherit;font-weight:700" title="Elimina carnet, WADA, consentimientos de Storage. Deja fotos de perfil intactas.">Purgar documentos</button>
           <button onclick="deleteEvento('${ev.id}','${escapeHtml(ev.name).replace(/'/g,"\\'")}',this)" style="font-size:10px;padding:3px 10px;border-radius:4px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.06);color:var(--red);cursor:pointer;font-family:inherit;font-weight:700;margin-left:auto" title="Eliminar campeonato">Eliminar</button>
         </div>
       </div>`;
@@ -4680,6 +4681,56 @@ window.purgarInscripcionesArchivadas = async function(){
     showToast(`${toDelete.length} inscripciones purgadas`);
     render();
   }catch(e){showToast('Error: '+e.message,null,true);}
+};
+
+window.purgarDocsNomina = async function(eventoId, eventoName, btn){
+  const insc = ST.inscripciones.filter(i => i.evento === eventoId);
+  if(!insc.length){ showToast('No hay inscripciones para este evento'); return; }
+  const LEGACY = ['carnetURL','carnetBackURL','wadeURL','carnetPhotoURL','consentimientoURL','ipfConsentURL','passportURL','notasURL'];
+  let docsCount = 0;
+  insc.forEach(ins => {
+    const priv = ST.inscripcionesPrivate[ins.id] || {};
+    const map = priv.docs || {};
+    if(Object.values(map).some(v=>v&&typeof v==='string') || LEGACY.some(f=>priv[f])) docsCount++;
+  });
+  if(!docsCount){ showToast('No hay documentos que purgar para este evento'); return; }
+  if(!confirm(`¿Purgar documentos de ${insc.length} atletas inscriptos en "${eventoName}"?\n\n• Se eliminan de Storage: carnets, WADA, consentimientos y fotos de documentos.\n• Las fotos de perfil de atleta NO se tocan.\n\nEsta acción no se puede deshacer.`)) return;
+  if(btn){ btn.disabled=true; btn.textContent='Purgando…'; }
+  const stor=getStorage(app);
+  let deleted=0, errors=0, processed=0;
+  try{
+    for(const ins of insc){
+      const priv = ST.inscripcionesPrivate[ins.id] || {};
+      const map = priv.docs || {};
+      const urls=[];
+      Object.values(map).forEach(u=>{ if(u&&typeof u==='string'&&u.includes('firebasestorage'))urls.push(u); });
+      LEGACY.forEach(f=>{ if(priv[f]&&typeof priv[f]==='string'&&priv[f].includes('firebasestorage'))urls.push(priv[f]); });
+      for(const url of urls){
+        const m=url.match(/\/o\/(.+?)(\?|$)/);
+        if(!m)continue;
+        const path=decodeURIComponent(m[1]);
+        try{ await deleteObject(storageRef(stor,path)); deleted++; }catch(e){ if(e.code!=='storage/object-not-found')errors++; }
+      }
+      const upd={};
+      Object.keys(map).forEach(k=>{ upd[`docs.${k}`]=deleteField(); });
+      LEGACY.forEach(f=>{ if(priv[f]!==undefined) upd[f]=deleteField(); });
+      if(Object.keys(upd).length){
+        try{
+          await updateDoc(doc(db,'inscripciones_private',ins.id),upd);
+          if(ST.inscripcionesPrivate[ins.id]){
+            delete ST.inscripcionesPrivate[ins.id].docs;
+            LEGACY.forEach(f=>delete ST.inscripcionesPrivate[ins.id][f]);
+          }
+        }catch(e){ errors++; }
+      }
+      processed++;
+      if(btn) btn.textContent=`Purgando… (${processed}/${insc.length})`;
+    }
+    await logAction('purgar_docs_nomina',eventoId,null,`${deleted} archivos`,{evento:eventoName});
+    showToast(`Documentos purgados: ${deleted} archivos eliminados${errors?`, ${errors} errores`:''}`);
+    render();
+  }catch(e){ showToast('Error: '+e.message,null,true); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='Purgar documentos'; } }
 };
 
 window.archiveEvento = async function(id){
