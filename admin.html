@@ -3907,9 +3907,48 @@ window.exportNominaExcel = async function(){
     const ExcelJS=window.ExcelJS;
     // Mismos datos que muestra la nómina del evento seleccionado.
     let list=(ST.inscripciones||[]).filter(i=>i.evento===ev&&i.status!=='rejected');
-    list.sort((a,b)=>(a.sortOrder||999)-(b.sortOrder||999));
     // Columna "Pos. Nacional 2026" solo si el evento activó esa pregunta (Sudamericano).
     const posNacOn = !!(ST.eventos||[]).find(e=>e.id===ev)?.posNac2026;
+
+    // ── GL lookup desde competition_results ──────────────────────────────────
+    const _normRutXL=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
+    const _normNmXL=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
+    // Identificar eventos Nacional y Universitario por nombre
+    const _xlEvNat=new Set((ST.eventos||[]).filter(e=>/nacional/i.test(e.name||'')&&!/universitario/i.test(e.name||'')).map(e=>e.id));
+    const _xlEvUni=new Set((ST.eventos||[]).filter(e=>/universitario/i.test(e.name||'')).map(e=>e.id));
+    // Clasificar el tipo de cada resultado
+    const _xlTabType=r=>{const m=String(r.modalidad||'').toLowerCase();const isOE=/olimpiadas|\boe\b/.test(m);const isEq=/equipado|equipped/.test(m);const isBench=/only.?bench/.test(m)||r.view==='bench';const isUni=/universitario/.test(String(r.division||'').toLowerCase())||/universitario/.test(m);if(isUni&&!isBench&&!isOE)return'uni';if(isOE)return'oe';if(isBench)return isEq?'bench_eq':'bench_cl';return isEq?'eq':'cl';};
+    const _xlTabFor={classic:['cl','bench_cl'],equipado:['eq','bench_eq'],oe:['oe'],universitario:['uni']};
+    // Construir mapa RUT/nombre → [{gl, tab, evId}]
+    const _xlByRut={},_xlByNm={};
+    (ST.allCompResults||[]).forEach(r=>{
+      const evId=r.evento||'';if(!_xlEvNat.has(evId)&&!_xlEvUni.has(evId))return;
+      const gl=parseFloat(r.resultado?.glp||r.resultado?.gl||0);if(gl<=0)return;
+      const e={gl,tab:_xlTabType(r),evId};
+      const rut=_normRutXL(r.rut||'');const nm=_normNmXL(r.nombre||'');
+      if(rut){if(!_xlByRut[rut])_xlByRut[rut]=[];_xlByRut[rut].push(e);}
+      if(nm){if(!_xlByNm[nm])_xlByNm[nm]=[];_xlByNm[nm].push(e);}
+    });
+    const _getGLXL=i=>{
+      const isUni=/universitario/i.test(String(i.division||''));
+      const mKey=String(i.posNacMod||'').toLowerCase().trim();
+      const tabs=_xlTabFor[mKey]||(isUni?['uni']:['cl']);
+      const evs=isUni?_xlEvUni:_xlEvNat;
+      const rut=_normRutXL(i.rut||'');const nm=_normNmXL(i.nombre||'');
+      let pool=(rut&&_xlByRut[rut])||(nm&&_xlByNm[nm])||[];
+      pool=pool.filter(r=>evs.has(r.evId));
+      if(!pool.length)return'';
+      const exact=pool.filter(r=>tabs.includes(r.tab));
+      const best=Math.max(...(exact.length?exact:pool).map(r=>r.gl));
+      return best>0?best.toFixed(2):'';
+    };
+
+    // ── Ordenar: Mujer→Hombre, Sub Junior→Junior→Open→Master 1→Master 2→Universitario, cat asc ──
+    const _xlDivOrd={'sub junior':0,'sub-junior':0,'junior':1,'open':2,'master i':3,'master 1':3,'master ii':4,'master 2':4,'master iii':5,'master 3':5,'universitario':6,'universitaria':6};
+    const _xlGetDiv=s=>{const sl=String(s||'').toLowerCase().trim();for(const[k,v]of Object.entries(_xlDivOrd))if(sl===k||sl.startsWith(k))return v;return 7;};
+    const _xlGetCat=s=>{const n=parseFloat(String(s||'').replace(/[^0-9.]/g,''));return isNaN(n)?999:(String(s||'').includes('+')?n+0.5:n);};
+    const _xlGetSex=s=>/mujer|femeni/i.test(String(s||''))?0:1;
+    list.sort((a,b)=>{const sx=_xlGetSex(a.sexo)-_xlGetSex(b.sexo);if(sx!==0)return sx;const dv=_xlGetDiv(a.division)-_xlGetDiv(b.division);if(dv!==0)return dv;return _xlGetCat(a.categoria)-_xlGetCat(b.categoria);});
     // Universidad cruzada por RUT/nombre desde cualquier inscripción que la tenga (ej. nómina del Nacional Universitario).
     const _xNN=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
     const _xNR=s=>String(s||'').replace(/[^0-9kK]/g,'').toLowerCase();
@@ -3923,6 +3962,7 @@ window.exportNominaExcel = async function(){
     const ws=wb.addWorksheet('Nómina',{views:[{state:'frozen',ySplit:1}]});
     ws.columns=[
       {header:'NOMBRE',    key:'nombre',    width:34.8},
+      {header:'SEXO',      key:'sexo',      width:10},
       {header:'MODALIDAD', key:'modalidad', width:34.5},
       {header:'DIVISIÓN',  key:'division',  width:16.8},
       {header:'CATEGORÍA', key:'categoria', width:12.8},
@@ -3937,6 +3977,7 @@ window.exportNominaExcel = async function(){
         {header:'BP NAC.', key:'posNacBP', width:10},
         {header:'DL NAC.', key:'posNacDL', width:10},
         {header:'TOTAL NAC.', key:'posNacTotal', width:12},
+        {header:'GL POINTS NAC.', key:'glNac', width:14},
         {header:'CLASIFICACIÓN SUDAMERICANO', key:'clasifSud', width:26}
       ] : [])
     ];
@@ -3947,9 +3988,9 @@ window.exportNominaExcel = async function(){
       const club=i.club==='Otro'?(i.clubOtro||'Otro'):(i.club||'');
       const priv=(ST.inscripcionesPrivate||{})[i.id]||{};
       const posNacVal = i.posNacLugar ? (i.posNacMod ? i.posNacMod+' · '+i.posNacLugar+'°' : i.posNacLugar+'°') : '';
-      ws.addRow({nombre:i.nombre||'',modalidad:i.modalidad||'',division:i.division||'',categoria:i.categoria||'',club,
+      ws.addRow({nombre:i.nombre||'',sexo:i.sexo||'',modalidad:i.modalidad||'',division:i.division||'',categoria:i.categoria||'',club,
         rut:i.rut||'',fechaNac:fmtFN(i.fechaNac||i.fechanac),correo:priv.correo||'',universidad:_xResolveUni(i),
-        ...(posNacOn ? {posNac:posNacVal,posNacSQ:i.posNacSQ||'',posNacBP:i.posNacBP||'',posNacDL:i.posNacDL||'',posNacTotal:(i.posNacTotal||(((parseFloat(i.posNacSQ)||0)+(parseFloat(i.posNacBP)||0)+(parseFloat(i.posNacDL)||0))||'')),clasifSud:(parseInt(i.posNacLugar)||0)===1?'CLASIFICADO':(parseInt(i.posNacLugar)||0)===2||(parseInt(i.posNacLugar)||0)===3?'LISTA DE ESPERA':''} : {})});
+        ...(posNacOn ? {posNac:posNacVal,posNacSQ:i.posNacSQ||'',posNacBP:i.posNacBP||'',posNacDL:i.posNacDL||'',posNacTotal:(i.posNacTotal||(((parseFloat(i.posNacSQ)||0)+(parseFloat(i.posNacBP)||0)+(parseFloat(i.posNacDL)||0))||'')),glNac:_getGLXL(i),clasifSud:(parseInt(i.posNacLugar)||0)===1?'CLASIFICADO':(parseInt(i.posNacLugar)||0)===2||(parseInt(i.posNacLugar)||0)===3?'LISTA DE ESPERA':''} : {})});
     });
 
     const thin={style:'thin',color:{argb:'FF000000'}};
