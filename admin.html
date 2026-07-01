@@ -3913,34 +3913,41 @@ window.exportNominaExcel = async function(){
     // ── GL lookup desde competition_results ──────────────────────────────────
     const _normRutXL=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
     const _normNmXL=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
-    // Identificar eventos Nacional y Universitario por nombre
+    // Identificar eventos Nacional y Universitario por nombre (para priorizar, no para filtrar)
     const _xlEvNat=new Set((ST.eventos||[]).filter(e=>/nacional/i.test(e.name||'')&&!/universitario/i.test(e.name||'')).map(e=>e.id));
     const _xlEvUni=new Set((ST.eventos||[]).filter(e=>/universitario/i.test(e.name||'')).map(e=>e.id));
-    // Clasificar el tipo de cada resultado
+    // Clasificar el tipo de cada resultado según modalidad/división/view
     const _xlTabType=r=>{const m=String(r.modalidad||'').toLowerCase();const isOE=/olimpiadas|\boe\b/.test(m);const isEq=/equipado|equipped/.test(m);const isBench=/only.?bench/.test(m)||r.view==='bench';const isUni=/universitario/.test(String(r.division||'').toLowerCase())||/universitario/.test(m);if(isUni&&!isBench&&!isOE)return'uni';if(isOE)return'oe';if(isBench)return isEq?'bench_eq':'bench_cl';return isEq?'eq':'cl';};
     const _xlTabFor={classic:['cl','bench_cl'],equipado:['eq','bench_eq'],oe:['oe'],universitario:['uni']};
-    // Construir mapa RUT/nombre → [{gl, tab, evId}]
+    // Construir mapa RUT/nombre → [{gl, tab, evId, isNat, isUni}] — TODOS los eventos
     const _xlByRut={},_xlByNm={};
     (ST.allCompResults||[]).forEach(r=>{
-      const evId=r.evento||'';if(!_xlEvNat.has(evId)&&!_xlEvUni.has(evId))return;
       const gl=parseFloat(r.resultado?.glp||r.resultado?.gl||0);if(gl<=0)return;
-      const e={gl,tab:_xlTabType(r),evId};
+      const evId=r.evento||'';
+      const e={gl,tab:_xlTabType(r),evId,isNat:_xlEvNat.has(evId),isUni:_xlEvUni.has(evId)};
       const rut=_normRutXL(r.rut||'');const nm=_normNmXL(r.nombre||'');
       if(rut){if(!_xlByRut[rut])_xlByRut[rut]=[];_xlByRut[rut].push(e);}
       if(nm){if(!_xlByNm[nm])_xlByNm[nm]=[];_xlByNm[nm].push(e);}
     });
     const _getGLXL=i=>{
-      const isUni=/universitario/i.test(String(i.division||''));
+      const isUniDiv=/universitario/i.test(String(i.division||''));
       const mKey=String(i.posNacMod||'').toLowerCase().trim();
-      const tabs=_xlTabFor[mKey]||(isUni?['uni']:['cl']);
-      const evs=isUni?_xlEvUni:_xlEvNat;
+      const tabs=_xlTabFor[mKey]||(isUniDiv?['uni']:['cl']);
       const rut=_normRutXL(i.rut||'');const nm=_normNmXL(i.nombre||'');
-      let pool=(rut&&_xlByRut[rut])||(nm&&_xlByNm[nm])||[];
-      pool=pool.filter(r=>evs.has(r.evId));
+      const pool=(rut&&_xlByRut[rut])||(nm&&_xlByNm[nm])||[];
       if(!pool.length)return'';
-      const exact=pool.filter(r=>tabs.includes(r.tab));
-      const best=Math.max(...(exact.length?exact:pool).map(r=>r.gl));
-      return best>0?best.toFixed(2):'';
+      const natFilter=r=>isUniDiv?r.isUni:r.isNat;
+      // Prioridad 1: evento Nacional + modalidad exacta
+      const p1=pool.filter(r=>natFilter(r)&&tabs.includes(r.tab));
+      if(p1.length)return Math.max(...p1.map(r=>r.gl)).toFixed(2);
+      // Prioridad 2: evento Nacional + cualquier modalidad
+      const p2=pool.filter(r=>natFilter(r));
+      if(p2.length)return Math.max(...p2.map(r=>r.gl)).toFixed(2);
+      // Prioridad 3: cualquier evento + modalidad exacta
+      const p3=pool.filter(r=>tabs.includes(r.tab));
+      if(p3.length)return Math.max(...p3.map(r=>r.gl)).toFixed(2);
+      // Prioridad 4: cualquier evento, mejor GL disponible
+      return Math.max(...pool.map(r=>r.gl)).toFixed(2);
     };
 
     // ── Ordenar: Mujer→Hombre, Sub Junior→Junior→Open→Master 1→Master 2→Universitario, cat asc ──
