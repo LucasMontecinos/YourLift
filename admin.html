@@ -3936,17 +3936,12 @@ window.exportNominaExcel = async function(){
       const rut=_normRutXL(i.rut||'');const nm=_normNmXL(i.nombre||'');
       const pool=(rut&&_xlByRut[rut])||(nm&&_xlByNm[nm])||[];
       if(!pool.length)return'';
-      const natFilter=r=>isUniDiv?r.isUni:r.isNat;
-      // Prioridad 1: evento Nacional + modalidad exacta
-      const p1=pool.filter(r=>natFilter(r)&&tabs.includes(r.tab));
-      if(p1.length)return Math.max(...p1.map(r=>r.gl)).toFixed(2);
-      // Prioridad 2: evento Nacional + cualquier modalidad
-      const p2=pool.filter(r=>natFilter(r));
-      if(p2.length)return Math.max(...p2.map(r=>r.gl)).toFixed(2);
-      // Prioridad 3: cualquier evento + modalidad exacta
-      const p3=pool.filter(r=>tabs.includes(r.tab));
-      if(p3.length)return Math.max(...p3.map(r=>r.gl)).toFixed(2);
-      // Prioridad 4: cualquier evento, mejor GL disponible
+      const natF=r=>isUniDiv?r.isUni:r.isNat;
+      // Tabs se intentan en orden — el primero tiene prioridad (ej. 'cl' antes que 'bench_cl')
+      // para que "Classic + Only Bench" use los GL del powerlifting, no del bench.
+      for(const tab of tabs){const h=pool.filter(r=>natF(r)&&r.tab===tab);if(h.length)return Math.max(...h.map(r=>r.gl)).toFixed(2);}
+      const p2=pool.filter(r=>natF(r));if(p2.length)return Math.max(...p2.map(r=>r.gl)).toFixed(2);
+      for(const tab of tabs){const h=pool.filter(r=>r.tab===tab);if(h.length)return Math.max(...h.map(r=>r.gl)).toFixed(2);}
       return Math.max(...pool.map(r=>r.gl)).toFixed(2);
     };
 
