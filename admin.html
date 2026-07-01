@@ -3933,22 +3933,43 @@ window.exportNominaExcel = async function(){
     // Mapa RUT→codigo desde ST.data (perfiles de atletas)
     const _xlRutToCod={};
     (ST.data||[]).forEach(a=>{const rut=_normRutXL(a.rut||'');const cod=String(a.codigo||'').trim();if(rut&&cod)_xlRutToCod[rut]=cod;});
+    // Fallback: GL desde data.json (competencias del Nacional FECHIPO 2026)
+    const _xlTabFromModal=m=>{const ml=String(m||'').toLowerCase();const isUni=/universitario/.test(ml);const isEq=/equipado|equipped/.test(ml);const isBench=/only.?bench/.test(ml);const isOE=/olimp|special olympic|\boe\b/.test(ml);if(isUni)return'uni';if(isOE)return'oe';if(isBench)return isEq?'bench_eq':'bench_cl';if(isEq)return'eq';return'cl';};
+    const _xlDataByCod={},_xlDataByRut={};
+    (ST.data||[]).forEach(a=>{
+      const cod=String(a.codigo||'').trim();const rut=_normRutXL(a.rut||'');
+      (a.competencias||[]).forEach(c=>{
+        const gl=parseFloat(c.resultado?.glp||0);if(gl<=0)return;
+        const ev=String(c.evento||'');
+        const isNat=/nacional.*fechipo.*2026|campeonato nacional fechipo 2026/i.test(ev)&&!/universitario/i.test(ev);
+        const isUni=/universitario/i.test(ev)&&/2026/i.test(ev);
+        if(!isNat&&!isUni)return;
+        const e={gl,tab:_xlTabFromModal(c.modalidad),isNat,isUni};
+        if(cod){if(!_xlDataByCod[cod])_xlDataByCod[cod]=[];_xlDataByCod[cod].push(e);}
+        if(rut){if(!_xlDataByRut[rut])_xlDataByRut[rut]=[];_xlDataByRut[rut].push(e);}
+      });
+    });
     const _getGLXL=i=>{
       const isUniDiv=/universitario/i.test(String(i.division||''));
       const mKey=String(i.posNacMod||'').toLowerCase().trim();
       const tabs=_xlTabFor[mKey]||(isUniDiv?['uni']:['cl']);
       const rut=_normRutXL(i.rut||'');const nm=_normNmXL(i.nombre||'');
-      // Buscar pool: RUT → nombre → codigo de inscripción → codigo desde perfil
       const cod=String(i.codigo||'').trim()||_xlRutToCod[rut]||'';
+      // 1° intento: competition_results (Firestore) — RUT → nombre → codigo
       const pool=(rut&&_xlByRut[rut])||(nm&&_xlByNm[nm])||(cod&&_xlByCod[cod])||[];
-      if(!pool.length)return'';
       const natF=r=>isUniDiv?r.isUni:r.isNat;
-      // Tabs se intentan en orden — el primero tiene prioridad (ej. 'cl' antes que 'bench_cl')
-      // para que "Classic + Only Bench" use los GL del powerlifting, no del bench.
-      for(const tab of tabs){const h=pool.filter(r=>natF(r)&&r.tab===tab);if(h.length)return Math.max(...h.map(r=>r.gl)).toFixed(2);}
-      const p2=pool.filter(r=>natF(r));if(p2.length)return Math.max(...p2.map(r=>r.gl)).toFixed(2);
-      for(const tab of tabs){const h=pool.filter(r=>r.tab===tab);if(h.length)return Math.max(...h.map(r=>r.gl)).toFixed(2);}
-      return Math.max(...pool.map(r=>r.gl)).toFixed(2);
+      if(pool.length){
+        for(const tab of tabs){const h=pool.filter(r=>natF(r)&&r.tab===tab);if(h.length)return Math.max(...h.map(r=>r.gl)).toFixed(2);}
+        const p2=pool.filter(r=>natF(r));if(p2.length)return Math.max(...p2.map(r=>r.gl)).toFixed(2);
+        for(const tab of tabs){const h=pool.filter(r=>r.tab===tab);if(h.length)return Math.max(...h.map(r=>r.gl)).toFixed(2);}
+        return Math.max(...pool.map(r=>r.gl)).toFixed(2);
+      }
+      // 2° intento: data.json competencias Nacional 2026 — codigo → RUT
+      const pool2=(cod&&_xlDataByCod[cod])||(rut&&_xlDataByRut[rut])||[];
+      if(!pool2.length)return'';
+      for(const tab of tabs){const h=pool2.filter(r=>natF(r)&&r.tab===tab);if(h.length)return Math.max(...h.map(r=>r.gl)).toFixed(2);}
+      const p3=pool2.filter(r=>natF(r));if(p3.length)return Math.max(...p3.map(r=>r.gl)).toFixed(2);
+      return'';
     };
 
     // ── Ordenar: Mujer→Hombre, Sub Junior→Junior→Open→Master 1→Master 2→Universitario, cat asc ──
