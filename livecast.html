@@ -136,6 +136,9 @@ if(TX_MODE){
     .sb-wrap-anim .sb-logo-anim{animation:txLogoBuildIn .7s cubic-bezier(.2,.85,.3,1.05) both;display:inline-block}
     @keyframes txSbRowOut{0%{opacity:1;transform:scaleY(1)}100%{opacity:0;transform:scaleY(0)}}
     @keyframes txScoreboardCycle{0%{transform:translateY(110%);opacity:0}3%{transform:translateY(0);opacity:1}97%{transform:translateY(0);opacity:1}100%{transform:translateY(110%);opacity:0}}
+    /* Barrido izquierda→derecha: el contenido se revela naciendo desde el logo YourLift (fijo a la izquierda) */
+    @keyframes txSbWipeFromLogo{0%{clip-path:inset(0 100% 0 0)}100%{clip-path:inset(0 0% 0 0)}}
+    .sb-wipe-content{animation:txSbWipeFromLogo .65s cubic-bezier(.16,1,.3,1) both}
     @keyframes txLbCycle{0%{transform:scale(.92);opacity:0}5%{transform:scale(1);opacity:1}95%{transform:scale(1);opacity:1}100%{transform:scale(1.04);opacity:0;filter:blur(4px)}}
     @keyframes txRecordSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
     @keyframes txRecordIn{0%{transform:scale(0) rotate(-180deg);opacity:0}60%{transform:scale(1.15) rotate(20deg);opacity:1}100%{transform:scale(1) rotate(0);opacity:1}}
@@ -3416,7 +3419,7 @@ function _widgetHandleDirectObsEvent(d){
 // Lee comandos desde Firestore livecast_director/current.
 // Cada componente tiene {active, until?} independiente; el panel del
 // admin pushea cambios y este widget renderiza lo que esté activo.
-const TX_DIR_DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[],movement:'',style:{bgColor:'#0A1628',accentColor:'#C41E3A',videoX:0,videoY:5,videoW:40,videoH:80,textX:44,textY:10,titleSize:8,movSize:5,timerSize:12,showLogos:true,blurAmount:24,overlayOpacity:0.65}}};
+const TX_DIR_DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[],movement:'',style:{bgColor:'#0A1628',accentColor:'#C41E3A',videoX:0,videoY:5,videoW:40,videoH:80,textX:44,textY:10,titleSize:8,movSize:5,timerSize:12,showLogos:true,blurAmount:24,overlayOpacity:0.65}}};
 let _txDirState=null;
 let _txDirUnsub=null;
 let _txDirPoll=null;
@@ -3531,14 +3534,14 @@ function _startBarrido(dir){
   setTimeout(()=>{if(_txBarridoEl&&_txBarridoEl.parentNode){_txBarridoEl.parentNode.removeChild(_txBarridoEl);_txBarridoEl=null;}},TX_ANIM_MS.fullscreen+200);
 }
 function _txDetectTransitions(){
-  const comps=['profile','scoreboard','leaderboard','timer','breakTimer','tablaActual'];
+  const comps=['profile','scoreboard','leaderboard','timer','breakTimer','tablaActual','medals'];
   const fullscreen=new Set(['profile','leaderboard','breakTimer']);
   const fsJustActivated=[...fullscreen].some(c=>!_txDirPrevActive[c]&&_txDirActive(c));
   const fsCurrentlyExiting=Object.keys(_txDirAnims).some(c=>fullscreen.has(c)&&_txDirAnims[c].dir==='out');
   const fsJustDeactivated=[...fullscreen].some(c=>!!_txDirPrevActive[c]&&!_txDirActive(c));
   const fsVisible=_txDirActive('profile')||_txDirActive('leaderboard')||_txDirActive('breakTimer')||fsCurrentlyExiting||fsJustDeactivated;
   const effectiveActive=(c)=>{
-    if(c==='scoreboard'||c==='timer')return _txDirActive(c)&&!fsVisible;
+    if(c==='scoreboard'||c==='timer'||c==='medals')return _txDirActive(c)&&!fsVisible;
     return _txDirActive(c);
   };
   comps.forEach(c=>{
@@ -3623,13 +3626,16 @@ function renderTxDirector(container){
   const _fsVisible=showProf||showLb||showBreak||_fsExiting;
   const showSb=_txDirActive('scoreboard')&&!_fsVisible;
   const showTm=_txDirActive('timer')&&!_fsVisible;
+  const showMedals=_txDirActive('medals')&&!_fsVisible;
   // Detectar transiciones (cambios on↔off) para reproducir animaciones
   _txDetectTransitions();
   // Signature p/ evitar flicker por timer cada 1s
-  const sig=[showProf,showSb,showLb,showTm,showSlam,showBreak,_txDirActive('tablaActual')].join('|')
+  const md=_txDirState.medals||{};
+  const sig=[showProf,showSb,showLb,showTm,showSlam,showBreak,_txDirActive('tablaActual'),showMedals].join('|')
     +'|'+(cur?cur.id+'|'+(cur.att?.[DATA.lift]||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
     +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
     +'|'+(_txDirState.leaderboard?.cat||'')+'|'+(_txDirState.slam?.type||'')
+    +'|md-'+(md.mod||'')+'-'+(md.sex||'')+'-'+(md.div||'')+'-'+(md.cat||'')+'-'+(md.until||0)
     +'|'+(_txDirState.profile?.until||0)+'|'+(_txDirState.scoreboard?.until||0)+'|'+(_txDirState.leaderboard?.until||0)+'|'+(_txDirState.slam?.until||0)
     +'|bt-'+(bt.startedAt||0)+'-'+(bt.durationSec||0)+'-'+(bt.pausedAt||0)+'-'+(bt.label||'')+'-'+(bt.videos||[]).length+'-'+(bt.movement||'')+'-'+JSON.stringify(bt.style||{})
     +'|sc-'+(_txDirState.profile?.scale||1)+'-'+(_txDirState.scoreboard?.scale||1)+'-'+(_txDirState.leaderboard?.scale||1)+'-'+(_txDirState.timer?.scale||1)+'-'+(_txDirState.slam?.scale||1)+'-'+(_txDirState.breakTimer?.scale||1)
@@ -3762,6 +3768,14 @@ function renderTxDirector(container){
     const taHtml=renderTxTablaActual(cur);
     const wrap='<div class="'+wrapClass+'" style="position:fixed;inset:0;pointer-events:none;'+(taScale!==1?'transform:scale('+taScale+');transform-origin:bottom right;':'')+taAnim+'">'+taHtml+'</div>';
     html+=wrap;
+  }
+  // Medallero (Top 3) — banda inferior-centro, entra/sale deslizando desde abajo
+  const animMedals=_txAnimActive('medals');
+  if(showMedals||(animMedals&&animMedals.dir==='out')){
+    const mdAnim=animMedals?(animMedals.dir==='in'?'animation:txSlideInBottom .75s cubic-bezier(.2,.85,.3,1.05) forwards;':'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;'):'';
+    const mdScale=md.scale||1;
+    const mdHtml=renderTxMedals(md);
+    if(mdHtml)html+='<div style="position:fixed;inset:0;pointer-events:none;'+(mdScale!==1?'transform:scale('+mdScale+');transform-origin:bottom center;':'')+mdAnim+'">'+mdHtml+'</div>';
   }
   if(showSlam){
     // Slam armado: cuando el operador marca ✓/✗ en Control en Vivo,
@@ -4107,37 +4121,65 @@ function renderTxScoreboard(cur,lifterChanged){
     forecastColor=forecastPos===1?_txC('goodLift'):forecastPos<=3?_txC('accent'):_txC('puesto');
   }
   const _animDir=TX_MODE==='scoreboard'?null:(lifterChanged?'in':null);
+  // ── Colores de marca YourLift (fijos para este widget, no dependen de la paleta seleccionable) ──
+  const YL_NAVY='#0A1628', YL_RED='#C41E3A', YL_GOLD='#D4A843';
+  const WHITE='#ffffff', WHITE_DIM='rgba(255,255,255,.55)', GREEN='#22c55e', RED='#ef4444';
+  // ── SQUAT / BENCH PRESS / DEADLIFT / TOTAL — mejor marca válida de cada uno + estado ──
+  const sqB=bestOf(cur,'sq'), bpB=bestOf(cur,'bp'), dlB=bestOf(cur,'dl');
+  const dq=isDQ(cur);
+  const _liftFailed=l=>cur.att[l].every(x=>x.r==='n')&&cur.att[l].some(x=>x.w>0);
+  const _liftCell=(l,label,best)=>{
+    let val,clr;
+    if(best>0){val=best;clr=GREEN}
+    else if(_liftFailed(l)){val='—';clr=RED}
+    else{val='—';clr=WHITE_DIM}
+    return `<div style="padding:8px 6px;text-align:center;border-right:1px solid rgba(255,255,255,.08)">
+      <div style="font-family:Oswald;font-size:10px;letter-spacing:2px;color:rgba(255,255,255,.4);margin-bottom:2px">${label}</div>
+      <div style="font-family:Oswald;font-size:20px;font-weight:800;color:${clr}">${val}</div>
+    </div>`;
+  };
+  const totB=sqB+bpB+dlB;
+  let totVal,totClr;
+  if(dq){totVal='DQ';totClr=RED}
+  else if(sqB>0&&bpB>0&&dlB>0){totVal=totB.toFixed(1);totClr=GREEN}
+  else if(totB>0){totVal=totB.toFixed(1);totClr=WHITE}
+  else{totVal='—';totClr=WHITE_DIM}
+  const flagHtml=_flagImg(_ctry(cur),22);
   return `
-    <div class="sb-card-explode" style="position:absolute;bottom:0;left:0;right:0;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
-      <div style="${_sbRowAnim(_animDir,0)}display:grid;grid-template-columns:240px 1fr 180px;background:${_txC('headerBg')};border-top:2px solid ${_txC('accent')};padding:10px 22px;align-items:center">
-        <div style="display:flex;align-items:center;gap:14px;font-family:Oswald;font-size:15px;color:rgba(200,215,240,.85);letter-spacing:1px">
-          ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" class="sb-logo-anim" style="height:54px;width:54px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 8px rgba(0,0,0,.7))" onerror="this.style.display='none'">`:''}
-          <span>${catLabel}</span>
-        </div>
-        <div style="text-align:center;font-family:Oswald;font-size:14px;letter-spacing:1px;color:rgba(200,215,240,.7)">${(rk.pos&&totalAth?rk.pos+'/'+totalAth+' en categoría':'')}</div>
-        <div style="font-family:Oswald;font-size:${willChange?'16px':'20px'};font-weight:800;color:${forecastColor};letter-spacing:${willChange?'1px':'2px'};text-align:right;white-space:nowrap" title="Posición forecast en su sexo+categoría+división">${forecastTxt}</div>
+    <div class="sb-card-explode" style="position:absolute;bottom:0;left:0;right:0;display:flex;align-items:stretch;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
+      <div style="flex-shrink:0;width:110px;background:${YL_NAVY};border-top:3px solid ${YL_GOLD};display:flex;align-items:center;justify-content:center">
+        <img src="YourLift_logo.png" alt="" style="height:58px;width:auto;object-fit:contain;filter:drop-shadow(0 2px 8px rgba(0,0,0,.7))" onerror="this.style.display='none'">
       </div>
-      <div style="${_sbRowAnim(_animDir,1)}background:linear-gradient(90deg,${_txC('nameBg')},${_txC('nameBg2')});padding:6px 22px;display:flex;align-items:center;gap:14px">
-        <div style="background:rgba(10,22,40,.9);color:${_txC('nameBg')};padding:4px 12px;border-radius:4px;font-family:Oswald;font-size:12px;letter-spacing:2px;font-weight:700">CHI 🇨🇱</div>
-        <div style="flex:1;font-family:Oswald;color:${_txC('nameText')};letter-spacing:1px;overflow:hidden">
-          <div style="font-size:30px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${firstName?firstName+' ':''}${lastName}</div>
+      <div class="sb-wipe-content" style="flex:1;overflow:hidden">
+        <div style="${_sbRowAnim(_animDir,0)}display:flex;justify-content:space-between;align-items:center;background:${YL_NAVY};border-top:3px solid ${YL_GOLD};padding:6px 22px">
+          <div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:rgba(255,255,255,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:38%">${cur.club||''}</div>
+          <div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:rgba(255,255,255,.6)">${(rk.pos&&totalAth?rk.pos+'/'+totalAth+' en categoría':'')}</div>
+          <div style="font-family:Oswald;font-size:${willChange?'15px':'18px'};font-weight:800;color:${forecastColor};letter-spacing:${willChange?'1px':'2px'};white-space:nowrap" title="Posición forecast en su sexo+categoría+división">${forecastTxt}</div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;font-family:Oswald;font-size:11px;color:rgba(10,22,40,.75);letter-spacing:1px;text-align:right;max-width:240px">
-          ${(window.clubLogoImg?window.clubLogoImg(cur.club,28,'background:rgba(10,22,40,.85);padding:2px;flex-shrink:0;'):'')}
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cur.club||''}</span>
+        <div style="${_sbRowAnim(_animDir,1)}background:linear-gradient(90deg,${YL_GOLD},#b8882e);padding:7px 22px;display:flex;align-items:center;gap:12px">
+          ${flagHtml}
+          <div style="flex:1;font-family:Oswald;color:${YL_NAVY};letter-spacing:1px;overflow:hidden">
+            <div style="font-size:28px;font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${firstName?firstName+' ':''}${lastName}</div>
+          </div>
+          <div style="background:rgba(10,22,40,.9);color:${YL_GOLD};padding:5px 14px;border-radius:4px;font-family:Oswald;font-size:16px;letter-spacing:1px;font-weight:700;white-space:nowrap">${catLabel}</div>
         </div>
-      </div>
-      <div style="${_sbRowAnim(_animDir,2)}display:grid;grid-template-columns:repeat(3,1fr) 140px;background:${_txC('gridBg')}">
-        ${cur.att[DATA.lift].map((at,j)=>{
-          let bg,clr,td='none';
-          if(at.r==='g'){bg=_txC('goodLift');clr=_txC('nameText')}
-          else if(at.r==='n'){bg=_txC('noLift');clr='#fff';td='line-through'}
-          else if(j===DATA.round&&at.w>0){bg=_txC('curAttempt');clr='#fff'}
-          else{bg='rgba(30,48,78,.3)';clr='rgba(140,160,190,.45)'}
-          const isCur=j===DATA.round&&at.r===null&&at.w>0;
-          return '<div style="padding:9px 18px;text-align:center;background:'+bg+';border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:22px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+(isCur?'box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';':'')+'">'+(at.w||'—')+'</div>';
-        }).join('')}
-        <div style="padding:9px 14px;text-align:center;background:${isDQ(cur)?_txC('noLift'):_txC('accent')};color:${isDQ(cur)?'#fff':_txC('nameText')};font-family:Oswald;font-size:24px;font-weight:700;letter-spacing:1px">${isDQ(cur)?'DQ':(st||newSub||0).toFixed(1)}</div>
+        <div style="${_sbRowAnim(_animDir,2)}display:grid;grid-template-columns:repeat(3,1fr) repeat(4,1fr);background:${YL_NAVY}">
+          ${cur.att[DATA.lift].map((at,j)=>{
+            let clr,td='none',boxSh='';
+            if(at.r==='g'){clr=GREEN}
+            else if(at.r==='n'){clr=RED;td='line-through'}
+            else if(j===DATA.round&&at.w>0){clr=WHITE;boxSh='box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';'}
+            else{clr=WHITE_DIM}
+            return '<div style="padding:8px 6px;text-align:center;border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:22px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+boxSh+'">'+(at.w||'—')+'</div>';
+          }).join('')}
+          ${_liftCell('sq','SQUAT',sqB)}
+          ${_liftCell('bp','BENCH PRESS',bpB)}
+          ${_liftCell('dl','DEADLIFT',dlB)}
+          <div style="padding:8px 6px;text-align:center">
+            <div style="font-family:Oswald;font-size:10px;letter-spacing:2px;color:rgba(255,255,255,.4);margin-bottom:2px">TOTAL</div>
+            <div style="font-family:Oswald;font-size:20px;font-weight:800;color:${totClr}">${totVal}</div>
+          </div>
+        </div>
       </div>
     </div>`;
 }
@@ -4585,6 +4627,49 @@ function renderTxTablaActual(cur,opts){
         <div style="padding:6px 18px;background:rgba(10,22,40,.7);font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(220,230,245,.5);text-align:center;border-top:1px solid rgba(212,168,67,.15)">YOURLIFT · LIVE</div>
       </div>
     </div>`;
+}
+
+// ══════════════════════════════════════════════
+// TX: MEDALLERO (Top 3) — banda inferior-centro con el podio de una
+// categoría específica (modalidad + sexo + división + categoría),
+// elegida a mano desde Control TX. No depende del levantador en tarima:
+// usa DATA.athletes, que YA está cargado localmente (sin lecturas nuevas
+// a Firestore — cero costo adicional).
+// ══════════════════════════════════════════════
+function renderTxMedals(md){
+  md=md||{};
+  if(!md.mod||!md.sex||!md.div||!md.cat)return '';
+  const pool=DATA.athletes.filter(a=>a.mod===md.mod&&a.sex===md.sex&&a.div===md.div&&a.cat===md.cat&&!isDQ(a));
+  const ranked=pool.map(a=>({a,total:totalOf(a)})).filter(x=>x.total>0).sort((x,y)=>y.total-x.total).slice(0,3);
+  if(!ranked.length)return '';
+  const divS=txDivShort(md.div);
+  const sexLabel=(md.sex==='Femenino'||md.sex==='Mujer'||md.sex==='F')?'♀':'♂';
+  const RANK_BG={1:'#D4A843',2:'#C0C0C0',3:'#CD7F32'};
+  const row=(r,x)=>{
+    if(!x)return '';
+    const flag=_flagImg(_ctry(x.a),18);
+    const big=r===1;
+    return `<div style="display:flex;align-items:center;gap:12px;background:linear-gradient(90deg,rgba(10,22,40,.94),rgba(10,22,40,.86));border-left:6px solid ${RANK_BG[r]};border-radius:8px;padding:${big?'12px 20px':'9px 18px'};box-shadow:0 8px 20px rgba(0,0,0,.5)">
+      <div style="width:${big?'40px':'32px'};height:${big?'40px':'32px'};flex-shrink:0;border-radius:50%;background:${RANK_BG[r]};display:flex;align-items:center;justify-content:center;font-family:Oswald;font-weight:800;font-size:${big?'20px':'16px'};color:#0A1628">${r}</div>
+      ${flag}
+      <div style="flex:1;font-family:Oswald;font-weight:700;font-size:${big?'24px':'18px'};color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.5)">${x.a.name||''}</div>
+      <div style="font-family:Oswald;font-weight:800;font-size:${big?'24px':'18px'};color:${RANK_BG[r]}">${x.total.toFixed(1)}</div>
+    </div>`;
+  };
+  return `
+    <div style="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);width:min(760px,60vw);pointer-events:none">
+      <div style="text-align:center;margin-bottom:10px;font-family:Oswald;font-size:14px;letter-spacing:3px;color:${'#D4A843'};text-shadow:0 2px 6px rgba(0,0,0,.6)">🏅 MEDALLERO · ${divS} ${md.cat} KG ${sexLabel} · ${_txModLabel(md.mod)}</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${row(1,ranked[0])}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>${row(2,ranked[1])}</div>
+          <div>${row(3,ranked[2])}</div>
+        </div>
+      </div>
+    </div>`;
+}
+function _txModLabel(mod){
+  return {classic:'Classic',equipped:'Equipado',oe_classic:'Olimpiadas Especiales',universitario:'Universitario',onlybench:'Only Bench',classic_bench:'Classic + Bench',equipped_bench:'Equipado + Bench'}[mod]||mod||'';
 }
 
 // ══════════════════════════════════════════════
@@ -5060,7 +5145,7 @@ function _dirEnsureListener(){
   if(_dirUnsub||!fbReady||!window._fb)return;
   try{
     _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',evStateDocId('current')),(snap)=>{
-      const DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[]}};
+      const DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[]}};
       if(snap.exists()){
         const d=snap.data();
         _dirState=Object.assign({},DEFAULT,d.show||{});
@@ -5123,11 +5208,31 @@ window.dirHide=async function(comp){
   await _dirPush();R();
 };
 window.dirHideAll=async function(){
-  ['profile','scoreboard','leaderboard','timer','slam','tablaActual'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
+  ['profile','scoreboard','leaderboard','timer','slam','tablaActual','medals'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
   await _dirPush();R();
 };
 window.dirShowLb=async function(cat,seconds){
   await window.dirShow('leaderboard',seconds,{cat:cat||''});
+};
+// ── Medallero: selects en cascada (modalidad → sexo → división → categoría) ──
+// Todo sale de DATA.athletes, ya cargado local en memoria — NO dispara ninguna
+// lectura nueva a Firestore. Selección local (_mdSel), se re-renderiza el panel
+// con R() igual que el resto del Control TX (sin listeners ni docs extra).
+window._mdSel={mod:'',sex:'',div:'',cat:''};
+window.dirMdSet=function(field,val){
+  window._mdSel[field]=val;
+  if(field==='mod'){window._mdSel.sex='';window._mdSel.div='';window._mdSel.cat='';}
+  else if(field==='sex'){window._mdSel.div='';window._mdSel.cat='';}
+  else if(field==='div'){window._mdSel.cat='';}
+  R();
+};
+window.dirToggleMedals=async function(){
+  const c=_dirState&&_dirState.medals;
+  const isOn=c&&c.active&&(!c.until||c.until>Date.now());
+  if(isOn){await window.dirHide('medals');return;}
+  const{mod,sex,div,cat}=window._mdSel;
+  if(!mod||!sex||!div||!cat){showToastLC('⚠️ Elegí modalidad, sexo, división y categoría primero');return;}
+  await window.dirShow('medals',0,{mod,sex,div,cat});
 };
 window.dirShowSlam=async function(type){
   await window.dirShow('slam',2,{type});
@@ -5222,6 +5327,7 @@ window._dirKeyHandler=function(e){
   if(map[k]){e.preventDefault();window.dirToggle(map[k]);return}
   if(k==='l'){e.preventDefault();window.dirToggleLb();return}
   if(k==='a'){e.preventDefault();window.dirToggle('tablaActual');return}
+  if(k==='m'){e.preventDefault();window.dirToggleMedals();return}
   if(k==='g'){e.preventDefault();window.dirShowSlam('g');return}
   if(k==='n'){e.preventDefault();window.dirShowSlam('n');return}
   if(k==='b'){e.preventDefault();window.dirToggleBreak();return}
@@ -5499,6 +5605,44 @@ function renderDirector(){
   h+='<button class="btn '+(lbActive?'btn-r':'btn-g')+'" onclick="dirToggleLb()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(lbActive?'⏸ DESACTIVAR':'▶ ACTIVAR')+'</button>';
   h+='</div>'+scaleSlider('leaderboard')+'</div>';
   h+=compToggle('tablaActual','📋','Tabla actual (corner)','Ranking de la categoría del lifter actual, esquina inferior derecha. Entra desde abajo, queda fijo. El levantador en pantalla se resalta y muestra la flecha de proyección (pos actual → pos si lo levanta).','A','dirToggle(\'tablaActual\')');
+  // Medallero (Top 3) — selects en cascada: modalidad → sexo → división → categoría.
+  // Todo se calcula desde DATA.athletes (ya cargado local): cero lecturas nuevas a Firestore.
+  {
+    const mdActive=_dirState.medals?.active&&(!_dirState.medals?.until||_dirState.medals.until>Date.now());
+    const MOD_LABEL={classic:'Classic',equipped:'Equipado',oe_classic:'Olimpiadas Especiales',universitario:'Universitario',onlybench:'Only Bench',classic_bench:'Classic + Bench',equipped_bench:'Equipado + Bench'};
+    const sel=window._mdSel||{mod:'',sex:'',div:'',cat:''};
+    const byMod=DATA.athletes.filter(a=>!sel.mod||a.mod===sel.mod);
+    const modOpts=[...new Set(DATA.athletes.map(a=>a.mod))].filter(Boolean);
+    const sexOpts=[...new Set(byMod.map(a=>a.sex))].filter(Boolean).sort();
+    const byModSex=byMod.filter(a=>!sel.sex||a.sex===sel.sex);
+    const divOpts=[...new Set(byModSex.map(a=>a.div))].filter(Boolean).sort();
+    const byModSexDiv=byModSex.filter(a=>!sel.div||a.div===sel.div);
+    const catOpts=[...new Set(byModSexDiv.map(a=>a.cat))].filter(Boolean).sort((a,b)=>(parseFloat(a)||999)-(parseFloat(b)||999));
+    const selStyle='padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;min-width:170px';
+    h+='<div class="card" style="padding:14px 18px;border-left:4px solid '+(mdActive?'var(--green)':'var(--border)')+';background:'+(mdActive?'rgba(34,197,94,.04)':'transparent')+'">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">';
+    h+='<div style="flex:1;min-width:280px">';
+    h+='<div style="display:flex;align-items:center;gap:10px"><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">🏅 Medallero (Top 3)</div>'+kbd('M')+'</div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Podio de una categoría específica. Elegí en orden: modalidad → sexo → división → categoría.</div>';
+    h+='<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">';
+    h+='<select style="'+selStyle+'" onchange="dirMdSet(\'mod\',this.value)"><option value="">1° Modalidad —</option>';
+    modOpts.forEach(m=>{h+='<option value="'+m+'"'+(m===sel.mod?' selected':'')+'>'+(MOD_LABEL[m]||m)+'</option>'});
+    h+='</select>';
+    h+='<select style="'+selStyle+'" '+(sel.mod?'':'disabled')+' onchange="dirMdSet(\'sex\',this.value)"><option value="">2° Sexo —</option>';
+    sexOpts.forEach(s=>{h+='<option value="'+s+'"'+(s===sel.sex?' selected':'')+'>'+((s==='Mujer'||s==='Femenino'||s==='F')?'♀ Mujer':'♂ Hombre')+'</option>'});
+    h+='</select>';
+    h+='<select style="'+selStyle+'" '+(sel.sex?'':'disabled')+' onchange="dirMdSet(\'div\',this.value)"><option value="">3° División —</option>';
+    divOpts.forEach(d=>{h+='<option value="'+d+'"'+(d===sel.div?' selected':'')+'>'+d+'</option>'});
+    h+='</select>';
+    h+='<select style="'+selStyle+'" '+(sel.div?'':'disabled')+' onchange="dirMdSet(\'cat\',this.value)"><option value="">4° Categoría —</option>';
+    catOpts.forEach(c=>{h+='<option value="'+c+'"'+(c===sel.cat?' selected':'')+'>'+c+' kg</option>'});
+    h+='</select>';
+    h+='</div>';
+    h+=(mdActive?'<div style="font-size:10px;color:var(--green);margin-top:6px;font-family:Oswald;letter-spacing:1px">🔵 EN PANTALLA</div>':'');
+    h+='</div>';
+    h+='<button class="btn '+(mdActive?'btn-r':'btn-g')+'" onclick="dirToggleMedals()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(mdActive?'⏸ DESACTIVAR':'▶ ACTIVAR')+'</button>';
+    h+='</div>'+scaleSlider('medals')+'</div>';
+  }
   h+=compToggle('timer','⏱','Timer grande','Reloj 1:00 → 0:00 en la esquina superior derecha. Sincronizado con el del operador.','T','dirToggle(\'timer\')');
   // Slam — dos botones momentáneos (GOOD / NO LIFT, no toggle)
   h+='<div class="card" style="padding:14px 18px;border-left:4px solid var(--border)">';
