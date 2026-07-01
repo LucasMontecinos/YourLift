@@ -3923,7 +3923,7 @@ window.exportNominaExcel = async function(){
     const _xlByRut={},_xlByNm={};
     (ST.allCompResults||[]).forEach(r=>{
       const gl=parseFloat(r.resultado?.glp||r.resultado?.gl||0);if(gl<=0)return;
-      const evId=r.evento||'';
+      const evId=r.evento_id||r.evento||''; // evento_id es el ID; evento es el nombre
       const e={gl,tab:_xlTabType(r),evId,isNat:_xlEvNat.has(evId),isUni:_xlEvUni.has(evId)};
       const rut=_normRutXL(r.rut||'');const nm=_normNmXL(r.nombre||'');
       if(rut){if(!_xlByRut[rut])_xlByRut[rut]=[];_xlByRut[rut].push(e);}
@@ -3992,7 +3992,7 @@ window.exportNominaExcel = async function(){
       const posNacVal = i.posNacLugar ? (i.posNacMod ? i.posNacMod+' · '+i.posNacLugar+'°' : i.posNacLugar+'°') : '';
       ws.addRow({nombre:i.nombre||'',sexo:i.sexo||'',modalidad:i.modalidad||'',division:i.division||'',categoria:i.categoria||'',club,
         rut:i.rut||'',fechaNac:fmtFN(i.fechaNac||i.fechanac),correo:priv.correo||'',universidad:_xResolveUni(i),
-        ...(posNacOn ? {posNac:posNacVal,posNacSQ:i.posNacSQ||'',posNacBP:i.posNacBP||'',posNacDL:i.posNacDL||'',posNacTotal:(i.posNacTotal||(((parseFloat(i.posNacSQ)||0)+(parseFloat(i.posNacBP)||0)+(parseFloat(i.posNacDL)||0))||'')),glNac:_getGLXL(i),clasifSud:(parseInt(i.posNacLugar)||0)===1?'CLASIFICADO':(parseInt(i.posNacLugar)||0)===2||(parseInt(i.posNacLugar)||0)===3?'LISTA DE ESPERA':''} : {})});
+        ...(posNacOn ? {posNac:posNacVal,posNacSQ:i.posNacSQ||'',posNacBP:i.posNacBP||'',posNacDL:i.posNacDL||'',posNacTotal:(i.posNacTotal||(((parseFloat(i.posNacSQ)||0)+(parseFloat(i.posNacBP)||0)+(parseFloat(i.posNacDL)||0))||'')),glNac:(()=>{const p=parseInt(i.posNacLugar)||0;return(p===2||p===3)?_getGLXL(i):'';})(),clasifSud:(parseInt(i.posNacLugar)||0)===1?'CLASIFICADO':(parseInt(i.posNacLugar)||0)===2||(parseInt(i.posNacLugar)||0)===3?'LISTA DE ESPERA':''} : {})});
     });
 
     const thin={style:'thin',color:{argb:'FF000000'}};
