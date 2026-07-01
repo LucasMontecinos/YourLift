@@ -3219,7 +3219,7 @@ function _renderTxCerScoreboardBL(cur,opts){
   opts=opts||{};
   const scale=opts.scale||1;
   const noAnimate=!!opts.noAnimate;
-  // Variante compacta del scoreboard, posicionada abajo-izquierda
+  // Variante compacta del scoreboard, posicionada abajo-izquierda (usada por Control TX y Ceremony)
   const parts=(cur.name||'').trim().split(/\s+/);
   const firstName=parts.length>2?parts.slice(0,-2).join(' '):parts.slice(0,-1).join(' ');
   const lastName=(parts.length>2?parts.slice(-2).join(' '):parts[parts.length-1]).toUpperCase();
@@ -3237,46 +3237,74 @@ function _renderTxCerScoreboardBL(cur,opts){
   const _forecastPos=_simPosBL||_rk.pos||0;
   const _willChangeBL=_rk.pos>0&&_simPosBL>0&&_simPosBL!==_rk.pos;
   let _forecastTxt,_forecastColor;
-  if(_forecastPos<=0){_forecastTxt='—';_forecastColor=_txC('puesto');}
+  if(_forecastPos<=0){_forecastTxt='—';_forecastColor='#ffffff';}
   else if(_willChangeBL){
     _forecastTxt='Puesto '+_rk.pos+' → '+_simPosBL;
-    _forecastColor=_simPosBL===1?_txC('goodLift'):_simPosBL<=3?_txC('accent'):_txC('puesto');
+    _forecastColor=_simPosBL===1?'#22c55e':_simPosBL<=3?'#D4A843':'#ffffff';
   }else{
     _forecastTxt='Posición '+_forecastPos;
-    _forecastColor=_forecastPos===1?_txC('goodLift'):_forecastPos<=3?_txC('accent'):_txC('puesto');
+    _forecastColor=_forecastPos===1?'#22c55e':_forecastPos<=3?'#D4A843':'#ffffff';
   }
-  const logo=window.clubLogoImg?window.clubLogoImg(cur.club,28,'background:rgba(10,22,40,.85);padding:2px;flex-shrink:0;'):'';
   // animOrTx → animación de ciclo automatico (modo widget standalone) o transform de scale
-  // extraStyle → animación in/out cuando se enciende/apaga desde control TX (slide vertical)
   const animDir=opts.animDir||null; // 'in' | 'out' | null
   const animOrTx=noAnimate
     ? (scale!==1?'transform:scale('+scale+');transform-origin:bottom left;':'')
     : 'animation:txScoreboardCycle '+(TX_CEREMONY.scoreboardMs/1000)+'s ease-in-out forwards;';
-  const champLogo=DATA.event?.logoUrl||'';
-  const champLogoHtml=champLogo?'<img src="'+champLogo+'" alt="" class="sb-logo-anim" style="height:46px;width:46px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 6px rgba(0,0,0,.7))" onerror="this.style.display=\'none\'">':'';
-  return '<div class="sb-card-explode" style="position:fixed;bottom:24px;left:24px;width:min(640px,55vw);'+animOrTx+'border-radius:8px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.6)">'
-    +'<div style="'+_sbRowAnim(animDir,0)+'display:flex;justify-content:space-between;align-items:center;background:'+_txC('headerBg')+';border-top:2px solid '+_txC('accent')+';padding:6px 14px;gap:12px">'
-      +'<div style="display:flex;align-items:center;gap:12px;font-family:Oswald;font-size:12px;color:rgba(200,215,240,.85);letter-spacing:1px">'+champLogoHtml+'<span>'+catLabel+'</span></div>'
-      +'<div style="font-family:Oswald;font-size:18px;font-weight:800;color:'+_forecastColor+';letter-spacing:2px">'+_forecastTxt+'</div>'
+  // ── Colores de marca YourLift (fijos, igual que el scoreboard standalone) ──
+  const YL_NAVY='#0A1628', YL_GOLD='#D4A843', WHITE='#ffffff', WHITE_DIM='rgba(255,255,255,.55)', GREEN='#22c55e', RED='#ef4444';
+  const sqB=bestOf(cur,'sq'), bpB=bestOf(cur,'bp'), dlB=bestOf(cur,'dl');
+  const dq=isDQ(cur);
+  const _liftFailedBL=l=>cur.att[l].every(x=>x.r==='n')&&cur.att[l].some(x=>x.w>0);
+  const _liftCellBL=(l,label,best)=>{
+    let val,clr;
+    if(best>0){val=best;clr=GREEN}
+    else if(_liftFailedBL(l)){val='—';clr=RED}
+    else{val='—';clr=WHITE_DIM}
+    return '<div style="padding:6px 4px;text-align:center;border-right:1px solid rgba(255,255,255,.08)">'
+      +'<div style="font-family:Oswald;font-size:8px;letter-spacing:1.5px;color:rgba(255,255,255,.4);margin-bottom:1px">'+label+'</div>'
+      +'<div style="font-family:Oswald;font-size:15px;font-weight:800;color:'+clr+'">'+val+'</div>'
+    +'</div>';
+  };
+  const totBL=sqB+bpB+dlB;
+  let totValBL,totClrBL;
+  if(dq){totValBL='DQ';totClrBL=RED}
+  else if(sqB>0&&bpB>0&&dlB>0){totValBL=totBL.toFixed(1);totClrBL=GREEN}
+  else if(totBL>0){totValBL=totBL.toFixed(1);totClrBL=WHITE}
+  else{totValBL='—';totClrBL=WHITE_DIM}
+  const flagHtmlBL=_flagImg(_ctry(cur),16);
+  return '<div class="sb-card-explode" style="position:fixed;bottom:24px;left:24px;width:min(680px,58vw);display:flex;align-items:stretch;'+animOrTx+'border-radius:8px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.6)">'
+    +'<div style="flex-shrink:0;width:70px;background:'+YL_NAVY+';border-top:3px solid '+YL_GOLD+';display:flex;align-items:center;justify-content:center">'
+      +'<img src="YourLift_logo.png" alt="" style="height:38px;width:auto;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.7))" onerror="this.style.display=\'none\'">'
     +'</div>'
-    +'<div style="'+_sbRowAnim(animDir,1)+'background:linear-gradient(90deg,'+_txC('nameBg')+','+_txC('nameBg2')+');padding:5px 14px;display:flex;align-items:center;gap:10px">'
-      +'<div style="background:rgba(10,22,40,.9);color:'+_txC('nameBg')+';padding:3px 9px;border-radius:3px;font-family:Oswald;font-size:10px;letter-spacing:2px;font-weight:700">CHI</div>'
-      +'<div style="flex:1;font-family:Oswald;color:'+_txC('nameText')+';letter-spacing:1px;overflow:hidden">'
-        +'<div style="font-size:24px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(firstName?firstName+' ':'')+lastName+'</div>'
+    +'<div class="sb-wipe-content" style="flex:1;overflow:hidden">'
+    +'<div style="'+_sbRowAnim(animDir,0)+'display:flex;justify-content:space-between;align-items:center;background:'+YL_NAVY+';border-top:3px solid '+YL_GOLD+';padding:5px 14px;gap:12px">'
+      +'<div style="font-family:Oswald;font-size:11px;color:rgba(255,255,255,.6);letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%">'+(cur.club||'')+'</div>'
+      +'<div style="font-family:Oswald;font-size:14px;font-weight:800;color:'+_forecastColor+';letter-spacing:1.5px;white-space:nowrap">'+_forecastTxt+'</div>'
+    +'</div>'
+    +'<div style="'+_sbRowAnim(animDir,1)+'background:linear-gradient(90deg,'+YL_GOLD+',#b8882e);padding:5px 14px;display:flex;align-items:center;gap:8px">'
+      +flagHtmlBL
+      +'<div style="flex:1;font-family:Oswald;color:'+YL_NAVY+';letter-spacing:1px;overflow:hidden">'
+        +'<div style="font-size:20px;font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(firstName?firstName+' ':'')+lastName+'</div>'
       +'</div>'
-      +logo
+      +'<div style="background:rgba(10,22,40,.9);color:'+YL_GOLD+';padding:3px 10px;border-radius:3px;font-family:Oswald;font-size:12px;letter-spacing:1px;font-weight:700;white-space:nowrap">'+catLabel+'</div>'
     +'</div>'
-    +'<div style="'+_sbRowAnim(animDir,2)+'display:grid;grid-template-columns:repeat(3,1fr) 100px;background:'+_txC('gridBg')+'">'
+    +'<div style="'+_sbRowAnim(animDir,2)+'display:grid;grid-template-columns:repeat(3,1fr) repeat(4,1fr);background:'+YL_NAVY+'">'
       +cur.att[DATA.lift].map((at,j)=>{
-        let bg,clr,td='none';
-        if(at.r==='g'){bg=_txC('goodLift');clr=_txC('nameText')}
-        else if(at.r==='n'){bg=_txC('noLift');clr='#fff';td='line-through'}
-        else if(j===DATA.round&&at.w>0){bg=_txC('curAttempt');clr='#fff'}
-        else{bg='rgba(30,48,78,.3)';clr='rgba(140,160,190,.45)'}
-        const isCur=j===DATA.round&&at.r===null&&at.w>0;
-        return '<div style="padding:7px 10px;text-align:center;background:'+bg+';border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:18px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+(isCur?'box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';':'')+'">'+(at.w||'—')+'</div>';
+        let clr,td='none',boxSh='';
+        if(at.r==='g'){clr=GREEN}
+        else if(at.r==='n'){clr=RED;td='line-through'}
+        else if(j===DATA.round&&at.w>0){clr=WHITE;boxSh='box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';'}
+        else{clr=WHITE_DIM}
+        return '<div style="padding:6px 4px;text-align:center;border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:15px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+boxSh+'">'+(at.w||'—')+'</div>';
       }).join('')
-      +'<div style="padding:7px 10px;text-align:center;background:'+(isDQ(cur)?_txC('noLift'):_txC('accent'))+';color:'+(isDQ(cur)?'#fff':_txC('nameText'))+';font-family:Oswald;font-size:20px;font-weight:700;letter-spacing:1px">'+(isDQ(cur)?'DQ':(subTotal(cur,DATA.lift)||0).toFixed(1))+'</div>'
+      +_liftCellBL('sq','SQUAT',sqB)
+      +_liftCellBL('bp','BENCH PRESS',bpB)
+      +_liftCellBL('dl','DEADLIFT',dlB)
+      +'<div style="padding:6px 4px;text-align:center">'
+        +'<div style="font-family:Oswald;font-size:8px;letter-spacing:1.5px;color:rgba(255,255,255,.4);margin-bottom:1px">TOTAL</div>'
+        +'<div style="font-family:Oswald;font-size:15px;font-weight:800;color:'+totClrBL+'">'+totValBL+'</div>'
+      +'</div>'
+    +'</div>'
     +'</div>'
   +'</div>';
 }
