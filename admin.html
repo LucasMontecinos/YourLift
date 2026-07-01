@@ -3919,22 +3919,28 @@ window.exportNominaExcel = async function(){
     // Clasificar el tipo de cada resultado según modalidad/división/view
     const _xlTabType=r=>{const m=String(r.modalidad||'').toLowerCase();const isOE=/olimpiadas|\boe\b/.test(m);const isEq=/equipado|equipped/.test(m);const isBench=/only.?bench/.test(m)||r.view==='bench';const isUni=/universitario/.test(String(r.division||'').toLowerCase())||/universitario/.test(m);if(isUni&&!isBench&&!isOE)return'uni';if(isOE)return'oe';if(isBench)return isEq?'bench_eq':'bench_cl';return isEq?'eq':'cl';};
     const _xlTabFor={classic:['cl','bench_cl'],equipado:['eq','bench_eq'],oe:['oe'],universitario:['uni']};
-    // Construir mapa RUT/nombre → [{gl, tab, evId, isNat, isUni}] — TODOS los eventos
-    const _xlByRut={},_xlByNm={};
+    // Construir mapa RUT/nombre/codigo → [{gl, tab, evId, isNat, isUni}] — TODOS los eventos
+    const _xlByRut={},_xlByNm={},_xlByCod={};
     (ST.allCompResults||[]).forEach(r=>{
       const gl=parseFloat(r.resultado?.glp||r.resultado?.gl||0);if(gl<=0)return;
       const evId=r.evento_id||r.evento||''; // evento_id es el ID; evento es el nombre
       const e={gl,tab:_xlTabType(r),evId,isNat:_xlEvNat.has(evId),isUni:_xlEvUni.has(evId)};
-      const rut=_normRutXL(r.rut||'');const nm=_normNmXL(r.nombre||'');
+      const rut=_normRutXL(r.rut||'');const nm=_normNmXL(r.nombre||'');const cod=String(r.codigo||'').trim();
       if(rut){if(!_xlByRut[rut])_xlByRut[rut]=[];_xlByRut[rut].push(e);}
       if(nm){if(!_xlByNm[nm])_xlByNm[nm]=[];_xlByNm[nm].push(e);}
+      if(cod){if(!_xlByCod[cod])_xlByCod[cod]=[];_xlByCod[cod].push(e);}
     });
+    // Mapa RUT→codigo desde ST.data (perfiles de atletas)
+    const _xlRutToCod={};
+    (ST.data||[]).forEach(a=>{const rut=_normRutXL(a.rut||'');const cod=String(a.codigo||'').trim();if(rut&&cod)_xlRutToCod[rut]=cod;});
     const _getGLXL=i=>{
       const isUniDiv=/universitario/i.test(String(i.division||''));
       const mKey=String(i.posNacMod||'').toLowerCase().trim();
       const tabs=_xlTabFor[mKey]||(isUniDiv?['uni']:['cl']);
       const rut=_normRutXL(i.rut||'');const nm=_normNmXL(i.nombre||'');
-      const pool=(rut&&_xlByRut[rut])||(nm&&_xlByNm[nm])||[];
+      // Buscar pool: RUT → nombre → codigo de inscripción → codigo desde perfil
+      const cod=String(i.codigo||'').trim()||_xlRutToCod[rut]||'';
+      const pool=(rut&&_xlByRut[rut])||(nm&&_xlByNm[nm])||(cod&&_xlByCod[cod])||[];
       if(!pool.length)return'';
       const natF=r=>isUniDiv?r.isUni:r.isNat;
       // Tabs se intentan en orden — el primero tiene prioridad (ej. 'cl' antes que 'bench_cl')
