@@ -1257,6 +1257,20 @@ function home(){
     if(seenBase[bn]) return; seenBase[bn]=1;
     insOpen.push({...e,name:bn});
   });
+  // Próximos campeonatos con inscripciones YA cerradas (status:'closed', o 'open' pero
+  // con preNominaCloseAt vencido) que todavía no se han corrido — para que se sigan
+  // viendo en el home aunque ya no acepten inscripciones.
+  const insClosed=[];const seenBaseC={};
+  evs.forEach(e=>{
+    const d=new Date((e.date||'')+'T00:00:00');
+    if(isNaN(d)||d<today) return; // solo próximos (fecha futura o de hoy)
+    const preNomPassed=e.preNominaCloseAt&&(()=>{const c=new Date(e.preNominaCloseAt);return !isNaN(c)&&now>c;})();
+    const isClosed=e.status==='closed'||(e.status==='open'&&preNomPassed);
+    if(!isClosed) return;
+    const bn=baseName(e.name);
+    if(seenBaseC[bn]) return; seenBaseC[bn]=1;
+    insClosed.push({...e,name:bn});
+  });
 
   let h=`
   <div style="position:relative;margin:-90px calc(-50vw + 50%) 0;width:100vw;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;padding:96px 0 26px">
@@ -1345,6 +1359,35 @@ function home(){
         </div>
         ${eIgHtml}
         <button onclick="sv('insc')" style="flex-shrink:0;padding:10px 20px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">INSCRIBIRME</button>
+      </div>`;
+    });
+    h+=`</div></div>`;
+  }
+
+  if(insClosed.length){
+    h+=`<div style="margin-bottom:30px">
+      <h2 style="font-family:Oswald;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:6px">Próximos Campeonatos</h2>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:18px">Con inscripciones cerradas — ya en preparación</p>
+      <div style="display:flex;flex-direction:column;gap:10px">`;
+    insClosed.forEach(ev=>{
+      const d=new Date((ev.date||'')+'T00:00:00');
+      const dd=isNaN(d)?'--':d.getDate();const mm=isNaN(d)?'':months[d.getMonth()];const yy=isNaN(d)?'':d.getFullYear();
+      const eOrgs=_evOrganizers(ev);
+      const eOrgNames=eOrgs.map(o=>o.name).filter(Boolean).join(' · ');
+      const eIgHtml=eOrgs.map(o=>_igPill(o.instagram,true)).join('');
+      h+=`<div style="display:flex;align-items:center;gap:16px;background:rgba(17,34,59,.45);backdrop-filter:blur(8px);border:1px solid var(--border);border-left:4px solid var(--muted);border-radius:12px;padding:14px 18px;flex-wrap:wrap;opacity:.9">
+        <div style="flex-shrink:0;text-align:center;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;padding:8px 14px;min-width:60px">
+          <div style="font-family:Oswald;font-size:24px;font-weight:700;color:var(--text);line-height:1">${dd}</div>
+          <div style="font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--muted)">${mm}</div>
+          <div style="font-size:9px;color:var(--muted)">${yy}</div>
+        </div>
+        ${ev.logoUrl?`<div style="flex-shrink:0;width:48px;height:48px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:4px"><img src="${ev.logoUrl}" alt="" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.parentElement.style.display='none'"></div>`:''}
+        <div style="flex:1;min-width:160px">
+          <div style="font-family:Oswald;font-size:15px;font-weight:600;letter-spacing:1px;color:var(--text);text-transform:uppercase;line-height:1.15">${ev.name||''}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px">${eOrgNames}${ev.location?' · '+ev.location:''} · <span style="color:var(--muted)">Inscripciones cerradas</span></div>
+        </div>
+        ${eIgHtml}
+        <button onclick="sv('nominas')" style="flex-shrink:0;padding:10px 20px;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">VER NÓMINA</button>
       </div>`;
     });
     h+=`</div></div>`;
