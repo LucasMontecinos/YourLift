@@ -698,6 +698,9 @@ window.showProfile=function(codigo){
     sorted.forEach((c,ci)=>{
       const r=c.resultado||{};
       const isDQ=r.status==='DQ';
+      // Total levantado real (suma de los mejores intentos válidos): el total oficial
+      // queda en 0 cuando hay DQ, pero igual queremos mostrar lo que sí levantó.
+      const dqLiftedTotal=(r.sq||0)+(r.bp||0)+(r.dl||0);
       const prevTotal=sorted[ci+1]?.resultado?.total||0;
       const delta=(prevTotal && !isDQ && r.total)?r.total-prevTotal:null;
       const glVal=isDQ?null:(r.glp||r.gl||null);
@@ -722,7 +725,9 @@ window.showProfile=function(codigo){
         +'</div>'
         +'<div style="text-align:right;flex-shrink:0;margin-left:12px">'
           +(isDQ
-            ? '<div class="os" style="font-size:19px;font-weight:700;color:var(--red)">DQ</div><div style="font-size:10px;color:var(--red);opacity:.85">3 fallos en algún lift</div>'
+            ? '<div class="os" style="font-size:19px;font-weight:700;color:var(--red)">DQ</div>'
+              +(dqLiftedTotal>0?'<div style="font-size:13px;font-weight:700;color:var(--muted)">'+dqLiftedTotal+' kg levantados</div>':'')
+              +'<div style="font-size:10px;color:var(--red);opacity:.85">3 fallos en algún lift</div>'
             : '<div class="os" style="font-size:19px;font-weight:700;color:var(--gold)">'+(r.total||'—')+' kg</div>'
               +(delta!==null?'<div style="font-size:11px;font-weight:700;color:'+(delta>0?'var(--green)':delta<0?'var(--red)':'var(--muted)')+'">'+  (delta>0?'+':'')+delta+' kg</div>':'')
               +(glVal?'<div style="font-size:10px;color:var(--muted)">GL '+glVal+(r.pos?' · #'+r.pos:'')+'</div>':'')

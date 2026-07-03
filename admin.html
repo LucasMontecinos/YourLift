@@ -5035,9 +5035,13 @@ window.compRecalc=function(){
   const sq=_bestLift('sq'),bp=_bestLift('bp'),dl=_bestLift('dl'),total=sq+bp+dl;
   const bw=parseFloat(document.getElementById('cm_bw').value)||0;
   const sex=document.getElementById('cm_sex').value, mod=document.getElementById('cm_mod').value;
-  const gl=_glPoints(total,bw,sex,mod), dots=_dotsPoints(total,bw,sex);
+  const dq=document.getElementById('cm_dq')?.checked;
+  const gl=dq?0:_glPoints(total,bw,sex,mod), dots=dq?0:_dotsPoints(total,bw,sex);
   const out=document.getElementById('cm_out');
-  if(out)out.innerHTML='SQ <b>'+(sq||'-')+'</b> · BP <b>'+(bp||'-')+'</b> · DL <b>'+(dl||'-')+'</b> &nbsp;|&nbsp; Total <b style="color:var(--gold)">'+(total||'-')+'</b> kg &nbsp;|&nbsp; GL <b style="color:var(--gold)">'+(gl||'-')+'</b> &nbsp;|&nbsp; DOTS <b>'+(dots||'-')+'</b>';
+  if(out)out.innerHTML='SQ <b>'+(sq||'-')+'</b> · BP <b>'+(bp||'-')+'</b> · DL <b>'+(dl||'-')+'</b> &nbsp;|&nbsp; '
+    +(dq
+      ? 'Total oficial <b style="color:var(--red)">DQ</b> <span style="color:var(--muted);font-size:11px">('+(total||0)+' kg levantados)</span>'
+      : 'Total <b style="color:var(--gold)">'+(total||'-')+'</b> kg &nbsp;|&nbsp; GL <b style="color:var(--gold)">'+(gl||'-')+'</b> &nbsp;|&nbsp; DOTS <b>'+(dots||'-')+'</b>');
 };
 window.compAthPick=function(v){
   const m=(ST.data||[]).find(a=>a.nombre===v)||(ST.data||[]).find(a=>(a.nombre||'').toLowerCase()===(v||'').toLowerCase());
@@ -5067,6 +5071,9 @@ window.openCompModal=function(codigo){
       <input id="cm_cat" placeholder="Categoría (ej: 83)" class="inp">
       <input id="cm_bw" type="number" step="0.1" placeholder="Peso corporal (kg)" oninput="compRecalc()" class="inp" style="grid-column:span 2">
       <input id="cm_pos" type="number" step="1" min="1" placeholder="Posición obtenida (1°, 2°, 3°...) — opcional" class="inp" style="grid-column:span 2">
+      <label style="grid-column:span 2;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--red);cursor:pointer;padding:8px 10px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px">
+        <input id="cm_dq" type="checkbox" onchange="compRecalc()"> Descalificado (DQ) — 3 fallos en algún lift. El total oficial queda en 0, pero se guarda lo que sí levantó.
+      </label>
     </div>
     ${lift('sq','SENTADILLA')}${lift('bp','BANCA')}${lift('dl','PESO MUERTO')}
     <div id="cm_out" style="margin:10px 0;font-size:13px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px">—</div>
@@ -5091,8 +5098,10 @@ window.saveCompResult=async function(){
   const fecha=g('cm_fecha').value||'', division=(g('cm_div').value||'').trim(), categoria=(g('cm_cat').value||'').trim();
   const modalidad=g('cm_mod').value, sexo=g('cm_sex').value, bw=parseFloat(g('cm_bw').value)||0;
   const posicion=parseInt(g('cm_pos').value,10)||null; // posición fijada a mano (prioriza sobre la calculada)
-  const sq=_bestLift('sq'),bp=_bestLift('bp'),dl=_bestLift('dl'),total=sq+bp+dl;
-  const glp=_glPoints(total,bw,sexo,modalidad), dots=_dotsPoints(total,bw,sexo);
+  const dq=g('cm_dq')?.checked||false;
+  const sq=_bestLift('sq'),bp=_bestLift('bp'),dl=_bestLift('dl'),liftedTotal=sq+bp+dl;
+  const total=dq?0:liftedTotal; // igual que livecast: el total oficial queda en 0 si DQ
+  const glp=dq?0:_glPoints(total,bw,sexo,modalidad), dots=dq?0:_dotsPoints(total,bw,sexo);
   const att=pfx=>{const arr=[];for(let i=1;i<=3;i++){const w=parseFloat(g('cm_'+pfx+i).value)||0;const v=g('cm_'+pfx+i+'v').checked;if(w)arr.push({w,r:v?'g':'n'});}return arr;};
   const slug=s=>String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,40);
   const docId=(codigo||('m_'+slug(nombre)))+'__'+slug(evento)+'__'+slug(modalidad||'cl');
@@ -5100,11 +5109,11 @@ window.saveCompResult=async function(){
     await setDoc(doc(db,'competition_results',docId),{
       codigo,rut,nombre,evento,fecha,sexo,division,categoria,modalidad,
       posicion: posicion!=null ? posicion : deleteField(),
-      resultado:{sq,bp,dl,total,bw,pesoCorporal:bw,glp,dots,intentos:{sq:att('sq'),bp:att('bp'),dl:att('dl')}},
+      resultado:{sq,bp,dl,total,bw,pesoCorporal:bw,glp,dots,status:dq?'DQ':'OK',intentos:{sq:att('sq'),bp:att('bp'),dl:att('dl')}},
       source:'manual', addedBy:(ST.user?.email||'admin'), updatedAt:serverTimestamp()
     },{merge:true});
-    await logAction('add_comp_result',docId,null,evento+' · '+total+'kg · GL '+glp,{nombre});
-    showToast('Competencia guardada: '+nombre+' · '+total+'kg');
+    await logAction('add_comp_result',docId,null,evento+' · '+(dq?'DQ ('+liftedTotal+'kg levantados)':total+'kg')+(dq?'':' · GL '+glp),{nombre});
+    showToast(dq?('Competencia guardada: '+nombre+' · DQ'):('Competencia guardada: '+nombre+' · '+total+'kg'));
     closeCompModal();
   }catch(e){showToast('Error: '+e.message,null,true);}
 };
