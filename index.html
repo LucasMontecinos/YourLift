@@ -579,11 +579,20 @@ function _applyNominas(all){
   NM.events=fbEvents;
   render();
 }
-async function loadFBNominas(){
+async function loadFBNominas(force){
   if(!fbReady)return;
   try{
+    // Caché 5min: esta colección se leía completa y sin caché en CADA carga de
+    // página (home, records, etc, no solo la pestaña Nóminas) — era el mayor
+    // driver de lecturas Firestore del sitio público. `force` (usado por el
+    // polling de la pestaña Nóminas) ignora el caché para traer datos frescos.
+    if(!force){
+      const cn=_fsCache('inscripciones',5*60*1000);
+      if(cn){_applyNominas(cn);return;}
+    }
     const snap=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'inscripciones'));
     const all=[];snap.forEach(d=>all.push({id:d.id,...d.data()}));
+    _fsSetCache('inscripciones',all);
     _applyNominas(all);
   }catch(e){console.warn('Error loading Firebase nominas',e)}
 }
@@ -1702,7 +1711,12 @@ function bk(){ST.sel=null;render()}
 function mp(){ST.p++;render()}
 function sr(t,l){if(t)ST.rt=t;if(l)ST.rl=l;render()}
 
-Promise.all([fetch("data.json").then(r=>r.json()),fetch("records.json").then(r=>r.json()).catch(()=>({})),fetch("nominas.json").then(r=>r.json()).catch(()=>({events:[]}))]).then(([d,r,n])=>{D=d;R=r;NM=n;NM._static=[...(n.events||[])];render();initFB();setInterval(()=>{if(ST.v==="nominas"){loadFBNominas()}},30000)}).catch(e=>{document.getElementById("app").innerHTML=`<div class="ld"><p style="color:var(--accent);font-weight:600">Error cargando datos</p><p style="color:var(--muted);font-size:13px">${e.message}</p></div>`});
+Promise.all([fetch("data.json").then(r=>r.json()),fetch("records.json").then(r=>r.json()).catch(()=>({})),fetch("nominas.json").then(r=>r.json()).catch(()=>({events:[]}))]).then(([d,r,n])=>{D=d;R=r;NM=n;NM._static=[...(n.events||[])];render();initFB();
+  // Refresco de Nóminas: cada 3min, SOLO si la pestaña está visible y el visitante
+  // sigue en esa vista. Antes era cada 30s sin importar visibilidad — leía la
+  // colección completa de inscripciones muy seguido en pestañas dejadas abiertas.
+  setInterval(()=>{if(ST.v==="nominas"&&document.visibilityState==="visible"){loadFBNominas(true)}},3*60*1000);
+}).catch(e=>{document.getElementById("app").innerHTML=`<div class="ld"><p style="color:var(--accent);font-weight:600">Error cargando datos</p><p style="color:var(--muted);font-size:13px">${e.message}</p></div>`});
 </script>
 <script>
 if('serviceWorker' in navigator){
