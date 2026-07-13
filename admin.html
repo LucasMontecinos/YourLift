@@ -3557,8 +3557,9 @@ function renderEditRequests(){
 // ═══════════════════════════════════════════
 // CRONOGRAMA EDITABLE (start list por campeonato, en vivo) — Fase 1
 // ═══════════════════════════════════════════
-const CRONO_FLIGHTS=['A1','A2','B1','B2','C1','C2','D1','D2','E1','E2','F1','F2'];
-const CRONO_TARIMAS=['1','2','3'];
+// Una sola tarima: flights son letras simples (A, B, C...), AM/PM es un campo
+// aparte y opcional (columna Jornada), no va pegado al código del flight.
+const CRONO_FLIGHTS=['A','B','C','D','E','F','G','H'];
 window.cronoPickEvent=function(ev){
   ST.cronoEv=ev; ST.cronoRows=null;
   if(window._cronoUnsub){try{window._cronoUnsub()}catch(e){}window._cronoUnsub=null;}
@@ -3609,11 +3610,11 @@ window.cronoClear=async function(){
   if(!confirm('Confirma de nuevo: se borrarán los '+n+' atletas del cronograma.\nEsta acción NO se puede deshacer.'))return;
   ST.cronoRows=[]; await cronoSaveDoc(); showToast('Cronograma vaciado'); render();
 };
-// Reglas: cada categoría+división JUNTA en un flight · máx 14 por flight · máx 6 flights por tarima
+// Reglas: cada categoría+división JUNTA en un flight · máx 14 por flight · una sola tarima
 window.cronoAutoDistribute=async function(){
   const rows=ST.cronoRows||[]; if(!rows.length){showToast('No hay atletas',null,true);return;}
-  if(!confirm('Auto-distribuir '+rows.length+' atletas?\nReglas: mujeres y hombres en flights separados · cada categoría+división junta · 8 a 14 por flight · Only Bench puro va aparte y puede pasar de 14 · 6 flights por tarima.'))return;
-  const MAXP=14, L3=['A','B','C'];
+  if(!confirm('Auto-distribuir '+rows.length+' atletas?\nReglas: mujeres y hombres en flights separados · cada categoría+división junta · 8 a 14 por flight · Only Bench puro va aparte y puede pasar de 14. Una sola tarima, flights A, B, C... la primera mitad queda en sesión AM y la segunda en PM.'))return;
+  const MAXP=14, LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   // H=hombre, M=mujer (como en la nómina). Si no hay sexo, se infiere de la categoría (IPF).
   const sexOf=r=>{
     const s=String(r.sexo||'').trim().toLowerCase();
@@ -3639,14 +3640,15 @@ window.cronoAutoDistribute=async function(){
     cur=cur.concat(g); curFull+=gf;
   }
   if(cur.length)flights.push(cur);
-  // Asignar: por tarima 6 flights = 3 AM (A,B,C) + 3 PM (A,B,C)
+  // Asignar: una sola tarima, flights con letra secuencial (sin repetir entre AM/PM).
+  // Primera mitad de los flights → sesión AM, segunda mitad → PM.
+  const half=Math.ceil(flights.length/2);
   flights.forEach((fl,idx)=>{
-    const tar=String(Math.floor(idx/6)+1); const pos=idx%6; const jor=pos<3?'AM':'PM'; const let_=L3[pos%3];
-    fl.forEach(r=>{r.tarima=tar;r.flight=let_;r.jornada=jor;});
+    const jor=idx<half?'AM':'PM'; const let_=LETTERS[idx%LETTERS.length];
+    fl.forEach(r=>{r.tarima='1';r.flight=let_;r.jornada=jor;});
   });
   await cronoSaveDoc();
-  const ntar=Math.ceil(flights.length/6);
-  showToast(flights.length+' flights · '+ntar+' tarima(s) (3 AM / 3 PM c/u)'); render();
+  showToast(flights.length+' flights · '+half+' AM / '+(flights.length-half)+' PM'); render();
 };
 window.cronoLoadFromNomina=async function(){
   if(!ST.cronoEv){showToast('Elige un campeonato primero',null,true);return;}
@@ -3655,8 +3657,13 @@ window.cronoLoadFromNomina=async function(){
   const list=(ST.inscripciones||[]).filter(i=>(i.evento===evName||i.evento===ST.cronoEv)&&i.status==='approved');
   if(!list.length){showToast('No hay inscripciones aprobadas en este campeonato',null,true);return;}
   if(!confirm('Cargar '+list.length+' atletas desde la nómina (inscripciones aprobadas)?\nReemplaza el cronograma actual de este evento.\nLuego ajustas tarima/flight/jornada y handlers.'))return;
+  // OJO: NO usar solo la primera letra de i.sexo — las inscripciones guardan
+  // "Masculino"/"Femenino" (a veces "Hombre"/"Mujer"), y "Masculino"[0] es
+  // "M", igual que Mujer → todos terminaban marcados "M". Hay que reconocer
+  // ambas formas explícitamente.
+  const _sexoHM=s=>{s=String(s||'').trim().toLowerCase();return /^(hombre|masculino|m(a|á)sc)/.test(s)?'H':/^(mujer|femenino|fem)/.test(s)?'M':'';};
   ST.cronoRows=list.map(i=>({
-    nombre:i.nombre||'', rut:i.rut||'', division:i.division||'', categoria:i.categoria||'', sexo:(i.sexo||'').toString().trim().toUpperCase().slice(0,1),
+    nombre:i.nombre||'', rut:i.rut||'', division:i.division||'', categoria:i.categoria||'', sexo:_sexoHM(i.sexo),
     club:i.club||'', modalidad:i.modalidad||'', tarima:'1', flight:(i.flight||'A'), jornada:'',
     entrenador:'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
   })).sort((a,b)=>String(a.flight).localeCompare(String(b.flight))||(a.nombre||'').localeCompare(b.nombre||''));
@@ -3672,15 +3679,15 @@ function _xlsxDownload(aoa, sheetName, filename){
 window.cronoExportXlsx=function(){
   const rows=ST.cronoRows||[]; if(!rows.length){showToast('Nada que exportar',null,true);return;}
   const _jr=x=>x==='AM'?0:x==='PM'?1:2;
-  const order=rows.map((r,i)=>i).sort((a,b)=>String(rows[a].tarima).localeCompare(String(rows[b].tarima))||(_jr(rows[a].jornada)-_jr(rows[b].jornada))||String(rows[a].flight).localeCompare(String(rows[b].flight)));
-  const head=['Nombre','División','Categoría','Sexo','Club','Modalidad','Tarima','Flight','Jornada','Entrenador','Handler 1','Correo handler 1','Handler 2','Correo handler 2'];
+  const order=rows.map((r,i)=>i).sort((a,b)=>(_jr(rows[a].jornada)-_jr(rows[b].jornada))||String(rows[a].flight).localeCompare(String(rows[b].flight)));
+  const head=['Nombre','División','Categoría','Sexo','Club','Modalidad','Flight','Jornada','Entrenador','Handler 1','Correo handler 1','Handler 2','Correo handler 2'];
   const aoa=[head];
-  order.forEach(i=>{const r=rows[i];aoa.push([r.nombre||'',r.division||'',r.categoria||'',r.sexo||'',r.club||'',r.modalidad||'',r.tarima||'',r.flight||'',r.jornada||'',r.entrenador||'',(r.handler1||{}).nombre||'',(r.handler1||{}).correo||'',(r.handler2||{}).nombre||'',(r.handler2||{}).correo||'']);});
+  order.forEach(i=>{const r=rows[i];aoa.push([r.nombre||'',r.division||'',r.categoria||'',r.sexo||'',r.club||'',r.modalidad||'',r.flight||'',r.jornada||'',r.entrenador||'',(r.handler1||{}).nombre||'',(r.handler1||{}).correo||'',(r.handler2||{}).nombre||'',(r.handler2||{}).correo||'']);});
   _xlsxDownload(aoa,'Cronograma','Cronograma_'+(ST.cronoEv||'evento')+'.xlsx');
 };
 window.cronoAddRow=function(){
   ST.cronoRows=ST.cronoRows||[];
-  ST.cronoRows.push({nombre:'',division:'',categoria:'',club:'',modalidad:'',tarima:'1',flight:'A1',jornada:'1',entrenador:'',handler1:{nombre:'',correo:''},handler2:{nombre:'',correo:''}});
+  ST.cronoRows.push({nombre:'',division:'',categoria:'',club:'',modalidad:'',tarima:'1',flight:'A',jornada:'',entrenador:'',handler1:{nombre:'',correo:''},handler2:{nombre:'',correo:''}});
   cronoSaveDoc(); render();
 };
 window.cronoDelRow=function(i){ if(!confirm('Eliminar a este atleta del cronograma?'))return; ST.cronoRows.splice(i,1); cronoSaveDoc(); render(); };
@@ -3698,25 +3705,24 @@ function renderCronoEditor(){
   if(!ST.cronoEv) return h+`<div class="card" style="color:var(--muted)">Elige un campeonato para ver y editar su cronograma.</div>`;
   if(ST.cronoRows===null) return h+`<div class="card" style="color:var(--muted)">Cargando…</div>`;
   if(!ST.cronoRows.length) return h+`<div class="card" style="color:var(--muted)">Este campeonato no tiene cronograma. Usa <b>“Cargar desde nómina”</b> (inscripciones aprobadas), <b>“Importar debutantes”</b> (solo debutantes) o <b>“+ Atleta”</b>.</div>`;
-  // orden de visualización: tarima, flight
+  // orden de visualización: jornada (AM/PM), flight
   const _jr=x=>x==='AM'?0:x==='PM'?1:2;
   const order=ST.cronoRows.map((r,i)=>i).sort((a,b)=>{
     const ra=ST.cronoRows[a],rb=ST.cronoRows[b];
-    return (String(ra.tarima)).localeCompare(String(rb.tarima))||(_jr(ra.jornada)-_jr(rb.jornada))||String(ra.flight).localeCompare(String(rb.flight))||0;
+    return (_jr(ra.jornada)-_jr(rb.jornada))||String(ra.flight).localeCompare(String(rb.flight))||0;
   });
   const flOpts=(cur)=>CRONO_FLIGHTS.concat(CRONO_FLIGHTS.includes(cur)?[]:[cur].filter(Boolean)).map(f=>`<option ${f===cur?'selected':''}>${f}</option>`).join('');
-  const taOpts=(cur)=>CRONO_TARIMAS.concat(CRONO_TARIMAS.includes(String(cur))?[]:[String(cur)].filter(Boolean)).map(t=>`<option ${String(t)===String(cur)?'selected':''}>${t}</option>`).join('');
   const inp=(i,f,v,w)=>`<input value="${esc(v||'')}" onchange="cronoSet(${i},'${f}',this.value)" style="width:${w||90}px;background:transparent;border:1px solid var(--border);border-radius:5px;padding:3px 5px;color:var(--text);font-size:11px">`;
   const sSel='background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:5px;padding:3px;color:var(--text);font-size:11px';
   let _prevFk=null,_colIdx=-1;
   const rows=order.map(i=>{const r=ST.cronoRows[i];
-    const _fk=String(r.tarima)+'|'+String(r.jornada)+'|'+String(r.flight); let _first=false; if(_fk!==_prevFk){_colIdx++;_prevFk=_fk;_first=true;}
+    const _fk=String(r.jornada)+'|'+String(r.flight); let _first=false; if(_fk!==_prevFk){_colIdx++;_prevFk=_fk;_first=true;}
     const _blue=_colIdx%2===0; const _bg=_blue?'rgba(59,130,246,.12)':'rgba(196,30,58,.12)'; const _bd=_first?('border-top:3px solid '+(_blue?'rgba(59,130,246,.65)':'rgba(196,30,58,.65)')+';'):'';
     let _hdr='';
     if(_first){
       const _hbg=_blue?'rgba(59,130,246,.30)':'rgba(196,30,58,.30)';
       const _jl=(r.jornada==='AM'||r.jornada==='PM')?(' · '+r.jornada):'';
-      _hdr=`<tr><td colspan="13" style="background:${_hbg};padding:6px 10px;font-family:Oswald;font-weight:700;letter-spacing:1px;font-size:12px">Tarima ${esc(r.tarima)} · Flight ${esc(r.flight)}${_jl} <span style="margin-left:8px;font-weight:400;color:var(--muted)">marcar todo el flight:</span> <button onclick="cronoSetFlightJornada('${esc(r.tarima)}','${esc(r.flight)}','AM')" style="padding:2px 10px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:rgba(59,130,246,.25);color:var(--text);cursor:pointer;font-family:Oswald">AM</button> <button onclick="cronoSetFlightJornada('${esc(r.tarima)}','${esc(r.flight)}','PM')" style="padding:2px 10px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:rgba(196,30,58,.25);color:var(--text);cursor:pointer;font-family:Oswald">PM</button></td></tr>`;
+      _hdr=`<tr><td colspan="12" style="background:${_hbg};padding:6px 10px;font-family:Oswald;font-weight:700;letter-spacing:1px;font-size:12px">Flight ${esc(r.flight)}${_jl} <span style="margin-left:8px;font-weight:400;color:var(--muted)">marcar todo el flight:</span> <button onclick="cronoSetFlightJornada('${esc(r.tarima)}','${esc(r.flight)}','AM')" style="padding:2px 10px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:rgba(59,130,246,.25);color:var(--text);cursor:pointer;font-family:Oswald">AM</button> <button onclick="cronoSetFlightJornada('${esc(r.tarima)}','${esc(r.flight)}','PM')" style="padding:2px 10px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:rgba(196,30,58,.25);color:var(--text);cursor:pointer;font-family:Oswald">PM</button></td></tr>`;
     }
     return `${_hdr}<tr style="background:${_bg};${_bd}">
     <td>${inp(i,'nombre',r.nombre,128)}</td>
@@ -3725,7 +3731,6 @@ function renderCronoEditor(){
     <td><select onchange="cronoSet(${i},'sexo',this.value)" style="${sSel}"><option ${!r.sexo?'selected':''}></option><option ${r.sexo==='H'?'selected':''}>H</option><option ${r.sexo==='M'?'selected':''}>M</option></select></td>
     <td>${inp(i,'club',r.club,98)}</td>
     <td>${inp(i,'modalidad',r.modalidad,108)}</td>
-    <td><select onchange="cronoSet(${i},'tarima',this.value)" style="${sSel}">${taOpts(r.tarima)}</select></td>
     <td><select onchange="cronoSet(${i},'flight',this.value)" style="${sSel}">${flOpts(r.flight)}</select></td>
     <td><select onchange="cronoSet(${i},'jornada',this.value)" style="${sSel}"><option value="" ${(r.jornada!=='AM'&&r.jornada!=='PM')?'selected':''}>—</option><option ${r.jornada==='AM'?'selected':''}>AM</option><option ${r.jornada==='PM'?'selected':''}>PM</option></select></td>
     <td>${inp(i,'entrenador',r.entrenador,104)}</td>
@@ -3735,7 +3740,7 @@ function renderCronoEditor(){
   </tr>`;}).join('');
   h+=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${ST.cronoRows.length} atletas · cambiar Tarima/Flight mueve al atleta · todo se guarda al instante</div>
     <div class="card" style="padding:0;overflow-x:auto"><table class="tbl" style="white-space:nowrap">
-      <tr><th>Nombre</th><th>División</th><th>Cat.</th><th>Sexo</th><th>Club</th><th>Modalidad</th><th>Tarima</th><th>Flight</th><th>Jornada</th><th>Entrenador</th><th>Handler 1 (nombre / correo)</th><th>Handler 2 (nombre / correo)</th><th></th></tr>
+      <tr><th>Nombre</th><th>División</th><th>Cat.</th><th>Sexo</th><th>Club</th><th>Modalidad</th><th>Flight</th><th>Jornada</th><th>Entrenador</th><th>Handler 1 (nombre / correo)</th><th>Handler 2 (nombre / correo)</th><th></th></tr>
       ${rows}
     </table></div>`;
   return h;
