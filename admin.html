@@ -3685,6 +3685,51 @@ window.cronoExportXlsx=function(){
   order.forEach(i=>{const r=rows[i];aoa.push([r.nombre||'',r.division||'',r.categoria||'',r.sexo||'',r.club||'',r.modalidad||'',r.flight||'',r.jornada||'',r.entrenador||'',(r.handler1||{}).nombre||'',(r.handler1||{}).correo||'',(r.handler2||{}).nombre||'',(r.handler2||{}).correo||'']);});
   _xlsxDownload(aoa,'Cronograma','Cronograma_'+(ST.cronoEv||'evento')+'.xlsx');
 };
+// Importa un cronograma armado en Excel (mismas columnas que exporta cronoExportXlsx,
+// detectadas por nombre de encabezado — no importa el orden exacto). Reemplaza el
+// cronograma actual del evento seleccionado.
+window.cronoImportXlsx=function(){
+  if(!ST.cronoEv){showToast('Elige un campeonato primero',null,true);return;}
+  if(typeof XLSX==='undefined'){showToast('Excel no cargó (revisa internet)',null,true);return;}
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='.xlsx,.xls';
+  inp.onchange=async()=>{
+    const file=inp.files&&inp.files[0]; if(!file)return;
+    try{
+      const buf=await file.arrayBuffer();
+      const wb=XLSX.read(buf,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      if(!aoa.length){showToast('Archivo vacío',null,true);return;}
+      const headers=aoa[0].map(h=>String(h||'').trim().toLowerCase());
+      const idx=name=>headers.findIndex(h=>h.includes(name));
+      const iNombre=idx('nombre'), iDiv=idx('divisi'), iCat=idx('categor'), iSexo=idx('sexo'),
+        iClub=idx('club'), iMod=idx('modalidad'), iFlight=idx('flight'), iJor=idx('jornada'),
+        iEnt=idx('entrenador'),
+        iH1n=headers.findIndex(h=>h.includes('handler 1')&&!h.includes('correo')),
+        iH1c=headers.findIndex(h=>h.includes('correo')&&h.includes('1')),
+        iH2n=headers.findIndex(h=>h.includes('handler 2')&&!h.includes('correo')),
+        iH2c=headers.findIndex(h=>h.includes('correo')&&h.includes('2'));
+      if(iNombre<0){showToast('No encontré la columna "Nombre" en el Excel',null,true);return;}
+      const rows=aoa.slice(1).filter(r=>r[iNombre]).map(r=>({
+        nombre:String(r[iNombre]||'').trim(), division:iDiv>=0?String(r[iDiv]??'').trim():'',
+        categoria:iCat>=0?String(r[iCat]??'').trim():'', sexo:iSexo>=0?String(r[iSexo]??'').trim():'',
+        club:iClub>=0?String(r[iClub]??'').trim():'', modalidad:iMod>=0?String(r[iMod]??'').trim():'',
+        tarima:'1', flight:iFlight>=0?String(r[iFlight]??'').trim()||'A':'A',
+        jornada:iJor>=0?String(r[iJor]??'').trim():'',
+        entrenador:iEnt>=0?String(r[iEnt]??'').trim():'',
+        handler1:{nombre:iH1n>=0?String(r[iH1n]??'').trim():'',correo:iH1c>=0?String(r[iH1c]??'').trim():''},
+        handler2:{nombre:iH2n>=0?String(r[iH2n]??'').trim():'',correo:iH2c>=0?String(r[iH2c]??'').trim():''}
+      }));
+      if(!rows.length){showToast('No se encontraron filas de atletas en el Excel',null,true);return;}
+      if(!confirm('Importar '+rows.length+' atletas desde "'+file.name+'"?\nReemplaza el cronograma actual de este evento.'))return;
+      ST.cronoRows=rows;
+      await cronoSaveDoc();
+      showToast('Importados '+rows.length+' atletas desde Excel');
+    }catch(e){console.error(e);showToast('Error leyendo el Excel: '+e.message,null,true);}
+  };
+  inp.click();
+};
 window.cronoAddRow=function(){
   ST.cronoRows=ST.cronoRows||[];
   ST.cronoRows.push({nombre:'',division:'',categoria:'',club:'',modalidad:'',tarima:'1',flight:'A',jornada:'',entrenador:'',handler1:{nombre:'',correo:''},handler2:{nombre:'',correo:''}});
@@ -3700,7 +3745,7 @@ function renderCronoEditor(){
       <select onchange="cronoPickEvent(this.value)" style="background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;min-width:240px">
         <option value="">— Elegir campeonato —</option>${evOpts}
       </select>
-      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g">Cargar desde nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button><label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;margin-left:4px"><input type="checkbox" ${ST.cronoHideCoaches?'checked':''} onchange="cronoToggleCoaches(this.checked)"> Ocultar entrenador/handlers en el público</label>`:''}
+      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g">Cargar desde nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoImportXlsx()" class="btn" title="Sube un Excel con las columnas Nombre/División/Categoría/Sexo/Club/Modalidad/Flight/Jornada/Entrenador/Handlers">Importar Excel</button><button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button><label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;margin-left:4px"><input type="checkbox" ${ST.cronoHideCoaches?'checked':''} onchange="cronoToggleCoaches(this.checked)"> Ocultar entrenador/handlers en el público</label>`:''}
     </div>`;
   if(!ST.cronoEv) return h+`<div class="card" style="color:var(--muted)">Elige un campeonato para ver y editar su cronograma.</div>`;
   if(ST.cronoRows===null) return h+`<div class="card" style="color:var(--muted)">Cargando…</div>`;
