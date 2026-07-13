@@ -5731,6 +5731,8 @@ window._fotosState = window._fotosState || {
   // GIF / video de perfil TX
   gifUploading:false, gifStatus:'', gifError:'',
   gifBlend:'screen',  // 'screen' | 'normal' | 'multiply'
+  // Selección múltiple para confirmar fotos pendientes "de golpe"
+  bulkSel:{}, bulkProcessing:false, bulkProgress:'',
 };
 
 // Re-renderiza el canvas de preview aplicando el transform actual
@@ -6024,24 +6026,34 @@ function renderFotos(){
     return k && photosByRut[k];
   });
   if(pendientes.length>0){
+    const bulkCount = Object.keys(F.bulkSel||{}).filter(k=>F.bulkSel[k] && pendientes.some(a=>a.codigo===k)).length;
+    const allSelected = pendientes.length>0 && pendientes.every(a=>F.bulkSel && F.bulkSel[a.codigo]);
     h += '<div class="card" style="margin-bottom:14px;background:rgba(212,168,67,.05);border-color:rgba(212,168,67,.4)">';
-    h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap">';
     h += '<div><div style="font-size:14px;font-weight:700;color:var(--gold)">'+pendientes.length+' atleta(s) con foto pendiente de inscripción</div>';
-    h += '<div style="font-size:11px;color:var(--muted);margin-top:2px">Estas fotos las subieron los atletas al inscribirse. Procesalas y guardalas para que aparezcan en perfiles.</div></div>';
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:2px">Estas fotos las subieron los atletas al inscribirse. Tildá las que querés confirmar y usá el botón, o hacé click en una para procesarla individualmente (quitar fondo, recortar, etc).</div></div>';
+    h += '<div style="display:flex;gap:8px;align-items:center;flex-shrink:0">';
+    h += '<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer"><input type="checkbox" '+(allSelected?'checked':'')+' onchange="toggleFotoBulkSelAll(this.checked)"> Seleccionar todas</label>';
+    h += '<button onclick="confirmarFotosBulk()" '+(bulkCount===0||F.bulkProcessing?'disabled':'')+' style="padding:9px 16px;background:'+(bulkCount>0?'var(--green)':'var(--border)')+';color:#000;border:none;border-radius:6px;cursor:'+(bulkCount>0?'pointer':'default')+';font-size:12px;font-weight:700;white-space:nowrap">'+(F.bulkProcessing?(F.bulkProgress||'Confirmando...'):'✓ Confirmar seleccionadas ('+bulkCount+')')+'</button>';
     h += '</div>';
-    h += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;max-height:280px;overflow-y:auto">';
-    pendientes.slice(0,30).forEach(a=>{
+    h += '</div>';
+    h += '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">La confirmación masiva publica la foto tal cual la mandó el atleta (sin quitar el fondo). Para procesar con fondo blanco IPF, hacelo una por una haciendo click en la tarjeta.</div>';
+    h += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;max-height:400px;overflow-y:auto">';
+    pendientes.forEach(a=>{
       const k = norm(a.rut);
       const photoUrl = photosByRut[k].url;
-      h += '<div onclick="seleccionarAtletaFoto(\''+escapeJsAttr(a.codigo)+'\')" style="background:var(--bg);padding:8px;border-radius:6px;border:1px solid var(--border);cursor:pointer;display:flex;gap:8px;align-items:center" title="Click para procesar">';
+      const checked = !!(F.bulkSel && F.bulkSel[a.codigo]);
+      h += '<div style="background:var(--bg);padding:8px;border-radius:6px;border:1px solid '+(checked?'var(--green)':'var(--border)')+';display:flex;gap:8px;align-items:center;position:relative">';
+      h += '<input type="checkbox" '+(checked?'checked':'')+' onclick="event.stopPropagation();toggleFotoBulkSel(\''+escapeJsAttr(a.codigo)+'\')" style="flex-shrink:0;width:16px;height:16px;cursor:pointer">';
+      h += '<div onclick="seleccionarAtletaFoto(\''+escapeJsAttr(a.codigo)+'\')" style="flex:1;min-width:0;display:flex;gap:8px;align-items:center;cursor:pointer" title="Click para procesar individualmente">';
       h += '<img src="'+escapeHtml(photoUrl)+'" style="width:36px;height:48px;object-fit:cover;border-radius:3px;flex-shrink:0">';
       h += '<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escapeHtml(a.nombre||'')+'</div>';
       h += '<div style="font-size:9px;color:var(--muted)">'+escapeHtml(a.rut||'')+'</div>';
       if(a._isPending) h += '<div style="font-size:9px;color:var(--gold);font-weight:700;margin-top:2px">★ DEBUT</div>';
       h += '</div>';
       h += '</div>';
+      h += '</div>';
     });
-    if(pendientes.length>30) h += '<div style="grid-column:1/-1;text-align:center;font-size:11px;color:var(--muted);padding:8px">y '+(pendientes.length-30)+' más...</div>';
     h += '</div></div>';
   }
 
@@ -6383,6 +6395,80 @@ window.seleccionarAtletaFoto = function(codigo){
   };
   // Detectar foto pendiente de la inscripcion
   window._fotosState.pendingPhotoUrl = _findInscriptionPhotoByRut(a.rut);
+  render();
+};
+
+// ── Selección múltiple: confirmar varias fotos pendientes de golpe ──
+// Publica la foto TAL CUAL la mandó el atleta (sin quitar fondo) — el
+// mismo resultado que "Importar tal cual (con fondo)" pero sin re-subir
+// el archivo a Storage: referencia directo la URL ya subida en la
+// inscripción, así que es instantáneo y no depende de CORS/canvas.
+window.toggleFotoBulkSel = function(codigo){
+  const F = window._fotosState;
+  F.bulkSel = F.bulkSel || {};
+  if(F.bulkSel[codigo]) delete F.bulkSel[codigo];
+  else F.bulkSel[codigo] = true;
+  render();
+};
+window.toggleFotoBulkSelAll = function(checkAll){
+  const F = window._fotosState;
+  const all = ST.data || [];
+  const norm = (s)=>String(s||'').replace(/[^0-9kK]/g,'').toLowerCase();
+  const photosByRut = {};
+  Object.entries(ST.inscripcionesPrivate||{}).forEach(([docId, priv])=>{
+    if(!priv?.carnetPhotoURL) return;
+    const rutKey = priv.rut || (docId.includes('_') ? docId.split('_').slice(1).join('_') : '');
+    const k = norm(rutKey);
+    if(k) photosByRut[k] = true;
+  });
+  const pendientes = all.filter(a=>{
+    if(a.foto_url) return false;
+    const fotoDoc = (ST.fotosByCodigo||{})[a.codigo];
+    if(fotoDoc && fotoDoc.status === 'rejected') return false;
+    return norm(a.rut) && photosByRut[norm(a.rut)];
+  });
+  F.bulkSel = {};
+  if(checkAll) pendientes.forEach(a=>{ F.bulkSel[a.codigo] = true; });
+  render();
+};
+window.confirmarFotosBulk = async function(){
+  const F = window._fotosState;
+  const codigos = Object.keys(F.bulkSel||{}).filter(k=>F.bulkSel[k]);
+  if(!codigos.length) return;
+  if(!confirm('¿Confirmar '+codigos.length+' foto(s) tal cual las mandaron los atletas (sin quitar fondo)?\n\nSe publican al instante en sus perfiles.')) return;
+  F.bulkProcessing = true;
+  let done=0, errors=0;
+  render();
+  for(const codigo of codigos){
+    F.bulkProgress = 'Confirmando '+(done+errors+1)+'/'+codigos.length+'...';
+    render();
+    const a = (ST.data||[]).find(x=>x.codigo===codigo);
+    if(!a){ errors++; continue; }
+    const url = _findInscriptionPhotoByRut(a.rut);
+    if(!url){ errors++; continue; }
+    try{
+      const docRef = doc(db, 'atleta_fotos', codigo);
+      await setDoc(docRef, {
+        codigo, rut: a.rut||'', nombre: a.nombre||'',
+        foto_url: url, status: 'approved',
+        approved_by: ST.user?.email || 'admin',
+        source: 'bulk_import_inscripcion',
+        updated: Date.now()
+      }, {merge:true});
+      if(!ST.fotosByCodigo) ST.fotosByCodigo = {};
+      ST.fotosByCodigo[codigo] = {codigo, foto_url: url, status:'approved'};
+      a.foto_url = url;
+      delete F.bulkSel[codigo];
+      done++;
+    }catch(e){
+      console.error('[Fotos] bulk confirm error:', codigo, e);
+      errors++;
+    }
+  }
+  F.bulkProcessing = false;
+  F.bulkProgress = '';
+  try{ await logAction('bulk_confirm_fotos','atleta_fotos',null,done+' confirmadas, '+errors+' errores'); }catch(_){}
+  showToast(errors>0 ? ('✓ '+done+' confirmadas — '+errors+' con error') : ('✓ '+done+' fotos confirmadas'));
   render();
 };
 
