@@ -1624,8 +1624,9 @@ async function submitForm() {
       // Subir archivos — comprime imágenes a WebP, PDFs se suben tal cual
       async function uploadOne(file, name) {
         const compressed = await compressImage(file);
-        const isWebP = compressed !== file && file.type.startsWith('image/');
-        const r = window.FB.ref(storage, `athlete_files/${rutClean}/${name}_${ts}${isWebP?'.webp':''}`);
+        const MIME_EXT = {'image/jpeg':'jpg','image/jpg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','application/pdf':'pdf'};
+        const ext = MIME_EXT[compressed.type] || (String(file.name||'').match(/\.([a-zA-Z0-9]+)$/)||[])[1] || '';
+        const r = window.FB.ref(storage, `athlete_files/${rutClean}/${name}_${ts}${ext?'.'+ext:''}`);
         console.log('[upload]', name, 'starting...', compressed.size, 'bytes', compressed.type);
         const snap = await window.FB.uploadBytes(r, compressed, {contentType: compressed.type});
         console.log('[upload]', name, 'uploaded OK, getting URL...');

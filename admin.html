@@ -1295,7 +1295,9 @@ window.replaceInsDocFile = function(sid, docKey){
     try{
       const storage=getStorage(app);
       const ts=Date.now();
-      const sref=storageRef(storage,`athlete_files/${rutClean}/${map.path}_${ts}`);
+      const MIME_EXT={'image/jpeg':'jpg','image/jpg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','application/pdf':'pdf'};
+      const ext=MIME_EXT[file.type]||(file.name.match(/\.([a-zA-Z0-9]+)$/)||[])[1]||'';
+      const sref=storageRef(storage,`athlete_files/${rutClean}/${map.path}_${ts}${ext?'.'+ext:''}`);
       await uploadBytes(sref,file,{contentType:file.type||'application/octet-stream'});
       const url=await getDownloadURL(sref);
       // Actualizar AMBOS: campo legacy y el mapa docs (nuevo sistema)
