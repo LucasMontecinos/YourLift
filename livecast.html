@@ -1682,7 +1682,7 @@ function showChangeExpiredAlert(name,lift,rnd){
 }
 
 let mainTI=null;
-function startTimer(){DATA.timerOn=true;syncToFB();mainTI=setInterval(()=>{DATA.timer--;const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}const txp=document.getElementById('txTimerPanel');if(txp){txp.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');txp.style.color=DATA.timer<=10?'#ef4444':DATA.timer<=30?'#f59e0b':'#ffffff'}syncTimerOnlyToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}},1000)}
+function startTimer(){DATA.timerOn=true;syncToFB();mainTI=setInterval(()=>{DATA.timer--;const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}const txp=document.getElementById('txTimerPanel');if(txp){txp.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');txp.style.color=DATA.timer<=10?'#ef4444':DATA.timer<=30?'#f59e0b':'#ffffff'}const pit=document.getElementById('pantIntentosTimer');if(pit){pit.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');pit.style.color=DATA.timerOn&&DATA.timer<=10?'#ef4444':DATA.timerOn&&DATA.timer<=30?'#f59e0b':'#22c55e'}syncTimerOnlyToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}},1000)}
 function pauseTimer(){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}
 function resetTimer(){DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);mainTI=null;const el=document.getElementById('mainTimer');if(el){el.style.color='var(--green)';el.textContent='1:00';el.style.animation='none'}syncToFB()}
 function advanceLift(){const li=LIFTS.indexOf(DATA.lift);if(DATA.round<2)DATA.round++;else if(li<2){DATA.lift=LIFTS[li+1];DATA.round=0}else go('results');saveNow();R()}
@@ -2909,9 +2909,8 @@ function renderObsTx(){
     {id:'tablaactual',icon:'📋',title:'Tabla actual (corner)',desc:'Ranking de la categoría del lifter en pantalla, esquina inferior derecha. Entra deslizando desde abajo, queda fijo. El levantador actual se resalta y muestra una flecha de proyección: posición actual → posición que tendría si el intento es válido (ej. 2→1 si se mueve al primer lugar). Activá/desactivá con el botón "Tabla actual" en Control TX o tecla A.',obsBg:'Transparente (overlay sobre cámara). Solo ocupa el cuadrante inferior derecho.',size:'1920×1080 (overlay)'},
     {id:'lbauto',icon:'🔁',title:'Tabla de clasificación (AUTO)',desc:'Igual al leaderboard fijo, pero APARECE SOLO al detectar fin de ronda (cuando cambia lift/round/flight). Queda 10s en pantalla y se va. Ideal como overlay siempre activo en una escena de cámara.',obsBg:'Transparente (overlay sobre cámara).',size:'1920×1080 (overlay fullscreen)'},
     {id:'slam',icon:'⚡',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activá una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcás ✓/✗ en Control en Vivo. Volvé a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
-    {id:'timer',icon:'⏱',title:'Timer independiente',desc:'Reloj 1:00 → 0:00 en grande. Verde/ámbar/rojo según se acerca a 0. Pulsa cuando quedan ≤10s. Sincronizado con el timer del operador.',obsBg:'Transparente. Posicionalo donde quieras (esquina, banner, etc).',size:'1920×1080 (autoescala)'},
     {id:'lights',icon:'💡',title:'Luces de jueces',desc:'3 círculos para izq / central / der. Se prenden blanco (good) o rojo (no lift) cuando los jueces votan en su panel. Ideal arriba de la cámara o en pantalla aparte.',obsBg:'Transparente. Funciona solo si activás "Modo Jueces" en Control en Vivo.',size:'1920×1080 (autoescala)'},
-    {id:'ceremony',icon:'🎭',title:'Ceremonia (TODO-EN-UNO automático)',desc:'Widget orquestador. Detecta nuevo levantador → PROFILE fullscreen 5s → SCOREBOARD bottom-left + TIMER top-right (30s) → SLAM top-left flash al marcar resultado → IDLE hasta el próximo. Sin tabla de clasificación: ese ciclo lo manejás aparte con el widget Leaderboard fijo.',obsBg:'Mixto: fullscreen opaco durante PROFILE, transparente sobre cámara durante SCOREBOARD/IDLE. Una sola escena con cámara de fondo + este browser source encima.',size:'1920×1080'},
+    {id:'ceremony',icon:'🎭',title:'Ceremonia (TODO-EN-UNO automático)',desc:'Widget orquestador. Detecta nuevo levantador → PROFILE fullscreen 5s → SCOREBOARD bottom-left (30s) → SLAM top-left flash al marcar resultado → IDLE hasta el próximo. Sin tabla de clasificación: ese ciclo lo manejás aparte con el widget Leaderboard fijo. (El tiempo para dar el intento ya no se muestra acá — es privado, solo lo ve el juez en Control en Vivo.)',obsBg:'Mixto: fullscreen opaco durante PROFILE, transparente sobre cámara durante SCOREBOARD/IDLE. Una sola escena con cámara de fondo + este browser source encima.',size:'1920×1080'},
     {id:'director',icon:'🎮',title:'Director (control 100% MANUAL)',desc:'NO se activa solo. Lee comandos desde Firestore (livecast_director/current) que pusheás vos desde la sidebar "🎮 Control TX". Cada componente (perfil, marcador, tabla, timer, slam) se muestra/esconde con un botón. Ideal si querés controlar todo a mano sin tocar OBS.',obsBg:'Mixto. Una sola escena con cámara de fondo + este browser source encima. Vos elegís qué se ve y por cuánto desde el panel Control TX.',size:'1920×1080'},
   ];
   let h='<div class="fade"><h2 class="os" style="font-size:22px;letter-spacing:1px;margin-bottom:6px">🎬 WIDGETS PARA OBS</h2>';
@@ -3245,13 +3244,12 @@ function _renderTxCerRecordBadge(d){
     +'</div>'
   +'</div>';
 }
+// Corner del tiempo para dar el próximo intento, usado en los widgets Ceremony y Director
+// (ambos públicos vía OBS). DESACTIVADO a pedido: ese tiempo ahora es privado, solo lo ve
+// el juez/operador en Control en Vivo. Se deja la función devolviendo vacío para no romper
+// las llamadas existentes (Ceremony / Director siguen funcionando, solo sin este corner).
 function _renderTxCerTimerCorner(scale){
-  const t=Math.max(0,DATA.timer||0);
-  const txt=String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');
-  const color=DATA.timerOn&&t<=10?'#ef4444':DATA.timerOn&&t<=30?'#f59e0b':'#fff';
-  const s=scale||1;
-  const tx=s!==1?'transform:scale('+s+');transform-origin:top right;':'';
-  return '<div id="cerTimer" style="position:fixed;top:24px;right:24px;font-family:Oswald,sans-serif;font-size:clamp(48px,5vw,72px);font-weight:900;color:'+color+';letter-spacing:3px;text-shadow:0 4px 20px rgba(0,0,0,.85);background:rgba(10,22,40,.6);padding:8px 22px;border-radius:10px;border:2px solid rgba(212,168,67,.4);-webkit-text-stroke:1px rgba(0,0,0,.35);'+tx+'">'+txt+'</div>';
+  return '';
 }
 // IPF-style row animation: rows appear/disappear one by one
 // rows: 0=header, 1=name, 2=attempts
@@ -3989,16 +3987,12 @@ function renderTxSlam(){
 }
 
 // ─── TIMER (1:00 → 0:00 standalone) ────────────────────────────
+// Widget "Timer independiente" (?tx=timer) DESACTIVADO a pedido: el tiempo para dar el
+// próximo intento ahora es privado, solo lo ve el juez/operador en Control en Vivo. Se
+// deja la función devolviendo vacío (en vez de borrar el widget) para no romper escenas
+// de OBS que ya tengan esta fuente agregada — simplemente queda transparente/sin contenido.
 function renderTxTimer(){
-  const t=Math.max(0,DATA.timer||0);
-  const m=Math.floor(t/60),s=t%60;
-  const txt=m+':'+(s<10?'0':'')+s;
-  const low=t<=10;
-  const color=low?'#ef4444':(t<=20?'#f59e0b':'#22c55e');
-  const pulse=low&&DATA.timerOn?'animation:txTimerPulse .55s ease-in-out infinite;':'';
-  return '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center">'
-    +'<div style="font-family:Oswald,sans-serif;font-size:clamp(120px,18vw,280px);font-weight:900;color:'+color+';text-shadow:0 0 40px '+color+'88,0 8px 30px rgba(0,0,0,.85);letter-spacing:6px;-webkit-text-stroke:2px rgba(0,0,0,.35);'+pulse+'">'+txt+'</div>'
-    +'</div>';
+  return '';
 }
 
 // ─── LIGHTS (3 luces de jueces) ────────────────────────────────
@@ -4288,7 +4282,7 @@ function renderScreenControl(){
   const jornadaUrl=base+'livecast.html?tx=jornada&evento='+enc;
   let h='<div style="max-width:920px">';
   h+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px">';
-  h+='<div><h2 class="os" style="font-size:22px;letter-spacing:1px">🖥 PANTALLA DE TARIMA</h2><p style="color:var(--muted);font-size:12px">Control independiente del Control TX. Alterná entre el perfil del atleta y la tabla de la jornada. Se actualiza en vivo en la pantalla.</p></div>';
+  h+='<div><h2 class="os" style="font-size:22px;letter-spacing:1px">🖥 PANTALLA DE TARIMA</h2><p style="color:var(--muted);font-size:12px">Control independiente del Control TX. Alterná entre el perfil del atleta, la barra con discos (estilo LiftingCast) y la tabla de la jornada. Se actualiza en vivo en la pantalla. Pensada para un monitor en el lugar de la competencia — no se transmite al stream online.</p></div>';
   h+='</div>';
 
   // URL de la pantalla
@@ -4306,6 +4300,7 @@ function renderScreenControl(){
   h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:12px">QUÉ MOSTRAR EN LA PANTALLA</div>';
   h+='<div style="display:flex;gap:12px;flex-wrap:wrap">';
   h+=mb('profile','PERFIL ATLETA','👤','#3b82f6');
+  h+=mb('intentos','PANTALLA DE INTENTOS','🏋️','#22c55e');
   h+=mb('jornada','TABLA JORNADA','📊','#D4A843');
   h+=mb('off','APAGAR','⬛','#ef4444');
   h+='</div></div>';
@@ -4394,6 +4389,12 @@ function renderTxScreen(c){
     const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
     document.body.classList.add('tx-opaque');
     c.innerHTML=cur?renderTxProfile(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>';
+    return;
+  }
+  if(st.mode==='intentos'){
+    const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
+    document.body.classList.add('tx-opaque');
+    c.innerHTML=cur?renderScreenIntentos(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>';
     return;
   }
   // jornada (default)
@@ -4733,7 +4734,9 @@ function renderTxBarbell(cur,lifterChanged){
   const weight=att?.w||0;
   if(!weight)return'';
   const isMale=cur.sex==='Hombre'||cur.sex==='M'||cur.sex==='Masculino';
-  const barW=isMale?20:15;
+  const barKg=isMale?20:15;
+  const collarsKg=5; // 2 collares × 2.5kg — se muestran aparte de los discos, pero SÍ pesan
+  const barW=barKg+collarsKg; // 25kg (H) / 20kg (M) — "Bar & Cols" fijo antes de los discos
   const sideKg=Math.max(0,(weight-barW)/2);
   // Plate greedy algorithm
   const PLATE_SIZES=[25,20,15,10,5,2.5,1.25,0.5,0.25];
@@ -4806,19 +4809,115 @@ function renderTxBarbell(cur,lifterChanged){
   });
   const bbSvg=`<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:${VH}px;display:block">${s.join('')}</svg>`;
   const anim=lifterChanged?'animation:txSlideInBottom .7s cubic-bezier(.2,.8,.2,1) both':'';
+  const rackH=DATA.lift==='sq'?cur.rackSQ:DATA.lift==='bp'?cur.rackBP:'';
+  const sexLbl=isMale?'HOMBRES':'MUJERES';
   return`<div style="position:fixed;bottom:0;left:0;right:0;${anim};background:linear-gradient(180deg,rgba(10,22,40,0) 0%,rgba(10,22,40,.9) 16%,rgba(10,22,40,.97) 38%,rgba(10,22,40,1) 100%);padding:22px 70px 28px">
     <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px">
-      <div style="font-family:Oswald;font-size:15px;letter-spacing:3px;color:rgba(212,225,245,.5)">${liftName} <span style="opacity:.7">·</span> ${roundLabel}</div>
+      <div style="font-family:Oswald;font-size:15px;letter-spacing:3px;color:rgba(212,225,245,.5)">${liftName} <span style="opacity:.7">·</span> ${roundLabel}${rackH?` <span style="opacity:.7">·</span> RACK ${rackH}`:''}</div>
       <div style="font-family:Oswald;font-size:44px;font-weight:700;color:#fff;line-height:1;letter-spacing:1px">${weight}<span style="font-size:22px;color:rgba(212,225,245,.55);margin-left:6px">KG</span><span style="font-size:16px;color:rgba(212,225,245,.3);margin-left:14px">/ ${weightLbs} LBS</span></div>
     </div>
     <div>${bbSvg}</div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
       <div>
         <div style="font-family:Oswald;font-size:34px;font-weight:700;letter-spacing:1px;color:#fff;line-height:1">${cur.name||''}</div>
-        <div style="font-family:Oswald;font-size:12px;letter-spacing:2.5px;color:rgba(212,225,245,.45);margin-top:5px">${[cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>
+        <div style="font-family:Oswald;font-size:12px;letter-spacing:2.5px;color:rgba(212,225,245,.45);margin-top:5px">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>
       </div>
       ${posHtml}
     </div>
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// PANTALLA DE INTENTOS — modo de la "Pantalla de Tarima" (?tx=screen),
+// pensada para un monitor/TV en el lugar de la competencia (junto a la
+// tarima), calcada de la vista de barra con discos de LiftingCast:
+// peso grande, barra con discos IPF a color, altura de rack, nombre,
+// sexo/club/categoría, pronóstico de posición y el reloj de 1:00 para
+// dar el intento. A diferencia de los widgets de OBS/transmisión, esta
+// pantalla NO se transmite al stream — es solo para quienes están en
+// el lugar (jueces, atletas, público presencial), así que el reloj
+// tiene sentido acá aunque ya no sea público en la transmisión online.
+// ════════════════════════════════════════════════════════════════
+function renderScreenIntentos(cur){
+  const att=cur.att[DATA.lift][DATA.round];
+  const weight=att?.w||0;
+  const isMale=cur.sex==='Hombre'||cur.sex==='M'||cur.sex==='Masculino';
+  const barKg=isMale?20:15;
+  const collarsKg=5; // 2 collares × 2.5kg
+  const barW=barKg+collarsKg;
+  const sideKg=Math.max(0,(weight-barW)/2);
+  const PLATE_SIZES=[25,20,15,10,5,2.5,1.25,0.5,0.25];
+  const plates=[];
+  let rem=Math.round(sideKg*100)/100;
+  for(const p of PLATE_SIZES){while(rem>=p-0.001){plates.push(p);rem=Math.round((rem-p)*100)/100;}}
+  function pp(kg){
+    if(kg>=25) return{h:150,w:40,fill:'#B91C1C',stroke:'#7F1D1D'};
+    if(kg>=20) return{h:136,w:36,fill:'#1E40AF',stroke:'#1E3A8A'};
+    if(kg>=15) return{h:122,w:33,fill:'#B45309',stroke:'#78350F'};
+    if(kg>=10) return{h:106,w:30,fill:'#15803D',stroke:'#14532D'};
+    if(kg>=5)  return{h:84, w:26,fill:'#D1D5DB',stroke:'#9CA3AF'};
+    if(kg>=2.5)return{h:64, w:22,fill:'#EF4444',stroke:'#991B1B'};
+    if(kg>=1.25)return{h:46, w:18,fill:'#9CA3AF',stroke:'#6B7280'};
+    if(kg>=0.5) return{h:34, w:15,fill:'#6B7280',stroke:'#374151'};
+                return{h:26, w:12,fill:'#4B5563',stroke:'#1F2937'};
+  }
+  const VW=1700,VH=240,cy=VH/2;
+  const shaftHalf=180,shaftCX=VW/2,shaftThick=16,sleeveThick=26,collarH=48,collarW=28;
+  const barL=20,barR=VW-20;
+  const rightColX=shaftCX+shaftHalf;
+  const leftColX=shaftCX-shaftHalf-collarW;
+  let s=[];
+  s.push(`<rect x="${barL+10}" y="${cy-sleeveThick/2}" width="${leftColX-barL-10}" height="${sleeveThick}" fill="#71717A" rx="3"/>`);
+  s.push(`<rect x="${rightColX+collarW}" y="${cy-sleeveThick/2}" width="${barR-10-(rightColX+collarW)}" height="${sleeveThick}" fill="#71717A" rx="3"/>`);
+  s.push(`<rect x="${shaftCX-shaftHalf}" y="${cy-shaftThick/2}" width="${shaftHalf*2}" height="${shaftThick}" fill="#D4D4D8" rx="3"/>`);
+  for(let xi=shaftCX-shaftHalf+18;xi<shaftCX+shaftHalf-12;xi+=20)s.push(`<line x1="${xi}" y1="${cy-shaftThick/2-2}" x2="${xi}" y2="${cy+shaftThick/2+2}" stroke="#A1A1AA" stroke-width="2" opacity="0.5"/>`);
+  s.push(`<rect x="${barL}" y="${cy-collarH/2}" width="14" height="${collarH}" fill="#27272A" rx="3"/>`);
+  s.push(`<rect x="${barR-14}" y="${cy-collarH/2}" width="14" height="${collarH}" fill="#27272A" rx="3"/>`);
+  s.push(`<rect x="${leftColX}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="3"/>`);
+  s.push(`<rect x="${rightColX}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="3"/>`);
+  let rxR=rightColX+collarW+3,rxL=leftColX-3;
+  plates.forEach(kg=>{
+    const p=pp(kg);const py=cy-p.h/2;
+    s.push(`<rect x="${rxR}" y="${py}" width="${p.w}" height="${p.h}" fill="${p.fill}" rx="3" stroke="${p.stroke}" stroke-width="2"/>`);
+    s.push(`<rect x="${rxR+2}" y="${py+3}" width="4" height="${p.h-6}" fill="rgba(255,255,255,0.2)" rx="1"/>`);
+    s.push(`<rect x="${rxL-p.w}" y="${py}" width="${p.w}" height="${p.h}" fill="${p.fill}" rx="3" stroke="${p.stroke}" stroke-width="2"/>`);
+    s.push(`<rect x="${rxL-6}" y="${py+3}" width="4" height="${p.h-6}" fill="rgba(255,255,255,0.2)" rx="1"/>`);
+    rxR+=p.w+2;rxL-=p.w+2;
+  });
+  const bbSvg=`<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:1100px;display:block;margin:0 auto">${s.join('')}</svg>`;
+  // Pronóstico de posición (idéntico criterio al del widget de OBS)
+  const peers=DATA.athletes.filter(a=>a.sex===cur.sex&&a.cat===cur.cat&&a.div===cur.div&&a.mod===cur.mod);
+  const curGL=calcGL(totalOf(cur),cur.bw,cur.sex,cur.mod);
+  const hypBest=Math.max(bestOf(cur,DATA.lift),weight);
+  const sqH=DATA.lift==='sq'?hypBest:bestOf(cur,'sq');
+  const bpH=DATA.lift==='bp'?hypBest:bestOf(cur,'bp');
+  const dlH=DATA.lift==='dl'?hypBest:bestOf(cur,'dl');
+  const hypTotal=(sqH&&bpH&&dlH)?sqH+bpH+dlH:0;
+  const hypGL=hypTotal>0?calcGL(hypTotal,cur.bw,cur.sex,cur.mod):0;
+  const othersGL=peers.filter(a=>a.id!==cur.id).map(a=>calcGL(totalOf(a),a.bw,a.sex,a.mod)).filter(g=>g>0).sort((a,b)=>b-a);
+  const curRank=curGL>0?othersGL.filter(g=>g>curGL).length+1:null;
+  const newRank=hypGL>0?othersGL.filter(g=>g>hypGL).length+1:null;
+  let posTxt='';
+  if(newRank!==null){
+    if(curRank!==null&&curRank!==newRank)posTxt=`Si es válido pasará del <b>${curRank}°</b> al <b>${newRank}° lugar</b>`;
+    else if(curRank!==null)posTxt=`Mantiene el <b>${newRank}° lugar</b> si es válido`;
+    else posTxt=`Si es válido: <b>${newRank}° lugar</b>`;
+  }
+  const liftName={sq:'SENTADILLA',bp:'PRESS DE BANCA',dl:'PESO MUERTO'}[DATA.lift]||DATA.lift.toUpperCase();
+  const roundLabel=['1er INTENTO','2do INTENTO','3er INTENTO'][DATA.round]||`INTENTO ${DATA.round+1}`;
+  const rackH=DATA.lift==='sq'?cur.rackSQ:DATA.lift==='bp'?cur.rackBP:'';
+  const sexLbl=isMale?'HOMBRES':'MUJERES';
+  const t=Math.max(0,DATA.timer||0);
+  const tTxt=Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
+  const tColor=DATA.timerOn&&t<=10?'#ef4444':DATA.timerOn&&t<=30?'#f59e0b':'#22c55e';
+  return `<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center" id="pantIntentosBox">
+    <div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>
+    <div style="font-family:Oswald;font-size:22px;letter-spacing:4px;color:rgba(212,225,245,.6);margin-bottom:6px">${liftName} · ${roundLabel}${rackH?` · RACK ${rackH}`:''}</div>
+    <div style="font-family:Oswald;font-size:clamp(70px,11vw,140px);font-weight:900;color:#fff;line-height:1;letter-spacing:2px;margin-bottom:18px">${weight}<span style="font-size:0.32em;color:rgba(212,225,245,.55);margin-left:10px">KG</span></div>
+    <div style="width:100%;margin-bottom:28px">${bbSvg}</div>
+    <div style="font-family:Oswald;font-size:clamp(32px,5vw,56px);font-weight:700;letter-spacing:1px;color:#fff;line-height:1.15">${cur.name||''}</div>
+    <div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:rgba(212,225,245,.5);margin-top:10px">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>
+    ${posTxt?`<div style="font-family:Oswald;font-size:22px;letter-spacing:1px;color:#D4A843;margin-top:18px">${posTxt}</div>`:''}
   </div>`;
 }
 
@@ -5695,7 +5794,8 @@ function renderDirector(){
     h+='<button class="btn '+(mdActive?'btn-r':'btn-g')+'" onclick="dirToggleMedals()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(mdActive?'⏸ DESACTIVAR':'▶ ACTIVAR')+'</button>';
     h+='</div>'+scaleSlider('medals')+'</div>';
   }
-  h+=compToggle('timer','⏱','Timer grande','Reloj 1:00 → 0:00 en la esquina superior derecha. Sincronizado con el del operador.','T','dirToggle(\'timer\')');
+  // "Timer grande" (corner de tiempo para dar el intento) se sacó del stream a pedido:
+  // ese tiempo ahora es privado, solo lo ve el juez/operador en Control en Vivo.
   // Slam — dos botones momentáneos (GOOD / NO LIFT, no toggle)
   h+='<div class="card" style="padding:14px 18px;border-left:4px solid var(--border)">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">';
@@ -6043,6 +6143,16 @@ function renderCompete(){
   if(cur){
     // Info compacta del atleta actual (sin botones grandes - los GOOD/NO LIFT estan en la tabla)
     h+='<div class="card" style="border-left:4px solid '+LIFT_C[DATA.lift]+';margin-bottom:10px;padding:10px 14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:0"><div class="os" style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+cur.name+'</div><div style="font-size:10px;color:var(--muted)">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+' \u00b7 pr\u00f3ximo: <strong style="color:'+LIFT_C[DATA.lift]+'">'+(cw||'\u2014')+'kg</strong></div></div><div style="display:flex;gap:6px;align-items:center">'+(rack?'<span style="background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:5px;font-size:10px">\uD83D\uDD27 '+rack+'</span>':'')+'<span class="flight-badge" style="background:'+(FL_C[cur.flight]||'#666')+'">'+cur.flight+'</span><span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:3px 10px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:12px">'+LIFT_S[DATA.lift]+(DATA.round+1)+'</span></div></div></div>';
+    // Reloj de 1:00 para dar el pr\u00f3ximo intento \u2014 PRIVADO: solo visible ac\u00e1, en Control en
+    // Vivo (isAdmin). No se transmite al p\u00fablico ni a OBS (el widget "Timer independiente"
+    // se desactiv\u00f3 a pedido). id="mainTimer" \u2014 lo actualiza startTimer() cada segundo.
+    {const _mt=Math.max(0,DATA.timer||0);
+     const _mtColor=_mt<=10?'var(--red)':_mt<=30?'var(--orange)':'var(--green)';
+     const _mtTxt=Math.floor(_mt/60)+':'+String(_mt%60).padStart(2,'0');
+     h+='<div class="card" style="margin-bottom:10px;padding:8px 14px;display:flex;align-items:center;justify-content:space-between">'
+       +'<span style="font-size:11px;color:var(--muted)">\u23f1 Tiempo para el pr\u00f3ximo intento <span style="opacity:.6">(solo lo ves vos ac\u00e1 \u2014 no es p\u00fablico)</span></span>'
+       +'<span id="mainTimer" class="os" style="font-size:20px;font-weight:700;color:'+_mtColor+'">'+_mtTxt+'</span>'
+     +'</div>';}
     // Modo Jueces: panel de luces. Si no, los GOOD/NO LIFT estan en cada celda de la tabla abajo.
     if(judgeMode){
       const jcSmall={white:'#f0f0f0',red:'#ef4444',yellow:'#f59e0b',blue:'#3b82f6'};
