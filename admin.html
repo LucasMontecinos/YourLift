@@ -1470,13 +1470,13 @@ window.exportInscripciones=function(){
 // LIVECAST RESET
 // ═══════════════════════════════════════════
 window.resetLivecast=async function(eventName){
-  if(!confirm(`¿Borrar TODOS los datos de LiveCast del campeonato "${eventName}"?\n\nEsto NO se puede deshacer.`))return;
+  if(!confirm(`¿Borrar TODOS los datos de YourLift del campeonato "${eventName}"?\n\nEsto NO se puede deshacer.`))return;
   if(!confirm('Última confirmación: ¿estás seguro?'))return;
   try{
     const id=eventName.replace(/[^a-zA-Z0-9]/g,'_').substring(0,60);
     await deleteDoc(doc(db,'livecast_sync',id));
     await logAction('reset_livecast',eventName,'data','deleted');
-    showToast(`LiveCast reseteado: ${eventName}`);
+    showToast(`YourLift reseteado: ${eventName}`);
     render();
   }catch(e){showToast('Error: '+e.message,null,true)}
 }
@@ -1562,7 +1562,7 @@ function render(){
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='certificados'?'active':''}" onclick="go('certificados')">Certificados</button>`:''}
       <button class="side-btn ${ST.view==='cronograma'?'active':''}" onclick="go('cronograma')">Cronograma</button>
       <div class="side-label">Sistema</div>
-      <a href="livecast.html" target="_blank" class="side-btn" style="text-decoration:none">LiveCast</a>
+      <a href="livecast.html" target="_blank" class="side-btn" style="text-decoration:none">YourLift</a>
       <button class="side-btn ${ST.view==='campeonatos'?'active':''}" onclick="go('campeonatos')">Campeonatos</button>
       <button class="side-btn ${ST.view==='exports'?'active':''}" onclick="go('exports')">Exports</button>
       <button class="side-btn ${ST.view==='audit'?'active':''}" onclick="go('audit')">Audit Log</button>
@@ -3870,18 +3870,18 @@ function renderLivecast(){
   });
   const events=[...evMap.values()];
   return `
-    <div class="h1">LiveCast — Gestión</div>
-    <p class="subtitle">Abre el LiveCast de un campeonato o resetea sus datos en vivo</p>
+    <div class="h1">YourLift — Gestión</div>
+    <p class="subtitle">Abrí YourLift para un campeonato o reseteá sus datos en vivo</p>
     <div class="card">
       <div class="h2">Campeonatos</div>
-      <p style="color:var(--muted);font-size:12px;margin-bottom:14px">Elegí el campeonato que querés abrir en LiveCast, o resetealo si terminó la competencia.</p>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:14px">Elegí el campeonato que querés abrir en YourLift, o resetealo si terminó la competencia.</p>
       ${events.length===0?'<div class="empty">Sin campeonatos</div>':events.map(ev=>{
         const safeLabel=ev.label.replace(/'/g,"\\'");
         const urlEv=encodeURIComponent(ev.id||ev.name||ev.label);
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
           <span style="flex:1;min-width:180px">${esc(ev.label)}</span>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <a href="livecast.html?evento=${urlEv}" target="_blank" class="btn btn-b" style="padding:6px 12px;font-size:11px;text-decoration:none">Abrir LiveCast</a>
+            <a href="livecast.html?evento=${urlEv}" target="_blank" class="btn btn-b" style="padding:6px 12px;font-size:11px;text-decoration:none">Abrir YourLift</a>
             <button class="btn btn-r" onclick="resetLivecast('${safeLabel}')" style="padding:6px 12px;font-size:11px">Resetear</button>
           </div>
         </div>`;
@@ -4456,8 +4456,8 @@ function renderCampeonatos(){
         <label class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.3);border-radius:8px">
           <input type="checkbox" id="ef_livecastVisible" ${(editing.livecastVisible!==false)?'checked':''} style="width:18px;height:18px;cursor:pointer">
           <div>
-            <div style="font-weight:600;color:var(--text)">Visible en LiveCast</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">Si está activo, el campeonato aparece en el selector de eventos de <b>livecast.html</b>. <b>Desactivá para ocultarlo del LiveCast</b> (ej. campeonatos ya terminados que no querés mostrar).</div>
+            <div style="font-weight:600;color:var(--text)">Visible en YourLift</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Si está activo, el campeonato aparece en el selector de eventos de <b>livecast.html</b>. <b>Desactivá para ocultarlo de YourLift</b> (ej. campeonatos ya terminados que no querés mostrar).</div>
           </div>
         </label>
         <label class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.3);border-radius:8px">
@@ -4591,9 +4591,9 @@ function renderCampeonatos(){
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center">
           <a href="inscripcion.html" target="_blank" style="font-size:10px;color:var(--blue);text-decoration:none;padding:3px 8px;border:1px solid rgba(59,130,246,.3);border-radius:4px">Formulario público</a>
           <a href="cronograma.html?evento=${encodeURIComponent(ev.id)}" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">Cronograma</a>
-          <a href="livecast.html?evento=${encodeURIComponent(ev.id)}" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">LiveCast (operador)</a>
+          <a href="livecast.html?evento=${encodeURIComponent(ev.id)}" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">YourLift (operador)</a>
           <button onclick="copyPublicLink('${ev.id}',this)" style="font-size:10px;color:var(--gold);background:transparent;text-decoration:none;padding:3px 8px;border:1px solid rgba(212,168,67,.4);border-radius:4px;cursor:pointer;font-family:inherit">Link público en vivo</button>
-          <button onclick="toggleLivecastVisible('${ev.id}',${ev.livecastVisible!==false})" style="font-size:10px;padding:3px 10px;border-radius:4px;border:1px solid ${ev.livecastVisible!==false?'rgba(34,197,94,.4)':'rgba(239,68,68,.4)'};background:${ev.livecastVisible!==false?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)'};color:${ev.livecastVisible!==false?'var(--green)':'var(--red)'};cursor:pointer;font-family:inherit;font-weight:700" title="Visible en el selector de eventos del LiveCast">${ev.livecastVisible!==false?'LiveCast: ON':'LiveCast: OFF'}</button>
+          <button onclick="toggleLivecastVisible('${ev.id}',${ev.livecastVisible!==false})" style="font-size:10px;padding:3px 10px;border-radius:4px;border:1px solid ${ev.livecastVisible!==false?'rgba(34,197,94,.4)':'rgba(239,68,68,.4)'};background:${ev.livecastVisible!==false?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)'};color:${ev.livecastVisible!==false?'var(--green)':'var(--red)'};cursor:pointer;font-family:inherit;font-weight:700" title="Visible en el selector de eventos de YourLift">${ev.livecastVisible!==false?'YourLift: ON':'YourLift: OFF'}</button>
           <button onclick="purgarDocsNomina('${ev.id}','${escapeHtml(ev.name).replace(/'/g,"\\'")}',this)" style="font-size:10px;padding:3px 10px;border-radius:4px;border:1px solid rgba(168,85,247,.4);background:rgba(168,85,247,.06);color:#c084fc;cursor:pointer;font-family:inherit;font-weight:700" title="Elimina carnet, WADA, consentimientos de Storage. Deja fotos de perfil intactas.">Purgar documentos</button>
           <button onclick="deleteEvento('${ev.id}','${escapeHtml(ev.name).replace(/'/g,"\\'")}',this)" style="font-size:10px;padding:3px 10px;border-radius:4px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.06);color:var(--red);cursor:pointer;font-family:inherit;font-weight:700;margin-left:auto" title="Eliminar campeonato">Eliminar</button>
         </div>
@@ -4761,7 +4761,7 @@ window.toggleLivecastVisible = async function(id, currentlyVisible){
   try{
     await setDoc(doc(db,'eventos',id), {livecastVisible: next, updatedAt: serverTimestamp()}, {merge:true});
     await logAction('toggle_livecast_visible', id, null, next ? 'ON' : 'OFF');
-    showToast(next ? 'Campeonato visible en LiveCast' : 'Campeonato oculto del LiveCast');
+    showToast(next ? 'Campeonato visible en YourLift' : 'Campeonato oculto de YourLift');
   }catch(e){ showToast('Error: '+e.message, null, true); }
 };
 
@@ -7386,7 +7386,7 @@ function renderMergeResults(){
     return `<div class="h1">Resultados de Competencia</div>
       <p class="subtitle">No hay competencias pendientes de procesar.</p>
       <div class="card" style="text-align:center;padding:40px;color:var(--muted)">
-        Cuando finalices una competencia desde LiveCast aparecerá aquí para procesar.
+        Cuando finalices una competencia desde YourLift aparecerá aquí para procesar.
       </div>`;
   }
 
