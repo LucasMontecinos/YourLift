@@ -190,6 +190,17 @@ if(TX_MODE){
 // ══════════════════════════════════════════════
 
 let isAdmin=false;
+// Rol del admin logueado (owner/superadmin/admin = acceso completo; transmision/juez = restringido).
+// Se completa al loguear, leyendo el campo "role" del doc admins/{uid} (ver admin.html → Gestión Admin).
+window.ADMIN_ROLE=null;
+// Páginas del panel bloqueadas para ciertos roles: transmisión no entra a Control en Vivo,
+// jueces no entran a Control TX. El resto de roles (owner/superadmin/admin) tiene acceso total.
+window._canAccess=function(page){
+  const role=window.ADMIN_ROLE;
+  if(role==='transmision'&&page==='compete')return false;
+  if(role==='juez'&&page==='director')return false;
+  return true;
+};
 // ══════════════════════════════════════════════
 // FIREBASE REAL-TIME SYNC
 // ══════════════════════════════════════════════
@@ -284,6 +295,7 @@ async function initFB(){
         fb.getDoc(fb.doc(fbDB,'admins',u.uid)).then(snap=>{
           if(snap.exists()){
             isAdmin=true;
+            window.ADMIN_ROLE=snap.data()?.role||'admin';
             // Auto-controller SOLO la primera vez (sin preferencia guardada). Si el
             // usuario eligió "Espectador" (yl_controller='0'), se respeta — así un 2º
             // PC puede ser solo lectura y espejar al controlador.
@@ -299,7 +311,7 @@ async function initFB(){
             console.log('[LiveCast] Logged in but not admin:',u.email);
           }
           R();
-        }).catch(()=>{isAdmin=true;if(localStorage.getItem('yl_controller')===null){window.IS_CONTROLLER=true;try{localStorage.setItem('yl_controller','1')}catch(e){}}R();}); // fallback: trust auth
+        }).catch(()=>{isAdmin=true;window.ADMIN_ROLE='admin';if(localStorage.getItem('yl_controller')===null){window.IS_CONTROLLER=true;try{localStorage.setItem('yl_controller','1')}catch(e){}}R();}); // fallback: trust auth
       } else {
         if(isAdmin){isAdmin=false;DATA.phase='liveView';R();}
       }
@@ -4861,11 +4873,12 @@ function renderShell(){
   h+='<div class="logo"><img src="YourLift_logo.png" style="height:28px" onerror="this.remove()"> YourLift</div><div class="event-name-side" style="font-size:11px;color:var(--muted);margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(DATA.event?.short||DATA.event?.name||'')+'</div>';
   if(isAdmin){
   h+='<div class="side-label">Gesti\u00f3n</div><button class="side-btn '+(p==='manage'?'active':'')+'" onclick="go(\'manage\')"><span class="icon">\uD83D\uDCCB</span>Atletas & Pesaje</button>';
-  h+='<div class="side-label">Competencia</div><button class="side-btn '+(p==='compete'?'active':'')+'" onclick="go(\'compete\')"><span class="icon">\uD83C\uDFCB\uFE0F</span>Control en Vivo</button>';
+  h+='<div class="side-label">Competencia</div>';
+  if(window._canAccess('compete'))h+='<button class="side-btn '+(p==='compete'?'active':'')+'" onclick="go(\'compete\')"><span class="icon">\uD83C\uDFCB\uFE0F</span>Control en Vivo</button>';
   h+='<button class="side-btn '+(p==='scoreboard'?'active':'')+'" onclick="go(\'scoreboard\')"><span class="icon">\uD83D\uDCFA</span>Scoreboard</button>';
   h+='<button class="side-btn '+(p==='transmision'?'active':'')+'" onclick="go(\'transmision\')"><span class="icon">\uD83D\uDCE1</span>Transmisi\u00f3n</button>';
   h+='<button class="side-btn '+(p==='obsTx'?'active':'')+'" onclick="go(\'obsTx\')"><span class="icon">\uD83C\uDFAC</span>Widgets OBS</button>';
-  h+='<button class="side-btn '+(p==='director'?'active':'')+'" onclick="go(\'director\')"><span class="icon">🎮</span>Control TX</button>';
+  if(window._canAccess('director'))h+='<button class="side-btn '+(p==='director'?'active':'')+'" onclick="go(\'director\')"><span class="icon">🎮</span>Control TX</button>';
   h+='<button class="side-btn '+(p==='screen'?'active':'')+'" onclick="go(\'screen\')"><span class="icon">🖥</span>Pantalla Tarima</button>';
   }
   h+='<div class="side-label">P\u00fablico</div>';
@@ -4899,6 +4912,7 @@ function renderShell(){
   h+='</div>';
   }
   h+='</div><div class="main">';
+  if((p==='compete'||p==='director')&&isAdmin&&!window._canAccess(p)){DATA.phase='manage';p='manage';}
   if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='screen'&&isAdmin)h+=renderScreenControl();else if(p==='results')h+=renderResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director'||p==='screen')){DATA.phase='liveView';h+=renderLiveView();}
   h+='</div></div>';return h;
 }
@@ -4909,13 +4923,13 @@ function sortByLot(){DATA.athletes.sort((a,b)=>a.lot-b.lot);save();R()}
 function generateLots(){
   const msg=DATA.lotsGenerated
     ? '⚠️ Los lotes YA fueron sorteados.\n\n¿Re-sortear y reemplazar todos los números actuales?\n\nLas ediciones manuales se perderán.'
-    : '¿Generar números de lote aleatorios?\n\nTanda A → 110, 111, 112…\nTanda B → 210, 211, 212…\netc.';
+    : '¿Generar números de lote aleatorios?\n\nTanda A → 100, 101, 102…\nTanda B → 200, 201, 202…\netc.';
   if(!confirm(msg))return;
-  // Shuffle within each flight, assign lot = flightIndex*100 + 10 + position
+  // Shuffle within each flight, assign lot = flightIndex*100 + position (Tanda A: 100-1XX, B: 200-2XX...)
   const flights=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort();
   flights.forEach((fl,fi)=>{
     const flightNum=fl.charCodeAt(0)-64; // A=1, B=2, C=3…
-    const base=flightNum*100+10;
+    const base=flightNum*100;
     const group=DATA.athletes.filter(a=>a.flight===fl);
     // Fisher-Yates shuffle
     for(let i=group.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[group[i]._rnd,group[j]._rnd]=[group[j]._rnd||Math.random(),group[i]._rnd||Math.random()]}
