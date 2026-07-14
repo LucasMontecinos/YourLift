@@ -6087,7 +6087,17 @@ function renderManage(){
 
 // Celda de un intento (peso + botones) para la tabla de "Todas las tandas" de Control en Vivo.
 // isCurrentCell = es el intento que se está juzgando ahora mismo (tanda+lift+round activos y atleta en tarima).
+// Tamaño de las casillas de intentos en "Todas las tandas" — ajustable por el operador
+// (útil en pantallas grandes o para tocar más fácil en touch). Persiste en localStorage.
+window._CT_CELL_SCALE=parseFloat(localStorage.getItem('yl_ct_cellscale')||'1')||1;
+window.setCtCellScale=function(v){
+  window._CT_CELL_SCALE=Math.max(0.7,Math.min(2.2,parseFloat(v)||1));
+  try{localStorage.setItem('yl_ct_cellscale',window._CT_CELL_SCALE)}catch(e){}
+  R();
+};
+window.nudgeCtCellScale=function(d){window.setCtCellScale(window._CT_CELL_SCALE+d)};
 function _attCellCompete(a,l,j,isCurrentCell){
+  const sc=window._CT_CELL_SCALE||1;
   const at=a.att[l][j];
   const c = at.r==='g'?'att-g':at.r==='n'?'att-n':at.w>0?'att-p':'att-e';
   const gActive = at.r==='g', nActive = at.r==='n';
@@ -6095,23 +6105,23 @@ function _attCellCompete(a,l,j,isCurrentCell){
   const ct = DATA.changeTimers[ctKey];
   const ctRem = (ct && !ct.expired && ct.remaining>0) ? ct.remaining : null;
   const ctExpired = ct && ct.expired;
-  let cell='<td style="padding:3px;vertical-align:top">';
+  let cell='<td style="padding:'+Math.round(3*sc)+'px;vertical-align:top">';
   if(ctRem!==null){
-    cell+='<div id="ctcell_'+ctKey+'" class="att att-p" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:14px;font-weight:700;padding:8px 4px;background:rgba(245,158,11,.15);border:2px solid var(--orange);color:var(--orange);text-align:center" title="Tiene '+ctRem+'s para declarar el peso">⏱ '+ctRem+'s</div>';
+    cell+='<div id="ctcell_'+ctKey+'" class="att att-p" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:'+Math.round(14*sc)+'px;font-weight:700;padding:'+Math.round(8*sc)+'px 4px;background:rgba(245,158,11,.15);border:2px solid var(--orange);color:var(--orange);text-align:center" title="Tiene '+ctRem+'s para declarar el peso">⏱ '+ctRem+'s</div>';
   } else if(ctExpired && !at.w){
-    cell+='<div id="ctcell_'+ctKey+'" class="att att-n" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:15px;font-weight:800;padding:8px 4px;background:rgba(239,68,68,.18);border:2px solid var(--red);color:var(--red);text-align:center;animation:pulse 1.5s ease-in-out infinite" title="Tiempo expirado — requiere aprobación del jurado">⏰❗</div>';
+    cell+='<div id="ctcell_'+ctKey+'" class="att att-n" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:'+Math.round(15*sc)+'px;font-weight:800;padding:'+Math.round(8*sc)+'px 4px;background:rgba(239,68,68,.18);border:2px solid var(--red);color:var(--red);text-align:center;animation:pulse 1.5s ease-in-out infinite" title="Tiempo expirado — requiere aprobación del jurado">⏰❗</div>';
   } else {
-    cell+='<div class="'+c+' att" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:'+(isCurrentCell?15:12)+'px;font-weight:700;padding:'+(isCurrentCell?'10px 4px':'8px 4px')+';'+(isCurrentCell?'box-shadow:inset 0 0 0 3px '+LIFT_C[l]+';':'')+'">'+(at.w||'—')+'</div>';
+    cell+='<div class="'+c+' att" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:'+Math.round((isCurrentCell?15:12)*sc)+'px;font-weight:700;padding:'+Math.round((isCurrentCell?10:8)*sc)+'px 4px;'+(isCurrentCell?'box-shadow:inset 0 0 0 3px '+LIFT_C[l]+';':'')+'">'+(at.w||'—')+'</div>';
   }
   if(isCurrentCell){
     cell+='<div style="display:flex;gap:2px;margin-top:3px">'
-      +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+l+'\','+j+',\'g\')" title="GOOD LIFT" style="flex:1;padding:7px 0;border-radius:5px;border:2px solid '+(gActive?'#5cb37f':'rgba(92,179,127,.5)')+';background:'+(gActive?'rgba(92,179,127,.45)':'rgba(92,179,127,.1)')+';color:'+(gActive?'#fff':'#5cb37f')+';font-size:14px;font-weight:800;cursor:pointer;line-height:1">✓</button>'
-      +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+l+'\','+j+',\'n\')" title="NO LIFT" style="flex:1;padding:7px 0;border-radius:5px;border:2px solid '+(nActive?'#cc6666':'rgba(204,102,102,.5)')+';background:'+(nActive?'rgba(204,102,102,.45)':'rgba(204,102,102,.1)')+';color:'+(nActive?'#fff':'#cc6666')+';font-size:14px;font-weight:800;cursor:pointer;line-height:1">✗</button>'
+      +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+l+'\','+j+',\'g\')" title="GOOD LIFT" style="flex:1;padding:'+Math.round(7*sc)+'px 0;border-radius:5px;border:2px solid '+(gActive?'#5cb37f':'rgba(92,179,127,.5)')+';background:'+(gActive?'rgba(92,179,127,.45)':'rgba(92,179,127,.1)')+';color:'+(gActive?'#fff':'#5cb37f')+';font-size:'+Math.round(14*sc)+'px;font-weight:800;cursor:pointer;line-height:1">✓</button>'
+      +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+l+'\','+j+',\'n\')" title="NO LIFT" style="flex:1;padding:'+Math.round(7*sc)+'px 0;border-radius:5px;border:2px solid '+(nActive?'#cc6666':'rgba(204,102,102,.5)')+';background:'+(nActive?'rgba(204,102,102,.45)':'rgba(204,102,102,.1)')+';color:'+(nActive?'#fff':'#cc6666')+';font-size:'+Math.round(14*sc)+'px;font-weight:800;cursor:pointer;line-height:1">✗</button>'
     +'</div>';
   } else if(at.w>0){
     cell+='<div style="display:flex;gap:2px;margin-top:3px" title="Cambiar o revocar la decisión de este intento">'
-      +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+l+'\','+j+',\'g\')" title="Cambiar a VÁLIDO (volver a tocar = revocar)" style="flex:1;padding:3px 0;border-radius:4px;border:1px solid '+(gActive?'var(--green)':'rgba(34,197,94,.35)')+';background:'+(gActive?'rgba(34,197,94,.25)':'transparent')+';color:'+(gActive?'var(--green)':'rgba(34,197,94,.6)')+';font-size:11px;font-weight:700;cursor:pointer;line-height:1">✓</button>'
-      +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+l+'\','+j+',\'n\')" title="Cambiar a NULO (volver a tocar = revocar)" style="flex:1;padding:3px 0;border-radius:4px;border:1px solid '+(nActive?'var(--red)':'rgba(239,68,68,.35)')+';background:'+(nActive?'rgba(239,68,68,.25)':'transparent')+';color:'+(nActive?'var(--red)':'rgba(239,68,68,.6)')+';font-size:11px;font-weight:700;cursor:pointer;line-height:1">✗</button>'
+      +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+l+'\','+j+',\'g\')" title="Cambiar a VÁLIDO (volver a tocar = revocar)" style="flex:1;padding:'+Math.round(3*sc)+'px 0;border-radius:4px;border:1px solid '+(gActive?'var(--green)':'rgba(34,197,94,.35)')+';background:'+(gActive?'rgba(34,197,94,.25)':'transparent')+';color:'+(gActive?'var(--green)':'rgba(34,197,94,.6)')+';font-size:'+Math.round(11*sc)+'px;font-weight:700;cursor:pointer;line-height:1">✓</button>'
+      +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+l+'\','+j+',\'n\')" title="Cambiar a NULO (volver a tocar = revocar)" style="flex:1;padding:'+Math.round(3*sc)+'px 0;border-radius:4px;border:1px solid '+(nActive?'var(--red)':'rgba(239,68,68,.35)')+';background:'+(nActive?'rgba(239,68,68,.25)':'transparent')+';color:'+(nActive?'var(--red)':'rgba(239,68,68,.6)')+';font-size:'+Math.round(11*sc)+'px;font-weight:700;cursor:pointer;line-height:1">✗</button>'
     +'</div>';
   }
   cell+='</td>';
@@ -6139,7 +6149,7 @@ function renderCompete(){
      +'<span style="font-size:11px;color:var(--muted)">⚡ Auto-rellenar intento al vencer el timer (nulo=mismo peso, válido=+2.5kg) <b style="color:'+(afon?'#3b82f6':'var(--muted)')+'">'+(afon?'ACTIVADO':'APAGADO')+'</b></span>'
      +'<button onclick="toggleChangeTimerAutofill()" style="padding:5px 14px;border-radius:6px;border:1px solid '+(afon?'#3b82f6':'var(--border)')+';background:transparent;color:'+(afon?'#3b82f6':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(afon?'APAGAR':'ACTIVAR')+'</button>'
    +'</div>';}
-  h+='<div style="display:grid;grid-template-columns:1fr 300px;gap:14px"><div>';
+  h+='<div>';
   if(cur){
     // Info compacta del atleta actual (sin botones grandes - los GOOD/NO LIFT estan en la tabla)
     h+='<div class="card" style="border-left:4px solid '+LIFT_C[DATA.lift]+';margin-bottom:10px;padding:10px 14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:0"><div class="os" style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+cur.name+'</div><div style="font-size:10px;color:var(--muted)">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+' \u00b7 pr\u00f3ximo: <strong style="color:'+LIFT_C[DATA.lift]+'">'+(cw||'\u2014')+'kg</strong></div></div><div style="display:flex;gap:6px;align-items:center">'+(rack?'<span style="background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:5px;font-size:10px">\uD83D\uDD27 '+rack+'</span>':'')+'<span class="flight-badge" style="background:'+(FL_C[cur.flight]||'#666')+'">'+cur.flight+'</span><span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:3px 10px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:12px">'+LIFT_S[DATA.lift]+(DATA.round+1)+'</span></div></div></div>';
@@ -6206,7 +6216,13 @@ function renderCompete(){
   // Permite editar openers de cualquier tanda/lift sin cambiar de pesta\u00f1a. Los botones grandes
   // GOOD/NO LIFT solo aparecen en la celda que coincide con tanda+lift+intento activos arriba.
   const allFlights = [...new Set(DATA.athletes.map(a=>a.flight))].sort();
-  h+='<div class="card"><h3 class="os" style="font-size:13px;letter-spacing:1px;margin-bottom:4px;color:var(--gold)">TODAS LAS TANDAS</h3>';
+  h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:4px"><h3 class="os" style="font-size:13px;letter-spacing:1px;color:var(--gold);margin:0">TODAS LAS TANDAS</h3>';
+  h+='<div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:var(--muted)">TAMA\u00d1O DE LAS CASILLAS</span>'
+    +'<button onclick="nudgeCtCellScale(-0.1)" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:15px;font-weight:700;cursor:pointer;line-height:1">\u2212</button>'
+    +'<span style="font-family:Oswald;font-size:12px;font-weight:700;color:var(--gold);min-width:38px;text-align:center">'+Math.round((window._CT_CELL_SCALE||1)*100)+'%</span>'
+    +'<button onclick="nudgeCtCellScale(0.1)" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:15px;font-weight:700;cursor:pointer;line-height:1">+</button>'
+    +'<button onclick="setCtCellScale(1)" style="padding:5px 10px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:6px;font-family:Oswald;font-size:10px;font-weight:700;cursor:pointer">100%</button>'
+  +'</div></div>';
   h+='<p style="font-size:10px;color:var(--muted);margin-bottom:10px">Click en cualquier casillero para editar el peso del intento. Los botones GOOD / NO LIFT grandes aparecen solo en la tanda e intento que se est\u00e1 juzgando ahora (arriba).</p>';
   if(!allFlights.length)h+='<p style="color:var(--muted);font-size:12px;text-align:center;padding:14px">Sin atletas cargados</p>';
   allFlights.forEach(fl=>{
@@ -6237,12 +6253,15 @@ function renderCompete(){
     h+='</tbody></table></div></div>';
   });
   h+='</div>';
-  h+='</div></div>';
-  // Rankings
-  h+='<div><div class="card" style="position:sticky;top:20px"><h3 class="os" style="font-size:12px;letter-spacing:1px;margin-bottom:8px;color:var(--gold)">RANKING GL</h3>';
+  h+='</div>';
+  // Ranking GL \u2014 ahora abajo, a todo el ancho (antes era una barra lateral de 300px
+  // que le quitaba ancho a "Todas las tandas").
+  h+='<div class="card"><h3 class="os" style="font-size:12px;letter-spacing:1px;margin-bottom:8px;color:var(--gold)">RANKING GL</h3>';
   if(!rk.length)h+='<p style="color:var(--muted);font-size:11px;text-align:center;padding:14px">Sin totales</p>';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:4px 14px">';
   rk.forEach((a,i)=>{h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 5px;border-bottom:1px solid rgba(30,58,95,.2)"><div style="display:flex;align-items:center;gap:6px"><span class="os" style="color:'+(i<3?'var(--gold)':'var(--muted)')+';font-weight:700;font-size:15px;width:20px">'+(i+1)+'</span><div><div style="font-weight:600;font-size:11px">'+a.name+'</div><div style="font-size:9px;color:var(--muted)">SQ '+bestOf(a,'sq')+' \u00b7 BP '+bestOf(a,'bp')+' \u00b7 DL '+bestOf(a,'dl')+'</div></div></div><div style="text-align:right"><div class="os" style="font-size:16px;font-weight:700;color:var(--gold)">'+a.gl+'</div><div style="font-size:9px;color:var(--muted)">'+a.total+'kg</div></div></div>'});
-  h+='</div></div></div></div>';return h;
+  h+='</div></div>';
+  h+='</div>';return h;
 }
 
 // Orden de divisiones (helper global)
