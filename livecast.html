@@ -853,6 +853,15 @@ window.toggleChangeTimers=function(){
   if(typeof saveNow==='function')saveNow();
   if(typeof R==='function')R();
 };
+// Auto-relleno del próximo intento al vencer el tiempo de cambio — switch
+// aparte, APAGADO por defecto, solo tiene efecto si el timer de cambio
+// (_CT_ENABLED) también está prendido. Nulo → mismo peso. Válido → +2.5kg.
+window._CT_AUTOFILL_ENABLED = localStorage.getItem('yl_ct_autofill')==='1';
+window.toggleChangeTimerAutofill=function(){
+  window._CT_AUTOFILL_ENABLED=!window._CT_AUTOFILL_ENABLED;
+  try{localStorage.setItem('yl_ct_autofill', window._CT_AUTOFILL_ENABLED?'1':'0')}catch(e){}
+  if(typeof R==='function')R();
+};
 function setResult(id,l,r,res){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;a.att[l][r].r=res;
   if(r<2){
@@ -1604,6 +1613,18 @@ setInterval(()=>{
       const parts=k.split('_');const aId=parseInt(parts[0]);const lift=parts[1];const rnd=parseInt(parts[2]);
       const a=DATA.athletes.find(x=>x.id===aId);
       showChangeExpiredAlert(a?a.name:'Atleta',lift,rnd);
+      // Auto-relleno del próximo intento al vencer el tiempo (switch aparte,
+      // apagado por defecto). "rnd" es la ronda PENDIENTE de peso (se crea
+      // el timer como id_lift_(r+1) al marcar la ronda anterior "r").
+      // Nulo → mismo peso. Válido → +2.5kg.
+      if(window._CT_AUTOFILL_ENABLED && a && rnd>=1 && rnd<=2){
+        const prev=a.att[lift][rnd-1], next=a.att[lift][rnd];
+        if(prev && prev.r && prev.w>0 && next && !next.w){
+          next.w=prev.r==='n'?prev.w:Math.round((prev.w+2.5)*2)/2;
+          changed=true;
+          showToastLC?.('⏱ '+a.name+' — '+LIFT_S[lift]+(rnd+1)+' auto-rellenado: '+next.w+'kg');
+        }
+      }
     }
   });
   if(changed)save();
@@ -5962,6 +5983,11 @@ function renderCompete(){
    h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:7px 12px;border-radius:8px;border:1px solid '+(cton?'rgba(245,158,11,.4)':'var(--border)')+';background:'+(cton?'rgba(245,158,11,.08)':'transparent')+'">'
      +'<span style="font-size:11px;color:var(--muted)">⏱ Timer de cambio (60s entre intentos) <b style="color:'+(cton?'var(--orange)':'var(--muted)')+'">'+(cton?'ACTIVADO':'APAGADO')+'</b></span>'
      +'<button onclick="toggleChangeTimers()" style="padding:5px 14px;border-radius:6px;border:1px solid '+(cton?'var(--orange)':'var(--border)')+';background:transparent;color:'+(cton?'var(--orange)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(cton?'APAGAR':'ACTIVAR')+'</button>'
+   +'</div>';
+   const afon=!!window._CT_AUTOFILL_ENABLED;
+   h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:7px 12px;border-radius:8px;border:1px solid '+(afon?'rgba(59,130,246,.4)':'var(--border)')+';background:'+(afon?'rgba(59,130,246,.08)':'transparent')+'">'
+     +'<span style="font-size:11px;color:var(--muted)">⚡ Auto-rellenar intento al vencer el timer (nulo=mismo peso, válido=+2.5kg) <b style="color:'+(afon?'#3b82f6':'var(--muted)')+'">'+(afon?'ACTIVADO':'APAGADO')+'</b></span>'
+     +'<button onclick="toggleChangeTimerAutofill()" style="padding:5px 14px;border-radius:6px;border:1px solid '+(afon?'#3b82f6':'var(--border)')+';background:transparent;color:'+(afon?'#3b82f6':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(afon?'APAGAR':'ACTIVAR')+'</button>'
    +'</div>';}
   h+='<div style="display:grid;grid-template-columns:1fr 300px;gap:14px"><div>';
   if(cur){
