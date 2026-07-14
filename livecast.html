@@ -4771,9 +4771,9 @@ function renderTxBarbell(cur,lifterChanged){
   const weight=att?.w||0;
   if(!weight)return'';
   const isMale=cur.sex==='Hombre'||cur.sex==='M'||cur.sex==='Masculino';
-  const barKg=isMale?20:15;
+  const barKg=20; // barra de 20kg para todos (según la foto de referencia de LiftingCast, incluso en Women's)
   const collarsKg=5; // 2 collares × 2.5kg — se muestran aparte de los discos, pero SÍ pesan
-  const barW=barKg+collarsKg; // 25kg (H) / 20kg (M) — "Bar & Cols" fijo antes de los discos
+  const barW=barKg+collarsKg; // 25kg fijo antes de los discos
   const sideKg=Math.max(0,(weight-barW)/2);
   // Plate greedy algorithm
   const PLATE_SIZES=[25,20,15,10,5,2.5,1.25,0.5,0.25];
@@ -4875,11 +4875,20 @@ function renderTxBarbell(cur,lifterChanged){
 // el lugar (jueces, atletas, público presencial), así que el reloj
 // tiene sentido acá aunque ya no sea público en la transmisión online.
 // ════════════════════════════════════════════════════════════════
+// Zoom de la barra con discos en Pantalla de Intentos — ajustable con clicks +/-.
+// Persiste por navegador/pantalla (cada monitor puede tener su propio tamaño).
+window._SCREEN_BB_SCALE=parseFloat(localStorage.getItem('yl_screen_bb_scale')||'1')||1;
+window.setScreenBbScale=function(v){
+  window._SCREEN_BB_SCALE=Math.max(0.6,Math.min(3,parseFloat(v)||1));
+  try{localStorage.setItem('yl_screen_bb_scale',window._SCREEN_BB_SCALE)}catch(e){}
+  R();
+};
+window.nudgeScreenBbScale=function(d){window.setScreenBbScale(window._SCREEN_BB_SCALE+d)};
 function renderScreenIntentos(cur){
   const att=cur.att[DATA.lift][DATA.round];
   const weight=att?.w||0;
   const isMale=cur.sex==='Hombre'||cur.sex==='M'||cur.sex==='Masculino';
-  const barKg=isMale?20:15;
+  const barKg=20; // barra de 20kg para todos (según la foto de referencia de LiftingCast, incluso en Women's)
   const collarsKg=5; // 2 collares × 2.5kg
   const barW=barKg+collarsKg;
   const sideKg=Math.max(0,(weight-barW)/2);
@@ -4887,41 +4896,48 @@ function renderScreenIntentos(cur){
   const plates=[];
   let rem=Math.round(sideKg*100)/100;
   for(const p of PLATE_SIZES){while(rem>=p-0.001){plates.push(p);rem=Math.round((rem-p)*100)/100;}}
+  // Props visuales por disco — grandes = rectángulo con el número; chicos (<2.5) = círculo,
+  // igual que en la referencia de LiftingCast.
   function pp(kg){
-    if(kg>=25) return{h:150,w:40,fill:'#B91C1C',stroke:'#7F1D1D'};
-    if(kg>=20) return{h:136,w:36,fill:'#1E40AF',stroke:'#1E3A8A'};
-    if(kg>=15) return{h:122,w:33,fill:'#B45309',stroke:'#78350F'};
-    if(kg>=10) return{h:106,w:30,fill:'#15803D',stroke:'#14532D'};
-    if(kg>=5)  return{h:84, w:26,fill:'#D1D5DB',stroke:'#9CA3AF'};
-    if(kg>=2.5)return{h:64, w:22,fill:'#EF4444',stroke:'#991B1B'};
-    if(kg>=1.25)return{h:46, w:18,fill:'#9CA3AF',stroke:'#6B7280'};
-    if(kg>=0.5) return{h:34, w:15,fill:'#6B7280',stroke:'#374151'};
-                return{h:26, w:12,fill:'#4B5563',stroke:'#1F2937'};
+    if(kg>=25) return{h:280,w:64,fill:'#DC2626',stroke:'#7F1D1D',round:false};
+    if(kg>=20) return{h:250,w:58,fill:'#2563EB',stroke:'#1E3A8A',round:false};
+    if(kg>=15) return{h:222,w:52,fill:'#D97706',stroke:'#78350F',round:false};
+    if(kg>=10) return{h:190,w:46,fill:'#16A34A',stroke:'#14532D',round:false};
+    if(kg>=5)  return{h:150,w:38,fill:'#E5E7EB',stroke:'#9CA3AF',round:false};
+    if(kg>=2.5)return{h:110,w:30,fill:'#EF4444',stroke:'#991B1B',round:false};
+    if(kg>=1.25)return{h:64, w:64,fill:'#9CA3AF',stroke:'#6B7280',round:true};
+    if(kg>=0.5) return{h:48, w:48,fill:'#6B7280',stroke:'#374151',round:true};
+                return{h:38, w:38,fill:'#4B5563',stroke:'#1F2937',round:true};
   }
-  const VW=1700,VH=240,cy=VH/2;
-  const shaftHalf=180,shaftCX=VW/2,shaftThick=16,sleeveThick=26,collarH=48,collarW=28;
-  const barL=20,barR=VW-20;
-  const rightColX=shaftCX+shaftHalf;
-  const leftColX=shaftCX-shaftHalf-collarW;
-  let s=[];
-  s.push(`<rect x="${barL+10}" y="${cy-sleeveThick/2}" width="${leftColX-barL-10}" height="${sleeveThick}" fill="#71717A" rx="3"/>`);
-  s.push(`<rect x="${rightColX+collarW}" y="${cy-sleeveThick/2}" width="${barR-10-(rightColX+collarW)}" height="${sleeveThick}" fill="#71717A" rx="3"/>`);
-  s.push(`<rect x="${shaftCX-shaftHalf}" y="${cy-shaftThick/2}" width="${shaftHalf*2}" height="${shaftThick}" fill="#D4D4D8" rx="3"/>`);
-  for(let xi=shaftCX-shaftHalf+18;xi<shaftCX+shaftHalf-12;xi+=20)s.push(`<line x1="${xi}" y1="${cy-shaftThick/2-2}" x2="${xi}" y2="${cy+shaftThick/2+2}" stroke="#A1A1AA" stroke-width="2" opacity="0.5"/>`);
-  s.push(`<rect x="${barL}" y="${cy-collarH/2}" width="14" height="${collarH}" fill="#27272A" rx="3"/>`);
-  s.push(`<rect x="${barR-14}" y="${cy-collarH/2}" width="14" height="${collarH}" fill="#27272A" rx="3"/>`);
-  s.push(`<rect x="${leftColX}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="3"/>`);
-  s.push(`<rect x="${rightColX}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="3"/>`);
-  let rxR=rightColX+collarW+3,rxL=leftColX-3;
+  // Solo LA MITAD de la barra (un lado): un tramo corto de eje representando el resto de
+  // la barra fuera de pantalla, el collar (con el peso fijo "barra+collares"), y los
+  // discos de mayor a menor saliendo hacia afuera — igual que la vista de LiftingCast.
+  const VH=440,cy=VH/2,shaftThick=26,collarH=90,collarW=34,stubW=90;
+  let x=20,s=[];
+  s.push(`<rect x="0" y="${cy-shaftThick/2}" width="${x+stubW}" height="${shaftThick}" fill="#71717A" rx="3"/>`);
+  x+=stubW;
+  for(let xi=20;xi<x-6;xi+=16)s.push(`<line x1="${xi}" y1="${cy-shaftThick/2-3}" x2="${xi}" y2="${cy+shaftThick/2+3}" stroke="#A1A1AA" stroke-width="2" opacity="0.5"/>`);
+  s.push(`<rect x="${x}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="4" stroke="#27272A" stroke-width="2"/>`);
+  s.push(`<text x="${x+collarW/2}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="#D4D4D8" font-family="Oswald" font-weight="700" font-size="15" transform="rotate(-90 ${x+collarW/2} ${cy})">BAR+COL ${barW}</text>`);
+  x+=collarW+6;
   plates.forEach(kg=>{
     const p=pp(kg);const py=cy-p.h/2;
-    s.push(`<rect x="${rxR}" y="${py}" width="${p.w}" height="${p.h}" fill="${p.fill}" rx="3" stroke="${p.stroke}" stroke-width="2"/>`);
-    s.push(`<rect x="${rxR+2}" y="${py+3}" width="4" height="${p.h-6}" fill="rgba(255,255,255,0.2)" rx="1"/>`);
-    s.push(`<rect x="${rxL-p.w}" y="${py}" width="${p.w}" height="${p.h}" fill="${p.fill}" rx="3" stroke="${p.stroke}" stroke-width="2"/>`);
-    s.push(`<rect x="${rxL-6}" y="${py+3}" width="4" height="${p.h-6}" fill="rgba(255,255,255,0.2)" rx="1"/>`);
-    rxR+=p.w+2;rxL-=p.w+2;
+    const label=(kg%1===0)?String(kg):String(kg);
+    if(p.round){
+      const r=p.w/2;
+      s.push(`<circle cx="${x+r}" cy="${cy}" r="${r}" fill="${p.fill}" stroke="${p.stroke}" stroke-width="3"/>`);
+      s.push(`<text x="${x+r}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="#111827" font-family="Oswald" font-weight="800" font-size="${Math.max(13,r*0.4)}">${label}</text>`);
+    } else {
+      s.push(`<rect x="${x}" y="${py}" width="${p.w}" height="${p.h}" fill="${p.fill}" rx="5" stroke="${p.stroke}" stroke-width="3"/>`);
+      s.push(`<rect x="${x+4}" y="${py+6}" width="6" height="${p.h-12}" fill="rgba(255,255,255,0.22)" rx="2"/>`);
+      const textColor=kg>=5&&kg<10?'#111827':'#fff';
+      s.push(`<text x="${x+p.w/2}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="${textColor}" font-family="Oswald" font-weight="800" font-size="${Math.min(30,p.w*0.62)}">${label}</text>`);
+    }
+    x+=p.w+8;
   });
-  const bbSvg=`<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:1100px;display:block;margin:0 auto">${s.join('')}</svg>`;
+  const VW=x+20;
+  const bbScale=window._SCREEN_BB_SCALE||1;
+  const bbSvg=`<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" style="height:${Math.round(VH*0.85*bbScale)}px;width:auto;max-width:96vw;display:block;margin:0 auto">${s.join('')}</svg>`;
   // Pronóstico de posición (idéntico criterio al del widget de OBS)
   const peers=DATA.athletes.filter(a=>a.sex===cur.sex&&a.cat===cur.cat&&a.div===cur.div&&a.mod===cur.mod);
   const curGL=calcGL(totalOf(cur),cur.bw,cur.sex,cur.mod);
@@ -4949,9 +4965,15 @@ function renderScreenIntentos(cur){
   const tColor=DATA.timerOn&&t<=10?'#ef4444':DATA.timerOn&&t<=30?'#f59e0b':'#22c55e';
   return `<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center" id="pantIntentosBox">
     <div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>
+    <div style="position:fixed;bottom:24px;right:24px;display:flex;align-items:center;gap:6px;background:rgba(10,22,40,.7);border:1px solid rgba(212,225,245,.2);border-radius:10px;padding:6px 8px">
+      <span style="font-family:Oswald;font-size:10px;color:rgba(212,225,245,.5);letter-spacing:1px;margin-right:2px">TAMAÑO BARRA</span>
+      <button onclick="nudgeScreenBbScale(-0.15)" style="width:30px;height:30px;border-radius:6px;border:1px solid rgba(212,225,245,.3);background:transparent;color:#fff;font-size:17px;font-weight:700;cursor:pointer;line-height:1">−</button>
+      <span style="font-family:Oswald;font-size:12px;font-weight:700;color:#D4A843;min-width:38px;text-align:center">${Math.round(bbScale*100)}%</span>
+      <button onclick="nudgeScreenBbScale(0.15)" style="width:30px;height:30px;border-radius:6px;border:1px solid rgba(212,225,245,.3);background:transparent;color:#fff;font-size:17px;font-weight:700;cursor:pointer;line-height:1">+</button>
+    </div>
     <div style="font-family:Oswald;font-size:22px;letter-spacing:4px;color:rgba(212,225,245,.6);margin-bottom:6px">${liftName} · ${roundLabel}${rackH?` · RACK ${rackH}`:''}</div>
-    <div style="font-family:Oswald;font-size:clamp(70px,11vw,140px);font-weight:900;color:#fff;line-height:1;letter-spacing:2px;margin-bottom:18px">${weight}<span style="font-size:0.32em;color:rgba(212,225,245,.55);margin-left:10px">KG</span></div>
-    <div style="width:100%;margin-bottom:28px">${bbSvg}</div>
+    <div style="font-family:Oswald;font-size:clamp(70px,11vw,140px);font-weight:900;color:#fff;line-height:1;letter-spacing:2px;margin-bottom:10px">${weight}<span style="font-size:0.32em;color:rgba(212,225,245,.55);margin-left:10px">KG</span></div>
+    <div style="width:100%;margin-bottom:18px;overflow-x:auto">${bbSvg}</div>
     <div style="font-family:Oswald;font-size:clamp(32px,5vw,56px);font-weight:700;letter-spacing:1px;color:#fff;line-height:1.15">${cur.name||''}</div>
     <div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:rgba(212,225,245,.5);margin-top:10px">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>
     ${posTxt?`<div style="font-family:Oswald;font-size:22px;letter-spacing:1px;color:#D4A843;margin-top:18px">${posTxt}</div>`:''}
