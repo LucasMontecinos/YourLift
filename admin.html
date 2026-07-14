@@ -3670,6 +3670,31 @@ window.cronoLoadFromNomina=async function(){
   await cronoSaveDoc();
   showToast('Cargados '+ST.cronoRows.length+' atletas desde la nómina');
 };
+// Suma a los atletas aprobados que todavía NO están en el cronograma (por
+// nombre), sin tocar a los que ya están — a diferencia de "Cargar desde
+// nómina" (que reemplaza todo), esto no pierde el trabajo de acomodar
+// flights/handlers ya hecho. Los nuevos entran en flight "A" sin jornada,
+// para ubicarlos a mano.
+window.cronoAddMissingFromNomina=async function(){
+  if(!ST.cronoEv){showToast('Elige un campeonato primero',null,true);return;}
+  const evObj=(ST.eventos||[]).find(e=>e.id===ST.cronoEv);
+  const evName=evObj?evObj.name:'';
+  const list=(ST.inscripciones||[]).filter(i=>(i.evento===evName||i.evento===ST.cronoEv)&&i.status==='approved');
+  if(!list.length){showToast('No hay inscripciones aprobadas en este campeonato',null,true);return;}
+  const _nn=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
+  const _sexoHM=s=>{s=String(s||'').trim().toLowerCase();return /^(hombre|masculino|m(a|á)sc)/.test(s)?'H':/^(mujer|femenino|fem)/.test(s)?'M':'';};
+  const yaEsta=new Set((ST.cronoRows||[]).map(r=>_nn(r.nombre)));
+  const nuevos=list.filter(i=>!yaEsta.has(_nn(i.nombre)));
+  if(!nuevos.length){showToast('No hay atletas nuevos — el cronograma ya tiene a todos los aprobados');return;}
+  if(!confirm('Agregar '+nuevos.length+' atleta(s) nuevo(s) al cronograma?\n\n'+nuevos.map(i=>'• '+i.nombre).join('\n')+'\n\nEntran en flight "A" sin jornada — los movés a mano después. No toca a los que ya están ubicados.'))return;
+  ST.cronoRows=(ST.cronoRows||[]).concat(nuevos.map(i=>({
+    nombre:i.nombre||'', rut:i.rut||'', division:i.division||'', categoria:i.categoria||'', sexo:_sexoHM(i.sexo),
+    club:i.club||'', modalidad:i.modalidad||'', tarima:'1', flight:'A', jornada:'',
+    entrenador:'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
+  })));
+  await cronoSaveDoc();
+  showToast('Agregados '+nuevos.length+' atleta(s) nuevo(s) al cronograma');
+};
 function _xlsxDownload(aoa, sheetName, filename){
   if(typeof XLSX==='undefined'){ showToast('Excel no cargó (revisa internet)',null,true); return; }
   const ws=XLSX.utils.aoa_to_sheet(aoa);
@@ -3745,7 +3770,7 @@ function renderCronoEditor(){
       <select onchange="cronoPickEvent(this.value)" style="background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;min-width:240px">
         <option value="">— Elegir campeonato —</option>${evOpts}
       </select>
-      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g">Cargar desde nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoImportXlsx()" class="btn" title="Sube un Excel con las columnas Nombre/División/Categoría/Sexo/Club/Modalidad/Flight/Jornada/Entrenador/Handlers">Importar Excel</button><button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button><label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;margin-left:4px"><input type="checkbox" ${ST.cronoHideCoaches?'checked':''} onchange="cronoToggleCoaches(this.checked)"> Ocultar entrenador/handlers en el público</label>`:''}
+      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g" title="Reemplaza TODO el cronograma actual">Cargar desde nómina</button><button onclick="cronoAddMissingFromNomina()" class="btn btn-g" title="Suma solo los aprobados que todavía no están — no toca a los ya ubicados">+ Nuevos de nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoImportXlsx()" class="btn" title="Sube un Excel con las columnas Nombre/División/Categoría/Sexo/Club/Modalidad/Flight/Jornada/Entrenador/Handlers">Importar Excel</button><button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button><label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;margin-left:4px"><input type="checkbox" ${ST.cronoHideCoaches?'checked':''} onchange="cronoToggleCoaches(this.checked)"> Ocultar entrenador/handlers en el público</label>`:''}
     </div>`;
   if(!ST.cronoEv) return h+`<div class="card" style="color:var(--muted)">Elige un campeonato para ver y editar su cronograma.</div>`;
   if(ST.cronoRows===null) return h+`<div class="card" style="color:var(--muted)">Cargando…</div>`;

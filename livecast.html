@@ -1343,9 +1343,28 @@ function confirmWeighIn(id,catKg,limit){
 }
 
 // ── REAL-TIME ATHLETE LOADING FROM FIRESTORE ────────────────
+// Trae el flight/jornada asignado en la pestaña Cronograma del admin
+// (doc Firestore cronograma/{eventId}), matcheando por nombre normalizado.
+// Es un getDoc puntual (no listener en vivo) — se llama solo cuando se
+// carga o resincroniza la nómina, no en cada cambio, para no sumar
+// lecturas de Firestore de más.
+function _nnCrono(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();}
+async function _loadCronoFlightMap(evId){
+  if(!fbReady||!window._fb||!evId)return null;
+  try{
+    const snap=await window._fb.getDoc(window._fb.doc(fbDB,'cronograma',evId));
+    if(!snap.exists())return null;
+    const rows=snap.data().rows;
+    if(!Array.isArray(rows)||!rows.length)return null;
+    const map={};
+    rows.forEach(r=>{if(r.nombre&&r.flight)map[_nnCrono(r.nombre)]={flight:r.flight,jornada:r.jornada||''};});
+    return map;
+  }catch(e){console.warn('[crono] flightMap',e.message);return null;}
+}
 function _inscToAthlete(ins, j, flightMap){
   const name=ins.nombre||'';
-  const fl=flightMap&&flightMap[name]?flightMap[name]:(ins.flight||'A');
+  const cronoEntry=flightMap&&flightMap[_nnCrono(name)];
+  const fl=cronoEntry?cronoEntry.flight:(ins.flight||'A');
   const rawMod=(ins.modalidad||'').toLowerCase();
   let mod;
   const isEq=rawMod.includes('equipado')||rawMod.includes('equipped');
@@ -1362,7 +1381,7 @@ function _inscToAthlete(ins, j, flightMap){
   return{
     id:j,lot:j+1,name,rut:ins.rut||'',sex:ins.sexo||'',
     cat:catNum,div:ins.division||'',club:ins.club==='Otro'?ins.clubOtro:ins.club||'',
-    uni:ins.universidad||'',mod,bw:0,flight:fl,rackSQ:'',rackBP:'',
+    uni:ins.universidad||'',mod,bw:0,flight:fl,jornada:cronoEntry?cronoEntry.jornada:'',rackSQ:'',rackBP:'',
     bombed:false,weighedIn:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],
          bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],
@@ -1415,7 +1434,7 @@ function _mergeFirebaseAthletes(fbAthletes){
   if(changed){save();R();}
 }
 
-function loadLiveAthletes(ev){
+async function loadLiveAthletes(ev){
   // Stop previous listener
   if(_liveUnsub){_liveUnsub();_liveUnsub=null;}
   // Find event ID from name
@@ -1424,10 +1443,10 @@ function loadLiveAthletes(ev){
     console.warn('[LiveCast] No Firestore ID for event:',ev.name);
     return;
   }
-  // Load saved flight assignments from cronograma
-  const cronoKey='fechipo_crono_'+(ev.name||'').replace(/\s+/g,'_');
-  let flightMap=null;
-  try{const saved=localStorage.getItem(cronoKey);if(saved){const d=JSON.parse(saved);if(d.map)flightMap=d.map}}catch(e){}
+  // Flight/jornada asignados en la pestaña Cronograma del admin — un solo
+  // getDoc puntual (no listener), se re-lee al reabrir el evento o con
+  // "Re-sincronizar nómina", no en cada snapshot de inscripciones.
+  const flightMap=await _loadCronoFlightMap(evId);
 
   const q=window._fb.query(
     window._fb.collection(fbDB,'inscripciones'),
@@ -4891,7 +4910,7 @@ function generateLots(){
 window.resyncFromAdmin=async function(){
   if(!fbReady||!window._fb){alert('Firebase no listo todavía. Esperá unos segundos y reintentá.');return}
   if(!DATA.event){alert('No hay competencia activa');return}
-  if(!confirm('🔄 Re-sincronizar la nómina con el admin?\n\n• Trae atletas nuevos\n• Borra los que ya no están en admin (si NO tienen pesos/intentos cargados acá)\n• Te avisa de los borrados que sí tienen datos para revisar a mano\n\nLas tandas, lots y pesaje se conservan.'))return;
+  if(!confirm('🔄 Re-sincronizar la nómina con el admin?\n\n• Trae atletas nuevos\n• Borra los que ya no están en admin (si NO tienen pesos/intentos cargados acá)\n• Te avisa de los borrados que sí tienen datos para revisar a mano\n• Actualiza el flight de cada atleta según lo armado en la pestaña Cronograma\n\nLots y pesaje se conservan.'))return;
   const evId=Object.keys(LIVE_EVENTS).find(k=>LIVE_EVENTS[k]===DATA.event.name)||DATA.event.id||DATA.event.name;
   try{
     const q=window._fb.query(
@@ -4900,9 +4919,7 @@ window.resyncFromAdmin=async function(){
       window._fb.where('status','in',['approved','pending'])
     );
     const snap=await window._fb.getDocs(q);
-    const cronoKey='fechipo_crono_'+(DATA.event.name||'').replace(/\s+/g,'_');
-    let flightMap=null;
-    try{const saved=localStorage.getItem(cronoKey);if(saved){const d=JSON.parse(saved);if(d.map)flightMap=d.map}}catch(e){}
+    const flightMap=await _loadCronoFlightMap(evId);
     const fbAthletes=snap.docs
       .map(d=>({...d.data(),id:d.id}))
       .sort((a,b)=>(a.timestamp?.seconds||0)-(b.timestamp?.seconds||0))
