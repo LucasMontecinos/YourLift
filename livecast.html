@@ -901,7 +901,7 @@ function setResult(id,l,r,res){
   // Auto-advance: if liftQueue is now empty, round is done
   const snapLift=DATA.lift,snapRound=DATA.round;
   if(liftQueue().length===0){
-    showToastLC('✅ Ronda completada — avanzando en 3s…');
+    showToastLC('Ronda completada — avanzando en 3s…');
     setTimeout(()=>{if(DATA.lift===snapLift&&DATA.round===snapRound)advanceLift();},3000);
   }
 }
@@ -911,13 +911,13 @@ async function toggleJudgeMode(){
   judgeMode=!judgeMode;
   if(judgeMode){
     if(!fbReady){
-      showToastLC('⚠️ Firebase no conectado — esperando conexión para activar panel de jueces');
+      showToastLC('Firebase no conectado — esperando conexión para activar panel de jueces');
       // Retry when fbReady becomes true (poll every 500ms, max 20s)
       let attempts=0;
       const waitFB=setInterval(()=>{
         attempts++;
-        if(fbReady){clearInterval(waitFB);startJudgeListener();showToastLC('✅ Modo Jueces ACTIVADO — Firebase conectado');}
-        else if(attempts>=40){clearInterval(waitFB);judgeMode=false;showToastLC('❌ Firebase no disponible — usa modo manual');R();}
+        if(fbReady){clearInterval(waitFB);startJudgeListener();showToastLC('Modo Jueces ACTIVADO — Firebase conectado');}
+        else if(attempts>=40){clearInterval(waitFB);judgeMode=false;showToastLC('Firebase no disponible — usa modo manual');R();}
       },500);
     }else{
       startJudgeListener();
@@ -1036,7 +1036,7 @@ function openAddAthlete(){
   m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:9999';
   m.innerHTML=`
   <div style="background:#0D1F38;border:2px solid var(--border);border-radius:16px;padding:24px 28px;width:min(620px,94vw);max-height:92vh;overflow-y:auto">
-    <div style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:4px">➕ AGREGAR ATLETA</div>
+    <div style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:4px">AGREGAR ATLETA</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:18px">Para altas manuales (ej. atletas de otros países en un internacional). No toca la nómina pública.</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
       <label style="${lbl};grid-column:1 / -1">NOMBRE COMPLETO<input id="aa_name" type="text" placeholder="Nombre y apellidos" style="${inp}"></label>
@@ -1067,7 +1067,7 @@ function confirmAddAthlete(){
   const g=id=>document.getElementById(id);
   const name=(g('aa_name').value||'').trim();
   const alertEl=g('aa_alert');
-  if(name.length<3){alertEl.style.display='block';alertEl.textContent='⚠️ Ingresá el nombre del atleta';return;}
+  if(name.length<3){alertEl.style.display='block';alertEl.textContent='Ingresá el nombre del atleta';return;}
   const country=(g('aa_country').value||'CHI');
   const newId=DATA.athletes.length?Math.max(...DATA.athletes.map(a=>a.id))+1:0;
   const newLot=DATA.athletes.length?Math.max(...DATA.athletes.map(a=>a.lot||0))+1:1;
@@ -1124,7 +1124,7 @@ function openAthleteMedia(id){
   const prev=(u,isVid)=>u?(isVid?'<video src="'+u+'" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover"></video>':'<img src="'+u+'" style="width:100%;height:100%;object-fit:cover">'):'<span style="color:var(--muted);font-size:11px;font-family:Oswald">sin imagen</span>';
   m.innerHTML=`
   <div style="background:#0D1F38;border:2px solid var(--border);border-radius:16px;padding:24px 28px;width:min(560px,94vw);max-height:92vh;overflow-y:auto">
-    <div style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:4px">📷 FOTO / GIF</div>
+    <div style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:4px">FOTO / GIF</div>
     <div style="font-size:12px;color:var(--gold);font-family:Oswald;margin-bottom:4px">${_flagImg(_ctry(a),14)}${a.name}</div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:16px">Se guarda y se reutiliza automáticamente si el atleta vuelve a competir.</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -1141,7 +1141,7 @@ function openAthleteMedia(id){
     </div>
     <div id="amStatus" style="font-size:11px;color:var(--muted);font-family:Oswald;margin-top:12px;min-height:16px"></div>
     <div style="display:flex;gap:10px;justify-content:space-between;margin-top:12px">
-      <button onclick="removeAthleteMedia(${id})" style="padding:8px 14px;border-radius:8px;border:1px solid var(--red);background:transparent;color:var(--red);font-family:Oswald;font-size:11px;cursor:pointer">🗑️ Quitar todo</button>
+      <button onclick="removeAthleteMedia(${id})" style="padding:8px 14px;border-radius:8px;border:1px solid var(--red);background:transparent;color:var(--red);font-family:Oswald;font-size:11px;cursor:pointer">Quitar todo</button>
       <button onclick="document.getElementById('athMediaModal').remove()" style="padding:8px 20px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;cursor:pointer">CERRAR</button>
     </div>
   </div>`;
@@ -1152,7 +1152,7 @@ async function uploadAthleteMedia(id,kind,file){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía, esperá un momento');return;}
   if(!isAdmin){alert('Solo admin puede subir fotos');return;}
-  const st=document.getElementById('amStatus');if(st)st.textContent='⏳ Subiendo…';
+  const st=document.getElementById('amStatus');if(st)st.textContent='Subiendo…';
   try{
     const {ref,uploadBytes,getDownloadURL}=window._fbSt;
     const key=_mediaKey(a);
@@ -1171,7 +1171,7 @@ async function uploadAthleteMedia(id,kind,file){
     const pv=document.getElementById(kind==='foto'?'amPrevFoto':'amPrevGif');
     if(pv)pv.innerHTML=isVid?'<video src="'+url+'" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover"></video>':'<img src="'+url+'" style="width:100%;height:100%;object-fit:cover">';
     R();
-  }catch(e){if(st)st.textContent='❌ '+e.message; console.warn('[lc-media] upload',e);}
+  }catch(e){if(st)st.textContent=''+e.message; console.warn('[lc-media] upload',e);}
 }
 async function removeAthleteMedia(id){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
@@ -1199,7 +1199,7 @@ function openWeighIn(id){
   const dl1 = a.att?.dl?.[0]?.w || '';
   m.innerHTML=`
   <div style="background:#0D1F38;border:2px solid var(--border);border-radius:16px;padding:24px 28px;width:min(560px,94vw);max-height:92vh;overflow-y:auto">
-    <div style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:4px">⚖️ PESAJE</div>
+    <div style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:4px">PESAJE</div>
     <div style="font-size:13px;color:var(--gold);font-family:Oswald;margin-bottom:18px">${a.name} · ${a.cat} · ${a.div}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
       <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)">
@@ -1258,13 +1258,13 @@ function openWeighIn(id){
     </div>
     <div id="wi_alert" style="display:none;background:rgba(196,30,58,.15);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--accent);font-family:Oswald;letter-spacing:1px"></div>
     <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap">
-      ${a.weighedIn||a.bw>0?`<button onclick="clearWeighIn(${id})" style="padding:8px 14px;border-radius:8px;border:1px solid var(--red);background:transparent;color:var(--red);font-family:Oswald;font-size:11px;cursor:pointer" title="Borrar BW + racks + intentos">🗑️ BORRAR PESAJE</button>`:'<span></span>'}
+      ${a.weighedIn||a.bw>0?`<button onclick="clearWeighIn(${id})" style="padding:8px 14px;border-radius:8px;border:1px solid var(--red);background:transparent;color:var(--red);font-family:Oswald;font-size:11px;cursor:pointer" title="Borrar BW + racks + intentos">BORRAR PESAJE</button>`:'<span></span>'}
       <div style="display:flex;gap:10px">
         <button onclick="document.getElementById('weighInModal').remove()" style="padding:8px 20px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;cursor:pointer">CANCELAR</button>
         <button id="wi_confirm_btn" onclick="confirmWeighIn(${id},${catKg},${limit||0})" style="padding:10px 24px;border-radius:8px;border:none;background:var(--green);color:#000;font-family:Oswald;font-size:13px;font-weight:700;cursor:pointer">✓ CONFIRMAR PESAJE</button>
       </div>
     </div>
-    <div style="text-align:center;margin-top:10px;font-size:10px;color:var(--muted)">💡 Usá <kbd style="background:var(--bg);padding:1px 6px;border-radius:3px;border:1px solid var(--border);font-family:monospace">Enter</kbd> para avanzar al siguiente campo</div>
+    <div style="text-align:center;margin-top:10px;font-size:10px;color:var(--muted)">Usá <kbd style="background:var(--bg);padding:1px 6px;border-radius:3px;border:1px solid var(--border);font-family:monospace">Enter</kbd> para avanzar al siguiente campo</div>
   </div>`;
   document.body.appendChild(m);
   // Auto-focus en BW
@@ -1288,12 +1288,12 @@ function openWeighIn(id){
     if(!st)return;
     if(limit){
       // Categoría normal: máximo permitido = limit
-      if(v>limit){st.textContent='⚠️ '+v+'kg EXCEDE el límite de '+limit+'kg';st.style.color='var(--red)';}
+      if(v>limit){st.textContent=''+v+'kg EXCEDE el límite de '+limit+'kg';st.style.color='var(--red)';}
       else if(v>0){st.textContent='✓ '+v+'kg dentro del límite ('+limit+'kg)';st.style.color='var(--green)';}
       else{st.textContent='Límite categoría: '+limit+' kg';st.style.color='var(--muted)';}
     } else if(isPlusCat && catKg){
       // Categoría "+X": el atleta DEBE pesar más que X
-      if(v>0 && v<=catKg){st.textContent='⚠️ '+v+'kg NO califica para +'+catKg+'kg (debe pesar más de '+catKg+'kg)';st.style.color='var(--red)';}
+      if(v>0 && v<=catKg){st.textContent=''+v+'kg NO califica para +'+catKg+'kg (debe pesar más de '+catKg+'kg)';st.style.color='var(--red)';}
       else if(v>catKg){st.textContent='✓ '+v+'kg califica para +'+catKg+'kg';st.style.color='var(--green)';}
       else{st.textContent='Categoría +'+catKg+' kg (debe pesar más de '+catKg+' kg)';st.style.color='var(--muted)';}
     }
@@ -1304,7 +1304,7 @@ function openWeighIn(id){
 window.clearWeighIn = function(id){
   const a = DATA.athletes.find(x=>x.id===id);
   if(!a) return;
-  const msg = `🗑️ ¿Borrar el pesaje de ${a.name}?\n\nSe borrarán:\n• Peso corporal (BW)\n• Alturas de rack (SQ y BP)\n• Todos los intentos cargados\n\nEsto NO borra al atleta del evento. Solo le reinicia el pesaje.`;
+  const msg = `¿Borrar el pesaje de ${a.name}?\n\nSe borrarán:\n• Peso corporal (BW)\n• Alturas de rack (SQ y BP)\n• Todos los intentos cargados\n\nEsto NO borra al atleta del evento. Solo le reinicia el pesaje.`;
   if(!confirm(msg)) return;
   a.bw = 0;
   a.rackSQ = '';
@@ -1324,7 +1324,7 @@ window.clearWeighIn = function(id){
   const modal = document.getElementById('weighInModal');
   if(modal) modal.remove();
   R();
-  showToastLC('🗑️ Pesaje borrado: '+a.name);
+  showToastLC('Pesaje borrado: '+a.name);
 };
 
 function confirmWeighIn(id,catKg,limit){
@@ -1338,15 +1338,15 @@ function confirmWeighIn(id,catKg,limit){
   const dl1=parseWeight(document.getElementById('wi_dl1')?.value);
   const alertEl=document.getElementById('wi_alert');
   // Validate BW > 0
-  if(!bw){alertEl.style.display='block';alertEl.textContent='⚠️ Ingresa el peso corporal';return;}
+  if(!bw){alertEl.style.display='block';alertEl.textContent='Ingresa el peso corporal';return;}
   // Re-derivar si es categoría "+" (sin límite superior)
   const _a=DATA.athletes.find(x=>x.id===id);
   const _isPlusCat=_a&&(_a.cat||'').includes('+');
   // Warn según el tipo de categoría
   if(_isPlusCat && catKg>0 && bw<=catKg){
-    if(!confirm('⚠️ El peso '+bw+'kg NO califica para la categoría +'+catKg+'kg (debe pesar más de '+catKg+'kg).\n¿Confirmar igualmente?'))return;
+    if(!confirm('El peso '+bw+'kg NO califica para la categoría +'+catKg+'kg (debe pesar más de '+catKg+'kg).\n¿Confirmar igualmente?'))return;
   } else if(!_isPlusCat && limit>0 && bw>limit){
-    if(!confirm('⚠️ El peso '+bw+'kg EXCEDE el límite de la categoría ('+limit+'kg).\n¿El atleta compite fuera de categoría o el jurado aprobó? Confirmar igualmente.'))return;
+    if(!confirm('El peso '+bw+'kg EXCEDE el límite de la categoría ('+limit+'kg).\n¿El atleta compite fuera de categoría o el jurado aprobó? Confirmar igualmente.'))return;
   }
   // Save
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
@@ -1381,6 +1381,42 @@ async function _loadCronoFlightMap(evId){
     rows.forEach(r=>{if(r.nombre&&r.flight)map[_nnCrono(r.nombre)]={flight:r.flight,jornada:r.jornada||''};});
     return map;
   }catch(e){console.warn('[crono] flightMap',e.message);return null;}
+}
+// Suscripción en vivo al Cronograma (además del getDoc puntual de arriba, usado para la
+// carga inicial). Un doc, se reescribe poco (solo cuando el admin edita el Cronograma), así
+// que el costo extra en Firestore es despreciable — y evita el bug de tandas desactualizadas
+// si el Cronograma se sigue ajustando DESPUÉS de abrir el evento en YourLift, sin tener que
+// acordarse de tocar "Re-sincronizar nómina" cada vez.
+let _cronoFlightUnsub=null;
+function _subscribeCronoFlightMap(evId){
+  if(!fbReady||!window._fb||!evId)return;
+  if(_cronoFlightUnsub){_cronoFlightUnsub();_cronoFlightUnsub=null;}
+  try{
+    _cronoFlightUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'cronograma',evId),(snap)=>{
+      if(!snap.exists())return;
+      const rows=snap.data().rows;
+      if(!Array.isArray(rows))return;
+      const map={};
+      rows.forEach(r=>{if(r.nombre&&r.flight)map[_nnCrono(r.nombre)]={flight:r.flight,jornada:r.jornada||''};});
+      window._cronoFlightMap=map;
+      _applyCronoFlightsToAthletes(map);
+    });
+  }catch(e){console.warn('[crono] subscribe',e.message);}
+}
+// Reaplica flight/jornada del Cronograma a los atletas ya cargados (por si cambiaron
+// DESPUÉS de la carga inicial). Solo toca lo que vino del Cronograma — no inventa nada
+// si un atleta no está ahí.
+function _applyCronoFlightsToAthletes(map){
+  if(!map||!DATA.athletes||!DATA.athletes.length)return;
+  let changed=false;
+  DATA.athletes.forEach(a=>{
+    const entry=map[_nnCrono(a.name)];
+    if(entry){
+      if(entry.flight && a.flight!==entry.flight){a.flight=entry.flight;changed=true;}
+      if(typeof entry.jornada==='string' && a.jornada!==entry.jornada){a.jornada=entry.jornada;changed=true;}
+    }
+  });
+  if(changed){save();R();showToastLC('Tandas actualizadas desde el Cronograma');}
 }
 function _inscToAthlete(ins, j, flightMap){
   const name=ins.nombre||'';
@@ -1444,12 +1480,12 @@ function _mergeFirebaseAthletes(fbAthletes){
       const ids=new Set(safeToRemove.map(a=>a.id));
       DATA.athletes=DATA.athletes.filter(a=>!ids.has(a.id));
       changed=true;
-      showToastLC('🗑️ '+safeToRemove.length+' atleta'+(safeToRemove.length>1?'s':'')+' eliminado'+(safeToRemove.length>1?'s':'')+' (borrados desde admin)');
+      showToastLC(''+safeToRemove.length+' atleta'+(safeToRemove.length>1?'s':'')+' eliminado'+(safeToRemove.length>1?'s':'')+' (borrados desde admin)');
     }
     // Aviso sobre los que tienen datos — el operador decide manualmente
     if(withData.length){
       console.warn('[LC] Atletas con datos pero borrados del admin:',withData.map(a=>a.name));
-      showToastLC('⚠️ '+withData.length+' atleta'+(withData.length>1?'s':'')+' borrado'+(withData.length>1?'s':'')+' del admin pero con datos cargados acá. Revisá Atletas & Pesaje y borralo'+(withData.length>1?'s':'')+' a mano si corresponde.');
+      showToastLC(''+withData.length+' atleta'+(withData.length>1?'s':'')+' borrado'+(withData.length>1?'s':'')+' del admin pero con datos cargados acá. Revisá Atletas & Pesaje y borralo'+(withData.length>1?'s':'')+' a mano si corresponde.');
     }
   }
   if(changed){save();R();}
@@ -1468,6 +1504,7 @@ async function loadLiveAthletes(ev){
   // getDoc puntual (no listener), se re-lee al reabrir el evento o con
   // "Re-sincronizar nómina", no en cada snapshot de inscripciones.
   const flightMap=await _loadCronoFlightMap(evId);
+  _subscribeCronoFlightMap(evId); // mantiene las tandas al día si el Cronograma se sigue editando
 
   const q=window._fb.query(
     window._fb.collection(fbDB,'inscripciones'),
@@ -1524,7 +1561,7 @@ function overrideResult(id,l,r,res){
   if(!wasSame && res){
     const snapLift=DATA.lift, snapRound=DATA.round;
     if(liftQueue().length===0){
-      showToastLC('✅ Ronda completada — avanzando automáticamente en 3s…');
+      showToastLC('Ronda completada — avanzando automáticamente en 3s…');
       setTimeout(()=>{
         if(DATA.lift===snapLift && DATA.round===snapRound) advanceLift();
       }, 3000);
@@ -1571,7 +1608,7 @@ function resetLiveData(){
   if(!isAdmin){alert('Solo admin puede reiniciar');return}
   if(!DATA.event){alert('No hay competencia activa');return}
   const ev=DATA.event;
-  const msg='⚠️ REINICIAR datos en vivo de:\n"'+ev.name+'"\n\nSE BORRAN:\n• Intentos (squat / bench / deadlift)\n• Pesos cargados y resultados (✓ / ✗)\n• Timer y cursores (lift, ronda)\n• Bombed (atletas eliminados)\n\nSE CONSERVAN:\n• Tandas, vuelos, lots\n• Pesaje (BW), racks\n• Listado de atletas\n\nEsto sobreescribe Firestore para TODOS los dispositivos y widgets de OBS.';
+  const msg='REINICIAR datos en vivo de:\n"'+ev.name+'"\n\nSE BORRAN:\n• Intentos (squat / bench / deadlift)\n• Pesos cargados y resultados (✓ / ✗)\n• Timer y cursores (lift, ronda)\n• Bombed (atletas eliminados)\n\nSE CONSERVAN:\n• Tandas, vuelos, lots\n• Pesaje (BW), racks\n• Listado de atletas\n\nEsto sobreescribe Firestore para TODOS los dispositivos y widgets de OBS.';
   if(!confirm(msg))return;
   if(!confirm('¿CONFIRMÁS el reinicio? Esta acción no se puede deshacer.'))return;
   // Reset por atleta: solo intentos y bombed
@@ -1634,7 +1671,7 @@ setInterval(()=>{
         if(prev && prev.r && prev.w>0 && next && !next.w){
           next.w=prev.r==='n'?prev.w:Math.round((prev.w+2.5)*2)/2;
           changed=true;
-          showToastLC?.('⏱ '+a.name+' — '+LIFT_S[lift]+(rnd+1)+' auto-rellenado: '+next.w+'kg');
+          showToastLC?.(''+a.name+' — '+LIFT_S[lift]+(rnd+1)+' auto-rellenado: '+next.w+'kg');
         }
       }
     }
@@ -1647,10 +1684,10 @@ setInterval(()=>{
     const cellEl=document.getElementById('ctcell_'+k);
     if(!cellEl)return;
     if(ct&&!ct.expired&&ct.remaining>0){
-      cellEl.textContent='⏱ '+ct.remaining+'s';
+      cellEl.textContent=''+ct.remaining+'s';
     } else if(ct&&ct.expired){
       // Tiempo expirado → reloj rojo + signo de exclamación
-      cellEl.textContent='⏰❗';
+      cellEl.textContent='TIEMPO';
       cellEl.style.background='rgba(239,68,68,.18)';
       cellEl.style.borderColor='var(--red)';
       cellEl.style.color='var(--red)';
@@ -1725,7 +1762,7 @@ const CP={
 // ═══════════════════════════════════════════════════════════
 async function generateHojaRack(){
   const btn=document.getElementById('btnHojaRack');
-  if(btn){btn.disabled=true;btn.textContent='⏳ Generando...';}
+  if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
     if(!window.jspdf){
       await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
@@ -1860,7 +1897,7 @@ async function generateHojaRack(){
     console.error('HojaRack error',err);
     alert('Error al generar hoja de rack: '+err.message);
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='📏 Altura de Rack PDF';}
+    if(btn){btn.disabled=false;btn.textContent='Altura de Rack PDF';}
   }
 }
 
@@ -1869,7 +1906,7 @@ async function generateHojaRack(){
 // ═══════════════════════════════════════════════════════════
 async function generateHojaEquipo(){
   const btn=document.getElementById('btnHojaEquipo');
-  if(btn){btn.disabled=true;btn.textContent='⏳ Generando...';}
+  if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
     if(!window.jspdf){
       await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
@@ -2003,7 +2040,7 @@ async function generateHojaEquipo(){
     console.error('HojaEquipo error',err);
     alert('Error al generar hoja de equipo: '+err.message);
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='🏋️ Revisión Equipo PDF';}
+    if(btn){btn.disabled=false;btn.textContent='Revisión Equipo PDF';}
   }
 }
 
@@ -2013,7 +2050,7 @@ async function generateHojaEquipo(){
 // ═══════════════════════════════════════════════════════════
 async function generatePapeletas(){
   const btn=document.getElementById('btnPapeletas');
-  if(btn){btn.disabled=true;btn.textContent='⏳ Generando...';}
+  if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
     if(!window.jspdf){
       await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
@@ -2173,7 +2210,7 @@ async function generatePapeletas(){
     console.error('Papeletas error',err);
     alert('Error al generar papeletas: '+err.message);
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='🎫 Papeletas de Intentos PDF';}
+    if(btn){btn.disabled=false;btn.textContent='Papeletas de Intentos PDF';}
   }
 }
 
@@ -2182,7 +2219,7 @@ async function generatePapeletas(){
 // ═══════════════════════════════════════════════════════════
 async function generateHojaPesaje(){
   const btn=document.getElementById('btnHojaPesaje');
-  if(btn){btn.disabled=true;btn.textContent='⏳ Generando...';}
+  if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
     if(!window.jspdf){
       await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
@@ -2330,7 +2367,7 @@ async function generateHojaPesaje(){
     console.error('HojaPesaje error',err);
     alert('Error al generar hoja de pesaje: '+err.message);
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='⚖️ Hoja de Pesaje PDF';}
+    if(btn){btn.disabled=false;btn.textContent='Hoja de Pesaje PDF';}
   }
 }
 
@@ -2365,7 +2402,7 @@ function _stripAccentsForPdf(s){
 }
 async function generateActaPDF(){
   const btn=document.getElementById('btnActaPDF');
-  if(btn){btn.disabled=true;btn.textContent='⏳ Generando...';}
+  if(btn){btn.disabled=true;btn.textContent='Generando...';}
   // Backup nombres + clubes y normalizar (sin acentos) para el PDF
   const _pdfBackups=DATA.athletes.map(a=>({ref:a,name:a.name,club:a.club,uni:a.uni}));
   DATA.athletes.forEach(a=>{
@@ -2755,7 +2792,7 @@ async function cerrarCompetenciaConfirm(){
     }
     if(inBenchRanking(a) && bestOf(a,'bp')>0) counts.bench++;
   });
-  const msg = `🏁 CERRAR COMPETENCIA\n\nEvento: ${evName}\n\nSe publicarán los resultados en Firestore:\n  • ${counts.meet} con total válido\n  • ${counts.dq} marcados como DQ\n  • ${counts.bench} en ranking Only Bench\n\nApareceran inmediatamente en los perfiles de cada atleta y en el ranking general.\n\n¿Confirmar?`;
+  const msg = `CERRAR COMPETENCIA\n\nEvento: ${evName}\n\nSe publicarán los resultados en Firestore:\n  • ${counts.meet} con total válido\n  • ${counts.dq} marcados como DQ\n  • ${counts.bench} en ranking Only Bench\n\nApareceran inmediatamente en los perfiles de cada atleta y en el ranking general.\n\n¿Confirmar?`;
   if(!confirm(msg)) return;
   await cerrarCompetencia(evId, evName);
 }
@@ -2767,7 +2804,7 @@ async function cerrarCompetencia(evId, evName){
   const ath = DATA.athletes || [];
 
   // Toast de progreso
-  showToastLC('⏳ Publicando resultados...');
+  showToastLC('Publicando resultados...');
   let written = 0;
   let errors = 0;
 
@@ -2830,10 +2867,10 @@ async function cerrarCompetencia(evId, evName){
   }
 
   if(errors===0){
-    showToastLC(`✅ Competencia cerrada: ${written} resultados publicados`);
-    alert(`✅ Competencia "${evName}" cerrada.\n\n${written} resultados publicados.\n\nYa son visibles en yourlift.cl/atleta y en el ranking.`);
+    showToastLC(`Competencia cerrada: ${written} resultados publicados`);
+    alert(`Competencia "${evName}" cerrada.\n\n${written} resultados publicados.\n\nYa son visibles en yourlift.cl/atleta y en el ranking.`);
   } else {
-    showToastLC(`⚠️ Publicados ${written}, errores ${errors}`);
+    showToastLC(`Publicados ${written}, errores ${errors}`);
     alert(`Se publicaron ${written} resultados.\n${errors} fallaron — revisá la consola (F12).`);
   }
 }
@@ -2902,21 +2939,21 @@ function renderObsTx(){
   const base=location.origin+location.pathname.replace(/[^/]+$/,'');
   const enc=encodeURIComponent(evId);
   const widgets=[
-    {id:'profile',icon:'🪪',title:'Perfil del atleta',desc:'Pantalla completa con foto placeholder, nombre, club, categoría, edad, años compitiendo y PB. Animación cascada al entrar. Mostrar ~10s antes de la tarima.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
-    {id:'scoreboard',icon:'📊',title:'Scoreboard (lower-third)',desc:'Barra inferior con categoría, rank, timer, nombre, club e intentos. Aparece al cambiar levantador / intento / peso, queda 20s en pantalla y se va con animación. Hasta el próximo cambio queda oculto.',obsBg:'Transparente (superpuesto sobre cámara).',size:'1920×320 (parte inferior)'},
-    {id:'barbell',icon:'🏋️',title:'Barra con discos (lower-third)',desc:'Franja inferior que muestra la barra con discos IPF a color, nombre del atleta, club, categoría, peso del intento en kg/lbs, ronda y pronóstico de posición ("Si es válido pasará del X° al Y° lugar"). Se anima al entrar cuando cambia el levantador.',obsBg:'Transparente (overlay sobre cámara). Fondo se fusiona hacia abajo.',size:'1920×1080 (contenido en el tercio inferior)'},
-    {id:'leaderboard',icon:'🏆',title:'Tabla de clasificación (FIJO)',desc:'Ranking completo de la categoría actual. Cascada fila por fila. SIEMPRE visible mientras la escena esté activa — usalo para escenas de pausa entre rondas que vos manejás manualmente.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
-    {id:'tablaactual',icon:'📋',title:'Tabla actual (corner)',desc:'Ranking de la categoría del lifter en pantalla, esquina inferior derecha. Entra deslizando desde abajo, queda fijo. El levantador actual se resalta y muestra una flecha de proyección: posición actual → posición que tendría si el intento es válido (ej. 2→1 si se mueve al primer lugar). Activá/desactivá con el botón "Tabla actual" en Control TX o tecla A.',obsBg:'Transparente (overlay sobre cámara). Solo ocupa el cuadrante inferior derecho.',size:'1920×1080 (overlay)'},
-    {id:'lbauto',icon:'🔁',title:'Tabla de clasificación (AUTO)',desc:'Igual al leaderboard fijo, pero APARECE SOLO al detectar fin de ronda (cuando cambia lift/round/flight). Queda 10s en pantalla y se va. Ideal como overlay siempre activo en una escena de cámara.',obsBg:'Transparente (overlay sobre cámara).',size:'1920×1080 (overlay fullscreen)'},
-    {id:'slam',icon:'⚡',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activá una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcás ✓/✗ en Control en Vivo. Volvé a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
-    {id:'lights',icon:'💡',title:'Luces de jueces',desc:'3 círculos para izq / central / der. Se prenden blanco (good) o rojo (no lift) cuando los jueces votan en su panel. Ideal arriba de la cámara o en pantalla aparte.',obsBg:'Transparente. Funciona solo si activás "Modo Jueces" en Control en Vivo.',size:'1920×1080 (autoescala)'},
-    {id:'ceremony',icon:'🎭',title:'Ceremonia (TODO-EN-UNO automático)',desc:'Widget orquestador. Detecta nuevo levantador → PROFILE fullscreen 5s → SCOREBOARD bottom-left (30s) → SLAM top-left flash al marcar resultado → IDLE hasta el próximo. Sin tabla de clasificación: ese ciclo lo manejás aparte con el widget Leaderboard fijo. (El tiempo para dar el intento ya no se muestra acá — es privado, solo lo ve el juez en Control en Vivo.)',obsBg:'Mixto: fullscreen opaco durante PROFILE, transparente sobre cámara durante SCOREBOARD/IDLE. Una sola escena con cámara de fondo + este browser source encima.',size:'1920×1080'},
-    {id:'director',icon:'🎮',title:'Director (control 100% MANUAL)',desc:'NO se activa solo. Lee comandos desde Firestore (livecast_director/current) que pusheás vos desde la sidebar "🎮 Control TX". Cada componente (perfil, marcador, tabla, timer, slam) se muestra/esconde con un botón. Ideal si querés controlar todo a mano sin tocar OBS.',obsBg:'Mixto. Una sola escena con cámara de fondo + este browser source encima. Vos elegís qué se ve y por cuánto desde el panel Control TX.',size:'1920×1080'},
+    {id:'profile',icon:'',title:'Perfil del atleta',desc:'Pantalla completa con foto placeholder, nombre, club, categoría, edad, años compitiendo y PB. Animación cascada al entrar. Mostrar ~10s antes de la tarima.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
+    {id:'scoreboard',icon:'',title:'Scoreboard (lower-third)',desc:'Barra inferior con categoría, rank, timer, nombre, club e intentos. Aparece al cambiar levantador / intento / peso, queda 20s en pantalla y se va con animación. Hasta el próximo cambio queda oculto.',obsBg:'Transparente (superpuesto sobre cámara).',size:'1920×320 (parte inferior)'},
+    {id:'barbell',icon:'',title:'Barra con discos (lower-third)',desc:'Franja inferior que muestra la barra con discos IPF a color, nombre del atleta, club, categoría, peso del intento en kg/lbs, ronda y pronóstico de posición ("Si es válido pasará del X° al Y° lugar"). Se anima al entrar cuando cambia el levantador.',obsBg:'Transparente (overlay sobre cámara). Fondo se fusiona hacia abajo.',size:'1920×1080 (contenido en el tercio inferior)'},
+    {id:'leaderboard',icon:'',title:'Tabla de clasificación (FIJO)',desc:'Ranking completo de la categoría actual. Cascada fila por fila. SIEMPRE visible mientras la escena esté activa — usalo para escenas de pausa entre rondas que vos manejás manualmente.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
+    {id:'tablaactual',icon:'',title:'Tabla actual (corner)',desc:'Ranking de la categoría del lifter en pantalla, esquina inferior derecha. Entra deslizando desde abajo, queda fijo. El levantador actual se resalta y muestra una flecha de proyección: posición actual → posición que tendría si el intento es válido (ej. 2→1 si se mueve al primer lugar). Activá/desactivá con el botón "Tabla actual" en Control TX o tecla A.',obsBg:'Transparente (overlay sobre cámara). Solo ocupa el cuadrante inferior derecho.',size:'1920×1080 (overlay)'},
+    {id:'lbauto',icon:'',title:'Tabla de clasificación (AUTO)',desc:'Igual al leaderboard fijo, pero APARECE SOLO al detectar fin de ronda (cuando cambia lift/round/flight). Queda 10s en pantalla y se va. Ideal como overlay siempre activo en una escena de cámara.',obsBg:'Transparente (overlay sobre cámara).',size:'1920×1080 (overlay fullscreen)'},
+    {id:'slam',icon:'',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activá una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcás ✓/✗ en Control en Vivo. Volvé a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
+    {id:'lights',icon:'',title:'Luces de jueces',desc:'3 círculos para izq / central / der. Se prenden blanco (good) o rojo (no lift) cuando los jueces votan en su panel. Ideal arriba de la cámara o en pantalla aparte.',obsBg:'Transparente. Funciona solo si activás "Modo Jueces" en Control en Vivo.',size:'1920×1080 (autoescala)'},
+    {id:'ceremony',icon:'',title:'Ceremonia (TODO-EN-UNO automático)',desc:'Widget orquestador. Detecta nuevo levantador → PROFILE fullscreen 5s → SCOREBOARD bottom-left (30s) → SLAM top-left flash al marcar resultado → IDLE hasta el próximo. Sin tabla de clasificación: ese ciclo lo manejás aparte con el widget Leaderboard fijo. (El tiempo para dar el intento ya no se muestra acá — es privado, solo lo ve el juez en Control en Vivo.)',obsBg:'Mixto: fullscreen opaco durante PROFILE, transparente sobre cámara durante SCOREBOARD/IDLE. Una sola escena con cámara de fondo + este browser source encima.',size:'1920×1080'},
+    {id:'director',icon:'',title:'Director (control 100% MANUAL)',desc:'NO se activa solo. Lee comandos desde Firestore (livecast_director/current) que pusheás vos desde la sidebar "Control TX". Cada componente (perfil, marcador, tabla, timer, slam) se muestra/esconde con un botón. Ideal si querés controlar todo a mano sin tocar OBS.',obsBg:'Mixto. Una sola escena con cámara de fondo + este browser source encima. Vos elegís qué se ve y por cuánto desde el panel Control TX.',size:'1920×1080'},
   ];
-  let h='<div class="fade"><h2 class="os" style="font-size:22px;letter-spacing:1px;margin-bottom:6px">🎬 WIDGETS PARA OBS</h2>';
+  let h='<div class="fade"><h2 class="os" style="font-size:22px;letter-spacing:1px;margin-bottom:6px">WIDGETS PARA OBS</h2>';
   h+='<p style="color:var(--muted);font-size:12px;margin-bottom:18px">Cada widget es una URL que se agrega como Browser Source en OBS. Actualiza en tiempo real desde Firestore — no necesita login.</p>';
   if(!evId){
-    h+='<div class="card" style="background:rgba(239,68,68,.1);border-color:var(--red);color:var(--red);padding:16px">⚠️ Primero elegí un campeonato. Los widgets necesitan saber qué evento mostrar.</div></div>';
+    h+='<div class="card" style="background:rgba(239,68,68,.1);border-color:var(--red);color:var(--red);padding:16px">Primero elegí un campeonato. Los widgets necesitan saber qué evento mostrar.</div></div>';
     return h;
   }
   h+='<div class="card" style="margin-bottom:14px;padding:12px 16px;background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.3);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
@@ -2925,7 +2962,7 @@ function renderObsTx(){
   // ── Selector de TARIMA: vincula esta página de control y TODOS los links de abajo
   //    a los datos de SU tarima. Sin esto, dos PCs (2 tarimas) leen el mismo doc y se cruzan.
   h+='<div class="card" style="margin-bottom:14px;padding:12px 16px;background:rgba(212,168,67,.08);border-color:rgba(212,168,67,.45)">';
-  h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:1px;color:var(--gold);margin-bottom:6px">🎚 TARIMA DE ESTE EQUIPO</div>';
+  h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:1px;color:var(--gold);margin-bottom:6px">TARIMA DE ESTE EQUIPO</div>';
   h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Usa Tarima 1/2 SOLO si es <b>una misma competencia</b> dividida en 2 tarimas físicas (mismo evento, flights A1/A2). Si son <b>2 competencias distintas</b> al mismo tiempo, deja <b>"Una sola tarima"</b> y abre el evento que corresponda en cada PC — los datos y el director ya se separan por evento automáticamente.</div>';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap">';
   [['1','Tarima 1'],['2','Tarima 2'],['','Una sola tarima']].forEach(function(o){
@@ -2949,13 +2986,13 @@ function renderObsTx(){
     h+='<div style="font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px">'+w.title+'</div>';
     h+='<div style="color:var(--muted);font-size:12px;margin-top:4px;line-height:1.5">'+w.desc+'</div>';
     h+='<div style="display:flex;gap:14px;margin-top:8px;font-size:10px;color:var(--muted);flex-wrap:wrap">';
-    h+='<span>🎨 Fondo: <span style="color:var(--text)">'+w.obsBg+'</span></span>';
-    h+='<span>📐 Tamaño: <span style="color:var(--text)">'+w.size+'</span></span>';
+    h+='<span>Fondo: <span style="color:var(--text)">'+w.obsBg+'</span></span>';
+    h+='<span>Tamaño: <span style="color:var(--text)">'+w.size+'</span></span>';
     h+='</div>';
     h+='</div>';
     h+='<div style="display:flex;gap:6px;flex-wrap:wrap">';
-    h+='<a href="'+url+'" target="_blank" class="btn btn-o" style="text-decoration:none;font-size:11px;padding:7px 12px">👁 Preview</a>';
-    h+='<button class="btn btn-g" onclick="navigator.clipboard.writeText(\''+url+'\').then(()=>{this.textContent=\'✓ Copiado\';setTimeout(()=>this.textContent=\'📋 Copiar URL\',1500)})" style="font-size:11px;padding:7px 12px">📋 Copiar URL</button>';
+    h+='<a href="'+url+'" target="_blank" class="btn btn-o" style="text-decoration:none;font-size:11px;padding:7px 12px">Preview</a>';
+    h+='<button class="btn btn-g" onclick="navigator.clipboard.writeText(\''+url+'\').then(()=>{this.textContent=\'✓ Copiado\';setTimeout(()=>this.textContent=\'Copiar URL\',1500)})" style="font-size:11px;padding:7px 12px">Copiar URL</button>';
     h+='</div>';
     h+='</div>';
     h+='<div style="background:rgba(10,22,40,.6);padding:8px 18px;font-family:monospace;font-size:10px;color:rgba(200,215,240,.6);word-break:break-all;border-top:1px solid var(--border)">'+url+'</div>';
@@ -2964,7 +3001,7 @@ function renderObsTx(){
   h+='</div>';
   // OBS setup guide
   h+='<div class="card" style="margin-top:20px;padding:16px 20px">';
-  h+='<div class="os" style="font-size:14px;letter-spacing:2px;color:var(--gold);margin-bottom:10px">⚙ SETUP EN OBS</div>';
+  h+='<div class="os" style="font-size:14px;letter-spacing:2px;color:var(--gold);margin-bottom:10px">SETUP EN OBS</div>';
   h+='<ol style="color:var(--muted);font-size:12px;line-height:1.9;padding-left:20px;margin:0">';
   h+='<li>En OBS: <b style="color:var(--text)">Sources → +  → Browser</b> → pegá la URL del widget.</li>';
   h+='<li>Width/Height según el widget (Profile y Leaderboard: 1920×1080 · Scoreboard: 1920×1080 también, ya queda posicionado abajo).</li>';
@@ -3100,7 +3137,7 @@ function renderTxLbAuto(){
 //      • SLAM top-left por slamMs cuando llega resultado (no cambia de estado)
 //   3) → IDLE (transparente) hasta el próximo levantador
 //
-// 🛠 PARA MODIFICAR LOS TIEMPOS, edita la línea de abajo (en milisegundos):
+// PARA MODIFICAR LOS TIEMPOS, edita la línea de abajo (en milisegundos):
 //    profileMs:     duración del perfil fullscreen
 //    scoreboardMs:  duración del scoreboard bottom-left ← acá lo subís
 //    slamMs:        duración del flash GOOD/NO LIFT en la esquina
@@ -4109,7 +4146,7 @@ function renderTxProfile(cur){
         </div>
         <div style="position:absolute;top:clamp(20px,2.5vw,40px);right:clamp(20px,2.5vw,40px);display:flex;align-items:center;gap:12px;padding:8px 14px;background:rgba(10,22,40,.55);border:2px solid rgba(212,168,67,.4);border-radius:8px">
           ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="Campeonato" style="height:clamp(32px,3.4vw,50px);width:auto;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))" onerror="this.style.display='none'"><div style="width:1px;height:clamp(24px,2.8vw,40px);background:rgba(212,168,67,.4)"></div>`:''}
-          <img src="YourLift_logo.png" alt="YourLift" style="height:clamp(28px,3vw,44px);filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(14px,1.4vw,20px);letter-spacing:3px;color:rgba(212,168,67,.7)\\'>⚡ YourLift</span>'">
+          <img src="YourLift_logo.png" alt="YourLift" style="height:clamp(28px,3vw,44px);filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(14px,1.4vw,20px);letter-spacing:3px;color:rgba(212,168,67,.7)\\'>YourLift</span>'">
         </div>
       </div>
     </div>
@@ -4234,12 +4271,12 @@ function renderTxScoreboard(cur,lifterChanged){
 // PANTALLA DE TARIMA (?tx=screen) — canal de control INDEPENDIENTE
 // del Control TX. Lee livecast_screen/{evento} y alterna entre el
 // PERFIL del atleta en tarima y la TABLA DE JORNADA. Se controla a
-// distancia desde el panel "🖥 Pantalla Tarima".
+// distancia desde el panel "Pantalla Tarima".
 // ════════════════════════════════════════════════════════════════
 // ─── Panel de control de la Pantalla de Tarima (admin) ──────────
 window._SCREEN_LOCAL={mode:'jornada',flights:[],nameScale:1};
 async function _screenPush(){
-  if(!fbReady||!DATA.event){showToastLC('⚠️ Sin evento activo');return;}
+  if(!fbReady||!DATA.event){showToastLC('Sin evento activo');return;}
   const id=(DATA.event.name||'comp').replace(/[^a-zA-Z0-9]/g,'_').substring(0,60);
   try{
     await window._fb.setDoc(window._fb.doc(fbDB,'livecast_screen',id),{
@@ -4282,11 +4319,11 @@ function renderScreenControl(){
   const jornadaUrl=base+'livecast.html?tx=jornada&evento='+enc;
   let h='<div style="max-width:920px">';
   h+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px">';
-  h+='<div><h2 class="os" style="font-size:22px;letter-spacing:1px">🖥 PANTALLA DE TARIMA</h2><p style="color:var(--muted);font-size:12px">Control independiente del Control TX. Alterná entre el perfil del atleta, la barra con discos (estilo LiftingCast) y la tabla de la jornada. Se actualiza en vivo en la pantalla. Pensada para un monitor en el lugar de la competencia — no se transmite al stream online.</p></div>';
+  h+='<div><h2 class="os" style="font-size:22px;letter-spacing:1px">PANTALLA DE TARIMA</h2><p style="color:var(--muted);font-size:12px">Control independiente del Control TX. Alterná entre el perfil del atleta, la barra con discos (estilo LiftingCast) y la tabla de la jornada. Se actualiza en vivo en la pantalla. Pensada para un monitor en el lugar de la competencia — no se transmite al stream online.</p></div>';
   h+='</div>';
 
   // URL de la pantalla
-  h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">📺 URL PARA LA PANTALLA (abrila en el navegador de la pantalla / OBS)</div>';
+  h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">URL PARA LA PANTALLA (abrila en el navegador de la pantalla / OBS)</div>';
   h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
   h+='<input readonly value="'+screenUrl+'" onclick="this.select()" style="flex:1;min-width:280px;padding:10px 12px;background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:monospace">';
   h+='<button onclick="navigator.clipboard.writeText(\''+screenUrl+'\');showToastLC(\'✓ Copiado\')" style="padding:10px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">COPIAR</button>';
@@ -4296,13 +4333,13 @@ function renderScreenControl(){
   h+='</div>';
 
   // Modo
-  const mb=(m,lbl,ic,col)=>'<button onclick="screenSetMode(\''+m+'\')" style="flex:1;min-width:160px;padding:18px;border-radius:12px;border:2px solid '+(mode===m?col:'var(--border)')+';background:'+(mode===m?col+'22':'transparent')+';color:'+(mode===m?col:'var(--text)')+';font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px;cursor:pointer">'+ic+' '+lbl+(mode===m?' ●':'')+'</button>';
+  const mb=(m,lbl,ic,col)=>'<button onclick="screenSetMode(\''+m+'\')" style="flex:1;min-width:160px;padding:18px;border-radius:12px;border:2px solid '+(mode===m?col:'var(--border)')+';background:'+(mode===m?col+'22':'transparent')+';color:'+(mode===m?col:'var(--text)')+';font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(ic?ic+' ':'')+lbl+(mode===m?' ●':'')+'</button>';
   h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:12px">QUÉ MOSTRAR EN LA PANTALLA</div>';
   h+='<div style="display:flex;gap:12px;flex-wrap:wrap">';
-  h+=mb('profile','PERFIL ATLETA','👤','#3b82f6');
-  h+=mb('intentos','PANTALLA DE INTENTOS','🏋️','#22c55e');
-  h+=mb('jornada','TABLA JORNADA','📊','#D4A843');
-  h+=mb('off','APAGAR','⬛','#ef4444');
+  h+=mb('profile','PERFIL ATLETA','','#3b82f6');
+  h+=mb('intentos','PANTALLA DE INTENTOS','','#22c55e');
+  h+=mb('jornada','TABLA JORNADA','','#D4A843');
+  h+=mb('off','APAGAR','','#ef4444');
   h+='</div></div>';
 
   // Tamaño de los nombres en la tabla
@@ -4527,7 +4564,7 @@ function renderTxJornada(){
     +'<div style="height:'+topBarH+'px;box-sizing:border-box;padding:0 26px;background:rgba(10,22,40,.6);border-bottom:2px solid #D4A843;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">'
       +'<div><div style="font-family:Oswald;font-size:'+Math.round(VH*0.013)+'px;letter-spacing:4px;color:rgba(212,168,67,.85)">TABLA DE CLASIFICACIÓN · JORNADA</div>'
       +'<div style="font-family:Oswald;font-size:'+Math.round(VH*0.024)+'px;font-weight:700;letter-spacing:1px;color:#fff;margin-top:2px">'+evName+' <span style="font-size:'+Math.round(VH*0.015)+'px;color:rgba(212,168,67,.8);margin-left:8px">Tandas: '+flLabel+'</span></div></div>'
-      +'<img src="yourlift_logo_hd.png" alt="YourLift" style="height:'+Math.round(VH*0.04)+'px;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))" onerror="this.outerHTML=\'<span style=&quot;font-family:Oswald;color:#D4A843;letter-spacing:2px&quot;>⚡ YourLift</span>\'">'
+      +'<img src="yourlift_logo_hd.png" alt="YourLift" style="height:'+Math.round(VH*0.04)+'px;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))" onerror="this.outerHTML=\'<span style=&quot;font-family:Oswald;color:#D4A843;letter-spacing:2px&quot;>YourLift</span>\'">'
     +'</div>'
     +'<div style="flex:1;overflow:hidden;padding:0 14px;box-sizing:border-box">'
       +'<table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed">'
@@ -4571,7 +4608,7 @@ function renderTxLeaderboard(cur,lifterChanged,opts){
             <div style="font-family:Oswald;font-size:clamp(11px,1.1vw,14px);color:rgba(220,230,245,.75);letter-spacing:3px">LEADERBOARD</div>
             <div style="font-family:Oswald;font-size:clamp(20px,2.2vw,30px);font-weight:700;color:#fff;letter-spacing:2px;margin-top:2px;text-shadow:0 2px 6px rgba(0,0,0,.6)">${divS} • ${ref.cat} (${sexLabel})</div>
           </div>
-          <img src="YourLift_logo.png" alt="YourLift" style="height:clamp(26px,2.6vw,38px);filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(12px,1.2vw,16px);color:rgba(212,168,67,.7);letter-spacing:2px\\'>⚡ YourLift</span>'">
+          <img src="YourLift_logo.png" alt="YourLift" style="height:clamp(26px,2.6vw,38px);filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(12px,1.2vw,16px);color:rgba(212,168,67,.7);letter-spacing:2px\\'>YourLift</span>'">
         </div>
         <div style="display:grid;grid-template-columns:1fr 120px 120px 80px;padding:10px clamp(20px,2.5vw,32px);background:rgba(10,22,40,.35);border-bottom:1px solid rgba(212,168,67,.25);font-family:Oswald;font-size:clamp(10px,1vw,13px);color:rgba(220,230,245,.7);letter-spacing:2px">
           <div>NOMBRE</div><div style="text-align:center">TOTAL</div><div style="text-align:center">F.TOT</div><div style="text-align:center">POS</div>
@@ -4664,7 +4701,7 @@ function renderTxTablaActual(cur,opts){
           const totalShown=isCur?a.fTotal:a.total;
           const posShown=isCur?a.fPos:a.curPos;
           const posColor=isCur?'#D4A843':'rgba(220,230,245,.7)';
-          const extra=isCur?'<div style="font-family:Oswald;font-size:9px;color:#D4A843;letter-spacing:2px;margin-top:2px;font-weight:600">⚡ EN TARIMA · '+(pendingW||'—')+' kg</div>':'';
+          const extra=isCur?'<div style="font-family:Oswald;font-size:9px;color:#D4A843;letter-spacing:2px;margin-top:2px;font-weight:600">EN TARIMA · '+(pendingW||'—')+' kg</div>':'';
           return `<div style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:${isCur?'14px 18px':'8px 18px'};${rowBg};border-bottom:1px solid rgba(212,168,67,.08);align-items:center">
             <div style="font-family:Oswald;font-size:${isCur?'18px':'13px'};font-weight:700;color:${isCur?'#D4A843':'rgba(220,230,245,.5)'};text-shadow:${isCur?'0 0 8px rgba(212,168,67,.5)':'none'}">${posShown}</div>
             <div style="overflow:hidden">
@@ -4711,7 +4748,7 @@ function renderTxMedals(md){
   };
   return `
     <div style="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);width:min(760px,60vw);pointer-events:none">
-      <div style="text-align:center;margin-bottom:10px;font-family:Oswald;font-size:14px;letter-spacing:3px;color:${'#D4A843'};text-shadow:0 2px 6px rgba(0,0,0,.6)">🏅 MEDALLERO · ${divS} ${md.cat} KG ${sexLabel} · ${_txModLabel(md.mod)}</div>
+      <div style="text-align:center;margin-bottom:10px;font-family:Oswald;font-size:14px;letter-spacing:3px;color:${'#D4A843'};text-shadow:0 2px 6px rgba(0,0,0,.6)">MEDALLERO · ${divS} ${md.cat} KG ${sexLabel} · ${_txModLabel(md.mod)}</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         ${row(1,ranked[0])}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -4933,7 +4970,7 @@ function renderSetup(){
       if(d.ts&&d.athletes&&d.athletes.length){
         const elapsed=Math.round((Date.now()-d.ts)/60000);
         backupInfo='<div style="background:rgba(212,168,67,.1);border:1px solid var(--gold);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">'
-          +'<div><div style="font-family:Oswald;font-size:13px;color:var(--gold);letter-spacing:1px">🔄 RESPALDO AUTOMÁTICO DISPONIBLE</div>'
+          +'<div><div style="font-family:Oswald;font-size:13px;color:var(--gold);letter-spacing:1px">RESPALDO AUTOMÁTICO DISPONIBLE</div>'
           +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+(d.event?.name||'Competencia')+' · '+d.athletes.length+' atletas · hace '+elapsed+'m ('+d.tsLabel+')</div></div>'
           +'<button onclick="recoverBackup()" style="padding:8px 18px;border-radius:8px;border:2px solid var(--gold);background:rgba(212,168,67,.1);color:var(--gold);font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:1px">RECUPERAR →</button>'
           +'</div>';
@@ -4977,8 +5014,8 @@ function renderShell(){
   h+='<button class="side-btn '+(p==='scoreboard'?'active':'')+'" onclick="go(\'scoreboard\')"><span class="icon">\uD83D\uDCFA</span>Scoreboard</button>';
   h+='<button class="side-btn '+(p==='transmision'?'active':'')+'" onclick="go(\'transmision\')"><span class="icon">\uD83D\uDCE1</span>Transmisi\u00f3n</button>';
   h+='<button class="side-btn '+(p==='obsTx'?'active':'')+'" onclick="go(\'obsTx\')"><span class="icon">\uD83C\uDFAC</span>Widgets OBS</button>';
-  if(window._canAccess('director'))h+='<button class="side-btn '+(p==='director'?'active':'')+'" onclick="go(\'director\')"><span class="icon">🎮</span>Control TX</button>';
-  h+='<button class="side-btn '+(p==='screen'?'active':'')+'" onclick="go(\'screen\')"><span class="icon">🖥</span>Pantalla Tarima</button>';
+  if(window._canAccess('director'))h+='<button class="side-btn '+(p==='director'?'active':'')+'" onclick="go(\'director\')"><span class="icon"></span>Control TX</button>';
+  h+='<button class="side-btn '+(p==='screen'?'active':'')+'" onclick="go(\'screen\')"><span class="icon"></span>Pantalla Tarima</button>';
   }
   h+='<div class="side-label">P\u00fablico</div>';
   h+='<button class="side-btn '+(p==='liveView'?'active':'')+'" onclick="go(\'liveView\')"><span class="icon">\uD83D\uDCFA</span>Competencia en Vivo</button>';
@@ -5000,7 +5037,7 @@ function renderShell(){
      +'<button onclick="setSyncMode('+(ctrl?'false':'true')+')" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;font-size:10px;letter-spacing:.5px;cursor:pointer">Cambiar a '+(ctrl?'\uD83D\uDC41 Espectador':'\uD83C\uDF9B Controlador')+'</button>'
    +'</div>';}
   h+='<button class="side-btn" onclick="exportBackupJSON()"><span class="icon">\uD83D\uDCBE</span>Exportar Backup</button>';
-  h+='<button class="side-btn" onclick="resetLiveData()" style="color:#ff8a8a"><span class="icon">🧹</span>Reiniciar datos en vivo</button>';
+  h+='<button class="side-btn" onclick="resetLiveData()" style="color:#ff8a8a"><span class="icon"></span>Reiniciar datos en vivo</button>';
   h+='<button class="side-btn" onclick="doLogout()"><span class="icon">\uD83D\uDD12</span>Cerrar sesi\u00f3n</button>';
   h+='</div>';
   }else{
@@ -5021,7 +5058,7 @@ function sortByFlight(){DATA.athletes.sort((a,b)=>{if(a.flight!==b.flight)return
 function sortByLot(){DATA.athletes.sort((a,b)=>a.lot-b.lot);save();R()}
 function generateLots(){
   const msg=DATA.lotsGenerated
-    ? '⚠️ Los lotes YA fueron sorteados.\n\n¿Re-sortear y reemplazar todos los números actuales?\n\nLas ediciones manuales se perderán.'
+    ? 'Los lotes YA fueron sorteados.\n\n¿Re-sortear y reemplazar todos los números actuales?\n\nLas ediciones manuales se perderán.'
     : '¿Generar números de lote aleatorios?\n\nTanda A → 100, 101, 102…\nTanda B → 200, 201, 202…\netc.';
   if(!confirm(msg))return;
   // Shuffle within each flight, assign lot = flightIndex*100 + position (Tanda A: 100-1XX, B: 200-2XX...)
@@ -5044,7 +5081,7 @@ function generateLots(){
 window.resyncFromAdmin=async function(){
   if(!fbReady||!window._fb){alert('Firebase no listo todavía. Esperá unos segundos y reintentá.');return}
   if(!DATA.event){alert('No hay competencia activa');return}
-  if(!confirm('🔄 Re-sincronizar la nómina con el admin?\n\n• Trae atletas nuevos\n• Borra los que ya no están en admin (si NO tienen pesos/intentos cargados acá)\n• Te avisa de los borrados que sí tienen datos para revisar a mano\n• Actualiza el flight de cada atleta según lo armado en la pestaña Cronograma\n\nLots y pesaje se conservan.'))return;
+  if(!confirm('Re-sincronizar la nómina con el admin?\n\n• Trae atletas nuevos\n• Borra los que ya no están en admin (si NO tienen pesos/intentos cargados acá)\n• Te avisa de los borrados que sí tienen datos para revisar a mano\n• Actualiza el flight de cada atleta según lo armado en la pestaña Cronograma\n\nLots y pesaje se conservan.'))return;
   const evId=Object.keys(LIVE_EVENTS).find(k=>LIVE_EVENTS[k]===DATA.event.name)||DATA.event.id||DATA.event.name;
   try{
     const q=window._fb.query(
@@ -5071,7 +5108,7 @@ window.setLot=function(id,val){
   const n=parseInt(val,10);
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   if(!Number.isFinite(n)||n<1){
-    showToastLC('⚠️ Lote inválido — debe ser un número entero ≥ 1');
+    showToastLC('Lote inválido — debe ser un número entero ≥ 1');
     R();return;
   }
   if(n===a.lot){R();return}
@@ -5225,7 +5262,7 @@ window.dirUploadChampionshipLogo=async function(){
   const inp=document.createElement('input');inp.type='file';inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
   inp.onchange=async()=>{
     const f=inp.files&&inp.files[0];if(!f)return;
-    const btn=document.getElementById('dirChampLogoBtn');if(btn)btn.textContent='⏳ Subiendo...';
+    const btn=document.getElementById('dirChampLogoBtn');if(btn)btn.textContent='Subiendo...';
     try{
       const {ref,uploadBytes,getDownloadURL}=window._fbSt;
       const safeId=evId.replace(/[^a-zA-Z0-9_]/g,'_');
@@ -5261,7 +5298,7 @@ window.dirBtUploadEventLogo=async function(){
   const inp=document.createElement('input');inp.type='file';inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
   inp.onchange=async()=>{
     const f=inp.files&&inp.files[0];if(!f)return;
-    const btn=document.getElementById('dirBtEvLogoBtn');if(btn)btn.textContent='⏳ Subiendo...';
+    const btn=document.getElementById('dirBtEvLogoBtn');if(btn)btn.textContent='Subiendo...';
     try{
       const {ref,uploadBytes,getDownloadURL}=window._fbSt;
       const r=ref(window._fbStInst,'logos/event/'+f.name);
@@ -5382,7 +5419,7 @@ window.dirToggleMedals=async function(){
   const isOn=c&&c.active&&(!c.until||c.until>Date.now());
   if(isOn){await window.dirHide('medals');return;}
   const{mod,sex,div,cat}=window._mdSel;
-  if(!mod||!sex||!div||!cat){showToastLC('⚠️ Elegí modalidad, sexo, división y categoría primero');return;}
+  if(!mod||!sex||!div||!cat){showToastLC('Elegí modalidad, sexo, división y categoría primero');return;}
   await window.dirShow('medals',0,{mod,sex,div,cat});
 };
 window.dirShowSlam=async function(type){
@@ -5608,7 +5645,7 @@ function renderDirector(){
     const c=_dirState[key]||{};
     const sc=c.scale||1;
     return '<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.05);display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
-      +'<span style="font-size:10px;color:var(--muted);letter-spacing:1px;font-family:Oswald;min-width:60px">📏 TAMAÑO</span>'
+      +'<span style="font-size:10px;color:var(--muted);letter-spacing:1px;font-family:Oswald;min-width:60px">TAMAÑO</span>'
       +'<input type="range" min="0.5" max="2.0" step="0.05" value="'+sc+'" oninput="dirSetScale(\''+key+'\',this.value);this.nextElementSibling.textContent=parseFloat(this.value).toFixed(2)+\'x\'" style="flex:1;min-width:140px;cursor:pointer;accent-color:var(--gold)">'
       +'<span style="font-family:Oswald;font-size:13px;color:var(--gold);font-weight:700;min-width:48px;text-align:right">'+sc.toFixed(2)+'x</span>'
       +'<button onclick="dirResetScale(\''+key+'\')" title="Reset a 1.00x" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:10px;cursor:pointer;font-family:Oswald;letter-spacing:1px">RESET</button>'
@@ -5620,9 +5657,9 @@ function renderDirector(){
     return '<div class="card" style="padding:14px 18px;border-left:4px solid '+(isOn?'var(--green)':'var(--border)')+';background:'+(isOn?'rgba(34,197,94,.04)':'transparent')+'">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">'
       +'<div style="flex:1;min-width:200px">'
-        +'<div style="display:flex;align-items:center;gap:10px"><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">'+icon+' '+title+'</div>'+kbd(shortcut)+'</div>'
+        +'<div style="display:flex;align-items:center;gap:10px"><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">'+(icon?icon+' ':'')+title+'</div>'+kbd(shortcut)+'</div>'
         +'<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">'+desc+'</div>'
-        +(isOn?'<div style="font-size:10px;color:var(--green);margin-top:4px;font-family:Oswald;letter-spacing:1px">🔵 EN PANTALLA</div>':'')
+        +(isOn?'<div style="font-size:10px;color:var(--green);margin-top:4px;font-family:Oswald;letter-spacing:1px">EN PANTALLA</div>':'')
       +'</div>'
       +'<button class="btn '+(isOn?'btn-r':'btn-g')+'" onclick="'+onClick+'" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(isOn?'⏸ DESACTIVAR':'▶ ACTIVAR')+'</button>'
       +'</div>'
@@ -5631,15 +5668,15 @@ function renderDirector(){
   };
   let h='<div class="fade">';
   h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;flex-wrap:wrap;gap:12px">';
-  h+='<div><h2 class="os" style="font-size:22px;letter-spacing:1px">🎮 CONTROL DE TRANSMISIÓN</h2><p style="color:var(--muted);font-size:12px">Toggle on/off por componente. Compatible con Stream Deck — cada acción tiene una tecla asignada.</p></div>';
-  h+='<div style="display:flex;gap:6px;align-items:center"><button class="btn btn-r" onclick="dirHideAll()" style="padding:12px 20px;font-size:13px;font-family:Oswald;font-weight:700;letter-spacing:2px">🙈 ESCONDER TODO</button>'
+  h+='<div><h2 class="os" style="font-size:22px;letter-spacing:1px">CONTROL DE TRANSMISIÓN</h2><p style="color:var(--muted);font-size:12px">Toggle on/off por componente. Compatible con Stream Deck — cada acción tiene una tecla asignada.</p></div>';
+  h+='<div style="display:flex;gap:6px;align-items:center"><button class="btn btn-r" onclick="dirHideAll()" style="padding:12px 20px;font-size:13px;font-family:Oswald;font-weight:700;letter-spacing:2px">ESCONDER TODO</button>'
     +'<div style="display:flex;flex-direction:column;align-items:center;gap:2px"><kbd style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:28px;padding:0 8px;background:#0a1628;border:2px solid #ef4444;border-radius:6px;font-family:Oswald;font-size:14px;font-weight:700;color:#ef4444;letter-spacing:1px">0</kbd><span style="font-size:9px;color:var(--muted)">o ESC</span></div></div>';
   h+='</div>';
   // OBS WebSocket card — status + settings
-  const wsStatus=_obsWsConnected?{c:'var(--green)',label:'CONECTADO',icon:'🟢'}:(_obsWsError?{c:'var(--red)',label:'ERROR',icon:'🔴'}:{c:'var(--muted)',label:'DESCONECTADO',icon:'⚫'});
+  const wsStatus=_obsWsConnected?{c:'var(--green)',label:'CONECTADO',icon:''}:(_obsWsError?{c:'var(--red)',label:'ERROR',icon:''}:{c:'var(--muted)',label:'DESCONECTADO',icon:''});
   h+='<div class="card" style="margin-bottom:14px;padding:14px 18px;border-color:'+wsStatus.c+';background:rgba(34,197,94,'+(_obsWsConnected?'.06':'.0')+')">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">';
-  h+='<div><div style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px">🔌 OBS WEBSOCKET (STREAM DECK)</div>';
+  h+='<div><div style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px">OBS WEBSOCKET (STREAM DECK)</div>';
   h+='<div style="font-size:13px;font-family:Oswald;margin-top:2px;color:'+wsStatus.c+'">'+wsStatus.icon+' '+wsStatus.label+(_obsWsError?' · <span style="color:var(--muted);font-size:11px">'+esc(_obsWsError)+'</span>':'')+'</div></div>';
   h+='<button class="btn '+(_obsWsConnected?'btn-r':'btn-g')+'" onclick="obsWsToggleConnection()" style="padding:8px 16px;font-size:12px">'+(_obsWsConnected?'Desconectar':'▶ Conectar')+'</button>';
   h+='</div>';
@@ -5652,7 +5689,7 @@ function renderDirector(){
   h+='<div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap">';
   h+='<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer"><input id="obsWsAuto" type="checkbox" '+(_obsWsSettings.autoConnect?'checked':'')+'> Conectar automáticamente al abrir el panel</label>';
   if(_obsWsConnected){
-    h+='<button class="btn" onclick="obsWsTestEvent()" style="padding:6px 14px;font-size:11px;background:transparent;border:1px solid var(--gold);color:var(--gold)">🧪 Probar evento (toggle perfil)</button>';
+    h+='<button class="btn" onclick="obsWsTestEvent()" style="padding:6px 14px;font-size:11px;background:transparent;border:1px solid var(--gold);color:var(--gold)">Probar evento (toggle perfil)</button>';
   }
   h+='</div>';
   // Log de eventos recibidos (debug)
@@ -5663,10 +5700,10 @@ function renderDirector(){
     h+='</div></details>';
   }
   // Setup help
-  h+='<details style="margin-top:10px"><summary style="cursor:pointer;font-size:11px;color:var(--gold);font-family:Oswald;letter-spacing:1px">📖 CÓMO CONFIGURAR (CLICK PARA EXPANDIR)</summary>';
+  h+='<details style="margin-top:10px"><summary style="cursor:pointer;font-size:11px;color:var(--gold);font-family:Oswald;letter-spacing:1px">CÓMO CONFIGURAR (CLICK PARA EXPANDIR)</summary>';
   h+='<div style="margin-top:8px;font-size:11px;line-height:1.7;color:var(--muted)">';
   h+='<b style="color:var(--text)">1. Habilitar WebSocket en OBS</b> (una sola vez):<br>OBS → menú <code>Tools → WebSocket Server Settings</code> → ✓ Enable WebSocket Server → poné un password → Apply.<br><br>';
-  h+='<b style="color:var(--text)">2. Pegá host (<code>localhost</code> si OBS corre en la misma PC), puerto y password arriba</b> → click "Guardar y conectar". Debería ponerse 🟢 CONECTADO.<br><br>';
+  h+='<b style="color:var(--text)">2. Pegá host (<code>localhost</code> si OBS corre en la misma PC), puerto y password arriba</b> → click "Guardar y conectar". Debería ponerse CONECTADO.<br><br>';
   h+='<b style="color:var(--text)">3. Configurar Stream Deck</b> (Elgato Stream Deck app):<br>';
   h+='• Si tenés el plugin <i>"OBS Studio"</i> instalado: agregá un botón con acción <code>OBS Studio → Send Custom Event</code>.<br>';
   h+='• Event name: <code>tx</code> (cualquiera, lo importante es el JSON del payload).<br>';
@@ -5687,21 +5724,21 @@ function renderDirector(){
   h+='<div>{"action":"breakStop"}</div>';
   h+='<div>{"action":"breakAdd","seconds":60} ← +1 min</div>';
   h+='</div>';
-  h+='<br><b style="color:var(--orange,#f59e0b)">⚠️ Nota:</b> esto reemplaza los hotkeys. Una vez conectado a OBS WS, no hace falta tener el panel en foco — los eventos llegan por WebSocket.';
+  h+='<br><b style="color:var(--orange,#f59e0b)">Nota:</b> esto reemplaza los hotkeys. Una vez conectado a OBS WS, no hace falta tener el panel en foco — los eventos llegan por WebSocket.';
   h+='</div></details>';
   h+='</div>';
 
   // Setup widget URL card
   h+='<div class="card" style="margin-bottom:14px;padding:12px 16px;background:rgba(212,168,67,.06);border-color:rgba(212,168,67,.3)">';
-  h+='<div style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px;margin-bottom:6px">📡 URL DEL WIDGET PARA OBS (UNA SOLA VEZ)</div>';
+  h+='<div style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px;margin-bottom:6px">URL DEL WIDGET PARA OBS (UNA SOLA VEZ)</div>';
   h+='<div style="font-size:12px;color:var(--muted);line-height:1.6">En OBS: Sources → + → Browser → pegá esta URL → 1920×1080 → DESMARCAR "Refresh on activate" y "Shutdown when not visible".</div>';
   h+='<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><code style="flex:1;background:rgba(10,22,40,.6);padding:8px 12px;border-radius:6px;font-size:10px;color:rgba(200,215,240,.8);word-break:break-all">'+widgetUrl+'</code>';
-  h+='<button class="btn btn-g" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent).then(()=>{this.textContent=\'✓ Copiado\';setTimeout(()=>this.textContent=\'📋 Copiar\',1500)})" style="padding:7px 14px;font-size:11px;flex-shrink:0">📋 Copiar</button></div>';
+  h+='<button class="btn btn-g" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent).then(()=>{this.textContent=\'✓ Copiado\';setTimeout(()=>this.textContent=\'Copiar\',1500)})" style="padding:7px 14px;font-size:11px;flex-shrink:0">Copiar</button></div>';
   h+='</div>';
   // Status del lifter actual
   if(cur){
     h+='<div class="card" style="margin-bottom:14px;padding:10px 14px;background:rgba(34,197,94,.05);border-color:rgba(34,197,94,.3);font-size:12px">';
-    h+='👤 <b>Levantador actual:</b> <span style="color:var(--gold);font-family:Oswald">'+cur.name+'</span> · '+cur.cat+' · '+cur.div+' · Vuelo '+cur.flight+' · '+LIFT_S[DATA.lift]+(DATA.round+1);
+    h+='<b>Levantador actual:</b> <span style="color:var(--gold);font-family:Oswald">'+cur.name+'</span> · '+cur.cat+' · '+cur.div+' · Vuelo '+cur.flight+' · '+LIFT_S[DATA.lift]+(DATA.round+1);
     h+='</div>';
   }
   // ── Logo del campeonato (se muestra en perfil/scoreboard/tabla actual)
@@ -5713,7 +5750,7 @@ function renderDirector(){
     h+='<div style="width:64px;height:64px;background:rgba(10,22,40,.5);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">'
       +(champLogo?'<img src="'+champLogo+'" style="max-width:100%;max-height:100%;object-fit:contain">':'<span style="font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:1px;text-align:center;line-height:1.2">SIN<br>LOGO</span>')
       +'</div>';
-    h+='<div><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">🏆 Logo del campeonato</div>';
+    h+='<div><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">Logo del campeonato</div>';
     h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Aparece en el Perfil, Scoreboard y Tabla Actual. Recomendado: PNG transparente, 256×256+.</div></div>';
     h+='</div>';
     h+='<div style="display:flex;gap:6px">';
@@ -5723,39 +5760,39 @@ function renderDirector(){
   }
   // Componentes — TOGGLES (1 botón / 1 tecla por componente, listo para Stream Deck)
   h+='<div style="display:grid;gap:12px">';
-  h+=compToggle('profile','🪪','Perfil del atleta','Pantalla completa con nombre, categoría, club, edad, PB del atleta actual.','P','dirToggle(\'profile\')');
+  h+=compToggle('profile','','Perfil del atleta','Pantalla completa con nombre, categoría, club, edad, PB del atleta actual.','P','dirToggle(\'profile\')');
   // Selector Foto / GIF
   const _isGif=_txProfileMediaType==='gif';
   h+='<div style="margin-top:-8px;margin-bottom:4px;padding:8px 18px;display:flex;align-items:center;gap:10px;background:rgba(10,22,40,.4);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;flex-wrap:wrap">';
   h+='<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;flex-shrink:0">MEDIA EN PERFIL:</span>';
-  h+='<button onclick="setTxProfileMedia(\'foto\')" style="padding:5px 16px;border-radius:6px;border:2px solid '+(!_isGif?'var(--gold)':'var(--border)')+';background:'+(!_isGif?'rgba(212,168,67,.15)':'transparent')+';color:'+(!_isGif?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;cursor:pointer;font-weight:700;letter-spacing:1px;transition:all .15s">📷 FOTO</button>';
-  h+='<button onclick="setTxProfileMedia(\'gif\')" style="padding:5px 16px;border-radius:6px;border:2px solid '+(_isGif?'#a78bfa':'var(--border)')+';background:'+(_isGif?'rgba(139,92,246,.15)':'transparent')+';color:'+(_isGif?'#a78bfa':'var(--muted)')+';font-family:Oswald;font-size:11px;cursor:pointer;font-weight:700;letter-spacing:1px;transition:all .15s">🎬 GIF</button>';
+  h+='<button onclick="setTxProfileMedia(\'foto\')" style="padding:5px 16px;border-radius:6px;border:2px solid '+(!_isGif?'var(--gold)':'var(--border)')+';background:'+(!_isGif?'rgba(212,168,67,.15)':'transparent')+';color:'+(!_isGif?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;cursor:pointer;font-weight:700;letter-spacing:1px;transition:all .15s">FOTO</button>';
+  h+='<button onclick="setTxProfileMedia(\'gif\')" style="padding:5px 16px;border-radius:6px;border:2px solid '+(_isGif?'#a78bfa':'var(--border)')+';background:'+(_isGif?'rgba(139,92,246,.15)':'transparent')+';color:'+(_isGif?'#a78bfa':'var(--muted)')+';font-family:Oswald;font-size:11px;cursor:pointer;font-weight:700;letter-spacing:1px;transition:all .15s">GIF</button>';
   if(_isGif){
     const _curFull=liftQueue()[0]?txLookupFull(liftQueue()[0]):null;
     if(_curFull?.gif_url){
       h+='<span style="font-size:10px;color:#a78bfa;font-family:Oswald">✓ GIF disponible para este atleta</span>';
     } else {
-      h+='<span style="font-size:10px;color:var(--red);font-family:Oswald">⚠ Sin GIF — se mostrará foto/iniciales</span>';
+      h+='<span style="font-size:10px;color:var(--red);font-family:Oswald">Sin GIF — se mostrará foto/iniciales</span>';
     }
   }
   h+='</div>';
-  h+=compToggle('scoreboard','📊','Marcador (lower-third)','Barra inferior izquierda con nombre, categoría e intentos cargados.','S','dirToggle(\'scoreboard\')');
+  h+=compToggle('scoreboard','','Marcador (lower-third)','Barra inferior izquierda con nombre, categoría e intentos cargados.','S','dirToggle(\'scoreboard\')');
   // Leaderboard: selector de cat + toggle
   const curCat=_dirState.leaderboard?.cat||'';
   const lbActive=_dirState.leaderboard?.active&&(!_dirState.leaderboard?.until||_dirState.leaderboard.until>Date.now());
   h+='<div class="card" style="padding:14px 18px;border-left:4px solid '+(lbActive?'var(--green)':'var(--border)')+';background:'+(lbActive?'rgba(34,197,94,.04)':'transparent')+'">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">';
   h+='<div style="flex:1;min-width:200px">';
-  h+='<div style="display:flex;align-items:center;gap:10px"><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">🏆 Tabla de clasificación</div>'+kbd('L')+'</div>';
+  h+='<div style="display:flex;align-items:center;gap:10px"><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">Tabla de clasificación</div>'+kbd('L')+'</div>';
   h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Ranking de la categoría seleccionada abajo. Si "Auto", usa la del lifter actual.</div>';
   h+='<div style="margin-top:8px"><select id="dirLbCat" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;min-width:240px"><option value="">— Auto (cat del lifter actual) —</option>';
   cats.forEach(c=>{h+='<option value="'+c+'" '+(c===curCat?'selected':'')+'>'+c+'</option>'});
   h+='</select></div>';
-  h+=(lbActive?'<div style="font-size:10px;color:var(--green);margin-top:6px;font-family:Oswald;letter-spacing:1px">🔵 EN PANTALLA</div>':'');
+  h+=(lbActive?'<div style="font-size:10px;color:var(--green);margin-top:6px;font-family:Oswald;letter-spacing:1px">EN PANTALLA</div>':'');
   h+='</div>';
   h+='<button class="btn '+(lbActive?'btn-r':'btn-g')+'" onclick="dirToggleLb()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(lbActive?'⏸ DESACTIVAR':'▶ ACTIVAR')+'</button>';
   h+='</div>'+scaleSlider('leaderboard')+'</div>';
-  h+=compToggle('tablaActual','📋','Tabla actual (corner)','Ranking de la categoría del lifter actual, esquina inferior derecha. Entra desde abajo, queda fijo. El levantador en pantalla se resalta y muestra la flecha de proyección (pos actual → pos si lo levanta).','A','dirToggle(\'tablaActual\')');
+  h+=compToggle('tablaActual','','Tabla actual (corner)','Ranking de la categoría del lifter actual, esquina inferior derecha. Entra desde abajo, queda fijo. El levantador en pantalla se resalta y muestra la flecha de proyección (pos actual → pos si lo levanta).','A','dirToggle(\'tablaActual\')');
   // Medallero (Top 3) — selects en cascada: modalidad → sexo → división → categoría.
   // Todo se calcula desde DATA.athletes (ya cargado local): cero lecturas nuevas a Firestore.
   {
@@ -5773,7 +5810,7 @@ function renderDirector(){
     h+='<div class="card" style="padding:14px 18px;border-left:4px solid '+(mdActive?'var(--green)':'var(--border)')+';background:'+(mdActive?'rgba(34,197,94,.04)':'transparent')+'">';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">';
     h+='<div style="flex:1;min-width:280px">';
-    h+='<div style="display:flex;align-items:center;gap:10px"><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">🏅 Medallero (Top 3)</div>'+kbd('M')+'</div>';
+    h+='<div style="display:flex;align-items:center;gap:10px"><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">Medallero (Top 3)</div>'+kbd('M')+'</div>';
     h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Podio de una categoría específica. Elegí en orden: modalidad → sexo → división → categoría.</div>';
     h+='<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">';
     h+='<select style="'+selStyle+'" onchange="dirMdSet(\'mod\',this.value)"><option value="">1° Modalidad —</option>';
@@ -5789,7 +5826,7 @@ function renderDirector(){
     catOpts.forEach(c=>{h+='<option value="'+c+'"'+(c===sel.cat?' selected':'')+'>'+c+' kg</option>'});
     h+='</select>';
     h+='</div>';
-    h+=(mdActive?'<div style="font-size:10px;color:var(--green);margin-top:6px;font-family:Oswald;letter-spacing:1px">🔵 EN PANTALLA</div>':'');
+    h+=(mdActive?'<div style="font-size:10px;color:var(--green);margin-top:6px;font-family:Oswald;letter-spacing:1px">EN PANTALLA</div>':'');
     h+='</div>';
     h+='<button class="btn '+(mdActive?'btn-r':'btn-g')+'" onclick="dirToggleMedals()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(mdActive?'⏸ DESACTIVAR':'▶ ACTIVAR')+'</button>';
     h+='</div>'+scaleSlider('medals')+'</div>';
@@ -5800,7 +5837,7 @@ function renderDirector(){
   h+='<div class="card" style="padding:14px 18px;border-left:4px solid var(--border)">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">';
   h+='<div style="flex:1;min-width:200px">';
-  h+='<div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">⚡ Slam GOOD / NO LIFT</div>';
+  h+='<div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">Slam GOOD / NO LIFT</div>';
   h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Flash de 2s en la esquina superior izquierda. Disparalo vos cuando los jueces dictaminen.</div>';
   h+='</div>';
   h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
@@ -5815,12 +5852,12 @@ function renderDirector(){
     const rem=Math.max(0,Math.ceil((bt.durationSec*1000-elapsed)/1000));
     const m=Math.floor(rem/60),s=rem%60;
     btStatus='<div style="font-size:11px;color:'+(bt.pausedAt?'var(--orange,#f59e0b)':'var(--green)')+';margin-top:6px;font-family:Oswald;letter-spacing:1px">'
-      +(bt.pausedAt?'⏸ PAUSADO':'🔵 EN PANTALLA')+' · '+m+':'+(s<10?'0':'')+s+(bt.label?' · '+bt.label:'')+'</div>';
+      +(bt.pausedAt?'⏸ PAUSADO':'EN PANTALLA')+' · '+m+':'+(s<10?'0':'')+s+(bt.label?' · '+bt.label:'')+'</div>';
   }
   h+='<div class="card" style="padding:14px 18px;border-left:4px solid '+(bt.active?'var(--green)':'var(--border)')+'">';
   h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">';
   h+='<div style="flex:1;min-width:240px">';
-  h+='<div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">⏲ Timer de descanso</div>';
+  h+='<div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">Timer de descanso</div>';
   h+='<div style="font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5">Reloj configurable para break entre lifts/vuelos/almuerzo. Aparece en grande al centro de la pantalla con cuenta regresiva.</div>';
   h+=btStatus;
   h+='</div>';
@@ -5838,7 +5875,7 @@ function renderDirector(){
   // Selector próximo movimiento
   const curMov=(bt.movement||'').toUpperCase();
   h+='<div style="margin-top:10px">';
-  h+='<label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:5px">🏋️ PRÓXIMO MOVIMIENTO</label>';
+  h+='<label style="font-size:10px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:5px">PRÓXIMO MOVIMIENTO</label>';
   h+='<div style="display:flex;gap:6px;flex-wrap:wrap">';
   ['','SQUAT','BENCH PRESS','DEADLIFT'].forEach(mv=>{
     const active=curMov===(mv.toUpperCase());
@@ -5850,17 +5887,17 @@ function renderDirector(){
   // ── Selector de videos dinámico ──────────────────────────────
   h+='<div style="margin-top:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
   h+='<div style="padding:8px 12px;background:var(--card);display:flex;align-items:center;justify-content:space-between;gap:8px">';
-  h+='<span style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text)">🎬 VIDEOS DE FONDO</span>';
+  h+='<span style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text)">VIDEOS DE FONDO</span>';
   h+='<div style="display:flex;gap:6px">';
   if(_dirBtVideoUploading){
-    h+='<span style="font-size:10px;color:var(--muted);padding:4px 10px">⏳ Subiendo...</span>';
+    h+='<span style="font-size:10px;color:var(--muted);padding:4px 10px">Subiendo...</span>';
   } else {
     h+='<button onclick="window.dirBtUploadVideo()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:10px;font-family:Oswald;letter-spacing:1px;cursor:pointer">⬆ SUBIR</button>';
   }
-  h+='<button onclick="window.dirBtLoadVideos()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px;cursor:pointer">🔄 CARGAR</button>';
+  h+='<button onclick="window.dirBtLoadVideos()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px;cursor:pointer">CARGAR</button>';
   h+='</div></div>';
   if(_dirBtVideoList===null){
-    h+='<div style="padding:10px 12px;font-size:11px;color:var(--muted)">Hacé clic en 🔄 CARGAR para ver los videos disponibles.</div>';
+    h+='<div style="padding:10px 12px;font-size:11px;color:var(--muted)">Hacé clic en CARGAR para ver los videos disponibles.</div>';
   } else if(_dirBtVideoList.length===0){
     h+='<div style="padding:10px 12px;font-size:11px;color:var(--muted)">No hay videos en storage. Subí uno con ⬆ SUBIR.</div>';
   } else {
@@ -5872,7 +5909,7 @@ function renderDirector(){
       h+='<div style="display:flex;align-items:center;gap:8px">';
       h+='<input type="checkbox" id="dirBtVid_'+i+'" '+(checked?'checked':'')+' style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">';
       h+='<label for="dirBtVid_'+i+'" style="font-size:11px;color:var(--text);cursor:pointer;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+v.name+'">'+fname+'</label>';
-      h+='<button onclick="window.dirBtDeleteVideo(\''+v.name.replace(/'/g,"\\'")+'\')" title="Eliminar" style="padding:2px 7px;border-radius:4px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;font-size:10px;cursor:pointer;flex-shrink:0">🗑</button>';
+      h+='<button onclick="window.dirBtDeleteVideo(\''+v.name.replace(/'/g,"\\'")+'\')" title="Eliminar" style="padding:2px 7px;border-radius:4px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;font-size:10px;cursor:pointer;flex-shrink:0">Eliminar</button>';
       h+='</div>';
     });
     h+='</div>';
@@ -5887,7 +5924,7 @@ function renderDirector(){
   const _ts=stl.titleSize!=null?stl.titleSize:8,_ms=stl.movSize!=null?stl.movSize:5,_tmr=stl.timerSize!=null?stl.timerSize:12;
   const _blur=stl.blurAmount!=null?stl.blurAmount:24,_ov=stl.overlayOpacity!=null?stl.overlayOpacity:0.65;
   h+='<details style="margin-top:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden" open>';
-  h+='<summary style="padding:9px 14px;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text);background:var(--card);list-style:none;display:flex;align-items:center;justify-content:space-between">🖊️ EDITOR DE LAYOUT <span style="font-size:9px;color:var(--muted);font-weight:400">arrastrá los bloques para mover</span></summary>';
+  h+='<summary style="padding:9px 14px;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text);background:var(--card);list-style:none;display:flex;align-items:center;justify-content:space-between">EDITOR DE LAYOUT <span style="font-size:9px;color:var(--muted);font-weight:400">arrastrá los bloques para mover</span></summary>';
   h+='<div style="background:#07111e">';
   // ── Canvas 16:9 ─────────────────────────────────────────────────────────
   h+='<div id="dirBtCanvas" style="position:relative;width:100%;aspect-ratio:16/9;background:'+_bg+';overflow:hidden;cursor:default;user-select:none;touch-action:none"'
@@ -5895,7 +5932,7 @@ function renderDirector(){
   // Bloque VIDEO (arrastrable + redimensionable)
   h+='<div id="dirBtVid" style="position:absolute;left:'+_vx+'%;top:'+_vy+'%;width:'+_vw+'%;height:'+_vh+'%;background:rgba(30,90,180,.25);border:2px solid rgba(80,150,255,.6);box-sizing:border-box;cursor:grab"'
     +' onmousedown="window.dirBtDown(event,\'vid\')">'
-    +'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:10px;color:rgba(255,255,255,.5);pointer-events:none;text-align:center">📹<br>VIDEO<br><span style="font-size:8px;opacity:.6">arrastrá</span></div>'
+    +'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:10px;color:rgba(255,255,255,.5);pointer-events:none;text-align:center"><br>VIDEO<br><span style="font-size:8px;opacity:.6">arrastrá</span></div>'
     // Handle resize esquina inferior-derecha
     +'<div style="position:absolute;right:-1px;bottom:-1px;width:14px;height:14px;background:rgba(80,150,255,.8);cursor:se-resize;border-radius:2px 0 0 0" onmousedown="window.dirBtDown(event,\'vid-resize\');event.stopPropagation()"></div>'
     // Handle resize borde derecho (ancho)
@@ -5942,7 +5979,7 @@ function renderDirector(){
   h+=sl2('dirBtBlur','Desenfoque fondo',0,48,_blur);
   h+='<div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:var(--muted);white-space:nowrap;min-width:90px">Opacidad overlay</span><input type="range" id="dirBtOv" min="0" max="1" step="0.05" value="'+_ov+'" style="flex:1;accent-color:var(--accent)" oninput="document.getElementById(\'dirBtOvV\').textContent=parseFloat(this.value).toFixed(2)"><span id="dirBtOvV" style="font-size:10px;color:var(--muted);min-width:28px">'+_ov.toFixed(2)+'</span></div>';
   // Botón guardar
-  h+='<button onclick="window.dirBtApplyStyle()" style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-family:Oswald;font-size:13px;letter-spacing:2px;cursor:pointer;width:100%;margin-top:2px">✅ GUARDAR Y APLICAR</button>';
+  h+='<button onclick="window.dirBtApplyStyle()" style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-family:Oswald;font-size:13px;letter-spacing:2px;cursor:pointer;width:100%;margin-top:2px">GUARDAR Y APLICAR</button>';
   h+='</div></div></details>';
   // Botones
   h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">';
@@ -5995,7 +6032,7 @@ function renderDirector(){
   // ── Paletas rápidas ──────────────────────────────────────────
   const activePal=(_dirState&&_dirState.palette)||null;
   h+='<div style="margin-top:14px;background:var(--card-bg,rgba(18,28,50,.7));border:1px solid var(--border);border-radius:10px;padding:16px 18px">';
-  h+='<div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:12px">🎨 PALETA DE COLORES</div>';
+  h+='<div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:12px">PALETA DE COLORES</div>';
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">';
   Object.entries(_TX_COLOR_PALETTES).forEach(([key,pal])=>{
     const active=activePal===key;
@@ -6043,7 +6080,7 @@ function renderDirector(){
 function renderManage(){
   // Filtrar por tarima si está activo (modo 2 tarimas)
   const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">🎲 Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">🎲 Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">🔄 Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">➕ Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">⚖️ Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">📏 Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">🏋️ Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">🎫 Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th><th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:38px">VLO</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:80px">BW + 1ros</th>';
   ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:62px">'+LIFT_S[l]+r+'</th>'})});
@@ -6061,9 +6098,9 @@ function renderManage(){
     if(a.weighedIn){
       h+='<button onclick="openWeighIn('+a.id+')" style="padding:2px 6px;border-radius:4px;border:1px solid var(--green);background:rgba(34,197,94,.1);color:var(--green);font-family:Oswald;font-size:9px;cursor:pointer;white-space:nowrap">'+a.bw+'kg ✓</button>';
     }else{
-      h+='<button onclick="openWeighIn('+a.id+')" style="padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:9px;cursor:pointer">⚖️ Pesar</button>';
+      h+='<button onclick="openWeighIn('+a.id+')" style="padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:9px;cursor:pointer">Pesar</button>';
     }
-    {const _hasMedia=!!_lcMediaFor(a);h+='<button onclick="openAthleteMedia('+a.id+')" title="Subir foto/GIF del atleta" style="display:block;margin:3px auto 0;padding:2px 8px;border-radius:4px;border:1px solid '+(_hasMedia?'var(--gold)':'var(--border)')+';background:'+(_hasMedia?'rgba(212,168,67,.12)':'transparent')+';color:'+(_hasMedia?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:9px;cursor:pointer;white-space:nowrap">📷 '+(_hasMedia?'Foto ✓':'Foto')+'</button>';}
+    {const _hasMedia=!!_lcMediaFor(a);h+='<button onclick="openAthleteMedia('+a.id+')" title="Subir foto/GIF del atleta" style="display:block;margin:3px auto 0;padding:2px 8px;border-radius:4px;border:1px solid '+(_hasMedia?'var(--gold)':'var(--border)')+';background:'+(_hasMedia?'rgba(212,168,67,.12)':'transparent')+';color:'+(_hasMedia?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:9px;cursor:pointer;white-space:nowrap">'+(_hasMedia?'Foto ✓':'Foto')+'</button>';}
     h+='</td>';
     ['sq','bp','dl'].forEach(l=>{a.att[l].forEach((at,r)=>{
       const ctKey=a.id+'_'+l+'_'+r;const ct=DATA.changeTimers[ctKey];
@@ -6107,9 +6144,9 @@ function _attCellCompete(a,l,j,isCurrentCell){
   const ctExpired = ct && ct.expired;
   let cell='<td style="padding:'+Math.round(3*sc)+'px;vertical-align:top">';
   if(ctRem!==null){
-    cell+='<div id="ctcell_'+ctKey+'" class="att att-p" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:'+Math.round(14*sc)+'px;font-weight:700;padding:'+Math.round(8*sc)+'px 4px;background:rgba(245,158,11,.15);border:2px solid var(--orange);color:var(--orange);text-align:center" title="Tiene '+ctRem+'s para declarar el peso">⏱ '+ctRem+'s</div>';
+    cell+='<div id="ctcell_'+ctKey+'" class="att att-p" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:'+Math.round(14*sc)+'px;font-weight:700;padding:'+Math.round(8*sc)+'px 4px;background:rgba(245,158,11,.15);border:2px solid var(--orange);color:var(--orange);text-align:center" title="Tiene '+ctRem+'s para declarar el peso">'+ctRem+'s</div>';
   } else if(ctExpired && !at.w){
-    cell+='<div id="ctcell_'+ctKey+'" class="att att-n" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:'+Math.round(15*sc)+'px;font-weight:800;padding:'+Math.round(8*sc)+'px 4px;background:rgba(239,68,68,.18);border:2px solid var(--red);color:var(--red);text-align:center;animation:pulse 1.5s ease-in-out infinite" title="Tiempo expirado — requiere aprobación del jurado">⏰❗</div>';
+    cell+='<div id="ctcell_'+ctKey+'" class="att att-n" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:'+Math.round(15*sc)+'px;font-weight:800;padding:'+Math.round(8*sc)+'px 4px;background:rgba(239,68,68,.18);border:2px solid var(--red);color:var(--red);text-align:center;animation:pulse 1.5s ease-in-out infinite" title="Tiempo expirado — requiere aprobación del jurado">TIEMPO</div>';
   } else {
     cell+='<div class="'+c+' att" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:'+Math.round((isCurrentCell?15:12)*sc)+'px;font-weight:700;padding:'+Math.round((isCurrentCell?10:8)*sc)+'px 4px;'+(isCurrentCell?'box-shadow:inset 0 0 0 3px '+LIFT_C[l]+';':'')+'">'+(at.w||'—')+'</div>';
   }
@@ -6141,12 +6178,12 @@ function renderCompete(){
   // Toggle: timer de cambio (60s tras válido/nulo). Apagado por defecto.
   {const cton=!!window._CT_ENABLED;
    h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:7px 12px;border-radius:8px;border:1px solid '+(cton?'rgba(245,158,11,.4)':'var(--border)')+';background:'+(cton?'rgba(245,158,11,.08)':'transparent')+'">'
-     +'<span style="font-size:11px;color:var(--muted)">⏱ Timer de cambio (60s entre intentos) <b style="color:'+(cton?'var(--orange)':'var(--muted)')+'">'+(cton?'ACTIVADO':'APAGADO')+'</b></span>'
+     +'<span style="font-size:11px;color:var(--muted)">Timer de cambio (60s entre intentos) <b style="color:'+(cton?'var(--orange)':'var(--muted)')+'">'+(cton?'ACTIVADO':'APAGADO')+'</b></span>'
      +'<button onclick="toggleChangeTimers()" style="padding:5px 14px;border-radius:6px;border:1px solid '+(cton?'var(--orange)':'var(--border)')+';background:transparent;color:'+(cton?'var(--orange)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(cton?'APAGAR':'ACTIVAR')+'</button>'
    +'</div>';
    const afon=!!window._CT_AUTOFILL_ENABLED;
    h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:7px 12px;border-radius:8px;border:1px solid '+(afon?'rgba(59,130,246,.4)':'var(--border)')+';background:'+(afon?'rgba(59,130,246,.08)':'transparent')+'">'
-     +'<span style="font-size:11px;color:var(--muted)">⚡ Auto-rellenar intento al vencer el timer (nulo=mismo peso, válido=+2.5kg) <b style="color:'+(afon?'#3b82f6':'var(--muted)')+'">'+(afon?'ACTIVADO':'APAGADO')+'</b></span>'
+     +'<span style="font-size:11px;color:var(--muted)">Auto-rellenar intento al vencer el timer (nulo=mismo peso, válido=+2.5kg) <b style="color:'+(afon?'#3b82f6':'var(--muted)')+'">'+(afon?'ACTIVADO':'APAGADO')+'</b></span>'
      +'<button onclick="toggleChangeTimerAutofill()" style="padding:5px 14px;border-radius:6px;border:1px solid '+(afon?'#3b82f6':'var(--border)')+';background:transparent;color:'+(afon?'#3b82f6':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(afon?'APAGAR':'ACTIVAR')+'</button>'
    +'</div>';}
   h+='<div>';
@@ -6402,9 +6439,9 @@ function renderResults(){
   // Los botones admin (Exportar, Cerrar, PDF) solo se muestran si está logueado como admin
   let adminButtons = '';
   if(isAdmin){
-    adminButtons = '<button class="btn btn-g" onclick="exportJSON()">📥 Exportar</button>'
-      +'<button class="btn" onclick="cerrarCompetenciaConfirm()" style="background:rgba(168,85,247,.15);border:1px solid #a855f7;color:#a855f7;font-weight:700" title="Publica todos los resultados a Firestore — visibles inmediatamente en perfiles + ranking">🏁 Cerrar competencia</button>'
-      +'<button id="btnActaPDF" class="btn btn-r" onclick="generateActaPDF()" style="background:rgba(196,30,58,.15);border-color:var(--accent)">📋 Generar Acta PDF</button>';
+    adminButtons = '<button class="btn btn-g" onclick="exportJSON()">Exportar</button>'
+      +'<button class="btn" onclick="cerrarCompetenciaConfirm()" style="background:rgba(168,85,247,.15);border:1px solid #a855f7;color:#a855f7;font-weight:700" title="Publica todos los resultados a Firestore — visibles inmediatamente en perfiles + ranking">Cerrar competencia</button>'
+      +'<button id="btnActaPDF" class="btn btn-r" onclick="generateActaPDF()" style="background:rgba(196,30,58,.15);border-color:var(--accent)">Generar Acta PDF</button>';
   }
   let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:24px;letter-spacing:2px">RESULTADOS <span style="background:'+FL_C[DATA.flight]+';color:#fff;padding:2px 10px;border-radius:6px;font-size:14px;vertical-align:middle">VUELO '+DATA.flight+'</span></h2><p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+' · '+DATA.athletes.length+' atletas</p></div>'+adminButtons+'</div>';
 
@@ -6421,12 +6458,12 @@ function renderResults(){
   // Top 3 GL by Division
   const divKeys=Object.keys(divGroups).sort();
   if(divKeys.length>0){
-    h+='<div class="card" style="margin-bottom:16px"><h3 class="os" style="font-size:14px;letter-spacing:1px;margin-bottom:12px;color:var(--gold)">🏅 TOP 3 GL POINTS POR DIVISIÓN (todas las modalidades)</h3>';
+    h+='<div class="card" style="margin-bottom:16px"><h3 class="os" style="font-size:14px;letter-spacing:1px;margin-bottom:12px;color:var(--gold)">TOP 3 GL POINTS POR DIVISIÓN (todas las modalidades)</h3>';
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
     divKeys.forEach(d=>{
       const top3=divGroups[d].slice(0,3);
       h+='<div style="background:var(--bg);border-radius:8px;padding:12px;border:1px solid var(--border)"><div class="os" style="font-size:13px;letter-spacing:1px;color:var(--accent);margin-bottom:8px">'+d+'</div>';
-      const medals=['🥇','🥈','🥉'];
+      const medals=['1°','2°','3°'];
       top3.forEach((a,i)=>{
         const tag=a._view==='bench'?'<span style="font-size:8px;background:#D4A843;color:#0A1628;padding:1px 4px;border-radius:3px;margin-left:4px;font-family:Oswald;font-weight:700">BENCH</span>':'';
         h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;'+(i<2?'border-bottom:1px solid rgba(30,58,95,.2)':'')+'"><div style="display:flex;align-items:center;gap:6px"><span style="font-size:14px">'+medals[i]+'</span><div><span style="font-weight:600;font-size:12px">'+a.name+'</span>'+tag+'<span style="font-size:9px;color:var(--muted);margin-left:4px">'+a.cat+'</span></div></div><div style="text-align:right"><span class="os" style="font-size:15px;font-weight:700;color:var(--gold)">'+a.gl+'</span><span style="font-size:9px;color:var(--muted);margin-left:4px">'+a.total+'kg</span></div></div>';
@@ -6437,10 +6474,10 @@ function renderResults(){
   }
 
   // 3 tablas separadas por modalidad
-  h+=_renderResultsTable({title:'POWERLIFTING CLASSIC',icon:'🏋️',color:'#22c55e',athletes:classicAthletes,view:'meet'});
-  h+=_renderResultsTable({title:'POWERLIFTING EQUIPADO',icon:'⚙️',color:'#f59e0b',athletes:equippedAthletes,view:'meet'});
-  h+=_renderResultsTable({title:'ONLY BENCH',icon:'💪',color:'#D4A843',athletes:benchAthletes,view:'bench'});
-  h+=_renderResultsTable({title:'POWERLIFTING — OLIMPIADAS ESPECIALES (OE)',icon:'🌟',color:'#a855f7',athletes:oeClassicAthletes,view:'meet'});
+  h+=_renderResultsTable({title:'POWERLIFTING CLASSIC',icon:'',color:'#22c55e',athletes:classicAthletes,view:'meet'});
+  h+=_renderResultsTable({title:'POWERLIFTING EQUIPADO',icon:'',color:'#f59e0b',athletes:equippedAthletes,view:'meet'});
+  h+=_renderResultsTable({title:'ONLY BENCH',icon:'',color:'#D4A843',athletes:benchAthletes,view:'bench'});
+  h+=_renderResultsTable({title:'POWERLIFTING — OLIMPIADAS ESPECIALES (OE)',icon:'',color:'#a855f7',athletes:oeClassicAthletes,view:'meet'});
 
   h+='</div>';
   return h;
@@ -6613,7 +6650,7 @@ function renderTransmision(){
   h+='<label style="font-size:9px;color:rgba(160,180,210,.5);font-family:Oswald;margin-left:8px">ESCALA</label>';
   h+=`<input type="range" min="50" max="150" value="${txScale}" oninput="txScale=parseInt(this.value);document.getElementById('txContent').style.transform='scale('+txScale/100+')';this.nextElementSibling.textContent=txScale+'%'" style="width:80px;cursor:pointer">`;
   h+=`<span style="font-size:10px;color:rgba(160,180,210,.5);font-family:Oswald;min-width:30px">${txScale}%</span>`;
-  h+='<button onclick="go(\'compete\')" style="background:rgba(30,50,80,.85);border:1px solid rgba(100,140,200,.3);color:#aac;padding:5px 10px;border-radius:5px;cursor:pointer;font-family:Oswald;font-size:10px;letter-spacing:1px;margin-left:6px">⚙ BACK</button>';
+  h+='<button onclick="go(\'compete\')" style="background:rgba(30,50,80,.85);border:1px solid rgba(100,140,200,.3);color:#aac;padding:5px 10px;border-radius:5px;cursor:pointer;font-family:Oswald;font-size:10px;letter-spacing:1px;margin-left:6px">BACK</button>';
   h+='</div></div>';
   h+=`<div id="txContent" data-tx-bg style="flex:1;display:flex;flex-direction:column;transform:scale(${txScale/100});transform-origin:center center">`;
   if(txView==='premiacion')h+=txPremiacion(evName);
@@ -6787,7 +6824,7 @@ function txSiLevantaCompact(cur,evName){
 }
 
 function txFooter(evName){
-  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 18px;background:linear-gradient(90deg,rgba(12,22,42,.92),rgba(16,26,46,.92));border-radius:0 0 7px 7px"><div style="font-family:Oswald;font-size:11px;color:rgba(160,180,210,.45);letter-spacing:1px">⚡ YourLift</div><div style="font-family:Oswald;font-size:11px;color:rgba(160,180,210,.45);letter-spacing:1px;text-transform:uppercase">'+evName+'</div></div>';
+  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 18px;background:linear-gradient(90deg,rgba(12,22,42,.92),rgba(16,26,46,.92));border-radius:0 0 7px 7px"><div style="font-family:Oswald;font-size:11px;color:rgba(160,180,210,.45);letter-spacing:1px">YourLift</div><div style="font-family:Oswald;font-size:11px;color:rgba(160,180,210,.45);letter-spacing:1px;text-transform:uppercase">'+evName+'</div></div>';
 }
 
 // ── MARCADOR (existing overlay) ──
@@ -6844,7 +6881,7 @@ function txLeaderboard(cur,evName){
   h+='<div style="margin:60px 30px 40px;max-width:700px;width:100%">';
   h+='<div style="padding:10px 18px;background:linear-gradient(90deg,rgba(25,42,72,.96),rgba(30,48,82,.96));border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center">';
   h+='<div><div style="font-family:Oswald;font-size:11px;color:rgba(160,180,210,.5);letter-spacing:1px">LEADERBOARD</div><div style="font-family:Oswald;font-size:16px;color:#fff;letter-spacing:1px">'+((cur.sex==='Femenino'||cur.sex==='Mujer'||cur.sex==='F')?'WOMEN\'S':'MEN\'S')+' '+divShort+' • '+cur.cat+'</div></div>';
-  h+='<div style="font-family:Oswald;font-size:14px;color:rgba(160,180,210,.4);letter-spacing:1px">⚡ YourLift</div></div>';
+  h+='<div style="font-family:Oswald;font-size:14px;color:rgba(160,180,210,.4);letter-spacing:1px">YourLift</div></div>';
   // Table header
   h+='<div style="display:grid;grid-template-columns:2fr 70px 80px 50px;gap:0;padding:6px 18px;background:rgba(20,35,60,.9);border-bottom:1px solid rgba(60,90,140,.3)">';
   h+='<div style="font-family:Oswald;font-size:10px;color:rgba(160,180,210,.5);letter-spacing:1px">NOMBRE</div>';
@@ -6925,11 +6962,11 @@ function txPremiacion(evName){
   Object.values(groups).forEach(arr=>arr.sort((a,b)=>b.total-a.total));
   const keys=Object.keys(groups).sort();
   let h='<div style="flex:1;overflow-y:auto;padding:60px 30px 30px">';
-  h+='<div style="text-align:center;margin-bottom:24px"><div style="font-family:Oswald;font-size:clamp(24px,4vw,36px);font-weight:700;color:#d4a843;letter-spacing:3px">🏆 PREMIACIÓN</div><div style="font-family:Oswald;font-size:13px;color:rgba(160,180,210,.5);letter-spacing:1px;margin-top:4px">'+evName+'</div></div>';
+  h+='<div style="text-align:center;margin-bottom:24px"><div style="font-family:Oswald;font-size:clamp(24px,4vw,36px);font-weight:700;color:#d4a843;letter-spacing:3px">PREMIACIÓN</div><div style="font-family:Oswald;font-size:13px;color:rgba(160,180,210,.5);letter-spacing:1px;margin-top:4px">'+evName+'</div></div>';
   if(!keys.length){h+='<div style="text-align:center;color:rgba(160,180,210,.5);font-size:14px;padding:40px">Sin resultados todavía</div></div>';return h}
   keys.forEach(k=>{
     const top3=groups[k].slice(0,3);
-    const medals=['🥇','🥈','🥉'];
+    const medals=['1°','2°','3°'];
     const colors=['#d4a843','#94a3b8','#b45309'];
     h+='<div style="background:linear-gradient(135deg,rgba(20,35,62,.96),rgba(26,42,72,.96));border:1px solid rgba(60,90,140,.3);border-radius:12px;margin-bottom:16px;overflow:hidden">';
     h+='<div style="padding:10px 20px;background:rgba(196,30,58,.15);border-bottom:1px solid rgba(80,120,180,.2)"><div style="font-family:Oswald;font-size:15px;font-weight:700;color:#fff;letter-spacing:1px">'+k+'</div></div>';
@@ -7048,7 +7085,7 @@ if(!loaded)R();
 // URL: livecast.html?demo=1
 // ════════════════════════════════════════════════════════════════
 if(DEMO_MODE){
-  console.log('🎬 DEMO MODE activo');
+  console.log('DEMO MODE activo');
   // Atletas demo con datos realistas
   const DEMO_ATHLETES=[
     {nombre:'Felipe Rieutord',rut:'20540088-5',sexo:'Hombre',categoria:'-83',division:'Universitario',modalidad:'Powerlifting Classic',club:'All Power CD',universidad:'Universidad de Chile',bw:82.5,att:{sq:[{w:240,r:'g'},{w:255,r:'g'},{w:265,r:'g'}],bp:[{w:155,r:'g'},{w:165,r:'g'},{w:170,r:null}],dl:[{w:280,r:'g'},{w:295,r:null},{w:0,r:null}]}},
@@ -7082,20 +7119,20 @@ if(DEMO_MODE){
     panel.innerHTML=`
       <div style="position:fixed;top:14px;right:14px;z-index:99998;background:rgba(8,16,30,.95);border:2px solid #D4A843;border-radius:12px;padding:14px;backdrop-filter:blur(8px);min-width:280px;font-family:Oswald,sans-serif">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid rgba(212,168,67,.3);padding-bottom:8px">
-          <span style="color:#D4A843;font-size:12px;font-weight:700;letter-spacing:2px">🎬 DEMO MODE</span>
+          <span style="color:#D4A843;font-size:12px;font-weight:700;letter-spacing:2px">DEMO MODE</span>
           <button onclick="document.getElementById('demoPanel').style.display='none'" style="background:none;border:0;color:#7A8FA6;font-size:18px;cursor:pointer;padding:0 4px">×</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
-          <button onclick="demoShow('profile')" style="padding:8px;background:rgba(196,30,58,.2);border:1px solid #C41E3A;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px">👤 PERFIL</button>
-          <button onclick="demoShow('scoreboard')" style="padding:8px;background:rgba(59,130,246,.2);border:1px solid #3B82F6;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px">📊 SCOREBOARD</button>
-          <button onclick="demoShow('leaderboard')" style="padding:8px;background:rgba(212,168,67,.2);border:1px solid #D4A843;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px">🏆 LEADERBOARD</button>
-          <button onclick="demoShow('timer')" style="padding:8px;background:rgba(34,197,94,.2);border:1px solid #22c55e;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px">⏱ TIMER</button>
+          <button onclick="demoShow('profile')" style="padding:8px;background:rgba(196,30,58,.2);border:1px solid #C41E3A;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px">PERFIL</button>
+          <button onclick="demoShow('scoreboard')" style="padding:8px;background:rgba(59,130,246,.2);border:1px solid #3B82F6;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px">SCOREBOARD</button>
+          <button onclick="demoShow('leaderboard')" style="padding:8px;background:rgba(212,168,67,.2);border:1px solid #D4A843;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px">LEADERBOARD</button>
+          <button onclick="demoShow('timer')" style="padding:8px;background:rgba(34,197,94,.2);border:1px solid #22c55e;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px">TIMER</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
           <button onclick="demoSlam('g')" style="padding:8px;background:#16a34a;border:0;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">✓ GOOD LIFT</button>
           <button onclick="demoSlam('r')" style="padding:8px;background:#dc2626;border:0;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">✗ NO LIFT</button>
         </div>
-        <button onclick="demoRecord()" style="width:100%;padding:10px;background:linear-gradient(90deg,#D4A843,#C41E3A);border:0;border-radius:6px;color:#fff;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:2px;margin-bottom:8px">🏆 SIMULAR RÉCORD</button>
+        <button onclick="demoRecord()" style="width:100%;padding:10px;background:linear-gradient(90deg,#D4A843,#C41E3A);border:0;border-radius:6px;color:#fff;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:2px;margin-bottom:8px">SIMULAR RÉCORD</button>
         <button onclick="demoBreak()" style="width:100%;padding:8px;background:rgba(168,85,247,.2);border:1px solid #a855f7;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px;margin-bottom:8px">⏸ BREAK TIMER</button>
         <div style="display:flex;gap:6px;margin-bottom:8px">
           <button onclick="demoPrev()" style="flex:1;padding:6px;background:rgba(122,143,166,.15);border:1px solid #7A8FA6;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;cursor:pointer">← ANTERIOR</button>
@@ -7120,7 +7157,7 @@ if(DEMO_MODE){
       if(type==='leaderboard')_txDirState[type].cat=a.cat;
       R&&R();
       if(typeof renderTxWidget==='function')renderTxWidget();
-      showToastLC&&showToastLC('🎬 Mostrando '+type);
+      showToastLC&&showToastLC('Mostrando '+type);
     };
     window.demoSlam=function(t){
       const a=DATA.athletes[window._demoIdx];
@@ -7280,7 +7317,7 @@ function renderLiveView(){
 
   // ── Header ──────────────────────────────────────────────────
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">';
-  h += '<div><h2 class="os" style="font-size:22px;letter-spacing:2px">📺 COMPETENCIA EN VIVO</h2>';
+  h += '<div><h2 class="os" style="font-size:22px;letter-spacing:2px">COMPETENCIA EN VIVO</h2>';
   h += '<p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+'</p></div>';
   h += '<div style="display:flex;gap:6px;align-items:center">';
   h += '<span style="font-size:11px;color:var(--muted)">Tanda activa:</span>';
@@ -7493,9 +7530,9 @@ function renderAtletaInfo(){
     if(curSq||curBp||curDl){
       h+='<div style="margin-bottom:8px"><div style="font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:4px">HOY</div>';
       h+='<div style="display:flex;gap:6px">';
-      if(curSq){const isPR=prSq&&curSq>=prSq;h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);border-radius:6px"><div style="font-size:8px;color:#3b82f6;font-family:Oswald">SQ'+(isPR?' ⭐':'')+'</div><div class="os" style="font-size:15px;font-weight:700">'+curSq+'</div></div>';}
-      if(curBp){const isPR=prBp&&curBp>=prBp;h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:6px"><div style="font-size:8px;color:#f59e0b;font-family:Oswald">BP'+(isPR?' ⭐':'')+'</div><div class="os" style="font-size:15px;font-weight:700">'+curBp+'</div></div>';}
-      if(curDl){const isPR=prDl&&curDl>=prDl;h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:6px"><div style="font-size:8px;color:#ef4444;font-family:Oswald">DL'+(isPR?' ⭐':'')+'</div><div class="os" style="font-size:15px;font-weight:700">'+curDl+'</div></div>';}
+      if(curSq){const isPR=prSq&&curSq>=prSq;h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);border-radius:6px"><div style="font-size:8px;color:#3b82f6;font-family:Oswald">SQ'+(isPR?' PR':'')+'</div><div class="os" style="font-size:15px;font-weight:700">'+curSq+'</div></div>';}
+      if(curBp){const isPR=prBp&&curBp>=prBp;h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:6px"><div style="font-size:8px;color:#f59e0b;font-family:Oswald">BP'+(isPR?' PR':'')+'</div><div class="os" style="font-size:15px;font-weight:700">'+curBp+'</div></div>';}
+      if(curDl){const isPR=prDl&&curDl>=prDl;h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:6px"><div style="font-size:8px;color:#ef4444;font-family:Oswald">DL'+(isPR?' PR':'')+'</div><div class="os" style="font-size:15px;font-weight:700">'+curDl+'</div></div>';}
       if(curTotal)h+='<div style="flex:1;text-align:center;padding:5px 4px;background:rgba(212,168,67,.15);border:1px solid rgba(212,168,67,.4);border-radius:6px"><div style="font-size:8px;color:var(--gold);font-family:Oswald">TOTAL</div><div class="os" style="font-size:15px;font-weight:700">'+curTotal+'</div></div>';
       h+='</div></div>';
     }
@@ -7508,7 +7545,7 @@ function renderAtletaInfo(){
       recent.forEach(c=>{
         const r=c.resultado||{};
         h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:10px">';
-        h+='<span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+(c.internacional?'🌎 ':'')+c.evento+'</span>';
+        h+='<span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+(c.internacional?'[INT] ':'')+c.evento+'</span>';
         h+='<span class="os" style="color:var(--gold);font-weight:700;margin-left:8px;flex-shrink:0">'+(r.total?r.total+'kg':'—')+'</span>';
         h+='</div>';
       });
