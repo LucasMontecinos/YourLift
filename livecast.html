@@ -71,7 +71,7 @@ body.nav-open .nav-backdrop{opacity:1;pointer-events:auto}
 <script src="https://cdn.jsdelivr.net/npm/obs-websocket-js@5/dist/obs-ws.min.js" integrity="sha384-Vce9u7FN5Pbapc8dhpMdg2EjTels5H1cGOVLAe7THp3fEtfb89nD6YOIaf8781ay" crossorigin="anonymous"></script>
 <script>
 
-let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,flight:'A',timer:60,timerOn:false,changeTimers:{},lotsGenerated:false};
+let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,flight:'A',timer:60,timerOn:false,changeTimers:{},lotsGenerated:false,forcedCurrent:null};
 
 // ══════════════════════════════════════════════
 // TRANSMISSION WIDGETS (?tx=<widget>)
@@ -345,7 +345,7 @@ async function syncToFB(){
   if(!window.IS_CONTROLLER)return; // Solo el controller escribe — evita conflictos multi-admin
   const id=fbDocId();if(!id)return;
   _fbLastWrite=Date.now();
-  const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,ts:Date.now(),writer:window._WRITER_ID};
+  const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,forcedCurrent:DATA.forcedCurrent||null,ts:Date.now(),writer:window._WRITER_ID};
   try{
     const ref=window._fb.doc(fbDB,'livecast_sync',id);
     await window._fb.setDoc(ref,payload);
@@ -397,6 +397,7 @@ function startFBSync(){
         DATA.round=typeof d.round==='number'?d.round:DATA.round;
         DATA.flight=d.flight||DATA.flight;
         DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
+        DATA.forcedCurrent=typeof d.forcedCurrent!=='undefined'?d.forcedCurrent:null;
       }
       DATA.lotsGenerated=d.lotsGenerated||false;
       if(typeof d.timer==='number'){DATA.timer=d.timer;DATA.timerOn=d.timerOn||false;if(DATA.timerOn&&!mainTI)startTimer();if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}}
@@ -606,11 +607,21 @@ function totalOf(a,view){
   return(s&&b&&d)?s+b+d:0;
 }
 function rankings(){return DATA.athletes.map(a=>({...a,total:totalOf(a),gl:calcGL(totalOf(a),a.bw,a.sex,a.mod)})).filter(a=>a.total>0).sort((a,b)=>b.gl-a.gl)}
-function liftQueue(){return DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed).filter(a=>{const at=a.att[DATA.lift][DATA.round];return at.r===null&&at.w>0}).sort((a,b)=>{const wa=a.att[DATA.lift][DATA.round].w,wb=b.att[DATA.lift][DATA.round].w;return wa!==wb?wa-wb:a.lot-b.lot})}
-function save(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated}))}catch(e){}if(!_fbSyncing)debouncedSync()}
+function liftQueue(){
+  const q=DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed).filter(a=>{const at=a.att[DATA.lift][DATA.round];return at.r===null&&at.w>0}).sort((a,b)=>{const wa=a.att[DATA.lift][DATA.round].w,wb=b.att[DATA.lift][DATA.round].w;return wa!==wb?wa-wb:a.lot-b.lot});
+  // Si el operador forzó un atleta como "actual" (forceCurrentAttempt), ponerlo primero
+  // en la cola para que Control TX / OBS / Control en Vivo lo muestren a él, no al que
+  // le tocaría por orden de peso. Se limpia solo al juzgar su intento (overrideResult).
+  if(DATA.forcedCurrent){
+    const idx=q.findIndex(a=>a.id===DATA.forcedCurrent);
+    if(idx>0){const [f]=q.splice(idx,1);q.unshift(f);}
+  }
+  return q;
+}
+function save(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null}))}catch(e){}if(!_fbSyncing)debouncedSync()}
 let _syncTimer=null;
 function debouncedSync(){if(_syncTimer)clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>{syncToFB();_syncTimer=null},800)}
-function saveNow(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated}))}catch(e){}syncToFB()}
+function saveNow(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null}))}catch(e){}syncToFB()}
 function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);return true}}}catch(e){}return false}
 
 function calcPlates(w){const ps=(w-BAR-COLLARS)/2;if(ps<=0)return[];let rem=ps;const r=[];for(const p of PLATES){while(rem>=p-0.001){r.push(p);rem-=p}}return r}
@@ -656,6 +667,7 @@ async function tryLoadFromFB(){
     }
     DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
     DATA.lotsGenerated=d.lotsGenerated||false;
+    DATA.forcedCurrent=typeof d.forcedCurrent!=='undefined'?d.forcedCurrent:null;
     if(typeof d.timer==='number')DATA.timer=d.timer;
     DATA.timerOn=false;
     console.log('[FB] Loaded state from Firebase:',DATA.athletes.length,'athletes');
@@ -1538,6 +1550,9 @@ function overrideResult(id,l,r,res){
   // Toggle: clicking same result clears it
   const wasSame=(a.att[l][r].r===res);
   a.att[l][r].r=wasSame?null:res;
+  // Si este intento era el forzado como "actual" a mano, se juzgó → volver al orden
+  // automático normal (queue).
+  if(!wasSame && res && DATA.forcedCurrent===id)DATA.forcedCurrent=null;
   // bombed = TODOS los 9 intentos fallidos (atleta totalmente fuera).
   // Si solo falla los 3 de un lift → queda DQ pero sigue compitiendo en los otros.
   a.bombed=a.att.sq.every(x=>x.r==='n')&&a.att.bp.every(x=>x.r==='n')&&a.att.dl.every(x=>x.r==='n');
@@ -1722,7 +1737,53 @@ let mainTI=null;
 function startTimer(){DATA.timerOn=true;syncToFB();mainTI=setInterval(()=>{DATA.timer--;const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}const txp=document.getElementById('txTimerPanel');if(txp){txp.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');txp.style.color=DATA.timer<=10?'#ef4444':DATA.timer<=30?'#f59e0b':'#ffffff'}const pit=document.getElementById('pantIntentosTimer');if(pit){pit.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');pit.style.color=DATA.timerOn&&DATA.timer<=10?'#ef4444':DATA.timerOn&&DATA.timer<=30?'#f59e0b':'#22c55e'}syncTimerOnlyToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}},1000)}
 function pauseTimer(){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}
 function resetTimer(){DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);mainTI=null;const el=document.getElementById('mainTimer');if(el){el.style.color='var(--green)';el.textContent='1:00';el.style.animation='none'}syncToFB()}
-function advanceLift(){const li=LIFTS.indexOf(DATA.lift);if(DATA.round<2)DATA.round++;else if(li<2){DATA.lift=LIFTS[li+1];DATA.round=0}else go('results');saveNow();R()}
+// Tandas existentes (con atletas activos), orden alfabético — A, B, C...
+function _allFlightsSorted(){return [...new Set(DATA.athletes.filter(a=>!a.bombed).map(a=>a.flight))].sort();}
+// ¿La tanda "fl" ya terminó todos sus intentos de "lift" (los 3, o los que haya declarado)?
+function _flightDoneWithLift(fl,lift){
+  const athletes=DATA.athletes.filter(a=>a.flight===fl&&!a.bombed);
+  if(!athletes.length)return true;
+  return athletes.every(a=>[0,1,2].every(r=>{const at=a.att[lift][r];return at.r!==null||at.w===0;}));
+}
+// Avanza al siguiente intento/tanda/lift cuando la tanda activa termina su ronda actual.
+// Flujo: dentro de la misma tanda, ronda 1→2→3 del lift activo. Al terminar la ronda 3,
+// si QUEDAN otras tandas sin terminar ese lift, salta a la siguiente (alfabético, cíclico) —
+// así primero se hace sentadilla en A, B y C antes de pasar a banca. Cuando TODAS las
+// tandas terminan el lift activo, pasa al siguiente lift arrancando en la primera tanda
+// con trabajo pendiente ahí (normalmente vuelve a la A). Con una sola tanda, este mismo
+// código simplemente avanza de lift sin saltar de tanda (no hay a dónde saltar).
+function advanceLift(){
+  const flights=_allFlightsSorted();
+  const li=LIFTS.indexOf(DATA.lift);
+  if(DATA.round<2){DATA.round++;saveNow();R();return;}
+  const pending=flights.filter(fl=>fl!==DATA.flight&&!_flightDoneWithLift(fl,DATA.lift));
+  if(pending.length){
+    const idx=flights.indexOf(DATA.flight);
+    const rotated=[...flights.slice(idx+1),...flights.slice(0,idx)];
+    DATA.flight=rotated.find(fl=>pending.includes(fl))||pending[0];
+    DATA.round=0;
+    saveNow();R();
+    return;
+  }
+  if(li<2){
+    const nextLift=LIFTS[li+1];
+    DATA.flight=flights.find(fl=>!_flightDoneWithLift(fl,nextLift))||flights[0]||DATA.flight;
+    DATA.lift=nextLift;DATA.round=0;
+    saveNow();R();
+  } else {
+    go('results');
+  }
+}
+// Fuerza un intento específico como "el actual" en Control en Vivo, saltándose el orden
+// automático de la cola — para corregir cuando se pasó por alto a un atleta. Cambia
+// también DATA.flight/lift/round para que la tarjeta, Control TX y las luces de jueces
+// sigan a este atleta. Se limpia solo apenas se marca GOOD/NO LIFT (ver overrideResult).
+window.forceCurrentAttempt=function(id,l,r){
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  DATA.flight=a.flight;DATA.lift=l;DATA.round=r;DATA.forcedCurrent=id;
+  save();R();
+  showToastLC('Marcado como actual: '+a.name+' — '+LIFT_S[l]+(r+1));
+};
 function editAtt(id,l,r){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   const v=prompt(a.name+' \u2014 '+LIFT_S[l]+' Int '+(r+1)+'\nPeso actual: '+(a.att[l][r].w||'\u2014')+'\nNuevo peso (kg):',a.att[l][r].w||'');
@@ -6182,11 +6243,17 @@ function _attCellCompete(a,l,j,isCurrentCell){
       +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+l+'\','+j+',\'g\')" title="Cambiar a VÁLIDO (volver a tocar = revocar)" style="flex:1;padding:'+Math.round(3*sc)+'px 0;border-radius:4px;border:1px solid '+(gActive?'var(--green)':'rgba(34,197,94,.35)')+';background:'+(gActive?'rgba(34,197,94,.25)':'transparent')+';color:'+(gActive?'var(--green)':'rgba(34,197,94,.6)')+';font-size:'+Math.round(11*sc)+'px;font-weight:700;cursor:pointer;line-height:1">✓</button>'
       +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+l+'\','+j+',\'n\')" title="Cambiar a NULO (volver a tocar = revocar)" style="flex:1;padding:'+Math.round(3*sc)+'px 0;border-radius:4px;border:1px solid '+(nActive?'var(--red)':'rgba(239,68,68,.35)')+';background:'+(nActive?'rgba(239,68,68,.25)':'transparent')+';color:'+(nActive?'var(--red)':'rgba(239,68,68,.6)')+';font-size:'+Math.round(11*sc)+'px;font-weight:700;cursor:pointer;line-height:1">✗</button>'
     +'</div>';
+    if(at.r===null){
+      cell+='<button onclick="event.stopPropagation();forceCurrentAttempt('+a.id+',\''+l+'\','+j+')" title="Marcar este intento como el actual (por si se saltó al atleta)" style="width:100%;margin-top:2px;padding:'+Math.round(2*sc)+'px 0;border-radius:4px;border:1px dashed rgba(212,168,67,.5);background:transparent;color:var(--gold);font-size:'+Math.round(9*sc)+'px;font-weight:700;cursor:pointer;letter-spacing:.5px">ACTUAL</button>';
+    }
   }
   cell+='</td>';
   return cell;
 }
 function renderCompete(){
+  // "cur" (el próximo/actual) sale de liftQueue(), que ya pone primero al atleta forzado
+  // manualmente con forceCurrentAttempt() si corresponde — así Control en Vivo, Control TX
+  // y los widgets de OBS quedan todos consistentes.
   const queue=liftQueue(),cur=queue[0],nxt=queue[1],rk=rankings();
   const rack=cur?(DATA.lift==='sq'?cur.rackSQ:DATA.lift==='bp'?cur.rackBP:''):'';
   const cw=cur?cur.att[DATA.lift][DATA.round].w:0;
@@ -6197,6 +6264,20 @@ function renderCompete(){
   h+='<span style="width:6px"></span>';
   h+=[0,1,2].map(r=>'<button onclick="DATA.round='+r+';save();R()" class="os" style="padding:5px 10px;border-radius:6px;border:1px solid '+(DATA.round===r?'var(--gold)':'var(--border)')+';background:'+(DATA.round===r?'rgba(212,168,67,.15)':'transparent')+';color:'+(DATA.round===r?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:600;cursor:pointer">INT '+(r+1)+'</button>').join('');
   h+='</div>';
+  // Selector de tanda activa — lo mismo que "Vuelo Activo" del menú hamburguesa, pero acá
+  // directo, sin tener que abrir la sidebar. Define qué tanda ve Control TX ahora mismo.
+  {const flightsCE=_allFlightsSorted();
+   if(flightsCE.length){
+     h+='<div style="display:flex;align-items:center;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
+     h+='<span style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-right:2px">TANDA EN TARIMA (Control TX)</span>';
+     h+=flightsCE.map(f=>{
+       const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;
+       const on=DATA.flight===f;
+       return '<button onclick="DATA.flight=\''+f+'\';save();R()" class="os" style="padding:5px 12px;border-radius:6px;border:2px solid '+(on?(FL_C[f]||'var(--gold)'):'var(--border)')+';background:'+(on?(FL_C[f]||'#666')+'22':'transparent')+';color:'+(on?(FL_C[f]||'#fff'):'var(--muted)')+';font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">'+f+'<span style="font-size:9px;opacity:.7;margin-left:4px">('+n+')</span></button>';
+     }).join('');
+     h+='</div>';
+   }
+  }
   // Toggle: timer de cambio (60s tras válido/nulo). Apagado por defecto.
   {const cton=!!window._CT_ENABLED;
    h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:7px 12px;border-radius:8px;border:1px solid '+(cton?'rgba(245,158,11,.4)':'var(--border)')+';background:'+(cton?'rgba(245,158,11,.08)':'transparent')+'">'
@@ -6276,7 +6357,7 @@ function renderCompete(){
   // GOOD/NO LIFT solo aparecen en la celda que coincide con tanda+lift+intento activos arriba.
   const allFlights = [...new Set(DATA.athletes.map(a=>a.flight))].sort();
   h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:4px"><h3 class="os" style="font-size:13px;letter-spacing:1px;color:var(--gold);margin:0">TODAS LAS TANDAS</h3>';
-  h+='<div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:var(--muted)">TAMA\u00d1O DE LAS CASILLAS</span>'
+  h+='<div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:var(--muted)">TAMA\u00d1O (casillas, nombres, lote)</span>'
     +'<button onclick="nudgeCtCellScale(-0.1)" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:15px;font-weight:700;cursor:pointer;line-height:1">\u2212</button>'
     +'<span style="font-family:Oswald;font-size:12px;font-weight:700;color:var(--gold);min-width:38px;text-align:center">'+Math.round((window._CT_CELL_SCALE||1)*100)+'%</span>'
     +'<button onclick="nudgeCtCellScale(0.1)" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:15px;font-weight:700;cursor:pointer;line-height:1">+</button>'
@@ -6297,9 +6378,10 @@ function renderCompete(){
     rows.forEach(a=>{
       const isCurrentAthlete = fl===DATA.flight && cur && a.id===cur.id;
       const tot = totalOf(a);
+      const rsc=window._CT_CELL_SCALE||1;
       h+='<tr style="border-bottom:1px solid rgba(30,58,95,.18);'+(isCurrentAthlete?'background:linear-gradient(90deg,'+LIFT_C[DATA.lift]+'30,'+LIFT_C[DATA.lift]+'10);box-shadow:inset 3px 0 0 '+LIFT_C[DATA.lift]+';':'')+'">';
-      h+='<td style="text-align:center;padding:6px 4px"><span class="os" style="color:'+(isCurrentAthlete?'#fff':'var(--muted)')+';font-weight:700;font-size:12px">'+(a.lot||'\u00b7')+'</span></td>';
-      h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:12px;font-weight:'+(isCurrentAthlete?800:500)+';color:'+(isCurrentAthlete?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px">'+(isCurrentAthlete?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">\u25b6</span>':'')+'<span>'+a.name+'</span></div><div style="font-size:8px;color:var(--muted)">'+(a.bw>0?a.bw+'kg':'sin BW')+'</div></td>';
+      h+='<td style="text-align:center;padding:6px 4px"><span class="os" style="color:'+(isCurrentAthlete?'#fff':'var(--muted)')+';font-weight:700;font-size:'+Math.round(12*rsc)+'px">'+(a.lot||'\u00b7')+'</span></td>';
+      h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:'+Math.round(12*rsc)+'px;font-weight:'+(isCurrentAthlete?800:500)+';color:'+(isCurrentAthlete?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px">'+(isCurrentAthlete?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">\u25b6</span>':'')+'<span>'+a.name+'</span></div><div style="font-size:'+Math.round(8*rsc)+'px;color:var(--muted)">'+(a.bw>0?a.bw+'kg':'sin BW')+'</div></td>';
       LIFTS.forEach(l=>{
         [0,1,2].forEach(j=>{
           const isCurrentCell = isCurrentAthlete && l===DATA.lift && j===DATA.round;
