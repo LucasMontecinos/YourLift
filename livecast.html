@@ -5971,13 +5971,49 @@ function renderManage(){
   h+='</tbody></table></div></div>';return h;
 }
 
+// Celda de un intento (peso + botones) para la tabla de "Todas las tandas" de Control en Vivo.
+// isCurrentCell = es el intento que se está juzgando ahora mismo (tanda+lift+round activos y atleta en tarima).
+function _attCellCompete(a,l,j,isCurrentCell){
+  const at=a.att[l][j];
+  const c = at.r==='g'?'att-g':at.r==='n'?'att-n':at.w>0?'att-p':'att-e';
+  const gActive = at.r==='g', nActive = at.r==='n';
+  const ctKey = a.id+'_'+l+'_'+j;
+  const ct = DATA.changeTimers[ctKey];
+  const ctRem = (ct && !ct.expired && ct.remaining>0) ? ct.remaining : null;
+  const ctExpired = ct && ct.expired;
+  let cell='<td style="padding:3px;vertical-align:top">';
+  if(ctRem!==null){
+    cell+='<div id="ctcell_'+ctKey+'" class="att att-p" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:14px;font-weight:700;padding:8px 4px;background:rgba(245,158,11,.15);border:2px solid var(--orange);color:var(--orange);text-align:center" title="Tiene '+ctRem+'s para declarar el peso">⏱ '+ctRem+'s</div>';
+  } else if(ctExpired && !at.w){
+    cell+='<div id="ctcell_'+ctKey+'" class="att att-n" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:15px;font-weight:800;padding:8px 4px;background:rgba(239,68,68,.18);border:2px solid var(--red);color:var(--red);text-align:center;animation:pulse 1.5s ease-in-out infinite" title="Tiempo expirado — requiere aprobación del jurado">⏰❗</div>';
+  } else {
+    cell+='<div class="'+c+' att" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:'+(isCurrentCell?15:12)+'px;font-weight:700;padding:'+(isCurrentCell?'10px 4px':'8px 4px')+';'+(isCurrentCell?'box-shadow:inset 0 0 0 3px '+LIFT_C[l]+';':'')+'">'+(at.w||'—')+'</div>';
+  }
+  if(isCurrentCell){
+    cell+='<div style="display:flex;gap:2px;margin-top:3px">'
+      +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+l+'\','+j+',\'g\')" title="GOOD LIFT" style="flex:1;padding:7px 0;border-radius:5px;border:2px solid '+(gActive?'#5cb37f':'rgba(92,179,127,.5)')+';background:'+(gActive?'rgba(92,179,127,.45)':'rgba(92,179,127,.1)')+';color:'+(gActive?'#fff':'#5cb37f')+';font-size:14px;font-weight:800;cursor:pointer;line-height:1">✓</button>'
+      +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+l+'\','+j+',\'n\')" title="NO LIFT" style="flex:1;padding:7px 0;border-radius:5px;border:2px solid '+(nActive?'#cc6666':'rgba(204,102,102,.5)')+';background:'+(nActive?'rgba(204,102,102,.45)':'rgba(204,102,102,.1)')+';color:'+(nActive?'#fff':'#cc6666')+';font-size:14px;font-weight:800;cursor:pointer;line-height:1">✗</button>'
+    +'</div>';
+  } else if(at.w>0){
+    cell+='<div style="display:flex;gap:2px;margin-top:3px" title="Cambiar o revocar la decisión de este intento">'
+      +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+l+'\','+j+',\'g\')" title="Cambiar a VÁLIDO (volver a tocar = revocar)" style="flex:1;padding:3px 0;border-radius:4px;border:1px solid '+(gActive?'var(--green)':'rgba(34,197,94,.35)')+';background:'+(gActive?'rgba(34,197,94,.25)':'transparent')+';color:'+(gActive?'var(--green)':'rgba(34,197,94,.6)')+';font-size:11px;font-weight:700;cursor:pointer;line-height:1">✓</button>'
+      +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+l+'\','+j+',\'n\')" title="Cambiar a NULO (volver a tocar = revocar)" style="flex:1;padding:3px 0;border-radius:4px;border:1px solid '+(nActive?'var(--red)':'rgba(239,68,68,.35)')+';background:'+(nActive?'rgba(239,68,68,.25)':'transparent')+';color:'+(nActive?'var(--red)':'rgba(239,68,68,.6)')+';font-size:11px;font-weight:700;cursor:pointer;line-height:1">✗</button>'
+    +'</div>';
+  }
+  cell+='</td>';
+  return cell;
+}
 function renderCompete(){
-  const queue=liftQueue(),cur=queue[0],nxt=queue[1],active=DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed),rk=rankings();
+  const queue=liftQueue(),cur=queue[0],nxt=queue[1],rk=rankings();
   const rack=cur?(DATA.lift==='sq'?cur.rackSQ:DATA.lift==='bp'?cur.rackBP:''):'';
   const cw=cur?cur.att[DATA.lift][DATA.round].w:0;
   let h='<div class="fade">';
-  h+='<div style="display:flex;gap:6px;margin-bottom:8px">'+LIFTS.map(l=>'<button onclick="DATA.lift=\''+l+'\';DATA.round=0;save();R()" class="os" style="flex:1;padding:9px 0;border-radius:8px;border:2px solid '+(DATA.lift===l?LIFT_C[l]:'var(--border)')+';background:'+(DATA.lift===l?LIFT_C[l]+'20':'transparent')+';color:'+(DATA.lift===l?LIFT_C[l]:'var(--muted)')+';font-size:13px;font-weight:700;letter-spacing:2px;cursor:pointer">'+LIFT_N[l]+'</button>').join('')+'</div>';
-  h+='<div style="display:flex;gap:6px;margin-bottom:10px">'+[0,1,2].map(r=>'<button onclick="DATA.round='+r+';save();R()" class="os" style="flex:1;padding:6px 0;border-radius:6px;border:1px solid '+(DATA.round===r?'var(--gold)':'var(--border)')+';background:'+(DATA.round===r?'rgba(212,168,67,.15)':'transparent')+';color:'+(DATA.round===r?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:600;cursor:pointer">INTENTO '+(r+1)+'</button>').join('')+'</div>';
+  h+='<div style="display:flex;align-items:center;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
+  h+='<span style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-right:2px">JUZGANDO AHORA</span>';
+  h+=LIFTS.map(l=>'<button onclick="DATA.lift=\''+l+'\';DATA.round=0;save();R()" class="os" style="padding:5px 12px;border-radius:6px;border:2px solid '+(DATA.lift===l?LIFT_C[l]:'var(--border)')+';background:'+(DATA.lift===l?LIFT_C[l]+'20':'transparent')+';color:'+(DATA.lift===l?LIFT_C[l]:'var(--muted)')+';font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">'+LIFT_S[l]+'</button>').join('');
+  h+='<span style="width:6px"></span>';
+  h+=[0,1,2].map(r=>'<button onclick="DATA.round='+r+';save();R()" class="os" style="padding:5px 10px;border-radius:6px;border:1px solid '+(DATA.round===r?'var(--gold)':'var(--border)')+';background:'+(DATA.round===r?'rgba(212,168,67,.15)':'transparent')+';color:'+(DATA.round===r?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:600;cursor:pointer">INT '+(r+1)+'</button>').join('');
+  h+='</div>';
   // Toggle: timer de cambio (60s tras válido/nulo). Apagado por defecto.
   {const cton=!!window._CT_ENABLED;
    h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:7px 12px;border-radius:8px;border:1px solid '+(cton?'rgba(245,158,11,.4)':'var(--border)')+';background:'+(cton?'rgba(245,158,11,.08)':'transparent')+'">'
@@ -6042,82 +6078,41 @@ function renderCompete(){
     });
     h+='</div>';
   }
-  // ORDEN + INTENTOS COMBINADOS \u2014 atletas ordenados seg\u00fan queue (peso del intento actual \u2191)
-  // Pendientes primero (ordenados por liftQueue), despu\u00e9s los que ya levantaron este lift en este round
-  const queueIds = new Set(queue.map(a=>a.id));
-  const activeFlight = active.filter(a=>a.flight===DATA.flight&&!a.bombed);
-  const ordered = [...queue, ...activeFlight.filter(a=>!queueIds.has(a.id))];
-  h+='<div class="card"><h3 class="os" style="font-size:13px;letter-spacing:1px;margin-bottom:10px;color:var(--gold)">ORDEN DE INTENTOS \u00b7 '+LIFT_N[DATA.lift]+' \u00b7 VUELO '+DATA.flight+'</h3>';
-  if(!ordered.length)h+='<p style="color:var(--muted);font-size:12px;text-align:center;padding:14px">Sin atletas en este vuelo</p>';
-  else{
-    h+='<table style="width:100%;border-collapse:collapse"><thead><tr style="border-bottom:1px solid var(--border)">';
-    h+='<th style="text-align:center;padding:6px 4px;color:var(--muted);font-size:10px;width:30px">#</th>';
-    h+='<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px">ATLETA</th>';
-    [1,2,3].forEach(r=>{h+='<th style="text-align:center;padding:6px 4px;color:'+LIFT_C[DATA.lift]+';font-size:11px;font-weight:700;width:78px">INT '+r+'</th>'});
-    h+='<th style="text-align:center;padding:6px 4px;color:var(--gold);font-size:10px;width:60px">BEST</th></tr></thead><tbody>';
-    ordered.forEach((a,i)=>{
-      const inQueue = queueIds.has(a.id);
-      const queuePos = inQueue ? queue.findIndex(q=>q.id===a.id) : -1;
-      const isCurrent = queuePos === 0;
-      const b = bestOf(a,DATA.lift);
-      // Color de fondo de fila: actual = highlight fuerte (con borde), pr\u00f3ximos = leve, ya levant\u00f3 = neutro
-      let rowBg = '';
-      let rowExtra = '';
-      if(isCurrent){
-        rowBg = 'background:linear-gradient(90deg,'+LIFT_C[DATA.lift]+'35,'+LIFT_C[DATA.lift]+'15)';
-        rowExtra = 'box-shadow:inset 4px 0 0 '+LIFT_C[DATA.lift]+',inset -1px 0 0 '+LIFT_C[DATA.lift]+'66;';
-      } else if(inQueue && queuePos<3){
-        rowBg = 'background:'+LIFT_C[DATA.lift]+'08';
-      }
-      h+='<tr style="border-bottom:1px solid rgba(30,58,95,.18);'+rowBg+';'+rowExtra+'">';
-      // Posici\u00f3n en queue
-      h+='<td style="text-align:center;padding:8px 4px"><span class="os" style="color:'+(isCurrent?'#fff':inQueue?'var(--gold)':'var(--muted)')+';font-weight:700;font-size:'+(isCurrent?20:13)+'px">'+(inQueue?(queuePos+1):'\u00b7')+'</span></td>';
-      // Nombre del atleta \u2014 click para editar BW + racks. Atleta actual con prefijo "\u25b6 EN TARIMA"
-      h+='<td style="padding:8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:'+(isCurrent?16:13)+'px;font-weight:'+(isCurrent?800:500)+';color:'+(isCurrent?'#fff':'var(--text)')+';display:flex;align-items:center;gap:6px">'+(isCurrent?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;font-family:Oswald;letter-spacing:1px">\u25b6 EN TARIMA</span>':'')+'<span>'+a.name+'</span><span style="font-size:9px;color:var(--muted);opacity:.6">\u270f</span></div><div style="font-size:9px;color:var(--muted);margin-top:2px">'+(a.bw>0?a.bw+'kg':'sin BW')+(a.rackSQ?' \u00b7 SQ '+a.rackSQ:'')+(a.rackBP?' \u00b7 BP '+a.rackBP:'')+'</div></td>';
-      // 3 intentos \u2014 solo el atleta EN TARIMA tiene botones \u2713/\u2717 grandes (en su intento actual)
-      a.att[DATA.lift].forEach((at,j)=>{
-        const c = at.r==='g'?'att-g':at.r==='n'?'att-n':at.w>0?'att-p':'att-e';
-        const isCurrentAtt = isCurrent && j===DATA.round;
-        const gActive = at.r==='g';
-        const nActive = at.r==='n';
-        // Change timer: corriendo (orange), expirado (red), o sin timer
-        const ctKey = a.id+'_'+DATA.lift+'_'+j;
-        const ct = DATA.changeTimers[ctKey];
-        const ctRem = (ct && !ct.expired && ct.remaining>0) ? ct.remaining : null;
-        const ctExpired = ct && ct.expired;
-        h+='<td style="padding:4px;vertical-align:top">';
-        if(ctRem!==null){
-          // Timer corriendo (naranja) \u2014 actualizado in-place por el master tick
-          h+='<div id="ctcell_'+ctKey+'" class="att att-p" onclick="editAtt('+a.id+',\''+DATA.lift+'\','+j+')" style="font-size:18px;font-weight:700;padding:10px 6px;background:rgba(245,158,11,.15);border:2px solid var(--orange);color:var(--orange);text-align:center" title="Tiene '+ctRem+'s para declarar el peso">\u23f1 '+ctRem+'s</div>';
-        } else if(ctExpired && !at.w){
-          // Timer EXPIRADO sin peso declarado \u2014 reloj rojo + animaci\u00f3n
-          h+='<div id="ctcell_'+ctKey+'" class="att att-n" onclick="editAtt('+a.id+',\''+DATA.lift+'\','+j+')" style="font-size:20px;font-weight:800;padding:10px 6px;background:rgba(239,68,68,.18);border:2px solid var(--red);color:var(--red);text-align:center;animation:pulse 1.5s ease-in-out infinite" title="Tiempo expirado \u2014 requiere aprobaci\u00f3n del jurado">\u23f0\u2757</div>';
-        } else {
-          // Sin timer activo \u2014 mostrar peso o em-dash
-          h+='<div class="'+c+' att" onclick="editAtt('+a.id+',\''+DATA.lift+'\','+j+')" style="font-size:'+(isCurrentAtt?18:14)+'px;font-weight:700;padding:'+(isCurrentAtt?'14px 6px':'10px 6px')+';'+(isCurrentAtt?'box-shadow:inset 0 0 0 3px '+LIFT_C[DATA.lift]+';':'')+'">'+(at.w||'\u2014')+'</div>';
-        }
-        // Solo el atleta EN TARIMA en su intento actual tiene los botones GOOD/NO LIFT grandes
-        if(isCurrentAtt){
-          h+='<div style="display:flex;gap:3px;margin-top:4px">'
-            +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+DATA.lift+'\','+j+',\'g\')" title="GOOD LIFT" style="flex:1;padding:10px 0;border-radius:6px;border:2px solid '+(gActive?'#5cb37f':'rgba(92,179,127,.5)')+';background:'+(gActive?'rgba(92,179,127,.45)':'rgba(92,179,127,.1)')+';color:'+(gActive?'#fff':'#5cb37f')+';font-size:18px;font-weight:800;cursor:pointer;line-height:1">\u2713</button>'
-            +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+DATA.lift+'\','+j+',\'n\')" title="NO LIFT" style="flex:1;padding:10px 0;border-radius:6px;border:2px solid '+(nActive?'#cc6666':'rgba(204,102,102,.5)')+';background:'+(nActive?'rgba(204,102,102,.45)':'rgba(204,102,102,.1)')+';color:'+(nActive?'#fff':'#cc6666')+';font-size:18px;font-weight:800;cursor:pointer;line-height:1">\u2717</button>'
-          +'</div>';
-        } else if(at.w>0){
-          // Cualquier otro intento con peso: botones chicos para CAMBIAR / REVOCAR la decisi\u00f3n.
-          // overrideResult alterna: clickear la decisi\u00f3n ya marcada la borra (deja sin juzgar).
-          h+='<div style="display:flex;gap:2px;margin-top:4px" title="Cambiar o revocar la decisi\u00f3n de este intento">'
-            +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+DATA.lift+'\','+j+',\'g\')" title="Cambiar a V\u00c1LIDO (volver a tocar = revocar)" style="flex:1;padding:4px 0;border-radius:4px;border:1px solid '+(gActive?'var(--green)':'rgba(34,197,94,.35)')+';background:'+(gActive?'rgba(34,197,94,.25)':'transparent')+';color:'+(gActive?'var(--green)':'rgba(34,197,94,.6)')+';font-size:12px;font-weight:700;cursor:pointer;line-height:1">\u2713</button>'
-            +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+DATA.lift+'\','+j+',\'n\')" title="Cambiar a NULO (volver a tocar = revocar)" style="flex:1;padding:4px 0;border-radius:4px;border:1px solid '+(nActive?'var(--red)':'rgba(239,68,68,.35)')+';background:'+(nActive?'rgba(239,68,68,.25)':'transparent')+';color:'+(nActive?'var(--red)':'rgba(239,68,68,.6)')+';font-size:12px;font-weight:700;cursor:pointer;line-height:1">\u2717</button>'
-          +'</div>';
-        }
-        h+='</td>';
+  // TODAS LAS TANDAS \u2014 SQ/BP/DL en la misma fila por atleta, todas las tandas apiladas.
+  // Permite editar openers de cualquier tanda/lift sin cambiar de pesta\u00f1a. Los botones grandes
+  // GOOD/NO LIFT solo aparecen en la celda que coincide con tanda+lift+intento activos arriba.
+  const allFlights = [...new Set(DATA.athletes.map(a=>a.flight))].sort();
+  h+='<div class="card"><h3 class="os" style="font-size:13px;letter-spacing:1px;margin-bottom:4px;color:var(--gold)">TODAS LAS TANDAS</h3>';
+  h+='<p style="font-size:10px;color:var(--muted);margin-bottom:10px">Click en cualquier casillero para editar el peso del intento. Los botones GOOD / NO LIFT grandes aparecen solo en la tanda e intento que se est\u00e1 juzgando ahora (arriba).</p>';
+  if(!allFlights.length)h+='<p style="color:var(--muted);font-size:12px;text-align:center;padding:14px">Sin atletas cargados</p>';
+  allFlights.forEach(fl=>{
+    const rows = DATA.athletes.filter(a=>a.flight===fl&&!a.bombed).sort((a,b)=>a.lot-b.lot);
+    if(!rows.length)return;
+    h+='<div style="margin-bottom:18px">';
+    h+='<div class="os" style="font-size:12px;font-weight:700;letter-spacing:1px;color:'+(FL_C[fl]||'#999')+';padding:5px 2px;border-bottom:2px solid '+(FL_C[fl]||'#999')+'44;margin-bottom:6px">TANDA '+fl+(fl===DATA.flight?' \u00b7 EN TARIMA AHORA':'')+'</div>';
+    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:640px"><thead><tr style="border-bottom:1px solid var(--border)">';
+    h+='<th style="text-align:center;padding:5px 4px;color:var(--muted);font-size:9px;width:26px">#</th>';
+    h+='<th style="text-align:left;padding:5px 8px;color:var(--muted);font-size:9px">ATLETA</th>';
+    LIFTS.forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="text-align:center;padding:5px 3px;color:'+LIFT_C[l]+';font-size:10px;font-weight:700;width:58px">'+LIFT_S[l]+r+'</th>'})});
+    h+='<th style="text-align:center;padding:5px 4px;color:var(--gold);font-size:9px;width:56px">TOTAL</th></tr></thead><tbody>';
+    rows.forEach(a=>{
+      const isCurrentAthlete = fl===DATA.flight && cur && a.id===cur.id;
+      const tot = totalOf(a);
+      h+='<tr style="border-bottom:1px solid rgba(30,58,95,.18);'+(isCurrentAthlete?'background:linear-gradient(90deg,'+LIFT_C[DATA.lift]+'30,'+LIFT_C[DATA.lift]+'10);box-shadow:inset 3px 0 0 '+LIFT_C[DATA.lift]+';':'')+'">';
+      h+='<td style="text-align:center;padding:6px 4px"><span class="os" style="color:'+(isCurrentAthlete?'#fff':'var(--muted)')+';font-weight:700;font-size:12px">'+(a.lot||'\u00b7')+'</span></td>';
+      h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:12px;font-weight:'+(isCurrentAthlete?800:500)+';color:'+(isCurrentAthlete?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px">'+(isCurrentAthlete?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">\u25b6</span>':'')+'<span>'+a.name+'</span></div><div style="font-size:8px;color:var(--muted)">'+(a.bw>0?a.bw+'kg':'sin BW')+'</div></td>';
+      LIFTS.forEach(l=>{
+        [0,1,2].forEach(j=>{
+          const isCurrentCell = isCurrentAthlete && l===DATA.lift && j===DATA.round;
+          h+=_attCellCompete(a,l,j,isCurrentCell);
+        });
       });
-      // Best
-      h+='<td style="text-align:center;padding:6px 4px;font-weight:700;font-family:Oswald;color:var(--gold);font-size:14px">'+(b||'\u2014')+'</td>';
+      h+='<td style="text-align:center;padding:6px 4px;font-weight:700;font-family:Oswald;color:var(--gold);font-size:13px">'+(tot||'\u2014')+'</td>';
       h+='</tr>';
     });
-    h+='</tbody></table>';
-  }
+    h+='</tbody></table></div></div>';
+  });
+  h+='</div>';
   h+='</div></div>';
   // Rankings
   h+='<div><div class="card" style="position:sticky;top:20px"><h3 class="os" style="font-size:12px;letter-spacing:1px;margin-bottom:8px;color:var(--gold)">RANKING GL</h3>';
