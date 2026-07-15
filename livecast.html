@@ -1512,11 +1512,14 @@ async function loadLiveAthletes(ev){
     console.warn('[LiveCast] No Firestore ID for event:',ev.name);
     return;
   }
-  // Flight/jornada asignados en la pestaña Cronograma del admin — un solo
-  // getDoc puntual (no listener), se re-lee al reabrir el evento o con
-  // "Re-sincronizar nómina", no en cada snapshot de inscripciones.
-  const flightMap=await _loadCronoFlightMap(evId);
-  _subscribeCronoFlightMap(evId); // mantiene las tandas al día si el Cronograma se sigue editando
+  // Flight/jornada asignados en la pestaña Cronograma del admin. Se carga una vez acá
+  // y de ahí en más se mantiene al día vía _subscribeCronoFlightMap (onSnapshot) en
+  // window._cronoFlightMap — el onSnapshot de acá abajo SIEMPRE lee window._cronoFlightMap
+  // (no una copia local vieja), porque si usara una variable capturada en este momento,
+  // cualquier cambio posterior en inscripciones (aunque no tenga nada que ver con el
+  // Cronograma) volvería a aplicar el mapa viejo y pisaría la tanda ya corregida.
+  window._cronoFlightMap=await _loadCronoFlightMap(evId);
+  _subscribeCronoFlightMap(evId); // mantiene window._cronoFlightMap al día si el Cronograma se sigue editando
 
   const q=window._fb.query(
     window._fb.collection(fbDB,'inscripciones'),
@@ -1528,7 +1531,7 @@ async function loadLiveAthletes(ev){
     const fbAthletes=snap.docs
       .map(d=>({...d.data(),id:d.id}))
       .sort((a,b)=>(a.lot||9999)-(b.lot||9999))
-      .map((ins,j)=>_inscToAthlete(ins,j,flightMap));
+      .map((ins,j)=>_inscToAthlete(ins,j,window._cronoFlightMap));
 
     if(!fbAthletes.length)return; // no Firestore data — keep nominas.json data
 
