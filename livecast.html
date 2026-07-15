@@ -7490,18 +7490,16 @@ function applyEventURLParam(){
     const p=new URLSearchParams(location.search).get('evento');
     if(!p)return;
     const want=decodeURIComponent(p);
-    // Para widgets TX (incluye jornada/screen): el widget solo necesita el
-    // name para armar el docId de livecast_sync. Si el evento no está en la
-    // lista (ej. una sub-tarima generada), construirlo directo del parámetro.
-    if(TX_MODE){
-      DATA.event={id:want,name:want,athletes:[],_fromUrl:true};
-      const tryStart=()=>{if(!fbReady){setTimeout(tryStart,300);return}startFBSync();
-        if(TX_MODE==='jornada'||TX_MODE==='screen'){loadBirthYears();}
-        if(TX_MODE==='screen'||TX_MODE==='jornada'){subscribeScreenChannel();}
-        R();};
-      tryStart();
-      return;
-    }
+    // NOTA: acá ANTES había un atajo que, para widgets TX, armaba DATA.event usando
+    // el slug crudo de la URL (ej. "regionalcentrosur") como name, sin buscar el
+    // nombre real del evento en Firestore. El problema: fbDocId() arma el id del doc
+    // de livecast_sync a partir de DATA.event.name — así que ese atajo hacía que el
+    // widget (Control TX, Pantalla de Tarima, etc.) leyera/escribiera un documento
+    // DISTINTO al que usa el resto de la app (que sí resuelve el nombre real más
+    // abajo), y quedaba pegado en un estado viejo para siempre — ni un hard refresh
+    // lo arregla, porque no es un problema de caché, es que apunta a otro documento.
+    // Ahora los widgets TX pasan por la misma resolución de nombre real que el resto
+    // (pasos 1-2 de abajo) antes de arrancar.
     // 1) Buscar en DATA.events (ya populado desde Firestore via LIVE_EVENT_META)
     let i=(DATA.events||[]).findIndex(e=>e.id===want||e.name===want);
     let wanted=i>=0?DATA.events[i]:null;
@@ -7523,10 +7521,16 @@ function applyEventURLParam(){
       if(_applyEvtRetries<=10){
         setTimeout(applyEventURLParam,500);
         if(_applyEvtRetries===1)console.log('[LC] Esperando que Firestore cargue el evento "'+want+'"...');
-      } else {
-        console.warn('[LC] No pude encontrar evento "'+want+'" después de 5s. Verificá nombre/id.');
+        return;
       }
-      return;
+      console.warn('[LC] No pude encontrar evento "'+want+'" después de 5s. Verificá nombre/id.');
+      if(!TX_MODE)return;
+      // Último recurso, SOLO para widgets TX de un evento que realmente no está en la
+      // lista (ej. una sub-tarima generada sin doc propio en "eventos"): usar el slug
+      // crudo como nombre, para no dejar el widget sin mostrar nada. Si el evento SÍ
+      // existe con nombre real, el paso 1/2 de arriba ya lo habrá encontrado antes de
+      // llegar hasta acá.
+      wanted={id:want,name:want,athletes:[],_fromUrl:true};
     }
     _applyEvtRetries=0;
     // TX widget mode: read-only. Just set DATA.event y suscribir a livecast_sync.
