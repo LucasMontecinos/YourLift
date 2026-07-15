@@ -4977,15 +4977,153 @@ function renderTxBarbell(cur,lifterChanged){
 // el lugar (jueces, atletas, público presencial), así que el reloj
 // tiene sentido acá aunque ya no sea público en la transmisión online.
 // ════════════════════════════════════════════════════════════════
-// Zoom de la barra con discos en Pantalla de Intentos — ajustable con clicks +/-.
-// Persiste por navegador/pantalla (cada monitor puede tener su propio tamaño).
-window._SCREEN_BB_SCALE=parseFloat(localStorage.getItem('yl_screen_bb_scale')||'1')||1;
-window.setScreenBbScale=function(v){
-  window._SCREEN_BB_SCALE=Math.max(0.6,Math.min(3,parseFloat(v)||1));
-  try{localStorage.setItem('yl_screen_bb_scale',window._SCREEN_BB_SCALE)}catch(e){}
-  R();
+// ════════════════════════════════════════════════════════════════
+// LAYOUT EDITABLE de Pantalla de Intentos — cada bloque (peso, barra,
+// nombre, etc.) se puede mover y agrandar/achicar a mano, como una foto:
+// click para seleccionarlo (ahí aparece el borde + la manija redonda en
+// la esquina para redimensionar), arrastrarlo para moverlo, arrastrar la
+// manija para agrandar/achicar. Click en el fondo deselecciona — en ese
+// estado la pantalla se ve limpia, sin ningún borde ni manija, lista
+// para mostrar en la competencia. Se guarda por navegador/pantalla.
+// ════════════════════════════════════════════════════════════════
+const PI_LAYOUT_KEY='yl_pant_intentos_layout';
+const PI_DEFAULT_LAYOUT={
+  liftLabel:{x:50,y:12,scale:100},
+  weight:{x:50,y:26,scale:100},
+  barbell:{x:50,y:50,scale:100},
+  name:{x:50,y:73,scale:100},
+  subtitle:{x:50,y:80,scale:100},
+  position:{x:50,y:87,scale:100}
 };
-window.nudgeScreenBbScale=function(d){window.setScreenBbScale(window._SCREEN_BB_SCALE+d)};
+function _piLoadLayout(){
+  try{
+    const raw=localStorage.getItem(PI_LAYOUT_KEY);
+    if(raw){const saved=JSON.parse(raw);const merged={};Object.keys(PI_DEFAULT_LAYOUT).forEach(k=>{merged[k]=Object.assign({},PI_DEFAULT_LAYOUT[k],saved[k]||{});});return merged;}
+  }catch(e){}
+  return JSON.parse(JSON.stringify(PI_DEFAULT_LAYOUT));
+}
+window._piLayout=_piLoadLayout();
+window._piSelected=null;
+function _piSaveLayout(){try{localStorage.setItem(PI_LAYOUT_KEY,JSON.stringify(window._piLayout))}catch(e){}}
+window.piResetLayout=function(){
+  if(!confirm('¿Restablecer las posiciones y tamaños de la Pantalla de Intentos a los valores por defecto?'))return;
+  window._piLayout=JSON.parse(JSON.stringify(PI_DEFAULT_LAYOUT));
+  _piSaveLayout();
+  window._piSelected=null;
+  if(typeof R==='function')R();
+};
+// Un bloque movible/redimensionable. isBarbell=true le agrega overflow visible
+// (la barra es más ancha que su contenedor centrado).
+function _piBlock(key,innerHtml){
+  const pos=window._piLayout[key]||{x:50,y:50,scale:100};
+  const selected=window._piSelected===key;
+  let h='<div class="pi-block" data-pi-key="'+key+'" style="position:absolute;left:'+pos.x+'%;top:'+pos.y+'%;transform:translate(-50%,-50%);padding:10px;border-radius:8px;'+(selected?'outline:2px dashed #D4A843;background:rgba(212,168,67,.08);':'')+'cursor:'+(selected?'move':'pointer')+'">';
+  h+='<div class="pi-inner" style="transform:scale('+((pos.scale||100)/100)+');transform-origin:center center">'+innerHtml+'</div>';
+  if(selected){
+    h+='<div class="pi-resize" data-pi-key="'+key+'" title="Arrastrá para agrandar/achicar" style="position:absolute;right:-15px;bottom:-15px;width:26px;height:26px;background:#D4A843;border:3px solid #0A1628;border-radius:50%;cursor:nwse-resize;box-shadow:0 2px 8px rgba(0,0,0,.5)"></div>';
+  }
+  h+='</div>';
+  return h;
+}
+// Handlers globales de click/arrastre/redimensión — se registran una sola vez,
+// funcionan sobre cualquier .pi-block presente en el DOM en cada momento.
+if(!window._piHandlersInit){
+  window._piHandlersInit=true;
+  document.addEventListener('mousedown',function(e){
+    const container=document.getElementById('pantIntentosBox');
+    if(!container||!container.contains(e.target))return;
+    const resizeEl=e.target.closest && e.target.closest('.pi-resize');
+    if(resizeEl){
+      e.preventDefault();
+      const key=resizeEl.getAttribute('data-pi-key');
+      window._piResize={key,startY:e.clientY,startScale:(window._piLayout[key]||{}).scale||100};
+      return;
+    }
+    const block=e.target.closest && e.target.closest('.pi-block');
+    if(!block){
+      if(window._piSelected){window._piSelected=null;if(typeof R==='function')R();}
+      return;
+    }
+    const key=block.getAttribute('data-pi-key');
+    if(window._piSelected!==key){
+      window._piSelected=key;
+      if(typeof R==='function')R();
+      return;
+    }
+    e.preventDefault();
+    const rect=container.getBoundingClientRect();
+    const pos=window._piLayout[key];
+    window._piDrag={key,startX:e.clientX,startY:e.clientY,startPosX:pos.x,startPosY:pos.y,rectW:rect.width,rectH:rect.height};
+  });
+  document.addEventListener('mousemove',function(e){
+    if(window._piDrag){
+      const d=window._piDrag;
+      const pos=window._piLayout[d.key];
+      pos.x=Math.max(2,Math.min(98,d.startPosX+(e.clientX-d.startX)/d.rectW*100));
+      pos.y=Math.max(2,Math.min(98,d.startPosY+(e.clientY-d.startY)/d.rectH*100));
+      const el=document.querySelector('.pi-block[data-pi-key="'+d.key+'"]');
+      if(el){el.style.left=pos.x+'%';el.style.top=pos.y+'%';}
+    } else if(window._piResize){
+      const r=window._piResize;
+      const pos=window._piLayout[r.key];
+      pos.scale=Math.max(20,Math.min(400,r.startScale+(e.clientY-r.startY)/2));
+      const el=document.querySelector('.pi-block[data-pi-key="'+r.key+'"] .pi-inner');
+      if(el)el.style.transform='scale('+(pos.scale/100)+')';
+    }
+  });
+  document.addEventListener('mouseup',function(){
+    if(window._piDrag){_piSaveLayout();window._piDrag=null;}
+    if(window._piResize){_piSaveLayout();window._piResize=null;}
+  });
+  // Touch — mismo criterio, con un solo dedo.
+  document.addEventListener('touchstart',function(e){
+    const container=document.getElementById('pantIntentosBox');
+    if(!container||!e.touches[0]||!container.contains(e.target))return;
+    const t=e.touches[0];
+    const resizeEl=e.target.closest && e.target.closest('.pi-resize');
+    if(resizeEl){
+      const key=resizeEl.getAttribute('data-pi-key');
+      window._piResize={key,startY:t.clientY,startScale:(window._piLayout[key]||{}).scale||100};
+      return;
+    }
+    const block=e.target.closest && e.target.closest('.pi-block');
+    if(!block){
+      if(window._piSelected){window._piSelected=null;if(typeof R==='function')R();}
+      return;
+    }
+    const key=block.getAttribute('data-pi-key');
+    if(window._piSelected!==key){
+      window._piSelected=key;
+      if(typeof R==='function')R();
+      return;
+    }
+    const rect=container.getBoundingClientRect();
+    const pos=window._piLayout[key];
+    window._piDrag={key,startX:t.clientX,startY:t.clientY,startPosX:pos.x,startPosY:pos.y,rectW:rect.width,rectH:rect.height};
+  },{passive:true});
+  document.addEventListener('touchmove',function(e){
+    if(!e.touches[0])return;
+    const t=e.touches[0];
+    if(window._piDrag){
+      const d=window._piDrag;
+      const pos=window._piLayout[d.key];
+      pos.x=Math.max(2,Math.min(98,d.startPosX+(t.clientX-d.startX)/d.rectW*100));
+      pos.y=Math.max(2,Math.min(98,d.startPosY+(t.clientY-d.startY)/d.rectH*100));
+      const el=document.querySelector('.pi-block[data-pi-key="'+d.key+'"]');
+      if(el){el.style.left=pos.x+'%';el.style.top=pos.y+'%';}
+    } else if(window._piResize){
+      const r=window._piResize;
+      const pos=window._piLayout[r.key];
+      pos.scale=Math.max(20,Math.min(400,r.startScale+(t.clientY-r.startY)/2));
+      const el=document.querySelector('.pi-block[data-pi-key="'+r.key+'"] .pi-inner');
+      if(el)el.style.transform='scale('+(pos.scale/100)+')';
+    }
+  },{passive:true});
+  document.addEventListener('touchend',function(){
+    if(window._piDrag){_piSaveLayout();window._piDrag=null;}
+    if(window._piResize){_piSaveLayout();window._piResize=null;}
+  });
+}
 function renderScreenIntentos(cur){
   const att=cur.att[DATA.lift][DATA.round];
   const weight=att?.w||0;
@@ -5038,8 +5176,7 @@ function renderScreenIntentos(cur){
     x+=p.w+8;
   });
   const VW=x+20;
-  const bbScale=window._SCREEN_BB_SCALE||1;
-  const bbSvg=`<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" style="height:${Math.round(VH*0.85*bbScale)}px;width:auto;max-width:96vw;display:block;margin:0 auto">${s.join('')}</svg>`;
+  const bbSvg=`<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" style="height:${Math.round(VH*0.85)}px;width:auto;max-width:none;display:block">${s.join('')}</svg>`;
   // Pronóstico de posición (idéntico criterio al del widget de OBS)
   const peers=DATA.athletes.filter(a=>a.sex===cur.sex&&a.cat===cur.cat&&a.div===cur.div&&a.mod===cur.mod);
   const curGL=calcGL(totalOf(cur),cur.bw,cur.sex,cur.mod);
@@ -5065,20 +5202,23 @@ function renderScreenIntentos(cur){
   const t=Math.max(0,DATA.timer||0);
   const tTxt=Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
   const tColor=DATA.timerOn&&t<=10?'#ef4444':DATA.timerOn&&t<=30?'#f59e0b':'#22c55e';
-  return `<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center" id="pantIntentosBox">
+  const liftLabelHtml=`<div style="font-family:Oswald;font-size:22px;letter-spacing:4px;color:rgba(212,225,245,.6);white-space:nowrap">${liftName} · ${roundLabel}${rackH?` · RACK ${rackH}`:''}</div>`;
+  const weightHtml=`<div style="font-family:Oswald;font-size:120px;font-weight:900;color:#fff;line-height:1;letter-spacing:2px;white-space:nowrap">${weight}<span style="font-size:0.32em;color:rgba(212,225,245,.55);margin-left:10px">KG</span></div>`;
+  const nameHtml=`<div style="font-family:Oswald;font-size:56px;font-weight:700;letter-spacing:1px;color:#fff;line-height:1.15;white-space:nowrap">${cur.name||''}</div>`;
+  const subtitleHtml=`<div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:rgba(212,225,245,.5);white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
+  const positionHtml=posTxt?`<div style="font-family:Oswald;font-size:22px;letter-spacing:1px;color:#D4A843;white-space:nowrap">${posTxt}</div>`:'';
+  return `<div style="position:fixed;inset:0;overflow:hidden" id="pantIntentosBox">
     <div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>
-    <div style="position:fixed;bottom:24px;right:24px;display:flex;align-items:center;gap:6px;background:rgba(10,22,40,.7);border:1px solid rgba(212,225,245,.2);border-radius:10px;padding:6px 8px">
-      <span style="font-family:Oswald;font-size:10px;color:rgba(212,225,245,.5);letter-spacing:1px;margin-right:2px">TAMAÑO BARRA</span>
-      <button onclick="nudgeScreenBbScale(-0.15)" style="width:30px;height:30px;border-radius:6px;border:1px solid rgba(212,225,245,.3);background:transparent;color:#fff;font-size:17px;font-weight:700;cursor:pointer;line-height:1">−</button>
-      <span style="font-family:Oswald;font-size:12px;font-weight:700;color:#D4A843;min-width:38px;text-align:center">${Math.round(bbScale*100)}%</span>
-      <button onclick="nudgeScreenBbScale(0.15)" style="width:30px;height:30px;border-radius:6px;border:1px solid rgba(212,225,245,.3);background:transparent;color:#fff;font-size:17px;font-weight:700;cursor:pointer;line-height:1">+</button>
+    ${_piBlock('liftLabel',liftLabelHtml)}
+    ${_piBlock('weight',weightHtml)}
+    ${_piBlock('barbell',bbSvg)}
+    ${_piBlock('name',nameHtml)}
+    ${_piBlock('subtitle',subtitleHtml)}
+    ${positionHtml?_piBlock('position',positionHtml):''}
+    <div style="position:fixed;bottom:24px;right:24px;display:flex;align-items:center;gap:8px">
+      <span style="font-family:Oswald;font-size:10px;color:rgba(212,225,245,.4);letter-spacing:1px">CLICK EN UN BLOQUE PARA MOVERLO/AGRANDARLO</span>
+      <button onclick="piResetLayout()" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(212,225,245,.3);background:rgba(10,22,40,.7);color:#fff;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">RESTABLECER POSICIONES</button>
     </div>
-    <div style="font-family:Oswald;font-size:22px;letter-spacing:4px;color:rgba(212,225,245,.6);margin-bottom:6px">${liftName} · ${roundLabel}${rackH?` · RACK ${rackH}`:''}</div>
-    <div style="font-family:Oswald;font-size:clamp(70px,11vw,140px);font-weight:900;color:#fff;line-height:1;letter-spacing:2px;margin-bottom:10px">${weight}<span style="font-size:0.32em;color:rgba(212,225,245,.55);margin-left:10px">KG</span></div>
-    <div style="width:100%;margin-bottom:18px;overflow-x:auto">${bbSvg}</div>
-    <div style="font-family:Oswald;font-size:clamp(32px,5vw,56px);font-weight:700;letter-spacing:1px;color:#fff;line-height:1.15">${cur.name||''}</div>
-    <div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:rgba(212,225,245,.5);margin-top:10px">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>
-    ${posTxt?`<div style="font-family:Oswald;font-size:22px;letter-spacing:1px;color:#D4A843;margin-top:18px">${posTxt}</div>`:''}
   </div>`;
 }
 
