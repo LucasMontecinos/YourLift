@@ -6677,7 +6677,14 @@ function renderCompete(){
   h+='<p style="font-size:10px;color:var(--muted);margin-bottom:10px">Click en cualquier casillero para editar el peso del intento. Los botones GOOD / NO LIFT grandes aparecen solo en la tanda e intento que se est\u00e1 juzgando ahora (arriba).</p>';
   if(!allFlights.length)h+='<p style="color:var(--muted);font-size:12px;text-align:center;padding:14px">Sin atletas cargados</p>';
   allFlights.forEach(fl=>{
-    const rows = DATA.athletes.filter(a=>a.flight===fl&&!a.bombed).sort((a,b)=>a.lot-b.lot);
+    // Orden real de tarima para el lift+intento activo: menor a mayor peso declarado,
+    // y en caso de empate, lote menor primero (mismo criterio que liftQueue()). Los que
+    // todavía no tienen peso declarado para esta ronda (0) quedan al final, por lote.
+    const rows = DATA.athletes.filter(a=>a.flight===fl&&!a.bombed).sort((a,b)=>{
+      const wa=a.att[DATA.lift][DATA.round].w||0,wb=b.att[DATA.lift][DATA.round].w||0;
+      const ka=wa>0?wa:Infinity,kb=wb>0?wb:Infinity;
+      return ka!==kb?ka-kb:a.lot-b.lot;
+    });
     if(!rows.length)return;
     h+='<div style="margin-bottom:18px">';
     h+='<div class="os" style="font-size:12px;font-weight:700;letter-spacing:1px;color:'+(FL_C[fl]||'#999')+';padding:5px 2px;border-bottom:2px solid '+(FL_C[fl]||'#999')+'44;margin-bottom:6px">TANDA '+fl+(fl===DATA.flight?' \u00b7 EN TARIMA AHORA':'')+'</div>';
