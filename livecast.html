@@ -5015,6 +5015,37 @@ window.piResetLayout=function(){
   window._piSelected=null;
   if(typeof R==='function')R();
 };
+// Ajustes de pantalla: mostrar/ocultar cronómetro y colores personalizados
+// (fondo/acento/texto), para adaptarse a la iluminación de cada recinto.
+// Se guardan por navegador/pantalla, igual que la disposición de bloques.
+const PI_SETTINGS_KEY='yl_pant_intentos_settings';
+const PI_DEFAULT_SETTINGS={showTimer:true,bgColor:'',accentColor:'#D4A843',textColor:'#ffffff'};
+function _piLoadSettings(){
+  try{
+    const raw=localStorage.getItem(PI_SETTINGS_KEY);
+    if(raw)return Object.assign({},PI_DEFAULT_SETTINGS,JSON.parse(raw));
+  }catch(e){}
+  return Object.assign({},PI_DEFAULT_SETTINGS);
+}
+function _piSaveSettings(){try{localStorage.setItem(PI_SETTINGS_KEY,JSON.stringify(window._piSettings))}catch(e){}}
+window._piSettings=_piLoadSettings();
+window._piPanelOpen=false;
+window.piSetSetting=function(key,val){
+  window._piSettings[key]=val;
+  _piSaveSettings();
+  if(typeof R==='function')R();
+};
+window.piToggleSettingsPanel=function(){
+  window._piPanelOpen=!window._piPanelOpen;
+  if(typeof R==='function')R();
+};
+window.piResetColors=function(){
+  window._piSettings.bgColor=PI_DEFAULT_SETTINGS.bgColor;
+  window._piSettings.accentColor=PI_DEFAULT_SETTINGS.accentColor;
+  window._piSettings.textColor=PI_DEFAULT_SETTINGS.textColor;
+  _piSaveSettings();
+  if(typeof R==='function')R();
+};
 // Un bloque movible/redimensionable. isBarbell=true le agrega overflow visible
 // (la barra es más ancha que su contenedor centrado).
 function _piBlock(key,innerHtml){
@@ -5032,6 +5063,11 @@ function _piBlock(key,innerHtml){
 // funcionan sobre cualquier .pi-block presente en el DOM en cada momento.
 if(!window._piHandlersInit){
   window._piHandlersInit=true;
+  // mousedown solo arranca redimensión o arrastre (necesita capturar la posición
+  // inicial en el acto). La selección/deselección vive en 'click' (más abajo):
+  // si se hiciera acá, un R() en pleno mousedown reemplaza el DOM antes de que
+  // el navegador dispare 'click', y ese click se pierde — por ejemplo al hacer
+  // clic en el engranaje de ajustes justo después de tener un bloque seleccionado.
   document.addEventListener('mousedown',function(e){
     const container=document.getElementById('pantIntentosBox');
     if(!container||!container.contains(e.target))return;
@@ -5043,6 +5079,18 @@ if(!window._piHandlersInit){
       return;
     }
     const block=e.target.closest && e.target.closest('.pi-block');
+    if(!block||block.getAttribute('data-pi-key')!==window._piSelected)return;
+    e.preventDefault();
+    const key=block.getAttribute('data-pi-key');
+    const rect=container.getBoundingClientRect();
+    const pos=window._piLayout[key];
+    window._piDrag={key,startX:e.clientX,startY:e.clientY,startPosX:pos.x,startPosY:pos.y,rectW:rect.width,rectH:rect.height};
+  });
+  document.addEventListener('click',function(e){
+    const container=document.getElementById('pantIntentosBox');
+    if(!container||!container.contains(e.target))return;
+    if(e.target.closest && e.target.closest('.pi-resize'))return;
+    const block=e.target.closest && e.target.closest('.pi-block');
     if(!block){
       if(window._piSelected){window._piSelected=null;if(typeof R==='function')R();}
       return;
@@ -5051,12 +5099,7 @@ if(!window._piHandlersInit){
     if(window._piSelected!==key){
       window._piSelected=key;
       if(typeof R==='function')R();
-      return;
     }
-    e.preventDefault();
-    const rect=container.getBoundingClientRect();
-    const pos=window._piLayout[key];
-    window._piDrag={key,startX:e.clientX,startY:e.clientY,startPosX:pos.x,startPosY:pos.y,rectW:rect.width,rectH:rect.height};
   });
   document.addEventListener('mousemove',function(e){
     if(window._piDrag){
@@ -5078,7 +5121,8 @@ if(!window._piHandlersInit){
     if(window._piDrag){_piSaveLayout();window._piDrag=null;}
     if(window._piResize){_piSaveLayout();window._piResize=null;}
   });
-  // Touch — mismo criterio, con un solo dedo.
+  // Touch — mismo criterio, con un solo dedo. La selección/deselección no se
+  // toca acá: el tap sintetiza un 'click' propio, que ya cubre eso arriba.
   document.addEventListener('touchstart',function(e){
     const container=document.getElementById('pantIntentosBox');
     if(!container||!e.touches[0]||!container.contains(e.target))return;
@@ -5090,16 +5134,8 @@ if(!window._piHandlersInit){
       return;
     }
     const block=e.target.closest && e.target.closest('.pi-block');
-    if(!block){
-      if(window._piSelected){window._piSelected=null;if(typeof R==='function')R();}
-      return;
-    }
+    if(!block||block.getAttribute('data-pi-key')!==window._piSelected)return;
     const key=block.getAttribute('data-pi-key');
-    if(window._piSelected!==key){
-      window._piSelected=key;
-      if(typeof R==='function')R();
-      return;
-    }
     const rect=container.getBoundingClientRect();
     const pos=window._piLayout[key];
     window._piDrag={key,startX:t.clientX,startY:t.clientY,startPosX:pos.x,startPosY:pos.y,rectW:rect.width,rectH:rect.height};
@@ -5126,6 +5162,39 @@ if(!window._piHandlersInit){
     if(window._piDrag){_piSaveLayout();window._piDrag=null;}
     if(window._piResize){_piSaveLayout();window._piResize=null;}
   });
+}
+// Engranaje discreto (esquina inferior izquierda) + panel de ajustes. Cerrado
+// por defecto para que la transmisión se vea limpia; el engranaje queda casi
+// invisible (baja opacidad) pero siempre clickeable para volver a entrar.
+function _piSettingsPanelHtml(){
+  const piSet=window._piSettings||(window._piSettings=_piLoadSettings());
+  const open=!!window._piPanelOpen;
+  let h='<div style="position:fixed;bottom:18px;left:18px;z-index:50;display:flex;flex-direction:column;align-items:flex-start;gap:10px">';
+  if(open){
+    h+=`<div style="background:rgba(10,22,40,.94);border:1px solid rgba(212,225,245,.25);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
+      <div style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:rgba(212,225,245,.5)">AJUSTES DE PANTALLA</div>
+      <label style="display:flex;align-items:center;gap:8px;font-family:Oswald;font-size:12px;color:#fff;cursor:pointer">
+        <input type="checkbox" ${piSet.showTimer!==false?'checked':''} onchange="piSetSetting('showTimer',this.checked)"> Mostrar cronómetro
+      </label>
+      <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:Oswald;font-size:12px;color:#fff">
+        Fondo <input type="color" value="${piSet.bgColor||'#0A1628'}" onchange="piSetSetting('bgColor',this.value)" style="width:36px;height:24px;padding:0;border:1px solid rgba(212,225,245,.3);border-radius:4px;background:none;cursor:pointer">
+      </label>
+      <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:Oswald;font-size:12px;color:#fff">
+        Acento <input type="color" value="${piSet.accentColor||'#D4A843'}" onchange="piSetSetting('accentColor',this.value)" style="width:36px;height:24px;padding:0;border:1px solid rgba(212,225,245,.3);border-radius:4px;background:none;cursor:pointer">
+      </label>
+      <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:Oswald;font-size:12px;color:#fff">
+        Texto <input type="color" value="${piSet.textColor||'#ffffff'}" onchange="piSetSetting('textColor',this.value)" style="width:36px;height:24px;padding:0;border:1px solid rgba(212,225,245,.3);border-radius:4px;background:none;cursor:pointer">
+      </label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="piResetColors()" style="padding:6px 10px;border-radius:6px;border:1px solid rgba(212,225,245,.3);background:rgba(255,255,255,.05);color:#fff;font-family:Oswald;font-size:10px;cursor:pointer;letter-spacing:1px">RESTABLECER COLORES</button>
+        <button onclick="piResetLayout()" style="padding:6px 10px;border-radius:6px;border:1px solid rgba(212,225,245,.3);background:rgba(255,255,255,.05);color:#fff;font-family:Oswald;font-size:10px;cursor:pointer;letter-spacing:1px">RESTABLECER POSICIONES</button>
+      </div>
+      <div style="font-family:Oswald;font-size:9px;color:rgba(212,225,245,.35);letter-spacing:.5px;max-width:210px">Click en un bloque de la pantalla para moverlo o agrandarlo.</div>
+    </div>`;
+  }
+  h+=`<button onclick="piToggleSettingsPanel()" title="Ajustes de pantalla" style="width:28px;height:28px;border-radius:50%;border:1px solid rgba(212,225,245,${open?'.35':'.15'});background:rgba(10,22,40,${open?'.85':'.15'});color:rgba(255,255,255,${open?'.9':'.2'});font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s">⚙</button>`;
+  h+='</div>';
+  return h;
 }
 function renderScreenIntentos(cur,nxt){
   const att=cur.att[DATA.lift][DATA.round];
@@ -5205,11 +5274,14 @@ function renderScreenIntentos(cur,nxt){
   const t=Math.max(0,DATA.timer||0);
   const tTxt=Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
   const tColor=DATA.timerOn&&t<=10?'#ef4444':DATA.timerOn&&t<=30?'#f59e0b':'#22c55e';
+  const piSet=window._piSettings||(window._piSettings=_piLoadSettings());
+  const accentColor=piSet.accentColor||PI_DEFAULT_SETTINGS.accentColor;
+  const textColor=piSet.textColor||PI_DEFAULT_SETTINGS.textColor;
   const liftLabelHtml=`<div style="font-family:Oswald;font-size:22px;letter-spacing:4px;color:rgba(212,225,245,.6);white-space:nowrap">${liftName} · ${roundLabel}${rackH?` · RACK ${rackH}`:''}</div>`;
-  const weightHtml=`<div style="font-family:Oswald;font-size:120px;font-weight:900;color:#fff;line-height:1;letter-spacing:2px;white-space:nowrap">${weight}<span style="font-size:0.32em;color:rgba(212,225,245,.55);margin-left:10px">KG</span></div>`;
-  const nameHtml=`<div style="font-family:Oswald;font-size:56px;font-weight:700;letter-spacing:1px;color:#fff;line-height:1.15;white-space:nowrap">${cur.name||''}</div>`;
+  const weightHtml=`<div style="font-family:Oswald;font-size:120px;font-weight:900;color:${textColor};line-height:1;letter-spacing:2px;white-space:nowrap">${weight}<span style="font-size:0.32em;color:rgba(212,225,245,.55);margin-left:10px">KG</span></div>`;
+  const nameHtml=`<div style="font-family:Oswald;font-size:56px;font-weight:700;letter-spacing:1px;color:${textColor};line-height:1.15;white-space:nowrap">${cur.name||''}</div>`;
   const subtitleHtml=`<div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:rgba(212,225,245,.5);white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
-  const positionHtml=posTxt?`<div style="font-family:Oswald;font-size:22px;letter-spacing:1px;color:#D4A843;white-space:nowrap">${posTxt}</div>`:'';
+  const positionHtml=posTxt?`<div style="font-family:Oswald;font-size:22px;letter-spacing:1px;color:${accentColor};white-space:nowrap">${posTxt}</div>`:'';
   // Quién viene después — para que los cargadores/spotters se vayan preparando.
   // Mismo lift+ronda que el atleta actual (nxt sale de la misma cola de intentos).
   let nextHtml='';
@@ -5218,13 +5290,13 @@ function renderScreenIntentos(cur,nxt){
     const nxtRack=DATA.lift==='sq'?nxt.rackSQ:DATA.lift==='bp'?nxt.rackBP:'';
     nextHtml=`<div style="display:flex;align-items:baseline;gap:14px;white-space:nowrap">
       <span style="font-family:Oswald;font-size:14px;letter-spacing:3px;color:rgba(212,225,245,.45)">SIGUIENTE</span>
-      <span style="font-family:Oswald;font-size:26px;font-weight:700;color:#fff">${nxt.name||''}</span>
-      <span style="font-family:Oswald;font-size:26px;font-weight:900;color:#D4A843">${nxtW||'—'}<span style="font-size:0.6em;margin-left:4px">KG</span></span>
+      <span style="font-family:Oswald;font-size:26px;font-weight:700;color:${textColor}">${nxt.name||''}</span>
+      <span style="font-family:Oswald;font-size:26px;font-weight:900;color:${accentColor}">${nxtW||'—'}<span style="font-size:0.6em;margin-left:4px">KG</span></span>
       ${nxtRack?`<span style="font-family:Oswald;font-size:16px;color:rgba(212,225,245,.55)">RACK ${nxtRack}</span>`:''}
     </div>`;
   }
-  return `<div style="position:fixed;inset:0;overflow:hidden" id="pantIntentosBox">
-    <div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>
+  return `<div style="position:fixed;inset:0;overflow:hidden${piSet.bgColor?';background:'+piSet.bgColor:''}" id="pantIntentosBox">
+    ${piSet.showTimer!==false?`<div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`:''}
     ${_piBlock('liftLabel',liftLabelHtml)}
     ${_piBlock('weight',weightHtml)}
     ${_piBlock('barbell',bbSvg)}
@@ -5232,10 +5304,7 @@ function renderScreenIntentos(cur,nxt){
     ${_piBlock('subtitle',subtitleHtml)}
     ${positionHtml?_piBlock('position',positionHtml):''}
     ${nextHtml?_piBlock('next',nextHtml):''}
-    <div style="position:fixed;bottom:24px;right:24px;display:flex;align-items:center;gap:8px">
-      <span style="font-family:Oswald;font-size:10px;color:rgba(212,225,245,.4);letter-spacing:1px">CLICK EN UN BLOQUE PARA MOVERLO/AGRANDARLO</span>
-      <button onclick="piResetLayout()" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(212,225,245,.3);background:rgba(10,22,40,.7);color:#fff;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">RESTABLECER POSICIONES</button>
-    </div>
+    ${_piSettingsPanelHtml()}
   </div>`;
 }
 
