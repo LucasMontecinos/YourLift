@@ -5146,7 +5146,7 @@ function renderShell(){
   h+='<button class="side-btn '+(p==='results'?'active':'')+'" onclick="go(\'results\')"><span class="icon">\uD83C\uDFC6</span>Resultados</button>';
   h+='<button class="side-btn '+(p==='atletaInfo'?'active':'')+'" onclick="go(\'atletaInfo\')"><span class="icon">\uD83D\uDC64</span>Atletas</button>';
   h+='<div class="side-label">Vuelo Activo</div><div style="display:flex;gap:4px;flex-wrap:wrap">';
-  flights.forEach(f=>{const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;h+='<button onclick="DATA.flight=\''+f+'\';save();R()" style="flex:1;min-width:36px;padding:6px 0;border-radius:6px;border:2px solid '+(DATA.flight===f?FL_C[f]||'var(--muted)':'var(--border)')+';background:'+(DATA.flight===f?(FL_C[f]||'#666')+'22':'transparent')+';color:'+(DATA.flight===f?FL_C[f]||'#fff':'var(--muted)')+';font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">'+f+'<span style="font-size:9px;opacity:.6;display:block">'+n+'</span></button>'});
+  flights.forEach(f=>{const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;h+='<button onclick="DATA.flight=\''+f+'\';saveNow();R()" style="flex:1;min-width:36px;padding:6px 0;border-radius:6px;border:2px solid '+(DATA.flight===f?FL_C[f]||'var(--muted)':'var(--border)')+';background:'+(DATA.flight===f?(FL_C[f]||'#666')+'22':'transparent')+';color:'+(DATA.flight===f?FL_C[f]||'#fff':'var(--muted)')+';font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">'+f+'<span style="font-size:9px;opacity:.6;display:block">'+n+'</span></button>'});
   h+='</div>';
   if(isAdmin){
   h+='<div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">';
@@ -6301,9 +6301,9 @@ function renderCompete(){
   let h='<div class="fade">';
   h+='<div style="display:flex;align-items:center;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
   h+='<span style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-right:2px">JUZGANDO AHORA</span>';
-  h+=LIFTS.map(l=>'<button onclick="DATA.lift=\''+l+'\';DATA.round=0;save();R()" class="os" style="padding:5px 12px;border-radius:6px;border:2px solid '+(DATA.lift===l?LIFT_C[l]:'var(--border)')+';background:'+(DATA.lift===l?LIFT_C[l]+'20':'transparent')+';color:'+(DATA.lift===l?LIFT_C[l]:'var(--muted)')+';font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">'+LIFT_S[l]+'</button>').join('');
+  h+=LIFTS.map(l=>'<button onclick="DATA.lift=\''+l+'\';DATA.round=0;saveNow();R()" class="os" style="padding:5px 12px;border-radius:6px;border:2px solid '+(DATA.lift===l?LIFT_C[l]:'var(--border)')+';background:'+(DATA.lift===l?LIFT_C[l]+'20':'transparent')+';color:'+(DATA.lift===l?LIFT_C[l]:'var(--muted)')+';font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">'+LIFT_S[l]+'</button>').join('');
   h+='<span style="width:6px"></span>';
-  h+=[0,1,2].map(r=>'<button onclick="DATA.round='+r+';save();R()" class="os" style="padding:5px 10px;border-radius:6px;border:1px solid '+(DATA.round===r?'var(--gold)':'var(--border)')+';background:'+(DATA.round===r?'rgba(212,168,67,.15)':'transparent')+';color:'+(DATA.round===r?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:600;cursor:pointer">INT '+(r+1)+'</button>').join('');
+  h+=[0,1,2].map(r=>'<button onclick="DATA.round='+r+';saveNow();R()" class="os" style="padding:5px 10px;border-radius:6px;border:1px solid '+(DATA.round===r?'var(--gold)':'var(--border)')+';background:'+(DATA.round===r?'rgba(212,168,67,.15)':'transparent')+';color:'+(DATA.round===r?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:600;cursor:pointer">INT '+(r+1)+'</button>').join('');
   h+='</div>';
   // Selector de tanda activa — lo mismo que "Vuelo Activo" del menú hamburguesa, pero acá
   // directo, sin tener que abrir la sidebar. Define qué tanda ve Control TX ahora mismo.
@@ -6314,7 +6314,7 @@ function renderCompete(){
      h+=flightsCE.map(f=>{
        const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;
        const on=DATA.flight===f;
-       return '<button onclick="DATA.flight=\''+f+'\';save();R()" class="os" style="padding:5px 12px;border-radius:6px;border:2px solid '+(on?(FL_C[f]||'var(--gold)'):'var(--border)')+';background:'+(on?(FL_C[f]||'#666')+'22':'transparent')+';color:'+(on?(FL_C[f]||'#fff'):'var(--muted)')+';font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">'+f+'<span style="font-size:9px;opacity:.7;margin-left:4px">('+n+')</span></button>';
+       return '<button onclick="DATA.flight=\''+f+'\';saveNow();R()" class="os" style="padding:5px 12px;border-radius:6px;border:2px solid '+(on?(FL_C[f]||'var(--gold)'):'var(--border)')+';background:'+(on?(FL_C[f]||'#666')+'22':'transparent')+';color:'+(on?(FL_C[f]||'#fff'):'var(--muted)')+';font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">'+f+'<span style="font-size:9px;opacity:.7;margin-left:4px">('+n+')</span></button>';
      }).join('');
      h+='</div>';
    }
