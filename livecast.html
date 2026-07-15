@@ -1382,6 +1382,31 @@ function confirmWeighIn(id,catKg,limit){
 // carga o resincroniza la nómina, no en cada cambio, para no sumar
 // lecturas de Firestore de más.
 function _nnCrono(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();}
+// Busca la tanda de un atleta en el mapa del Cronograma. Primero intenta match exacto
+// (nombre normalizado); si no hay, intenta un match flexible por subconjunto de palabras.
+// Motivo: el Cronograma a veces trae el nombre completo con segundo nombre (ej. "Andres
+// SIMÓN Neira Acevedo") mientras que la inscripción solo tiene "Andres Neira Acevedo" — con
+// match exacto esos casos quedaban sin tanda asignada. Requiere que TODAS las palabras del
+// nombre más corto estén contenidas en el más largo, así nunca cruza por coincidencia
+// parcial de un solo apellido suelto entre dos personas distintas.
+function _cronoLookup(map,name){
+  if(!map)return null;
+  const key=_nnCrono(name);
+  if(map[key])return map[key];
+  const qTokens=key.split(' ').filter(Boolean);
+  if(qTokens.length<2)return null;
+  const qSet=new Set(qTokens);
+  for(const k in map){
+    const kTokens=k.split(' ').filter(Boolean);
+    if(kTokens.length<2)continue;
+    const kSet=new Set(kTokens);
+    const small=qSet.size<=kSet.size?qSet:kSet, big=qSet.size<=kSet.size?kSet:qSet;
+    let subset=true;
+    for(const t of small){if(!big.has(t)){subset=false;break;}}
+    if(subset)return map[k];
+  }
+  return null;
+}
 async function _loadCronoFlightMap(evId){
   if(!fbReady||!window._fb||!evId)return null;
   try{
@@ -1422,7 +1447,7 @@ function _applyCronoFlightsToAthletes(map){
   if(!map||!DATA.athletes||!DATA.athletes.length)return;
   let changed=false;
   DATA.athletes.forEach(a=>{
-    const entry=map[_nnCrono(a.name)];
+    const entry=_cronoLookup(map,a.name);
     if(entry){
       if(entry.flight && a.flight!==entry.flight){a.flight=entry.flight;changed=true;}
       if(typeof entry.jornada==='string' && a.jornada!==entry.jornada){a.jornada=entry.jornada;changed=true;}
@@ -1432,7 +1457,7 @@ function _applyCronoFlightsToAthletes(map){
 }
 function _inscToAthlete(ins, j, flightMap){
   const name=ins.nombre||'';
-  const cronoEntry=flightMap&&flightMap[_nnCrono(name)];
+  const cronoEntry=_cronoLookup(flightMap,name);
   const fl=cronoEntry?cronoEntry.flight:(ins.flight||'A');
   const rawMod=(ins.modalidad||'').toLowerCase();
   let mod;
