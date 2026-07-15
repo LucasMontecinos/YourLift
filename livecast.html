@@ -81,6 +81,12 @@ const TX_URL=new URLSearchParams(location.search);
 const TX_MODE=TX_URL.get('tx')||null; // 'profile' | 'scoreboard' | 'leaderboard' | 'lbauto' | 'slam' | 'timer' | 'lights' | 'ceremony' | null
 const TARIMA=TX_URL.get('tarima')||null; // '1' o '2' para modo 2 tarimas; null = todas
 const DEMO_MODE=TX_URL.get('demo')==='1'; // Modo demo para grabar videos promocionales
+// Modo práctica (?practica=1): livecast.html completo (Control en Vivo, Atletas y
+// Pesaje, Control TX, todo) pero con una tanda ficticia de atletas inventados, sin
+// tocar Firebase para nada — ni lectura ni escritura. Pensado para que los jueces
+// se familiaricen con la herramienta sin riesgo de tocar una competencia real.
+// Ver _initPracticeMode() más abajo.
+const PRACTICE_MODE=TX_URL.get('practica')==='1';
 function _inTarima(flightLetter){if(!TARIMA)return true;return String(flightLetter||'').endsWith(TARIMA);}
 if(TX_MODE){
   const css=document.createElement('style');
@@ -418,7 +424,7 @@ function startFBSync(){
   });
   console.log('[FB] Listener started for',id);
 }
-initFB();
+if(!PRACTICE_MODE)initFB(); // modo práctica: nunca toca Firebase, ni lectura ni escritura
 async function doLogin(){
   const em=(document.getElementById('adminEmail')?.value||'').trim().toLowerCase();
   const pw=document.getElementById('adminPass')?.value||'';
@@ -510,7 +516,9 @@ function _txC(key){
   const c=(_dirState&&_dirState.colors)||(_txDirState&&_txDirState.colors)||_txColorsLS;
   return (c&&c[key])||_TX_COLOR_DEFAULTS[key];
 }
-const SAVE_KEY='fechipo_lc3';
+// Clave separada en modo práctica: así nunca lee ni pisa el estado guardado de
+// una competencia real que esté abierta en el mismo navegador/dispositivo.
+const SAVE_KEY=PRACTICE_MODE?'fechipo_lc3_practica':'fechipo_lc3';
 const PLATES=[25,20,15,10,5,2.5,1.25,0.5,0.25];
 const PLATE_C={25:'#ef4444',20:'#3b82f6',15:'#f59e0b',10:'#22c55e',5:'#888','2.5':'#ef4444','1.25':'#f59e0b','0.5':'#7c3aed','0.25':'#ec4899'};
 const BAR=20,COLLARS=5;
@@ -7408,14 +7416,73 @@ try{localStorage.removeItem('fechipo_lc2');localStorage.removeItem('fechipo_live
 const loaded=load();
 let DB_FULL=[];
 
-// Auto-pick event si vino ?evento= en la URL (fallback por si los eventos
-// ya están en DATA.events de nominas.json antes de que el listener Firestore corra)
-if(!TX_MODE){
+// ══════════════════════════════════════════════
+// MODO PRÁCTICA (?practica=1) — roster ficticio + bootstrap
+// ══════════════════════════════════════════════
+const PRACTICE_EVENT_NAME='🎓 PRÁCTICA — Jueces (datos ficticios, no oficial)';
+function _genPracticeRoster(){
+  const firstM=['Bruno','Diego','Franco','Hugo','Jorge','Lucas','Nico','Pablo','Simón','Tomás'];
+  const firstF=['Ana','Carla','Elena','Gabriela','Iris','Karen','Marta','Olivia','Renata','Rocío'];
+  const last=['Pérez','Soto','Muñoz','Rojas','Vidal','Contreras','Silva','Reyes','Torres','Bravo'];
+  const catsM=[66,74,83,93,105,120];
+  const catsF=[52,57,63,69,76,84];
+  const rnd25=v=>Math.round(v/2.5)*2.5;
+  const athletes=[];
+  for(let i=0;i<20;i++){
+    const sex=i%2===0?'Hombre':'Mujer';
+    const cats=sex==='Hombre'?catsM:catsF;
+    const catNum=cats[Math.floor(Math.random()*cats.length)];
+    const flight=i<10?'A':'B';
+    const firstPool=sex==='Hombre'?firstM:firstF;
+    const name=firstPool[Math.floor(i/2)%firstPool.length]+' '+last[(i*3+1)%last.length]+' (Práctica)';
+    const bw=Math.round((catNum-(0.5+Math.random()*2.5))*10)/10;
+    const sqOpen=rnd25(catNum*0.85*(0.9+Math.random()*0.3));
+    const bpOpen=rnd25(catNum*0.5*(0.9+Math.random()*0.3));
+    const dlOpen=rnd25(catNum*1.0*(0.9+Math.random()*0.3));
+    athletes.push({
+      id:i,lot:i+1,name,rut:'',sex,cat:String(catNum),div:'Open',
+      club:'Club Práctica FECHIPO',uni:'',mod:'classic',country:'CHI',
+      bw,flight,jornada:'',rackSQ:String(3+Math.floor(Math.random()*8)),rackBP:String(2+Math.floor(Math.random()*6)),
+      bombed:false,weighedIn:true,
+      att:{
+        sq:[{w:sqOpen,r:null},{w:0,r:null},{w:0,r:null}],
+        bp:[{w:bpOpen,r:null},{w:0,r:null},{w:0,r:null}],
+        dl:[{w:dlOpen,r:null},{w:0,r:null},{w:0,r:null}]
+      }
+    });
+  }
+  return athletes;
+}
+function _initPracticeMode(){
+  isAdmin=true;
+  window.ADMIN_ROLE='owner';
+  // Si ya había una sesión de práctica guardada en este navegador (localStorage
+  // separado, ver SAVE_KEY), se continúa donde quedó. Si no, se genera una nueva.
+  if(!DATA.athletes||!DATA.athletes.length){
+    DATA.event={id:'practica_jueces',name:PRACTICE_EVENT_NAME,short:'PRÁCTICA (no oficial)',recordsEnabled:false};
+    DATA.athletes=_genPracticeRoster();
+    DATA.lift='sq';DATA.round=0;DATA.flight='A';DATA.changeTimers={};DATA.lotsGenerated=true;DATA.forcedCurrent=null;
+    DATA.phase='manage';
+    save();
+  }
+  // Banner fijo arriba de todo — para que nunca se confunda con una competencia real.
+  const banner=document.createElement('div');
+  banner.textContent='🎓 MODO PRÁCTICA — Atletas y datos ficticios. No es una competencia real. Nada de esto se guarda en el servidor.';
+  banner.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#D4A843;color:#0A1628;font-family:Oswald,sans-serif;font-weight:700;font-size:12px;letter-spacing:.5px;text-align:center;padding:6px 12px';
+  document.body.prepend(banner);
+  document.body.style.paddingTop='30px';
+  R();
+}
+if(PRACTICE_MODE){
+  _initPracticeMode();
+} else if(!TX_MODE){
+  // Auto-pick event si vino ?evento= en la URL (fallback por si los eventos
+  // ya están en DATA.events de nominas.json antes de que el listener Firestore corra)
   setTimeout(()=>{try{if(!window._autoEvtTried){window._autoEvtTried=true;applyEventURLParam()}}catch(e){}},150);
 }
 
 // ── Auto-backup every 30 seconds ─────────────────────────────
-const BACKUP_KEY='fechipo_lc3_backup';
+const BACKUP_KEY=PRACTICE_MODE?'fechipo_lc3_backup_practica':'fechipo_lc3_backup';
 setInterval(()=>{
   if(DATA.phase==='setup'||!DATA.athletes.length)return;
   try{
