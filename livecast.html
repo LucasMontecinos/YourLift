@@ -1101,13 +1101,30 @@ function confirmAddAthlete(){
 // Firestore atleta_fotos/<clave> (reusa colección existente, lectura pública) y
 // los archivos en Storage athlete_photos/ y athlete_gifs/ (reusa paths existentes).
 window._LC_MEDIA = window._LC_MEDIA || {};
+// Fotos subidas desde Admin (inscripción/panel "Fotos Atletas") — quedan en el
+// mismo doc atleta_fotos/{codigo} pero con id que NO empieza con 'lc_', y traen
+// el RUT del atleta como campo. Se indexan acá por RUT para poder mostrarlas
+// en Control TX / Perfil aunque livecast nunca haya subido nada por su cuenta.
+window._ADMIN_FOTOS_BY_RUT = window._ADMIN_FOTOS_BY_RUT || {};
+function _rutKey(r){ return String(r||'').replace(/[^0-9kK]/gi,'').toUpperCase(); }
+function _adminFotoFor(a){ const r=_rutKey(a&&a.rut); return (r&&window._ADMIN_FOTOS_BY_RUT[r])||null; }
 function _mediaKey(a){
   const rut=String((a&&a.rut)||'').replace(/[^0-9kK]/gi,'').toUpperCase();
   if(rut) return 'lc_rut_'+rut;
   const nm=String((a&&a.name)||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
   return 'lc_'+_ctry(a).toLowerCase()+'_'+nm;
 }
-function _lcMediaFor(a){ return (a&&window._LC_MEDIA[_mediaKey(a)])||null; }
+// Foto/GIF efectivos de un atleta: base = foto de inscripción aprobada en Admin
+// (si existe), y encima se superpone lo que se haya subido puntualmente desde
+// livecast (foto o GIF distinto para la transmisión), si lo hay.
+function _lcMediaFor(a){
+  const own=(a&&window._LC_MEDIA[_mediaKey(a)])||null;
+  const admin=_adminFotoFor(a);
+  if(!own&&!admin)return null;
+  const merged=Object.assign({},admin?{foto_url:admin.foto_url}:{},own||{});
+  if(!merged.foto_url&&admin&&admin.foto_url)merged.foto_url=admin.foto_url;
+  return merged;
+}
 function _setupLcMediaListener(){
   if(!fbReady||!window._fb||!fbDB||window._lcMediaUnsub)return;
   // Logos de clubes desde admin
@@ -1121,7 +1138,12 @@ function _setupLcMediaListener(){
   }catch(e){}
   try{
     window._lcMediaUnsub=window._fb.onSnapshot(window._fb.collection(fbDB,'atleta_fotos'),snap=>{
-      snap.docs.forEach(d=>{ if(String(d.id).indexOf('lc_')===0) window._LC_MEDIA[d.id]=d.data(); });
+      snap.docs.forEach(d=>{
+        const data=d.data();
+        if(String(d.id).indexOf('lc_')===0){ window._LC_MEDIA[d.id]=data; return; }
+        const r=_rutKey(data.rut);
+        if(r&&data.foto_url&&data.status!=='rejected')window._ADMIN_FOTOS_BY_RUT[r]={foto_url:data.foto_url};
+      });
       if(typeof renderTxWidget==='function')renderTxWidget();
       if(!TX_MODE && DATA.phase==='manage' && typeof R==='function')R();
     });
