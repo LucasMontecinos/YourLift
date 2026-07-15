@@ -4879,8 +4879,9 @@ function renderTxBarbell(cur,lifterChanged){
   const collarsKg=5; // 2 collares × 2.5kg — se muestran aparte de los discos, pero SÍ pesan
   const barW=barKg+collarsKg; // 25kg fijo antes de los discos
   const sideKg=Math.max(0,(weight-barW)/2);
-  // Plate greedy algorithm
-  const PLATE_SIZES=[25,20,15,10,5,2.5,1.25,0.5,0.25];
+  // Plate greedy algorithm — solo el set de competencia (25→1.25kg); los
+  // fraccionarios de récord (0.75/0.5/0.25/0.125) aún no están habilitados.
+  const PLATE_SIZES=[25,20,15,10,5,2.5,1.25];
   const plates=[];
   let rem=Math.round(sideKg*100)/100;
   for(const p of PLATE_SIZES){while(rem>=p-0.001){plates.push(p);rem=Math.round((rem-p)*100)/100;}}
@@ -4893,6 +4894,7 @@ function renderTxBarbell(cur,lifterChanged){
     if(kg>=5)  return{h:50,w:16,fill:'#D1D5DB',stroke:'#9CA3AF'};
     if(kg>=2.5)return{h:38,w:13,fill:'#EF4444',stroke:'#991B1B'};
     if(kg>=1.25)return{h:28,w:11,fill:'#9CA3AF',stroke:'#6B7280'};
+    if(kg>=0.75)return{h:22,w:9, fill:'#9CA3AF',stroke:'#6B7280'};
     if(kg>=0.5) return{h:20,w:9, fill:'#6B7280',stroke:'#374151'};
                 return{h:16,w:7, fill:'#4B5563',stroke:'#1F2937'};
   }
@@ -5204,12 +5206,15 @@ function renderScreenIntentos(cur,nxt){
   const collarsKg=5; // 2 collares × 2.5kg
   const barW=barKg+collarsKg;
   const sideKg=Math.max(0,(weight-barW)/2);
-  const PLATE_SIZES=[25,20,15,10,5,2.5,1.25,0.5,0.25];
+  // Solo el set de discos que se usa en competencia (25→1.25kg). Los fraccionarios
+  // 0.75/0.5/0.25/0.125 son exclusivos para intentos de récord y aún no están
+  // habilitados para el Regional — se suman más adelante cuando se necesiten.
+  const PLATE_SIZES=[25,20,15,10,5,2.5,1.25];
   const plates=[];
   let rem=Math.round(sideKg*100)/100;
   for(const p of PLATE_SIZES){while(rem>=p-0.001){plates.push(p);rem=Math.round((rem-p)*100)/100;}}
-  // Props visuales por disco — grandes = rectángulo con el número; chicos (<2.5) = círculo,
-  // igual que en la referencia de LiftingCast.
+  // Props visuales por disco — todos son rectángulos (vista de canto de un disco real),
+  // el 1.25 antes se dibujaba como círculo y parecía una pelota.
   function pp(kg){
     if(kg>=25) return{h:280,w:64,fill:'#DC2626',stroke:'#7F1D1D',round:false};
     if(kg>=20) return{h:250,w:58,fill:'#2563EB',stroke:'#1E3A8A',round:false};
@@ -5217,9 +5222,11 @@ function renderScreenIntentos(cur,nxt){
     if(kg>=10) return{h:190,w:46,fill:'#16A34A',stroke:'#14532D',round:false};
     if(kg>=5)  return{h:150,w:38,fill:'#E5E7EB',stroke:'#9CA3AF',round:false};
     if(kg>=2.5)return{h:110,w:30,fill:'#EF4444',stroke:'#991B1B',round:false};
-    if(kg>=1.25)return{h:64, w:64,fill:'#9CA3AF',stroke:'#6B7280',round:true};
-    if(kg>=0.5) return{h:48, w:48,fill:'#6B7280',stroke:'#374151',round:true};
-                return{h:38, w:38,fill:'#4B5563',stroke:'#1F2937',round:true};
+    if(kg>=1.25)return{h:80, w:18,fill:'#D1D5DB',stroke:'#6B7280',round:false};
+    if(kg>=0.75)return{h:64, w:14,fill:'#9CA3AF',stroke:'#6B7280',round:false};
+    if(kg>=0.5) return{h:54, w:12,fill:'#6B7280',stroke:'#374151',round:false};
+    if(kg>=0.25)return{h:46, w:10,fill:'#4B5563',stroke:'#1F2937',round:false};
+                return{h:38, w:8, fill:'#374151',stroke:'#111827',round:false};
   }
   // Solo LA MITAD de la barra (un lado): un tramo corto de eje representando el resto de
   // la barra fuera de pantalla, el collar (con el peso fijo "barra+collares"), y los
@@ -5240,10 +5247,17 @@ function renderScreenIntentos(cur,nxt){
       s.push(`<circle cx="${x+r}" cy="${cy}" r="${r}" fill="${p.fill}" stroke="${p.stroke}" stroke-width="3"/>`);
       s.push(`<text x="${x+r}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="#111827" font-family="Oswald" font-weight="800" font-size="${Math.max(13,r*0.4)}">${label}</text>`);
     } else {
-      s.push(`<rect x="${x}" y="${py}" width="${p.w}" height="${p.h}" fill="${p.fill}" rx="5" stroke="${p.stroke}" stroke-width="3"/>`);
-      s.push(`<rect x="${x+4}" y="${py+6}" width="6" height="${p.h-12}" fill="rgba(255,255,255,0.22)" rx="2"/>`);
+      const rx=Math.min(5,p.w*0.25);
+      const stripeW=Math.max(2,Math.min(6,p.w*0.3));
+      s.push(`<rect x="${x}" y="${py}" width="${p.w}" height="${p.h}" fill="${p.fill}" rx="${rx}" stroke="${p.stroke}" stroke-width="3"/>`);
+      s.push(`<rect x="${x+4}" y="${py+6}" width="${stripeW}" height="${p.h-12}" fill="rgba(255,255,255,0.22)" rx="2"/>`);
       const textColor=kg>=5&&kg<10?'#111827':'#fff';
-      s.push(`<text x="${x+p.w/2}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="${textColor}" font-family="Oswald" font-weight="800" font-size="${Math.min(30,p.w*0.62)}">${label}</text>`);
+      // Discos angostos (1.25kg y menores): la etiqueta se rota para leerse a lo
+      // largo del disco, si no el número no entra en el ancho del disco.
+      const narrow=p.w<24;
+      const fs=narrow?Math.max(9,Math.min(14,p.w*0.75)):Math.min(30,p.w*0.62);
+      const rot=narrow?` transform="rotate(-90 ${x+p.w/2} ${cy})"`:'';
+      s.push(`<text x="${x+p.w/2}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="${textColor}" font-family="Oswald" font-weight="800" font-size="${fs}"${rot}>${label}</text>`);
     }
     x+=p.w+8;
   });
