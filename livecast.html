@@ -4531,9 +4531,11 @@ function renderTxScreen(c){
     return;
   }
   if(st.mode==='intentos'){
-    const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
+    const _piQ=liftQueue();
+    const cur=_piQ[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
+    const nxt=_piQ[1]||null;
     document.body.classList.add('tx-opaque');
-    c.innerHTML=cur?renderScreenIntentos(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>';
+    c.innerHTML=cur?renderScreenIntentos(cur,nxt):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>';
     return;
   }
   // jornada (default)
@@ -4988,12 +4990,13 @@ function renderTxBarbell(cur,lifterChanged){
 // ════════════════════════════════════════════════════════════════
 const PI_LAYOUT_KEY='yl_pant_intentos_layout';
 const PI_DEFAULT_LAYOUT={
-  liftLabel:{x:50,y:12,scale:100},
-  weight:{x:50,y:26,scale:100},
-  barbell:{x:50,y:50,scale:100},
-  name:{x:50,y:73,scale:100},
-  subtitle:{x:50,y:80,scale:100},
-  position:{x:50,y:87,scale:100}
+  liftLabel:{x:50,y:10,scale:100},
+  weight:{x:50,y:23,scale:100},
+  barbell:{x:50,y:45,scale:100},
+  name:{x:50,y:66,scale:100},
+  subtitle:{x:50,y:72,scale:100},
+  position:{x:50,y:78,scale:100},
+  next:{x:50,y:92,scale:100}
 };
 function _piLoadLayout(){
   try{
@@ -5124,7 +5127,7 @@ if(!window._piHandlersInit){
     if(window._piResize){_piSaveLayout();window._piResize=null;}
   });
 }
-function renderScreenIntentos(cur){
+function renderScreenIntentos(cur,nxt){
   const att=cur.att[DATA.lift][DATA.round];
   const weight=att?.w||0;
   const isMale=cur.sex==='Hombre'||cur.sex==='M'||cur.sex==='Masculino';
@@ -5207,6 +5210,19 @@ function renderScreenIntentos(cur){
   const nameHtml=`<div style="font-family:Oswald;font-size:56px;font-weight:700;letter-spacing:1px;color:#fff;line-height:1.15;white-space:nowrap">${cur.name||''}</div>`;
   const subtitleHtml=`<div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:rgba(212,225,245,.5);white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
   const positionHtml=posTxt?`<div style="font-family:Oswald;font-size:22px;letter-spacing:1px;color:#D4A843;white-space:nowrap">${posTxt}</div>`:'';
+  // Quién viene después — para que los cargadores/spotters se vayan preparando.
+  // Mismo lift+ronda que el atleta actual (nxt sale de la misma cola de intentos).
+  let nextHtml='';
+  if(nxt){
+    const nxtW=nxt.att[DATA.lift][DATA.round].w;
+    const nxtRack=DATA.lift==='sq'?nxt.rackSQ:DATA.lift==='bp'?nxt.rackBP:'';
+    nextHtml=`<div style="display:flex;align-items:baseline;gap:14px;white-space:nowrap">
+      <span style="font-family:Oswald;font-size:14px;letter-spacing:3px;color:rgba(212,225,245,.45)">SIGUIENTE</span>
+      <span style="font-family:Oswald;font-size:26px;font-weight:700;color:#fff">${nxt.name||''}</span>
+      <span style="font-family:Oswald;font-size:26px;font-weight:900;color:#D4A843">${nxtW||'—'}<span style="font-size:0.6em;margin-left:4px">KG</span></span>
+      ${nxtRack?`<span style="font-family:Oswald;font-size:16px;color:rgba(212,225,245,.55)">RACK ${nxtRack}</span>`:''}
+    </div>`;
+  }
   return `<div style="position:fixed;inset:0;overflow:hidden" id="pantIntentosBox">
     <div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>
     ${_piBlock('liftLabel',liftLabelHtml)}
@@ -5215,6 +5231,7 @@ function renderScreenIntentos(cur){
     ${_piBlock('name',nameHtml)}
     ${_piBlock('subtitle',subtitleHtml)}
     ${positionHtml?_piBlock('position',positionHtml):''}
+    ${nextHtml?_piBlock('next',nextHtml):''}
     <div style="position:fixed;bottom:24px;right:24px;display:flex;align-items:center;gap:8px">
       <span style="font-family:Oswald;font-size:10px;color:rgba(212,225,245,.4);letter-spacing:1px">CLICK EN UN BLOQUE PARA MOVERLO/AGRANDARLO</span>
       <button onclick="piResetLayout()" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(212,225,245,.3);background:rgba(10,22,40,.7);color:#fff;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">RESTABLECER POSICIONES</button>
