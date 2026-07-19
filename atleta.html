@@ -202,6 +202,11 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
     try{window.RECORDS=await fetch('records.json')
       .then(r=>r.ok?r.json():fetch(_STOR+'public%2Frecords.json?alt=media').then(r=>r.json()))
       .catch(()=>fetch(_STOR+'public%2Frecords.json?alt=media').then(r=>r.json()));}catch(e){window.RECORDS={};}
+    // Nómina Sudamericano (badges de inscripción en el perfil) — no bloquea la carga.
+    // El flag de preview se captura ACÁ (una vez): showProfile() hace replaceState
+    // y borra ?nominasuda=1 de la URL, así que no se puede releer después.
+    window._NOMSUDA_PREVIEW=(()=>{try{return new URLSearchParams(location.search).get('nominasuda')==='1'}catch(e){return false}})();
+    fetch('nomina_sudamericano.json').then(r=>r.ok?r.json():null).then(j=>{window._NOMSUDA=j;if(window._curCodigo)showProfile(window._curCodigo);}).catch(()=>{});
 
     // Merge debutant athletes from Firestore (inscribed but not yet in data.json)
     if(_fbDB && _fbMod){
@@ -475,6 +480,32 @@ window.showProfile=function(codigo){
     +'</div>'
     +(medalsHtml?'<div style="display:flex;gap:10px;align-items:flex-start;flex-shrink:0;padding-left:4px">'+medalsHtml+'</div>':'')
   +'</div></div>';
+
+  // ── Inscripciones al Sudamericano 2026 (nómina goodlift) ─────────────
+  // Un atleta puede estar en varias listas (ej. Clásico + Only Bench Clásico):
+  // se muestra un badge por cada una. Solo visible cuando la nómina está
+  // publicada (o con ?nominasuda=1 para previsualizar).
+  {
+    const ns=window._NOMSUDA;
+    const nsVisible=ns&&(ns.publicada||window._NOMSUDA_PREVIEW);
+    if(nsVisible){
+      const inscSuda=ns.atletas.filter(x=>x.cod===codigo);
+      if(inscSuda.length){
+        h+='<div class="card" style="border-left:4px solid var(--gold)">'
+          +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
+          +'<span class="os" style="font-size:13px;letter-spacing:1.5px;color:var(--gold)">🌎 '+(ns.eventoCorto||'SUDAMERICANO 2026').toUpperCase()+'</span>'
+          +'<span style="font-size:10px;color:var(--muted)">'+(ns.lugar||'')+' · '+(ns.fechas||'')+'</span>'
+          +'</div>'
+          +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+          +inscSuda.map(x=>'<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:10px;background:rgba(212,168,67,.1);border:1px solid rgba(212,168,67,.35);font-family:Oswald;font-size:12px;letter-spacing:.5px;color:var(--text)">'
+            +'Inscrito en <b style="color:var(--gold)">'+x.mod+'</b>'
+            +'<span style="color:var(--muted);font-size:11px">'+x.cat+' kg · '+x.div+'</span>'
+            +(x.res?'<span title="Reserva" style="background:rgba(212,168,67,.2);color:var(--gold);padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700">R</span>':'')
+            +'</span>').join('')
+          +'</div></div>';
+      }
+    }
+  }
 
 
   // ── PRs ─────────────────────────────────────────────────

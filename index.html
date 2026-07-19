@@ -736,10 +736,74 @@ function trans(){
 function cdStr(target){if(!target||target.includes("X"))return{d:null,h:null,m:null,done:false,unknown:true};const now=new Date(),t=new Date(target+"T00:00:00"),diff=t-now;if(isNaN(diff))return{d:null,h:null,m:null,done:false,unknown:true};if(diff<=0)return{d:0,h:0,m:0,done:true};const d=Math.floor(diff/864e5),h=Math.floor((diff%864e5)/36e5),m=Math.floor((diff%36e5)/6e4);return{d,h,m,done:false}}
 // cdStrDT: igual pero acepta datetime-local 'YYYY-MM-DDTHH:MM' (para preNominaCloseAt)
 function cdStrDT(target){if(!target)return{d:null,h:null,m:null,done:false,unknown:true};const now=new Date(),t=new Date(target);if(isNaN(t))return{d:null,h:null,m:null,done:false,unknown:true};const diff=t-now;if(diff<=0)return{d:0,h:0,m:0,done:true};const d=Math.floor(diff/864e5),h=Math.floor((diff%864e5)/36e5),m=Math.floor((diff%36e5)/6e4);return{d,h,m,done:false}}
+// ── Nómina Sudamericano 2026 (goodlift.info) ─────────────────────────────
+// Cada inscripción es una fila por lista (un atleta en Clásico + Only Bench
+// aparece en ambas, a pedido). Chilenos linkeados a su perfil (campo cod).
+function _nsudaVisible(){
+  const j=window.NOMSUDA;
+  if(!j)return false;
+  if(j.publicada)return true;
+  try{return new URLSearchParams(location.search).get('nominasuda')==='1'}catch(e){return false}
+}
+const _NSUDA_DIVORD={'Sub-Junior':0,'Junior':1,'Universitario':2,'Open':3,'Master I':4,'Master II':5,'Master III':6,'Master IV':7};
+function _nsudaCatKey(c){const plus=(c||'').includes('+');return (parseFloat(String(c).replace(/[^0-9.]/g,''))||999)+(plus?0.5:0)}
+function renderNominaSuda(){
+  const j=window.NOMSUDA;
+  const fl=ST.nsudaF||'', q=(ST.nsudaS||'').toLowerCase();
+  let rows=j.atletas.slice();
+  if(fl)rows=rows.filter(a=>a.lista===fl);
+  if(q)rows=rows.filter(a=>a.n.toLowerCase().includes(q)||(a.pais||'').toLowerCase().includes(q)||(a.uni||'').toLowerCase().includes(q));
+  rows.sort((a,b)=>{
+    if(a.sexo!==b.sexo)return a.sexo==='F'?-1:1;
+    const ca=_nsudaCatKey(a.cat),cb=_nsudaCatKey(b.cat);
+    if(ca!==cb)return ca-cb;
+    const da=_NSUDA_DIVORD[a.div]??9,db=_NSUDA_DIVORD[b.div]??9;
+    if(da!==db)return da-db;
+    return a.n.localeCompare(b.n);
+  });
+  let h=`<div class="cd2" style="margin-bottom:24px;border:2px solid rgba(212,168,67,.45)">`;
+  h+=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px"><div><h2 style="font-family:Oswald;font-size:clamp(16px,3.5vw,20px);letter-spacing:1px;text-transform:uppercase">🌎 ${j.eventoCorto} <span style="font-size:10px;background:rgba(212,168,67,.2);color:var(--gold);padding:2px 8px;border-radius:10px;vertical-align:middle;border:1px solid rgba(212,168,67,.4)">NÓMINA OFICIAL</span>${j.publicada?'':' <span style="font-size:10px;background:rgba(239,68,68,.15);color:#ef4444;padding:2px 8px;border-radius:10px;vertical-align:middle;border:1px solid rgba(239,68,68,.4)">VISTA PREVIA — NO PUBLICADA</span>'}</h2><p style="font-size:12px;color:var(--muted);margin-top:2px">${j.evento}</p><p style="font-size:11px;color:var(--muted);margin-top:2px">${j.lugar} · ${j.fechas} · ${j.fuente}</p></div><span class="bg" style="background:var(--accent);color:#fff;font-size:14px;padding:6px 14px">${j.atletas.length} inscripciones</span></div>`;
+  // Filtros por lista (12) + todas
+  h+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin:12px 0">`;
+  const chip=(v,l)=>`<button onclick="nsudaF('${v.replace(/'/g,"\\'")}')" style="padding:6px 12px;border-radius:16px;border:1px solid ${fl===v?'var(--gold)':'var(--border)'};background:${fl===v?'rgba(212,168,67,.15)':'transparent'};color:${fl===v?'var(--gold)':'var(--muted)'};font-family:Oswald;font-size:11px;letter-spacing:.5px;cursor:pointer">${l}</button>`;
+  h+=chip('','Todas');
+  j.listas.forEach(l=>{const n=j.atletas.filter(a=>a.lista===l).length;h+=chip(l,l+' ('+n+')')});
+  h+=`</div>`;
+  h+=`<div class="fl" style="margin-bottom:10px"><input type="text" placeholder="Buscar atleta, país o universidad..." value="${ST.nsudaS||''}" oninput="nsudaS(this.value)"></div>`;
+  h+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px">${rows.length} inscripción${rows.length!==1?'es':''}${fl?' · '+fl:''} · <span style="color:var(--gold)">R = Reserva</span> · Los atletas chilenos tienen link a su perfil YourLift</div>`;
+  h+=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:760px">`;
+  h+=`<tr style="background:var(--blue)">`;
+  ['#','Atleta','País','Categoría','División','Modalidad','SQ','BP','DL','Total'].forEach((t,i)=>{
+    h+=`<th style="padding:8px 6px;color:#fff;text-align:${i===1||i===2?'left':'center'};font-family:Oswald;letter-spacing:.5px;${i===0?'width:35px':''}">${t}</th>`;
+  });
+  h+=`</tr>`;
+  rows.forEach((a,i)=>{
+    const bg=i%2===0?'transparent':'rgba(30,58,95,.15)';
+    const sexC=a.sexo==='M'?'var(--blue)':'var(--accent)';
+    const nameHtml=a.cod
+      ?`<a href="atleta.html?codigo=${encodeURIComponent(a.cod)}" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(212,168,67,.5);font-weight:600" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${a.n}</a>`
+      :`<span>${a.n}</span>`;
+    h+=`<tr style="background:${bg};border-bottom:1px solid rgba(30,58,95,.2)">`;
+    h+=`<td style="padding:7px 6px;text-align:center;color:var(--muted)">${i+1}</td>`;
+    h+=`<td style="padding:7px 6px">${nameHtml}${a.res?' <span title="Reserva" style="background:rgba(212,168,67,.15);color:var(--gold);border:1px solid rgba(212,168,67,.4);padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700">R</span>':''}${a.uni?`<div style="font-size:10px;color:var(--muted)">${a.uni}</div>`:''}</td>`;
+    h+=`<td style="padding:7px 6px;font-size:11px"><span style="color:${sexC};font-weight:700;margin-right:5px">${a.sexo}</span>${a.pais}</td>`;
+    h+=`<td style="padding:7px 6px;text-align:center"><span style="background:rgba(212,168,67,.12);color:var(--gold);padding:2px 8px;border-radius:10px;font-weight:600;font-size:11px">${a.cat}</span></td>`;
+    h+=`<td style="padding:7px 6px;text-align:center;font-size:11px">${a.div}</td>`;
+    h+=`<td style="padding:7px 6px;text-align:center;font-size:11px">${a.mod}</td>`;
+    ['sq','bp','dl','total'].forEach(k=>{h+=`<td style="padding:7px 6px;text-align:center;font-size:11px;${k==='total'?'color:var(--gold);font-weight:700':''}">${a[k]!=null?a[k]:'—'}</td>`});
+    h+=`</tr>`;
+  });
+  h+=`</table></div></div>`;
+  return h;
+}
+let _nsudaTimer=null;
+function nsudaF(v){ST.nsudaF=v;render()}
+function nsudaS(v){ST.nsudaS=v;if(_nsudaTimer)clearTimeout(_nsudaTimer);_nsudaTimer=setTimeout(()=>{render();setTimeout(()=>{document.querySelectorAll('.fl input').forEach(i=>{if(i.value===v){i.focus();i.setSelectionRange(v.length,v.length)}})},10)},300)}
 function nom(){
   let h='';
+  if(_nsudaVisible())h+=renderNominaSuda();
   const visibleEvs=(NM.events||[]).filter(ev=>ev.fromFirebase);
-  if(!visibleEvs.length)return'<div class="emp" style="padding:40px;text-align:center;color:var(--muted)">No hay campeonatos activos. El administrador los publicará pronto.</div>';
+  if(!visibleEvs.length)return h||'<div class="emp" style="padding:40px;text-align:center;color:var(--muted)">No hay campeonatos activos. El administrador los publicará pronto.</div>';
   NM.events=visibleEvs; // ensure we only render Firestore events in nóminas
   NM.events.forEach((ev,ei)=>{
     const cd=cdStr(ev.date),cc=cdStr(ev.closeDate),cp=cdStrDT(ev.preNominaCloseAt),isUni=ev.extraCols&&ev.extraCols.includes("universidad");
@@ -1711,6 +1775,10 @@ function bk(){ST.sel=null;render()}
 function mp(){ST.p++;render()}
 function sr(t,l){if(t)ST.rt=t;if(l)ST.rl=l;render()}
 
+// Nómina oficial del Sudamericano 2026 (goodlift) — archivo estático versionado.
+// Se muestra en la pestaña Nóminas solo cuando NOMSUDA.publicada===true en el JSON,
+// o para previsualizar con ?nominasuda=1 en la URL antes de publicarla.
+fetch('nomina_sudamericano.json').then(r=>r.ok?r.json():null).then(j=>{window.NOMSUDA=j;if(ST.v==='nominas')render();}).catch(()=>{});
 Promise.all([fetch("data.json").then(r=>r.json()),fetch("records.json").then(r=>r.json()).catch(()=>({})),fetch("nominas.json").then(r=>r.json()).catch(()=>({events:[]}))]).then(([d,r,n])=>{D=d;R=r;NM=n;NM._static=[...(n.events||[])];render();initFB();
   // Refresco de Nóminas: cada 3min, SOLO si la pestaña está visible y el visitante
   // sigue en esa vista. Antes era cada 30s sin importar visibilidad — leía la

@@ -1603,8 +1603,24 @@ async function loadLiveAthletes(ev){
     }
   });
 }
+// Confirmación antes de tocar una decisión YA tomada (pedido del operador):
+// - misma decisión otra vez (✓ sobre ✓ / ✗ sobre ✗) → anula → "¿seguro de ANULAR?"
+// - decisión contraria → revierte → "¿seguro de REVERTIR?"
+// Primera decisión de un intento sin juzgar: sin confirmación (flujo normal rápido).
+function _confirmDecisionChange(a,l,r,res){
+  const prev=a.att[l][r].r;
+  if(prev!=='g'&&prev!=='n')return true;
+  const lbl=prev==='g'?'VÁLIDO ✓':'NULO ✗';
+  const att=LIFT_S[l]+(r+1);
+  if(res===prev){
+    return confirm('¿Estás seguro de ANULAR la decisión?\n\n'+a.name+' — '+att+' está marcado como '+lbl+'.\nEl intento quedará SIN decisión (pendiente de nuevo).');
+  }
+  const newLbl=res==='g'?'VÁLIDO ✓':'NULO ✗';
+  return confirm('¿Estás seguro de REVERTIR la decisión?\n\n'+a.name+' — '+att+': pasa de '+lbl+' a '+newLbl+'.');
+}
 function overrideResult(id,l,r,res){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  if(!_confirmDecisionChange(a,l,r,res))return;
   // Toggle: clicking same result clears it
   const wasSame=(a.att[l][r].r===res);
   a.att[l][r].r=wasSame?null:res;
@@ -1646,6 +1662,7 @@ function overrideResult(id,l,r,res){
 // timers ni auto-avanza la ronda. Alterna: tocar la misma decisión la borra.
 function changeResult(id,l,r,res){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  if(!_confirmDecisionChange(a,l,r,res))return;
   const wasSame=(a.att[l][r].r===res);
   a.att[l][r].r=wasSame?null:res;
   a.bombed=a.att.sq.every(x=>x.r==='n')&&a.att.bp.every(x=>x.r==='n')&&a.att.dl.every(x=>x.r==='n');
