@@ -397,8 +397,22 @@ function startFBSync(){
       // de timer, que viaja con su copia de athletes) borra el peso recién ingresado
       // ("pongo el número y no sale nada") o me devuelve a SQ / Intento 1 / Tanda A.
       const _localFresh = (Date.now()-(window._lastLocalAction||0))<2500;
+      // Los ATLETAS siempre se mergean por-celda: absorbo los cambios del otro
+      // escritor (pesos/resultados en otras casillas) pero conservo las celdas que
+      // yo toqué hace <4s. Así varios controladores pueden cargar a la vez sin
+      // pisarse. La NAVEGACIÓN (lift/ronda/tanda/changeTimers) sigue con el guard
+      // grueso de 2.5s (normalmente la maneja un solo operador de tarima).
+      const _remoteAth = JSON.parse(d.athletes||'[]');
+      try{
+        DATA.athletes = _mergeAthletes(DATA.athletes, _remoteAth);
+        // Si conservé ediciones mías que no estaban en el remoto, reenvío mi versión
+        // para que Firestore (→ Control TX) quede con AMBOS cambios.
+        if(window.__mergeOverrode) _scheduleWriteback();
+      }catch(e){
+        // Ante cualquier problema, fallback al comportamiento anterior (no perder datos)
+        if(!_localFresh) DATA.athletes=_remoteAth;
+      }
       if(!_localFresh){
-        DATA.athletes=JSON.parse(d.athletes||'[]');
         DATA.lift=d.lift||DATA.lift;
         DATA.round=typeof d.round==='number'?d.round:DATA.round;
         DATA.flight=d.flight||DATA.flight;
@@ -633,6 +647,63 @@ let _syncTimer=null;
 function debouncedSync(){if(_syncTimer)clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>{syncToFB();_syncTimer=null},800)}
 function saveNow(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null}))}catch(e){}syncToFB()}
 function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);return true}}}catch(e){}return false}
+
+// ═══════════════════════════════════════════════════════════════════
+// MULTI-ESCRITOR: merge por-celda para que varios controladores (ej. la
+// planilla cargando pesos + vos/otros marcando resultados o cargando pesos
+// en otras casillas) NO se pisen. Cada edición local marca su "celda" con
+// timestamp; cuando llega un snapshot de OTRO escritor, se absorben todos
+// sus cambios EXCEPTO las celdas que toqué en los últimos HOLD ms (esas las
+// conservo). Si conservé algo que difería del remoto, reenvío mi versión
+// para que Firestore (y por lo tanto Control TX) converja con ambos cambios.
+// ═══════════════════════════════════════════════════════════════════
+window._recentAtt = window._recentAtt || {};   // "athId|campo" -> ts
+const _MERGE_HOLD_MS = 4000;
+function _markAtt(id, field){ try{ window._recentAtt[id+'|'+field]=Date.now(); }catch(e){} }
+function _mergeAthletes(localArr, remoteArr){
+  const now=Date.now();
+  const held={};
+  for(const k in window._recentAtt){ if(now-window._recentAtt[k]<_MERGE_HOLD_MS) held[k]=true; else delete window._recentAtt[k]; }
+  const localById={}; (localArr||[]).forEach(a=>{ if(a&&a.id!=null) localById[a.id]=a; });
+  let overrode=false;
+  const out=(remoteArr||[]).map(ra=>{
+    const la=localById[ra.id];
+    if(!la) return ra;
+    const m=JSON.parse(JSON.stringify(ra));
+    if(held[ra.id+'|meta']){
+      ['bw','rackSQ','rackBP','mod','country','flight','lot','bombed','weighedIn','jornada'].forEach(f=>{ if(la[f]!==undefined) m[f]=la[f]; });
+      overrode=true;
+    }
+    ['sq','bp','dl'].forEach(l=>{
+      const lLocal=(la.att&&la.att[l])||[];
+      const lRemote=(m.att&&m.att[l])||[];
+      const maxLen=Math.max(lLocal.length,lRemote.length);
+      const arr=[];
+      for(let r=0;r<maxLen;r++){
+        if(held[ra.id+'|att_'+l+'_'+r] && lLocal[r]){ arr[r]={w:lLocal[r].w,r:lLocal[r].r}; overrode=true; }
+        else if(lRemote[r]!==undefined){ arr[r]=lRemote[r]; }
+        else if(lLocal[r]!==undefined){ arr[r]={w:lLocal[r].w,r:lLocal[r].r}; overrode=true; } // remoto más corto: conservo mi 4º recién agregado
+      }
+      if(!m.att) m.att={};
+      m.att[l]=arr;
+    });
+    return m;
+  });
+  // atletas que tengo local y no vinieron en el remoto, con edición reciente → conservarlos
+  const remoteIds=new Set((remoteArr||[]).map(a=>a&&a.id));
+  (localArr||[]).forEach(a=>{ if(a && !remoteIds.has(a.id) && held[a.id+'|meta']){ out.push(a); overrode=true; } });
+  window.__mergeOverrode=overrode;
+  return out;
+}
+// Reenvío diferido: si el merge conservó ediciones mías que no estaban en el
+// remoto, empujo mi versión para que Firestore quede con AMBOS cambios. Sale
+// del handler de snapshot (por eso el setTimeout) y solo si soy controlador.
+let _wbTimer=null;
+function _scheduleWriteback(){
+  if(!window.IS_CONTROLLER)return;
+  if(_wbTimer)return;
+  _wbTimer=setTimeout(()=>{ _wbTimer=null; try{ if(typeof syncToFB==='function') syncToFB(); }catch(e){} }, 450);
+}
 
 function calcPlates(w){const ps=(w-BAR-COLLARS)/2;if(ps<=0)return[];let rem=ps;const r=[];for(const p of PLATES){while(rem>=p-0.001){r.push(p);rem-=p}}return r}
 function renderPlates(w){
@@ -870,6 +941,7 @@ function setAtt(id,l,r,val){
     }
   }
   a.att[l][r].w=w;
+  _markAtt(id,'att_'+l+'_'+r);
   if(DATA.changeTimers[key])delete DATA.changeTimers[key];
   save();
   // Refrescar la UI para que la celda muestre el peso (no el countdown viejo)
@@ -898,6 +970,7 @@ window.toggleChangeTimerAutofill=function(){
 };
 function setResult(id,l,r,res){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;a.att[l][r].r=res;
+  _markAtt(id,'att_'+l+'_'+r);
   if(r<2){
     const key=id+'_'+l+'_'+(r+1);
     // Solo arrancar el change timer si el próximo intento NO tiene peso declarado.
@@ -1395,6 +1468,7 @@ function confirmWeighIn(id,catKg,limit){
   // Save
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   a.bw=bw;a.rackSQ=rSQ;a.rackBP=rBP;a.mod=mod;a.country=country;
+  _markAtt(id,'meta');
   a.weighedIn=true;
   // Guardar primeros intentos (apertura) si vinieron en el modal
   if(a.att){
@@ -1626,6 +1700,7 @@ function overrideResult(id,l,r,res){
   // Toggle: clicking same result clears it
   const wasSame=(a.att[l][r].r===res);
   a.att[l][r].r=wasSame?null:res;
+  _markAtt(id,'att_'+l+'_'+r);
   // Si este intento era el forzado como "actual" a mano, se juzgó → volver al orden
   // automático normal (queue).
   if(!wasSame && res && DATA.forcedCurrent===id)DATA.forcedCurrent=null;
@@ -1667,6 +1742,7 @@ function changeResult(id,l,r,res){
   if(!_confirmDecisionChange(a,l,r,res))return;
   const wasSame=(a.att[l][r].r===res);
   a.att[l][r].r=wasSame?null:res;
+  _markAtt(id,'att_'+l+'_'+r);
   a.bombed=a.att.sq.every(x=>x.r==='n')&&a.att.bp.every(x=>x.r==='n')&&a.att.dl.every(x=>x.r==='n');
   saveNow();R();
   showToastLC(wasSame?'↺ '+a.name+' — '+LIFT_S[l]+(r+1)+': decisión revocada'
@@ -1682,7 +1758,7 @@ function isDQ(a){
   return a.att.sq.every(x=>x.r==='n')||a.att.bp.every(x=>x.r==='n')||a.att.dl.every(x=>x.r==='n');
 }
 window.isDQ=isDQ;
-function updA(id,k,v){const a=DATA.athletes.find(x=>x.id===id);if(!a)return;if(k==='bw')a.bw=parseFloat(v)||0;else a[k]=v;save()}
+function updA(id,k,v){const a=DATA.athletes.find(x=>x.id===id);if(!a)return;if(k==='bw')a.bw=parseFloat(v)||0;else a[k]=v;_markAtt(id,'meta');save()}
 function recoverBackup(){
   try{
     const bk=localStorage.getItem('fechipo_lc3_backup');
@@ -1885,6 +1961,7 @@ window.add4thAttempt=function(id,l){
   if(a.att[l].length>=4){showToastLC(a.name+' ya tiene un 4º intento en '+LIFT_S[l]);window._attMenuOpen=null;R();return;}
   const prevW=(a.att[l][2]&&a.att[l][2].w)||0; // arranca con el peso del 3er intento como sugerencia
   a.att[l].push({w:prevW,r:null});
+  _markAtt(id,'att_'+l+'_3');
   window._attMenuOpen=null;
   saveNow();R();
   showToastLC('➕ 4º intento agregado: '+a.name+' — '+LIFT_S[l]+'4'+(prevW?' ('+prevW+'kg, editá si cambia)':''));
@@ -1902,6 +1979,7 @@ window.remove4thAttempt=function(id,l){
   window._attMenuOpen=null;
   if(!confirm('¿Eliminar el 4º intento de '+a.name+' en '+LIFT_S[l]+'?'+detalle+'\n\nSe borra ese intento extra.')){R();return;}
   a.att[l].pop();
+  _markAtt(id,'att_'+l+'_3');
   // limpiar cualquier change timer colgado de ese índice
   const ck=id+'_'+l+'_3';if(DATA.changeTimers[ck])delete DATA.changeTimers[ck];
   // si quedamos en INT 4 sin ningún 4º en la tanda+lift activos, bajar a INT 3
@@ -1934,6 +2012,7 @@ function editAtt(id,l,r){
   const v=prompt(a.name+' \u2014 '+LIFT_S[l]+' Int '+(r+1)+'\nPeso actual: '+(a.att[l][r].w||'\u2014')+'\nNuevo peso (kg):',a.att[l][r].w||'');
   if(v!==null){
     a.att[l][r].w=parseFloat(v)||0;
+    _markAtt(id,'att_'+l+'_'+r);
     // Si hab\u00eda un change timer corriendo para este intento, cancelarlo
     const key=id+'_'+l+'_'+r;
     if(DATA.changeTimers[key])delete DATA.changeTimers[key];
@@ -5592,6 +5671,7 @@ window.setLot=function(id,val){
   } else {
     a.lot=n;
   }
+  _markAtt(id,'meta');
   save();R();
 };
 
