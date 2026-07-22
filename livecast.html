@@ -87,6 +87,9 @@ const DEMO_MODE=TX_URL.get('demo')==='1'; // Modo demo para grabar videos promoc
 // se familiaricen con la herramienta sin riesgo de tocar una competencia real.
 // Ver _initPracticeMode() más abajo.
 const PRACTICE_MODE=TX_URL.get('practica')==='1';
+// ?remote=1 → al loguearse admin, aterriza directo en el Control Remoto (phone-first).
+// Pensado para mandarle el link al teléfono que controla el overlay de OBS.
+const WANT_REMOTE=TX_URL.get('remote')==='1';
 function _inTarima(flightLetter){if(!TARIMA)return true;return String(flightLetter||'').endsWith(TARIMA);}
 if(TX_MODE){
   const css=document.createElement('style');
@@ -312,6 +315,8 @@ async function initFB(){
             } else {
               console.log('[LiveCast] Admin · Modo',window.IS_CONTROLLER?'CONTROLADOR':'ESPECTADOR');
             }
+            // ?remote=1: aterrizar en el Control Remoto (para el teléfono)
+            if(WANT_REMOTE && window._canAccess('director') && DATA.phase!=='remote'){DATA.phase='remote';}
           } else {
             isAdmin=false;
             console.log('[LiveCast] Logged in but not admin:',u.email);
@@ -5566,6 +5571,7 @@ function renderShell(){
   h+='<button class="side-btn '+(p==='transmision'?'active':'')+'" onclick="go(\'transmision\')"><span class="icon">\uD83D\uDCE1</span>Transmisi\u00f3n</button>';
   h+='<button class="side-btn '+(p==='obsTx'?'active':'')+'" onclick="go(\'obsTx\')"><span class="icon">\uD83C\uDFAC</span>Widgets OBS</button>';
   if(window._canAccess('director'))h+='<button class="side-btn '+(p==='director'?'active':'')+'" onclick="go(\'director\')"><span class="icon"></span>Control TX</button>';
+  if(window._canAccess('director'))h+='<button class="side-btn '+(p==='remote'?'active':'')+'" onclick="go(\'remote\')"><span class="icon">📱</span>Control Remoto</button>';
   h+='<button class="side-btn '+(p==='screen'?'active':'')+'" onclick="go(\'screen\')"><span class="icon"></span>Pantalla Tarima</button>';
   }
   h+='<div class="side-label">P\u00fablico</div>';
@@ -5600,7 +5606,7 @@ function renderShell(){
   }
   h+='</div><div class="main">';
   if((p==='compete'||p==='director')&&isAdmin&&!window._canAccess(p)){DATA.phase='manage';p='manage';}
-  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='screen'&&isAdmin)h+=renderScreenControl();else if(p==='results')h+=renderResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director'||p==='screen')){DATA.phase='liveView';h+=renderLiveView();}
+  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='remote'&&isAdmin)h+=renderRemote();else if(p==='screen'&&isAdmin)h+=renderScreenControl();else if(p==='results')h+=renderResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director'||p==='remote'||p==='screen')){DATA.phase='liveView';h+=renderLiveView();}
   h+='</div></div>';return h;
 }
 
@@ -6179,6 +6185,63 @@ window.dirBreakAdd=async function(secs){
   bt.durationSec=Math.max(1,(bt.durationSec||0)+secs);
   await _dirPush();R();
 };
+// ═══════════════════════════════════════════════════════════════════
+// CONTROL REMOTO (phone-first) — alternativa al Stream Deck / OBS WebSocket.
+// Grilla de botones grandes que empujan los MISMOS comandos a Firestore
+// (livecast_director) que el panel Control TX. Se abre en el teléfono con
+// ?remote=1 y controla el overlay de OBS (browser source ?tx=director) sin
+// puente, sin WebSocket, sin Stream Deck. Reusa las funciones dir* existentes.
+// ═══════════════════════════════════════════════════════════════════
+function renderRemote(){
+  _dirEnsureListener();
+  if(!_dirState){_dirState={profile:{active:false,until:0},scoreboard:{active:false,until:0},leaderboard:{active:false,until:0,cat:''},tablaActual:{active:false,until:0},timer:{active:false,until:0},slam:{active:false,until:0,type:'g'}};}
+  const on=(k)=>{const c=_dirState[k]||{};return c.active&&(!c.until||c.until>Date.now());};
+  const cur=liftQueue()[0];
+  const evName=DATA.event?.short||DATA.event?.name||'—';
+  // Botón grande touch. col: cuántas columnas ocupa (por defecto 1).
+  const bigBtn=(label,sub,active,onClick,col)=>{
+    const bg=active?'linear-gradient(180deg,rgba(34,197,94,.28),rgba(34,197,94,.12))':'rgba(10,22,40,.55)';
+    const bd=active?'#22c55e':'var(--border)';
+    const col2=active?'#4ade80':'var(--text)';
+    return '<button onclick="'+onClick+'" style="grid-column:span '+(col||1)+';min-height:88px;border-radius:14px;border:2px solid '+bd+';background:'+bg+';color:'+col2+';font-family:Oswald;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:10px;-webkit-tap-highlight-color:transparent;transition:transform .08s" ontouchstart="this.style.transform=\'scale(.96)\'" ontouchend="this.style.transform=\'scale(1)\'">'
+      +'<span style="font-size:16px;font-weight:700;letter-spacing:1px;text-align:center;line-height:1.1">'+label+'</span>'
+      +(sub?'<span style="font-size:10px;font-weight:600;letter-spacing:1px;color:'+(active?'#86efac':'var(--muted)')+'">'+sub+'</span>':'')
+      +'</button>';
+  };
+  let h='<div class="fade" style="max-width:560px;margin:0 auto">';
+  // Encabezado compacto
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
+  h+='<div><h2 class="os" style="font-size:20px;letter-spacing:1px;margin:0">📱 CONTROL REMOTO</h2>'
+    +'<div style="font-size:11px;color:var(--muted)">'+evName+(cur?' · en tarima: <b style="color:var(--gold)">'+esc(cur.name)+'</b>':'')+'</div></div>';
+  h+='<div style="display:flex;align-items:center;gap:6px">'
+    +'<span style="width:9px;height:9px;border-radius:50%;background:'+(fbReady?'var(--green)':'var(--red)')+';display:inline-block"></span>'
+    +'<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">'+(fbReady?'CONECTADO':'SIN CONEXIÓN')+'</span></div>';
+  h+='</div>';
+  // Grilla principal — pensada para el pulgar
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  h+=bigBtn('PERFIL', on('profile')?'EN PANTALLA':'atleta actual', on('profile'), "dirToggle('profile')");
+  h+=bigBtn('MARCADOR', on('scoreboard')?'EN PANTALLA':'lower-third', on('scoreboard'), "dirToggle('scoreboard')");
+  h+=bigBtn('TABLA ACTUAL', on('tablaActual')?'EN PANTALLA':'ranking corner', on('tablaActual'), "dirToggle('tablaActual')");
+  h+=bigBtn('CLASIFICACIÓN', on('leaderboard')?'EN PANTALLA':'ranking cat.', on('leaderboard'), "dirToggleLb()");
+  h+=bigBtn('TIMER', on('timer')?'EN PANTALLA':'cronómetro', on('timer'), "dirToggle('timer')");
+  h+=bigBtn('MEDALLERO', on('medals')?'EN PANTALLA':'top 3', on('medals'), "dirToggle('medals')");
+  h+='</div>';
+  // Slams (flash grande) — fila aparte, colores fuertes
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">';
+  h+='<button onclick="dirShowSlam(\'g\')" style="min-height:76px;border-radius:14px;border:2px solid #22c55e;background:linear-gradient(180deg,rgba(34,197,94,.25),rgba(34,197,94,.08));color:#4ade80;font-family:Oswald;font-size:17px;font-weight:800;letter-spacing:1px;cursor:pointer;-webkit-tap-highlight-color:transparent">✓ GOOD LIFT</button>';
+  h+='<button onclick="dirShowSlam(\'n\')" style="min-height:76px;border-radius:14px;border:2px solid #ef4444;background:linear-gradient(180deg,rgba(239,68,68,.25),rgba(239,68,68,.08));color:#f87171;font-family:Oswald;font-size:17px;font-weight:800;letter-spacing:1px;cursor:pointer;-webkit-tap-highlight-color:transparent">✗ NO LIFT</button>';
+  h+='</div>';
+  // Esconder todo — ancho completo
+  h+='<button onclick="dirHideAll()" style="width:100%;margin-top:10px;min-height:64px;border-radius:14px;border:2px solid var(--red);background:rgba(239,68,68,.1);color:#f87171;font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">⨯ ESCONDER TODO</button>';
+  // Ayuda / enlace del browser source para OBS
+  const widgetUrl=location.origin+location.pathname.replace(/[^/]+$/,'')+'livecast.html?tx=director&evento='+encodeURIComponent(DATA.event?.id||DATA.event?.name||'')+(TARIMA?'&tarima='+TARIMA:'');
+  h+='<div style="margin-top:18px;padding:12px 14px;background:rgba(10,22,40,.4);border:1px solid var(--border);border-radius:10px">'
+    +'<div style="font-size:11px;color:var(--muted);line-height:1.6">En OBS agregá <b style="color:var(--text)">un solo Browser Source</b> con esta URL (cámara de fondo + este overlay encima). No hace falta OBS WebSocket ni Stream Deck — este control empuja todo por internet.</div>'
+    +'<div style="display:flex;gap:6px;align-items:center;margin-top:8px"><input readonly value="'+esc(widgetUrl)+'" onclick="this.select()" style="flex:1;min-width:0;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-family:monospace;font-size:11px"><button onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+widgetUrl.replace(/'/g,"\\'")+'\');showToastLC(\'URL del overlay copiada\')" style="padding:8px 12px;border-radius:8px;border:1px solid var(--gold);background:rgba(212,168,67,.12);color:var(--gold);font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">COPIAR</button></div>'
+    +'</div>';
+  h+='</div>';
+  return h;
+}
 function renderDirector(){
   // Escaper local (independiente del helper global por si el browser cachea la vieja versión)
   const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
