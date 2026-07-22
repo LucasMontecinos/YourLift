@@ -2264,11 +2264,13 @@ async function generatePapeletas(){
     const {jsPDF}=window.jspdf;
     const strip=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\x00-\x7F]/g,'?').trim();
 
-    // Preload logos
+    // Preload logos. Se prueban varias rutas para el logo FECHIPO (cuando exista
+    // el archivo oficial, se toma automáticamente). YourLift usa la versión HD.
     const loadImg=src=>new Promise(r=>{const i=new Image();i.crossOrigin='anonymous';i.onload=()=>r(i);i.onerror=()=>r(null);i.src=src+'?t='+Date.now();});
+    const loadFirst=async(srcs)=>{for(const s of srcs){const img=await loadImg(s);if(img)return img;}return null;};
     const [fechipoImg,yourliftImg]=await Promise.all([
-      loadImg('promo/assets/fechipo_logo.png'),
-      loadImg('YourLift_logo.png'),
+      loadFirst(['fechipo_logo.png','logo_fechipo.png','promo/assets/fechipo_logo.png']),
+      loadFirst(['yourlift_logo_hd.png','YourLift_logo.png']),
     ]);
 
     // Sort athletes by lot
@@ -2304,28 +2306,30 @@ async function generatePapeletas(){
 
       // ── Logos izquierda: FECHIPO arriba, YourLift abajo ───
       const lX=ox+pad, lY=oy+12.5;
-      // FECHIPO logo (~4:1 ratio)
+      // FECHIPO logo (~4:1). Si no hay archivo de logo, texto negro legible
+      // (sobre blanco) en vez del rojo que quedaba flotando.
       const fW2=30, fH2=8;
-      if(fechipoImg){try{doc.addImage(fechipoImg,'PNG',lX,lY,fW2,fH2);}catch(e){
-        doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(180,0,0);
-        doc.text('FECHIPO',lX+fW2/2,lY+fH2/2+1.5,{align:'center'});
-      }}else{
-        doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(180,0,0);
-        doc.text('FECHIPO',lX+fW2/2,lY+fH2/2+1.5,{align:'center'});
-      }
-      // YourLift logo debajo
-      const ylW=22, ylH=7;
-      const ylX=lX, ylY=lY+fH2+3;
+      const fechipoText=()=>{doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(20,20,20);doc.text('FECHIPO',lX,lY+fH2/2+1.5);};
+      if(fechipoImg){try{doc.addImage(fechipoImg,'PNG',lX,lY,fW2,fH2);}catch(e){fechipoText();}}else{fechipoText();}
+      // YourLift: el logo tiene partes blancas que se pierden sobre el papel, así que
+      // va dentro de un chip oscuro redondeado (como se ve en la web) para que se
+      // lea bien. Se usa la versión HD para que imprima nítido.
+      const ylW=24, ylH=8.4;
+      const ylX=lX, ylY=lY+fH2+2.5;
+      const chPad=1.4;
+      doc.setFillColor(10,22,40); // #0A1628 (fondo azul oscuro de la marca)
+      if(doc.roundedRect)doc.roundedRect(ylX-chPad,ylY-chPad,ylW+2*chPad,ylH+2*chPad,1.2,1.2,'F');
+      else doc.rect(ylX-chPad,ylY-chPad,ylW+2*chPad,ylH+2*chPad,'F');
       if(yourliftImg){try{doc.addImage(yourliftImg,'PNG',ylX,ylY,ylW,ylH);}catch(e){
-        doc.setFont('helvetica','bold');doc.setFontSize(6);doc.setTextColor(60,60,60);
+        doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(255,255,255);
         doc.text('YourLift',ylX+ylW/2,ylY+ylH/2+1.5,{align:'center'});
       }}else{
-        doc.setFont('helvetica','bold');doc.setFontSize(6);doc.setTextColor(60,60,60);
+        doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(255,255,255);
         doc.text('YourLift',ylX+ylW/2,ylY+ylH/2+1.5,{align:'center'});
       }
 
       // ── Discipline checkboxes (centro) ────────────────────
-      const logoZoneW=Math.max(fW2,ylW)+5;
+      const logoZoneW=Math.max(fW2,ylW)+7;
       const cbX=ox+pad+logoZoneW;
       const discs=[{l:'Sentadilla',dy:0},{l:'Press de Banca',dy:7},{l:'Peso Muerto',dy:14}];
       discs.forEach(d=>{
