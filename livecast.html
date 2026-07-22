@@ -1889,6 +1889,28 @@ window.add4thAttempt=function(id,l){
   saveNow();R();
   showToastLC('➕ 4º intento agregado: '+a.name+' — '+LIFT_S[l]+'4'+(prevW?' ('+prevW+'kg, editá si cambia)':''));
 };
+// Elimina el 4º intento de un lift (por si se agregó por error o el jurado lo
+// revoca). Solo saca el índice 3, nunca los 3 base. Pide confirmación porque
+// borra datos. Si estábamos parados en "INT 4" y ya no queda ningún 4º en la
+// tanda+lift activos, vuelve la ronda a 3 (índice 2) para no quedar en una
+// ronda vacía.
+window.remove4thAttempt=function(id,l){
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  if(!a.att[l]||a.att[l].length<4){window._attMenuOpen=null;R();return;}
+  const at4=a.att[l][3];
+  const detalle=at4&&(at4.w||at4.r)?' (tiene '+(at4.w||'—')+'kg'+(at4.r==='g'?' · VÁLIDO':at4.r==='n'?' · NULO':'')+')':'';
+  window._attMenuOpen=null;
+  if(!confirm('¿Eliminar el 4º intento de '+a.name+' en '+LIFT_S[l]+'?'+detalle+'\n\nSe borra ese intento extra.')){R();return;}
+  a.att[l].pop();
+  // limpiar cualquier change timer colgado de ese índice
+  const ck=id+'_'+l+'_3';if(DATA.changeTimers[ck])delete DATA.changeTimers[ck];
+  // si quedamos en INT 4 sin ningún 4º en la tanda+lift activos, bajar a INT 3
+  if(DATA.round===3 && !DATA.athletes.some(x=>x.flight===DATA.flight&&!x.bombed&&(x.att[DATA.lift]||[]).length>=4)){
+    DATA.round=2;
+  }
+  saveNow();R();
+  showToastLC('🗑 4º intento eliminado: '+a.name+' — '+LIFT_S[l]);
+};
 // Menú de tres puntitos (⋮) por intento — estado global, se abre/cierra con toggle.
 window._attMenuOpen=null;
 window.toggleAttMenu=function(id,l,j){
@@ -6635,6 +6657,8 @@ function _attMenuHtml(a,l,j,sc){
       h+=item('window._attMenuOpen=null;forceCurrentAttempt('+a.id+',\''+l+'\','+j+')','▶','Marcar como actual','var(--gold)');
     if(!has4th)
       h+=item('add4thAttempt('+a.id+',\''+l+'\')','➕','Añadir 4º intento','#60a5fa');
+    else
+      h+=item('remove4thAttempt('+a.id+',\''+l+'\')','🗑','Eliminar 4º intento','#f59e0b');
     h+=item('window._attMenuOpen=null;changeResult('+a.id+',\''+l+'\','+j+',\'g\')','✓','Marcar intento válido','var(--green)');
     h+=item('window._attMenuOpen=null;changeResult('+a.id+',\''+l+'\','+j+',\'n\')','✗','Marcar intento nulo','var(--red)');
     h+='</div>';
@@ -6766,7 +6790,9 @@ function renderCompete(){
     // y en caso de empate, lote menor primero (mismo criterio que liftQueue()). Los que
     // todavía no tienen peso declarado para esta ronda (0) quedan al final, por lote.
     const rows = DATA.athletes.filter(a=>a.flight===fl&&!a.bombed).sort((a,b)=>{
-      const wa=a.att[DATA.lift][DATA.round].w||0,wb=b.att[DATA.lift][DATA.round].w||0;
+      // (att puede ser undefined si la ronda activa es "INT 4" y el atleta no tiene 4º)
+      const aa=a.att[DATA.lift][DATA.round],ab=b.att[DATA.lift][DATA.round];
+      const wa=(aa&&aa.w)||0,wb=(ab&&ab.w)||0;
       const ka=wa>0?wa:Infinity,kb=wb>0?wb:Infinity;
       return ka!==kb?ka-kb:a.lot-b.lot;
     });
