@@ -616,7 +616,9 @@ function totalOf(a,view){
 }
 function rankings(){return DATA.athletes.map(a=>({...a,total:totalOf(a),gl:calcGL(totalOf(a),a.bw,a.sex,a.mod)})).filter(a=>a.total>0).sort((a,b)=>b.gl-a.gl)}
 function liftQueue(){
-  const q=DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed).filter(a=>{const at=a.att[DATA.lift][DATA.round];return at.r===null&&at.w>0}).sort((a,b)=>{const wa=a.att[DATA.lift][DATA.round].w,wb=b.att[DATA.lift][DATA.round].w;return wa!==wb?wa-wb:a.lot-b.lot});
+  // at puede ser undefined si DATA.round apunta a un 4º intento (índice 3) y este
+  // atleta no tiene uno declarado — por eso el guard `at &&`.
+  const q=DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed).filter(a=>{const at=a.att[DATA.lift][DATA.round];return at&&at.r===null&&at.w>0}).sort((a,b)=>{const wa=a.att[DATA.lift][DATA.round].w,wb=b.att[DATA.lift][DATA.round].w;return wa!==wb?wa-wb:a.lot-b.lot});
   // Si el operador forzó un atleta como "actual" (forceCurrentAttempt), ponerlo primero
   // en la cola para que Control TX / OBS / Control en Vivo lo muestren a él, no al que
   // le tocaría por orden de peso. Se limpia solo al juzgar su intento (overrideResult).
@@ -1872,6 +1874,39 @@ window.forceCurrentAttempt=function(id,l,r){
   save();R();
   showToastLC('Marcado como actual: '+a.name+' — '+LIFT_S[l]+(r+1));
 };
+// Añade un 4º intento a un lift de un atleta (índice 3). Se usa cuando el jurado
+// concede un intento extra por error de logística/carga. Cuenta para el mejor
+// levantamiento igual que los otros (bestOf recorre todos los intentos válidos).
+// El 4º NO dispara auto-avance de ronda: el operador navega a "INT 4" y lo juzga
+// a mano. Solo un 4º por lift.
+window.add4thAttempt=function(id,l){
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  if(!a.att[l]){showToastLC('Lift inválido');return;}
+  if(a.att[l].length>=4){showToastLC(a.name+' ya tiene un 4º intento en '+LIFT_S[l]);window._attMenuOpen=null;R();return;}
+  const prevW=(a.att[l][2]&&a.att[l][2].w)||0; // arranca con el peso del 3er intento como sugerencia
+  a.att[l].push({w:prevW,r:null});
+  window._attMenuOpen=null;
+  saveNow();R();
+  showToastLC('➕ 4º intento agregado: '+a.name+' — '+LIFT_S[l]+'4'+(prevW?' ('+prevW+'kg, editá si cambia)':''));
+};
+// Menú de tres puntitos (⋮) por intento — estado global, se abre/cierra con toggle.
+window._attMenuOpen=null;
+window.toggleAttMenu=function(id,l,j){
+  const key=id+'_'+l+'_'+j;
+  window._attMenuOpen=(window._attMenuOpen===key)?null:key;
+  R();
+};
+// Cerrar el menú al hacer click fuera de él (una sola vez).
+if(!window._attMenuInit){
+  window._attMenuInit=true;
+  document.addEventListener('mousedown',function(e){
+    if(!window._attMenuOpen)return;
+    const t=e.target;
+    if(t.closest&&(t.closest('.att-menu')||t.closest('.att-menu-btn')))return;
+    window._attMenuOpen=null;
+    if(typeof R==='function')R();
+  },true);
+}
 function editAtt(id,l,r){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   const v=prompt(a.name+' \u2014 '+LIFT_S[l]+' Int '+(r+1)+'\nPeso actual: '+(a.att[l][r].w||'\u2014')+'\nNuevo peso (kg):',a.att[l][r].w||'');
@@ -6513,7 +6548,9 @@ function renderManage(){
     }
     {const _hasMedia=!!_lcMediaFor(a);h+='<button onclick="openAthleteMedia('+a.id+')" title="Subir foto/GIF del atleta" style="display:block;margin:3px auto 0;padding:2px 8px;border-radius:4px;border:1px solid '+(_hasMedia?'var(--gold)':'var(--border)')+';background:'+(_hasMedia?'rgba(212,168,67,.12)':'transparent')+';color:'+(_hasMedia?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:9px;cursor:pointer;white-space:nowrap">'+(_hasMedia?'Foto ✓':'Foto')+'</button>';}
     h+='</td>';
-    ['sq','bp','dl'].forEach(l=>{a.att[l].forEach((at,r)=>{
+    // La tabla de pesaje muestra siempre 3 intentos (el 4º extra se gestiona en
+    // Control en Vivo). slice(0,3) evita filas con más columnas que el encabezado.
+    ['sq','bp','dl'].forEach(l=>{a.att[l].slice(0,3).forEach((at,r)=>{
       const ctKey=a.id+'_'+l+'_'+r;const ct=DATA.changeTimers[ctKey];
       let cls='inp-sm',ph='\u2014';
       if(ct&&!ct.expired&&ct.remaining>0){cls='inp-sm countdown';ph=ct.remaining+'s'}
@@ -6575,8 +6612,35 @@ function _attCellCompete(a,l,j,isCurrentCell){
       cell+='<button onclick="event.stopPropagation();forceCurrentAttempt('+a.id+',\''+l+'\','+j+')" title="Marcar este intento como el actual (por si se saltó al atleta)" style="width:100%;margin-top:2px;padding:'+Math.round(2*sc)+'px 0;border-radius:4px;border:1px dashed rgba(212,168,67,.5);background:transparent;color:var(--gold);font-size:'+Math.round(9*sc)+'px;font-weight:700;cursor:pointer;letter-spacing:.5px">ACTUAL</button>';
     }
   }
+  cell+=_attMenuHtml(a,l,j,sc);
   cell+='</td>';
   return cell;
+}
+// Menú de tres puntitos (⋮) para un intento — consolida las acciones sueltas en un
+// solo lugar y queda disponible en TODOS los intentos (activo o no), pedido del
+// operador. El ✓/✗ grande y la reversión rápida siguen igual arriba; esto es un
+// atajo extra. Se mantiene fijo intento a intento porque se dibuja en cada celda.
+function _attMenuHtml(a,l,j,sc){
+  const key=a.id+'_'+l+'_'+j;
+  const open=window._attMenuOpen===key;
+  const at=a.att[l][j]; if(!at)return'';
+  const has4th=a.att[l].length>=4;
+  let h='<div style="position:relative;margin-top:3px">';
+  h+='<button class="att-menu-btn" onclick="event.stopPropagation();toggleAttMenu('+a.id+',\''+l+'\','+j+')" title="Más opciones de este intento" style="width:100%;padding:'+Math.round(1*sc)+'px 0;border-radius:4px;border:1px solid '+(open?'var(--gold)':'var(--border)')+';background:'+(open?'rgba(212,168,67,.15)':'transparent')+';color:'+(open?'var(--gold)':'var(--muted)')+';font-size:'+Math.round(13*sc)+'px;font-weight:700;cursor:pointer;line-height:1;letter-spacing:1px">⋮</button>';
+  if(open){
+    const item=(oc,ico,txt,col)=>'<button class="att-menu-item" onclick="event.stopPropagation();'+oc+'" style="display:flex;align-items:center;gap:7px;width:100%;padding:8px 10px;border:none;border-bottom:1px solid rgba(30,58,95,.25);background:transparent;color:'+(col||'var(--text)')+';font-family:Oswald;font-size:12px;font-weight:600;cursor:pointer;text-align:left;white-space:nowrap"><span style="font-size:13px;width:14px;text-align:center;flex-shrink:0">'+ico+'</span>'+txt+'</button>';
+    h+='<div class="att-menu" onclick="event.stopPropagation()" style="position:absolute;z-index:60;top:calc(100% + 3px);left:0;min-width:180px;background:#0D1F38;border:1px solid var(--gold);border-radius:8px;box-shadow:0 8px 26px rgba(0,0,0,.6);overflow:hidden">';
+    h+='<div style="padding:6px 10px;font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--muted);border-bottom:1px solid rgba(30,58,95,.4);background:rgba(30,58,95,.25)">'+a.name+' · '+LIFT_S[l]+(j+1)+'</div>';
+    if(at.r===null)
+      h+=item('window._attMenuOpen=null;forceCurrentAttempt('+a.id+',\''+l+'\','+j+')','▶','Marcar como actual','var(--gold)');
+    if(!has4th)
+      h+=item('add4thAttempt('+a.id+',\''+l+'\')','➕','Añadir 4º intento','#60a5fa');
+    h+=item('window._attMenuOpen=null;changeResult('+a.id+',\''+l+'\','+j+',\'g\')','✓','Marcar intento válido','var(--green)');
+    h+=item('window._attMenuOpen=null;changeResult('+a.id+',\''+l+'\','+j+',\'n\')','✗','Marcar intento nulo','var(--red)');
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
 }
 function renderCompete(){
   // "cur" (el próximo/actual) sale de liftQueue(), que ya pone primero al atleta forzado
@@ -6591,6 +6655,10 @@ function renderCompete(){
   h+=LIFTS.map(l=>'<button onclick="DATA.lift=\''+l+'\';DATA.round=0;saveNow();R()" class="os" style="padding:5px 12px;border-radius:6px;border:2px solid '+(DATA.lift===l?LIFT_C[l]:'var(--border)')+';background:'+(DATA.lift===l?LIFT_C[l]+'20':'transparent')+';color:'+(DATA.lift===l?LIFT_C[l]:'var(--muted)')+';font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">'+LIFT_S[l]+'</button>').join('');
   h+='<span style="width:6px"></span>';
   h+=[0,1,2].map(r=>'<button onclick="DATA.round='+r+';saveNow();R()" class="os" style="padding:5px 10px;border-radius:6px;border:1px solid '+(DATA.round===r?'var(--gold)':'var(--border)')+';background:'+(DATA.round===r?'rgba(212,168,67,.15)':'transparent')+';color:'+(DATA.round===r?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:600;cursor:pointer">INT '+(r+1)+'</button>').join('');
+  // Botón INT 4 — solo aparece si algún atleta de la tanda activa tiene un 4º
+  // intento declarado en el lift activo (intento extra concedido por el jurado).
+  {const has4=DATA.athletes.some(a=>a.flight===DATA.flight&&!a.bombed&&(a.att[DATA.lift]||[]).length>=4);
+   if(has4){const on=DATA.round===3;h+='<button onclick="DATA.round=3;saveNow();R()" class="os" title="4º intento (extra por jurado)" style="padding:5px 10px;border-radius:6px;border:1px solid '+(on?'#60a5fa':'rgba(96,165,250,.5)')+';background:'+(on?'rgba(96,165,250,.18)':'transparent')+';color:'+(on?'#60a5fa':'rgba(96,165,250,.7)')+';font-size:11px;font-weight:700;cursor:pointer">INT 4*</button>';}}
   h+='</div>';
   // Selector de tanda activa — lo mismo que "Vuelo Activo" del menú hamburguesa, pero acá
   // directo, sin tener que abrir la sidebar. Define qué tanda ve Control TX ahora mismo.
@@ -6705,10 +6773,13 @@ function renderCompete(){
     if(!rows.length)return;
     h+='<div style="margin-bottom:18px">';
     h+='<div class="os" style="font-size:12px;font-weight:700;letter-spacing:1px;color:'+(FL_C[fl]||'#999')+';padding:5px 2px;border-bottom:2px solid '+(FL_C[fl]||'#999')+'44;margin-bottom:6px">TANDA '+fl+(fl===DATA.flight?' \u00b7 EN TARIMA AHORA':'')+'</div>';
+    // Cuántos intentos mostrar por lift en esta tanda: 3 normalmente, 4 si algún
+    // atleta de la tanda tiene un 4º intento en ese lift.
+    const maxAtts={};LIFTS.forEach(l=>{maxAtts[l]=Math.max(3,...rows.map(a=>(a.att[l]||[]).length))});
     h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:640px"><thead><tr style="border-bottom:1px solid var(--border)">';
     h+='<th style="text-align:center;padding:5px 4px;color:var(--muted);font-size:9px;width:26px">#</th>';
     h+='<th style="text-align:left;padding:5px 8px;color:var(--muted);font-size:9px">ATLETA</th>';
-    LIFTS.forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="text-align:center;padding:5px 3px;color:'+LIFT_C[l]+';font-size:10px;font-weight:700;width:58px">'+LIFT_S[l]+r+'</th>'})});
+    LIFTS.forEach(l=>{for(let r=1;r<=maxAtts[l];r++){const is4=r===4;h+='<th style="text-align:center;padding:5px 3px;color:'+(is4?'#60a5fa':LIFT_C[l])+';font-size:10px;font-weight:700;width:58px"'+(is4?' title="4º intento (extra por jurado)"':'')+'>'+LIFT_S[l]+r+(is4?'*':'')+'</th>'}});
     h+='<th style="text-align:center;padding:5px 4px;color:var(--gold);font-size:9px;width:56px">TOTAL</th></tr></thead><tbody>';
     rows.forEach(a=>{
       const isCurrentAthlete = fl===DATA.flight && cur && a.id===cur.id;
@@ -6718,10 +6789,16 @@ function renderCompete(){
       h+='<td style="text-align:center;padding:6px 4px"><span class="os" style="color:'+(isCurrentAthlete?'#fff':'var(--muted)')+';font-weight:700;font-size:'+Math.round(12*rsc)+'px">'+(a.lot||'\u00b7')+'</span></td>';
       h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:'+Math.round(12*rsc)+'px;font-weight:'+(isCurrentAthlete?800:500)+';color:'+(isCurrentAthlete?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px">'+(isCurrentAthlete?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">\u25b6</span>':'')+'<span>'+a.name+'</span></div><div style="font-size:'+Math.round(8*rsc)+'px;color:var(--muted)">'+(a.bw>0?a.bw+'kg':'sin BW')+'</div></td>';
       LIFTS.forEach(l=>{
-        [0,1,2].forEach(j=>{
+        for(let j=0;j<maxAtts[l];j++){
+          if(!a.att[l][j]){
+            // La columna del 4º existe porque OTRO atleta de la tanda tiene un 4º,
+            // pero este no: celda vacía (puede agregar el suyo desde el menú ⋮).
+            h+='<td style="padding:'+Math.round(3*(window._CT_CELL_SCALE||1))+'px;text-align:center;color:var(--border)">·</td>';
+            continue;
+          }
           const isCurrentCell = isCurrentAthlete && l===DATA.lift && j===DATA.round;
           h+=_attCellCompete(a,l,j,isCurrentCell);
-        });
+        }
       });
       h+='<td style="text-align:center;padding:6px 4px;font-weight:700;font-family:Oswald;color:var(--gold);font-size:13px">'+(tot||'\u2014')+'</td>';
       h+='</tr>';
