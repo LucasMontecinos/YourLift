@@ -71,7 +71,7 @@ body.nav-open .nav-backdrop{opacity:1;pointer-events:auto}
 <script src="https://cdn.jsdelivr.net/npm/obs-websocket-js@5/dist/obs-ws.min.js" integrity="sha384-Vce9u7FN5Pbapc8dhpMdg2EjTels5H1cGOVLAe7THp3fEtfb89nD6YOIaf8781ay" crossorigin="anonymous"></script>
 <script>
 
-let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,flight:'A',timer:60,timerOn:false,changeTimers:{},lotsGenerated:false,forcedCurrent:null};
+let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,flight:'A',timer:60,timerOn:false,changeTimers:{},lotsGenerated:false,forcedCurrent:null,compTimer:null};
 
 // ══════════════════════════════════════════════
 // TRANSMISSION WIDGETS (?tx=<widget>)
@@ -356,7 +356,7 @@ async function syncToFB(){
   if(!window.IS_CONTROLLER)return; // Solo el controller escribe — evita conflictos multi-admin
   const id=fbDocId();if(!id)return;
   _fbLastWrite=Date.now();
-  const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,forcedCurrent:DATA.forcedCurrent||null,ts:Date.now(),writer:window._WRITER_ID};
+  const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null,ts:Date.now(),writer:window._WRITER_ID};
   try{
     const ref=window._fb.doc(fbDB,'livecast_sync',id);
     await window._fb.setDoc(ref,payload);
@@ -423,6 +423,7 @@ function startFBSync(){
         DATA.flight=d.flight||DATA.flight;
         DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
         DATA.forcedCurrent=typeof d.forcedCurrent!=='undefined'?d.forcedCurrent:null;
+        DATA.compTimer=typeof d.compTimer!=='undefined'?d.compTimer:null;
       }
       DATA.lotsGenerated=d.lotsGenerated||false;
       if(typeof d.timer==='number'){DATA.timer=d.timer;DATA.timerOn=d.timerOn||false;if(DATA.timerOn&&!mainTI)startTimer();if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}}
@@ -647,10 +648,10 @@ function liftQueue(){
   }
   return q;
 }
-function save(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null}))}catch(e){}if(!_fbSyncing)debouncedSync()}
+function save(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}if(!_fbSyncing)debouncedSync()}
 let _syncTimer=null;
 function debouncedSync(){if(_syncTimer)clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>{syncToFB();_syncTimer=null},800)}
-function saveNow(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null}))}catch(e){}syncToFB()}
+function saveNow(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}syncToFB()}
 function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);return true}}}catch(e){}return false}
 
 // ═══════════════════════════════════════════════════════════════════
@@ -754,6 +755,7 @@ async function tryLoadFromFB(){
     DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
     DATA.lotsGenerated=d.lotsGenerated||false;
     DATA.forcedCurrent=typeof d.forcedCurrent!=='undefined'?d.forcedCurrent:null;
+    DATA.compTimer=typeof d.compTimer!=='undefined'?d.compTimer:null;
     if(typeof d.timer==='number')DATA.timer=d.timer;
     DATA.timerOn=false;
     console.log('[FB] Loaded state from Firebase:',DATA.athletes.length,'athletes');
@@ -976,6 +978,7 @@ window.toggleChangeTimerAutofill=function(){
 function setResult(id,l,r,res){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;a.att[l][r].r=res;
   _markAtt(id,'att_'+l+'_'+r);
+  _clearCompIfJudged(id,l,r);
   if(r<2){
     const key=id+'_'+l+'_'+(r+1);
     // Solo arrancar el change timer si el próximo intento NO tiene peso declarado.
@@ -1709,6 +1712,7 @@ function overrideResult(id,l,r,res){
   // Si este intento era el forzado como "actual" a mano, se juzgó → volver al orden
   // automático normal (queue).
   if(!wasSame && res && DATA.forcedCurrent===id)DATA.forcedCurrent=null;
+  if(!wasSame && res)_clearCompIfJudged(id,l,r);
   // bombed = TODOS los 9 intentos fallidos (atleta totalmente fuera).
   // Si solo falla los 3 de un lift → queda DQ pero sigue compitiendo en los otros.
   a.bombed=a.att.sq.every(x=>x.r==='n')&&a.att.bp.every(x=>x.r==='n')&&a.att.dl.every(x=>x.r==='n');
@@ -1748,6 +1752,7 @@ function changeResult(id,l,r,res){
   const wasSame=(a.att[l][r].r===res);
   a.att[l][r].r=wasSame?null:res;
   _markAtt(id,'att_'+l+'_'+r);
+  if(!wasSame && res)_clearCompIfJudged(id,l,r);
   a.bombed=a.att.sq.every(x=>x.r==='n')&&a.att.bp.every(x=>x.r==='n')&&a.att.dl.every(x=>x.r==='n');
   saveNow();R();
   showToastLC(wasSame?'↺ '+a.name+' — '+LIFT_S[l]+(r+1)+': decisión revocada'
@@ -1881,11 +1886,33 @@ setInterval(()=>{
       cellEl.title='Tiempo expirado — requiere aprobación del jurado';
     }
   });
+  // ── Tiempo compensatorio (4º intento "se sigue a sí mismo") ──────────
+  // Solo a la vista, NO bloquea. Se actualiza en Control en Vivo (#compTimerBox)
+  // y en la Pantalla de Intentos (#compTimerPant) sin re-render. Puede pasar a
+  // negativo (sigue mostrando, en rojo, para que se note que se pasó del tiempo).
+  {
+    const ci=_compInfo();
+    ['compTimerBox','compTimerPant'].forEach(idEl=>{
+      const el=document.getElementById(idEl);
+      if(el&&ci)el.textContent=ci.mmss;
+    });
+  }
   // Re-render completo SOLO si el auto-relleno cambió un peso (ver comentario arriba).
   if(needsRerender && DATA.phase==='compete' && typeof R==='function'){
     setTimeout(R,100);
   }
 },1000);
+// Info del tiempo compensatorio activo (o null). remaining puede ser negativo.
+function _compInfo(){
+  const c=DATA.compTimer;
+  if(!c||!c.startedAt)return null;
+  const a=DATA.athletes.find(x=>x.id===c.id);
+  if(!a)return null;
+  const remaining=(c.min*60)-Math.floor((Date.now()-c.startedAt)/1000);
+  const neg=remaining<0;const abs=Math.abs(remaining);
+  const mmss=(neg?'-':'')+Math.floor(abs/60)+':'+String(abs%60).padStart(2,'0');
+  return {a,lift:c.lift,min:c.min,remaining,mmss,neg};
+}
 
 function showChangeExpiredAlert(name,lift,rnd){
   // Banner rojo + pitido DESACTIVADOS (se veian en transmision).
@@ -1955,21 +1982,41 @@ window.forceCurrentAttempt=function(id,l,r){
   save();R();
   showToastLC('Marcado como actual: '+a.name+' — '+LIFT_S[l]+(r+1));
 };
-// Añade un 4º intento a un lift de un atleta (índice 3). Se usa cuando el jurado
-// concede un intento extra por error de logística/carga. Cuenta para el mejor
-// levantamiento igual que los otros (bestOf recorre todos los intentos válidos).
-// El 4º NO dispara auto-avance de ronda: el operador navega a "INT 4" y lo juzga
-// a mano. Solo un 4º por lift.
-window.add4thAttempt=function(id,l){
+// Añade un 4º intento a un lift de un atleta (índice 3). Se concede cuando el
+// jurado otorga un intento compensatorio por un error ajeno (carga, equipo,
+// cronómetro, arbitraje) — reglamento IPF. Cuenta para el mejor levantamiento
+// igual que los otros (bestOf recorre todos los válidos). Solo un 4º por lift.
+//   mode 'self'     → se sigue a sí mismo: el atleta repite enseguida. Se le da
+//                     un tiempo compensatorio (0-5 min) que corre a la vista
+//                     (NO bloquea el válido/nulo). Queda como "actual" en INT 4.
+//   mode 'endround' → el 4º se toma al final de la ronda (uso IPF habitual).
+window.add4thAttempt=function(id,l,mode){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   if(!a.att[l]){showToastLC('Lift inválido');return;}
   if(a.att[l].length>=4){showToastLC(a.name+' ya tiene un 4º intento en '+LIFT_S[l]);window._attMenuOpen=null;R();return;}
-  const prevW=(a.att[l][2]&&a.att[l][2].w)||0; // arranca con el peso del 3er intento como sugerencia
-  a.att[l].push({w:prevW,r:null});
-  _markAtt(id,'att_'+l+'_3');
   window._attMenuOpen=null;
+  mode=(mode==='self')?'self':'endround';
+  // Minutos compensatorios (0-5). Requerido para 'self'; opcional para 'endround'.
+  let compMin=0;
+  const def=mode==='self'?'2':'0';
+  const raw=prompt('4º intento — '+(mode==='self'?'SE SIGUE A SÍ MISMO':'AL FINAL DE LA RONDA')+'\n'+a.name+' · '+LIFT_S[l]+'\n\nMinutos compensatorios (0 a 5):\n(0 = sin tiempo compensatorio)',def);
+  if(raw===null){R();return;} // canceló
+  compMin=Math.max(0,Math.min(5,parseInt(raw,10)||0));
+  const prevW=(a.att[l][2]&&a.att[l][2].w)||0; // sugerencia: mismo peso del 3er intento
+  a.att[l].push({w:prevW,r:null,extra:true,mode:mode,compMin:compMin});
+  _markAtt(id,'att_'+l+'_3');
+  // Tiempo compensatorio a la vista (Control en Vivo + Pantalla de Tarima). No bloquea.
+  if(compMin>0){
+    DATA.compTimer={id:id,lift:l,min:compMin,startedAt:Date.now()};
+  }else{
+    DATA.compTimer=null;
+  }
+  // 'self': el atleta se sigue a sí mismo → queda como actual en INT 4 enseguida.
+  if(mode==='self'){
+    DATA.flight=a.flight;DATA.lift=l;DATA.round=3;DATA.forcedCurrent=id;
+  }
   saveNow();R();
-  showToastLC('➕ 4º intento agregado: '+a.name+' — '+LIFT_S[l]+'4'+(prevW?' ('+prevW+'kg, editá si cambia)':''));
+  showToastLC('➕ 4º intento ('+(mode==='self'?'se sigue a sí mismo':'final de ronda')+'): '+a.name+' — '+LIFT_S[l]+'4'+(compMin?' · '+compMin+' min compensatorio':''));
 };
 // Elimina el 4º intento de un lift (por si se agregó por error o el jurado lo
 // revoca). Solo saca el índice 3, nunca los 3 base. Pide confirmación porque
@@ -1987,6 +2034,9 @@ window.remove4thAttempt=function(id,l){
   _markAtt(id,'att_'+l+'_3');
   // limpiar cualquier change timer colgado de ese índice
   const ck=id+'_'+l+'_3';if(DATA.changeTimers[ck])delete DATA.changeTimers[ck];
+  // limpiar el tiempo compensatorio si era de este 4º
+  if(DATA.compTimer&&DATA.compTimer.id===id&&DATA.compTimer.lift===l)DATA.compTimer=null;
+  if(DATA.forcedCurrent===id&&DATA.round===3)DATA.forcedCurrent=null;
   // si quedamos en INT 4 sin ningún 4º en la tanda+lift activos, bajar a INT 3
   if(DATA.round===3 && !DATA.athletes.some(x=>x.flight===DATA.flight&&!x.bombed&&(x.att[DATA.lift]||[]).length>=4)){
     DATA.round=2;
@@ -1994,6 +2044,14 @@ window.remove4thAttempt=function(id,l){
   saveNow();R();
   showToastLC('🗑 4º intento eliminado: '+a.name+' — '+LIFT_S[l]);
 };
+// Cierra el tiempo compensatorio a la vista (manual).
+window.clearCompTimer=function(){ DATA.compTimer=null; saveNow(); R(); };
+// Si se juzgó (válido/nulo) el 4º intento que tenía tiempo compensatorio, se cierra.
+function _clearCompIfJudged(id,l,r){
+  if(r===3 && DATA.compTimer && DATA.compTimer.id===id && DATA.compTimer.lift===l){
+    DATA.compTimer=null;
+  }
+}
 // Menú de tres puntitos (⋮) por intento — estado global, se abre/cierra con toggle.
 window._attMenuOpen=null;
 window.toggleAttMenu=function(id,l,j){
@@ -5501,7 +5559,15 @@ function renderScreenIntentos(cur,nxt){
       ${nxtRack?`<span style="font-family:Oswald;font-size:16px;color:rgba(212,225,245,.55)">RACK ${nxtRack}</span>`:''}
     </div>`;
   }
+  // Tiempo compensatorio (4º "se sigue a sí mismo") — se ve arriba a la izquierda
+  // en la pantalla de tarima. Solo informativo.
+  const _ci=(typeof _compInfo==='function')?_compInfo():null;
+  const compHtml=_ci?`<div style="position:fixed;top:36px;left:48px;font-family:Oswald,sans-serif;color:#60a5fa;text-shadow:0 4px 20px rgba(0,0,0,.7)">
+      <div style="font-size:16px;letter-spacing:3px;opacity:.8">TIEMPO COMPENSATORIO</div>
+      <div id="compTimerPant" style="font-size:56px;font-weight:900;color:${_ci.neg?'#ef4444':'#60a5fa'};line-height:1">${_ci.mmss}</div>
+    </div>`:'';
   return `<div style="position:fixed;inset:0;overflow:hidden${piSet.bgColor?';background:'+piSet.bgColor:''}" id="pantIntentosBox">
+    ${compHtml}
     ${piSet.showTimer!==false?`<div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`:''}
     ${_piBlock('liftLabel',liftLabelHtml)}
     ${_piBlock('weight',weightHtml)}
@@ -6797,17 +6863,22 @@ function _attMenuHtml(a,l,j,sc){
   let h='<div style="position:relative;margin-top:3px">';
   h+='<button class="att-menu-btn" onclick="event.stopPropagation();toggleAttMenu('+a.id+',\''+l+'\','+j+')" title="Más opciones de este intento" style="width:100%;padding:'+Math.round(1*sc)+'px 0;border-radius:4px;border:1px solid '+(open?'var(--gold)':'var(--border)')+';background:'+(open?'rgba(212,168,67,.15)':'transparent')+';color:'+(open?'var(--gold)':'var(--muted)')+';font-size:'+Math.round(13*sc)+'px;font-weight:700;cursor:pointer;line-height:1;letter-spacing:1px">⋮</button>';
   if(open){
-    const item=(oc,ico,txt,col)=>'<button class="att-menu-item" onclick="event.stopPropagation();'+oc+'" style="display:flex;align-items:center;gap:7px;width:100%;padding:8px 10px;border:none;border-bottom:1px solid rgba(30,58,95,.25);background:transparent;color:'+(col||'var(--text)')+';font-family:Oswald;font-size:12px;font-weight:600;cursor:pointer;text-align:left;white-space:nowrap"><span style="font-size:13px;width:14px;text-align:center;flex-shrink:0">'+ico+'</span>'+txt+'</button>';
-    h+='<div class="att-menu" onclick="event.stopPropagation()" style="position:absolute;z-index:60;top:calc(100% + 3px);left:0;min-width:180px;background:#0D1F38;border:1px solid var(--gold);border-radius:8px;box-shadow:0 8px 26px rgba(0,0,0,.6);overflow:hidden">';
+    const item=(oc,ico,txt,col,tip)=>'<button class="att-menu-item" onclick="event.stopPropagation();'+oc+'"'+(tip?' title="'+tip.replace(/"/g,'&quot;')+'"':'')+' style="display:flex;align-items:center;gap:7px;width:100%;padding:8px 10px;border:none;border-bottom:1px solid rgba(30,58,95,.25);background:transparent;color:'+(col||'var(--text)')+';font-family:Oswald;font-size:12px;font-weight:600;cursor:pointer;text-align:left;white-space:nowrap"><span style="font-size:13px;width:14px;text-align:center;flex-shrink:0">'+ico+'</span>'+txt+'</button>';
+    // Torpedos (tooltips) basados en el criterio IPF de intento compensatorio.
+    const TIP_SELF='4º compensatorio que el atleta toma ENSEGUIDA, justo después de su intento. Se otorga cuando un error ajeno (carga, equipo, cronómetro o arbitraje) lo perjudicó y repite en el acto. Se le da un tiempo de descanso compensatorio (0-5 min) que corre a la vista, sin bloquear el válido/nulo (criterio IPF).';
+    const TIP_ENDROUND='4º compensatorio que el atleta toma AL FINAL de la ronda en curso — forma habitual IPF de conceder el intento extra por un error ajeno: el atleta espera al final de la ronda para repetir. No requiere tiempo compensatorio (opcional).';
+    const TIP_REMOVE='Quita el 4º intento (si se agregó por error o el jurado lo revoca). Solo borra el intento extra; los 3 base quedan intactos.';
+    h+='<div class="att-menu" onclick="event.stopPropagation()" style="position:absolute;z-index:60;top:calc(100% + 3px);left:0;min-width:210px;background:#0D1F38;border:1px solid var(--gold);border-radius:8px;box-shadow:0 8px 26px rgba(0,0,0,.6);overflow:hidden">';
     h+='<div style="padding:6px 10px;font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--muted);border-bottom:1px solid rgba(30,58,95,.4);background:rgba(30,58,95,.25)">'+a.name+' · '+LIFT_S[l]+(j+1)+'</div>';
     if(at.r===null)
-      h+=item('window._attMenuOpen=null;forceCurrentAttempt('+a.id+',\''+l+'\','+j+')','▶','Marcar como actual','var(--gold)');
-    if(!has4th)
-      h+=item('add4thAttempt('+a.id+',\''+l+'\')','➕','Añadir 4º intento','#60a5fa');
-    else
-      h+=item('remove4thAttempt('+a.id+',\''+l+'\')','🗑','Eliminar 4º intento','#f59e0b');
-    h+=item('window._attMenuOpen=null;changeResult('+a.id+',\''+l+'\','+j+',\'g\')','✓','Marcar intento válido','var(--green)');
-    h+=item('window._attMenuOpen=null;changeResult('+a.id+',\''+l+'\','+j+',\'n\')','✗','Marcar intento nulo','var(--red)');
+      h+=item('window._attMenuOpen=null;forceCurrentAttempt('+a.id+',\''+l+'\','+j+')','▶','Marcar como actual','var(--gold)','Salta la cola y pone este intento como el que está en tarima ahora (por si se pasó por alto al atleta).');
+    if(!has4th){
+      h+=item('add4thAttempt('+a.id+',\''+l+'\',\'self\')','➕','4º — se sigue a sí mismo','#60a5fa',TIP_SELF);
+      h+=item('add4thAttempt('+a.id+',\''+l+'\',\'endround\')','➕','4º — al final de la ronda','#60a5fa',TIP_ENDROUND);
+    }else
+      h+=item('remove4thAttempt('+a.id+',\''+l+'\')','🗑','Eliminar 4º intento','#f59e0b',TIP_REMOVE);
+    h+=item('window._attMenuOpen=null;changeResult('+a.id+',\''+l+'\','+j+',\'g\')','✓','Marcar intento válido','var(--green)','Fija este intento como VÁLIDO (corrección manual, sin efectos de tarima).');
+    h+=item('window._attMenuOpen=null;changeResult('+a.id+',\''+l+'\','+j+',\'n\')','✗','Marcar intento nulo','var(--red)','Fija este intento como NULO (corrección manual, sin efectos de tarima).');
     h+='</div>';
   }
   h+='</div>';
@@ -6857,6 +6928,20 @@ function renderCompete(){
      +'<button onclick="toggleChangeTimerAutofill()" style="padding:5px 14px;border-radius:6px;border:1px solid '+(afon?'#3b82f6':'var(--border)')+';background:transparent;color:'+(afon?'#3b82f6':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(afon?'APAGAR':'ACTIVAR')+'</button>'
    +'</div>';}
   h+='<div>';
+  // Tiempo compensatorio (4º "se sigue a sí mismo") — se muestra siempre que esté
+  // activo, aunque todavía no haya un atleta "actual" con peso cargado. Solo a la
+  // vista, NO bloquea el válido/nulo.
+  {const ci=_compInfo();
+   if(ci){
+     const cc=ci.neg?'var(--red)':ci.remaining<=15?'var(--orange)':'#60a5fa';
+     h+='<div class="card" style="margin-bottom:10px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border:2px solid #60a5fa;background:rgba(96,165,250,.08)">'
+       +'<div><span style="font-size:12px;font-weight:700;color:#60a5fa">🕒 TIEMPO COMPENSATORIO</span>'
+         +'<div style="font-size:10px;color:var(--muted);margin-top:2px">'+esc(ci.a.name)+' · '+LIFT_S[ci.lift]+'4 · '+ci.min+' min · <span style="opacity:.8">no bloquea: podés dar válido/nulo cuando quieras</span></div></div>'
+       +'<div style="display:flex;align-items:center;gap:8px">'
+         +'<span id="compTimerBox" class="os" style="font-size:26px;font-weight:800;color:'+cc+'">'+ci.mmss+'</span>'
+         +'<button onclick="clearCompTimer()" title="Cerrar el tiempo compensatorio" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:10px;cursor:pointer">✕</button>'
+       +'</div></div>';
+   }}
   if(cur){
     // Info compacta del atleta actual (sin botones grandes - los GOOD/NO LIFT estan en la tabla)
     h+='<div class="card" style="border-left:4px solid '+LIFT_C[DATA.lift]+';margin-bottom:10px;padding:10px 14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:0"><div class="os" style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+cur.name+'</div><div style="font-size:10px;color:var(--muted)">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+' \u00b7 pr\u00f3ximo: <strong style="color:'+LIFT_C[DATA.lift]+'">'+(cw||'\u2014')+'kg</strong></div></div><div style="display:flex;gap:6px;align-items:center">'+(rack?'<span style="background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:5px;font-size:10px">\uD83D\uDD27 '+rack+'</span>':'')+'<span class="flight-badge" style="background:'+(FL_C[cur.flight]||'#666')+'">'+cur.flight+'</span><span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:3px 10px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:12px">'+LIFT_S[DATA.lift]+(DATA.round+1)+'</span></div></div></div>';
