@@ -6870,41 +6870,8 @@ function renderCompete(){
        +'<span style="font-size:11px;color:var(--muted)">\u23f1 Tiempo para el pr\u00f3ximo intento <span style="opacity:.6">(solo lo ves vos ac\u00e1 \u2014 no es p\u00fablico)</span></span>'
        +'<span id="mainTimer" class="os" style="font-size:20px;font-weight:700;color:'+_mtColor+'">'+_mtTxt+'</span>'
      +'</div>';}
-    // Modo Jueces: panel de luces. Si no, los GOOD/NO LIFT estan en cada celda de la tabla abajo.
-    if(judgeMode){
-      const jcSmall={white:'#f0f0f0',red:'#ef4444',yellow:'#f59e0b',blue:'#3b82f6'};
-      const jl=['izq','central','der'];const jn={izq:'IZQ',central:'CENTRAL',der:'DER'};
-      h+='<div class="card" style="margin-bottom:10px;padding:12px"><div style="display:flex;justify-content:center;gap:20px;padding:4px">';
-      jl.forEach(j=>{
-        const v=judgeLights[j];
-        const bigCol=v?(v==='white'?'#f0f0f0':'#ef4444'):'var(--border)';
-        const bigGlow=v?(v==='white'?'0 0 22px rgba(240,240,240,.6)':'0 0 22px rgba(239,68,68,.6)'):'none';
-        const smallCol=v?jcSmall[v]:'var(--border)';
-        h+='<div style="text-align:center">'
-          +'<div style="width:54px;height:54px;border-radius:50%;background:'+bigCol+';border:3px solid '+(v?bigCol:'var(--border)')+';margin:0 auto 5px;box-shadow:'+bigGlow+'"></div>'
-          +'<div style="width:16px;height:16px;border-radius:50%;background:'+smallCol+';border:2px solid '+(v?smallCol:'var(--border)')+';margin:0 auto 4px"></div>'
-          +'<div style="font-family:Oswald;font-size:10px;color:'+(v?'#fff':'var(--muted)')+';letter-spacing:1px">'+jn[j]+'</div>'
-          +'</div>';
-      });
-      h+='</div>';
-      const votes=[judgeLights.izq,judgeLights.central,judgeLights.der].filter(Boolean);
-      if(votes.length===3){
-        const goods=votes.filter(v=>v==='white').length;
-        h+='<div style="text-align:center;font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:3px;color:'+(goods>=2?'var(--green)':'var(--red)')+';padding:6px">'+(goods>=2?'\u2713 GOOD LIFT':'\u2717 NO LIFT')+'</div>';
-        h+='<div style="text-align:center;margin-top:2px"><button onclick="resetJudgeLights()" style="padding:5px 16px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;cursor:pointer">\u21BA LIMPIAR LUCES</button></div>';
-      }else if(votes.length>0){
-        h+='<div style="text-align:center;font-family:Oswald;font-size:13px;color:var(--muted);padding:6px">Esperando jueces ('+votes.length+'/3)\u2026</div>';
-        h+='<div style="text-align:center"><button onclick="resetJudgeLights()" style="padding:5px 16px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;cursor:pointer">\u21BA LIMPIAR LUCES</button></div>';
-      }else{
-        h+='<div style="text-align:center;font-family:Oswald;font-size:13px;color:var(--muted);padding:6px">Esperando jueces (0/3)\u2026</div>';
-      }
-      h+='</div>';
-    }
-    // Judge mode toggle + record button (siempre visibles)
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:8px 12px;background:var(--bg);border-radius:8px;border:1px solid '+(judgeMode?'var(--green)':'var(--border)')+'">';
-    h+='<div><span style="font-size:12px;font-weight:600;color:'+(judgeMode?'var(--green)':'var(--muted)')+'">Modo Jueces</span><span style="font-size:10px;color:var(--muted);margin-left:6px">'+(judgeMode?'ACTIVO \u2014 luces':'DESACTIVADO \u2014 manual')+'</span></div>';
-    h+='<button onclick="toggleJudgeMode()" style="padding:6px 14px;border-radius:6px;border:1px solid '+(judgeMode?'var(--green)':'var(--border)')+';background:'+(judgeMode?'rgba(34,197,94,.15)':'transparent')+';color:'+(judgeMode?'var(--green)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">'+(judgeMode?'DESACTIVAR':'ACTIVAR')+'</button></div>';
-    h+='<button onclick="manualRecordAlert()" style="width:100%;padding:9px 14px;border-radius:8px;border:2px solid #D4A843;background:rgba(212,168,67,.08);color:#D4A843;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">\uD83C\uDFC6 SE PERMITE R\u00C9CORD NACIONAL</button>';
+    // (Modo Jueces y el bot\u00F3n "Se permite r\u00E9cord nacional" se quitaron a pedido:
+    //  las decisiones se marcan a mano con \u2713/\u2717 y los r\u00E9cords se cargan en admin.)
   }else{
     h+='<div class="card" style="text-align:center;padding:20px"><p class="os" style="font-size:15px;color:var(--gold);margin-bottom:10px">RONDA COMPLETADA</p><button class="btn btn-r" onclick="advanceLift()">Siguiente \u2192</button></div>';
   }
