@@ -635,15 +635,40 @@ function totalOf(a,view){
   return(s&&b&&d)?s+b+d:0;
 }
 function rankings(){return DATA.athletes.map(a=>({...a,total:totalOf(a),gl:calcGL(totalOf(a),a.bw,a.sex,a.mod)})).filter(a=>a.total>0).sort((a,b)=>b.gl-a.gl)}
+// Índice del intento "actual" de una entrada de la cola. Para un 4º intento la
+// entrada es un clon con __ai=3; para el resto es la ronda activa (DATA.round).
+function curAtt(c){ return (c && c.__ai!=null) ? c.__ai : DATA.round; }
+// Atleta REAL detrás de una entrada de la cola. El clon del 4º tiene su att[lift]
+// con el índice de la ronda "redirigido" al 4º (bien para mostrar el intento en
+// curso, pero rompe una fila completa de intentos). Para tablas/scoreboard que
+// listan los 3 (o 4) intentos, usar el atleta real y curAtt(c) para el resaltado.
+function _realAth(c){ return (c && c.__is4) ? (DATA.athletes.find(x=>x.id===c.id)||c) : c; }
+// Clon superficial de un atleta cuyo "intento actual" (att[lift][DATA.round])
+// APUNTA a su 4º intento. Así TODOS los consumidores de display (Control TX,
+// pantalla, barra, scoreboard) muestran el 4º sin cambios. __ai=3 marca el índice
+// real para que el JUZGADO (✓/✗) apunte al 4º y no a la ronda normal.
+function _mk4clone(a){
+  const l=DATA.lift;
+  const arr=a.att[l].slice();
+  arr[DATA.round]=a.att[l][3];
+  const attCopy=Object.assign({},a.att);attCopy[l]=arr;
+  return Object.assign({},a,{att:attCopy,__ai:3,__is4:true});
+}
+// Cola de tarima de la ronda activa. Incluye los 4º intentos concedidos EN ESTA
+// ronda: los "se sigue a sí mismo" van ADELANTE (el atleta repite enseguida) y los
+// "al final de la ronda" van al FINAL. La ronda NO cambia (sigue INT 1/2/3): el 4º
+// aparece como el mismo atleta de nuevo dentro de su ronda.
 function liftQueue(){
-  // at puede ser undefined si DATA.round apunta a un 4º intento (índice 3) y este
-  // atleta no tiene uno declarado — por eso el guard `at &&`.
-  const q=DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed).filter(a=>{const at=a.att[DATA.lift][DATA.round];return at&&at.r===null&&at.w>0}).sort((a,b)=>{const wa=a.att[DATA.lift][DATA.round].w,wb=b.att[DATA.lift][DATA.round].w;return wa!==wb?wa-wb:a.lot-b.lot});
-  // Si el operador forzó un atleta como "actual" (forceCurrentAttempt), ponerlo primero
-  // en la cola para que Control TX / OBS / Control en Vivo lo muestren a él, no al que
-  // le tocaría por orden de peso. Se limpia solo al juzgar su intento (overrideResult).
+  const flightAth=DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed);
+  const normal=flightAth.filter(a=>{const at=a.att[DATA.lift][DATA.round];return at&&at.r===null&&at.w>0})
+    .sort((a,b)=>{const wa=a.att[DATA.lift][DATA.round].w,wb=b.att[DATA.lift][DATA.round].w;return wa!==wb?wa-wb:a.lot-b.lot});
+  const has4=a=>{const at=a.att[DATA.lift][3];return at&&at.extra&&at.grantedRound===DATA.round&&at.r===null&&at.w>0;};
+  const self4=flightAth.filter(a=>has4(a)&&a.att[DATA.lift][3].mode==='self').sort((a,b)=>a.lot-b.lot).map(_mk4clone);
+  const end4=flightAth.filter(a=>has4(a)&&a.att[DATA.lift][3].mode!=='self').sort((a,b)=>{const wa=a.att[DATA.lift][3].w,wb=b.att[DATA.lift][3].w;return wa!==wb?wa-wb:a.lot-b.lot}).map(_mk4clone);
+  let q=[...self4,...normal,...end4];
+  // forceCurrentAttempt: mover al frente (solo la entrada normal, no un clon 4º).
   if(DATA.forcedCurrent){
-    const idx=q.findIndex(a=>a.id===DATA.forcedCurrent);
+    const idx=q.findIndex(a=>a.id===DATA.forcedCurrent && !a.__is4);
     if(idx>0){const [f]=q.splice(idx,1);q.unshift(f);}
   }
   return q;
@@ -2039,17 +2064,18 @@ function _do4thAttempt(id,l,mode,compMin){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   if(a.att[l].length>=4)return;
   compMin=Math.max(0,Math.min(5,parseInt(compMin,10)||0));
-  const prevW=(a.att[l][2]&&a.att[l][2].w)||0; // sugerencia: mismo peso del 3er intento
-  a.att[l].push({w:prevW,r:null,extra:true,mode:mode,compMin:compMin});
+  // El 4º pertenece a la RONDA ACTUAL (no crea una "INT 4"). Arranca con el mismo
+  // peso del intento de esa ronda (se sigue a sí mismo = repite ese intento).
+  const gr=(l===DATA.lift)?DATA.round:2; // si se agrega desde otro lift, asume 3ª ronda
+  const prevW=(a.att[l][gr]&&a.att[l][gr].w)||(a.att[l][2]&&a.att[l][2].w)||0;
+  a.att[l].push({w:prevW,r:null,extra:true,mode:mode,compMin:compMin,grantedRound:gr});
   _markAtt(id,'att_'+l+'_3');
   // Tiempo compensatorio a la vista (Control en Vivo + Pantalla de Tarima). No bloquea.
   DATA.compTimer=compMin>0?{id:id,lift:l,min:compMin,startedAt:Date.now()}:null;
-  // 'self': el atleta se sigue a sí mismo → queda como actual en INT 4 enseguida.
-  if(mode==='self'){
-    DATA.flight=a.flight;DATA.lift=l;DATA.round=3;DATA.forcedCurrent=id;
-  }
+  // Nos aseguramos de estar viendo la tanda/lift/ronda donde aparece el 4º.
+  DATA.flight=a.flight;DATA.lift=l;DATA.round=gr;DATA.forcedCurrent=null;
   saveNow();R();
-  showToastLC('➕ 4º intento ('+(mode==='self'?'se sigue a sí mismo':'final de ronda')+'): '+a.name+' — '+LIFT_S[l]+'4'+(compMin?' · '+compMin+' min compensatorio':''));
+  showToastLC('➕ 4º intento ('+(mode==='self'?'se sigue a sí mismo':'final de ronda')+'): '+a.name+' — repite su '+['1er','2do','3er'][gr]+' intento en '+LIFT_S[l]+(compMin?' · '+compMin+' min compensatorio':''));
 }
 // Tiempo compensatorio MANUAL — para casos fuera de las dos opciones del 4º
 // (ej. un atleta abre 1º y 2º de sentadilla seguidos → se le dan 4 min). No crea
@@ -2084,9 +2110,8 @@ window._startManualComp=function(id,l,min){
 };
 // Elimina el 4º intento de un lift (por si se agregó por error o el jurado lo
 // revoca). Solo saca el índice 3, nunca los 3 base. Pide confirmación porque
-// borra datos. Si estábamos parados en "INT 4" y ya no queda ningún 4º en la
-// tanda+lift activos, vuelve la ronda a 3 (índice 2) para no quedar en una
-// ronda vacía.
+// borra datos. El 4º vive dentro de su ronda concedida (no hay "INT 4"), así
+// que basta con quitarlo del array; la cola deja de mostrarlo automáticamente.
 window.remove4thAttempt=function(id,l){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   if(!a.att[l]||a.att[l].length<4){window._attMenuOpen=null;R();return;}
@@ -2100,11 +2125,6 @@ window.remove4thAttempt=function(id,l){
   const ck=id+'_'+l+'_3';if(DATA.changeTimers[ck])delete DATA.changeTimers[ck];
   // limpiar el tiempo compensatorio si era de este 4º
   if(DATA.compTimer&&DATA.compTimer.id===id&&DATA.compTimer.lift===l)DATA.compTimer=null;
-  if(DATA.forcedCurrent===id&&DATA.round===3)DATA.forcedCurrent=null;
-  // si quedamos en INT 4 sin ningún 4º en la tanda+lift activos, bajar a INT 3
-  if(DATA.round===3 && !DATA.athletes.some(x=>x.flight===DATA.flight&&!x.bombed&&(x.att[DATA.lift]||[]).length>=4)){
-    DATA.round=2;
-  }
   saveNow();R();
   showToastLC('🗑 4º intento eliminado: '+a.name+' — '+LIFT_S[l]);
 };
@@ -2977,14 +2997,15 @@ async function generateActaPDF(){
       doc.text(athletes.length+' atletas',PW-12,curY+5.5,{align:'right'});
       curY+=10;
 
-      // Build table
+      // Cuántas casillas por lift en esta categoría: 3, o 4 si algún atleta tuvo un
+      // 4º intento en ese lift (solo esos lo ven en el acta).
+      const mA={};['sq','bp','dl'].forEach(l=>{mA[l]=Math.max(3,...athletes.map(a=>(a.att[l]||[]).length));});
+      // Build table (columnas de intento se adaptan a mA)
       const cols=[
-        {header:'Pos',w:8},{header:'Atleta',w:42},{header:'Club',w:28},{header:'BW',w:11},
-        {header:'SQ1',w:13},{header:'SQ2',w:13},{header:'SQ3',w:13},
-        {header:'BP1',w:13},{header:'BP2',w:13},{header:'BP3',w:13},
-        {header:'DL1',w:13},{header:'DL2',w:13},{header:'DL3',w:13},
-        {header:'Total',w:14},{header:'GL',w:13},{header:'BL',w:8}
+        {header:'Pos',w:8},{header:'Atleta',w:42},{header:'Club',w:28},{header:'BW',w:11}
       ];
+      ['sq','bp','dl'].forEach(l=>{const L=l.toUpperCase();for(let r=1;r<=mA[l];r++)cols.push({header:L+r+(r===4?'*':''),w:13});});
+      cols.push({header:'Total',w:14},{header:'GL',w:13},{header:'BL',w:8});
 
       // Column header row
       let cx=8;
@@ -3008,18 +3029,19 @@ async function generateActaPDF(){
 
         const bl=isBL(a);
 
+        const emptyCell={text:'',color:C.muted};
         const cells=[
           {text:a._rank?String(a._rank):'DNF',color:a._rank<=3?C.gold:C.white,bold:!!a._rank},
           {text:a.name,color:C.white,bold:false,maxW:40},
           {text:(a.club||'—').substring(0,20),color:C.muted,bold:false},
-          {text:a.bw?String(a.bw):'—',color:C.muted,bold:false},
-          attCell(a.att.sq[0]),attCell(a.att.sq[1]),attCell(a.att.sq[2]),
-          attCell(a.att.bp[0]),attCell(a.att.bp[1]),attCell(a.att.bp[2]),
-          attCell(a.att.dl[0]),attCell(a.att.dl[1]),attCell(a.att.dl[2]),
+          {text:a.bw?String(a.bw):'—',color:C.muted,bold:false}
+        ];
+        ['sq','bp','dl'].forEach(l=>{for(let r=0;r<mA[l];r++)cells.push(a.att[l][r]?attCell(a.att[l][r]):emptyCell);});
+        cells.push(
           {text:a.total?String(a.total):'—',color:C.white,bold:true},
           {text:a.gl?String(a.gl):'—',color:C.gold,bold:true},
           {text:bl?'\u2605':'',color:C.gold,bold:true}
-        ];
+        );
 
         cx=8;
         cells.forEach((cell,ci)=>{
@@ -4574,11 +4596,15 @@ let _txSbShownAt=0;
 const TX_SCOREBOARD_DURATION=20000; // 20s visible
 function renderTxScoreboard(cur,lifterChanged){
   if(!cur)return '';
+  // Atleta real + índice del intento actual (3 si es un 4º). Las estadísticas y la
+  // fila de intentos se calculan sobre el atleta real; el clon del 4º solo sirve
+  // para saber cuál es el intento en curso (curAtt).
+  const ra=_realAth(cur), ci=curAtt(cur);
   // Auto-hide: el marcador aparece al cambiar levantador / intento / peso / lift,
   // queda 20s en pantalla y se va con animación. Hasta el próximo cambio: oculto.
   // En modo widget (?tx=scoreboard), el render que importa es éste.
   if(TX_MODE==='scoreboard'){
-    const sig=cur.id+'-'+DATA.lift+'-'+DATA.round+'-'+(cur.att[DATA.lift][DATA.round].w||0);
+    const sig=cur.id+'-'+DATA.lift+'-'+ci+'-'+((ra.att[DATA.lift][ci]&&ra.att[DATA.lift][ci].w)||0);
     if(sig!==_txSbSig){
       _txSbSig=sig;
       _txSbShownAt=Date.now();
@@ -4591,14 +4617,14 @@ function renderTxScoreboard(cur,lifterChanged){
   const lastName=(parts.length>2?parts.slice(-2).join(' '):parts[parts.length-1]).toUpperCase();
   const divS=txDivShort(cur.div);
   const catLabel=(cur.cat?'-'+txCatNum(cur.cat)+'kg ':'')+divS;
-  const rk=catRankBySub(cur);
-  const st=subTotal(cur,DATA.lift);
-  const cw=cur.att[DATA.lift][DATA.round].w;
-  const simBest=Math.max(bestOf(cur,DATA.lift),cw);
+  const rk=catRankBySub(ra);
+  const st=subTotal(ra,DATA.lift);
+  const cw=(ra.att[DATA.lift][ci]&&ra.att[DATA.lift][ci].w)||0;
+  const simBest=Math.max(bestOf(ra,DATA.lift),cw);
   let newSub;
   if(DATA.lift==='sq')newSub=simBest;
-  else if(DATA.lift==='bp')newSub=bestOf(cur,'sq')+simBest;
-  else newSub=bestOf(cur,'sq')+bestOf(cur,'bp')+simBest;
+  else if(DATA.lift==='bp')newSub=bestOf(ra,'sq')+simBest;
+  else newSub=bestOf(ra,'sq')+bestOf(ra,'bp')+simBest;
   // Mismo sexo + cat + div (separar divisiones de edad)
   const sameCat=DATA.athletes.filter(a=>a.cat===cur.cat&&a.div===cur.div&&a.sex===cur.sex&&a.flight===DATA.flight&&!a.bombed);
   const simRanked=sameCat.map(a=>{
@@ -4624,9 +4650,9 @@ function renderTxScoreboard(cur,lifterChanged){
   const YL_NAVY='#0A1628', YL_RED='#C41E3A', YL_GOLD='#D4A843';
   const WHITE='#ffffff', WHITE_DIM='rgba(255,255,255,.55)', GREEN='#22c55e', RED='#ef4444';
   // ── SQUAT / BENCH PRESS / DEADLIFT / TOTAL — mejor marca válida de cada uno + estado ──
-  const sqB=bestOf(cur,'sq'), bpB=bestOf(cur,'bp'), dlB=bestOf(cur,'dl');
-  const dq=isDQ(cur);
-  const _liftFailed=l=>cur.att[l].every(x=>x.r==='n')&&cur.att[l].some(x=>x.w>0);
+  const sqB=bestOf(ra,'sq'), bpB=bestOf(ra,'bp'), dlB=bestOf(ra,'dl');
+  const dq=isDQ(ra);
+  const _liftFailed=l=>ra.att[l].every(x=>x.r==='n')&&ra.att[l].some(x=>x.w>0);
   const _liftCell=(l,label,best)=>{
     let val,clr;
     if(best>0){val=best;clr=GREEN}
@@ -4662,14 +4688,15 @@ function renderTxScoreboard(cur,lifterChanged){
           </div>
           <div style="background:rgba(10,22,40,.9);color:${YL_GOLD};padding:5px 14px;border-radius:4px;font-family:Oswald;font-size:16px;letter-spacing:1px;font-weight:700;white-space:nowrap">${catLabel}</div>
         </div>
-        <div style="${_sbRowAnim(_animDir,2)}display:grid;grid-template-columns:repeat(3,1fr) repeat(4,1fr);background:${YL_NAVY}">
-          ${cur.att[DATA.lift].map((at,j)=>{
+        <div style="${_sbRowAnim(_animDir,2)}display:grid;grid-template-columns:repeat(${ra.att[DATA.lift].length},1fr) repeat(4,1fr);background:${YL_NAVY}">
+          ${ra.att[DATA.lift].map((at,j)=>{
             let clr,td='none',boxSh='';
+            const is4=j===3&&at.extra;
             if(at.r==='g'){clr=GREEN}
             else if(at.r==='n'){clr=RED;td='line-through'}
-            else if(j===DATA.round&&at.w>0){clr=WHITE;boxSh='box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';'}
+            else if(j===ci&&at.w>0){clr=WHITE;boxSh='box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';'}
             else{clr=WHITE_DIM}
-            return '<div style="padding:8px 6px;text-align:center;border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:22px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+boxSh+'">'+(at.w||'—')+'</div>';
+            return '<div style="padding:8px 6px;text-align:center;border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:22px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+boxSh+'"'+(is4?' title="4º intento"':'')+'>'+(at.w||'—')+(is4?'<sup style="font-size:10px;color:'+YL_GOLD+'">4º</sup>':'')+'</div>';
           }).join('')}
           ${_liftCell('sq','SQUAT',sqB)}
           ${_liftCell('bp','BENCH PRESS',bpB)}
@@ -6983,10 +7010,8 @@ function renderCompete(){
   h+=LIFTS.map(l=>'<button onclick="DATA.lift=\''+l+'\';DATA.round=0;saveNow();R()" class="os" style="padding:5px 12px;border-radius:6px;border:2px solid '+(DATA.lift===l?LIFT_C[l]:'var(--border)')+';background:'+(DATA.lift===l?LIFT_C[l]+'20':'transparent')+';color:'+(DATA.lift===l?LIFT_C[l]:'var(--muted)')+';font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">'+LIFT_S[l]+'</button>').join('');
   h+='<span style="width:6px"></span>';
   h+=[0,1,2].map(r=>'<button onclick="DATA.round='+r+';saveNow();R()" class="os" style="padding:5px 10px;border-radius:6px;border:1px solid '+(DATA.round===r?'var(--gold)':'var(--border)')+';background:'+(DATA.round===r?'rgba(212,168,67,.15)':'transparent')+';color:'+(DATA.round===r?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:600;cursor:pointer">INT '+(r+1)+'</button>').join('');
-  // Botón INT 4 — solo aparece si algún atleta de la tanda activa tiene un 4º
-  // intento declarado en el lift activo (intento extra concedido por el jurado).
-  {const has4=DATA.athletes.some(a=>a.flight===DATA.flight&&!a.bombed&&(a.att[DATA.lift]||[]).length>=4);
-   if(has4){const on=DATA.round===3;h+='<button onclick="DATA.round=3;saveNow();R()" class="os" title="4º intento (extra por jurado)" style="padding:5px 10px;border-radius:6px;border:1px solid '+(on?'#60a5fa':'rgba(96,165,250,.5)')+';background:'+(on?'rgba(96,165,250,.18)':'transparent')+';color:'+(on?'#60a5fa':'rgba(96,165,250,.7)')+';font-size:11px;font-weight:700;cursor:pointer">INT 4*</button>';}}
+  // Sin botón "INT 4": el 4º intento vive dentro de su ronda (INT 1/2/3) y el
+  // atleta reaparece en la cola. No hay una ronda separada para el 4º.
   h+='</div>';
   // Selector de tanda activa — lo mismo que "Vuelo Activo" del menú hamburguesa, pero acá
   // directo, sin tener que abrir la sidebar. Define qué tanda ve Control TX ahora mismo.
@@ -7030,7 +7055,7 @@ function renderCompete(){
    }}
   if(cur){
     // Info compacta del atleta actual (sin botones grandes - los GOOD/NO LIFT estan en la tabla)
-    h+='<div class="card" style="border-left:4px solid '+LIFT_C[DATA.lift]+';margin-bottom:10px;padding:10px 14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:0"><div class="os" style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+cur.name+'</div><div style="font-size:10px;color:var(--muted)">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+' \u00b7 pr\u00f3ximo: <strong style="color:'+LIFT_C[DATA.lift]+'">'+(cw||'\u2014')+'kg</strong></div></div><div style="display:flex;gap:6px;align-items:center">'+(rack?'<span style="background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:5px;font-size:10px">\uD83D\uDD27 '+rack+'</span>':'')+'<span class="flight-badge" style="background:'+(FL_C[cur.flight]||'#666')+'">'+cur.flight+'</span><span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:3px 10px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:12px">'+LIFT_S[DATA.lift]+(DATA.round+1)+'</span></div></div></div>';
+    h+='<div class="card" style="border-left:4px solid '+LIFT_C[DATA.lift]+';margin-bottom:10px;padding:10px 14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:0"><div class="os" style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+cur.name+'</div><div style="font-size:10px;color:var(--muted)">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+' \u00b7 pr\u00f3ximo: <strong style="color:'+LIFT_C[DATA.lift]+'">'+(cw||'\u2014')+'kg</strong></div></div><div style="display:flex;gap:6px;align-items:center">'+(rack?'<span style="background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:5px;font-size:10px">\uD83D\uDD27 '+rack+'</span>':'')+'<span class="flight-badge" style="background:'+(FL_C[cur.flight]||'#666')+'">'+cur.flight+'</span>'+(cur.__is4?'<span title="4º intento compensatorio — repite este intento" style="background:#60a5fa;color:#fff;padding:3px 8px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:11px;letter-spacing:.5px">4º</span>':'')+'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:3px 10px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:12px">'+LIFT_S[DATA.lift]+(DATA.round+1)+'</span></div></div></div>';
     // Reloj de 1:00 para dar el pr\u00f3ximo intento \u2014 PRIVADO: solo visible ac\u00e1, en Control en
     // Vivo (isAdmin). No se transmite al p\u00fablico ni a OBS (el widget "Timer independiente"
     // se desactiv\u00f3 a pedido). id="mainTimer" \u2014 lo actualiza startTimer() cada segundo.
@@ -7110,7 +7135,9 @@ function renderCompete(){
             h+='<td style="padding:'+Math.round(3*(window._CT_CELL_SCALE||1))+'px;text-align:center;color:var(--border)">·</td>';
             continue;
           }
-          const isCurrentCell = isCurrentAthlete && l===DATA.lift && j===DATA.round;
+          // Si el atleta actual es un 4º intento (clon con __ai=3), la celda que se
+          // juzga es la del índice 3, no la de la ronda (que ya está resuelta).
+          const isCurrentCell = isCurrentAthlete && l===DATA.lift && j===curAtt(cur);
           h+=_attCellCompete(a,l,j,isCurrentCell);
         }
       });
@@ -7151,6 +7178,10 @@ function _renderResultsTable(opts){
   const isBench=view==='bench';
   const all=opts.athletes.map(a=>({...a,total:totalOf(a,view),gl:calcGL(totalOf(a,view),a.bw,a.sex,a.mod,view)}));
   if(!all.length)return '';
+  // Cuántas casillas de intento mostrar por lift: 3 normalmente, 4 si algún atleta
+  // de la tabla tuvo un 4º intento en ese lift (solo esos lo ven). Header y filas
+  // se ajustan a esto para no quedar descuadradas.
+  const maxAtts={};(isBench?['bp']:['sq','bp','dl']).forEach(l=>{maxAtts[l]=Math.max(3,...all.map(a=>(a.att[l]||[]).length));});
   const SEP='|';
   const catGroups={};
   all.forEach(a=>{const k=_catGroupKey(a);if(!catGroups[k])catGroups[k]=[];catGroups[k].push(a);});
@@ -7185,7 +7216,10 @@ function _renderResultsTable(opts){
   });
   catKeys.forEach(k=>catGroups[k].forEach(a=>sorted.push(a)));
   const withTotal=all.filter(a=>a.total>0).length;
-  const colspanTotal=isBench?10:18;
+  // Pos,Atleta,BW,Div,Cat (5) + intentos + subtotales + Total,GL (2).
+  const colspanTotal=isBench
+    ? 5+maxAtts.bp+1+2
+    : 5+maxAtts.sq+maxAtts.bp+maxAtts.dl+3+2;
   let h='<div class="card" style="padding:0;overflow:hidden;margin-bottom:18px">';
   h+='<div style="padding:10px 16px;background:linear-gradient(90deg,'+opts.color+'22,transparent);border-bottom:2px solid '+opts.color+';display:flex;justify-content:space-between;align-items:center">';
   h+='<div class="os" style="font-size:15px;font-weight:700;letter-spacing:2px;color:'+opts.color+'">'+opts.icon+' '+opts.title+'</div>';
@@ -7198,10 +7232,10 @@ function _renderResultsTable(opts){
   h+='<th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px">Div</th>';
   h+='<th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px">Cat</th>';
   if(isBench){
-    [1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C['bp']+';font-size:9px;width:60px">BP'+r+'</th>'});
+    for(let r=1;r<=maxAtts.bp;r++){const is4=r===4;h+='<th style="padding:8px 2px;text-align:center;color:'+(is4?'#60a5fa':LIFT_C['bp'])+';font-size:9px;width:60px"'+(is4?' title="4º intento"':'')+'>BP'+r+(is4?'*':'')+'</th>'}
     h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C['bp']+';font-size:9px;width:60px;font-weight:800">Best BP</th>';
   } else {
-    ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:46px">'+LIFT_S[l]+r+'</th>'});h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:48px;font-weight:800">Sub</th>'});
+    ['sq','bp','dl'].forEach(l=>{for(let r=1;r<=maxAtts[l];r++){const is4=r===4;h+='<th style="padding:8px 2px;text-align:center;color:'+(is4?'#60a5fa':LIFT_C[l])+';font-size:9px;width:46px"'+(is4?' title="4º intento"':'')+'>'+LIFT_S[l]+r+(is4?'*':'')+'</th>'}h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:48px;font-weight:800">Sub</th>'});
   }
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--text);font-size:10px;width:46px">Total</th>';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--gold);font-size:10px;width:48px">GL</th>';
@@ -7222,13 +7256,21 @@ function _renderResultsTable(opts){
     h+='<td style="padding:6px 3px;text-align:center;font-size:11px">'+(a.bw||'—')+'</td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:10px">'+(a.div||'—')+'</td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:10px">'+(a.cat||'—')+'</td>';
+    const _attTd=(at)=>{
+      if(!at)return '<td style="padding:4px 2px;text-align:center;color:var(--border);font-family:Oswald;font-size:11px">·</td>';
+      let st='',tx=at.w||'—';
+      if(at.r==='g')st='background:rgba(34,197,94,.12);color:var(--green);font-weight:700';
+      else if(at.r==='n')st='background:rgba(239,68,68,.1);color:var(--red);text-decoration:line-through';
+      else if(at.w>0)st='color:var(--text)';else st='color:var(--border)';
+      return '<td style="padding:4px 2px;text-align:center;'+st+';font-family:Oswald;font-size:11px">'+tx+'</td>';
+    };
     if(isBench){
-      a.att.bp.forEach((at,j)=>{let st='',tx=at.w||'—';if(at.r==='g')st='background:rgba(34,197,94,.12);color:var(--green);font-weight:700';else if(at.r==='n')st='background:rgba(239,68,68,.1);color:var(--red);text-decoration:line-through';else if(at.w>0)st='color:var(--text)';else st='color:var(--border)';h+='<td style="padding:4px 2px;text-align:center;'+st+';font-family:Oswald;font-size:11px">'+tx+'</td>'});
+      for(let j=0;j<maxAtts.bp;j++)h+=_attTd(a.att.bp[j]);
       const bestBP=bestOf(a,'bp');
       h+='<td style="padding:4px 2px;text-align:center;font-weight:700;font-family:Oswald;color:#d4a843;font-size:12px;background:rgba(212,168,67,.08)">'+(bestBP||'—')+'</td>';
     } else {
       ['sq','bp','dl'].forEach(l=>{
-        a.att[l].forEach((at,j)=>{let st='',tx=at.w||'—';if(at.r==='g')st='background:rgba(34,197,94,.12);color:var(--green);font-weight:700';else if(at.r==='n')st='background:rgba(239,68,68,.1);color:var(--red);text-decoration:line-through';else if(at.w>0)st='color:var(--text)';else st='color:var(--border)';h+='<td style="padding:4px 2px;text-align:center;'+st+';font-family:Oswald;font-size:11px">'+tx+'</td>'});
+        for(let j=0;j<maxAtts[l];j++)h+=_attTd(a.att[l][j]);
         const sub=l==='sq'?bestOf(a,'sq'):l==='bp'?bestOf(a,'sq')+bestOf(a,'bp'):bestOf(a,'sq')+bestOf(a,'bp')+bestOf(a,'dl');
         h+='<td style="padding:4px 2px;text-align:center;font-weight:700;font-family:Oswald;color:#d4a843;font-size:12px;background:rgba(212,168,67,.08)">'+(sub||'—')+'</td>';
       });
