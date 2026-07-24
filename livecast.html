@@ -5641,7 +5641,7 @@ function renderShell(){
   h+='<button class="side-btn '+(p==='screen'?'active':'')+'" onclick="go(\'screen\')"><span class="icon"></span>Pantalla Tarima</button>';
   }
   h+='<div class="side-label">P\u00fablico</div>';
-  h+='<button class="side-btn '+(p==='liveView'?'active':'')+'" onclick="go(\'liveView\')"><span class="icon">\uD83D\uDCFA</span>Competencia en Vivo</button>';
+  // (Pesta\u00F1a "Competencia en Vivo" quitada a pedido \u2014 la vista p\u00fablica se ve desde el link p\u00fablico.)
   h+='<button class="side-btn '+(p==='results'?'active':'')+'" onclick="go(\'results\')"><span class="icon">\uD83C\uDFC6</span>Resultados</button>';
   h+='<button class="side-btn '+(p==='atletaInfo'?'active':'')+'" onclick="go(\'atletaInfo\')"><span class="icon">\uD83D\uDC64</span>Atletas</button>';
   h+='<div class="side-label">Vuelo Activo</div><div style="display:flex;gap:4px;flex-wrap:wrap">';
@@ -5953,10 +5953,17 @@ window.dirBtDeleteVideo=async function(name){
     await _dirLoadBtVideos();
   }catch(e){alert('Error al eliminar: '+e.message);}
 };
+let _dirUnsubDocId=null;
 function _dirEnsureListener(){
-  if(_dirUnsub||!fbReady||!window._fb)return;
+  if(!fbReady||!window._fb)return;
+  const docId=evStateDocId('current');
+  // Re-suscribir si el doc cambió (ej. el evento se resolvió DESPUÉS de la 1ª
+  // suscripción → antes escuchábamos 'current' y ahora 'current__<Evento>').
+  if(_dirUnsub && _dirUnsubDocId===docId)return;
+  if(_dirUnsub){try{_dirUnsub()}catch(e){}_dirUnsub=null;}
+  _dirUnsubDocId=docId;
   try{
-    _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',evStateDocId('current')),(snap)=>{
+    _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',docId),(snap)=>{
       const DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[]}};
       if(snap.exists()){
         const d=snap.data();
@@ -5964,15 +5971,18 @@ function _dirEnsureListener(){
       } else {
         _dirState={...DEFAULT};
       }
-      if(DATA.phase==='director')R();
+      if(DATA.phase==='director'||DATA.phase==='remote')R();
     });
   }catch(e){console.warn('[DIR] listen',e)}
 }
 async function _dirPush(){
-  if(!fbReady||!isAdmin||!window._fb)return;
+  // Feedback claro en vez de no-op silencioso (era la causa de "aprieto y no pasa nada").
+  if(!fbReady||!window._fb){showToastLC('⏳ Conectando a Firebase… esperá unos segundos y reintentá');return;}
+  if(!isAdmin){showToastLC('Solo un admin logueado puede controlar la transmisión');return;}
+  if(!fbDocId()){showToastLC('⏳ Cargando el evento… esperá a que el campeonato aparezca arriba y reintentá');if(DATA.phase==='remote'||DATA.phase==='director')R();return;}
   try{
     await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director',evStateDocId('current')),{show:_dirState,ts:Date.now()});
-  }catch(e){alert('Error pusheando comando: '+(e.message||e))}
+  }catch(e){showToastLC('Error al enviar comando: '+(e.message||e))}
   _obsWsBroadcastSync();
 }
 // Broadcastea datos de competencia vía OBS para el widget (no depende de Firestore).
@@ -6279,10 +6289,22 @@ function renderRemote(){
   h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
   h+='<div><h2 class="os" style="font-size:20px;letter-spacing:1px;margin:0">📱 CONTROL REMOTO</h2>'
     +'<div style="font-size:11px;color:var(--muted)">'+evName+(cur?' · en tarima: <b style="color:var(--gold)">'+esc(cur.name)+'</b>':'')+'</div></div>';
+  // Estado real: necesita Firebase listo Y el evento resuelto (si no, empujaría al
+  // doc equivocado y el overlay de OBS no vería nada → "aprieto y no pasa nada").
+  const _evtReady=!!fbDocId();
+  const _connCol=(fbReady&&_evtReady)?'var(--green)':(fbReady?'var(--orange)':'var(--red)');
+  const _connTxt=(fbReady&&_evtReady)?'CONECTADO':(fbReady?'CARGANDO EVENTO…':'CONECTANDO…');
   h+='<div style="display:flex;align-items:center;gap:6px">'
-    +'<span style="width:9px;height:9px;border-radius:50%;background:'+(fbReady?'var(--green)':'var(--red)')+';display:inline-block"></span>'
-    +'<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">'+(fbReady?'CONECTADO':'SIN CONEXIÓN')+'</span></div>';
+    +'<span style="width:9px;height:9px;border-radius:50%;background:'+_connCol+';display:inline-block"></span>'
+    +'<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">'+_connTxt+'</span></div>';
   h+='</div>';
+  if(!(fbReady&&_evtReady)){
+    h+='<div style="margin:0 0 12px;padding:10px 14px;border-radius:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);color:#f59e0b;font-size:12px;line-height:1.5">'
+      +(fbReady?'Esperando que cargue el evento. Asegurate de abrir el link con <b>?evento=TU_EVENTO&remote=1</b> y estar logueado como admin.':'Conectando a Firebase… Si no conecta, revisá tu internet y que estés logueado como admin.')
+      +'</div>';
+    // Re-chequear en 1s hasta que esté listo (evita quedar en "conectando" para siempre).
+    if(!window._remotePoll){window._remotePoll=setTimeout(()=>{window._remotePoll=null;if(DATA.phase==='remote'){_dirEnsureListener();R();}},1000);}
+  }
   // Grilla principal — pensada para el pulgar
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
   h+=bigBtn('PERFIL', on('profile')?'EN PANTALLA':'atleta actual', on('profile'), "dirToggle('profile')");
@@ -7747,28 +7769,31 @@ let DB_FULL=[];
 // ══════════════════════════════════════════════
 const PRACTICE_EVENT_NAME='🎓 PRÁCTICA — Jueces (datos ficticios, no oficial)';
 function _genPracticeRoster(){
-  const firstM=['Bruno','Diego','Franco','Hugo','Jorge','Lucas','Nico','Pablo','Simón','Tomás'];
-  const firstF=['Ana','Carla','Elena','Gabriela','Iris','Karen','Marta','Olivia','Renata','Rocío'];
-  const last=['Pérez','Soto','Muñoz','Rojas','Vidal','Contreras','Silva','Reyes','Torres','Bravo'];
-  const catsM=[66,74,83,93,105,120];
-  const catsF=[52,57,63,69,76,84];
+  const firstM=['Bruno','Diego','Franco','Hugo','Jorge','Lucas','Nico','Pablo','Simón','Tomás','Iván','Mateo','Andrés','Felipe','Gonzalo','Rodrigo','Sergio','Vicente'];
+  const firstF=['Ana','Carla','Elena','Gabriela','Iris','Karen','Marta','Olivia','Renata','Rocío','Sofía','Valentina','Antonia','Josefa','Camila','Fernanda','Paula','Trinidad'];
+  const last=['Pérez','Soto','Muñoz','Rojas','Vidal','Contreras','Silva','Reyes','Torres','Bravo','Fuentes','Araya','Cortés','Navarro','Herrera','Castro','Vega','Pizarro'];
+  // Categorías oficiales IPF (2 atletas por cada una, hombres y mujeres).
+  const catsM=[53,59,66,74,83,93,105,120,'120+'];
+  const catsF=[43,47,52,57,63,69,76,84,'84+'];
   const rnd25=v=>Math.round(v/2.5)*2.5;
   const athletes=[];
-  for(let i=0;i<20;i++){
-    const sex=i%2===0?'Hombre':'Mujer';
-    const cats=sex==='Hombre'?catsM:catsF;
-    const catNum=cats[Math.floor(Math.random()*cats.length)];
-    const flight=i<10?'A':'B';
-    const firstPool=sex==='Hombre'?firstM:firstF;
-    const name=firstPool[Math.floor(i/2)%firstPool.length]+' '+last[(i*3+1)%last.length]+' (Práctica)';
-    const bw=Math.round((catNum-(0.5+Math.random()*2.5))*10)/10;
-    const sqOpen=rnd25(catNum*0.85*(0.9+Math.random()*0.3));
-    const bpOpen=rnd25(catNum*0.5*(0.9+Math.random()*0.3));
-    const dlOpen=rnd25(catNum*1.0*(0.9+Math.random()*0.3));
+  let id=0, mi=0, fi=0;
+  const push=(sex,catStr)=>{
+    const catNum=parseFloat(String(catStr))||120;
+    const plus=String(catStr).includes('+');
+    const pool=sex==='Hombre'?firstM:firstF;
+    const idx=sex==='Hombre'?mi++:fi++;
+    const name=pool[idx%pool.length]+' '+last[(id*3+idx)%last.length]+' (Práctica)';
+    // Peso corporal dentro de la categoría (para "+", un poco por encima del límite).
+    const bw=plus?Math.round((catNum+(3+Math.random()*10))*10)/10:Math.round((catNum-(0.3+Math.random()*2.2))*10)/10;
+    const factor=sex==='Hombre'?1:0.62; // mujeres levantan proporcionalmente menos
+    const sqOpen=rnd25(catNum*0.85*factor*(0.9+Math.random()*0.3));
+    const bpOpen=rnd25(catNum*0.55*factor*(0.9+Math.random()*0.3));
+    const dlOpen=rnd25(catNum*1.0*factor*(0.9+Math.random()*0.3));
     athletes.push({
-      id:i,lot:i+1,name,rut:'',sex,cat:String(catNum),div:'Open',
+      id,lot:id+1,name,rut:'',sex,cat:String(catStr),div:'Open',
       club:'Club Práctica FECHIPO',uni:'',mod:'classic',country:'CHI',
-      bw,flight,jornada:'',rackSQ:String(3+Math.floor(Math.random()*8)),rackBP:String(2+Math.floor(Math.random()*6)),
+      bw,flight:'A',jornada:'',rackSQ:String(3+Math.floor(Math.random()*8)),rackBP:String(2+Math.floor(Math.random()*6)),
       bombed:false,weighedIn:true,
       att:{
         sq:[{w:sqOpen,r:null},{w:0,r:null},{w:0,r:null}],
@@ -7776,7 +7801,13 @@ function _genPracticeRoster(){
         dl:[{w:dlOpen,r:null},{w:0,r:null},{w:0,r:null}]
       }
     });
-  }
+    id++;
+  };
+  // Mujeres primero, luego hombres; 2 por categoría.
+  catsF.forEach(c=>{push('Mujer',c);push('Mujer',c);});
+  catsM.forEach(c=>{push('Hombre',c);push('Hombre',c);});
+  // Repartir en tandas de a 10 para no tener una sola tanda gigante (A, B, C, D…).
+  athletes.forEach((a,k)=>{a.flight=String.fromCharCode(65+Math.floor(k/10));});
   return athletes;
 }
 function _initPracticeMode(){
@@ -7791,12 +7822,15 @@ function _initPracticeMode(){
     DATA.phase='manage';
     save();
   }
-  // Banner fijo arriba de todo — para que nunca se confunda con una competencia real.
+  // Chip discreto abajo a la derecha (antes era una barra amarilla arriba que
+  // molestaba visualmente). Sigue avisando que es práctica, sin tapar la UI ni la
+  // transmisión. Se puede ocultar con un click.
   const banner=document.createElement('div');
-  banner.textContent='🎓 MODO PRÁCTICA — Atletas y datos ficticios. No es una competencia real. Nada de esto se guarda en el servidor.';
-  banner.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#D4A843;color:#0A1628;font-family:Oswald,sans-serif;font-weight:700;font-size:12px;letter-spacing:.5px;text-align:center;padding:6px 12px';
-  document.body.prepend(banner);
-  document.body.style.paddingTop='30px';
+  banner.textContent='🎓 PRÁCTICA';
+  banner.title='Modo práctica — atletas ficticios, nada se guarda en el servidor. Click para ocultar.';
+  banner.onclick=function(){banner.style.display='none';};
+  banner.style.cssText='position:fixed;bottom:8px;right:8px;z-index:99999;background:rgba(212,168,67,.85);color:#0A1628;font-family:Oswald,sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:3px 9px;border-radius:10px;cursor:pointer;opacity:.75';
+  document.body.appendChild(banner);
   R();
 }
 if(PRACTICE_MODE){
