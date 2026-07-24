@@ -1996,27 +1996,91 @@ window.add4thAttempt=function(id,l,mode){
   if(a.att[l].length>=4){showToastLC(a.name+' ya tiene un 4º intento en '+LIFT_S[l]);window._attMenuOpen=null;R();return;}
   window._attMenuOpen=null;
   mode=(mode==='self')?'self':'endround';
-  // Minutos compensatorios (0-5). Requerido para 'self'; opcional para 'endround'.
-  let compMin=0;
-  const def=mode==='self'?'2':'0';
-  const raw=prompt('4º intento — '+(mode==='self'?'SE SIGUE A SÍ MISMO':'AL FINAL DE LA RONDA')+'\n'+a.name+' · '+LIFT_S[l]+'\n\nMinutos compensatorios (0 a 5):\n(0 = sin tiempo compensatorio)',def);
-  if(raw===null){R();return;} // canceló
-  compMin=Math.max(0,Math.min(5,parseInt(raw,10)||0));
+  // Ventanita emergente para elegir el tiempo compensatorio a dar.
+  _openCompModal(id,l,mode);
+};
+// Modal de tiempo compensatorio (ventanita emergente) al agregar un 4º intento.
+//   'self'     → default 4 min (intento de récord, peso muerto 3ª ronda,
+//                only bench 3ª ronda). El descanso compensatorio es completo.
+//   'endround' → 4/3/2 min según posición (último/penúltimo/antepenúltimo),
+//                porque el minuto normal de descanso ya está considerado.
+window._openCompModal=function(id,l,mode){
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  const ex=document.getElementById('compModal');if(ex)ex.remove();
+  const m=document.createElement('div');m.id='compModal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100000;padding:16px';
+  const title=mode==='self'?'4º — SE SIGUE A SÍ MISMO':'4º — AL FINAL DE LA RONDA';
+  const desc=mode==='self'
+    ?'Tiempo compensatorio de descanso completo (4 min por defecto).'
+    :'El tiempo depende de la posición del atleta en la ronda (el minuto normal de descanso ya está considerado).';
+  const opts=(mode==='self')
+    ?[{min:4,label:'4 min · por defecto',def:true},{min:3,label:'3 min'},{min:2,label:'2 min'},{min:5,label:'5 min'},{min:0,label:'Sin tiempo compensatorio'}]
+    :[{min:4,label:'Último de la ronda · 4 min',def:true},{min:3,label:'Penúltimo · 3 min'},{min:2,label:'Antepenúltimo · 2 min'},{min:0,label:'Sigue la competencia · sin tiempo'}];
+  let h='<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:22px 24px;width:min(460px,95vw)">';
+  h+='<div style="font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:1px;color:var(--gold)">🕒 '+title+'</div>';
+  h+='<div style="font-size:12px;color:var(--muted);margin:6px 0 14px;line-height:1.5"><b style="color:var(--text)">'+esc(a.name)+' · '+LIFT_S[l]+'4</b> — '+desc+'</div>';
+  h+='<div style="font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:8px">TIEMPO COMPENSATORIO A DAR:</div>';
+  h+='<div style="display:flex;flex-direction:column;gap:8px">';
+  opts.forEach(o=>{
+    h+='<button onclick="_confirmComp('+id+',\''+l+'\',\''+mode+'\','+o.min+')" style="padding:12px 16px;border-radius:10px;border:2px solid '+(o.def?'var(--gold)':'var(--border)')+';background:'+(o.def?'rgba(212,168,67,.12)':'transparent')+';color:'+(o.def?'var(--gold)':'var(--text)')+';font-family:Oswald;font-size:14px;font-weight:'+(o.def?700:600)+';cursor:pointer;text-align:left">'+o.label+'</button>';
+  });
+  h+='</div>';
+  h+='<button onclick="document.getElementById(\'compModal\').remove()" style="width:100%;margin-top:14px;padding:10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:12px;cursor:pointer">Cancelar</button>';
+  h+='</div>';
+  m.innerHTML=h;
+  m.onclick=function(e){if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+};
+window._confirmComp=function(id,l,mode,compMin){
+  const m=document.getElementById('compModal');if(m)m.remove();
+  _do4thAttempt(id,l,mode,compMin);
+};
+function _do4thAttempt(id,l,mode,compMin){
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  if(a.att[l].length>=4)return;
+  compMin=Math.max(0,Math.min(5,parseInt(compMin,10)||0));
   const prevW=(a.att[l][2]&&a.att[l][2].w)||0; // sugerencia: mismo peso del 3er intento
   a.att[l].push({w:prevW,r:null,extra:true,mode:mode,compMin:compMin});
   _markAtt(id,'att_'+l+'_3');
   // Tiempo compensatorio a la vista (Control en Vivo + Pantalla de Tarima). No bloquea.
-  if(compMin>0){
-    DATA.compTimer={id:id,lift:l,min:compMin,startedAt:Date.now()};
-  }else{
-    DATA.compTimer=null;
-  }
+  DATA.compTimer=compMin>0?{id:id,lift:l,min:compMin,startedAt:Date.now()}:null;
   // 'self': el atleta se sigue a sí mismo → queda como actual en INT 4 enseguida.
   if(mode==='self'){
     DATA.flight=a.flight;DATA.lift=l;DATA.round=3;DATA.forcedCurrent=id;
   }
   saveNow();R();
   showToastLC('➕ 4º intento ('+(mode==='self'?'se sigue a sí mismo':'final de ronda')+'): '+a.name+' — '+LIFT_S[l]+'4'+(compMin?' · '+compMin+' min compensatorio':''));
+}
+// Tiempo compensatorio MANUAL — para casos fuera de las dos opciones del 4º
+// (ej. un atleta abre 1º y 2º de sentadilla seguidos → se le dan 4 min). No crea
+// un 4º intento, solo arranca el cronómetro compensatorio para el atleta actual.
+window.openManualComp=function(){
+  const cur=liftQueue()[0];
+  const who=cur||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
+  if(!who){showToastLC('No hay atleta en tarima para asignarle tiempo');return;}
+  const ex=document.getElementById('compModal');if(ex)ex.remove();
+  const m=document.createElement('div');m.id='compModal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100000;padding:16px';
+  let h='<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:22px 24px;width:min(440px,95vw)">';
+  h+='<div style="font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:1px;color:var(--gold)">🕒 TIEMPO COMPENSATORIO MANUAL</div>';
+  h+='<div style="font-size:12px;color:var(--muted);margin:6px 0 14px;line-height:1.5"><b style="color:var(--text)">'+esc(who.name)+'</b> — para cuando le corresponde descanso extra sin ser un 4º intento (ej. abre dos intentos seguidos).</div>';
+  h+='<div style="display:flex;flex-direction:column;gap:8px">';
+  [{min:4,def:true},{min:3},{min:2},{min:1},{min:5}].forEach(o=>{
+    h+='<button onclick="_startManualComp('+who.id+',\''+DATA.lift+'\','+o.min+')" style="padding:12px 16px;border-radius:10px;border:2px solid '+(o.def?'var(--gold)':'var(--border)')+';background:'+(o.def?'rgba(212,168,67,.12)':'transparent')+';color:'+(o.def?'var(--gold)':'var(--text)')+';font-family:Oswald;font-size:14px;font-weight:'+(o.def?700:600)+';cursor:pointer;text-align:left">'+o.min+' min</button>';
+  });
+  h+='</div>';
+  h+='<button onclick="document.getElementById(\'compModal\').remove()" style="width:100%;margin-top:14px;padding:10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:12px;cursor:pointer">Cancelar</button>';
+  h+='</div>';
+  m.innerHTML=h;
+  m.onclick=function(e){if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+};
+window._startManualComp=function(id,l,min){
+  const m=document.getElementById('compModal');if(m)m.remove();
+  DATA.compTimer={id:id,lift:l,min:Math.max(1,Math.min(5,min)),startedAt:Date.now()};
+  saveNow();R();
+  const a=DATA.athletes.find(x=>x.id===id);
+  showToastLC('🕒 '+min+' min compensatorios para '+(a?a.name:'atleta'));
 };
 // Elimina el 4º intento de un lift (por si se agregó por error o el jurado lo
 // revoca). Solo saca el índice 3, nunca los 3 base. Pide confirmación porque
@@ -6887,7 +6951,7 @@ function _attMenuHtml(a,l,j,sc){
   if(open){
     const item=(oc,ico,txt,col,tip)=>'<button class="att-menu-item" onclick="event.stopPropagation();'+oc+'"'+(tip?' title="'+tip.replace(/"/g,'&quot;')+'"':'')+' style="display:flex;align-items:center;gap:7px;width:100%;padding:8px 10px;border:none;border-bottom:1px solid rgba(30,58,95,.25);background:transparent;color:'+(col||'var(--text)')+';font-family:Oswald;font-size:12px;font-weight:600;cursor:pointer;text-align:left;white-space:nowrap"><span style="font-size:13px;width:14px;text-align:center;flex-shrink:0">'+ico+'</span>'+txt+'</button>';
     // Torpedos (tooltips) basados en el criterio IPF de intento compensatorio.
-    const TIP_SELF='4º compensatorio que el atleta toma ENSEGUIDA, justo después de su intento. Se otorga cuando un error ajeno (carga, equipo, cronómetro o arbitraje) lo perjudicó y repite en el acto. Se le da un tiempo de descanso compensatorio (0-5 min) que corre a la vista, sin bloquear el válido/nulo (criterio IPF).';
+    const TIP_SELF='El atleta se sigue a sí mismo (repite ENSEGUIDA). Se usa en: intento de récord, peso muerto (deadlift) en 3ª ronda, y only bench en 3ª ronda. Se le da un tiempo compensatorio de descanso (por defecto 4 min) que corre a la vista, sin bloquear el válido/nulo (criterio IPF).';
     const TIP_ENDROUND='4º compensatorio que el atleta toma AL FINAL de la ronda en curso — forma habitual IPF de conceder el intento extra por un error ajeno: el atleta espera al final de la ronda para repetir. No requiere tiempo compensatorio (opcional).';
     const TIP_REMOVE='Quita el 4º intento (si se agregó por error o el jurado lo revoca). Solo borra el intento extra; los 3 base quedan intactos.';
     h+='<div class="att-menu" onclick="event.stopPropagation()" style="position:absolute;z-index:60;top:calc(100% + 3px);left:0;min-width:210px;background:#0D1F38;border:1px solid var(--gold);border-radius:8px;box-shadow:0 8px 26px rgba(0,0,0,.6);overflow:hidden">';
@@ -6975,7 +7039,10 @@ function renderCompete(){
      const _mtTxt=Math.floor(_mt/60)+':'+String(_mt%60).padStart(2,'0');
      h+='<div class="card" style="margin-bottom:10px;padding:8px 14px;display:flex;align-items:center;justify-content:space-between">'
        +'<span style="font-size:11px;color:var(--muted)">\u23f1 Tiempo para el pr\u00f3ximo intento <span style="opacity:.6">(solo lo ves vos ac\u00e1 \u2014 no es p\u00fablico)</span></span>'
-       +'<span id="mainTimer" class="os" style="font-size:20px;font-weight:700;color:'+_mtColor+'">'+_mtTxt+'</span>'
+       +'<span style="display:flex;align-items:center;gap:10px">'
+         +'<button onclick="openManualComp()" title="Asignar un tiempo compensatorio a mano (ej. el atleta abre dos intentos seguidos)" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(96,165,250,.5);background:rgba(96,165,250,.08);color:#60a5fa;font-family:Oswald;font-size:10px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap">\uD83D\uDD52 COMPENSATORIO MANUAL</button>'
+         +'<span id="mainTimer" class="os" style="font-size:20px;font-weight:700;color:'+_mtColor+'">'+_mtTxt+'</span>'
+       +'</span>'
      +'</div>';}
     // (Modo Jueces y el bot\u00F3n "Se permite r\u00E9cord nacional" se quitaron a pedido:
     //  las decisiones se marcan a mano con \u2713/\u2717 y los r\u00E9cords se cargan en admin.)
