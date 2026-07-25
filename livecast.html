@@ -7271,37 +7271,53 @@ function renderCompete(){
     if(!rows.length)return;
     h+='<div style="margin-bottom:18px">';
     h+='<div class="os" style="font-size:12px;font-weight:700;letter-spacing:1px;color:'+(FL_C[fl]||'#999')+';padding:5px 2px;border-bottom:2px solid '+(FL_C[fl]||'#999')+'44;margin-bottom:6px">TANDA '+fl+(fl===DATA.flight?' \u00b7 EN TARIMA AHORA':'')+'</div>';
-    // Cuántos intentos mostrar por lift en esta tanda: 3 normalmente, 4 si algún
-    // atleta de la tanda tiene un 4º intento en ese lift.
-    const maxAtts={};LIFTS.forEach(l=>{maxAtts[l]=Math.max(3,...rows.map(a=>(a.att[l]||[]).length))});
+    // La fila principal SIEMPRE tiene 3 intentos por lift. El intento extra/4º NO
+    // ensancha la tabla (no agrega columna a la derecha): el atleta aparece
+    // DUPLICADO en una fila abajo (mismo nombre y tanda) con solo la casilla del
+    // extra. Si tiene extra en más de un lift, esa fila muestra una casilla por lift.
     h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:640px"><thead><tr style="border-bottom:1px solid var(--border)">';
     h+='<th style="text-align:center;padding:5px 4px;color:var(--muted);font-size:9px;width:26px">#</th>';
     h+='<th style="text-align:left;padding:5px 8px;color:var(--muted);font-size:9px">ATLETA</th>';
-    LIFTS.forEach(l=>{for(let r=1;r<=maxAtts[l];r++){const is4=r===4;h+='<th style="text-align:center;padding:5px 3px;color:'+(is4?'#60a5fa':LIFT_C[l])+';font-size:10px;font-weight:700;width:58px"'+(is4?' title="4º intento (extra por jurado)"':'')+'>'+LIFT_S[l]+r+(is4?'*':'')+'</th>'}});
+    LIFTS.forEach(l=>{for(let r=1;r<=3;r++){h+='<th style="text-align:center;padding:5px 3px;color:'+LIFT_C[l]+';font-size:10px;font-weight:700;width:58px">'+LIFT_S[l]+r+'</th>'}});
     h+='<th style="text-align:center;padding:5px 4px;color:var(--gold);font-size:9px;width:56px">TOTAL</th></tr></thead><tbody>';
     rows.forEach(a=>{
       const isCurrentAthlete = fl===DATA.flight && cur && a.id===cur.id;
+      const curOnExtra = isCurrentAthlete && curAtt(cur)===3; // el actual está en su intento extra
+      const hiMain = isCurrentAthlete && !curOnExtra;
       const tot = totalOf(a);
       const rsc=window._CT_CELL_SCALE||1;
-      h+='<tr style="border-bottom:1px solid rgba(30,58,95,.18);'+(isCurrentAthlete?'background:linear-gradient(90deg,'+LIFT_C[DATA.lift]+'30,'+LIFT_C[DATA.lift]+'10);box-shadow:inset 3px 0 0 '+LIFT_C[DATA.lift]+';':'')+'">';
-      h+='<td style="text-align:center;padding:6px 4px"><span class="os" style="color:'+(isCurrentAthlete?'#fff':'var(--muted)')+';font-weight:700;font-size:'+Math.round(12*rsc)+'px">'+(a.lot||'\u00b7')+'</span></td>';
-      h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:'+Math.round(12*rsc)+'px;font-weight:'+(isCurrentAthlete?800:500)+';color:'+(isCurrentAthlete?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px">'+(isCurrentAthlete?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">\u25b6</span>':'')+'<span>'+a.name+'</span></div><div style="font-size:'+Math.round(8*rsc)+'px;color:var(--muted)">'+(a.bw>0?a.bw+'kg':'sin BW')+'</div></td>';
+      // Fila principal (1º/2º/3º)
+      h+='<tr style="border-bottom:1px solid rgba(30,58,95,.18);'+(hiMain?'background:linear-gradient(90deg,'+LIFT_C[DATA.lift]+'30,'+LIFT_C[DATA.lift]+'10);box-shadow:inset 3px 0 0 '+LIFT_C[DATA.lift]+';':'')+'">';
+      h+='<td style="text-align:center;padding:6px 4px"><span class="os" style="color:'+(hiMain?'#fff':'var(--muted)')+';font-weight:700;font-size:'+Math.round(12*rsc)+'px">'+(a.lot||'·')+'</span></td>';
+      h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:'+Math.round(12*rsc)+'px;font-weight:'+(hiMain?800:500)+';color:'+(hiMain?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px">'+(hiMain?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">▶</span>':'')+'<span>'+a.name+'</span></div><div style="font-size:'+Math.round(8*rsc)+'px;color:var(--muted)">'+(a.bw>0?a.bw+'kg':'sin BW')+'</div></td>';
       LIFTS.forEach(l=>{
-        for(let j=0;j<maxAtts[l];j++){
-          if(!a.att[l][j]){
-            // La columna del 4º existe porque OTRO atleta de la tanda tiene un 4º,
-            // pero este no: celda vacía (puede agregar el suyo desde el menú ⋮).
-            h+='<td style="padding:'+Math.round(3*(window._CT_CELL_SCALE||1))+'px;text-align:center;color:var(--border)">·</td>';
-            continue;
-          }
-          // Si el atleta actual es un 4º intento (clon con __ai=3), la celda que se
-          // juzga es la del índice 3, no la de la ronda (que ya está resuelta).
-          const isCurrentCell = isCurrentAthlete && l===DATA.lift && j===curAtt(cur);
+        for(let j=0;j<3;j++){
+          const isCurrentCell = hiMain && l===DATA.lift && j===DATA.round;
           h+=_attCellCompete(a,l,j,isCurrentCell);
         }
       });
-      h+='<td style="text-align:center;padding:6px 4px;font-weight:700;font-family:Oswald;color:var(--gold);font-size:13px">'+(tot||'\u2014')+'</td>';
+      h+='<td style="text-align:center;padding:6px 4px;font-weight:700;font-family:Oswald;color:var(--gold);font-size:13px">'+(tot||'—')+'</td>';
       h+='</tr>';
+      // Fila del/los intento(s) EXTRA (duplicado abajo, solo si tiene)
+      const extraLifts = LIFTS.filter(l=>(a.att[l]||[]).length>=4 && a.att[l][3] && a.att[l][3].extra);
+      if(extraLifts.length){
+        const gr0=((a.att[extraLifts[0]][3]||{}).grantedRound)||0;
+        const exLbl=gr0>=2?'4º INTENTO':'INTENTO EXTRA';
+        h+='<tr style="border-bottom:1px solid rgba(30,58,95,.18);'+(curOnExtra?'background:linear-gradient(90deg,#60a5fa33,#60a5fa12);box-shadow:inset 3px 0 0 #60a5fa;':'background:rgba(96,165,250,.05)')+'">';
+        h+='<td style="text-align:center;padding:6px 4px;color:'+(curOnExtra?'#fff':'#60a5fa')+';font-size:'+Math.round(13*rsc)+'px">↳</td>';
+        h+='<td style="padding:6px 8px"><div style="font-size:'+Math.round(11*rsc)+'px;font-weight:'+(curOnExtra?800:500)+';color:'+(curOnExtra?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px;flex-wrap:wrap">'+(curOnExtra?'<span style="background:#60a5fa;color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">▶</span>':'')+'<span>'+a.name+'</span><span style="background:#60a5fa;color:#fff;padding:1px 6px;border-radius:4px;font-size:8px;font-family:Oswald;letter-spacing:1px">'+exLbl+'</span></div></td>';
+        LIFTS.forEach(l=>{
+          if((a.att[l]||[]).length>=4 && a.att[l][3] && a.att[l][3].extra){
+            const isCurrentCell = curOnExtra && l===DATA.lift;
+            h+=_attCellCompete(a,l,3,isCurrentCell); // la casilla del extra
+            h+='<td></td><td></td>'; // 2 vacías para mantener la grilla de 3 por lift
+          }else{
+            h+='<td></td><td></td><td></td>';
+          }
+        });
+        h+='<td></td>';
+        h+='</tr>';
+      }
     });
     h+='</tbody></table></div></div>';
   });
