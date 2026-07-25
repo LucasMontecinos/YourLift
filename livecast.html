@@ -824,10 +824,19 @@ function _mergeAthletes(localArr, remoteArr){
       const maxLen=Math.max(lLocal.length,lRemote.length);
       const arr=[];
       for(let r=0;r<maxLen;r++){
-        if(held[ra.id+'|att_'+l+'_'+r] && lLocal[r]){ arr[r]={w:lLocal[r].w,r:lLocal[r].r}; overrode=true; }
+        const heldR=held[ra.id+'|att_'+l+'_'+r];
+        if(heldR){
+          // Yo toqué esta celda hace poco → mi versión manda. Si la BORRÉ (ej.
+          // eliminé el 4º intento: lLocal[r] ya no existe) NO la re-agrego desde el
+          // remoto — así la eliminación no "revive" por un snapshot de otro control.
+          if(lLocal[r]){ arr[r]={w:lLocal[r].w,r:lLocal[r].r}; }
+          overrode=true;
+        }
         else if(lRemote[r]!==undefined){ arr[r]=lRemote[r]; }
         else if(lLocal[r]!==undefined){ arr[r]={w:lLocal[r].w,r:lLocal[r].r}; overrode=true; } // remoto más corto: conservo mi 4º recién agregado
       }
+      // Sacar huecos finales (ej. borré el último índice estando held).
+      while(arr.length && arr[arr.length-1]===undefined) arr.pop();
       if(!m.att) m.att={};
       m.att[l]=arr;
     });
