@@ -714,10 +714,10 @@ function liftQueue(){
   }
   return q;
 }
-function save(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}if(!_fbSyncing)debouncedSync()}
+function save(){if(PRACTICE_VIEWER)return;if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}if(!_fbSyncing)debouncedSync()}
 let _syncTimer=null;
 function debouncedSync(){if(_syncTimer)clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>{syncToFB();_syncTimer=null},800)}
-function saveNow(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}syncToFB()}
+function saveNow(){if(PRACTICE_VIEWER)return;if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}syncToFB()}
 function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);return true}}}catch(e){}return false}
 
 // ═══════════════════════════════════════════════════════════════════
@@ -5881,7 +5881,10 @@ function renderShell(){
   h+='<button class="side-btn '+(p==='screen'?'active':'')+'" onclick="go(\'screen\')"><span class="icon"></span>Pantalla Tarima</button>';
   }
   h+='<div class="side-label">P\u00fablico</div>';
-  // (Pesta\u00F1a "Competencia en Vivo" quitada a pedido \u2014 la vista p\u00fablica se ve desde el link p\u00fablico.)
+  // "Competencia en Vivo": para el espectador (no admin) es su vista principal, as\u00ed
+  // puede volver a ella despu\u00e9s de ir a Resultados/Atletas. Para el admin se mantiene
+  // oculta (tiene su propio "Control en Vivo"), como se pidi\u00f3.
+  if(!isAdmin)h+='<button class="side-btn '+(p==='liveView'?'active':'')+'" onclick="go(\'liveView\')"><span class="icon">\ud83d\udcfa</span>Competencia en Vivo</button>';
   h+='<button class="side-btn '+(p==='results'?'active':'')+'" onclick="go(\'results\')"><span class="icon">\uD83C\uDFC6</span>Resultados</button>';
   h+='<button class="side-btn '+(p==='atletaInfo'?'active':'')+'" onclick="go(\'atletaInfo\')"><span class="icon">\uD83D\uDC64</span>Atletas</button>';
   h+='<div class="side-label">Vuelo Activo</div><div style="display:flex;gap:4px;flex-wrap:wrap">';
