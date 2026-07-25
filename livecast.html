@@ -429,6 +429,7 @@ function startFBSync(){
   fbUnsub=window._fb.onSnapshot(ref,(snap)=>{
     if(!snap.exists())return;
     _lastFbUpdate=Date.now();
+    window._fbSyncRetries=0; // llegó un snapshot OK → reset del backoff de recuperación
     const d=snap.data();
     // Multi-controlador: ignorar SOLO el eco de mi propia escritura (evita parpadeo),
     // pero SÍ aplicar lo que escribieron los demás controladores → todos sincronizados.
@@ -487,6 +488,20 @@ function startFBSync(){
       }
     }catch(e){console.warn('[FB] Sync read error',e)}
     _fbSyncing=false;
+  },(err)=>{
+    // El listener se cortó (error terminal). Re-suscribir con backoff para
+    // recuperar la conexión sin ciclar ante errores permanentes (permisos).
+    console.warn('[FB] Sync listener error',err&&err.code,err&&err.message);
+    _fbSyncing=false;
+    if(fbUnsub){try{fbUnsub()}catch(_){}}
+    fbUnsub=null;
+    window._fbSyncRetries=(window._fbSyncRetries||0)+1;
+    if(window._fbSyncRetries<=8){
+      const delay=Math.min(15000,1500*window._fbSyncRetries);
+      setTimeout(()=>{ if(!PRACTICE_MODE && fbReady && DATA.event && !fbUnsub) startFBSync(); },delay);
+    }else{
+      console.warn('[FB] Sync listener: demasiados reintentos, se detiene la re-suscripción automática');
+    }
   });
   console.log('[FB] Listener started for',id);
 }
