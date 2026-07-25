@@ -680,11 +680,83 @@ function liftQueue(){
   }
   return q;
 }
-function save(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}if(!_fbSyncing)debouncedSync()}
+function save(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}if(!_fbSyncing)debouncedSync()}
 let _syncTimer=null;
 function debouncedSync(){if(_syncTimer)clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>{syncToFB();_syncTimer=null},800)}
-function saveNow(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}syncToFB()}
+function saveNow(){if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}syncToFB()}
 function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);return true}}}catch(e){}return false}
+
+// ═══════════════════════════════════════════════════════════════════
+// DESHACER / REHACER (Ctrl+Z / Ctrl+Y) — pila de estados de la competencia.
+// Captura solo el estado "de tarima" (pesos, decisiones válido/nulo, ronda,
+// lift, tanda, forzado, extra) — NO los cronómetros, para que el tic del reloj
+// no ensucie el historial. Cada acción local que cambia ese estado empuja el
+// estado ANTERIOR a la pila de deshacer y limpia la de rehacer.
+// ═══════════════════════════════════════════════════════════════════
+window._histUndo=[]; window._histRedo=[]; window._histCur=null;
+window._histApplying=false;
+const _HIST_MAX=80;
+function _histSnapshot(){
+  return JSON.stringify({
+    a:DATA.athletes, l:DATA.lift, r:DATA.round, f:DATA.flight,
+    fc:DATA.forcedCurrent||null, ct:DATA.compTimer||null
+  });
+}
+// Se llama tras guardar en una acción local. Empuja el estado previo si cambió.
+function _histCommit(){
+  if(window._histApplying)return;
+  if(typeof _fbSyncing!=='undefined' && _fbSyncing)return; // cambios remotos no entran al historial local
+  const snap=_histSnapshot();
+  if(window._histCur===null){window._histCur=snap;return;} // baseline inicial
+  if(snap===window._histCur)return; // nada cambió (ej. tic de reloj)
+  window._histUndo.push(window._histCur);
+  if(window._histUndo.length>_HIST_MAX)window._histUndo.shift();
+  window._histRedo.length=0; // una acción nueva invalida el "rehacer"
+  window._histCur=snap;
+  _histUpdateButtons();
+}
+function _histApply(snap){
+  const d=JSON.parse(snap);
+  DATA.athletes=d.a; DATA.lift=d.l; DATA.round=d.r; DATA.flight=d.f;
+  DATA.forcedCurrent=d.fc||null; DATA.compTimer=d.ct||null;
+  window._histApplying=true;
+  try{ saveNow(); R(); }
+  finally{ window._histApplying=false; }
+  _histUpdateButtons();
+}
+window.histUndo=function(){
+  if(!window._histUndo.length){showToastLC('Nada para deshacer');return;}
+  window._histRedo.push(window._histCur);
+  const prev=window._histUndo.pop();
+  window._histCur=prev;
+  _histApply(prev);
+  showToastLC('↶ Deshecho ('+window._histUndo.length+' más atrás · '+window._histRedo.length+' adelante)');
+};
+window.histRedo=function(){
+  if(!window._histRedo.length){showToastLC('Nada para rehacer');return;}
+  window._histUndo.push(window._histCur);
+  const next=window._histRedo.pop();
+  window._histCur=next;
+  _histApply(next);
+  showToastLC('↷ Rehecho ('+window._histUndo.length+' atrás · '+window._histRedo.length+' adelante)');
+};
+// Actualiza los botones ↶/↷ sin re-render completo (para que no molesten al foco).
+function _histUpdateButtons(){
+  const bu=document.getElementById('histUndoBtn'), br=document.getElementById('histRedoBtn');
+  if(bu){bu.disabled=!window._histUndo.length; bu.style.opacity=window._histUndo.length?'1':'.4'; bu.title='Deshacer (Ctrl+Z) — '+window._histUndo.length+' paso(s)';}
+  if(br){br.disabled=!window._histRedo.length; br.style.opacity=window._histRedo.length?'1':'.4'; br.title='Rehacer (Ctrl+Y) — '+window._histRedo.length+' paso(s)';}
+}
+// Atajos de teclado: Ctrl/Cmd+Z = deshacer, Ctrl/Cmd+Y o Ctrl/Cmd+Shift+Z = rehacer.
+// No dispara si se está escribiendo en un campo de texto.
+document.addEventListener('keydown',(e)=>{
+  if(typeof isAdmin!=='undefined' && !isAdmin)return;
+  if(TX_MODE)return; // los widgets/pantalla no deshacen
+  const t=e.target;
+  if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+  const k=(e.key||'').toLowerCase();
+  if((e.ctrlKey||e.metaKey)&&k==='z'&&!e.shiftKey){e.preventDefault();window.histUndo();}
+  else if((e.ctrlKey||e.metaKey)&&(k==='y'||(k==='z'&&e.shiftKey))){e.preventDefault();window.histRedo();}
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // MULTI-ESCRITOR: merge por-celda para que varios controladores (ej. la
@@ -5654,7 +5726,10 @@ function renderScreenIntentos(cur,nxt){
     else posTxt=`Si es válido: <b>${newRank}° lugar</b>`;
   }
   const liftName={sq:'SENTADILLA',bp:'PRESS DE BANCA',dl:'PESO MUERTO'}[DATA.lift]||DATA.lift.toUpperCase();
-  const roundLabel=['1er INTENTO','2do INTENTO','3er INTENTO'][DATA.round]||`INTENTO ${DATA.round+1}`;
+  let roundLabel=['1er INTENTO','2do INTENTO','3er INTENTO'][DATA.round]||`INTENTO ${DATA.round+1}`;
+  // Enunciado del intento extra en la proyección: "4º INTENTO" si se concedió en
+  // la 3ª ronda, "INTENTO EXTRA" en la 1ª/2ª. Se suma al intento normal en curso.
+  if(cur.__is4){roundLabel+=((((cur.att[DATA.lift][3]||{}).grantedRound)||0)>=2)?' · 4º INTENTO':' · INTENTO EXTRA';}
   const rackH=DATA.lift==='sq'?cur.rackSQ:DATA.lift==='bp'?cur.rackBP:'';
   const sexLbl=isMale?'HOMBRES':'MUJERES';
   const t=Math.max(0,DATA.timer||0);
@@ -7043,9 +7118,9 @@ function renderCompete(){
   const queue=liftQueue(),cur=queue[0],nxt=queue[1],rk=rankings();
   const rack=cur?(DATA.lift==='sq'?cur.rackSQ:DATA.lift==='bp'?cur.rackBP:''):'';
   const cw=cur?cur.att[DATA.lift][DATA.round].w:0;
-  // Etiqueta del chip cuando el actual es un intento extra: "4º" si se concedió en
-  // la 3ª ronda, "EXTRA" si fue en la 1ª/2ª (retoma su intento por un error ajeno).
-  const cur4lbl=(cur&&cur.__is4)?((((cur.att[DATA.lift][3]||{}).grantedRound)||0)>=2?'4º':'EXTRA'):'';
+  // Enunciado del chip cuando el actual es un intento extra: "4º INTENTO" si se
+  // concedió en la 3ª ronda, "INTENTO EXTRA" si fue en la 1ª/2ª ronda.
+  const cur4lbl=(cur&&cur.__is4)?((((cur.att[DATA.lift][3]||{}).grantedRound)||0)>=2?'4º INTENTO':'INTENTO EXTRA'):'';
   let h='<div class="fade">';
   h+='<div style="display:flex;align-items:center;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
   h+='<span style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-right:2px">JUZGANDO AHORA</span>';
@@ -7054,6 +7129,10 @@ function renderCompete(){
   h+=[0,1,2].map(r=>'<button onclick="DATA.round='+r+';saveNow();R()" class="os" style="padding:5px 10px;border-radius:6px;border:1px solid '+(DATA.round===r?'var(--gold)':'var(--border)')+';background:'+(DATA.round===r?'rgba(212,168,67,.15)':'transparent')+';color:'+(DATA.round===r?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:600;cursor:pointer">INT '+(r+1)+'</button>').join('');
   // Sin botón "INT 4": el 4º intento vive dentro de su ronda (INT 1/2/3) y el
   // atleta reaparece en la cola. No hay una ronda separada para el 4º.
+  // Deshacer / Rehacer (Ctrl+Z / Ctrl+Y) — para volver atrás cualquier acción.
+  h+='<span style="flex:1"></span>';
+  h+='<button id="histUndoBtn" onclick="histUndo()"'+(window._histUndo&&window._histUndo.length?'':' disabled')+' title="Deshacer (Ctrl+Z)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:700;cursor:pointer;opacity:'+(window._histUndo&&window._histUndo.length?'1':'.4')+'">↶ Deshacer</button>';
+  h+='<button id="histRedoBtn" onclick="histRedo()"'+(window._histRedo&&window._histRedo.length?'':' disabled')+' title="Rehacer (Ctrl+Y)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:700;cursor:pointer;opacity:'+(window._histRedo&&window._histRedo.length?'1':'.4')+'">↷ Rehacer</button>';
   h+='</div>';
   // Selector de tanda activa — lo mismo que "Vuelo Activo" del menú hamburguesa, pero acá
   // directo, sin tener que abrir la sidebar. Define qué tanda ve Control TX ahora mismo.
