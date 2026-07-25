@@ -7081,6 +7081,14 @@ window.setCtCellScale=function(v){
   R();
 };
 window.nudgeCtCellScale=function(d){window.setCtCellScale(window._CT_CELL_SCALE+d)};
+// Auto-scroll de "TODAS LAS TANDAS" al atleta en tarima (por defecto ENCENDIDO).
+window._ctAutoScroll=localStorage.getItem('yl_ct_autoscroll')!=='0';
+window.toggleCtAutoScroll=function(){
+  window._ctAutoScroll=!window._ctAutoScroll;
+  try{localStorage.setItem('yl_ct_autoscroll',window._ctAutoScroll?'1':'0')}catch(e){}
+  if(window._ctAutoScroll)window._ctScrollKey=null; // forzar un reacomodo al reactivar
+  R();
+};
 function _attCellCompete(a,l,j,isCurrentCell){
   const sc=window._CT_CELL_SCALE||1;
   const at=a.att[l][j];
@@ -7261,6 +7269,9 @@ function renderCompete(){
   // GOOD/NO LIFT solo aparecen en la celda que coincide con tanda+lift+intento activos arriba.
   const allFlights = [...new Set(DATA.athletes.map(a=>a.flight))].sort();
   h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:4px"><h3 class="os" style="font-size:13px;letter-spacing:1px;color:var(--gold);margin:0">TODAS LAS TANDAS</h3>';
+  // Toggle de auto-scroll al atleta en tarima (estilo LiftingCast).
+  {const on=window._ctAutoScroll!==false;
+   h+='<button onclick="toggleCtAutoScroll()" title="Acomoda la tabla autom\u00e1ticamente al atleta en tarima (como LiftingCast)" style="padding:5px 10px;border-radius:6px;border:1px solid '+(on?'var(--green)':'var(--border)')+';background:'+(on?'rgba(34,197,94,.12)':'transparent')+';color:'+(on?'var(--green)':'var(--muted)')+';font-family:Oswald;font-size:10px;font-weight:700;letter-spacing:.5px;cursor:pointer">\u2913 Auto-scroll '+(on?'ON':'OFF')+'</button>';}
   h+='<div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:var(--muted)">TAMA\u00d1O (casillas, nombres, lote)</span>'
     +'<button onclick="nudgeCtCellScale(-0.1)" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:15px;font-weight:700;cursor:pointer;line-height:1">\u2212</button>'
     +'<span style="font-family:Oswald;font-size:12px;font-weight:700;color:var(--gold);min-width:38px;text-align:center">'+Math.round((window._CT_CELL_SCALE||1)*100)+'%</span>'
@@ -7298,8 +7309,8 @@ function renderCompete(){
       const hiMain = isCurrentAthlete && !curOnExtra;
       const tot = totalOf(a);
       const rsc=window._CT_CELL_SCALE||1;
-      // Fila principal (1º/2º/3º)
-      h+='<tr style="border-bottom:1px solid rgba(30,58,95,.18);'+(hiMain?'background:linear-gradient(90deg,'+LIFT_C[DATA.lift]+'30,'+LIFT_C[DATA.lift]+'10);box-shadow:inset 3px 0 0 '+LIFT_C[DATA.lift]+';':'')+'">';
+      // Fila principal (1º/2º/3º). Marca de auto-scroll cuando es el actual (en intento normal).
+      h+='<tr '+(hiMain?'id="ctCurrentLifter" ':'')+'style="border-bottom:1px solid rgba(30,58,95,.18);'+(hiMain?'background:linear-gradient(90deg,'+LIFT_C[DATA.lift]+'30,'+LIFT_C[DATA.lift]+'10);box-shadow:inset 3px 0 0 '+LIFT_C[DATA.lift]+';':'')+'">';
       h+='<td style="text-align:center;padding:6px 4px"><span class="os" style="color:'+(hiMain?'#fff':'var(--muted)')+';font-weight:700;font-size:'+Math.round(12*rsc)+'px">'+(a.lot||'·')+'</span></td>';
       h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:'+Math.round(12*rsc)+'px;font-weight:'+(hiMain?800:500)+';color:'+(hiMain?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px">'+(hiMain?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">▶</span>':'')+'<span>'+a.name+'</span></div><div style="font-size:'+Math.round(8*rsc)+'px;color:var(--muted)">'+(a.bw>0?a.bw+'kg':'sin BW')+'</div></td>';
       LIFTS.forEach(l=>{
@@ -7315,7 +7326,7 @@ function renderCompete(){
       if(extraLifts.length){
         const gr0=((a.att[extraLifts[0]][3]||{}).grantedRound)||0;
         const exLbl=gr0>=2?'4º INTENTO':'INTENTO EXTRA';
-        h+='<tr style="border-bottom:1px solid rgba(30,58,95,.18);'+(curOnExtra?'background:linear-gradient(90deg,#60a5fa33,#60a5fa12);box-shadow:inset 3px 0 0 #60a5fa;':'background:rgba(96,165,250,.05)')+'">';
+        h+='<tr '+(curOnExtra?'id="ctCurrentLifter" ':'')+'style="border-bottom:1px solid rgba(30,58,95,.18);'+(curOnExtra?'background:linear-gradient(90deg,#60a5fa33,#60a5fa12);box-shadow:inset 3px 0 0 #60a5fa;':'background:rgba(96,165,250,.05)')+'">';
         h+='<td style="text-align:center;padding:6px 4px;color:'+(curOnExtra?'#fff':'#60a5fa')+';font-size:'+Math.round(13*rsc)+'px">↳</td>';
         h+='<td style="padding:6px 8px"><div style="font-size:'+Math.round(11*rsc)+'px;font-weight:'+(curOnExtra?800:500)+';color:'+(curOnExtra?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px;flex-wrap:wrap">'+(curOnExtra?'<span style="background:#60a5fa;color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">▶</span>':'')+'<span>'+a.name+'</span><span style="background:#60a5fa;color:#fff;padding:1px 6px;border-radius:4px;font-size:8px;font-family:Oswald;letter-spacing:1px">'+exLbl+'</span></div></td>';
         LIFTS.forEach(l=>{
@@ -7342,7 +7353,21 @@ function renderCompete(){
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:4px 14px">';
   rk.forEach((a,i)=>{h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 5px;border-bottom:1px solid rgba(30,58,95,.2)"><div style="display:flex;align-items:center;gap:6px"><span class="os" style="color:'+(i<3?'var(--gold)':'var(--muted)')+';font-weight:700;font-size:15px;width:20px">'+(i+1)+'</span><div><div style="font-weight:600;font-size:11px">'+a.name+'</div><div style="font-size:9px;color:var(--muted)">SQ '+bestOf(a,'sq')+' \u00b7 BP '+bestOf(a,'bp')+' \u00b7 DL '+bestOf(a,'dl')+'</div></div></div><div style="text-align:right"><div class="os" style="font-size:16px;font-weight:700;color:var(--gold)">'+a.gl+'</div><div style="font-size:9px;color:var(--muted)">'+a.total+'kg</div></div></div>'});
   h+='</div></div>';
-  h+='</div>';return h;
+  h+='</div>';
+  // ── Auto-scroll estilo LiftingCast ──────────────────────────────────────
+  // Acomoda la tabla al atleta EN TARIMA. Solo se mueve cuando CAMBIA el
+  // levantador/intento (no molesta mientras editás ni si scrolleás a mano), y
+  // respeta el foco en un input. Se puede apagar con el botón "⤓ Auto-scroll".
+  {const _ck=cur?(DATA.flight+'_'+DATA.lift+'_'+DATA.round+'_'+cur.id+'_'+curAtt(cur)):'';
+   if(window._ctAutoScroll!==false && _ck && _ck!==window._ctScrollKey){
+     setTimeout(()=>{
+       const f=document.activeElement;
+       if(f&&(f.tagName==='INPUT'||f.tagName==='SELECT'||f.tagName==='TEXTAREA'))return;
+       const el=document.getElementById('ctCurrentLifter');
+       if(el){window._ctScrollKey=_ck;el.scrollIntoView({behavior:'smooth',block:'center'});}
+     },160);
+   }}
+  return h;
 }
 
 // Orden de divisiones (helper global)
