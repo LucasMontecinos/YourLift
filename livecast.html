@@ -87,6 +87,11 @@ const DEMO_MODE=TX_URL.get('demo')==='1'; // Modo demo para grabar videos promoc
 // se familiaricen con la herramienta sin riesgo de tocar una competencia real.
 // Ver _initPracticeMode() más abajo.
 const PRACTICE_MODE=TX_URL.get('practica')==='1';
+// ?practica=1&espectador=1 → vista de ESPECTADOR de la práctica: lo mismo que ve
+// el público (COMPETENCIA EN VIVO, sin controles de admin), leyendo la data de
+// práctica compartida por localStorage. Para mandarle el link a la gente que
+// quiere ir mirando mientras los jueces practican. Ver _initPracticeMode().
+const PRACTICE_VIEWER=PRACTICE_MODE && TX_URL.get('espectador')==='1';
 // ?remote=1 → al loguearse admin, aterriza directo en el Control Remoto (phone-first).
 // Pensado para mandarle el link al teléfono que controla el overlay de OBS.
 const WANT_REMOTE=TX_URL.get('remote')==='1';
@@ -7131,6 +7136,10 @@ function renderCompete(){
   // atleta reaparece en la cola. No hay una ronda separada para el 4º.
   // Deshacer / Rehacer (Ctrl+Z / Ctrl+Y) — para volver atrás cualquier acción.
   h+='<span style="flex:1"></span>';
+  // En práctica: link de la vista de espectador (lo que ve el público) para compartir.
+  if(PRACTICE_MODE){
+    h+='<button onclick="copyPracticeViewerLink()" title="Copiar el link de la vista de espectador (lo que ve el público) para compartir" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(96,165,250,.5);background:rgba(96,165,250,.08);color:#60a5fa;font-size:12px;font-weight:700;cursor:pointer">👁 Link espectador</button>';
+  }
   h+='<button id="histUndoBtn" onclick="histUndo()"'+(window._histUndo&&window._histUndo.length?'':' disabled')+' title="Deshacer (Ctrl+Z)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:700;cursor:pointer;opacity:'+(window._histUndo&&window._histUndo.length?'1':'.4')+'">↶ Deshacer</button>';
   h+='<button id="histRedoBtn" onclick="histRedo()"'+(window._histRedo&&window._histRedo.length?'':' disabled')+' title="Rehacer (Ctrl+Y)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:700;cursor:pointer;opacity:'+(window._histRedo&&window._histRedo.length?'1':'.4')+'">↷ Rehacer</button>';
   h+='</div>';
@@ -8072,7 +8081,33 @@ window.fillPracticeWeights=function(opts){
   showToastLC('✓ Pesos de práctica cargados en '+DATA.athletes.length+' atletas'+(opts.results?' (con resultados)':''));
   return 'OK — '+DATA.athletes.length+' atletas con pesos';
 };
+// Link de la vista de ESPECTADOR de la práctica (lo que ve el público). Se copia
+// al portapapeles para mandárselo a la gente que quiere ir mirando.
+window.practiceViewerUrl=function(){
+  return location.origin+location.pathname.replace(/[^/]*$/,'')+'livecast.html?practica=1&espectador=1';
+};
+window.copyPracticeViewerLink=function(){
+  const url=practiceViewerUrl();
+  if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>showToastLC('👁 Link de espectador copiado')).catch(()=>showToastLC(url));}
+  else showToastLC(url);
+};
 function _initPracticeMode(){
+  // Vista de ESPECTADOR de la práctica (?practica=1&espectador=1): sin admin, ve
+  // COMPETENCIA EN VIVO como el público, leyendo la data compartida por
+  // localStorage y siguiéndola en vivo (via _initPracticeSync). No genera roster:
+  // usa el que cargó el Control en Vivo.
+  if(PRACTICE_VIEWER){
+    isAdmin=false; window.ADMIN_ROLE=null;
+    if(!DATA.event)DATA.event={id:'practica_jueces',name:PRACTICE_EVENT_NAME,short:'PRÁCTICA (no oficial)',recordsEnabled:false};
+    DATA.phase='liveView';
+    const chip=document.createElement('div');
+    chip.textContent='🎓 PRÁCTICA · ESPECTADOR';
+    chip.title='Vista de espectador de la práctica (atletas ficticios, no oficial).';
+    chip.style.cssText='position:fixed;bottom:8px;right:8px;z-index:99999;background:rgba(212,168,67,.85);color:#0A1628;font-family:Oswald,sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:3px 9px;border-radius:10px;opacity:.75';
+    document.body.appendChild(chip);
+    R();
+    return;
+  }
   isAdmin=true;
   window.ADMIN_ROLE='owner';
   // Estado de la pantalla de tarima guardado (modo/tandas/tamaño) — para que la
@@ -8118,7 +8153,14 @@ function _initPracticeSync(){
   window.addEventListener('storage',(e)=>{
     if(!e)return;
     if(e.key===SAVE_KEY && e.newValue){
-      try{const d=JSON.parse(e.newValue);if(d&&d.phase){d.timerOn=false;Object.assign(DATA,d);}}catch(_){}
+      try{const d=JSON.parse(e.newValue);if(d&&d.phase){
+        d.timerOn=false;
+        // El espectador / pantalla NO debe cambiar de vista por lo que hace el
+        // control (ej. que el admin pase a "manage" o "compete"): conserva su fase.
+        const keepPhase=(PRACTICE_VIEWER||TX_MODE)?DATA.phase:null;
+        Object.assign(DATA,d);
+        if(keepPhase)DATA.phase=keepPhase;
+      }}catch(_){}
     } else if(e.key===PRACTICE_SCREEN_KEY && e.newValue){
       try{const d=JSON.parse(e.newValue);
         window._SCREEN_STATE={mode:d.mode||'jornada',flights:Array.isArray(d.flights)?d.flights:null,nameScale:typeof d.nameScale==='number'?d.nameScale:1};
@@ -8489,6 +8531,12 @@ function renderLiveView(){
     ...curFlightAll.filter(a=>a.bombed),
     ...otherAthletes.sort((a,b)=>(a.flight||'').localeCompare(b.flight||'')||a.lot-b.lot),
   ];
+  // Cuántas casillas por lift: 3, o 4 si algún atleta tuvo un intento extra/4º en
+  // ese lift. Se calcula sobre los atletas REALES (el clon del 4º redirige su
+  // att, así que para la tabla usamos siempre _realAth).
+  const _liveReal=sortedAthletes.map(_realAth);
+  const maxAtts={};['sq','bp','dl'].forEach(l=>{maxAtts[l]=Math.max(3,..._liveReal.map(a=>(a.att[l]||[]).length));});
+  const totalCols=2+(maxAtts.sq+1)+(maxAtts.bp+1)+(maxAtts.dl+1)+1;
 
   // ── Tabla completa de resultados ─────────────────────────────
   h += '<div class="card" style="padding:0;overflow-x:auto">';
@@ -8501,7 +8549,7 @@ function renderLiveView(){
   ['sq','bp','dl'].forEach(l=>{
     const isCur = l===DATA.lift;
     const c = LIFT_C[l];
-    h += '<th colspan="4" style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:12px;letter-spacing:2px;color:'+c+';border-right:1px solid var(--border);background:'+(isCur?c+'18':'transparent')+'">'+LIFT_N[l]+(isCur?' ▶':'')+'</th>';
+    h += '<th colspan="'+(maxAtts[l]+1)+'" style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:12px;letter-spacing:2px;color:'+c+';border-right:1px solid var(--border);background:'+(isCur?c+'18':'transparent')+'">'+LIFT_N[l]+(isCur?' ▶':'')+'</th>';
   });
   h += '<th style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:10px;color:var(--gold)">GLP</th>';
   h += '</tr>';
@@ -8513,9 +8561,10 @@ function renderLiveView(){
   ['sq','bp','dl'].forEach(l=>{
     const isCur = l===DATA.lift;
     const bg = isCur ? LIFT_C[l]+'12' : 'transparent';
-    [1,2,3].forEach(r=>{
-      h += '<th style="padding:5px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:56px;background:'+bg+'">INT '+r+'</th>';
-    });
+    for(let r=1;r<=maxAtts[l];r++){
+      const is4=r===4;
+      h += '<th style="padding:5px 2px;text-align:center;color:'+(is4?'#60a5fa':LIFT_C[l])+';font-size:9px;width:56px;background:'+bg+'"'+(is4?' title="Intento extra / 4º"':'')+'>'+(is4?'EXTRA':'INT '+r)+'</th>';
+    }
     const subLabel = l==='dl'?'TOTAL':'SUB-TOTAL';
     h += '<th style="padding:5px 3px;text-align:center;color:var(--gold);font-size:8px;width:54px;border-right:1px solid var(--border)">'+subLabel+'</th>';
   });
@@ -8528,7 +8577,7 @@ function renderLiveView(){
     if(a.flight !== lastFlight){
       lastFlight = a.flight;
       const flC = FL_C[a.flight]||'#666';
-      h += '<tr style="background:rgba(30,58,95,.5)"><td colspan="16" style="padding:5px 12px">';
+      h += '<tr style="background:rgba(30,58,95,.5)"><td colspan="'+totalCols+'" style="padding:5px 12px">';
       h += '<span style="background:'+flC+';color:#fff;padding:2px 10px;border-radius:4px;font-family:Oswald;font-size:10px;letter-spacing:2px">TANDA '+(a.flight||'—')+'</span>';
       h += '</td></tr>';
     }
@@ -8565,21 +8614,26 @@ function renderLiveView(){
     h += '<div style="font-size:9px;color:var(--muted);margin-top:1px">'+a.club+' · '+(a.bw||'—')+'kg · '+a.div+' · '+a.cat+'</div>';
     h += '</td>';
 
+    // Atleta REAL detrás de la entrada (el clon del 4º redirige su att) + índice
+    // del intento actual (3 si está en su intento extra, si no la ronda activa).
+    const ra=_realAth(a), ci=curAtt(a);
     // SQ / BP / DL con subtotales
     ['sq','bp','dl'].forEach(l=>{
       const isCurLift = l===DATA.lift;
       const bg = isCurLift ? LIFT_C[l]+'0b' : 'transparent';
-      // 3 intentos
-      a.att[l].forEach((at,j)=>{
-        const isCurAtt = isCurLift && isOnPlatform && j===DATA.round;
+      // intentos (3, o 4 si hubo extra en la tabla)
+      for(let j=0;j<maxAtts[l];j++){
+        const at=ra.att[l][j];
+        if(!at){ h += '<td style="padding:2px;background:'+bg+'"><div class="att att-e" style="font-size:11px;padding:6px 3px;min-width:46px;text-align:center;color:var(--border)">·</div></td>'; continue; }
+        const isCurAtt = isCurLift && isOnPlatform && j===ci;
         const cls = at.r==='g'?'att-g':at.r==='n'?'att-n':at.w>0?'att-p':'att-e';
         h += '<td style="padding:2px;background:'+bg+'">';
         h += '<div class="'+cls+' att" style="font-size:'+(isCurAtt?15:11)+'px;font-weight:700;padding:'+(isCurAtt?'10px 3px':'6px 3px')+';cursor:default;'+(isCurAtt?'box-shadow:inset 0 0 0 2px '+LIFT_C[l]+';':'')+'min-width:46px;text-align:center">'+(at.w||'—')+'</div>';
         h += '</td>';
-      });
+      }
       // Subtotal / Total
       let sub = null;
-      const bSQ=bestOf(a,'sq')||0, bBP=bestOf(a,'bp')||0, bDL=bestOf(a,'dl')||0;
+      const bSQ=bestOf(ra,'sq')||0, bBP=bestOf(ra,'bp')||0, bDL=bestOf(ra,'dl')||0;
       if(l==='sq')      sub = bSQ||null;
       else if(l==='bp') sub = (bSQ||bBP) ? (bSQ+bBP)||null : null;
       else              sub = (bSQ&&bBP&&bDL) ? bSQ+bBP+bDL : null;
@@ -8590,8 +8644,8 @@ function renderLiveView(){
     });
 
     // GLP
-    const tot = totalOf(a);
-    const glp = tot ? calcGL(tot,a.bw,a.sex,a.mod) : null;
+    const tot = totalOf(ra);
+    const glp = tot ? calcGL(tot,ra.bw,ra.sex,ra.mod) : null;
     h += '<td style="text-align:center;padding:3px 5px">';
     h += '<span style="font-family:Oswald;font-size:'+(glp?12:9)+'px;font-weight:700;color:'+(glp?'var(--gold)':'rgba(100,120,150,.5)')+';">'+(glp||'—')+'</span>';
     h += '</td>';
