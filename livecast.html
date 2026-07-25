@@ -379,16 +379,30 @@ function txDocId(base){return TARIMA?`${base}_T${TARIMA}`:base;}
 // porque ambos usan fbDocId() (basado en el nombre del evento). Si no hay evento, cae
 // al id viejo (compatibilidad).
 function evStateDocId(base){const ev=fbDocId();return ev?(base+'__'+ev):txDocId(base);}
+let _syncInFlight=false;
 async function syncToFB(){
   if(!fbReady||!isAdmin||_fbSyncing)return;
   if(!window.IS_CONTROLLER)return; // Solo el controller escribe — evita conflictos multi-admin
+  if(_syncInFlight)return; // ya hay una escritura en curso — evita solapar (menos contención)
   const id=fbDocId();if(!id)return;
   _fbLastWrite=Date.now();
-  const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null,ts:Date.now(),writer:window._WRITER_ID};
+  // Reintenta con backoff ante fallos transitorios (ej. contención con varios
+  // controladores o cortes de red). Reconstruye el payload en cada intento para no
+  // escribir datos viejos. Nunca lanza: un fallo de escritura no debe caer la app.
+  _syncInFlight=true;
   try{
     const ref=window._fb.doc(fbDB,'livecast_sync',id);
-    await window._fb.setDoc(ref,payload);
-  }catch(e){console.warn('[FB] Sync write error',e)}
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null,ts:Date.now(),writer:window._WRITER_ID};
+        await window._fb.setDoc(ref,payload);
+        return;
+      }catch(e){
+        if(attempt===2){console.warn('[FB] Sync write error (tras reintentos)',e);return;}
+        await new Promise(r=>setTimeout(r,250*(attempt+1)));
+      }
+    }
+  }finally{ _syncInFlight=false; }
 }
 // Sync liviano solo del timer — corre cada 1s mientras el timer está activo,
 // así los widgets de OBS ven el countdown segundo a segundo sin reescribir
@@ -396,6 +410,9 @@ async function syncToFB(){
 async function syncTimerOnlyToFB(){
   if(!fbReady||!isAdmin)return;
   if(!window.IS_CONTROLLER)return; // Solo el controller escribe
+  if(!window._iOwnTimer)return; // Solo QUIEN inició el reloj lo escribe cada segundo.
+  // Los demás controladores lo muestran localmente (startTimer(false)) sin escribir
+  // → evita 5 escrituras/seg sobre el mismo doc (contención Firestore).
   const id=fbDocId();if(!id)return;
   _fbLastWrite=Date.now();
   try{
@@ -455,7 +472,7 @@ function startFBSync(){
         DATA.compTimer=typeof d.compTimer!=='undefined'?d.compTimer:null;
       }
       DATA.lotsGenerated=d.lotsGenerated||false;
-      if(typeof d.timer==='number'){DATA.timer=d.timer;DATA.timerOn=d.timerOn||false;if(DATA.timerOn&&!mainTI)startTimer();if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}}
+      if(typeof d.timer==='number'){DATA.timer=d.timer;DATA.timerOn=d.timerOn||false;if(DATA.timerOn&&!mainTI)startTimer(false);if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}}
       const newSig = JSON.stringify(DATA.athletes)+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight;
       const structuralChange = prevSig !== newSig;
       // Solo re-renderizar si hubo cambio estructural (no solo timer) — evita flicker en vista pública
@@ -2079,7 +2096,7 @@ function showChangeExpiredAlert(name,lift,rnd){
 }
 
 let mainTI=null;
-function startTimer(){DATA.timerOn=true;DATA.timerStartedAt=Date.now()-((60-(DATA.timer||60))*1000);syncToFB();mainTI=setInterval(()=>{DATA.timer=Math.max(0,60-Math.floor((Date.now()-DATA.timerStartedAt)/1000));const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}const txp=document.getElementById('txTimerPanel');if(txp){txp.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');txp.style.color=DATA.timer<=10?'#ef4444':DATA.timer<=30?'#f59e0b':'#ffffff'}const pit=document.getElementById('pantIntentosTimer');if(pit){pit.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');pit.style.color=DATA.timerOn&&DATA.timer<=10?'#ef4444':DATA.timerOn&&DATA.timer<=30?'#f59e0b':'#22c55e'}syncTimerOnlyToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}},1000)}
+function startTimer(isLocal){window._iOwnTimer=(isLocal!==false);DATA.timerOn=true;DATA.timerStartedAt=Date.now()-((60-(DATA.timer||60))*1000);if(window._iOwnTimer)syncToFB();mainTI=setInterval(()=>{DATA.timer=Math.max(0,60-Math.floor((Date.now()-DATA.timerStartedAt)/1000));const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}const txp=document.getElementById('txTimerPanel');if(txp){txp.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');txp.style.color=DATA.timer<=10?'#ef4444':DATA.timer<=30?'#f59e0b':'#ffffff'}const pit=document.getElementById('pantIntentosTimer');if(pit){pit.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');pit.style.color=DATA.timerOn&&DATA.timer<=10?'#ef4444':DATA.timerOn&&DATA.timer<=30?'#f59e0b':'#22c55e'}if(window._iOwnTimer)syncTimerOnlyToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;if(window._iOwnTimer)syncToFB()}},1000)}
 function pauseTimer(){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}
 // Toggle manual del reloj de 1:00 (para iniciarlo cuando se va a tirar un intento
 // extra, o pausarlo/reanudarlo cuando haga falta). Re-renderiza para actualizar el botón.
@@ -5827,7 +5844,35 @@ function renderScreenIntentos(cur,nxt){
   </div>`;
 }
 
-function R(){if(TX_MODE){renderTxWidget();return}const el=document.getElementById('R');if(DATA.phase==='scoreboard'){el.innerHTML=renderSB();return}if(DATA.phase==='transmision'){el.innerHTML=renderTransmision();setTimeout(initTxWidgets,0);return}if(DATA.phase==='setup'){el.innerHTML=renderSetup();return}el.innerHTML=renderShell()}
+function R(){
+  // Paracaídas de render: un error al dibujar NUNCA debe dejar la pantalla en
+  // blanco/congelada (crítico con mucha gente operando en vivo). Para los widgets
+  // de OBS/pantalla, si falla se conserva lo anterior. Para el admin, se muestra un
+  // panel de recuperación (los datos quedan intactos: reintentar / deshacer / recargar).
+  if(TX_MODE){ try{renderTxWidget();}catch(e){console.error('[TX] render error',e);} return; }
+  try{
+    const el=document.getElementById('R');if(!el)return;
+    if(DATA.phase==='scoreboard'){el.innerHTML=renderSB();return}
+    if(DATA.phase==='transmision'){el.innerHTML=renderTransmision();setTimeout(initTxWidgets,0);return}
+    if(DATA.phase==='setup'){el.innerHTML=renderSetup();return}
+    el.innerHTML=renderShell();
+  }catch(e){ console.error('[R] render error',e); _renderRecovery(e); }
+}
+function _renderRecovery(e){
+  try{
+    const el=document.getElementById('R');if(!el)return;
+    const msg=(e&&e.message)?String(e.message):'error';
+    el.innerHTML='<div style="max-width:560px;margin:60px auto;padding:24px;border:2px solid var(--red);border-radius:14px;background:rgba(239,68,68,.06);text-align:center;font-family:Inter,sans-serif">'
+      +'<div style="font-family:Oswald;font-size:20px;font-weight:700;color:var(--red);letter-spacing:1px">⚠ ERROR AL DIBUJAR LA PANTALLA</div>'
+      +'<div style="font-size:12px;color:var(--muted);margin:10px 0 16px;line-height:1.5">La aplicación sigue funcionando y los datos están a salvo. Reintentá, deshacé el último cambio, o recordá.</div>'
+      +'<div style="font-size:10px;color:var(--muted);font-family:monospace;background:rgba(0,0,0,.25);padding:8px;border-radius:6px;margin-bottom:16px;word-break:break-word">'+msg.replace(/[<>&]/g,'')+'</div>'
+      +'<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
+      +'<button onclick="R()" style="padding:9px 18px;border-radius:8px;border:1px solid var(--gold);background:rgba(212,168,67,.12);color:var(--gold);font-family:Oswald;font-weight:700;cursor:pointer">↻ Reintentar</button>'
+      +((window._histUndo&&window._histUndo.length)?'<button onclick="histUndo()" style="padding:9px 18px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;font-weight:700;cursor:pointer">↶ Deshacer</button>':'')
+      +'<button onclick="location.reload()" style="padding:9px 18px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;font-weight:700;cursor:pointer">⟳ Recargar</button>'
+      +'</div></div>';
+  }catch(_){}
+}
 
 function renderSetup(){
   // Check for backup
