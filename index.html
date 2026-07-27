@@ -750,8 +750,14 @@ function _nsudaCatKey(c){const plus=(c||'').includes('+');return (parseFloat(Str
 function renderNominaSuda(){
   const j=window.NOMSUDA;
   const fl=ST.nsudaF||'', q=(ST.nsudaS||'').toLowerCase();
+  const fMod=ST.nsudaMod||'', fPais=ST.nsudaPais||'', fCat=ST.nsudaCat||'', fSex=ST.nsudaSex||'', fDiv=ST.nsudaDiv||'';
   let rows=j.atletas.slice();
   if(fl)rows=rows.filter(a=>a.lista===fl);
+  if(fMod)rows=rows.filter(a=>a.mod===fMod);
+  if(fPais)rows=rows.filter(a=>a.pais===fPais);
+  if(fCat)rows=rows.filter(a=>a.cat===fCat);
+  if(fSex)rows=rows.filter(a=>a.sexo===fSex);
+  if(fDiv)rows=rows.filter(a=>a.div===fDiv);
   if(q)rows=rows.filter(a=>a.n.toLowerCase().includes(q)||(a.pais||'').toLowerCase().includes(q)||(a.uni||'').toLowerCase().includes(q));
   rows.sort((a,b)=>{
     if(a.sexo!==b.sexo)return a.sexo==='F'?-1:1;
@@ -763,14 +769,34 @@ function renderNominaSuda(){
   });
   let h=`<div class="cd2" style="margin-bottom:24px;border:2px solid rgba(212,168,67,.45)">`;
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px"><div><h2 style="font-family:Oswald;font-size:clamp(16px,3.5vw,20px);letter-spacing:1px;text-transform:uppercase">🌎 ${j.eventoCorto} <span style="font-size:10px;background:rgba(212,168,67,.2);color:var(--gold);padding:2px 8px;border-radius:10px;vertical-align:middle;border:1px solid rgba(212,168,67,.4)">NÓMINA OFICIAL</span>${j.publicada?'':' <span style="font-size:10px;background:rgba(239,68,68,.15);color:#ef4444;padding:2px 8px;border-radius:10px;vertical-align:middle;border:1px solid rgba(239,68,68,.4)">VISTA PREVIA — NO PUBLICADA</span>'}</h2><p style="font-size:12px;color:var(--muted);margin-top:2px">${j.evento}</p><p style="font-size:11px;color:var(--muted);margin-top:2px">${j.lugar} · ${j.fechas} · ${j.fuente}</p></div><span class="bg" style="background:var(--accent);color:#fff;font-size:14px;padding:6px 14px">${j.atletas.length} inscripciones</span></div>`;
-  // Filtros por lista (12) + todas
-  h+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin:12px 0">`;
-  const chip=(v,l)=>`<button onclick="nsudaF('${v.replace(/'/g,"\\'")}')" style="padding:6px 12px;border-radius:16px;border:1px solid ${fl===v?'var(--gold)':'var(--border)'};background:${fl===v?'rgba(212,168,67,.15)':'transparent'};color:${fl===v?'var(--gold)':'var(--muted)'};font-family:Oswald;font-size:11px;letter-spacing:.5px;cursor:pointer">${l}</button>`;
-  h+=chip('','Todas');
-  j.listas.forEach(l=>{const n=j.atletas.filter(a=>a.lista===l).length;h+=chip(l,l+' ('+n+')')});
+  // ── PESTAÑAS por modalidad (Clásico / Equipado / Universitario / Only Bench / Olimpiadas Especiales) ──
+  // Se combinan con el filtro de género de abajo (así "Clásico + Mujeres" = la lista femenina clásica).
+  const mods=[...new Set(j.atletas.map(a=>a.mod))];
+  const MODORD=['Clásico','Equipado','Universitario','Only Bench Clásico','Olimpiadas Especiales'];
+  mods.sort((a,b)=>(MODORD.indexOf(a)+1||99)-(MODORD.indexOf(b)+1||99));
+  h+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 10px">`;
+  const tab=(v,l,n)=>`<button onclick="nsudaSet('nsudaMod','${v.replace(/'/g,"\\'")}')" style="padding:8px 15px;border-radius:18px;border:1px solid ${fMod===v?'var(--gold)':'var(--border)'};background:${fMod===v?'rgba(212,168,67,.18)':'transparent'};color:${fMod===v?'var(--gold)':'var(--muted)'};font-family:Oswald;font-size:12px;font-weight:${fMod===v?700:400};letter-spacing:.5px;cursor:pointer">${l}${n!=null?` <span style="opacity:.65">(${n})</span>`:''}</button>`;
+  h+=tab('','Todas las modalidades',j.atletas.length);
+  mods.forEach(m=>h+=tab(m,m,j.atletas.filter(a=>a.mod===m).length));
+  h+=`</div>`;
+  // ── Filtros: género · país · categoría · división de edad ──
+  const uniq=(k,cmp)=>[...new Set(j.atletas.map(a=>a[k]).filter(Boolean))].sort(cmp);
+  const sel=(key,label,val,opts,fmt)=>{
+    let s=`<label style="display:flex;flex-direction:column;gap:3px;font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:.5px;text-transform:uppercase">${label}`;
+    s+=`<select onchange="nsudaSet('${key}',this.value)" style="padding:7px 10px;border-radius:8px;border:1px solid ${val?'var(--gold)':'var(--border)'};background:var(--bg2,#0d1f38);color:${val?'var(--gold)':'var(--text)'};font-family:Inter,sans-serif;font-size:12px;min-width:130px;cursor:pointer">`;
+    s+=`<option value=""${val?'':' selected'}>Todas</option>`;
+    opts.forEach(o=>{s+=`<option value="${String(o).replace(/"/g,'&quot;')}"${val===String(o)?' selected':''}>${fmt?fmt(o):o}</option>`});
+    return s+`</select></label>`;
+  };
+  h+=`<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;align-items:flex-end">`;
+  h+=sel('nsudaSex','Género',fSex,['F','M'],v=>v==='F'?'Mujeres':'Hombres');
+  h+=sel('nsudaPais','País',fPais,uniq('pais',(a,b)=>a.localeCompare(b)));
+  h+=sel('nsudaCat','Categoría',fCat,uniq('cat',(a,b)=>_nsudaCatKey(a)-_nsudaCatKey(b)),v=>v+' kg');
+  h+=sel('nsudaDiv','División de edad',fDiv,uniq('div',(a,b)=>(_NSUDA_DIVORD[a]??9)-(_NSUDA_DIVORD[b]??9)));
+  if(fMod||fPais||fCat||fSex||fDiv||fl)h+=`<button onclick="nsudaClear()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--accent);background:rgba(196,30,58,.12);color:var(--accent);font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">✕ Limpiar filtros</button>`;
   h+=`</div>`;
   h+=`<div class="fl" style="margin-bottom:10px"><input type="text" placeholder="Buscar atleta, país o universidad..." value="${ST.nsudaS||''}" oninput="nsudaS(this.value)"></div>`;
-  h+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px">${rows.length} inscripción${rows.length!==1?'es':''}${fl?' · '+fl:''} · <span style="color:var(--gold)">R = Reserva</span> · Los atletas chilenos tienen link a su perfil YourLift</div>`;
+  h+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px">${rows.length} inscripción${rows.length!==1?'es':''}${fMod?' · '+fMod:''}${fSex?' · '+(fSex==='F'?'Mujeres':'Hombres'):''}${fPais?' · '+fPais:''}${fCat?' · '+fCat+'kg':''}${fDiv?' · '+fDiv:''} · <span style="color:var(--gold)">R = Reserva</span> · Los atletas chilenos tienen link a su perfil YourLift</div>`;
   h+=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:760px">`;
   h+=`<tr style="background:var(--blue)">`;
   ['#','Atleta','País','Categoría','División','Modalidad','SQ','BP','DL','Total'].forEach((t,i)=>{
@@ -798,6 +824,8 @@ function renderNominaSuda(){
 }
 let _nsudaTimer=null;
 function nsudaF(v){ST.nsudaF=v;render()}
+function nsudaSet(k,v){ST[k]=v;render()}
+function nsudaClear(){['nsudaF','nsudaMod','nsudaPais','nsudaCat','nsudaSex','nsudaDiv'].forEach(k=>ST[k]='');render()}
 function nsudaS(v){ST.nsudaS=v;if(_nsudaTimer)clearTimeout(_nsudaTimer);_nsudaTimer=setTimeout(()=>{render();setTimeout(()=>{document.querySelectorAll('.fl input').forEach(i=>{if(i.value===v){i.focus();i.setSelectionRange(v.length,v.length)}})},10)},300)}
 function nom(){
   let h='';
