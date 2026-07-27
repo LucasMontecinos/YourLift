@@ -992,7 +992,10 @@ function pickEvent(i){
 let judgeMode=false,judgeLights={izq:null,central:null,der:null},judgeUnsub=null,_lastTimerSignal=0;
 let RECORDS=null;
 
-function _normCat(s){const m=(s||'').match(/(\d+\+?)/);return m?m[1]:s;}
+// Normaliza la categoría a "N" o "N+" — acepta el signo antes O después del
+// número ('+120 kg', '120+ kg', '-120 kg' → '120+', '120+', '120'). Antes el +
+// adelante se perdía y los superpesados salían como si fueran -120.
+function _normCat(s){const t=String(s||'');const m=t.match(/([+]?)(\d+\.?\d*)(\+?)/);if(!m)return s;const plus=(m[1]==='+'||m[3]==='+');return m[2]+(plus?'+':'');}
 function _normDiv(d){
   const v=(d||'').toLowerCase().replace(/[\s\-_]/g,'');
   if(v.startsWith('sub'))return 'Sub-Junior';
@@ -3668,6 +3671,9 @@ function txPB(full,lift){
 }
 function txDivShort(div){return(div||'').replace('Sub Junior','SJR').replace('Sub-Junior','SJR').replace('Subjunior','SJR').replace('Junior','JR').replace('Open','OPN').replace('Master I','M1').replace('Master II','M2').replace('Master III','M3').replace('Master IV','M4')}
 function txCatNum(cat){const m=(cat||'').match(/([+\-]?\d+\.?\d*)/);return m?m[1]:''}
+// Etiqueta de categoría con el signo CORRECTO: '-120kg' para el límite, '+120kg'
+// para superpesados (acepta '+120 kg', '120+ kg' o '-120 kg' como entrada).
+function txCatLabel(cat){const n=_normCat(cat);if(!n||!/\d/.test(n))return '';return n.endsWith('+')?('+'+n.slice(0,-1)+'kg'):('-'+n+'kg');}
 
 let _txLastLifter=null;
 function renderTxWidget(){
@@ -3922,7 +3928,7 @@ function _renderTxCerScoreboardBL(cur,opts){
   const firstName=parts.length>2?parts.slice(0,-2).join(' '):parts.slice(0,-1).join(' ');
   const lastName=(parts.length>2?parts.slice(-2).join(' '):parts[parts.length-1]).toUpperCase();
   const divS=txDivShort(cur.div);
-  const catLabel=(cur.cat?'-'+txCatNum(cur.cat)+'kg ':'')+divS;
+  const catLabel=(cur.cat?txCatLabel(cur.cat)+' ':'')+divS;
   const cw=cur.att[DATA.lift][DATA.round].w;
   // Forecast: posición proyectada en sex+cat+div (reemplaza el timer en la barra superior)
   const _rk=catRankBySub(cur);
@@ -4695,7 +4701,7 @@ function renderTxProfile(cur){
   const firstName=parts.slice(0,-2).join(' ')||parts[0]||'';
   const lastName=parts.slice(-2).join(' ').toUpperCase();
   const club=cur.club||full?.club||'';
-  const cat=txCatNum(cur.cat)+'kg';
+  const cat=txCatLabel(cur.cat)||(txCatNum(cur.cat)+'kg');
   const divS=txDivShort(cur.div);
   const age=txAge(full?.fechaNac);
   const years=txYearsCompeting(full);
@@ -4789,7 +4795,7 @@ function renderTxScoreboard(cur,lifterChanged){
   const firstName=parts.length>2?parts.slice(0,-2).join(' '):parts.slice(0,-1).join(' ');
   const lastName=(parts.length>2?parts.slice(-2).join(' '):parts[parts.length-1]).toUpperCase();
   const divS=txDivShort(cur.div);
-  const catLabel=(cur.cat?'-'+txCatNum(cur.cat)+'kg ':'')+divS;
+  const catLabel=(cur.cat?txCatLabel(cur.cat)+' ':'')+divS;
   const rk=catRankBySub(ra);
   const st=subTotal(ra,DATA.lift);
   const cw=(ra.att[DATA.lift][ci]&&ra.att[DATA.lift][ci].w)||0;

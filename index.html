@@ -396,6 +396,16 @@ async function initFB(){
       if(cr){if(cr.classic||cr.equipped){R=cr;if(ST.v==='records')render();}}
       else{const rs=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'records','data'));if(rs.exists()){const r=rs.data();if(r&&(r.classic||r.equipped)){R=r;_fsSetCache('records',r);if(ST.v==='records')render();}}}
     }catch(e){console.warn('[records]',e);}
+    // ── Fotos de la nómina Sudamericano (para las fichas): caché 1h ──
+    try{
+      const cf=_fsCache('nsudafotos',60*60*1000);
+      if(cf){window.NSUDA_FOTOS=cf;if(ST.v==='nominas')render();}
+      else{
+        const fs=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'nomina_suda_fotos'));
+        const map={};fs.docs.forEach(d=>{const x=d.data();if(x.foto_url)map[d.id]=x.foto_url;});
+        window.NSUDA_FOTOS=map;_fsSetCache('nsudafotos',map);if(ST.v==='nominas')render();
+      }
+    }catch(e){console.warn('[nsudafotos]',e);}
     // ── Cert config: getDocs + caché 1h ──
     try{
       const cc=_fsCache('certcfg',60*60*1000);
@@ -746,6 +756,12 @@ function _nsudaVisible(){
   try{return new URLSearchParams(location.search).get('nominasuda')==='1'}catch(e){return false}
 }
 const _NSUDA_DIVORD={'Sub-Junior':0,'Junior':1,'Universitario':2,'Open':3,'Master I':4,'Master II':5,'Master III':6,'Master IV':7};
+// Slug del atleta — el MISMO formato que usa el cargador de fotos del admin
+// (nomina_suda_fotos/{slug}), así la ficha encuentra su foto.
+function _nsudaSlug(s){
+  return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,'-').slice(0,80);
+}
 function _nsudaCatKey(c){const plus=(c||'').includes('+');return (parseFloat(String(c).replace(/[^0-9.]/g,''))||999)+(plus?0.5:0)}
 function renderNominaSuda(){
   const j=window.NOMSUDA;
@@ -810,8 +826,10 @@ function renderNominaSuda(){
       ?`<a href="atleta.html?codigo=${encodeURIComponent(a.cod)}" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(212,168,67,.5);font-weight:600" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${a.n}</a>`
       :`<span>${a.n}</span>`;
     h+=`<tr style="background:${bg};border-bottom:1px solid rgba(30,58,95,.2)">`;
+    const slug=_nsudaSlug(a.n);
+    const foto=(window.NSUDA_FOTOS||{})[slug]||'';
     h+=`<td style="padding:7px 6px;text-align:center;color:var(--muted)">${i+1}</td>`;
-    h+=`<td style="padding:7px 6px">${nameHtml}${a.res?' <span title="Reserva" style="background:rgba(212,168,67,.15);color:var(--gold);border:1px solid rgba(212,168,67,.4);padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700">R</span>':''}${a.uni?`<div style="font-size:10px;color:var(--muted)">${a.uni}</div>`:''}</td>`;
+    h+=`<td style="padding:7px 6px"><div style="display:flex;align-items:center;gap:8px"><div onclick="nsudaFicha('${slug}')" title="Ver ficha" style="width:30px;height:30px;border-radius:50%;overflow:hidden;flex-shrink:0;background:rgba(30,58,95,.5);border:1px solid ${foto?'rgba(212,168,67,.5)':'var(--border)'};cursor:pointer;display:flex;align-items:center;justify-content:center">${foto?`<img src="${foto}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:11px;color:var(--muted);font-family:Oswald">${a.n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</span>`}</div><div>${a.cod?nameHtml:`<span onclick="nsudaFicha('${slug}')" style="cursor:pointer">${nameHtml}</span>`}${a.res?' <span title="Reserva" style="background:rgba(212,168,67,.15);color:var(--gold);border:1px solid rgba(212,168,67,.4);padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700">R</span>':''}${a.uni?`<div style="font-size:10px;color:var(--muted)">${a.uni}</div>`:''}</div></div></td>`;
     h+=`<td style="padding:7px 6px;font-size:11px"><span style="color:${sexC};font-weight:700;margin-right:5px">${a.sexo}</span>${a.pais}</td>`;
     h+=`<td style="padding:7px 6px;text-align:center"><span style="background:rgba(212,168,67,.12);color:var(--gold);padding:2px 8px;border-radius:10px;font-weight:600;font-size:11px">${a.cat}</span></td>`;
     h+=`<td style="padding:7px 6px;text-align:center;font-size:11px">${a.div}</td>`;
@@ -821,6 +839,50 @@ function renderNominaSuda(){
   });
   h+=`</table></div></div>`;
   return h;
+}
+// ── FICHA del atleta de la nómina (modal). No es un perfil: junta las
+// inscripciones del atleta (puede estar en varias listas), su foto si fue
+// subida, país, año y marcas nominadas. Cierra con ✕, click afuera o Esc.
+function nsudaFicha(slug){
+  const j=window.NOMSUDA; if(!j)return;
+  const rows=j.atletas.filter(a=>_nsudaSlug(a.n)===slug);
+  if(!rows.length)return;
+  const a=rows[0];
+  const foto=(window.NSUDA_FOTOS||{})[slug]||'';
+  const ex=document.getElementById('nsudaFichaModal'); if(ex)ex.remove();
+  const m=document.createElement('div'); m.id='nsudaFichaModal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(4,10,20,.82);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px;backdrop-filter:blur(3px)';
+  const ini=a.n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  let h=`<div style="background:linear-gradient(160deg,#0D1F38,#0a1628);border:2px solid rgba(212,168,67,.5);border-radius:16px;width:min(420px,94vw);max-height:90vh;overflow-y:auto;position:relative">`;
+  h+=`<button onclick="document.getElementById('nsudaFichaModal').remove()" style="position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:rgba(10,22,40,.8);color:var(--muted);font-size:15px;cursor:pointer;z-index:2">✕</button>`;
+  h+=`<div style="display:flex;flex-direction:column;align-items:center;padding:26px 22px 10px">`;
+  h+=`<div style="width:110px;height:110px;border-radius:50%;overflow:hidden;border:3px solid var(--gold);background:rgba(30,58,95,.5);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(0,0,0,.5)">${foto?`<img src="${foto}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-family:Oswald;font-size:34px;color:var(--muted)">${ini}</span>`}</div>`;
+  h+=`<div style="font-family:Oswald;font-size:19px;font-weight:700;letter-spacing:.5px;margin-top:12px;text-align:center">${a.n}</div>`;
+  h+=`<div style="font-size:12px;color:var(--muted);margin-top:3px">${a.pais}${a.born?' · '+a.born:''}${a.uni?'<div style="margin-top:2px">'+a.uni+'</div>':''}</div>`;
+  if(a.cod)h+=`<a href="atleta.html?codigo=${encodeURIComponent(a.cod)}" style="margin-top:8px;font-size:11px;color:var(--gold);border:1px solid rgba(212,168,67,.45);padding:4px 12px;border-radius:12px;text-decoration:none;font-family:Oswald;letter-spacing:.5px">VER PERFIL YOURLIFT →</a>`;
+  h+=`</div>`;
+  h+=`<div style="padding:8px 22px 24px">`;
+  rows.forEach(r=>{
+    h+=`<div style="background:rgba(10,22,40,.55);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:10px">`;
+    h+=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">`;
+    h+=`<span style="font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--gold)">${r.lista}</span>`;
+    h+=`<span style="background:rgba(212,168,67,.12);color:var(--gold);padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600">${r.cat} kg</span>`;
+    h+=`<span style="font-size:11px;color:var(--muted)">${r.div}</span>`;
+    if(r.res)h+=`<span title="Reserva" style="background:rgba(212,168,67,.15);color:var(--gold);border:1px solid rgba(212,168,67,.4);padding:0 6px;border-radius:8px;font-size:10px;font-weight:700">R</span>`;
+    h+=`</div>`;
+    const isBench=/Only Bench/i.test(r.lista);
+    const cells=isBench?[['BP',r.bp]]:[['SQ',r.sq],['BP',r.bp],['DL',r.dl],['Total',r.total]];
+    h+=`<div style="display:grid;grid-template-columns:repeat(${cells.length},1fr);gap:6px;text-align:center">`;
+    cells.forEach(([k,v])=>{h+=`<div style="background:rgba(30,58,95,.35);border-radius:8px;padding:7px 2px"><div style="font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:1px">${k}</div><div style="font-family:Oswald;font-size:16px;font-weight:700;color:${k==='Total'?'var(--gold)':'var(--text)'}">${v!=null?v:'—'}</div></div>`});
+    h+=`</div></div>`;
+  });
+  h+=`<div style="font-size:10px;color:var(--muted);text-align:center;margin-top:12px">Marcas nominadas · Sudamericano 2026 · Santiago de Chile</div>`;
+  h+=`</div></div>`;
+  m.innerHTML=h;
+  m.onclick=e=>{if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+  const esc=e=>{if(e.key==='Escape'){m.remove();document.removeEventListener('keydown',esc);}};
+  document.addEventListener('keydown',esc);
 }
 let _nsudaTimer=null;
 function nsudaF(v){ST.nsudaF=v;render()}
