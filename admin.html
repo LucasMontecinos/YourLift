@@ -1558,6 +1558,7 @@ function render(){
       <button class="side-btn ${ST.view==='entrenadoresDB'?'active':''}" onclick="go('entrenadoresDB')">Base Entrenadores</button>
       <button class="side-btn ${ST.view==='clubs'?'active':''}" onclick="go('clubs')">Clubes</button>
       <button class="side-btn ${ST.view==='fotos'?'active':''}" onclick="go('fotos')">Fotos Atletas</button>
+      <button class="side-btn ${ST.view==='sudaFotos'?'active':''}" onclick="go('sudaFotos')">Fotos Sudamericano</button>
       <button class="side-btn ${ST.view==='records'?'active':''}" onclick="go('records')">Récords</button>
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='certificados'?'active':''}" onclick="go('certificados')">Certificados</button>`:''}
       <button class="side-btn ${ST.view==='cronograma'?'active':''}" onclick="go('cronograma')">Cronograma</button>
@@ -1588,6 +1589,7 @@ function render(){
   else if(ST.view==='entrenadoresDB')content=renderEntrenadoresDB();
   else if(ST.view==='clubs')content=renderClubs();
   else if(ST.view==='fotos')content=renderFotos();
+  else if(ST.view==='sudaFotos')content=renderSudaFotos();
   else if(ST.view==='records')content=renderRecordsEditor();
   else if(ST.view==='certificados'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderCertificados();else go('athletes');}
   else if(ST.view==='importar')content=renderImportar();
@@ -6042,6 +6044,163 @@ function renderClubs(){
 }
 
 // Comprime imágenes en el navegador antes de subir a Storage
+
+// ══════════════════════════════════════════════════════════════════
+// FOTOS SUDAMERICANO — carga masiva desde una carpeta del PC.
+// Evita el ZIP/Drive: los archivos van DIRECTO del PC a Firebase Storage.
+// Cada foto se convierte a WebP en el navegador ANTES de subir (pesa ~80%
+// menos que el PNG/JPEG original), y se emparejan con la nómina por el
+// nombre del archivo. Los chilenos con perfil además reciben la foto en su
+// perfil (atleta_fotos); el resto queda solo en su FICHA de la nómina.
+// ══════════════════════════════════════════════════════════════════
+function _sfNrm(s){
+  return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/[ﬁ]/g,'fi').replace(/[ﬂ]/g,'fl')
+    .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+}
+function _sfSlug(s){ return _sfNrm(s).replace(/\s+/g,'-').slice(0,80); }
+function _sfToks(s){ return new Set(_sfNrm(s).split(' ').filter(t=>t.length>1)); }
+// Empareja el nombre de archivo con un atleta de la nómina.
+// Acepta "Apellido Nombre.jpg", "nombre_apellido.png", con números/prefijos.
+function _sfMatch(fileName, pool){
+  const base=String(fileName).replace(/\.[^.]+$/,'').replace(/^\d+[\s._-]*/,'');
+  const t=_sfToks(base);
+  if(!t.size) return {status:'sin-nombre'};
+  // Puntaje por CONTENCIÓN: tolera que el archivo traiga apellidos/nombres de más
+  // (ej. "Perez Gomez Ana Maria.jpg" para "Perez Gomez Ana"). Exige al menos 2
+  // tokens en común (salvo nombres de un solo token) para no casar por el apellido solo.
+  let best=null,bestC=0,bestJ=0,tie=false;
+  for(const a of pool){
+    const inter=[...t].filter(x=>a._toks.has(x)).length;
+    if(!inter) continue;
+    if(inter<2 && Math.min(t.size,a._toks.size)>1) continue;
+    const cont=inter/Math.min(t.size,a._toks.size);
+    const jac=inter/Math.max(t.size,a._toks.size);
+    if(cont>bestC||(cont===bestC&&jac>bestJ)){best=a;bestC=cont;bestJ=jac;tie=false;}
+    else if(cont===bestC&&jac===bestJ&&best&&a.n!==best.n) tie=true;
+  }
+  if(!best||bestC<0.8) return {status:'sin-match'};
+  if(tie) return {status:'ambiguo', a:best, score:bestJ};
+  return {status:bestJ>=0.99?'exacto':'probable', a:best, score:bestJ};
+}
+window.sfPick=async function(inp){
+  const files=[...(inp.files||[])].filter(f=>/^image\//.test(f.type)||/\.(jpe?g|png|webp)$/i.test(f.name));
+  if(!files.length){showToast('No se encontraron imágenes en la selección',null,true);return;}
+  // Nómina: una entrada por atleta (no por inscripción)
+  if(!ST.sudaNom){
+    try{ ST.sudaNom=await (await fetch('nomina_sudamericano.json?'+Date.now())).json(); }
+    catch(e){ showToast('No se pudo leer nomina_sudamericano.json',null,true); return; }
+  }
+  const byName={};
+  (ST.sudaNom.atletas||[]).forEach(a=>{
+    const k=_sfNrm(a.n);
+    if(!byName[k]) byName[k]={n:a.n,pais:a.pais,cod:a.cod||null,listas:[],_toks:_sfToks(a.n)};
+    byName[k].listas.push(a.lista);
+  });
+  const pool=Object.values(byName);
+  ST.sfPool=pool;
+  ST.sfItems=files.map(f=>{ const m=_sfMatch(f.name,pool); return {file:f,name:f.name,size:f.size,...m,done:false}; });
+  ST.view='sudaFotos'; render();
+};
+window.sfClear=function(){ ST.sfItems=null; render(); };
+// Reasignar a mano un archivo que no matcheó (o quedó ambiguo)
+window.sfAssign=function(i,val){
+  const it=ST.sfItems[i]; if(!it)return;
+  if(!val){ it.a=null; it.status='sin-match'; }
+  else { const a=(ST.sfPool||[]).find(x=>x.n===val); if(a){ it.a=a; it.status='manual'; } }
+  render();
+};
+window.sfSkip=function(i){ const it=ST.sfItems[i]; if(it){it.skip=!it.skip;render();} };
+window.sfUpload=async function(){
+  const items=(ST.sfItems||[]).filter(x=>x.a && !x.skip && !x.done);
+  if(!items.length){showToast('No hay fotos emparejadas para subir',null,true);return;}
+  if(!confirm('Se van a convertir a WebP y subir '+items.length+' foto(s).\n\nLas chilenas con perfil también se cargan en su perfil.\n\n¿Continuar?'))return;
+  ST.sfBusy=true; ST.sfProg={done:0,total:items.length,err:0}; render();
+  const storage=getStorage(app);
+  for(const it of items){
+    try{
+      const webp=await compressImg(it.file,900,0.82);   // ← conversión a WebP
+      const slug=_sfSlug(it.a.n);
+      const sref=storageRef(storage,'nomina_suda/'+slug+'.webp');
+      await uploadBytes(sref,webp,{contentType:'image/webp'});
+      const url=await getDownloadURL(sref);
+      it.url=url; it.outSize=webp.size;
+      // Ficha de la nómina (todos los países)
+      await setDoc(doc(db,'nomina_suda_fotos',slug),
+        {nombre:it.a.n,pais:it.a.pais,foto_url:url,codigo:it.a.cod||null,ts:Date.now()},{merge:true});
+      // Chilenos con perfil → también a su perfil YourLift
+      if(it.a.cod){
+        await setDoc(doc(db,'atleta_fotos',it.a.cod),
+          {codigo:it.a.cod,name:it.a.n,foto_url:url,status:'approved',source:'sudamericano_2026',ts:Date.now()},{merge:true});
+      }
+      it.done=true;
+    }catch(e){ it.err=e.message; ST.sfProg.err++; }
+    ST.sfProg.done++;
+    if(ST.sfProg.done%3===0)render();
+  }
+  ST.sfBusy=false; render();
+  showToast('Listo: '+(ST.sfProg.total-ST.sfProg.err)+' foto(s) subidas'+(ST.sfProg.err?' · '+ST.sfProg.err+' con error':''));
+};
+function renderSudaFotos(){
+  const items=ST.sfItems||[];
+  const pool=ST.sfPool||[];
+  const kb=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':Math.round(n/1024)+' KB';
+  let h=`<div style="margin-bottom:18px"><h2 style="font-family:Oswald;font-size:22px;letter-spacing:1px">FOTOS SUDAMERICANO 2026</h2>
+    <p style="color:var(--muted);font-size:12px;margin-top:4px">Elegí la carpeta con las fotos. Se convierten a <b style="color:var(--gold)">WebP</b> en tu navegador antes de subir (pesan ~80% menos) y se emparejan solas con la nómina por el nombre del archivo. No hace falta ZIP ni Drive: van directo de tu PC a Firebase.</p></div>`;
+  h+=`<div class="card" style="padding:18px;margin-bottom:16px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <label class="btn" style="padding:10px 18px;cursor:pointer">📁 Elegir carpeta
+        <input type="file" webkitdirectory directory multiple accept="image/*" onchange="sfPick(this)" style="display:none"></label>
+      <label class="btn" style="padding:10px 18px;cursor:pointer;background:transparent;border:1px solid var(--border)">🖼 Elegir archivos
+        <input type="file" multiple accept="image/*" onchange="sfPick(this)" style="display:none"></label>
+      ${items.length?`<button class="btn" onclick="sfClear()" style="padding:10px 16px;background:transparent;border:1px solid var(--border)">Limpiar</button>`:''}
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-top:10px">Ideal: que el archivo se llame como el atleta (ej. <code>Navarro Medel Javiera.jpg</code>). Acepta acentos, guiones bajos y números al inicio.</p>
+  </div>`;
+  if(!items.length) return h;
+  const g=s=>items.filter(x=>x.status===s).length;
+  const ok=items.filter(x=>x.a&&!x.skip).length;
+  h+=`<div class="card" style="padding:14px;margin-bottom:14px;display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+    <span style="font-family:Oswald;font-size:13px">${items.length} archivo(s)</span>
+    <span style="color:var(--green);font-size:12px">✓ ${g('exacto')} exactos · ${g('probable')} probables${g('manual')?' · '+g('manual')+' manuales':''}</span>
+    ${g('ambiguo')?`<span style="color:var(--gold);font-size:12px">⚠ ${g('ambiguo')} ambiguos</span>`:''}
+    ${g('sin-match')?`<span style="color:var(--accent);font-size:12px">✕ ${g('sin-match')} sin match</span>`:''}
+    <span style="flex:1"></span>
+    ${ST.sfBusy
+      ? `<span style="font-family:Oswald;color:var(--gold)">Subiendo ${ST.sfProg.done}/${ST.sfProg.total}…</span>`
+      : `<button class="btn" onclick="sfUpload()" ${ok?'':'disabled'} style="padding:10px 20px;${ok?'':'opacity:.5'}">Convertir a WebP y subir (${ok})</button>`}
+  </div>`;
+  const opts=pool.map(a=>a.n).sort();
+  h+=`<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+    <tr style="background:var(--blue)">${['Archivo','Peso','Atleta de la nómina','País','Estado',''].map(t=>`<th style="padding:8px;color:#fff;text-align:left;font-family:Oswald">${t}</th>`).join('')}</tr>`;
+  items.forEach((it,i)=>{
+    const st=it.done?['✓ subida','var(--green)']
+      :it.err?['✕ '+it.err,'var(--accent)']
+      :it.skip?['omitida','var(--muted)']
+      :it.status==='exacto'?['exacto','var(--green)']
+      :it.status==='probable'?['probable '+Math.round(it.score*100)+'%','var(--gold)']
+      :it.status==='manual'?['manual','var(--blue2,#60a5fa)']
+      :it.status==='ambiguo'?['ambiguo — revisá','var(--gold)']
+      :['sin match','var(--accent)'];
+    h+=`<tr style="border-bottom:1px solid var(--border);${it.skip?'opacity:.45':''}">
+      <td style="padding:7px 8px;word-break:break-all">${esc(it.name)}</td>
+      <td style="padding:7px 8px;color:var(--muted);white-space:nowrap">${kb(it.size)}${it.outSize?` → <b style="color:var(--green)">${kb(it.outSize)}</b>`:''}</td>
+      <td style="padding:7px 8px">
+        <select onchange="sfAssign(${i},this.value)" style="max-width:260px;padding:5px;border-radius:6px;border:1px solid ${it.a?'var(--border)':'var(--accent)'};background:var(--card);color:var(--text);font-size:12px">
+          <option value="">— sin asignar —</option>
+          ${opts.map(n=>`<option value="${esc(n)}"${it.a&&it.a.n===n?' selected':''}>${esc(n)}</option>`).join('')}
+        </select>
+        ${it.a&&it.a.cod?`<div style="font-size:10px;color:var(--gold);margin-top:2px">perfil ${esc(it.a.cod)} — también se carga ahí</div>`:''}
+      </td>
+      <td style="padding:7px 8px;color:var(--muted)">${it.a?esc(it.a.pais):'—'}</td>
+      <td style="padding:7px 8px;color:${st[1]};white-space:nowrap">${st[0]}</td>
+      <td style="padding:7px 8px">${it.done?'':`<button onclick="sfSkip(${i})" style="padding:3px 9px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer">${it.skip?'incluir':'omitir'}</button>`}</td>
+    </tr>`;
+  });
+  h+=`</table></div>`;
+  return h;
+}
+
 async function compressImg(file,maxPx=900,quality=0.80){
   return new Promise(res=>{
     if(!file||!file.type.startsWith('image/')){res(file);return;}
