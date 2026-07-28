@@ -852,7 +852,7 @@ function _mergeAthletes(localArr, remoteArr){
     if(!la) return ra;
     const m=JSON.parse(JSON.stringify(ra));
     if(held[ra.id+'|meta']){
-      ['bw','rackSQ','rackBP','mod','country','flight','lot','bombed','weighedIn','jornada'].forEach(f=>{ if(la[f]!==undefined) m[f]=la[f]; });
+      ['bw','rackSQ','rackBP','sqAbat','bpSeg','bpPalm','mod','country','flight','lot','bombed','weighedIn','jornada'].forEach(f=>{ if(la[f]!==undefined) m[f]=la[f]; });
       overrode=true;
     }
     ['sq','bp','dl'].forEach(l=>{
@@ -1602,16 +1602,35 @@ function openWeighIn(id){
         <select id="wi_country" style="padding:9px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:13px">${_countryOptions(_ctry(a))}</select>
       </label>
     </div>
-    <div style="font-size:10px;color:var(--gold);letter-spacing:1.5px;margin-bottom:6px;font-family:Oswald;font-weight:700">RACK HEIGHTS</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <div style="font-size:10px;color:var(--gold);letter-spacing:1.5px;margin-bottom:6px;font-family:Oswald;font-weight:700">SENTADILLA</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)">
-        SQUAT
+        ALTURA RACK
         <input id="wi_rackSQ" type="text" value="${a.rackSQ||''}" placeholder="ej: 14" data-wi-next="wi_rackBP"
           style="padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:14px;text-align:center">
       </label>
       <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)">
-        BENCH
-        <input id="wi_rackBP" type="text" value="${a.rackBP||''}" placeholder="ej: 7" data-wi-next="wi_sq1"
+        ABATIBLE (soportes)
+        <select id="wi_sqAbat" style="padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:13px">
+          ${[['','No'],['izq','Izquierdo'],['der','Derecho'],['ambos','Ambos']].map(o=>`<option value="${o[0]}"${(a.sqAbat||'')===o[0]?' selected':''}>${o[1]}</option>`).join('')}
+        </select>
+      </label>
+    </div>
+    <div style="font-size:10px;color:var(--gold);letter-spacing:1.5px;margin-bottom:6px;font-family:Oswald;font-weight:700">PRESS DE BANCA</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)">
+        ALTURA ARMS
+        <input id="wi_rackBP" type="text" value="${a.rackBP||''}" placeholder="ej: 7" data-wi-next="wi_bpSeg"
+          style="padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:14px;text-align:center">
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)">
+        ALT. SEGUROS
+        <input id="wi_bpSeg" type="text" value="${a.bpSeg||''}" placeholder="—" data-wi-next="wi_bpPalm"
+          style="padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:14px;text-align:center">
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)">
+        PALMETAS
+        <input id="wi_bpPalm" type="text" inputmode="numeric" value="${a.bpPalm||''}" placeholder="0" data-wi-next="wi_sq1"
           style="padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:14px;text-align:center">
       </label>
     </div>
@@ -1686,6 +1705,7 @@ window.clearWeighIn = function(id){
   a.bw = 0;
   a.rackSQ = '';
   a.rackBP = '';
+  a.sqAbat = ''; a.bpSeg = ''; a.bpPalm = '';
   a.weighedIn = false;
   // Limpiar intentos del atleta (pesos y resultados)
   ['sq','bp','dl'].forEach(l=>{
@@ -1708,6 +1728,10 @@ function confirmWeighIn(id,catKg,limit){
   const bw=parseWeight(document.getElementById('wi_bw').value);
   const rSQ=(document.getElementById('wi_rackSQ').value||'').trim();
   const rBP=(document.getElementById('wi_rackBP').value||'').trim();
+  const _v=id=>{const e=document.getElementById(id);return e?(e.value||'').trim():'';};
+  const sqAbat=_v('wi_sqAbat');                       // '' | izq | der | ambos
+  const bpSeg=_v('wi_bpSeg');                         // altura de los seguros de banca
+  const bpPalm=(parseInt(_v('wi_bpPalm'),10)||0)||''; // 0 → vacío (no se muestra)
   const mod=document.getElementById('wi_mod').value;
   const country=(document.getElementById('wi_country')?.value||'CHI');
   const sq1=parseWeight(document.getElementById('wi_sq1')?.value);
@@ -1727,7 +1751,7 @@ function confirmWeighIn(id,catKg,limit){
   }
   // Save
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  a.bw=bw;a.rackSQ=rSQ;a.rackBP=rBP;a.mod=mod;a.country=country;
+  a.bw=bw;a.rackSQ=rSQ;a.rackBP=rBP;a.sqAbat=sqAbat;a.bpSeg=bpSeg;a.bpPalm=bpPalm;a.mod=mod;a.country=country;
   _markAtt(id,'meta');
   a.weighedIn=true;
   // Guardar primeros intentos (apertura) si vinieron en el modal
@@ -2526,8 +2550,8 @@ async function generateHojaRack(){
       const vals=[
         {t:a.flight||'', bold:true},
         {t:strip(a.name||''), bold:false, align:'left'},
-        {t:a.rackSQ?String(a.rackSQ):'', bold:!!a.rackSQ},
-        {t:a.rackBP?String(a.rackBP):'', bold:!!a.rackBP},
+        {t:(function(){const ab={izq:'I',der:'D',ambos:'I+D'}[String(a.sqAbat||'')]||'';return (a.rackSQ?String(a.rackSQ):'')+(ab?' ab:'+ab:'');})(), bold:!!a.rackSQ},
+        {t:(function(){const p=parseInt(a.bpPalm,10)||0;return (a.rackBP?String(a.rackBP):'')+(a.bpSeg?' s:'+a.bpSeg:'')+(p>0?' p:'+p:'');})(), bold:!!a.rackBP},
         {t:'', bold:false},
       ];
 
@@ -5889,6 +5913,7 @@ function renderScreenIntentos(cur,nxt){
   // la 3ª ronda, "INTENTO EXTRA" en la 1ª/2ª. Se suma al intento normal en curso.
   if(cur.__is4){roundLabel+=((((cur.att[DATA.lift][3]||{}).grantedRound)||0)>=2)?' · 4º INTENTO':' · INTENTO EXTRA';}
   const rackH=DATA.lift==='sq'?cur.rackSQ:DATA.lift==='bp'?cur.rackBP:'';
+  const _setup=_rackSetup(_realAth(cur),DATA.lift);
   const sexLbl=isMale?'HOMBRES':'MUJERES';
   const t=Math.max(0,DATA.timer||0);
   const tTxt=Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
@@ -5896,7 +5921,7 @@ function renderScreenIntentos(cur,nxt){
   const piSet=window._piSettings||(window._piSettings=_piLoadSettings());
   const accentColor=piSet.accentColor||PI_DEFAULT_SETTINGS.accentColor;
   const textColor=piSet.textColor||PI_DEFAULT_SETTINGS.textColor;
-  const liftLabelHtml=`<div style="font-family:Oswald;font-size:22px;letter-spacing:4px;color:rgba(212,225,245,.6);white-space:nowrap">${liftName} · ${roundLabel}${rackH?` · RACK ${rackH}`:''}</div>`;
+  const liftLabelHtml=`<div style="font-family:Oswald;font-size:22px;letter-spacing:4px;color:rgba(212,225,245,.6);white-space:nowrap">${liftName} · ${roundLabel}${_setup?` · ${_setup}`:''}</div>`;
   const weightHtml=`<div style="font-family:Oswald;font-size:120px;font-weight:900;color:${textColor};line-height:1;letter-spacing:2px;white-space:nowrap">${weight}<span style="font-size:0.32em;color:rgba(212,225,245,.55);margin-left:10px">KG</span></div>`;
   const nameHtml=`<div style="font-family:Oswald;font-size:56px;font-weight:700;letter-spacing:1px;color:${textColor};line-height:1.15;white-space:nowrap">${cur.name||''}</div>`;
   const subtitleHtml=`<div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:rgba(212,225,245,.5);white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
@@ -5911,7 +5936,7 @@ function renderScreenIntentos(cur,nxt){
       <span style="font-family:Oswald;font-size:14px;letter-spacing:3px;color:rgba(212,225,245,.45)">SIGUIENTE</span>
       <span style="font-family:Oswald;font-size:26px;font-weight:700;color:${textColor}">${nxt.name||''}</span>
       <span style="font-family:Oswald;font-size:26px;font-weight:900;color:${accentColor}">${nxtW||'—'}<span style="font-size:0.6em;margin-left:4px">KG</span></span>
-      ${nxtRack?`<span style="font-family:Oswald;font-size:16px;color:rgba(212,225,245,.55)">RACK ${nxtRack}</span>`:''}
+      ${(()=>{const ns=_rackSetup(_realAth(nxt),DATA.lift);return ns?`<span style="font-family:Oswald;font-size:16px;color:rgba(212,225,245,.55)">${ns}</span>`:''})()}
     </div>`;
   }
   // Tiempo compensatorio (4º "se sigue a sí mismo") — se ve arriba a la izquierda
@@ -7242,6 +7267,25 @@ window.toggleCtAutoScroll=function(){
 // Muestran a QUÉ se nominó el atleta, para quien carga o revisa:
 //   DIVISIÓN (OE / UNI destacados) · CATEGORÍA de peso · LÍNEA (Classic/Equipado)
 //   · MODALIDAD (PL / Only Bench; "PL+BP" si compite en ambas).
+// Texto de MONTAJE de tarima para el lift en curso: altura de rack + los extras
+// que pidió el atleta en el pesaje. Se omite lo que no pidió (palmetas 0 → no
+// sale, seguros vacíos → no sale). Sentadilla: abatible izq/der/ambos.
+// Banca: altura de seguros y cantidad de palmetas. Lo ve quien monta la barra.
+function _rackSetup(a,lift){
+  if(!a)return '';
+  const out=[];
+  if(lift==='sq'){
+    if(a.rackSQ)out.push('RACK '+a.rackSQ);
+    const ab=String(a.sqAbat||'');
+    if(ab)out.push('ABATIBLE '+({izq:'IZQ',der:'DER',ambos:'AMBOS'}[ab]||ab.toUpperCase()));
+  }else if(lift==='bp'){
+    if(a.rackBP)out.push('ARMS '+a.rackBP);
+    if(a.bpSeg)out.push('SEGUROS '+a.bpSeg);
+    const p=parseInt(a.bpPalm,10)||0;
+    if(p>0)out.push('PALMETAS '+p);
+  }
+  return out.join(' \u00b7 ');
+}
 function _nomDivShort(a){
   const mod=String(a.mod||'');
   if(mod.startsWith('oe'))return 'OE';                      // Special Olympics
@@ -7421,7 +7465,7 @@ function renderCompete(){
    }}
   if(cur){
     // Info compacta del atleta actual (sin botones grandes - los GOOD/NO LIFT estan en la tabla)
-    h+='<div class="card" style="border-left:4px solid '+LIFT_C[DATA.lift]+';margin-bottom:10px;padding:10px 14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:0"><div class="os" style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+cur.name+'</div><div style="font-size:10px;color:var(--muted)">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+' \u00b7 pr\u00f3ximo: <strong style="color:'+LIFT_C[DATA.lift]+'">'+(cw||'\u2014')+'kg</strong></div></div><div style="display:flex;gap:6px;align-items:center">'+(rack?'<span style="background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:5px;font-size:10px">\uD83D\uDD27 '+rack+'</span>':'')+'<span class="flight-badge" style="background:'+(FL_C[cur.flight]||'#666')+'">'+cur.flight+'</span>'+(cur.__is4?'<span title="Intento extra compensatorio — repite este intento" style="background:#60a5fa;color:#fff;padding:3px 8px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:11px;letter-spacing:.5px">'+cur4lbl+'</span>':'')+'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:3px 10px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:12px">'+LIFT_S[DATA.lift]+(DATA.round+1)+'</span></div></div></div>';
+    h+='<div class="card" style="border-left:4px solid '+LIFT_C[DATA.lift]+';margin-bottom:10px;padding:10px 14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:0"><div class="os" style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+cur.name+'</div><div style="font-size:10px;color:var(--muted)">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+' \u00b7 pr\u00f3ximo: <strong style="color:'+LIFT_C[DATA.lift]+'">'+(cw||'\u2014')+'kg</strong></div></div><div style="display:flex;gap:6px;align-items:center">'+(function(){const _s=_rackSetup(_realAth(cur),DATA.lift)||(rack?'RACK '+rack:'');return _s?'<span style="background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:5px;font-size:10px">\uD83D\uDD27 '+_s+'</span>':'';})()+'<span class="flight-badge" style="background:'+(FL_C[cur.flight]||'#666')+'">'+cur.flight+'</span>'+(cur.__is4?'<span title="Intento extra compensatorio — repite este intento" style="background:#60a5fa;color:#fff;padding:3px 8px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:11px;letter-spacing:.5px">'+cur4lbl+'</span>':'')+'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:3px 10px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:12px">'+LIFT_S[DATA.lift]+(DATA.round+1)+'</span></div></div></div>';
     // Reloj de 1:00 para dar el pr\u00f3ximo intento \u2014 PRIVADO: solo visible ac\u00e1, en Control en
     // Vivo (isAdmin). No se transmite al p\u00fablico ni a OBS (el widget "Timer independiente"
     // se desactiv\u00f3 a pedido). id="mainTimer" \u2014 lo actualiza startTimer() cada segundo.
