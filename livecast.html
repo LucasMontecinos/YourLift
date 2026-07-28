@@ -384,11 +384,16 @@ function txDocId(base){return TARIMA?`${base}_T${TARIMA}`:base;}
 // porque ambos usan fbDocId() (basado en el nombre del evento). Si no hay evento, cae
 // al id viejo (compatibilidad).
 function evStateDocId(base){const ev=fbDocId();return ev?(base+'__'+ev):txDocId(base);}
-let _syncInFlight=false;
+let _syncInFlight=false,_syncPending=false;
 async function syncToFB(){
   if(!fbReady||!isAdmin||_fbSyncing)return;
   if(!window.IS_CONTROLLER)return; // Solo el controller escribe — evita conflictos multi-admin
-  if(_syncInFlight)return; // ya hay una escritura en curso — evita solapar (menos contención)
+  // Si ya hay una escritura en curso, NO se descarta este cambio: se marca como
+  // pendiente y se vuelve a escribir al terminar. (Antes se hacía `return` y el
+  // cambio se perdía para siempre — cargando pesos rápido, o con la red lenta,
+  // el espectador se quedaba sin ver lo último.) El payload se arma de cero en
+  // cada intento, así una sola escritura final ya lleva todo el estado al día.
+  if(_syncInFlight){_syncPending=true;return;}
   const id=fbDocId();if(!id)return;
   _fbLastWrite=Date.now();
   // Reintenta con backoff ante fallos transitorios (ej. contención con varios
@@ -407,7 +412,10 @@ async function syncToFB(){
         await new Promise(r=>setTimeout(r,250*(attempt+1)));
       }
     }
-  }finally{ _syncInFlight=false; }
+  }finally{
+    _syncInFlight=false;
+    if(_syncPending){_syncPending=false;setTimeout(()=>{try{syncToFB()}catch(e){}},60);}
+  }
 }
 // Sync liviano solo del timer — corre cada 1s mientras el timer está activo,
 // así los widgets de OBS ven el countdown segundo a segundo sin reescribir
