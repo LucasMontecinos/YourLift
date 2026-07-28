@@ -8216,7 +8216,10 @@ window.fillPracticeWeights=function(opts){
   const rnd25=v=>Math.round(v/2.5)*2.5;
   const isM=a=>(a.sex==='Hombre'||a.sex==='Masculino'||a.sex==='M');
   DATA.athletes.forEach(a=>{
-    const catNum=parseFloat(String(a.cat))||100;
+    // Solo los dígitos de la categoría: con el formato real '-59 kg (Hombre)'
+    // parseFloat daba -59 (negativo) y los pesos generados quedaban negativos
+    // → la cola de tarima salía vacía.
+    const catNum=parseFloat((String(a.cat).match(/\d+(\.\d+)?/)||[])[0])||100;
     const factor=isM(a)?1:0.62;
     const base={
       sq:rnd25((a.att.sq&&a.att.sq[0]&&a.att.sq[0].w)||catNum*0.85*factor),
@@ -8442,8 +8445,11 @@ if(!TX_MODE&&!DEMO_MODE&&!(PRACTICE_MODE&&!PRACTICE_REAL)){
       DATA.events.push(ev);
     });
     if(DATA.phase==='setup'&&DATA.events.length)R();
-    // por si vino ?evento= apuntando a un evento de nominas.json
-    try{if(!window._autoEvtTried){window._autoEvtTried=true;applyEventURLParam();}}catch(e){}
+    // por si vino ?evento= apuntando a un evento de nominas.json. Se llama DIRECTO
+    // (sin el guard _autoEvtTried): los eventos recién llegaron, y si otro caller
+    // temprano ya agotó sus reintentos esperándolos, este es el que resuelve.
+    // applyEventURLParam es idempotente (si el evento ya está elegido, no hace nada).
+    try{window._autoEvtTried=true;_applyEvtRetries=0;applyEventURLParam();}catch(e){}
   }).catch(e=>console.warn('[LC] nominas.json no cargado',e));
 }
 if(!loaded)R();
@@ -8601,7 +8607,7 @@ function applyEventURLParam(){
     // 3) Si todavía no se encontró, retry hasta 10 veces (espera a que Firestore listener cargue)
     if(!wanted){
       _applyEvtRetries++;
-      if(_applyEvtRetries<=10){
+      if(_applyEvtRetries<=20){ // hasta 10s: nominas.json puede tardar en conexiones lentas
         setTimeout(applyEventURLParam,500);
         if(_applyEvtRetries===1)console.log('[LC] Esperando que Firestore cargue el evento "'+want+'"...');
         return;
