@@ -1,5 +1,5 @@
 // YourLift Service Worker — v2
-const CACHE = 'yourlift-v2';
+const CACHE = 'yourlift-v3';
 
 const PRECACHE_URLS = [
   '/',
@@ -86,6 +86,22 @@ self.addEventListener('fetch', e => {
         const clone = res.clone(); caches.open(CACHE).then(c => c.put(req, clone));
         return res;
       }))
+    );
+    return;
+  }
+
+  // Datos JSON locales (nominas, nomina_sudamericano, data, records…) — network-first.
+  // ANTES caían en el catch-all "static assets" que es cache-first, así que una vez
+  // cacheados quedaban congelados y había que hacer hard reset para ver cambios
+  // (ej. la nómina del Sudamericano recién publicada no aparecía).
+  if (url.pathname.endsWith('.json') && url.origin === self.location.origin) {
+    e.respondWith(
+      fetch(req)
+        .then(res => {
+          if (res.ok) { const clone = res.clone(); caches.open(CACHE).then(c => c.put(req, clone)); }
+          return res;
+        })
+        .catch(() => caches.match(req))
     );
     return;
   }

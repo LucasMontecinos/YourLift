@@ -131,6 +131,15 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── Fotos de la nómina del Sudamericano (incluye extranjeros) ──
+    // Lectura pública: son las fotos que se muestran en la nómina y en la
+    // ficha de cada atleta en yourlift.cl. Escritura solo admin (cargador
+    // masivo del panel: Admin → Fotos Sudamericano).
+    match /nomina_suda_fotos/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ── Configuración de certificados ──────────────────────────
     match /cert_config/{doc} {
       allow read: if isAdmin();
