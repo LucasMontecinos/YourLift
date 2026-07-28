@@ -6230,7 +6230,10 @@ window.sfUpload=async function(){
     try{
       const webp=await compressImg(it.file,900,0.82);   // ← conversión a WebP
       const slug=_sfSlug(it.a.n);
-      const sref=storageRef(storage,'nomina_suda/'+slug+'.webp');
+      // Se sube bajo public/: es la ruta que las reglas de Storage ya permiten
+      // (lectura pública + escritura de admin). Fuera de public/ la subida era
+      // rechazada por permisos — de ahí el error de autenticación.
+      const sref=storageRef(storage,'public/nomina_suda/'+slug+'.webp');
       await uploadBytes(sref,webp,{contentType:'image/webp'});
       const url=await getDownloadURL(sref);
       it.url=url; it.outSize=webp.size;
@@ -6243,7 +6246,13 @@ window.sfUpload=async function(){
           {codigo:it.a.cod,name:it.a.n,foto_url:url,status:'approved',source:'sudamericano_2026',ts:Date.now()},{merge:true});
       }
       it.done=true;
-    }catch(e){ it.err=e.message; ST.sfProg.err++; }
+    }catch(e){
+      const c=String(e&&e.code||''), m=String(e&&e.message||e);
+      it.err=/unauthoriz|permission|denied|unauthenticated/i.test(c+' '+m)
+        ? 'Sin permiso — iniciá sesión como admin y reintentá'
+        : m;
+      ST.sfProg.err++;
+    }
     ST.sfProg.done++;
     if(ST.sfProg.done%3===0)render();
   }
