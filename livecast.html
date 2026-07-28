@@ -8429,7 +8429,23 @@ fetch(_STOR+'public%2Frecords.json?alt=media',{cache:'no-cache'})
   .then(r=>r.ok?r.json():fetch('records.json').then(r=>r.json()))
   .catch(()=>fetch('records.json').then(r=>r.json()))
   .then(d=>{RECORDS=d}).catch(()=>console.warn('[FECHIPO] records.json no cargado'));
-// DATA.events se construye desde Firestore via LIVE_EVENT_META en renderSetup()
+// DATA.events se construye desde Firestore (LIVE_EVENT_META en renderSetup) MÁS
+// los eventos con nómina propia de nominas.json (ej. Sudamericano Día 1..8, que
+// no tienen inscripciones en Firestore: su roster viene del archivo). renderSetup
+// evita duplicar: si un evento ya está acá por nombre, no lo agrega de Firestore
+// — y para esos, loadLiveAthletes igual sincroniza atletas en vivo si existen.
+if(!TX_MODE&&!DEMO_MODE&&!(PRACTICE_MODE&&!PRACTICE_REAL)){
+  fetch('nominas.json',{cache:'no-cache'}).then(r=>r.json()).then(j=>{
+    ((j&&j.events)||[]).forEach(ev=>{
+      if(!ev||!ev.name||!Array.isArray(ev.athletes)||!ev.athletes.length)return;
+      if(DATA.events.some(e=>e.name===ev.name))return;
+      DATA.events.push(ev);
+    });
+    if(DATA.phase==='setup'&&DATA.events.length)R();
+    // por si vino ?evento= apuntando a un evento de nominas.json
+    try{if(!window._autoEvtTried){window._autoEvtTried=true;applyEventURLParam();}}catch(e){}
+  }).catch(e=>console.warn('[LC] nominas.json no cargado',e));
+}
 if(!loaded)R();
 
 // ════════════════════════════════════════════════════════════════
