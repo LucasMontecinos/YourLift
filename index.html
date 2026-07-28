@@ -436,6 +436,17 @@ async function initFB(){
         window.NSUDA_FOTOS=map;_fsSetCache('nsudafotos',map);if(ST.v==='nominas')render();
       }
     }catch(e){console.warn('[nsudafotos]',e);}
+    // ── Fotos de PERFIL por código (atleta_fotos) — para que los chilenos que ya
+    // tienen foto se vean en la nómina sin volver a subirlas ──
+    try{
+      const cp=_fsCache('atlfotos',60*60*1000);
+      if(cp){window.ATL_FOTOS=cp;if(ST.v==='nominas')render();}
+      else{
+        const ps=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'atleta_fotos'));
+        const map={};ps.docs.forEach(d=>{const x=d.data();if(x.foto_url&&x.status!=='rejected')map[d.id]=x.foto_url;});
+        window.ATL_FOTOS=map;_fsSetCache('atlfotos',map);if(ST.v==='nominas')render();
+      }
+    }catch(e){console.warn('[atlfotos]',e);}
     // ── Cert config: getDocs + caché 1h ──
     try{
       const cc=_fsCache('certcfg',60*60*1000);
@@ -798,6 +809,12 @@ function _nsudaVisible(){
 const _NSUDA_DIVORD={'Sub-Junior':0,'Junior':1,'Universitario':2,'Open':3,'Master I':4,'Master II':5,'Master III':6,'Master IV':7};
 // Slug del atleta — el MISMO formato que usa el cargador de fotos del admin
 // (nomina_suda_fotos/{slug}), así la ficha encuentra su foto.
+// Foto de un atleta de la nómina: primero la de su PERFIL (chilenos que ya la
+// tienen cargada, atleta_fotos por código), si no la subida para la nómina.
+function _nsudaFoto(a,slug){
+  if(a&&a.cod){const f=(window.ATL_FOTOS||{})[a.cod];if(f)return f;}
+  return (window.NSUDA_FOTOS||{})[slug||_nsudaSlug(a&&a.n)]||'';
+}
 function _nsudaSlug(s){
   return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'')
     .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,'-').slice(0,80);
@@ -811,7 +828,7 @@ function nsudaFicha(slug){
   const rows=j.atletas.filter(a=>_nsudaSlug(a.n)===slug);
   if(!rows.length)return;
   const a=rows[0];
-  const foto=(window.NSUDA_FOTOS||{})[slug]||'';
+  const foto=_nsudaFoto(a,slug);
   const ex=document.getElementById('nsudaFichaModal'); if(ex)ex.remove();
   const m=document.createElement('div'); m.id='nsudaFichaModal';
   m.style.cssText='position:fixed;inset:0;background:rgba(4,10,20,.82);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px;backdrop-filter:blur(3px)';
@@ -996,7 +1013,7 @@ function _nomSudaRows(){
   const j=window.NOMSUDA;
   return (j.atletas||[]).map(a=>{
     const slug=_nsudaSlug(a.n);
-    const foto=(window.NSUDA_FOTOS||{})[slug]||'';
+    const foto=_nsudaFoto(a,slug);
     const av=`<span onclick="event.stopPropagation();nsudaFicha('${slug}')" title="Ver ficha" style="display:inline-flex;width:24px;height:24px;border-radius:50%;overflow:hidden;background:rgba(30,58,95,.5);border:1px solid ${foto?'rgba(212,168,67,.5)':'var(--border)'};cursor:pointer;vertical-align:middle;margin-right:7px;align-items:center;justify-content:center;flex-shrink:0">${foto?`<img src="${foto}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:9px;color:var(--muted);font-family:Oswald">${a.n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</span>`}</span>`;
     const nm=a.cod
       ?`<a href="atleta.html?codigo=${encodeURIComponent(a.cod)}" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(212,168,67,.5);font-weight:600" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${a.n}</a>`
