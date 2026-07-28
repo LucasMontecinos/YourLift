@@ -966,6 +966,44 @@ function _ensayoGrant(){
     }
   }catch(e){}
 }
+// ── LOGIN EN EL LIVECAST ──────────────────────────────────────────
+// Mismas cuentas del panel admin (Firebase Auth). Evita tener que pasar por
+// admin.html: el juez/controlador inicia sesión acá mismo. La verificación de
+// rol la hace onAuthStateChanged (lee admins/{uid}) igual que siempre.
+window.openLoginModal=function(){
+  const ex=document.getElementById('lcLogin'); if(ex)ex.remove();
+  const m=document.createElement('div'); m.id='lcLogin';
+  m.style.cssText='position:fixed;inset:0;background:rgba(4,10,20,.85);display:flex;align-items:center;justify-content:center;z-index:100001;padding:16px';
+  m.innerHTML='<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:24px;width:min(360px,94vw)">'
+    +'<div style="font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:4px">\uD83D\uDD10 INICIAR SESI\u00d3N</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:14px">Cuenta de administrador / juez (la misma del panel admin).</div>'
+    +'<input id="lcLoginEmail" type="email" autocomplete="username" placeholder="Email" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:13px;margin-bottom:8px">'
+    +'<input id="lcLoginPass" type="password" autocomplete="current-password" placeholder="Contrase\u00f1a" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:13px;margin-bottom:6px">'
+    +'<div id="lcLoginErr" style="color:var(--red);font-size:11px;min-height:14px;margin-bottom:6px"></div>'
+    +'<button onclick="doLcLogin()" style="width:100%;padding:11px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">ENTRAR</button>'
+    +'<button onclick="document.getElementById(\'lcLogin\').remove()" style="width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;cursor:pointer">Cancelar</button>'
+    +'</div>';
+  m.onclick=e=>{if(e.target===m)m.remove();};
+  m.addEventListener('keydown',e=>{if(e.key==='Enter')doLcLogin();});
+  document.body.appendChild(m);
+  setTimeout(()=>{const e=document.getElementById('lcLoginEmail');if(e)e.focus();},50);
+};
+window.doLcLogin=async function(){
+  const err=document.getElementById('lcLoginErr');
+  const email=((document.getElementById('lcLoginEmail')||{}).value||'').trim();
+  const pass=(document.getElementById('lcLoginPass')||{}).value||'';
+  if(!email||!pass){if(err)err.textContent='Complet\u00e1 email y contrase\u00f1a';return;}
+  if(!fbReady||!window._fbAuth||!window._fbAuth.signInWithEmailAndPassword){if(err)err.textContent='Conectando con el servidor\u2026 prob\u00e1 de nuevo en unos segundos';return;}
+  try{
+    if(err)err.textContent='';
+    await window._fbAuth.signInWithEmailAndPassword(fbAuth,email,pass);
+    const m=document.getElementById('lcLogin'); if(m)m.remove();
+    showToastLC('\u2713 Sesi\u00f3n iniciada');
+  }catch(e){
+    const code=(e&&e.code)||'';
+    if(err)err.textContent=/invalid-credential|wrong-password|user-not-found|invalid-email/.test(code)?'Email o contrase\u00f1a incorrectos':'Error: '+(code||e.message);
+  }
+};
 window.ensayoToggleRole=function(){
   if(!window._ensayoFree)return;
   if(isAdmin){isAdmin=false;DATA.phase='liveView';}
@@ -6016,7 +6054,7 @@ function renderShell(){
   h+='<div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">';
   h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'\uD83D\uDCE1 Datos en vivo':'\u23F3 Conectando...')+'</div>';
   h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon">\ud83c\udfc6</span>Selecci\u00f3n de Campeonato</button>';
-  // Admin button removed — login via admin.html only
+  h+='<button class="side-btn" onclick="openLoginModal()"><span class="icon">\uD83D\uDD10</span>Iniciar sesi\u00f3n</button>';
   h+='</div>';
   }
   h+='</div><div class="main">';
