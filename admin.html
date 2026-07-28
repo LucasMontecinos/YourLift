@@ -1577,7 +1577,7 @@ function render(){
   
   let content='';
   if(ST.view==='athletes')content=renderAthletes();
-  else if(ST.view==='nominas')content=renderNominas();
+  else if(ST.view==='nominas')content=renderNomCards()+renderNominas();
   else if(ST.view==='stats'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderStats();else go('athletes');}
   else if(ST.view==='bgvideos'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderBgVideos();else go('athletes');}
   else if(ST.view==='sponsors'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderSponsors();else go('athletes');}
@@ -3348,6 +3348,87 @@ function renderAthletes(){
       </div>
     </div>
     ${list.length===100?'<p style="text-align:center;color:var(--muted);font-size:12px;padding:14px">Mostrando primeros 100 — refina tu búsqueda</p>':''}`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TARJETAS DE NÓMINAS — foto/fecha/organizador/lugar de cada campeonato que
+// aparece en la pestaña Nóminas de yourlift.cl. Se guarda en Firestore
+// nomina_cards/{slug-del-nombre}. La foto se convierte a WebP antes de subir.
+// ══════════════════════════════════════════════════════════════════
+function _ncSlug(s){
+  return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,'-').slice(0,80);
+}
+window.ncLoad=async function(){
+  if(ST.ncList)return;
+  const list=[];
+  try{
+    const j=await (await fetch('nomina_sudamericano.json?'+Date.now())).json();
+    list.push({id:'suda2026',name:j.eventoCorto||'Sudamericano 2026'});
+  }catch(e){}
+  try{
+    const n=await (await fetch('nominas.json?'+Date.now())).json();
+    (n.events||[]).forEach(e=>{if(e.name)list.push({id:_ncSlug(e.name),name:e.name});});
+  }catch(e){}
+  // quitar duplicados por id
+  const seen=new Set();
+  ST.ncList=list.filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return true;});
+  // cargar lo guardado
+  ST.ncData={};
+  try{
+    const snap=await getDocs(collection(db,'nomina_cards'));
+    snap.docs.forEach(d=>{ST.ncData[d.id]=d.data();});
+  }catch(e){}
+  render();
+};
+window.ncSet=function(id,k,v){ST.ncData[id]=ST.ncData[id]||{};ST.ncData[id][k]=v;};
+window.ncSave=async function(id){
+  const st=document.getElementById('nc_st_'+id);if(st)st.textContent='Guardando…';
+  try{
+    await setDoc(doc(db,'nomina_cards',id),{...(ST.ncData[id]||{}),updatedAt:Date.now()},{merge:true});
+    if(st)st.textContent='✓ Guardado';
+    setTimeout(()=>{if(st)st.textContent='';},2500);
+  }catch(e){if(st)st.textContent='Error: '+e.message;}
+};
+window.ncFoto=async function(id,inp){
+  const f=inp.files&&inp.files[0];if(!f)return;
+  const st=document.getElementById('nc_st_'+id);if(st)st.textContent='Convirtiendo a WebP y subiendo…';
+  try{
+    const storage=getStorage(app);
+    const webp=await compressImg(f,1400,0.82);
+    const sref=storageRef(storage,'nomina_cards/'+id+'.webp');
+    await uploadBytes(sref,webp,{contentType:'image/webp'});
+    const url=await getDownloadURL(sref);
+    ncSet(id,'fotoUrl',url);
+    await ncSave(id);
+    render();
+  }catch(e){if(st)st.textContent='Error: '+e.message;}
+};
+function renderNomCards(){
+  if(!ST.ncList){ncLoad();return `<div style="padding:30px;text-align:center;color:var(--muted)">Cargando nóminas…</div>`;}
+  let h=`<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:18px">
+    <div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:4px">TARJETAS DE NÓMINAS (yourlift.cl)</div>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:14px">La foto, fecha, organizador y lugar que se ven en la tarjeta de cada campeonato en la pestaña Nóminas del sitio. La foto se convierte a WebP automáticamente.</p>`;
+  ST.ncList.forEach(ev=>{
+    const d=ST.ncData[ev.id]||{};
+    h+=`<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">`;
+    h+=`<div style="width:150px;flex-shrink:0"><div style="width:150px;height:64px;border-radius:8px;overflow:hidden;background:#0a1628;border:1px solid var(--border);display:flex;align-items:center;justify-content:center">${d.fotoUrl?`<img src="${esc(d.fotoUrl)}" style="width:100%;height:100%;object-fit:cover">`:'<span style="font-size:10px;color:var(--muted)">sin foto</span>'}</div>
+      <label class="btn" style="display:block;text-align:center;margin-top:6px;padding:5px;font-size:11px;cursor:pointer">📷 Subir foto<input type="file" accept="image/*" onchange="ncFoto('${ev.id}',this)" style="display:none"></label></div>`;
+    h+=`<div style="flex:1;min-width:230px">
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px">${esc(ev.name)}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+        <input placeholder="Fecha (ej. 20-27 sep 2026)" value="${esc(d.fecha||'')}" oninput="ncSet('${ev.id}','fecha',this.value)" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px">
+        <input placeholder="Organizador" value="${esc(d.organizador||'')}" oninput="ncSet('${ev.id}','organizador',this.value)" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px">
+        <input placeholder="Lugar" value="${esc(d.lugar||'')}" oninput="ncSet('${ev.id}','lugar',this.value)" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px">
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+        <button class="btn" onclick="ncSave('${ev.id}')" style="padding:6px 16px;font-size:12px">Guardar</button>
+        <span id="nc_st_${ev.id}" style="font-size:11px;color:var(--green)"></span>
+      </div>
+    </div></div>`;
+  });
+  h+=`</div>`;
+  return h;
 }
 
 function renderNominas(){

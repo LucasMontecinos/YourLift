@@ -396,6 +396,16 @@ async function initFB(){
       if(cr){if(cr.classic||cr.equipped){R=cr;if(ST.v==='records')render();}}
       else{const rs=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'records','data'));if(rs.exists()){const r=rs.data();if(r&&(r.classic||r.equipped)){R=r;_fsSetCache('records',r);if(ST.v==='records')render();}}}
     }catch(e){console.warn('[records]',e);}
+    // ── Tarjetas de nóminas (foto/fecha/organizador por campeonato, editable en admin): caché 10min ──
+    try{
+      const cn=_fsCache('nomcards',10*60*1000);
+      if(cn){window.NOMCARDS=cn;if(ST.v==='nominas')render();}
+      else{
+        const ns=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'nomina_cards'));
+        const map={};ns.docs.forEach(d=>{map[d.id]=d.data();});
+        window.NOMCARDS=map;_fsSetCache('nomcards',map);if(ST.v==='nominas')render();
+      }
+    }catch(e){console.warn('[nomcards]',e);}
     // ── Fotos de la nómina Sudamericano (para las fichas): caché 1h ──
     try{
       const cf=_fsCache('nsudafotos',60*60*1000);
@@ -763,83 +773,6 @@ function _nsudaSlug(s){
     .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,'-').slice(0,80);
 }
 function _nsudaCatKey(c){const plus=(c||'').includes('+');return (parseFloat(String(c).replace(/[^0-9.]/g,''))||999)+(plus?0.5:0)}
-function renderNominaSuda(){
-  const j=window.NOMSUDA;
-  const fl=ST.nsudaF||'', q=(ST.nsudaS||'').toLowerCase();
-  const fMod=ST.nsudaMod||'', fPais=ST.nsudaPais||'', fCat=ST.nsudaCat||'', fSex=ST.nsudaSex||'', fDiv=ST.nsudaDiv||'';
-  let rows=j.atletas.slice();
-  if(fl)rows=rows.filter(a=>a.lista===fl);
-  if(fMod)rows=rows.filter(a=>a.mod===fMod);
-  if(fPais)rows=rows.filter(a=>a.pais===fPais);
-  if(fCat)rows=rows.filter(a=>a.cat===fCat);
-  if(fSex)rows=rows.filter(a=>a.sexo===fSex);
-  if(fDiv)rows=rows.filter(a=>a.div===fDiv);
-  if(q)rows=rows.filter(a=>a.n.toLowerCase().includes(q)||(a.pais||'').toLowerCase().includes(q)||(a.uni||'').toLowerCase().includes(q));
-  rows.sort((a,b)=>{
-    if(a.sexo!==b.sexo)return a.sexo==='F'?-1:1;
-    const ca=_nsudaCatKey(a.cat),cb=_nsudaCatKey(b.cat);
-    if(ca!==cb)return ca-cb;
-    const da=_NSUDA_DIVORD[a.div]??9,db=_NSUDA_DIVORD[b.div]??9;
-    if(da!==db)return da-db;
-    return a.n.localeCompare(b.n);
-  });
-  let h=`<div class="cd2" style="margin-bottom:24px;border:2px solid rgba(212,168,67,.45)">`;
-  h+=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px"><div><h2 style="font-family:Oswald;font-size:clamp(16px,3.5vw,20px);letter-spacing:1px;text-transform:uppercase">🌎 ${j.eventoCorto} <span style="font-size:10px;background:rgba(212,168,67,.2);color:var(--gold);padding:2px 8px;border-radius:10px;vertical-align:middle;border:1px solid rgba(212,168,67,.4)">NÓMINA OFICIAL</span>${j.publicada?'':' <span style="font-size:10px;background:rgba(239,68,68,.15);color:#ef4444;padding:2px 8px;border-radius:10px;vertical-align:middle;border:1px solid rgba(239,68,68,.4)">VISTA PREVIA — NO PUBLICADA</span>'}</h2><p style="font-size:12px;color:var(--muted);margin-top:2px">${j.evento}</p><p style="font-size:11px;color:var(--muted);margin-top:2px">${j.lugar} · ${j.fechas} · ${j.fuente}</p></div><span class="bg" style="background:var(--accent);color:#fff;font-size:14px;padding:6px 14px">${j.atletas.length} inscripciones</span></div>`;
-  // ── PESTAÑAS por modalidad (Clásico / Equipado / Universitario / Only Bench / Olimpiadas Especiales) ──
-  // Se combinan con el filtro de género de abajo (así "Clásico + Mujeres" = la lista femenina clásica).
-  const mods=[...new Set(j.atletas.map(a=>a.mod))];
-  const MODORD=['Clásico','Equipado','Universitario','Only Bench Clásico','Olimpiadas Especiales'];
-  mods.sort((a,b)=>(MODORD.indexOf(a)+1||99)-(MODORD.indexOf(b)+1||99));
-  h+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 10px">`;
-  const tab=(v,l,n)=>`<button onclick="nsudaSet('nsudaMod','${v.replace(/'/g,"\\'")}')" style="padding:8px 15px;border-radius:18px;border:1px solid ${fMod===v?'var(--gold)':'var(--border)'};background:${fMod===v?'rgba(212,168,67,.18)':'transparent'};color:${fMod===v?'var(--gold)':'var(--muted)'};font-family:Oswald;font-size:12px;font-weight:${fMod===v?700:400};letter-spacing:.5px;cursor:pointer">${l}${n!=null?` <span style="opacity:.65">(${n})</span>`:''}</button>`;
-  h+=tab('','Todas las modalidades',j.atletas.length);
-  mods.forEach(m=>h+=tab(m,m,j.atletas.filter(a=>a.mod===m).length));
-  h+=`</div>`;
-  // ── Filtros: género · país · categoría · división de edad ──
-  const uniq=(k,cmp)=>[...new Set(j.atletas.map(a=>a[k]).filter(Boolean))].sort(cmp);
-  const sel=(key,label,val,opts,fmt)=>{
-    let s=`<label style="display:flex;flex-direction:column;gap:3px;font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:.5px;text-transform:uppercase">${label}`;
-    s+=`<select onchange="nsudaSet('${key}',this.value)" style="padding:7px 10px;border-radius:8px;border:1px solid ${val?'var(--gold)':'var(--border)'};background:var(--bg2,#0d1f38);color:${val?'var(--gold)':'var(--text)'};font-family:Inter,sans-serif;font-size:12px;min-width:130px;cursor:pointer">`;
-    s+=`<option value=""${val?'':' selected'}>Todas</option>`;
-    opts.forEach(o=>{s+=`<option value="${String(o).replace(/"/g,'&quot;')}"${val===String(o)?' selected':''}>${fmt?fmt(o):o}</option>`});
-    return s+`</select></label>`;
-  };
-  h+=`<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;align-items:flex-end">`;
-  h+=sel('nsudaSex','Género',fSex,['F','M'],v=>v==='F'?'Mujeres':'Hombres');
-  h+=sel('nsudaPais','País',fPais,uniq('pais',(a,b)=>a.localeCompare(b)));
-  h+=sel('nsudaCat','Categoría',fCat,uniq('cat',(a,b)=>_nsudaCatKey(a)-_nsudaCatKey(b)),v=>v+' kg');
-  h+=sel('nsudaDiv','División de edad',fDiv,uniq('div',(a,b)=>(_NSUDA_DIVORD[a]??9)-(_NSUDA_DIVORD[b]??9)));
-  if(fMod||fPais||fCat||fSex||fDiv||fl)h+=`<button onclick="nsudaClear()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--accent);background:rgba(196,30,58,.12);color:var(--accent);font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">✕ Limpiar filtros</button>`;
-  h+=`</div>`;
-  h+=`<div class="fl" style="margin-bottom:10px"><input type="text" placeholder="Buscar atleta, país o universidad..." value="${ST.nsudaS||''}" oninput="nsudaS(this.value)"></div>`;
-  h+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px">${rows.length} inscripción${rows.length!==1?'es':''}${fMod?' · '+fMod:''}${fSex?' · '+(fSex==='F'?'Mujeres':'Hombres'):''}${fPais?' · '+fPais:''}${fCat?' · '+fCat+'kg':''}${fDiv?' · '+fDiv:''} · <span style="color:var(--gold)">R = Reserva</span> · Los atletas chilenos tienen link a su perfil YourLift</div>`;
-  h+=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:760px">`;
-  h+=`<tr style="background:var(--blue)">`;
-  ['#','Atleta','País','Categoría','División','Modalidad','SQ','BP','DL','Total'].forEach((t,i)=>{
-    h+=`<th style="padding:8px 6px;color:#fff;text-align:${i===1||i===2?'left':'center'};font-family:Oswald;letter-spacing:.5px;${i===0?'width:35px':''}">${t}</th>`;
-  });
-  h+=`</tr>`;
-  rows.forEach((a,i)=>{
-    const bg=i%2===0?'transparent':'rgba(30,58,95,.15)';
-    const sexC=a.sexo==='M'?'var(--blue)':'var(--accent)';
-    const nameHtml=a.cod
-      ?`<a href="atleta.html?codigo=${encodeURIComponent(a.cod)}" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(212,168,67,.5);font-weight:600" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${a.n}</a>`
-      :`<span>${a.n}</span>`;
-    h+=`<tr style="background:${bg};border-bottom:1px solid rgba(30,58,95,.2)">`;
-    const slug=_nsudaSlug(a.n);
-    const foto=(window.NSUDA_FOTOS||{})[slug]||'';
-    h+=`<td style="padding:7px 6px;text-align:center;color:var(--muted)">${i+1}</td>`;
-    h+=`<td style="padding:7px 6px"><div style="display:flex;align-items:center;gap:8px"><div onclick="nsudaFicha('${slug}')" title="Ver ficha" style="width:30px;height:30px;border-radius:50%;overflow:hidden;flex-shrink:0;background:rgba(30,58,95,.5);border:1px solid ${foto?'rgba(212,168,67,.5)':'var(--border)'};cursor:pointer;display:flex;align-items:center;justify-content:center">${foto?`<img src="${foto}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:11px;color:var(--muted);font-family:Oswald">${a.n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</span>`}</div><div>${a.cod?nameHtml:`<span onclick="nsudaFicha('${slug}')" style="cursor:pointer">${nameHtml}</span>`}${a.res?' <span title="Reserva" style="background:rgba(212,168,67,.15);color:var(--gold);border:1px solid rgba(212,168,67,.4);padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700">R</span>':''}${a.uni?`<div style="font-size:10px;color:var(--muted)">${a.uni}</div>`:''}</div></div></td>`;
-    h+=`<td style="padding:7px 6px;font-size:11px"><span style="color:${sexC};font-weight:700;margin-right:5px">${a.sexo}</span>${a.pais}</td>`;
-    h+=`<td style="padding:7px 6px;text-align:center"><span style="background:rgba(212,168,67,.12);color:var(--gold);padding:2px 8px;border-radius:10px;font-weight:600;font-size:11px">${a.cat}</span></td>`;
-    h+=`<td style="padding:7px 6px;text-align:center;font-size:11px">${a.div}</td>`;
-    h+=`<td style="padding:7px 6px;text-align:center;font-size:11px">${a.mod}</td>`;
-    ['sq','bp','dl','total'].forEach(k=>{h+=`<td style="padding:7px 6px;text-align:center;font-size:11px;${k==='total'?'color:var(--gold);font-weight:700':''}">${a[k]!=null?a[k]:'—'}</td>`});
-    h+=`</tr>`;
-  });
-  h+=`</table></div></div>`;
-  return h;
-}
 // ── FICHA del atleta de la nómina (modal). No es un perfil: junta las
 // inscripciones del atleta (puede estar en varias listas), su foto si fue
 // subida, país, año y marcas nominadas. Cierra con ✕, click afuera o Esc.
@@ -884,99 +817,237 @@ function nsudaFicha(slug){
   const esc=e=>{if(e.key==='Escape'){m.remove();document.removeEventListener('keydown',esc);}};
   document.addEventListener('keydown',esc);
 }
-let _nsudaTimer=null;
-function nsudaF(v){ST.nsudaF=v;render()}
-function nsudaSet(k,v){ST[k]=v;render()}
-function nsudaClear(){['nsudaF','nsudaMod','nsudaPais','nsudaCat','nsudaSex','nsudaDiv'].forEach(k=>ST[k]='');render()}
-function nsudaS(v){ST.nsudaS=v;if(_nsudaTimer)clearTimeout(_nsudaTimer);_nsudaTimer=setTimeout(()=>{render();setTimeout(()=>{document.querySelectorAll('.fl input').forEach(i=>{if(i.value===v){i.focus();i.setSelectionRange(v.length,v.length)}})},10)},300)}
-function nom(){
+// ══════════════════════════════════════════════════════════════════
+// NÓMINAS — tarjetas por campeonato + vista tipo goodlift.
+// Cada campeonato es una TARJETA a lo ancho (foto del evento, nombre, fecha,
+// organizador — editable desde admin en "Tarjetas de Nóminas" → Firestore
+// nomina_cards/{slug}). Al tocarla se despliega la nómina completa, agrupada
+// por División (banda) y dentro por categoría de peso (subencabezado), estilo
+// goodlift. Filtros (género/categoría/división/país·club/modalidad + buscador)
+// para TODAS las nóminas.
+// ══════════════════════════════════════════════════════════════════
+const _NOM_ISO={'Chile':'cl','Argentina':'ar','Brasil':'br','Brazil':'br','Uruguay':'uy','Paraguay':'py','Perú':'pe','Peru':'pe','Bolivia':'bo','Ecuador':'ec','Colombia':'co','Venezuela':'ve','Guyana':'gy','Surinam':'sr','Suriname':'sr','Costa Rica':'cr','Panamá':'pa','México':'mx'};
+function _nomFlag(p){const c=_NOM_ISO[p];return c?`<img src="https://flagcdn.com/h20/${c}.png" alt="" style="height:12px;border-radius:2px;vertical-align:-1px;margin-right:5px" onerror="this.remove()">`:'';}
+const _NOM_DIVN={'subjunior':'Sub-Junior','sub-junior':'Sub-Junior','sub junior':'Sub-Junior','junior':'Junior','juniors':'Junior','universitario':'Universitario','univ':'Universitario','open':'Open','master i':'Master I','master 1':'Master I','master ii':'Master II','master 2':'Master II','master iii':'Master III','master 3':'Master III','master iv':'Master IV','master 4':'Master IV','special olympics':'Special Olympics','olimpiadas especiales':'Special Olympics'};
+function _nomDiv(d){return _NOM_DIVN[String(d||'').trim().toLowerCase()]||String(d||'').trim()||'Sin división';}
+const _NOM_DIVORD={'Sub-Junior':0,'Junior':1,'Universitario':2,'Open':3,'Master I':4,'Master II':5,'Master III':6,'Master IV':7,'Special Olympics':8};
+// Normaliza categoría a 'N' o 'N+' (acepta '+120', '120+', '-59 kg (Hombre)')
+function _nomCatN(c){const t=String(c||'');const m=t.match(/([+]?)(\d+\.?\d*)(\+?)/);if(!m)return '';return m[2]+((m[1]==='+'||m[3]==='+')?'+':'');}
+function _nomCatKey(n){return (parseFloat(n)||999)+(String(n).endsWith('+')?0.5:0);}
+function _nomCatLbl(n){if(!n)return '—';return String(n).endsWith('+')?('+'+String(n).slice(0,-1)+'kg'):('-'+n+'kg');}
+function _nomDobYear(a){if(a.born)return a.born;const m=String(a.dob||'').match(/(\d{4})/);return m?m[1]:'';}
+
+// ── Estado de la vista ──
+function nomToggle(id){ST.nomOpen=(ST.nomOpen===id)?'':id;ST.nomF={};ST.nomQ='';render();if(ST.nomOpen){setTimeout(()=>{const el=document.getElementById('nomcard_'+id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});},60);}}
+function nomFSet(k,v){ST.nomF=ST.nomF||{};ST.nomF[k]=v;render();}
+function nomFClear(){ST.nomF={};ST.nomQ='';render();}
+let _nomQT=null;
+function nomQ(v){ST.nomQ=v;if(_nomQT)clearTimeout(_nomQT);_nomQT=setTimeout(()=>{render();setTimeout(()=>{document.querySelectorAll('.nomq input').forEach(i=>{if(i.value===v){i.focus();i.setSelectionRange(v.length,v.length)}})},10)},300);}
+
+// ── Fila normalizada para el renderer goodlift ──
+//  {n, year, teamHtml, sexo:'F'|'M', cat:'59'|'120+', div, mod, sq,bp,dl,total,
+//   res, nameHtml, estadoHtml, hasMarks}
+function _nomGLTable(rows,opts){
+  opts=opts||{};
+  const F=ST.nomF||{}, q=(ST.nomQ||'').toLowerCase();
+  let list=rows.slice();
+  if(F.sex)list=list.filter(r=>r.sexo===F.sex);
+  if(F.cat)list=list.filter(r=>r.cat===F.cat);
+  if(F.div)list=list.filter(r=>_nomDiv(r.div)===F.div);
+  if(F.team)list=list.filter(r=>r.team===F.team);
+  if(F.mod)list=list.filter(r=>r.mod===F.mod);
+  if(q)list=list.filter(r=>r.n.toLowerCase().includes(q)||(r.team||'').toLowerCase().includes(q)||(r.uni||'').toLowerCase().includes(q));
+  if(!list.length)return `<div style="padding:26px;text-align:center;color:var(--muted);font-size:12px">Sin atletas con esos filtros</div>`;
+  const marks=opts.marks&&list.some(r=>r.total!=null||r.sq!=null||r.bp!=null||r.dl!=null);
+  // Agrupar: división → (sexo, categoría)
+  const byDiv={};
+  list.forEach(r=>{const d=_nomDiv(r.div);(byDiv[d]=byDiv[d]||[]).push(r);});
+  const divs=Object.keys(byDiv).sort((a,b)=>(_NOM_DIVORD[a]??50)-(_NOM_DIVORD[b]??50));
+  const nCols=3+(marks?4:0)+(opts.club?1:0)+(opts.estado?1:0)+(opts.mod?1:0);
   let h='';
-  if(_nsudaVisible())h+=renderNominaSuda();
-  const visibleEvs=(NM.events||[]).filter(ev=>ev.fromFirebase);
-  if(!visibleEvs.length)return h||'<div class="emp" style="padding:40px;text-align:center;color:var(--muted)">No hay campeonatos activos. El administrador los publicará pronto.</div>';
-  NM.events=visibleEvs; // ensure we only render Firestore events in nóminas
-  NM.events.forEach((ev,ei)=>{
-    const cd=cdStr(ev.date),cc=cdStr(ev.closeDate),cp=cdStrDT(ev.preNominaCloseAt),isUni=ev.extraCols&&ev.extraCols.includes("universidad");
-    h+=`<div class="cd2" style="margin-bottom:24px">`;
-    const lc=ev.liveCount||{};
-    h+=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px"><div><h2 style="font-family:Oswald;font-size:clamp(16px,3.5vw,20px);letter-spacing:1px;text-transform:uppercase">${ev.name}${ev.fromFirebase?' <span style="font-size:10px;background:var(--green);color:#fff;padding:2px 8px;border-radius:10px;vertical-align:middle;animation:pulse 2s infinite">EN VIVO</span>':''} ${ev.hasJsonFallback?'<span style="font-size:10px;background:rgba(212,168,67,.2);color:var(--gold);padding:2px 8px;border-radius:10px;vertical-align:middle;border:1px solid rgba(212,168,67,.4)">Nómina manual</span>':''}</h2><p style="font-size:12px;color:var(--muted);margin-top:2px">${ev.organizer||ev.org||''} · ${ev.location} · ${ev.days}</p>${ev.fromFirebase&&lc.pending>0?`<p style="font-size:11px;color:var(--gold);margin-top:2px">⏳ ${lc.pending} inscripción${lc.pending!==1?"es":""} pendiente${lc.pending!==1?"s":""} de aprobación</p>`:''}</div><div style="display:flex;gap:8px;align-items:center">${ev.fromFirebase&&lc.approved?`<span style="font-size:12px;background:rgba(34,197,94,.15);color:var(--green);padding:4px 10px;border-radius:8px;border:1px solid rgba(34,197,94,.3)">✓ ${lc.approved} confirmados</span>`:"" }<span class="bg" style="background:var(--accent);color:#fff;font-size:14px;padding:6px 14px">${ev.athletes.length} inscritos</span></div></div>`;
-    if(ev.fromFirebase)h+=`<div style="display:flex;gap:14px;margin-bottom:10px;padding:8px 12px;background:rgba(30,58,95,.2);border-radius:8px;border:1px solid rgba(30,58,95,.4);flex-wrap:wrap;align-items:center"><span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">LEYENDA:</span><span style="font-size:11px;display:flex;align-items:center;gap:5px;color:var(--green)"><span style="width:10px;height:10px;border-radius:50%;background:var(--green);flex-shrink:0"></span>Confirmado — plaza asegurada</span><span style="font-size:11px;display:flex;align-items:center;gap:5px;color:var(--gold)"><span style="width:10px;height:10px;background:var(--gold);border-radius:2px;flex-shrink:0"></span>Pendiente — inscripción en revisión por el organizador</span></div>`;
-    // Countdown cards — 3 columnas si hay cierre de pre-nómina, si no 2
-    const hasCp=ev.preNominaCloseAt&&!cp.unknown;
-    h+=`<div style="display:grid;grid-template-columns:${hasCp?'1fr 1fr 1fr':'1fr 1fr'};gap:12px;margin-bottom:16px">`;
-    // Competition countdown
-    h+=`<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center">`;
-    h+=`<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">⏱ Competencia</div>`;
-    if(cd.done)h+=`<div style="font-size:18px;font-weight:700;color:var(--green);font-family:Oswald">COMPETENCIA ACTIVA</div>`;
-    else if(cd.unknown)h+=`<div style="font-size:14px;color:var(--muted);padding:12px 0">Fecha por confirmar</div>`;else h+=`<div style="display:flex;justify-content:center;gap:12px"><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--gold);font-family:Oswald">${cd.d}</span><div style="font-size:10px;color:var(--muted)">días</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--gold);font-family:Oswald">${cd.h}</span><div style="font-size:10px;color:var(--muted)">hrs</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--gold);font-family:Oswald">${cd.m}</span><div style="font-size:10px;color:var(--muted)">min</div></div></div>`;
-    h+=`</div>`;
-    // Roster close countdown
-    h+=`<div style="background:var(--bg);border:1px solid ${cc.done?'var(--accent)':'var(--border)'};border-radius:12px;padding:16px;text-align:center">`;
-    h+=`<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Cierre de Nómina</div>`;
-    if(cc.done)h+=`<div style="font-size:18px;font-weight:700;color:var(--accent);font-family:Oswald">NÓMINA CERRADA</div>`;
-    else if(cc.unknown)h+=`<div style="font-size:14px;color:var(--muted);padding:12px 0">Por confirmar</div>`;else h+=`<div style="display:flex;justify-content:center;gap:12px"><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--accent);font-family:Oswald">${cc.d}</span><div style="font-size:10px;color:var(--muted)">días</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--accent);font-family:Oswald">${cc.h}</span><div style="font-size:10px;color:var(--muted)">hrs</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--accent);font-family:Oswald">${cc.m}</span><div style="font-size:10px;color:var(--muted)">min</div></div></div>`;
-    h+=`</div>`;
-    // Pre-nómina close countdown (cierre de inscripciones)
-    if(hasCp){
-      h+=`<div style="background:var(--bg);border:1px solid ${cp.done?'var(--green)':'rgba(34,197,94,.4)'};border-radius:12px;padding:16px;text-align:center">`;
-      h+=`<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Cierre Inscripciones</div>`;
-      if(cp.done) h+=`<div style="font-size:18px;font-weight:700;color:var(--green);font-family:Oswald">INSCRIPCIONES CERRADAS</div>`;
-      else h+=`<div style="display:flex;justify-content:center;gap:12px"><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--green);font-family:Oswald">${cp.d}</span><div style="font-size:10px;color:var(--muted)">días</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--green);font-family:Oswald">${cp.h}</span><div style="font-size:10px;color:var(--muted)">hrs</div></div><div><span style="font-size:clamp(22px,4vw,32px);font-weight:700;color:var(--green);font-family:Oswald">${cp.m}</span><div style="font-size:10px;color:var(--muted)">min</div></div></div>`;
-      h+=`</div>`;
-    }
-    h+=`</div>`;
-    // Search
-    h+=`<div class="fl" style="margin-bottom:10px"><input type="text" placeholder="Buscar en nómina..." value="${ST.ne===ei?ST.ns:''}" oninput="nss(${ei},this.value)"></div>`;
-    // Roster table
-    const ns=(ST.ne===ei?ST.ns:'').toLowerCase();
-    const fa=ev.athletes.slice().sort((a,b)=>(a.sortOrder||999)-(b.sortOrder||999)).filter(a=>!ns||a.nombre.toLowerCase().includes(ns)||a.club.toLowerCase().includes(ns)||(a.universidad||'').toLowerCase().includes(ns));
-    h+=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">`;
-    h+=`<tr style="background:var(--blue)">`;
-    h+=`<th style="padding:8px 6px;color:#fff;text-align:center;font-family:Oswald;letter-spacing:.5px;width:35px">#</th>`;
-    h+=`<th style="padding:8px 6px;color:#fff;text-align:left;font-family:Oswald;letter-spacing:.5px">Atleta</th>`;
-    h+=`<th style="padding:8px 6px;color:#fff;text-align:center;font-family:Oswald;letter-spacing:.5px">Sexo</th>`;
-    h+=`<th style="padding:8px 6px;color:#fff;text-align:center;font-family:Oswald;letter-spacing:.5px">División</th>`;
-    h+=`<th style="padding:8px 6px;color:#fff;text-align:center;font-family:Oswald;letter-spacing:.5px">Categoría</th>`;
-    if(isUni)h+=`<th style="padding:8px 6px;color:#fff;text-align:left;font-family:Oswald;letter-spacing:.5px">Universidad</th>`;
-    else h+=`<th style="padding:8px 6px;color:#fff;text-align:left;font-family:Oswald;letter-spacing:.5px">Modalidad</th>`;
-    h+=`<th style="padding:8px 6px;color:#fff;text-align:left;font-family:Oswald;letter-spacing:.5px">Club</th>`;
-    if(ev.fromFirebase)h+=`<th style="padding:8px 6px;color:#fff;text-align:center;font-family:Oswald;letter-spacing:.5px;width:68px">Estado</th>`;
+  divs.forEach(d=>{
+    // Banda de división (estilo goodlift)
+    h+=`<div style="background:linear-gradient(90deg,var(--accent),rgba(196,30,58,.55));border-radius:8px 8px 0 0;padding:8px 14px;margin-top:16px"><span style="font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:1px;color:#fff">División «${d}»</span></div>`;
+    h+=`<div style="overflow-x:auto;border:1px solid rgba(30,58,95,.5);border-top:none;border-radius:0 0 8px 8px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:${marks?680:520}px">`;
+    h+=`<tr style="background:rgba(30,58,95,.45)">`;
+    h+=`<th style="padding:6px;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:.5px;width:42px;text-align:center">Pos</th>`;
+    h+=`<th style="padding:6px 8px;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:.5px;text-align:left">Atleta</th>`;
+    h+=`<th style="padding:6px;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:.5px;width:52px;text-align:center">Año</th>`;
+    h+=`<th style="padding:6px 8px;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:.5px;text-align:left">${opts.teamLabel||'Equipo'}</th>`;
+    if(opts.mod)h+=`<th style="padding:6px 8px;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:.5px;text-align:left">Modalidad</th>`;
+    if(marks)['SQ','BP','DL','Total'].forEach(k=>h+=`<th style="padding:6px;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:.5px;width:58px;text-align:center">${k}</th>`);
+    if(opts.estado)h+=`<th style="padding:6px;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:.5px;width:70px;text-align:center">Estado</th>`;
     h+=`</tr>`;
-    fa.forEach((a,i)=>{
-      const isPending=ev.fromFirebase&&a.status==='pending';
-      const bg=isPending?'rgba(212,168,67,.05)':i%2===0?'transparent':'rgba(30,58,95,.15)';
-      const sexC=a.sexo==='Hombre'||a.sexo==='Masculino'?'var(--blue)':'var(--accent)';
-      h+=`<tr style="background:${bg};border-bottom:1px solid rgba(30,58,95,.2);${isPending?'border-left:3px solid var(--gold);opacity:.8':''}">`;
-      h+=`<td style="padding:7px 6px;text-align:center;color:var(--muted)">${i+1}</td>`;
-      h+=`<td style="padding:7px 6px;font-weight:${isPending?400:600}">${a.nombre}</td>`;
-      h+=`<td style="padding:7px 6px;text-align:center"><span style="color:${sexC};font-weight:600;font-size:11px;" >${(a.sexo||'').substring(0,1)||'?'}</span></td>`;
-      h+=`<td style="padding:7px 6px;text-align:center;font-size:11px;" >${a.division||'—'}</td>`;
-      h+=`<td style="padding:7px 6px;text-align:center"><span style="background:rgba(212,168,67,.12);color:var(--gold);padding:2px 8px;border-radius:10px;font-weight:600;font-size:11px;" >${a.categoria||'—'}</span></td>`;
-      if(isUni)h+=`<td style="padding:7px 6px;font-size:11px;color:var(--muted);" >${a.universidad||''}</td>`;
-      else h+=`<td style="padding:7px 6px;font-size:11px;color:var(--muted);" >${a.modalidad||''}</td>`;
-      h+=`<td style="padding:7px 6px;font-size:11px;" >${a.club||'—'}</td>`;
-      if(ev.fromFirebase){
-        const isApproved=a.status==='approved';
-        h+=`<td style="padding:6px;text-align:center">
-          <div style="display:inline-flex;flex-direction:column;align-items:center;gap:1px">
-            <span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px;
-              ${isApproved
-                ? 'background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)'
-                : 'background:rgba(212,168,67,.12);color:var(--gold);border:1px solid rgba(212,168,67,.3)'
-              }">
-              ${isApproved?'✓ OK':'⏳'}
-            </span>
-            <span style="font-size:8px;color:var(--muted)">${isApproved?'Confirmado':'Pendiente'}</span>
-          </div>
-        </td>`;
-      }
-      h+=`</tr>`;
+    // Subgrupos: mujeres primero, categoría ascendente
+    const sub={};
+    byDiv[d].forEach(r=>{const k=(r.sexo==='F'?'0':'1')+'|'+r.cat;(sub[k]=sub[k]||[]).push(r);});
+    const both=new Set(byDiv[d].map(r=>r.sexo)).size>1;
+    Object.keys(sub).sort((a,b)=>{const[sa,ca]=a.split('|'),[sb,cb]=b.split('|');if(sa!==sb)return sa<sb?-1:1;return _nomCatKey(ca)-_nomCatKey(cb);}).forEach(k=>{
+      const [sx,cat]=k.split('|');
+      const lbl=(both?(sx==='0'?'Mujeres ':'Hombres '):'')+_nomCatLbl(cat);
+      h+=`<tr><td colspan="${nCols}" style="padding:6px 12px;background:rgba(212,168,67,.10);border-top:1px solid rgba(30,58,95,.45)"><span style="font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--gold)">${lbl}</span></td></tr>`;
+      const g=sub[k];
+      if(marks)g.sort((a,b)=>(b.total||0)-(a.total||0)||(b.bp||0)-(a.bp||0)||a.n.localeCompare(b.n));
+      else g.sort((a,b)=>a.n.localeCompare(b.n));
+      g.forEach((r,i)=>{
+        h+=`<tr style="background:${i%2?'rgba(30,58,95,.12)':'transparent'};border-top:1px solid rgba(30,58,95,.22)">`;
+        h+=`<td style="padding:6px;text-align:center;color:var(--muted)">${r.res?'<span title="Reserva" style="color:var(--gold);font-weight:700;font-size:10px;margin-right:2px">R</span>':''}${i+1}.</td>`;
+        h+=`<td style="padding:6px 8px">${r.nameHtml||r.n}${r.uni?`<div style="font-size:10px;color:var(--muted)">${r.uni}</div>`:''}</td>`;
+        h+=`<td style="padding:6px;text-align:center;color:var(--muted);font-size:11px">${r.year||'—'}</td>`;
+        h+=`<td style="padding:6px 8px;font-size:11px;white-space:nowrap">${r.teamHtml||r.team||'—'}</td>`;
+        if(opts.mod)h+=`<td style="padding:6px 8px;font-size:11px;color:var(--muted)">${r.mod||'—'}</td>`;
+        if(marks)['sq','bp','dl','total'].forEach(kk=>{const v=r[kk];h+=`<td style="padding:6px;text-align:center;font-size:11px;${kk==='total'?'font-weight:700;color:var(--gold)':''}">${v!=null?v:'—'}</td>`});
+        if(opts.estado)h+=`<td style="padding:6px;text-align:center">${r.estadoHtml||''}</td>`;
+        h+=`</tr>`;
+      });
     });
     h+=`</table></div>`;
-    h+=`<div style="margin-top:8px;font-size:11px;color:var(--muted)">${fa.length<ev.athletes.length?fa.length+' de '+ev.athletes.length+' atletas mostrados':''}</div>`;
-    h+=`</div>`;
   });
-  return h}
+  return h;
+}
+
+// ── Barra de filtros (común a todas las nóminas) ──
+function _nomFilters(rows,opts){
+  const F=ST.nomF||{};
+  const uniq=(fn,cmp)=>[...new Set(rows.map(fn).filter(Boolean))].sort(cmp);
+  const sel=(key,label,val,items,fmt)=>{
+    let s=`<label style="display:flex;flex-direction:column;gap:3px;font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:.5px;text-transform:uppercase">${label}<select onchange="nomFSet('${key}',this.value)" style="padding:6px 9px;border-radius:8px;border:1px solid ${val?'var(--gold)':'var(--border)'};background:var(--bg2,#0d1f38);color:${val?'var(--gold)':'var(--text)'};font-size:12px;min-width:110px;cursor:pointer"><option value="">Todas</option>`;
+    items.forEach(o=>{s+=`<option value="${String(o).replace(/"/g,'&quot;')}"${val===String(o)?' selected':''}>${fmt?fmt(o):o}</option>`});
+    return s+`</select></label>`;
+  };
+  let h=`<div style="display:flex;flex-wrap:wrap;gap:9px;margin:12px 0;align-items:flex-end">`;
+  h+=sel('sex','Género',F.sex||'',['F','M'],v=>v==='F'?'Mujeres':'Hombres');
+  h+=sel('cat','Categoría',F.cat||'',uniq(r=>r.cat,(a,b)=>_nomCatKey(a)-_nomCatKey(b)),v=>_nomCatLbl(v));
+  h+=sel('div','División',F.div||'',uniq(r=>_nomDiv(r.div),(a,b)=>(_NOM_DIVORD[a]??50)-(_NOM_DIVORD[b]??50)));
+  h+=sel('team',opts.teamLabel||'Equipo',F.team||'',uniq(r=>r.team,(a,b)=>a.localeCompare(b)));
+  if(opts.mod)h+=sel('mod','Modalidad',F.mod||'',uniq(r=>r.mod,(a,b)=>a.localeCompare(b)));
+  if(F.sex||F.cat||F.div||F.team||F.mod||ST.nomQ)h+=`<button onclick="nomFClear()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--accent);background:rgba(196,30,58,.12);color:var(--accent);font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">✕ Limpiar</button>`;
+  h+=`</div>`;
+  h+=`<div class="fl nomq" style="margin-bottom:4px"><input type="text" placeholder="Buscar atleta, equipo o universidad..." value="${ST.nomQ||''}" oninput="nomQ(this.value)"></div>`;
+  return h;
+}
+
+// ── Tarjeta (colapsada / expandida) ──
+function _nomCardShell(id,info,innerFn){
+  const cfg=(window.NOMCARDS||{})[id]||{};
+  const foto=cfg.fotoUrl||'';
+  const open=ST.nomOpen===id;
+  const fecha=cfg.fecha||info.fecha||'';
+  const org=cfg.organizador||info.org||'';
+  const lugar=cfg.lugar||info.lugar||'';
+  let h=`<div id="nomcard_${id}" class="cd2" style="margin-bottom:18px;padding:0;overflow:hidden;border:1px solid ${open?'rgba(212,168,67,.55)':'var(--border)'}">`;
+  // Cabecera clickeable, a lo ancho, con la foto del evento de fondo
+  h+=`<div onclick="nomToggle('${id}')" style="cursor:pointer;position:relative;min-height:96px;display:flex;align-items:center;background:${foto?`linear-gradient(90deg,rgba(7,16,32,.93) 30%,rgba(7,16,32,.55)),url('${foto}') center/cover`:'linear-gradient(120deg,#0D1F38,#0a1628)'}">`;
+  h+=`<div style="padding:18px 20px;flex:1;min-width:0">`;
+  h+=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h2 style="font-family:Oswald;font-size:clamp(15px,3.2vw,20px);letter-spacing:1px;text-transform:uppercase;margin:0">${info.name}</h2>${info.badges||''}</div>`;
+  h+=`<p style="font-size:12px;color:var(--muted);margin-top:4px">${[fecha,org,lugar].filter(Boolean).join(' · ')||'&nbsp;'}</p>`;
+  h+=`</div>`;
+  h+=`<div style="padding:0 20px;display:flex;align-items:center;gap:10px;flex-shrink:0">`;
+  h+=`<span class="bg" style="background:var(--accent);color:#fff;font-size:13px;padding:5px 12px;white-space:nowrap">${info.count} inscritos</span>`;
+  h+=`<span style="font-family:Oswald;font-size:11px;color:${open?'var(--gold)':'var(--muted)'};letter-spacing:.5px;white-space:nowrap">${open?'▲ CERRAR':'▼ VER NÓMINA'}</span>`;
+  h+=`</div></div>`;
+  if(open)h+=`<div style="padding:14px 16px 20px">${innerFn()}</div>`;
+  h+=`</div>`;
+  return h;
+}
+
+// ── Sudamericano: filas normalizadas ──
+function _nomSudaRows(){
+  const j=window.NOMSUDA;
+  return (j.atletas||[]).map(a=>{
+    const slug=_nsudaSlug(a.n);
+    const foto=(window.NSUDA_FOTOS||{})[slug]||'';
+    const av=`<span onclick="event.stopPropagation();nsudaFicha('${slug}')" title="Ver ficha" style="display:inline-flex;width:24px;height:24px;border-radius:50%;overflow:hidden;background:rgba(30,58,95,.5);border:1px solid ${foto?'rgba(212,168,67,.5)':'var(--border)'};cursor:pointer;vertical-align:middle;margin-right:7px;align-items:center;justify-content:center;flex-shrink:0">${foto?`<img src="${foto}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:9px;color:var(--muted);font-family:Oswald">${a.n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</span>`}</span>`;
+    const nm=a.cod
+      ?`<a href="atleta.html?codigo=${encodeURIComponent(a.cod)}" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(212,168,67,.5);font-weight:600" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${a.n}</a>`
+      :`<span onclick="nsudaFicha('${slug}')" style="cursor:pointer">${a.n}</span>`;
+    return {n:a.n,year:a.born||'',sexo:a.sexo,cat:_nomCatN(a.cat),div:a.div,mod:a.mod,
+      team:a.pais,teamHtml:_nomFlag(a.pais)+a.pais,uni:a.uni||'',res:!!a.res,
+      sq:a.sq,bp:a.bp,dl:a.dl,total:a.total,nameHtml:av+nm};
+  });
+}
+function _nomSudaCard(){
+  const j=window.NOMSUDA;
+  const id='suda2026';
+  return _nomCardShell(id,{
+    name:j.eventoCorto||'Sudamericano 2026',
+    fecha:j.fechas,org:'FESUPO',lugar:j.lugar,
+    count:j.atletas.length,
+    badges:`<span style="font-size:10px;background:rgba(212,168,67,.2);color:var(--gold);padding:2px 8px;border-radius:10px;border:1px solid rgba(212,168,67,.4)">NÓMINA OFICIAL</span>${j.publicada?'':'<span style="font-size:10px;background:rgba(239,68,68,.15);color:#ef4444;padding:2px 8px;border-radius:10px;border:1px solid rgba(239,68,68,.4)">VISTA PREVIA</span>'}`
+  },()=>{
+    const rows=_nomSudaRows();
+    const F=ST.nomF||{};
+    let h=`<div style="font-size:11px;color:var(--muted)">${j.evento} · ${j.fuente} · <span style="color:var(--gold)">R = Reserva</span> · Los chilenos tienen link a su perfil; el resto abre su ficha</div>`;
+    // Pestañas de MODALIDAD (obligatorias): con +600 inscripciones no se muestra
+    // la nómina completa — primero se elige la modalidad y recién ahí sale la
+    // tabla ordenada estilo goodlift (división → categoría).
+    const MODORD=['Clásico','Equipado','Universitario','Only Bench Clásico','Only Bench Equipado','Olimpiadas Especiales'];
+    const mods=[...new Set(rows.map(r=>r.mod))].sort((a,b)=>(MODORD.indexOf(a)+1||99)-(MODORD.indexOf(b)+1||99));
+    h+=`<div style="display:flex;flex-wrap:wrap;gap:7px;margin:14px 0 4px">`;
+    mods.forEach(m=>{
+      const n=rows.filter(r=>r.mod===m).length, on=F.mod===m;
+      h+=`<button onclick="nomFSet('mod','${m.replace(/'/g,"\\'")}')" style="padding:9px 16px;border-radius:18px;border:1px solid ${on?'var(--gold)':'var(--border)'};background:${on?'rgba(212,168,67,.18)':'transparent'};color:${on?'var(--gold)':'var(--muted)'};font-family:Oswald;font-size:12px;font-weight:${on?700:400};letter-spacing:.5px;cursor:pointer">${m} <span style="opacity:.65">(${n})</span></button>`;
+    });
+    h+=`</div>`;
+    if(!F.mod){
+      h+=`<div style="padding:34px 16px;text-align:center;border:1px dashed rgba(212,168,67,.35);border-radius:12px;margin-top:10px"><div style="font-family:Oswald;font-size:15px;color:var(--gold);letter-spacing:1px">ELEGÍ UNA MODALIDAD</div><div style="font-size:12px;color:var(--muted);margin-top:6px">Seleccioná arriba la modalidad para ver su nómina ordenada por división y categoría.</div></div>`;
+      return h;
+    }
+    h+=_nomFilters(rows.filter(r=>r.mod===F.mod),{teamLabel:'País'});
+    h+=_nomGLTable(rows,{marks:true,teamLabel:'País'});
+    return h;
+  });
+}
+
+// ── Campeonatos (Firestore/nominas.json): filas normalizadas ──
+function _nomEvRows(ev){
+  return (ev.athletes||[]).map(a=>{
+    const male=(a.sexo==='Hombre'||a.sexo==='Masculino'||a.sexo==='M');
+    const isPend=ev.fromFirebase&&a.status==='pending';
+    return {n:a.nombre,year:_nomDobYear(a),sexo:male?'M':'F',cat:_nomCatN(a.categoria),div:a.division,
+      mod:a.modalidad||'',team:a.club||'—',teamHtml:a.club||'—',uni:a.universidad||'',
+      nameHtml:`<span style="font-weight:${isPend?400:600};${isPend?'opacity:.75':''}">${a.nombre}</span>`,
+      estadoHtml:ev.fromFirebase?(a.status==='approved'
+        ?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)">✓ OK</span>`
+        :`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(212,168,67,.12);color:var(--gold);border:1px solid rgba(212,168,67,.3)">⏳</span>`):''};
+  });
+}
+function _nomEvCard(ev,ei){
+  const id=_nsudaSlug(ev.name);
+  const lc=ev.liveCount||{};
+  const badges=(ev.fromFirebase?'<span style="font-size:10px;background:var(--green);color:#fff;padding:2px 8px;border-radius:10px;animation:pulse 2s infinite">EN VIVO</span>':'')
+    +(ev.hasJsonFallback?' <span style="font-size:10px;background:rgba(212,168,67,.2);color:var(--gold);padding:2px 8px;border-radius:10px;border:1px solid rgba(212,168,67,.4)">Nómina manual</span>':'');
+  return _nomCardShell(id,{
+    name:ev.name,fecha:'',org:ev.organizer||ev.org||'',lugar:ev.location||'',
+    count:ev.athletes.length,badges
+  },()=>{
+    const cd=cdStr(ev.date),cc=cdStr(ev.closeDate),cp=cdStrDT(ev.preNominaCloseAt);
+    let h='';
+    if(ev.fromFirebase&&lc.pending>0)h+=`<p style="font-size:11px;color:var(--gold);margin-bottom:8px">⏳ ${lc.pending} inscripción${lc.pending!==1?'es':''} pendiente${lc.pending!==1?'s':''} de aprobación${lc.approved?` · <span style="color:var(--green)">✓ ${lc.approved} confirmados</span>`:''}</p>`;
+    // Countdowns (igual que antes, compactos)
+    const hasCp=ev.preNominaCloseAt&&!cp.unknown;
+    const cdBox=(t,c,color)=>`<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center"><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">${t}</div>${c.done?`<div style="font-size:13px;font-weight:700;color:${color};font-family:Oswald">${t==='⏱ Competencia'?'ACTIVA':'CERRADA'}</div>`:c.unknown?`<div style="font-size:11px;color:var(--muted)">Por confirmar</div>`:`<div style="font-family:Oswald;font-size:17px;font-weight:700;color:${color}">${c.d}d ${c.h}h ${c.m}m</div>`}</div>`;
+    h+=`<div style="display:grid;grid-template-columns:repeat(${hasCp?3:2},1fr);gap:9px;margin-bottom:8px">`;
+    h+=cdBox('⏱ Competencia',cd,'var(--gold)')+cdBox('Cierre de Nómina',cc,'var(--accent)');
+    if(hasCp)h+=cdBox('Cierre Inscripciones',cp,'var(--green)');
+    h+=`</div>`;
+    const rows=_nomEvRows(ev);
+    h+=_nomFilters(rows,{teamLabel:'Club',mod:true});
+    h+=_nomGLTable(rows,{marks:false,teamLabel:'Club',mod:!(ST.nomF&&ST.nomF.mod),estado:ev.fromFirebase});
+    return h;
+  });
+}
+
+function nom(){
+  let h='';
+  if(_nsudaVisible())h+=_nomSudaCard();
+  const visibleEvs=(NM.events||[]).filter(ev=>ev.fromFirebase);
+  if(!visibleEvs.length&&!h)return '<div class="emp" style="padding:40px;text-align:center;color:var(--muted)">No hay campeonatos activos. El administrador los publicará pronto.</div>';
+  NM.events=visibleEvs;
+  NM.events.forEach((ev,ei)=>{h+=_nomEvCard(ev,ei);});
+  return h;
+}
+
 let _nssTimer=null;
 function nss(ei,v){ST.ne=ei;ST.ns=v;if(_nssTimer)clearTimeout(_nssTimer);_nssTimer=setTimeout(()=>{render();setTimeout(()=>{const inputs=document.querySelectorAll('.fl input');inputs.forEach(i=>{if(i.value===v){i.focus();i.setSelectionRange(i.value.length,i.value.length)}})},10)},300)}
 function sfl(l){ST.fl=l;ST.p=0;render()}
