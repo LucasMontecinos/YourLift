@@ -427,6 +427,8 @@ async function initFB(){
       const ce=_fsCache('eventos',10*60*1000);
       if(ce){_applyEventos(ce);}
       else{const es=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'eventos'));const docs=es.docs.map(d=>({...d.data(),id:d.id}));_fsSetCache('eventos',docs);_applyEventos(docs);}
+      // Logos de evento (subidos desde admin → Campeonatos) para las tarjetas de nómina
+      try{const _ev=_fsCache('eventos',10*60*1000)||[];const lg={};_ev.forEach(e=>{if(e&&e.id&&e.logoUrl)lg[e.id]=e.logoUrl;});window.NOMEVENT_LOGOS=lg;if(ST.v==='nominas')render();}catch(_){}
     }catch(e){console.warn('[eventos]',e);}
     // ── Edits de atletas ──
     await loadEdits();
@@ -947,8 +949,11 @@ function _nomCardShell(id,info,innerFn){
   h+=`<p style="font-size:12px;color:var(--muted);margin-top:4px">${[fecha,org,lugarHtml].filter(Boolean).join(' · ')||'&nbsp;'}</p>`;
   if(info.cierre)h+=`<p style="font-size:11px;color:var(--accent);margin-top:2px">Cierre de nómina: ${info.cierre}</p>`;
   h+=`</div>`;
-  // Logo oficial del evento (si el archivo existe; si no, no se muestra nada)
-  if(info.logo)h+=`<div style="padding:0 4px 0 12px;flex-shrink:0;display:flex;align-items:center"><img src="${info.logo}" alt="" style="height:74px;width:auto;max-width:150px;object-fit:contain;background:#fff;border-radius:8px;padding:5px" onerror="this.parentElement.remove()"></div>`;
+  // Logo oficial del evento: primero el subido desde admin → Campeonatos
+  // (eventos/{id}.logoUrl en Firebase Storage), si no el del JSON. Si no hay
+  // ninguno o la imagen falla, el bloque se quita solo.
+  const logoUrl=cfg.logoUrl||(window.NOMEVENT_LOGOS||{})[info.eventoId]||info.logo||'';
+  if(logoUrl)h+=`<div style="padding:0 4px 0 12px;flex-shrink:0;display:flex;align-items:center"><img src="${logoUrl}" alt="" style="height:74px;width:auto;max-width:150px;object-fit:contain;background:#fff;border-radius:8px;padding:5px" onerror="this.parentElement.remove()"></div>`;
   h+=`<div style="padding:0 20px;display:flex;align-items:center;gap:10px;flex-shrink:0">`;
   h+=`<span class="bg" style="background:var(--accent);color:#fff;font-size:13px;padding:5px 12px;white-space:nowrap">${info.countLabel||(info.count+' inscritos')}</span>`;
   h+=`<span style="font-family:Oswald;font-size:11px;color:${open?'var(--gold)':'var(--muted)'};letter-spacing:.5px;white-space:nowrap">${open?'▲ CERRAR':'▼ VER NÓMINA'}</span>`;
@@ -996,7 +1001,7 @@ function _nomSudaCard(){
   return _nomCardShell(id,{
     name:j.eventoCorto||'Sudamericano 2026',
     fecha:j.fechas,org:'FESUPO',lugar:j.lugar,
-    maps:j.maps||'', cierre:j.cierreNomina||'', logo:j.logo||'',
+    maps:j.maps||'', cierre:j.cierreNomina||'', logo:j.logo||'', eventoId:j.eventoId||'Sudamericano_2026',
     count:j.atletas.length,
     countLabel:`${st.ins} inscripciones · ${st.personas} atletas`,
     badges:`<span style="font-size:10px;background:rgba(212,168,67,.2);color:var(--gold);padding:2px 8px;border-radius:10px;border:1px solid rgba(212,168,67,.4)">NÓMINA OFICIAL</span>${j.publicada?'':'<span style="font-size:10px;background:rgba(239,68,68,.15);color:#ef4444;padding:2px 8px;border-radius:10px;border:1px solid rgba(239,68,68,.4)">VISTA PREVIA</span>'}`
