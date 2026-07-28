@@ -120,6 +120,25 @@ a{color:var(--accent);text-decoration:none}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes balloonUp{0%{transform:translateY(0) rotate(0deg);opacity:0.85}50%{opacity:0.9}100%{transform:translateY(-120vh) rotate(20deg);opacity:0}}
 @media(max-width:640px){.fl{flex-direction:column}.fl select{max-width:none}.pg{grid-template-columns:1fr}.cm{grid-template-columns:1fr}.bx{grid-template-columns:repeat(3,1fr)}.rr{grid-template-columns:30px 1fr 60px 50px 1fr 55px;font-size:11px;gap:4px}.rp{min-width:48px;padding:4px 5px}.rp .rv{font-size:13px}table th,table td{padding:5px 3px!important;font-size:10px!important}}
+
+/* ── Tarjetas de nómina en TELÉFONO ───────────────────────────────
+   En pantallas angostas la cabecera se apilaba en columnas de ~150px y cada
+   palabra caía en su propia línea ("20 / al / 27 / de / septiembre…"). Acá se
+   apila en vertical, el texto usa todo el ancho y la tabla se compacta. */
+@media (max-width:640px){
+  .nomcard-head{flex-direction:column;align-items:stretch!important;min-height:0!important}
+  .nomcard-info{padding:14px 14px 8px!important;flex:1 1 auto!important;order:2}
+  .nomcard-info h2{font-size:16px!important;line-height:1.25}
+  .nomcard-meta{padding:0 14px 14px!important;flex-wrap:wrap;justify-content:space-between;width:100%;order:3}
+  .nomcard-logo{padding:14px 14px 0!important;order:1;justify-content:center}
+  .nomcard-logo img{height:56px!important;max-width:60%!important}
+  /* Tabla: más compacta y con scroll propio + nombre fijo a la izquierda */
+  .nomtbl{font-size:11px!important}
+  .nomtbl th,.nomtbl td{padding:5px 6px!important;white-space:nowrap}
+  .nomtbl th:nth-child(2),.nomtbl td:nth-child(2){position:sticky;left:0;background:#0b1a30;z-index:1}
+  .nomwrap{-webkit-overflow-scrolling:touch}
+  .nomwrap::after{content:'\2190 desliz\00E1 para ver m\00E1s \2192';display:block;text-align:center;font-size:10px;color:var(--muted);padding:6px 0 2px;font-family:Oswald,sans-serif;letter-spacing:.5px}
+}
 </style>
 </head>
 <body>
@@ -870,7 +889,7 @@ function _nomGLTable(rows,opts){
   divs.forEach(d=>{
     // Banda de división (estilo goodlift)
     h+=`<div style="background:linear-gradient(90deg,var(--accent),rgba(196,30,58,.55));border-radius:8px 8px 0 0;padding:8px 14px;margin-top:16px"><span style="font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:1px;color:#fff">División «${d}»</span></div>`;
-    h+=`<div style="overflow-x:auto;border:1px solid rgba(30,58,95,.5);border-top:none;border-radius:0 0 8px 8px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:${marks?680:520}px">`;
+    h+=`<div class="nomwrap" style="overflow-x:auto;border:1px solid rgba(30,58,95,.5);border-top:none;border-radius:0 0 8px 8px"><table class="nomtbl" style="width:100%;border-collapse:collapse;font-size:12px;min-width:${marks?680:520}px">`;
     h+=`<tr style="background:rgba(30,58,95,.45)">`;
     h+=`<th style="padding:6px;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:.5px;width:42px;text-align:center">Pos</th>`;
     h+=`<th style="padding:6px 8px;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:.5px;text-align:left">Atleta</th>`;
@@ -939,8 +958,8 @@ function _nomCardShell(id,info,innerFn){
   const lugar=cfg.lugar||info.lugar||'';
   let h=`<div id="nomcard_${id}" class="cd2" style="margin-bottom:18px;padding:0;overflow:hidden;border:1px solid ${open?'rgba(212,168,67,.55)':'var(--border)'}">`;
   // Cabecera clickeable, a lo ancho, con la foto del evento de fondo
-  h+=`<div onclick="nomToggle('${id}')" style="cursor:pointer;position:relative;min-height:96px;display:flex;align-items:center;background:${foto?`linear-gradient(90deg,rgba(7,16,32,.93) 30%,rgba(7,16,32,.55)),url('${foto}') center/cover`:'linear-gradient(120deg,#0D1F38,#0a1628)'}">`;
-  h+=`<div style="padding:18px 20px;flex:1;min-width:0">`;
+  h+=`<div class="nomcard-head" onclick="nomToggle('${id}')" style="cursor:pointer;position:relative;min-height:96px;display:flex;align-items:center;background:${foto?`linear-gradient(90deg,rgba(7,16,32,.93) 30%,rgba(7,16,32,.55)),url('${foto}') center/cover`:'linear-gradient(120deg,#0D1F38,#0a1628)'}">`;
+  h+=`<div class="nomcard-info" style="padding:18px 20px;flex:1 1 260px;min-width:0">`;
   h+=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h2 style="font-family:Oswald;font-size:clamp(15px,3.2vw,20px);letter-spacing:1px;text-transform:uppercase;margin:0">${info.name}</h2>${info.badges||''}</div>`;
   // Fecha · organizador · lugar (con link a Google Maps si el evento lo trae) · cierre de nómina
   const lugarHtml=info.maps
@@ -953,8 +972,8 @@ function _nomCardShell(id,info,innerFn){
   // (eventos/{id}.logoUrl en Firebase Storage), si no el del JSON. Si no hay
   // ninguno o la imagen falla, el bloque se quita solo.
   const logoUrl=cfg.logoUrl||(window.NOMEVENT_LOGOS||{})[info.eventoId]||info.logo||'';
-  if(logoUrl)h+=`<div style="padding:0 4px 0 12px;flex-shrink:0;display:flex;align-items:center"><img src="${logoUrl}" alt="" style="height:74px;width:auto;max-width:150px;object-fit:contain;background:#fff;border-radius:8px;padding:5px" onerror="this.parentElement.remove()"></div>`;
-  h+=`<div style="padding:0 20px;display:flex;align-items:center;gap:10px;flex-shrink:0">`;
+  if(logoUrl)h+=`<div class="nomcard-logo" style="padding:0 4px 0 12px;flex-shrink:0;display:flex;align-items:center"><img src="${logoUrl}" alt="" style="height:74px;width:auto;max-width:150px;object-fit:contain;background:#fff;border-radius:8px;padding:5px" onerror="this.parentElement.remove()"></div>`;
+  h+=`<div class="nomcard-meta" style="padding:0 20px;display:flex;align-items:center;gap:10px;flex-shrink:0">`;
   h+=`<span class="bg" style="background:var(--accent);color:#fff;font-size:13px;padding:5px 12px;white-space:nowrap">${info.countLabel||(info.count+' inscritos')}</span>`;
   h+=`<span style="font-family:Oswald;font-size:11px;color:${open?'var(--gold)':'var(--muted)'};letter-spacing:.5px;white-space:nowrap">${open?'▲ CERRAR':'▼ VER NÓMINA'}</span>`;
   h+=`</div></div>`;
