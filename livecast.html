@@ -384,6 +384,27 @@ function txDocId(base){return TARIMA?`${base}_T${TARIMA}`:base;}
 // porque ambos usan fbDocId() (basado en el nombre del evento). Si no hay evento, cae
 // al id viejo (compatibilidad).
 function evStateDocId(base){const ev=fbDocId();return ev?(base+'__'+ev):txDocId(base);}
+// Firma liviana de la competencia (cuántas decisiones y suma de pesos). Sirve
+// para detectar si esta pantalla EDITÓ algo que no se está guardando.
+function _dataSig(){
+  let n=0,s=0;
+  (DATA.athletes||[]).forEach(a=>{['sq','bp','dl'].forEach(l=>{
+    ((a.att&&a.att[l])||[]).forEach(x=>{ if(x){ s+=(x.w||0); if(x.r)n++; } });
+  })});
+  return n+'|'+Math.round(s*10);
+}
+// Aviso cuando se editan datos estando en modo ESPECTADOR (no escribe nada).
+function _spectatorEditAlert(){
+  let el=document.getElementById('spectModeBanner');
+  if(!el){
+    el=document.createElement('div'); el.id='spectModeBanner';
+    el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:100000;background:#b45309;color:#fff;padding:9px 14px;font-family:Oswald,sans-serif;font-size:13px;letter-spacing:.5px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.5)';
+    document.body.appendChild(el);
+  }
+  el.innerHTML='\uD83D\uDC41 EST\u00c1S EN MODO ESPECTADOR \u2014 lo que carg\u00e1s NO se guarda ni lo ve nadie. '
+    +'<button onclick="setSyncMode(true)" style="margin-left:8px;padding:4px 14px;border-radius:6px;border:none;background:#fff;color:#b45309;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">CAMBIAR A CONTROLADOR</button>';
+}
+function _spectatorEditOk(){ const el=document.getElementById('spectModeBanner'); if(el)el.remove(); }
 // Banner rojo fijo cuando las escrituras a Firebase fallan: sin esto el operador
 // sigue cargando pesos creyendo que todo va bien mientras el espectador ve datos
 // viejos. Se quita solo en cuanto una escritura vuelve a salir bien.
@@ -404,7 +425,14 @@ function _syncWriteOk(){ const el=document.getElementById('syncErrBanner'); if(e
 let _syncInFlight=false,_syncPending=false;
 async function syncToFB(){
   if(!fbReady||!isAdmin||_fbSyncing)return;
-  if(!window.IS_CONTROLLER)return; // Solo el controller escribe — evita conflictos multi-admin
+  if(!window.IS_CONTROLLER){
+    // Modo ESPECTADOR: esta pantalla no escribe. Si además se están EDITANDO datos
+    // (pesos/decisiones cambiaron respecto de lo último sincronizado), se avisa —
+    // antes fallaba en silencio y el operador cargaba pesos que no llegaban a
+    // nadie. Una pantalla espectadora que solo mira nunca dispara el aviso.
+    try{ if(isAdmin && _dataSig()!==window._lastSyncedSig) _spectatorEditAlert(); }catch(e){}
+    return;
+  }
   // Si ya hay una escritura en curso, NO se descarta este cambio: se marca como
   // pendiente y se vuelve a escribir al terminar. (Antes se hacía `return` y el
   // cambio se perdía para siempre — cargando pesos rápido, o con la red lenta,
@@ -423,7 +451,8 @@ async function syncToFB(){
       try{
         const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null,ts:Date.now(),writer:window._WRITER_ID};
         await window._fb.setDoc(ref,payload);
-        _syncWriteOk();
+        window._lastSyncedSig=_dataSig();
+        _syncWriteOk(); _spectatorEditOk();
         return;
       }catch(e){
         if(attempt===2){
@@ -510,6 +539,9 @@ function startFBSync(){
         DATA.compTimer=typeof d.compTimer!=='undefined'?d.compTimer:null;
       }
       DATA.lotsGenerated=d.lotsGenerated||false;
+      // Alinear la firma con lo que acaba de llegar: así el aviso de "modo
+      // espectador" solo aparece si ESTA pantalla editó algo por su cuenta.
+      try{window._lastSyncedSig=_dataSig();}catch(e){}
       if(typeof d.timer==='number'){DATA.timer=d.timer;DATA.timerOn=d.timerOn||false;if(DATA.timerOn&&!mainTI)startTimer(false);if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}}
       const newSig = JSON.stringify(DATA.athletes)+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight;
       const structuralChange = prevSig !== newSig;
