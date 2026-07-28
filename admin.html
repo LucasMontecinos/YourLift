@@ -1565,6 +1565,7 @@ function render(){
       <div class="side-label">Sistema</div>
       <a href="livecast.html" target="_blank" class="side-btn" style="text-decoration:none">YourLift</a>
       <button class="side-btn ${ST.view==='campeonatos'?'active':''}" onclick="go('campeonatos')">Campeonatos</button>
+      <button class="side-btn ${ST.view==='publico'?'active':''}" onclick="go('publico')">YourLift Público</button>
       <button class="side-btn ${ST.view==='exports'?'active':''}" onclick="go('exports')">Exports</button>
       <button class="side-btn ${ST.view==='audit'?'active':''}" onclick="go('audit')">Audit Log</button>
       ${ST.pendingResults?`<button class="side-btn ${ST.view==='mergeResults'?'active':''}" onclick="go('mergeResults')" style="border-color:var(--green);color:var(--green)">Resultados Pendientes <span style="background:var(--green);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.pendingResults}</span></button>`:''}
@@ -1595,6 +1596,7 @@ function render(){
   else if(ST.view==='importar')content=renderImportar();
   else if(ST.view==='cronograma')content=renderCronoEditor();
   else if(ST.view==='campeonatos')content=renderCampeonatos();
+  else if(ST.view==='publico')content=renderPublico();
   else if(ST.view==='exports')content=renderExports();
   else if(ST.view==='audit')content=renderAudit();
   else if(ST.view==='admins'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderAdmins();else go('athletes');}
@@ -6305,6 +6307,69 @@ function renderSudaFotos(){
     </tr>`;
   });
   h+=`</table></div>`;
+  return h;
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// YOURLIFT PÚBLICO — qué competencias ve la gente en "Competencia en Vivo"
+// (index.html → hamburguesa → Competencia en Vivo). Es INDEPENDIENTE de lo que
+// ves vos en el livecast: acá podés tener muchas competencias cargadas y
+// mostrarle al público solo la que se está transmitiendo hoy.
+// Marca el campo publicoVisible en eventos/{id}.
+// ══════════════════════════════════════════════════════════════════
+window.pubToggle=async function(id,on){
+  const ev=(ST.eventos||[]).find(e=>e.id===id); if(!ev)return;
+  const prev=ev.publicoVisible===true;
+  ev.publicoVisible=!!on; render();                    // respuesta inmediata
+  try{
+    await setDoc(doc(db,'eventos',id),{publicoVisible:!!on},{merge:true});
+    showToast(on?('✓ "'+(ev.name||id)+'" ya se ve en Competencia en Vivo')
+                :('Oculto del público: "'+(ev.name||id)+'"'));
+  }catch(e){
+    ev.publicoVisible=prev; render();                  // revertir si falló
+    showToast('No se pudo guardar: '+e.message,null,true);
+  }
+};
+window.pubHideAll=async function(){
+  const on=(ST.eventos||[]).filter(e=>e.publicoVisible===true);
+  if(!on.length){showToast('No hay competencias visibles para el público');return;}
+  if(!confirm('¿Ocultar del público las '+on.length+' competencia(s) visibles?\n\nLa pestaña "Competencia en Vivo" va a quedar vacía.'))return;
+  for(const e of on){ try{ await setDoc(doc(db,'eventos',e.id),{publicoVisible:false},{merge:true}); e.publicoVisible=false; }catch(_){} }
+  render(); showToast('Listo: no se muestra ninguna competencia al público');
+};
+function renderPublico(){
+  const evs=(ST.eventos||[]).slice().sort((a,b)=>{
+    const av=a.publicoVisible===true?0:1, bv=b.publicoVisible===true?0:1;
+    if(av!==bv)return av-bv;                            // primero las visibles
+    return String(a.name||'').localeCompare(String(b.name||''));
+  });
+  const nOn=evs.filter(e=>e.publicoVisible===true).length;
+  let h=`<div class="h1">YourLift Público</div>
+  <p class="subtitle">Elegí qué competencias ve la gente en <b>Competencia en Vivo</b> (yourlift.cl → menú ☰). El público entra siempre como <b>espectador</b>: puede mirar, nunca operar. Lo que no marques acá sigue disponible para vos en el livecast, pero no se le muestra a nadie.</p>`;
+  h+=`<div class="card" style="padding:14px 16px;margin-bottom:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+    <span style="font-family:Oswald;font-size:13px">${nOn} de ${evs.length} visibles para el público</span>
+    <span style="flex:1"></span>
+    <a href="index.html#envivo" target="_blank" class="btn" style="padding:8px 14px;font-size:12px;background:transparent;border:1px solid var(--border);text-decoration:none">Ver como público ↗</a>
+    ${nOn?`<button class="btn" onclick="pubHideAll()" style="padding:8px 14px;font-size:12px;background:transparent;border:1px solid var(--red);color:var(--red)">Ocultar todas</button>`:''}
+  </div>`;
+  if(!evs.length)return h+`<div class="card" style="padding:24px;text-align:center;color:var(--muted)">No hay campeonatos cargados todavía.</div>`;
+  h+=`<div class="card" style="padding:0;overflow:hidden">`;
+  evs.forEach(e=>{
+    const on=e.publicoVisible===true;
+    h+=`<div style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-bottom:1px solid var(--border);${on?'background:rgba(34,197,94,.06)':''}">
+      <div style="width:52px;height:38px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:${e.logoUrl?'#fff':'transparent'};border-radius:6px;border:1px solid var(--border)">
+        ${e.logoUrl?`<img src="${esc(e.logoUrl)}" style="max-width:100%;max-height:100%;object-fit:contain">`:'<span style="font-size:9px;color:var(--muted)">sin logo</span>'}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis">${esc(e.name||e.id)}</div>
+        <div style="font-size:10px;color:var(--muted)">${esc(e.id)}${e.status?' · '+esc(e.status):''}</div>
+      </div>
+      ${on?`<span style="font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--green);white-space:nowrap">● EN VIVO PARA EL PÚBLICO</span>`:''}
+      <button onclick="pubToggle('${esc(e.id)}',${on?'false':'true'})" style="padding:7px 14px;border-radius:8px;border:1px solid ${on?'var(--red)':'var(--green)'};background:transparent;color:${on?'var(--red)':'var(--green)'};font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap">${on?'OCULTAR':'MOSTRAR'}</button>
+    </div>`;
+  });
+  h+=`</div>`;
   return h;
 }
 

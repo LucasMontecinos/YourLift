@@ -201,6 +201,7 @@ function buildMenu(){
   const items=[
     {v:'home',l:'Inicio',ic:''},
     {v:'nominas',l:'Nóminas',ic:''},
+    {v:'envivo',l:'Competencia en Vivo',ic:'',cls:'special-r'},
     {v:'stats',l:'Estadísticas',ic:''},
     {v:'records',l:'Records',ic:''},
     {v:'trans',l:'Transmisiones',ic:''},
@@ -448,6 +449,14 @@ async function initFB(){
       else{const es=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'eventos'));const docs=es.docs.map(d=>({...d.data(),id:d.id}));_fsSetCache('eventos',docs);_applyEventos(docs);}
       // Logos de evento (subidos desde admin → Campeonatos) para las tarjetas de nómina
       try{const _ev=_fsCache('eventos',10*60*1000)||[];const lg={};_ev.forEach(e=>{if(e&&e.id&&e.logoUrl)lg[e.id]=e.logoUrl;});window.NOMEVENT_LOGOS=lg;if(ST.v==='nominas')render();}catch(_){}
+      // Competencias habilitadas para el PÚBLICO (admin → YourLift Público).
+      // Solo las marcadas con publicoVisible salen en "Competencia en Vivo".
+      try{
+        const _ev=_fsCache('eventos',10*60*1000)||[];
+        window.EVENTOS_PUB=_ev.filter(e=>e&&e.publicoVisible===true)
+          .map(e=>({id:e.id,name:e.name||e.id,logoUrl:e.logoUrl||'',fecha:e.fecha||e.fechas||'',lugar:e.lugar||e.location||''}));
+        if(ST.v==='envivo')render();
+      }catch(_){ window.EVENTOS_PUB=window.EVENTOS_PUB||[]; }
     }catch(e){console.warn('[eventos]',e);}
     // ── Edits de atletas ──
     await loadEdits();
@@ -1131,9 +1140,48 @@ function render(){const app=document.getElementById("app");
     else if(ST.v==="glcalc")h+=glcalc();
     else if(ST.v==="entrenadores")h+=renderEntrenadoresPub();
     else if(ST.v==="terminos")h+=renderTerminos();
+    else if(ST.v==="envivo")h+=renderEnVivoPub();
     else h+=nom();
     if(typeof buildMenu==='function')buildMenu();
   }
+// ── COMPETENCIA EN VIVO (público) ─────────────────────────────────
+// Lista SOLO los eventos que se habilitaron para el público desde
+// admin → YourLift Público (campo publicoVisible en eventos/{id}). Abre el
+// livecast en modo ESPECTADOR: sin sesión no se puede operar nada.
+function renderEnVivoPub(){
+  const evs=(window.EVENTOS_PUB||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  let h=`<div style="max-width:900px;margin:0 auto;padding:0 4px">`;
+  h+=`<h2 style="font-family:Oswald;font-size:clamp(20px,5vw,28px);letter-spacing:2px;text-transform:uppercase;margin:0 0 4px">Competencia en Vivo</h2>`;
+  h+=`<p style="color:var(--muted);font-size:13px;margin-bottom:18px">Seguí la competencia en tiempo real: atleta en tarima, intentos y resultados.</p>`;
+  if(!window.EVENTOS_PUB){
+    h+=`<div class="cd2" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">Cargando competencias…</div></div>`;
+    return h;
+  }
+  if(!evs.length){
+    h+=`<div class="cd2" style="padding:30px 22px;text-align:center">
+      <div style="font-family:Oswald;font-size:16px;letter-spacing:1px;color:var(--gold);margin-bottom:6px">NO HAY COMPETENCIAS EN VIVO</div>
+      <div style="color:var(--muted);font-size:13px;line-height:1.5">Cuando haya una competencia transmitiéndose, aparece acá.</div>
+    </div></div>`;
+    return h;
+  }
+  h+=`<div style="display:grid;gap:12px">`;
+  evs.forEach(e=>{
+    const url='livecast.html?evento='+encodeURIComponent(e.id);
+    h+=`<a href="${url}" style="text-decoration:none;color:inherit">
+      <div class="cd2" style="padding:0;overflow:hidden;display:flex;align-items:stretch;min-height:88px">
+        ${e.logoUrl?`<div style="flex-shrink:0;width:96px;background:#fff;display:flex;align-items:center;justify-content:center;padding:8px"><img src="${e.logoUrl}" alt="" style="max-width:100%;max-height:70px;object-fit:contain" onerror="this.parentElement.remove()"></div>`:''}
+        <div style="padding:14px 16px;flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center">
+          <div style="font-family:Oswald;font-size:clamp(14px,3.4vw,17px);letter-spacing:.5px;text-transform:uppercase;line-height:1.25">${e.name||e.id}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">${[e.fecha,e.lugar].filter(Boolean).join(' · ')||'&nbsp;'}</div>
+        </div>
+        <div style="padding:0 16px;display:flex;align-items:center;flex-shrink:0">
+          <span style="background:var(--accent);color:#fff;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 14px;border-radius:20px;white-space:nowrap">VER EN VIVO</span>
+        </div>
+      </div></a>`;
+  });
+  h+=`</div></div>`;
+  return h;
+}
 function embedded(url){return `<iframe src="${url}?embedded=1" style="width:100%;height:calc(100vh - 110px);min-height:600px;border:0;background:transparent;display:block" loading="lazy"></iframe>`}
 
 // ── Solicitud de certificado (público, moderado) ──
