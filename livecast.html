@@ -7317,6 +7317,9 @@ window.toggleCtAutoScroll=function(){
 // que pidió el atleta en el pesaje. Se omite lo que no pidió (palmetas 0 → no
 // sale, seguros vacíos → no sale). Sentadilla: abatible izq/der/ambos.
 // Banca: altura de seguros y cantidad de palmetas. Lo ve quien monta la barra.
+// ¿El atleta compite en Powerlifting Y en Only Bench de la misma línea?
+// (una sola banca en tarima que cuenta para los dos rankings)
+function _isPlusBench(a){const m=String(a&&a.mod||'');return m==='classic_bench'||m==='equipped_bench';}
 function _rackSetup(a,lift){
   if(!a)return '';
   const out=[];
@@ -7618,6 +7621,30 @@ function renderCompete(){
           }
         });
         h+='<td></td>';
+        h+='</tr>';
+      }
+      // ── Fila ESPEJO de Only Bench (estilo LiftingCast) ──────────────────
+      // Si el atleta compite en PL + Only Bench, en BANCA sale una segunda vez
+      // debajo con su MISMO intento: sube a tarima una sola vez y esa banca
+      // cuenta para los dos rankings. Es un reflejo de solo lectura del mismo
+      // dato — al marcar válido/nulo arriba, acá queda automático (imposible
+      // que se desincronicen). Sentadilla y peso muerto son solo del PL.
+      if(DATA.lift==='bp' && _isPlusBench(a)){
+        const eqB=String(a.mod)==='equipped_bench';
+        h+='<tr style="border-bottom:1px solid rgba(30,58,95,.18);background:rgba(167,139,250,.06)">';
+        h+='<td style="text-align:center;padding:6px 4px;color:#a78bfa;font-size:'+Math.round(13*rsc)+'px">\u21B3</td>';
+        h+='<td style="padding:6px 8px"><div style="font-size:'+Math.round(11*rsc)+'px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span>'+a.name+'</span>'
+          +'<span style="background:#a78bfa;color:#0A1628;padding:1px 6px;border-radius:4px;font-size:8px;font-family:Oswald;font-weight:700;letter-spacing:1px">ONLY BENCH'+(eqB?' EQ':'')+'</span>'
+          +'<span style="font-size:8px;color:var(--muted)">mismo intento \u2014 se marca solo</span></div></td>';
+        LIFTS.forEach(l=>{
+          for(let j=0;j<3;j++){
+            if(l!=='bp'){h+='<td></td>';continue;}
+            const at=a.att.bp[j]||{w:0,r:null};
+            const cls=at.r==='g'?'att-g':at.r==='n'?'att-n':at.w>0?'att-p':'att-e';
+            h+='<td style="padding:'+Math.round(3*rsc)+'px;vertical-align:top"><div class="'+cls+' att" title="Reflejo del intento de banca (no se edita ac\u00e1)" style="font-size:'+Math.round(12*rsc)+'px;font-weight:700;padding:'+Math.round(8*rsc)+'px 4px;opacity:.92;cursor:default">'+(at.w||'\u2014')+'</div></td>';
+          }
+        });
+        h+='<td style="text-align:center;padding:6px 4px;font-weight:700;font-family:Oswald;color:#a78bfa;font-size:12px">'+(bestOf(a,'bp')||'\u2014')+'</td>';
         h+='</tr>';
       }
     });
@@ -8807,6 +8834,31 @@ function applyEventURLParam(){
         DATA.events.push(wanted);
         i=DATA.events.length-1;
         console.log('[LC] Evento resuelto desde Firestore: id='+id+' name='+meta.name);
+      }
+    }
+    // 2.5) Resolver por SLUG: los links viejos de OBS traen el nombre "aplastado"
+    // (ej. ?evento=regionalcentrosur). Sin esto, el widget no encontraba el evento
+    // y caía al fallback de abajo usando el slug como NOMBRE → fbDocId() apuntaba a
+    // otro documento (uno viejo) y la Pantalla de Tarima / Control TX mostraban
+    // datos que no coincidían con lo que cargaba el control. Comparando sin
+    // acentos/espacios/símbolos, el slug resuelve al evento real.
+    if(!wanted){
+      const _slg=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+      const ws=_slg(want);
+      if(ws){
+        const cands=[];
+        (DATA.events||[]).forEach((e,idx)=>cands.push({e:e,i:idx,s:_slg(e.name),id:_slg(e.id)}));
+        if(window.LIVE_EVENT_META)Object.entries(window.LIVE_EVENT_META).forEach(function(en){
+          if(!(DATA.events||[]).some(e=>e.name===en[1].name))
+            cands.push({e:{id:en[0],name:en[1].name,organizer:en[1].org||'',location:en[1].location||'',athletes:[],_fromFirestore:true},i:-1,s:_slg(en[1].name),id:_slg(en[0])});
+        });
+        let hit=cands.find(c=>c.s===ws||c.id===ws) || cands.find(c=>c.s.includes(ws)&&ws.length>=8);
+        if(hit){
+          wanted=hit.e;
+          if(hit.i>=0)i=hit.i;
+          else{if(!DATA.events)DATA.events=[];DATA.events.push(wanted);i=DATA.events.length-1;}
+          console.log('[LC] Evento resuelto por slug "'+want+'" → '+wanted.name);
+        }
       }
     }
     // 3) Si todavía no se encontró, retry hasta 10 veces (espera a que Firestore listener cargue)
