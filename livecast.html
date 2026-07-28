@@ -422,7 +422,7 @@ function _syncWriteAlert(e){
     +' <span style="opacity:.85;font-size:11px">(se reintenta solo)</span>';
 }
 function _syncWriteOk(){ const el=document.getElementById('syncErrBanner'); if(el)el.remove(); }
-let _syncInFlight=false,_syncPending=false;
+let _syncInFlight=false,_syncPending=false,_fbLastOk=0;
 async function syncToFB(){
   if(!fbReady||!isAdmin||_fbSyncing)return;
   if(!window.IS_CONTROLLER){
@@ -449,9 +449,27 @@ async function syncToFB(){
     const ref=window._fb.doc(fbDB,'livecast_sync',id);
     for(let attempt=0;attempt<3;attempt++){
       try{
-        const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null,ts:Date.now(),writer:window._WRITER_ID};
-        await window._fb.setDoc(ref,payload);
+        const _mkPayload=(ath)=>({event:DATA.event,athletes:JSON.stringify(ath||DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null,ts:Date.now(),writer:window._WRITER_ID});
+        // Ediciones que estoy por confirmar (se limpian solo si la escritura sale bien)
+        const sent=[...(window._pendingEdits||[])];
+        if(window._fb.runTransaction && !PRACTICE_MODE){
+          // TRANSACCIÓN: lee el estado actual, le aplica MIS cambios y escribe, todo
+          // atómico. Con varios controladores esto elimina el "lost update" clásico
+          // (dos PCs escribiendo el documento completo y el último pisando al otro).
+          await window._fb.runTransaction(fbDB, async (tx)=>{
+            const snap=await tx.get(ref);
+            let ath=DATA.athletes;
+            if(snap.exists()){
+              try{ ath=_mergeForWrite(DATA.athletes, JSON.parse(snap.data().athletes||'[]')); }catch(_){}
+            }
+            tx.set(ref,_mkPayload(ath));
+          });
+        }else{
+          await window._fb.setDoc(ref,_mkPayload());
+        }
+        sent.forEach(k=>{ try{window._pendingEdits.delete(k)}catch(_){} });
         window._lastSyncedSig=_dataSig();
+        _fbLastOk=Date.now();
         _syncWriteOk(); _spectatorEditOk();
         return;
       }catch(e){
@@ -904,7 +922,46 @@ document.addEventListener('keydown',(e)=>{
 // ═══════════════════════════════════════════════════════════════════
 window._recentAtt = window._recentAtt || {};   // "athId|campo" -> ts
 const _MERGE_HOLD_MS = 4000;
-function _markAtt(id, field){ try{ window._recentAtt[id+'|'+field]=Date.now(); }catch(e){} }
+// Ediciones locales todavía NO confirmadas en Firebase. A diferencia de
+// _recentAtt (ventana de 4s para el merge de LECTURA), estas se conservan hasta
+// que una escritura sale bien: así, con varios PCs operando, una edición mía
+// nunca se pierde aunque el guardado tarde o haya que reintentar.
+window._pendingEdits=new Set();
+function _markAtt(id, field){
+  try{ window._recentAtt[id+'|'+field]=Date.now(); window._pendingEdits.add(id+'|'+field); }catch(e){}
+}
+// Merge para ESCRITURA: parte del estado REMOTO (lo que hicieron los otros
+// controladores) y encima aplica solo MIS ediciones pendientes. Así dos PCs que
+// tocan atletas distintos no se pisan nunca — antes, cada escritura mandaba el
+// documento completo y la última en llegar borraba lo del otro.
+function _mergeForWrite(localArr, remoteArr){
+  if(!remoteArr||!remoteArr.length)return localArr;
+  const pend=window._pendingEdits||new Set();
+  const META=['bw','rackSQ','rackBP','sqAbat','bpSeg','bpPalm','mod','country','flight','lot','bombed','weighedIn','jornada'];
+  const byId={}; (localArr||[]).forEach(a=>{ if(a&&a.id!=null) byId[a.id]=a; });
+  const out=(remoteArr||[]).map(ra=>{
+    const la=byId[ra.id];
+    if(!la)return ra;
+    const m=JSON.parse(JSON.stringify(ra));
+    if(pend.has(ra.id+'|meta'))META.forEach(f=>{ if(la[f]!==undefined)m[f]=la[f]; });
+    ['sq','bp','dl'].forEach(l=>{
+      const lL=(la.att&&la.att[l])||[], lR=(m.att&&m.att[l])||[];
+      const n=Math.max(lL.length,lR.length), arr=[];
+      for(let r=0;r<n;r++){
+        if(pend.has(ra.id+'|att_'+l+'_'+r)){ if(lL[r])arr[r]=lL[r]; }  // mío (incluye borrar el 4º)
+        else if(lR[r]!==undefined)arr[r]=lR[r];
+        else if(lL[r]!==undefined)arr[r]=lL[r];
+      }
+      while(arr.length&&arr[arr.length-1]===undefined)arr.pop();
+      if(!m.att)m.att={};
+      m.att[l]=arr;
+    });
+    return m;
+  });
+  const rids=new Set((remoteArr||[]).map(a=>a&&a.id));
+  (localArr||[]).forEach(a=>{ if(a&&!rids.has(a.id))out.push(a); });
+  return out;
+}
 function _mergeAthletes(localArr, remoteArr){
   const now=Date.now();
   const held={};
@@ -7503,6 +7560,20 @@ function renderCompete(){
   // atleta reaparece en la cola. No hay una ronda separada para el 4º.
   // Deshacer / Rehacer (Ctrl+Z / Ctrl+Y) — para volver atrás cualquier acción.
   h+='<span style="flex:1"></span>';
+  // Indicador de SINCRONIZACIÓN: con varios PCs operando, el operador tiene que ver
+  // de un vistazo si sus cambios están llegando. Verde = guardado recién; ámbar =
+  // hace rato; rojo = no está guardando (o es una pantalla espectadora).
+  if(!PRACTICE_MODE){
+    const secs=_fbLastOk?Math.round((Date.now()-_fbLastOk)/1000):null;
+    const ctrl=!!window.IS_CONTROLLER;
+    let col,txt,tip;
+    if(!ctrl){col='var(--red)';txt='NO GUARDA';tip='Esta pantalla está en modo ESPECTADOR: no escribe nada.';}
+    else if(secs===null){col='var(--muted)';txt='SIN GUARDAR AÚN';tip='Todavía no se guardó nada desde esta pantalla.';}
+    else if(secs<15){col='var(--green)';txt='EN LÍNEA';tip='Último guardado hace '+secs+'s.';}
+    else if(secs<60){col='var(--orange)';txt='HACE '+secs+'s';tip='Hace '+secs+'s que no se guarda.';}
+    else {col='var(--red)';txt='HACE '+Math.round(secs/60)+'min';tip='Hace más de un minuto que no se guarda: revisá conexión/sesión.';}
+    h+='<span id="syncPill" title="'+tip+'" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;border:1px solid '+col+';color:'+col+';font-family:Oswald;font-size:10px;font-weight:700;letter-spacing:.5px"><span style="width:7px;height:7px;border-radius:50%;background:'+col+'"></span>SYNC '+txt+'</span>';
+  }
   // En práctica: link de la vista de espectador (lo que ve el público) para compartir.
   if(PRACTICE_MODE){
     h+='<button onclick="copyPracticeViewerLink()" title="Copiar el link de la vista de espectador (lo que ve el público) para compartir" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(96,165,250,.5);background:rgba(96,165,250,.08);color:#60a5fa;font-size:12px;font-weight:700;cursor:pointer">👁 Link espectador</button>';
