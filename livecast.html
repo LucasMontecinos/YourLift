@@ -1932,7 +1932,13 @@ function _inscToAthlete(ins, j, flightMap){
   const isEq=rawMod.includes('equipado')||rawMod.includes('equipped');
   const isBench=rawMod.includes('only bench')||rawMod.includes('onlybench')||rawMod.includes('only_bench');
   const isCombined=rawMod.includes('+');
-  if(isCombined&&isEq) mod='equipped_bench';
+  // Special Olympics: faltaba acá (sí estaba en pickEvent). Sin esto, los OE de
+  // eventos EN VIVO quedaban como 'classic' y competían en el ranking general
+  // en vez del suyo. Cubre 'Powerlifting Classic Special Olympics',
+  // 'Olimpiadas Especiales (OE)', etc.
+  const isOE=rawMod.includes('special olympics')||rawMod.includes('olimpiadas')||rawMod.includes(' oe')||rawMod.trim().endsWith('oe');
+  if(isOE) mod=isBench?'oe_bench':'oe_classic';
+  else if(isCombined&&isEq) mod='equipped_bench';
   else if(isCombined) mod='classic_bench';
   else if(isBench&&isEq) mod='equipped_bench';
   else if(isBench) mod='onlybench';
@@ -7616,7 +7622,8 @@ function renderCompete(){
     h+='<th style="text-align:center;padding:5px 4px;color:var(--muted);font-size:9px;width:26px">#</th>';
     h+='<th style="text-align:left;padding:5px 8px;color:var(--muted);font-size:9px">ATLETA</th>';
     LIFTS.forEach(l=>{for(let r=1;r<=3;r++){h+='<th style="text-align:center;padding:5px 3px;color:'+LIFT_C[l]+';font-size:10px;font-weight:700;width:58px">'+LIFT_S[l]+r+'</th>'}});
-    h+='<th style="text-align:center;padding:5px 4px;color:var(--gold);font-size:9px;width:56px">TOTAL</th></tr></thead><tbody>';
+    h+='<th style="text-align:center;padding:5px 4px;color:var(--gold);font-size:9px;width:56px">TOTAL</th>';
+    h+='<th style="text-align:center;padding:5px 4px;color:#60a5fa;font-size:9px;width:70px" title="Posición actual → posición si el intento es válido">POSICIÓN</th></tr></thead><tbody>';
     rows.forEach(a=>{
       const isCurrentAthlete = fl===DATA.flight && cur && a.id===cur.id;
       const curOnExtra = isCurrentAthlete && curAtt(cur)===3; // el actual está en su intento extra
@@ -7634,6 +7641,7 @@ function renderCompete(){
         }
       });
       h+='<td style="text-align:center;padding:6px 4px;font-weight:700;font-family:Oswald;color:var(--gold);font-size:13px">'+(tot||'—')+'</td>';
+      h+=_posCellHtml(isCurrentAthlete?cur:a,{fs:Math.round(11*rsc)});
       h+='</tr>';
       // Fila del/los intento(s) EXTRA (duplicado abajo, solo si tiene)
       const extraLifts = LIFTS.filter(l=>(a.att[l]||[]).length>=4 && a.att[l][3] && a.att[l][3].extra);
@@ -7652,7 +7660,7 @@ function renderCompete(){
             h+='<td></td><td></td><td></td>';
           }
         });
-        h+='<td></td>';
+        h+='<td></td><td></td>';
         h+='</tr>';
       }
       // ── Fila ESPEJO de Only Bench (estilo LiftingCast) ──────────────────
@@ -7677,6 +7685,7 @@ function renderCompete(){
           }
         });
         h+='<td style="text-align:center;padding:6px 4px;font-weight:700;font-family:Oswald;color:#a78bfa;font-size:12px">'+(bestOf(a,'bp')||'\u2014')+'</td>';
+        h+='<td></td>';
         h+='</tr>';
       }
     });
@@ -7932,6 +7941,49 @@ function subTotal(a,lift){
   const b=bestOf(a,'bp');
   if(lift==='bp')return s+b;
   return s+b+bestOf(a,'dl');
+}
+// Posición ACTUAL y posición si el intento en curso es válido (forecast), dentro
+// del mismo sexo + categoría + división + modalidad. Es el mismo criterio que usa
+// el widget de OBS, para que Control en Vivo, espectador y transmisión coincidan.
+function _posForecast(a,lift,round){
+  if(!a)return null;
+  const ra=(typeof _realAth==='function')?_realAth(a):a;
+  const l=lift||DATA.lift;
+  const at=(ra.att&&ra.att[l])?ra.att[l][(typeof curAtt==='function')?curAtt(a):round||0]:null;
+  const w=(at&&at.w)||0;
+  const peers=DATA.athletes.filter(x=>x.cat===ra.cat&&x.div===ra.div&&x.sex===ra.sex&&x.mod===ra.mod&&!x.bombed);
+  const sub=x=>subTotal(x,l);
+  // actual
+  const cur=peers.map(x=>({id:x.id,s:sub(x)})).filter(x=>x.s>0).sort((p,q)=>q.s-p.s);
+  const posNow=cur.findIndex(x=>x.id===ra.id)+1;
+  // simulado: si este intento sale válido
+  let posIf=0;
+  if(w>0){
+    const best=Math.max(bestOf(ra,l),w);
+    const sim=peers.map(x=>{
+      if(x.id===ra.id){
+        const o=(l==='sq')?best:(l==='bp')?bestOf(ra,'sq')+best:bestOf(ra,'sq')+bestOf(ra,'bp')+best;
+        return{id:x.id,s:o};
+      }
+      return{id:x.id,s:sub(x)};
+    }).filter(x=>x.s>0).sort((p,q)=>q.s-p.s);
+    posIf=sim.findIndex(x=>x.id===ra.id)+1;
+  }
+  return {now:posNow||0, ifOk:posIf||0, of:cur.length};
+}
+// Celda compacta "actual → si es válido" para las tablas.
+function _posCellHtml(a,opts){
+  opts=opts||{};
+  const f=_posForecast(a);
+  if(!f)return '<td></td>';
+  const fs=opts.fs||11;
+  const col=p=>p===1?'var(--gold)':p<=3?'#60a5fa':'var(--muted)';
+  if(!f.now&&!f.ifOk)return '<td style="text-align:center;padding:4px 3px;color:var(--border);font-size:'+fs+'px">—</td>';
+  let h='<td style="text-align:center;padding:4px 3px;white-space:nowrap;font-family:Oswald;font-size:'+fs+'px">';
+  h+='<span title="Posición actual" style="font-weight:700;color:'+col(f.now)+'">'+(f.now?f.now+'°':'—')+'</span>';
+  if(f.ifOk&&f.ifOk!==f.now)h+='<span style="color:var(--muted);margin:0 2px">→</span><span title="Posición si el intento es válido" style="font-weight:800;color:'+col(f.ifOk)+'">'+f.ifOk+'°</span>';
+  h+='</td>';
+  return h;
 }
 function catRankBySub(athlete){
   // Ranking dentro del mismo sexo + categoría + división (no mezcla divisiones de edad)
@@ -9016,7 +9068,7 @@ function renderLiveView(){
   // att, así que para la tabla usamos siempre _realAth).
   const _liveReal=sortedAthletes.map(_realAth);
   const maxAtts={};['sq','bp','dl'].forEach(l=>{maxAtts[l]=Math.max(3,..._liveReal.map(a=>(a.att[l]||[]).length));});
-  const totalCols=2+(maxAtts.sq+1)+(maxAtts.bp+1)+(maxAtts.dl+1)+1;
+  const totalCols=2+(maxAtts.sq+1)+(maxAtts.bp+1)+(maxAtts.dl+1)+1+1; // +1 = columna POSICIÓN
 
   // ── Tabla completa de resultados ─────────────────────────────
   h += '<div class="card" style="padding:0;overflow-x:auto">';
@@ -9049,6 +9101,7 @@ function renderLiveView(){
     h += '<th style="padding:5px 3px;text-align:center;color:var(--gold);font-size:8px;width:54px;border-right:1px solid var(--border)">'+subLabel+'</th>';
   });
   h += '<th style="padding:5px 4px;text-align:center;color:var(--gold);font-size:9px;width:52px">GL PTS</th>';
+  h += '<th style="padding:5px 4px;text-align:center;color:#60a5fa;font-size:9px;width:74px" title="Posición actual → posición si el intento es válido">POSICIÓN</th>';
   h += '</tr></thead><tbody>';
 
   let lastFlight = currentFlight;
@@ -9133,7 +9186,7 @@ function renderLiveView(){
     h += '<td style="text-align:center;padding:3px 5px">';
     h += '<span style="font-family:Oswald;font-size:'+(glp?12:9)+'px;font-weight:700;color:'+(glp?'var(--gold)':'rgba(100,120,150,.5)')+';">'+(glp||'—')+'</span>';
     h += '</td>';
-
+    h += _posCellHtml(a,{fs:11});
     h += '</tr>';
   });
 
