@@ -943,7 +943,7 @@ function _nomCardShell(id,info,innerFn){
   h+=`<p style="font-size:12px;color:var(--muted);margin-top:4px">${[fecha,org,lugar].filter(Boolean).join(' · ')||'&nbsp;'}</p>`;
   h+=`</div>`;
   h+=`<div style="padding:0 20px;display:flex;align-items:center;gap:10px;flex-shrink:0">`;
-  h+=`<span class="bg" style="background:var(--accent);color:#fff;font-size:13px;padding:5px 12px;white-space:nowrap">${info.count} inscritos</span>`;
+  h+=`<span class="bg" style="background:var(--accent);color:#fff;font-size:13px;padding:5px 12px;white-space:nowrap">${info.countLabel||(info.count+' inscritos')}</span>`;
   h+=`<span style="font-family:Oswald;font-size:11px;color:${open?'var(--gold)':'var(--muted)'};letter-spacing:.5px;white-space:nowrap">${open?'▲ CERRAR':'▼ VER NÓMINA'}</span>`;
   h+=`</div></div>`;
   if(open)h+=`<div style="padding:14px 16px 20px">${innerFn()}</div>`;
@@ -966,18 +966,42 @@ function _nomSudaRows(){
       sq:a.sq,bp:a.bp,dl:a.dl,total:a.total,nameHtml:av+nm};
   });
 }
+// Desglose del Sudamericano: inscripciones (una por lista/división) vs PERSONAS
+// (atletas únicos — muchos compiten en 2+ disciplinas). Pedido de la organización:
+// que se vea al abrir el evento.
+function _nomSudaStats(j){
+  const norm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+  const per=new Map();
+  (j.atletas||[]).forEach(a=>{
+    const k=norm(a.n)+'|'+a.sexo;
+    if(!per.has(k))per.set(k,{sexo:a.sexo,pais:a.pais,n:0});
+    per.get(k).n++;
+  });
+  const ps=[...per.values()];
+  return {ins:j.atletas.length, personas:ps.length,
+    h:ps.filter(p=>p.sexo==='M').length, m:ps.filter(p=>p.sexo==='F').length,
+    multi:ps.filter(p=>p.n>1).length, paises:new Set(ps.map(p=>p.pais)).size};
+}
 function _nomSudaCard(){
   const j=window.NOMSUDA;
   const id='suda2026';
+  const st=_nomSudaStats(j);
   return _nomCardShell(id,{
     name:j.eventoCorto||'Sudamericano 2026',
     fecha:j.fechas,org:'FESUPO',lugar:j.lugar,
     count:j.atletas.length,
+    countLabel:`${st.ins} inscripciones · ${st.personas} atletas`,
     badges:`<span style="font-size:10px;background:rgba(212,168,67,.2);color:var(--gold);padding:2px 8px;border-radius:10px;border:1px solid rgba(212,168,67,.4)">NÓMINA OFICIAL</span>${j.publicada?'':'<span style="font-size:10px;background:rgba(239,68,68,.15);color:#ef4444;padding:2px 8px;border-radius:10px;border:1px solid rgba(239,68,68,.4)">VISTA PREVIA</span>'}`
   },()=>{
     const rows=_nomSudaRows();
     const F=ST.nomF||{};
-    let h=`<div style="font-size:11px;color:var(--muted)">${j.evento} · ${j.fuente} · <span style="color:var(--gold)">R = Reserva</span> · Los chilenos tienen link a su perfil; el resto abre su ficha</div>`;
+    // Desglose visible al abrir el evento (pedido de la organización)
+    let h=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:10px">`;
+    [[st.ins,'Inscripciones'],[st.personas,'Atletas'],[st.h,'Hombres'],[st.m,'Mujeres'],[st.multi,'En 2+ disciplinas'],[st.paises,'Países']].forEach(([v,l])=>{
+      h+=`<div style="background:rgba(30,58,95,.28);border:1px solid var(--border);border-radius:10px;padding:9px 6px;text-align:center"><div style="font-family:Oswald;font-size:20px;font-weight:700;color:var(--gold)">${v}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${l}</div></div>`;
+    });
+    h+=`</div>`;
+    h+=`<div style="font-size:11px;color:var(--muted)">${j.evento} · ${j.fuente} · <span style="color:var(--gold)">R = Reserva</span> · Los chilenos tienen link a su perfil; el resto abre su ficha · Una inscripción por lista y división: por eso hay más inscripciones que atletas</div>`;
     // Pestañas de MODALIDAD (obligatorias): con +600 inscripciones no se muestra
     // la nómina completa — primero se elige la modalidad y recién ahí sale la
     // tabla ordenada estilo goodlift (división → categoría).

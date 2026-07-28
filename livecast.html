@@ -345,6 +345,10 @@ async function initFB(){
             }
             // ?remote=1: aterrizar en el Control Remoto (para el teléfono)
             if(WANT_REMOTE && window._canAccess('director') && DATA.phase!=='remote'){DATA.phase='remote';}
+          } else if(window._ensayoFree){
+            // ENSAYO abierto: el usuario anónimo no es admin en Firestore, pero
+            // el ensayo se opera sin sesión — se mantiene el rol local.
+            console.log('[LiveCast] Ensayo abierto · usuario anónimo');
           } else {
             isAdmin=false;
             console.log('[LiveCast] Logged in but not admin:',u.email);
@@ -352,10 +356,11 @@ async function initFB(){
           R();
         }).catch(()=>{isAdmin=true;window.ADMIN_ROLE='admin';if(localStorage.getItem('yl_controller')===null){window.IS_CONTROLLER=true;try{localStorage.setItem('yl_controller','1')}catch(e){}}R();}); // fallback: trust auth
       } else {
-        if(isAdmin){isAdmin=false;DATA.phase='liveView';R();}
+        if(isAdmin&&!window._ensayoFree){isAdmin=false;DATA.phase='liveView';R();}
       }
     });
     console.log('[FB] Firebase ready');
+    _ensayoGrant(); // por si la sesión restaurada ya es el ensayo (login anónimo)
     if(DATA.event)startFBSync();
     // If redirected back from admin.html after login
     if(sessionStorage.getItem('livecast_return')){
@@ -941,9 +946,36 @@ async function tryLoadFromFB(){
     return true;
   }catch(e){console.warn('[FB] Load failed',e);return false}
 }
+// ── ENSAYO ABIERTO ────────────────────────────────────────────────
+// El evento de ensayo (id suda2026_ensayo / nombre "ENSAYO …") se opera SIN
+// iniciar sesión: al cargarlo cualquiera queda como admin-controlador, con un
+// botón en la hamburguesa para alternar admin ↔ espectador. Para que lo que
+// juzguen se sincronice a otros dispositivos, Firebase necesita el proveedor
+// "Anónimo" habilitado (Console → Authentication → Sign-in method): acá se
+// intenta signInAnonymously(); si no está habilitado, el ensayo funciona igual
+// pero solo-local en esa pantalla.
+function _isEnsayo(ev){ev=ev||DATA.event;return !!(ev&&(ev.id==='suda2026_ensayo'||/^ENSAYO\s/.test(ev.name||'')));}
+function _ensayoGrant(){
+  if(!_isEnsayo())return;
+  window._ensayoFree=true;
+  if(!isAdmin){isAdmin=true;window.ADMIN_ROLE=window.ADMIN_ROLE||'ensayo';}
+  window.IS_CONTROLLER=true;
+  try{
+    if(fbReady&&window._fbAuth&&fbAuth&&!fbAuth.currentUser&&window._fbAuth.signInAnonymously){
+      window._fbAuth.signInAnonymously(fbAuth).catch(e=>console.warn('[ensayo] login anónimo:',e.code||e.message));
+    }
+  }catch(e){}
+}
+window.ensayoToggleRole=function(){
+  if(!window._ensayoFree)return;
+  if(isAdmin){isAdmin=false;DATA.phase='liveView';}
+  else{isAdmin=true;if(DATA.phase==='liveView')DATA.phase='compete';}
+  R();
+};
 function pickEvent(i){
   const ev=DATA.events[i];
   DATA.event=ev;
+  _ensayoGrant();
   // Load saved flight assignments from cronograma
   const cronoKey='fechipo_crono_'+(ev.name||'').replace(/\s+/g,'_');
   let flightMap=null;
@@ -5960,6 +5992,7 @@ function renderShell(){
   if(!isAdmin)h+='<button class="side-btn '+(p==='liveView'?'active':'')+'" onclick="go(\'liveView\')"><span class="icon">\ud83d\udcfa</span>Competencia en Vivo</button>';
   h+='<button class="side-btn '+(p==='results'?'active':'')+'" onclick="go(\'results\')"><span class="icon">\uD83C\uDFC6</span>Resultados</button>';
   h+='<button class="side-btn '+(p==='atletaInfo'?'active':'')+'" onclick="go(\'atletaInfo\')"><span class="icon">\uD83D\uDC64</span>Atletas</button>';
+  if(window._ensayoFree)h+='<button class="side-btn" onclick="ensayoToggleRole()" style="border:1px solid rgba(96,165,250,.5);color:#60a5fa;margin-top:4px"><span class="icon">'+(isAdmin?'\uD83D\uDC41':'\uD83C\uDF9B')+'</span>'+(isAdmin?'Cambiar a modo espectador':'Cambiar a modo admin')+'</button>';
   h+='<div class="side-label">Vuelo Activo</div><div style="display:flex;gap:4px;flex-wrap:wrap">';
   flights.forEach(f=>{const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;h+='<button onclick="DATA.flight=\''+f+'\';saveNow();R()" style="flex:1;min-width:36px;padding:6px 0;border-radius:6px;border:2px solid '+(DATA.flight===f?FL_C[f]||'var(--muted)':'var(--border)')+';background:'+(DATA.flight===f?(FL_C[f]||'#666')+'22':'transparent')+';color:'+(DATA.flight===f?FL_C[f]||'#fff':'var(--muted)')+';font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">'+f+'<span style="font-size:9px;opacity:.6;display:block">'+n+'</span></button>'});
   h+='</div>';
@@ -8158,6 +8191,7 @@ function txPremiacion(evName){
 try{localStorage.removeItem('fechipo_lc2');localStorage.removeItem('fechipo_livecast')}catch(e){}
 
 const loaded=load();
+try{_ensayoGrant();}catch(e){}
 let DB_FULL=[];
 
 // ══════════════════════════════════════════════
@@ -8634,7 +8668,7 @@ function applyEventURLParam(){
       return;
     }
     // If already on this event with an active session, keep it.
-    if(DATA.event&&(DATA.event.id===wanted.id||DATA.event.name===wanted.name)){R();return}
+    if(DATA.event&&(DATA.event.id===wanted.id||DATA.event.name===wanted.name)){_ensayoGrant();R();return}
     // If there is an active session for a different event, do NOT auto-wipe it.
     if(DATA.phase!=='setup'&&DATA.athletes?.length){
       DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};
