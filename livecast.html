@@ -452,7 +452,14 @@ async function syncToFB(){
         const _mkPayload=(ath)=>({event:DATA.event,athletes:JSON.stringify(ath||DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null,ts:Date.now(),writer:window._WRITER_ID});
         // Ediciones que estoy por confirmar (se limpian solo si la escritura sale bien)
         const sent=[...(window._pendingEdits||[])];
-        if(window._fb.runTransaction && !PRACTICE_MODE){
+        // Operaciones AUTORITATIVAS (reiniciar datos, borrar atletas, regenerar
+        // lotes): el estado local MANDA y debe reemplazar al remoto. Si se mergeara,
+        // el remoto (que todavía tiene los datos viejos) los devolvería y el reinicio
+        // nunca llegaría al público.
+        if(window._forceFullWrite){
+          await window._fb.setDoc(ref,_mkPayload());
+          window._forceFullWrite=false;
+        }else if(window._fb.runTransaction && !PRACTICE_MODE){
           // TRANSACCIÓN: lee el estado actual, le aplica MIS cambios y escribe, todo
           // atómico. Con varios controladores esto elimina el "lost update" clásico
           // (dos PCs escribiendo el documento completo y el último pisando al otro).
@@ -2047,6 +2054,9 @@ function _mergeFirebaseAthletes(fbAthletes){
     if(safeToRemove.length){
       const ids=new Set(safeToRemove.map(a=>a.id));
       DATA.athletes=DATA.athletes.filter(a=>!ids.has(a.id));
+      // Un borrado debe REEMPLAZAR el remoto: el merge conserva los atletas que
+      // están en el servidor y no en local, así que sin esto no se propagaría.
+      window._forceFullWrite=true;
       changed=true;
       showToastLC(''+safeToRemove.length+' atleta'+(safeToRemove.length>1?'s':'')+' eliminado'+(safeToRemove.length>1?'s':'')+' (borrados desde admin)');
     }
@@ -2219,10 +2229,23 @@ function resetLiveData(){
   DATA.timerOn=false;
   if(typeof mainTI!=='undefined'&&mainTI){clearInterval(mainTI);mainTI=null}
   const tEl=document.getElementById('mainTimer');if(tEl){tEl.style.color='var(--green)';tEl.textContent='1:00';tEl.style.animation='none'}
-  // Persistir local + push inmediato a Firestore
+  // Persistir local + push inmediato a Firestore. Va como escritura AUTORITATIVA:
+  // reemplaza el documento remoto en vez de mergear (si no, el remoto devolvía los
+  // intentos borrados y el público seguía viendo todo marcado).
+  window._forceFullWrite=true;
+  window._pendingEdits=new Set();   // el reinicio invalida cualquier edición pendiente
   saveNow();
   R();
-  alert('✓ Datos en vivo reiniciados. Tandas, vuelos y pesaje se conservaron.');
+  // Confirmar que realmente se propagó (si no escribe, el público no se entera)
+  setTimeout(()=>{
+    if(window._forceFullWrite||!window.IS_CONTROLLER){
+      alert('\u26A0 El reinicio se aplicó en ESTA pantalla pero NO se pudo guardar en el servidor'
+        +(window.IS_CONTROLLER?'.':' porque está en modo ESPECTADOR.')
+        +'\n\nEl público sigue viendo los datos anteriores. Revisá el indicador SYNC y volvé a intentar.');
+    }else{
+      alert('\u2713 Datos en vivo reiniciados y propagados a todos los dispositivos y widgets.');
+    }
+  },1200);
 }
 
 const ctIntervals={};
@@ -6253,7 +6276,9 @@ function generateLots(){
     group.sort((a,b)=>(a._rnd||0)-(b._rnd||0));
     group.forEach((a,pos)=>{a.lot=base+pos;delete a._rnd});
   });
-  DATA.lotsGenerated=true;save();R();
+  DATA.lotsGenerated=true;
+  window._forceFullWrite=true;   // el re-sorteo reemplaza los lots de todos
+  saveNow();R();
 }
 
 // Re-sincroniza la nómina con el admin. Trae todos los atletas aprobados/pendientes
