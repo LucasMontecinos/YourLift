@@ -940,8 +940,15 @@ function _nomCardShell(id,info,innerFn){
   h+=`<div onclick="nomToggle('${id}')" style="cursor:pointer;position:relative;min-height:96px;display:flex;align-items:center;background:${foto?`linear-gradient(90deg,rgba(7,16,32,.93) 30%,rgba(7,16,32,.55)),url('${foto}') center/cover`:'linear-gradient(120deg,#0D1F38,#0a1628)'}">`;
   h+=`<div style="padding:18px 20px;flex:1;min-width:0">`;
   h+=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h2 style="font-family:Oswald;font-size:clamp(15px,3.2vw,20px);letter-spacing:1px;text-transform:uppercase;margin:0">${info.name}</h2>${info.badges||''}</div>`;
-  h+=`<p style="font-size:12px;color:var(--muted);margin-top:4px">${[fecha,org,lugar].filter(Boolean).join(' · ')||'&nbsp;'}</p>`;
+  // Fecha · organizador · lugar (con link a Google Maps si el evento lo trae) · cierre de nómina
+  const lugarHtml=info.maps
+    ? `<a href="${info.maps}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--gold);text-decoration:none;border-bottom:1px dashed rgba(212,168,67,.5)" title="Ver en Google Maps">${lugar} ↗</a>`
+    : lugar;
+  h+=`<p style="font-size:12px;color:var(--muted);margin-top:4px">${[fecha,org,lugarHtml].filter(Boolean).join(' · ')||'&nbsp;'}</p>`;
+  if(info.cierre)h+=`<p style="font-size:11px;color:var(--accent);margin-top:2px">Cierre de nómina: ${info.cierre}</p>`;
   h+=`</div>`;
+  // Logo oficial del evento (si el archivo existe; si no, no se muestra nada)
+  if(info.logo)h+=`<div style="padding:0 4px 0 12px;flex-shrink:0;display:flex;align-items:center"><img src="${info.logo}" alt="" style="height:74px;width:auto;max-width:150px;object-fit:contain;background:#fff;border-radius:8px;padding:5px" onerror="this.parentElement.remove()"></div>`;
   h+=`<div style="padding:0 20px;display:flex;align-items:center;gap:10px;flex-shrink:0">`;
   h+=`<span class="bg" style="background:var(--accent);color:#fff;font-size:13px;padding:5px 12px;white-space:nowrap">${info.countLabel||(info.count+' inscritos')}</span>`;
   h+=`<span style="font-family:Oswald;font-size:11px;color:${open?'var(--gold)':'var(--muted)'};letter-spacing:.5px;white-space:nowrap">${open?'▲ CERRAR':'▼ VER NÓMINA'}</span>`;
@@ -989,6 +996,7 @@ function _nomSudaCard(){
   return _nomCardShell(id,{
     name:j.eventoCorto||'Sudamericano 2026',
     fecha:j.fechas,org:'FESUPO',lugar:j.lugar,
+    maps:j.maps||'', cierre:j.cierreNomina||'', logo:j.logo||'',
     count:j.atletas.length,
     countLabel:`${st.ins} inscripciones · ${st.personas} atletas`,
     badges:`<span style="font-size:10px;background:rgba(212,168,67,.2);color:var(--gold);padding:2px 8px;border-radius:10px;border:1px solid rgba(212,168,67,.4)">NÓMINA OFICIAL</span>${j.publicada?'':'<span style="font-size:10px;background:rgba(239,68,68,.15);color:#ef4444;padding:2px 8px;border-radius:10px;border:1px solid rgba(239,68,68,.4)">VISTA PREVIA</span>'}`
