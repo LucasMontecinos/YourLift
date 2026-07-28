@@ -7238,6 +7238,44 @@ window.toggleCtAutoScroll=function(){
   if(window._ctAutoScroll)window._ctScrollKey=null; // forzar un reacomodo al reactivar
   R();
 };
+// ── Chips de nominación para la planilla (pedido de la organización) ──
+// Muestran a QUÉ se nominó el atleta, para quien carga o revisa:
+//   DIVISIÓN (OE / UNI destacados) · CATEGORÍA de peso · LÍNEA (Classic/Equipado)
+//   · MODALIDAD (PL / Only Bench; "PL+BP" si compite en ambas).
+function _nomDivShort(a){
+  const mod=String(a.mod||'');
+  if(mod.startsWith('oe'))return 'OE';                      // Special Olympics
+  const d=String(a.div||'');
+  if(/universitar/i.test(d))return 'UNI';
+  return txDivShort(d)||'—';
+}
+// [línea de equipamiento, modalidad competitiva]
+function _nomLineMod(a){
+  const mod=String(a.mod||'').toLowerCase();
+  if(mod==='equipped')          return ['EQUIPADO','PL'];
+  if(mod==='equipped_bench')    return ['EQUIPADO','PL+BP'];
+  if(mod==='onlybench')         return ['CLASSIC','ONLY BENCH'];
+  if(mod==='oe_bench')          return ['CLASSIC','ONLY BENCH'];
+  if(mod==='classic_bench')     return ['CLASSIC','PL+BP'];
+  return ['CLASSIC','PL'];                                   // classic y oe_classic
+}
+function _nomChips(a,sc){
+  sc=sc||1;
+  const fs=Math.max(7,Math.round(8.5*sc));
+  const chip=(txt,col,bg,bd,title)=>'<span'+(title?' title="'+title+'"':'')+' style="display:inline-block;padding:0 '+Math.round(5*sc)+'px;border-radius:4px;font-family:Oswald;font-size:'+fs+'px;font-weight:700;letter-spacing:.4px;line-height:'+Math.round(14*sc)+'px;color:'+col+';background:'+bg+';border:1px solid '+bd+'">'+txt+'</span>';
+  const dv=_nomDivShort(a);
+  const esp=(dv==='OE'||dv==='UNI');
+  const [linea,modal]=_nomLineMod(a);
+  const eq=(linea==='EQUIPADO');
+  const bench=/BENCH/.test(modal);
+  let h='<div style="display:flex;flex-wrap:wrap;gap:'+Math.round(3*sc)+'px;margin-top:'+Math.round(2*sc)+'px">';
+  h+=chip(dv, esp?'#0A1628':'var(--muted)', esp?'var(--gold)':'rgba(30,58,95,.55)', esp?'var(--gold)':'var(--border)', 'División: '+(a.div||'—'));
+  h+=chip(txCatLabel(a.cat)||'—','var(--gold)','rgba(212,168,67,.12)','rgba(212,168,67,.35)','Categoría de peso');
+  h+=chip(linea, eq?'#f59e0b':'#60a5fa', eq?'rgba(245,158,11,.12)':'rgba(96,165,250,.12)', eq?'rgba(245,158,11,.4)':'rgba(96,165,250,.4)','Línea competitiva');
+  h+=chip(modal, bench?'#a78bfa':'var(--green)', bench?'rgba(167,139,250,.12)':'rgba(34,197,94,.12)', bench?'rgba(167,139,250,.4)':'rgba(34,197,94,.4)','Modalidad');
+  h+='</div>';
+  return h;
+}
 function _attCellCompete(a,l,j,isCurrentCell){
   const sc=window._CT_CELL_SCALE||1;
   const at=a.att[l][j];
@@ -7463,7 +7501,7 @@ function renderCompete(){
       // Fila principal (1º/2º/3º). Marca de auto-scroll cuando es el actual (en intento normal).
       h+='<tr '+(hiMain?'id="ctCurrentLifter" ':'')+'style="border-bottom:1px solid rgba(30,58,95,.18);'+(hiMain?'background:linear-gradient(90deg,'+LIFT_C[DATA.lift]+'30,'+LIFT_C[DATA.lift]+'10);box-shadow:inset 3px 0 0 '+LIFT_C[DATA.lift]+';':'')+'">';
       h+='<td style="text-align:center;padding:6px 4px"><span class="os" style="color:'+(hiMain?'#fff':'var(--muted)')+';font-weight:700;font-size:'+Math.round(12*rsc)+'px">'+(a.lot||'·')+'</span></td>';
-      h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:'+Math.round(12*rsc)+'px;font-weight:'+(hiMain?800:500)+';color:'+(hiMain?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px">'+(hiMain?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">▶</span>':'')+'<span>'+a.name+'</span></div><div style="font-size:'+Math.round(8*rsc)+'px;color:var(--muted)">'+(a.bw>0?a.bw+'kg':'sin BW')+'</div></td>';
+      h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:'+Math.round(12*rsc)+'px;font-weight:'+(hiMain?800:500)+';color:'+(hiMain?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px">'+(hiMain?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">▶</span>':'')+'<span>'+a.name+'</span></div><div style="font-size:'+Math.round(8*rsc)+'px;color:var(--muted)">'+(a.bw>0?a.bw+'kg':'sin BW')+'</div>'+_nomChips(a,rsc)+'</td>';
       LIFTS.forEach(l=>{
         for(let j=0;j<3;j++){
           const isCurrentCell = hiMain && l===DATA.lift && j===DATA.round;
