@@ -3482,7 +3482,7 @@ function renderNominas(){
       <button class="btn btn-g" onclick="openInscribirModal()" style="padding:8px 16px;font-size:12px">Inscribir atleta</button>
       <button id="btnExportNomina" class="btn btn-b" onclick="exportNominaExcel()" style="padding:8px 16px;font-size:12px">Exportar Excel</button>
       <button id="btnExportDocs" class="btn btn-b" onclick="exportNominaDocsZip()" style="padding:8px 16px;font-size:12px" title="ZIP con una carpeta por atleta (con su nombre) y adentro sus documentos subidos">Descargar Docs (ZIP)</button>
-      <button id="btnExportFotos" class="btn btn-b" onclick="exportNominaFotosZip()" style="padding:8px 16px;font-size:12px" title="ZIP con las fotos de perfil de todos los atletas inscritos (nombre del atleta.png)">Descargar Fotos (ZIP)</button>
+      <button id="btnExportFotos" class="btn btn-b" onclick="exportNominaFotosZip()" style="padding:8px 16px;font-size:12px" title="ZIP con las fotos de perfil de todos los atletas inscritos, convertidas a JPG (formato que piden IPF/goodlift)">Descargar Fotos (ZIP · JPG)</button>
       <button id="btnExportPaquete" class="btn btn-b" onclick="exportPaqueteInternacionalZip()" style="padding:8px 16px;font-size:12px;background:rgba(212,168,67,.12);border-color:#D4A843;color:#D4A843" title="ZIP con una carpeta por atleta: foto fondo blanco (JPEG, garantizada) + Consentimiento IPF (PDF) + WADA (PDF). Para envíos a la federación internacional (ej. Sudamericano). Al final avisa qué atletas están incompletos.">Paquete Internacional (ZIP)</button>
     </div>
     ${needsMetaSync?'<div class="card" style="background:rgba(212,168,67,.08);border-color:rgba(212,168,67,.3);padding:12px 16px;margin-bottom:12px"><span style="color:var(--gold);font-size:12px">Las inscripciones están en Firebase pero falta el doc de evento en <code>eventos/</code>. Sin eso no podés editar fecha/cierre/ubicación desde <b>Campeonatos</b>. Creá el evento desde el panel de Campeonatos.</span></div>':''}
@@ -4270,7 +4270,29 @@ window.exportNominaDocsZip = async function(){
   finally{ if(btn){ btn.textContent='Descargar Docs (ZIP)'; btn.disabled=false; } }
 };
 
-// ── Descargar fotos de atletas de una nómina en ZIP ───────────────────────────
+// Convierte cualquier imagen (WebP/PNG/GIF/JPEG) a JPG de alta calidad, con
+// fondo blanco (JPEG no soporta transparencia). Mantiene la resolución original.
+// Se usa en la descarga de fotos: las plataformas externas (IPF/goodlift) piden
+// JPG y nuestras fotos se guardan en WebP para ahorrar espacio.
+async function _blobToJpg(blob){
+  return new Promise((res)=>{
+    if(blob.type==='image/jpeg'||blob.type==='image/jpg'){res(blob);return;}
+    const img=new Image(), u=URL.createObjectURL(blob);
+    img.onload=()=>{
+      URL.revokeObjectURL(u);
+      try{
+        const c=document.createElement('canvas'); c.width=img.width; c.height=img.height;
+        const ctx=c.getContext('2d');
+        ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,c.width,c.height); // fondo blanco
+        ctx.drawImage(img,0,0);
+        c.toBlob(b=>res(b||blob),'image/jpeg',0.95);
+      }catch(e){res(blob);}
+    };
+    img.onerror=()=>{URL.revokeObjectURL(u);res(blob);};
+    img.src=u;
+  });
+}
+// ── Descargar fotos de atletas de una nómina en ZIP (siempre en JPG) ──────────
 window.exportNominaFotosZip = async function(){
   const btn=document.getElementById('btnExportFotos');
   const ev=ST.filterEv;
@@ -4319,8 +4341,12 @@ window.exportNominaFotosZip = async function(){
       try{
         const resp=await fetch(t.fotoUrl); if(!resp.ok) throw new Error('HTTP '+resp.status);
         const blob=await resp.blob();
-        const ext=MIME_EXT[blob.type]||'png';
-        zip.file(safe(t.nombre)+'.'+ext, blob); ok++;
+        // Entregar SIEMPRE en JPG (lo piden las plataformas externas); si la
+        // conversión falla, cae al formato original para no perder la foto.
+        const jpg=await _blobToJpg(blob);
+        const isJpg=jpg&&(jpg.type==='image/jpeg'||jpg.type==='image/jpg');
+        const ext=isJpg?'jpg':(MIME_EXT[blob.type]||'png');
+        zip.file(safe(t.nombre)+'.'+ext, isJpg?jpg:blob); ok++;
       }catch(e){ fail++; console.warn('[fotos zip]',t.nombre,e.message); }
       done++; if(btn) btn.textContent='Descargando '+done+'/'+conFoto.length;
     }
