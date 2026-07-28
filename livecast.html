@@ -384,6 +384,23 @@ function txDocId(base){return TARIMA?`${base}_T${TARIMA}`:base;}
 // porque ambos usan fbDocId() (basado en el nombre del evento). Si no hay evento, cae
 // al id viejo (compatibilidad).
 function evStateDocId(base){const ev=fbDocId();return ev?(base+'__'+ev):txDocId(base);}
+// Banner rojo fijo cuando las escrituras a Firebase fallan: sin esto el operador
+// sigue cargando pesos creyendo que todo va bien mientras el espectador ve datos
+// viejos. Se quita solo en cuanto una escritura vuelve a salir bien.
+function _syncWriteAlert(e){
+  const code=(e&&e.code)||'';
+  const perm=/permission|PERMISSION/i.test(code+' '+((e&&e.message)||''));
+  let el=document.getElementById('syncErrBanner');
+  if(!el){
+    el=document.createElement('div'); el.id='syncErrBanner';
+    el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:100000;background:#C41E3A;color:#fff;padding:8px 14px;font-family:Oswald,sans-serif;font-size:13px;letter-spacing:.5px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.5)';
+    document.body.appendChild(el);
+  }
+  el.innerHTML='\u26A0 LOS CAMBIOS NO SE ESTÁN GUARDANDO — el espectador y OBS no ven lo que cargás.'
+    +(perm?' <b>Iniciá sesión con tu cuenta de administrador.</b>':' Revisá la conexión a internet.')
+    +' <span style="opacity:.85;font-size:11px">(se reintenta solo)</span>';
+}
+function _syncWriteOk(){ const el=document.getElementById('syncErrBanner'); if(el)el.remove(); }
 let _syncInFlight=false,_syncPending=false;
 async function syncToFB(){
   if(!fbReady||!isAdmin||_fbSyncing)return;
@@ -406,9 +423,16 @@ async function syncToFB(){
       try{
         const payload={event:DATA.event,athletes:JSON.stringify(DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null,ts:Date.now(),writer:window._WRITER_ID};
         await window._fb.setDoc(ref,payload);
+        _syncWriteOk();
         return;
       }catch(e){
-        if(attempt===2){console.warn('[FB] Sync write error (tras reintentos)',e);return;}
+        if(attempt===2){
+          console.warn('[FB] Sync write error (tras reintentos)',e);
+          // Aviso VISIBLE: que el operador se entere de que lo que carga NO está
+          // llegando al espectador/OBS, en vez de descubrirlo tarde.
+          _syncWriteAlert(e);
+          return;
+        }
         await new Promise(r=>setTimeout(r,250*(attempt+1)));
       }
     }
@@ -964,7 +988,21 @@ async function tryLoadFromFB(){
 // pero solo-local en esa pantalla.
 function _isEnsayo(ev){ev=ev||DATA.event;return !!(ev&&(ev.id==='suda2026_ensayo'||/^ENSAYO\s/.test(ev.name||'')));}
 function _ensayoGrant(){
-  if(!_isEnsayo())return;
+  // El permiso del ensayo es EXCLUSIVO del ensayo. Al cambiar a un evento real
+  // hay que revocarlo: si no, el operador queda "admin" localmente pero SIN
+  // sesión válida en Firebase, y las escrituras se rechazan en silencio (el
+  // espectador nunca ve los pesos). También se oculta el botón de cambio de rol.
+  if(!_isEnsayo()){
+    if(window._ensayoFree){
+      window._ensayoFree=false;
+      if(window.ADMIN_ROLE==='ensayo'){          // admin dado por el ensayo, no real
+        isAdmin=false; window.ADMIN_ROLE=null;
+        if(DATA.phase!=='setup')DATA.phase='liveView';
+        try{showToastLC('Este es un evento OFICIAL: iniciá sesión para operarlo');}catch(e){}
+      }
+    }
+    return;
+  }
   window._ensayoFree=true;
   if(!isAdmin){isAdmin=true;window.ADMIN_ROLE=window.ADMIN_ROLE||'ensayo';}
   window.IS_CONTROLLER=true;
