@@ -140,6 +140,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Correcciones a la nómina del Sudamericano hechas desde el panel
+    // (Admin → Nóminas → "Sudamericano 2026 — nómina FESUPO"): categoría,
+    // división, modalidad, lista y bajas. Un solo doc (main) que yourlift.cl
+    // aplica encima del archivo nomina_sudamericano.json, así no hay que
+    // regenerarlo por cada arreglo. Lectura pública, escritura solo admin.
+    match /nomina_suda_edits/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ── Configuración de certificados ──────────────────────────
     match /cert_config/{doc} {
       allow read: if isAdmin();

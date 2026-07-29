@@ -1578,7 +1578,7 @@ function render(){
   
   let content='';
   if(ST.view==='athletes')content=renderAthletes();
-  else if(ST.view==='nominas')content=renderNomCards()+renderNominas();
+  else if(ST.view==='nominas')content=(ST.filterEv===NS_EV?'':renderNomCards())+renderNominas();
   else if(ST.view==='stats'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderStats();else go('athletes');}
   else if(ST.view==='bgvideos'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderBgVideos();else go('athletes');}
   else if(ST.view==='sponsors'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderSponsors();else go('athletes');}
@@ -3438,6 +3438,9 @@ function renderNominas(){
   const fbEvents=[...new Set(ST.inscripciones.map(i=>i.evento))].filter(Boolean);
   const allEvents=[...new Set([...fbEvents])];
   if(!ST.filterEv&&allEvents.length)ST.filterEv=allEvents[0];
+  // La nómina del Sudamericano llega de FESUPO en un archivo, no por inscripciones:
+  // tiene su propia tabla (mismo selector de evento).
+  if(ST.filterEv===NS_EV) return renderNomSuda(allEvents);
 
   const inFirebase=fbEvents.includes(ST.filterEv);
   const hasEventoDoc=ST.eventos.some(e=>e.id===ST.filterEv||e.name===ST.filterEv);
@@ -3473,6 +3476,7 @@ function renderNominas(){
     <div class="search-box">
       <select class="inp" onchange="ST.filterEv=this.value;ST.filterClasif='';render()">
         ${allEvents.map(e=>`<option value="${e}" ${ST.filterEv===e?'selected':''}>${e}</option>`).join('')}
+        <option value="${NS_EV}">Sudamericano 2026 — nómina FESUPO</option>
       </select>
       ${_posNacCol?`<select class="inp" style="max-width:190px" onchange="ST.filterClasif=this.value;render()">
         <option value="">Todos</option>
@@ -3545,6 +3549,173 @@ function renderNominas(){
       </table>
       ${filtered.length===0?'<div class="empty">Sin atletas en este evento</div>':''}
     </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// NÓMINA SUDAMERICANO 2026 — editor
+// La nómina la manda FESUPO en un Excel y vive en un archivo estático
+// (nomina_sudamericano.json), no en `inscripciones`. Cuando llega un dato mal
+// (categoría equivocada, división, modalidad, alguien que se bajó), en vez de
+// regenerar el archivo se guarda una CORRECCIÓN en Firestore
+// (nomina_suda_edits/main → items) y yourlift.cl la aplica encima del archivo.
+// Así el archivo original sigue siendo el espejo fiel de lo que mandó FESUPO.
+// Clave de cada inscripción: slug(nombre)~slug(lista original) — verificado
+// único para las 633. Es la MISMA que usa index.html.
+// ══════════════════════════════════════════════════════════════════
+const NS_EV='__nomina_sudamericano__';
+function nsKey(a){ return _sfSlug(a.n)+'~'+_sfSlug(a._lista0||a.lista); }
+async function nsLoad(){
+  if(ST.nsLoading)return; ST.nsLoading=true;
+  try{
+    if(!ST.sudaNom) ST.sudaNom=await (await fetch('nomina_sudamericano.json?'+Date.now())).json();
+    if(!ST.nsEdits){
+      try{ const s=await getDoc(doc(db,'nomina_suda_edits','main')); ST.nsEdits=(s.exists()&&s.data().items)||{}; }
+      catch(e){ ST.nsEdits={}; }
+    }
+    ST.nsDirty=false;
+  }catch(e){ ST.nsErr=e.message; }
+  ST.nsLoading=false; render();
+}
+// Valor vigente de un campo (corrección si la hay, si no lo del archivo)
+function nsVal(a,f){ const e=(ST.nsEdits||{})[nsKey(a)]; return (e&&e[f]!==undefined&&e[f]!=='')?e[f]:(a[f]||''); }
+function nsDel(a){ const e=(ST.nsEdits||{})[nsKey(a)]; return !!(e&&e.del); }
+function nsHasEdit(a){ const e=(ST.nsEdits||{})[nsKey(a)]; return !!(e&&Object.keys(e).length); }
+window.nsSet=function(k,f,v){
+  const ed=ST.nsEdits||(ST.nsEdits={});
+  const a=(ST.sudaNom.atletas||[]).find(x=>nsKey(x)===k); if(!a)return;
+  const e=ed[k]||(ed[k]={});
+  if(String(v).trim()===String(a[f]||'').trim()) delete e[f];        // volvió al original
+  else e[f]=String(v).trim();
+  if(!Object.keys(e).length) delete ed[k];
+  ST.nsDirty=true; render();
+};
+window.nsToggleDel=function(k){
+  const ed=ST.nsEdits||(ST.nsEdits={});
+  const e=ed[k]||(ed[k]={});
+  if(e.del) delete e.del; else e.del=true;
+  if(!Object.keys(e).length) delete ed[k];
+  ST.nsDirty=true; render();
+};
+window.nsReset=function(k){ if(ST.nsEdits) delete ST.nsEdits[k]; ST.nsDirty=true; render(); };
+window.nsResetAll=function(){
+  const n=Object.keys(ST.nsEdits||{}).length;
+  if(!n){showToast('No hay correcciones para deshacer');return;}
+  if(!confirm('¿Descartar las '+n+' corrección(es) y dejar la nómina tal cual la mandó FESUPO?\n\nSe guarda al tocar Guardar.'))return;
+  ST.nsEdits={}; ST.nsDirty=true; render();
+};
+window.nsSave=async function(){
+  ST.nsBusy=true; render();
+  try{
+    await setDoc(doc(db,'nomina_suda_edits','main'),{items:ST.nsEdits||{},ts:Date.now(),by:(ST.adminInfo?.email||'')},{merge:false});
+    ST.nsDirty=false;
+    showToast('✓ Nómina actualizada — se ve en yourlift.cl en unos minutos');
+  }catch(e){ showToast('No se pudo guardar: '+e.message,null,true); }
+  ST.nsBusy=false; render();
+};
+let _nsQT=null;
+window.nsFilter=function(f,v){
+  ST.nsF=Object.assign({},ST.nsF||{},{[f]:v});
+  // La tabla son 633 filas con selects: redibujar en cada tecla se siente
+  // pesado, así que el buscador espera a que dejes de escribir. Después del
+  // render hay que devolverle el foco al input, que se rehizo.
+  if(f==='q'){
+    if(_nsQT)clearTimeout(_nsQT);
+    _nsQT=setTimeout(()=>{ render();
+      const i=document.getElementById('nsQ'); if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}
+    },280);
+    return;
+  }
+  render();
+};
+window.nsVerTodas=function(){ ST.nsAll=true; render(); };
+// Selector de evento (el mismo de Nóminas) para poder volver a las otras nóminas
+function nsEvSelect(allEvents){
+  return `<select class="inp" onchange="ST.filterEv=this.value;ST.filterClasif='';render()">
+    ${(allEvents||[]).map(e=>`<option value="${esc(e)}">${esc(e)}</option>`).join('')}
+    <option value="${NS_EV}" selected>Sudamericano 2026 — nómina FESUPO</option>
+  </select>`;
+}
+function renderNomSuda(allEvents){
+  if(!ST.sudaNom||!ST.nsEdits){ nsLoad(); return `<div class="h1">Nóminas</div>
+    <div class="search-box">${nsEvSelect(allEvents)}</div>
+    <div style="padding:30px;text-align:center;color:var(--muted)">Cargando la nómina del Sudamericano…${ST.nsErr?'<br><span style="color:var(--red)">'+esc(ST.nsErr)+'</span>':''}</div>`; }
+  const all=ST.sudaNom.atletas||[];
+  const F=ST.nsF||{};
+  const uniq=f=>[...new Set(all.map(a=>String(a[f]||'')).filter(Boolean))].sort();
+  const listas=uniq('lista'), divs=uniq('div'), mods=uniq('mod'), cats=uniq('cat');
+  const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  let rows=all;
+  if(F.lista) rows=rows.filter(a=>nsVal(a,'lista')===F.lista);
+  if(F.q){ const q=nrm(F.q); rows=rows.filter(a=>nrm(a.n).includes(q)||nrm(a.pais).includes(q)); }
+  if(F.solo==='edit') rows=rows.filter(nsHasEdit);
+  if(F.solo==='baja') rows=rows.filter(nsDel);
+  const nEd=Object.keys(ST.nsEdits||{}).length;
+  const nBaja=all.filter(nsDel).length;
+  const vivos=all.length-nBaja;
+  const personas=new Set(all.filter(a=>!nsDel(a)).map(a=>nrm(a.n)+'|'+a.sexo)).size;
+
+  const sel=(a,f,opts)=>{
+    const k=nsKey(a), v=nsVal(a,f), ch=v!==String(a[f]||'');
+    const list=opts.includes(v)?opts:[v,...opts];
+    return `<select onchange="nsSet('${k}','${f}',this.value)" style="max-width:170px;padding:4px 6px;border-radius:6px;border:1px solid ${ch?'var(--gold)':'var(--border)'};background:${ch?'rgba(212,168,67,.10)':'#0a1628'};color:${ch?'var(--gold)':'var(--text)'};font-size:11px">
+      ${list.map(o=>`<option value="${esc(o)}"${o===v?' selected':''}>${esc(o)}</option>`).join('')}</select>`;
+  };
+
+  let h=`<div class="h1">Nóminas</div>
+  <p class="subtitle">Nómina oficial del Sudamericano (FESUPO) · ${vivos} inscripciones · ${personas} atletas</p>
+  <div class="card" style="padding:14px 16px;margin-bottom:14px;background:rgba(212,168,67,.06);border-color:rgba(212,168,67,.28)">
+    <div style="font-size:12px;color:var(--muted);line-height:1.55">Esta nómina no son inscripciones de YourLift: la manda FESUPO. Acá corregís <b style="color:var(--gold)">categoría, división, modalidad y lista</b>, o das de baja a alguien, sin tocar el archivo original. Los cambios se publican en yourlift.cl al tocar <b>Guardar</b>. Siempre podés volver un dato a como venía.</div>
+  </div>`;
+
+  h+=`<div class="search-box">
+    ${nsEvSelect(allEvents)}
+    <select class="inp" onchange="nsFilter('lista',this.value)">
+      <option value="">Todas las listas (${all.length})</option>
+      ${listas.map(l=>`<option value="${esc(l)}"${F.lista===l?' selected':''}>${esc(l)} (${all.filter(a=>nsVal(a,'lista')===l).length})</option>`).join('')}
+    </select>
+    <select class="inp" style="max-width:190px" onchange="nsFilter('solo',this.value)">
+      <option value="">Todos</option>
+      <option value="edit"${F.solo==='edit'?' selected':''}>Solo corregidos (${nEd})</option>
+      <option value="baja"${F.solo==='baja'?' selected':''}>Solo dados de baja (${nBaja})</option>
+    </select>
+    <input id="nsQ" class="inp" placeholder="Buscar por nombre o país…" value="${esc(F.q||'')}" oninput="nsFilter('q',this.value)" style="max-width:260px">
+    <button class="btn ${ST.nsDirty?'btn-g':'btn-b'}" onclick="nsSave()" ${ST.nsBusy||!ST.nsDirty?'disabled':''} style="padding:8px 18px;font-size:12px;${ST.nsBusy||!ST.nsDirty?'opacity:.5':''}">${ST.nsBusy?'Guardando…':'Guardar cambios'}</button>
+    ${nEd?`<button class="btn btn-r" onclick="nsResetAll()" style="padding:8px 14px;font-size:12px">Descartar todo</button>`:''}
+  </div>`;
+
+  if(ST.nsDirty)h+=`<div class="card" style="padding:10px 14px;margin-bottom:12px;background:rgba(212,168,67,.10);border-color:var(--gold)"><span style="color:var(--gold);font-size:12px">Hay cambios sin guardar. Tocá <b>Guardar cambios</b> para que se vean en el sitio.</span></div>`;
+
+  // Tope de filas: 633 filas con selects tardan en dibujarse. Con filtro o
+  // búsqueda casi nunca se llega al tope; si igual lo querés todo, está el botón.
+  const TOPE=200, recortado=!ST.nsAll&&rows.length>TOPE;
+  if(recortado){
+    h+=`<div class="card" style="padding:10px 14px;margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--muted)">Mostrando ${TOPE} de ${rows.length}. Filtrá por lista o buscá el nombre para llegar más rápido.</span>
+      <button class="btn btn-b" onclick="nsVerTodas()" style="padding:6px 14px;font-size:11px">Ver las ${rows.length}</button></div>`;
+    rows=rows.slice(0,TOPE);
+  }
+  h+=`<div class="card" style="padding:0;overflow-x:auto"><table class="tbl">
+    <tr><th>#</th><th>Atleta</th><th>País</th><th>Cat.</th><th>División</th><th>Modalidad</th><th>Lista</th><th title="Marcas nominadas">SQ / BP / DL</th><th></th></tr>`;
+  rows.forEach((a,idx)=>{
+    const k=nsKey(a), baja=nsDel(a), ed=nsHasEdit(a);
+    h+=`<tr style="${baja?'opacity:.42':''}">
+      <td style="color:var(--muted);font-family:Oswald">${idx+1}</td>
+      <td style="min-width:190px">${esc(a.n)}${baja?' <span style="color:var(--red);font-size:10px;font-family:Oswald">DE BAJA</span>':''}
+        <br><span style="font-size:9px;color:var(--muted)">${a.born||''}${a.cod?' · '+esc(a.cod):''}</span></td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.pais||'')}</td>
+      <td><input value="${esc(nsVal(a,'cat'))}" onchange="nsSet('${k}','cat',this.value)" list="nsCats" style="width:72px;padding:4px 6px;border-radius:6px;border:1px solid ${nsVal(a,'cat')!==(a.cat||'')?'var(--gold)':'var(--border)'};background:${nsVal(a,'cat')!==(a.cat||'')?'rgba(212,168,67,.10)':'#0a1628'};color:${nsVal(a,'cat')!==(a.cat||'')?'var(--gold)':'var(--text)'};font-size:11px"></td>
+      <td>${sel(a,'div',divs)}</td>
+      <td>${sel(a,'mod',mods)}</td>
+      <td>${sel(a,'lista',listas)}</td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${a.sq||'-'} / ${a.bp||'-'} / ${a.dl||'-'}</td>
+      <td style="white-space:nowrap">
+        ${ed?`<button onclick="nsReset('${k}')" title="Volver a como lo mandó FESUPO" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald">↺</button> `:''}
+        <button onclick="nsToggleDel('${k}')" title="${baja?'Volver a la nómina':'Sacar de la nómina'}" style="background:transparent;border:1px solid ${baja?'var(--green)':'rgba(239,68,68,.35)'};color:${baja?'var(--green)':'var(--red)'};padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer;font-family:Oswald">${baja?'Reponer':'✕'}</button>
+      </td></tr>`;
+  });
+  h+=`</table>${rows.length?'':'<div class="empty">Sin resultados con esos filtros</div>'}</div>
+  <datalist id="nsCats">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist>`;
+  return h;
 }
 
 function apprListHtml(){

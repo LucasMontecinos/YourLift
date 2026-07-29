@@ -436,6 +436,18 @@ async function initFB(){
         window.NSUDA_FOTOS=map;_fsSetCache('nsudafotos',map);if(ST.v==='nominas')render();
       }
     }catch(e){console.warn('[nsudafotos]',e);}
+    // ── Correcciones de la nómina Sudamericano hechas desde el admin: 1 solo
+    // doc, caché 10min (hay que ver los arreglos rápido, pero sin leer en cada carga) ──
+    try{
+      const ce=_fsCache('nsudaedits',10*60*1000);
+      if(ce!==null&&ce!==undefined){window.NSUDA_EDITS=ce;}
+      else{
+        const es=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'nomina_suda_edits','main'));
+        window.NSUDA_EDITS=(es.exists()&&es.data().items)||{};
+        _fsSetCache('nsudaedits',window.NSUDA_EDITS);
+      }
+      _nsudaApplyEdits(); if(ST.v==='nominas')render();
+    }catch(e){console.warn('[nsudaedits]',e);}
     // ── Fotos de PERFIL por código (atleta_fotos) — para que los chilenos que ya
     // tienen foto se vean en la nómina sin volver a subirlas ──
     try{
@@ -1038,6 +1050,22 @@ function _nomSudaStats(j){
   return {ins:j.atletas.length, personas:ps.length,
     h:ps.filter(p=>p.sexo==='M').length, m:ps.filter(p=>p.sexo==='F').length,
     multi:ps.filter(p=>p.n>1).length, paises:new Set(ps.map(p=>p.pais)).size};
+}
+// Clave de una inscripción del Sudamericano (nombre + lista original). Se
+// verificó que es única para las 633 inscripciones. Tiene que ser IDÉNTICA a la
+// que usa el editor del admin.
+function _nsudaKey(a){ return _nsudaSlug(a&&a.n)+'~'+_nsudaSlug(a&&(a._lista0||a.lista)); }
+function _nsudaApplyEdits(){
+  const j=window.NOMSUDA; if(!j||!j._raw)return;
+  const ed=window.NSUDA_EDITS||{};
+  j.atletas=j._raw.map(a=>{
+    const k=_nsudaKey(a), e=ed[k];
+    if(!e)return a;
+    if(e.del)return null;
+    const out={...a,_lista0:a.lista};
+    ['cat','div','mod','lista','pais','sexo'].forEach(f=>{ if(e[f]!==undefined&&e[f]!=='')out[f]=e[f]; });
+    return out;
+  }).filter(Boolean);
 }
 function _nomSudaCard(){
   const j=window.NOMSUDA;
@@ -2135,7 +2163,14 @@ function sr(t,l){if(t)ST.rt=t;if(l)ST.rl=l;render()}
 // Nómina oficial del Sudamericano 2026 (goodlift) — archivo estático versionado.
 // Se muestra en la pestaña Nóminas solo cuando NOMSUDA.publicada===true en el JSON,
 // o para previsualizar con ?nominasuda=1 en la URL antes de publicarla.
-fetch('nomina_sudamericano.json').then(r=>r.ok?r.json():null).then(j=>{window.NOMSUDA=j;if(ST.v==='nominas')render();}).catch(()=>{});
+// Encima del archivo se aplican las CORRECCIONES hechas desde el admin
+// (Nóminas → Sudamericano 2026): cambios de categoría/división/modalidad/lista
+// y bajas. Viven en un único doc de Firestore (nomina_suda_edits/main) para no
+// tener que regenerar el archivo por cada arreglo.
+fetch('nomina_sudamericano.json').then(r=>r.ok?r.json():null).then(j=>{
+  if(j)j._raw=(j.atletas||[]).slice();
+  window.NOMSUDA=j; _nsudaApplyEdits(); if(ST.v==='nominas')render();
+}).catch(()=>{});
 Promise.all([fetch("data.json").then(r=>r.json()),fetch("records.json").then(r=>r.json()).catch(()=>({})),fetch("nominas.json").then(r=>r.json()).catch(()=>({events:[]}))]).then(([d,r,n])=>{D=d;R=r;NM=n;NM._static=[...(n.events||[])];render();initFB();
   // Refresco de Nóminas: cada 3min, SOLO si la pestaña está visible y el visitante
   // sigue en esa vista. Antes era cada 30s sin importar visibilidad — leía la
