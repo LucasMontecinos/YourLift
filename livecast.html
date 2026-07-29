@@ -2214,6 +2214,25 @@ function resetLiveData(){
   if(!DATA.event){alert('No hay competencia activa');return}
   const ev=DATA.event;
   const msg='REINICIAR datos en vivo de:\n"'+ev.name+'"\n\nSE BORRAN:\n• Intentos (squat / bench / deadlift)\n• Pesos cargados y resultados (✓ / ✗)\n• Timer y cursores (lift, ronda)\n• Bombed (atletas eliminados)\n\nSE CONSERVAN:\n• Tandas, vuelos, lots\n• Pesaje (BW), racks\n• Listado de atletas\n\nEsto sobreescribe Firestore para TODOS los dispositivos y widgets de OBS.';
+  // ANTES de borrar nada: comprobar que ESTA pantalla puede escribir en el servidor.
+  // Si no puede (modo espectador, sin sesión admin o Firebase caído), el borrado
+  // local dejaba el equipo desincronizado: vacío acá y con todo cargado en el
+  // servidor y en el público. Mejor no tocar nada y explicar por qué.
+  if(!fbReady){
+    alert('\u26A0 Sin conexión con el servidor.\n\nNo se reinició nada: si borrara solo en esta pantalla, quedaría distinta del resto. Revisá tu conexión y reintentá.');
+    return;
+  }
+  if(!isAdmin){
+    alert('\u26A0 Necesitás iniciar sesión como administrador para reiniciar los datos.\n\nNo se borró nada.');
+    return;
+  }
+  if(!window.IS_CONTROLLER){
+    if(confirm('\u26A0 Esta pantalla está en modo ESPECTADOR: no puede guardar en el servidor.\n\nSi reiniciara ahora, se borraría solo acá y el público seguiría viendo todo.\n\n¿Cambiar esta pantalla a CONTROLADOR y continuar?')){
+      setSyncMode(true);
+    }else{
+      return;   // no se toca nada
+    }
+  }
   if(!confirm(msg))return;
   if(!confirm('¿CONFIRMÁS el reinicio? Esta acción no se puede deshacer.'))return;
   // Reset por atleta: solo intentos y bombed
@@ -2237,8 +2256,9 @@ function resetLiveData(){
   saveNow();
   R();
   // Confirmar que realmente se propagó (si no escribe, el público no se entera)
+  const _okAntes=_fbLastOk;
   setTimeout(()=>{
-    if(window._forceFullWrite||!window.IS_CONTROLLER){
+    if(_fbLastOk===_okAntes){   // no hubo ninguna escritura exitosa después del reinicio
       alert('\u26A0 El reinicio se aplicó en ESTA pantalla pero NO se pudo guardar en el servidor'
         +(window.IS_CONTROLLER?'.':' porque está en modo ESPECTADOR.')
         +'\n\nEl público sigue viendo los datos anteriores. Revisá el indicador SYNC y volvé a intentar.');
