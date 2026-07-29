@@ -1081,6 +1081,78 @@ function _nomSudaCard(){
   });
 }
 
+// ── Avatar + ficha para las nóminas de campeonatos ────────────────
+// Misma experiencia que la nómina del Sudamericano: foto a la izquierda del
+// nombre y, al tocarlo, una ficha con sus datos. La foto sale del perfil del
+// atleta (atleta_fotos por código); si no tiene, quedan sus iniciales.
+// Las nóminas de campeonato traen RUT (no código), así que hay que pasar por
+// el padrón (data.json) para llegar al código y de ahí a la foto de perfil.
+// Se arma un índice una sola vez: si no, serían 100 atletas × 2000 del padrón
+// en cada render.
+let _NOMIDX=null,_NOMIDX_N=-1;
+function _nomRutK(r){return String(r||'').replace(/[^0-9kK]/g,'').toUpperCase()}
+function _nomNomK(n){return String(n||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
+function _nomIdx(){
+  const src=(typeof D!=='undefined'&&D)||[];
+  if(_NOMIDX&&_NOMIDX_N===src.length)return _NOMIDX;
+  const byRut={},byNom={};
+  src.forEach(a=>{
+    const r=_nomRutK(a.rut); if(r&&!byRut[r])byRut[r]=a;
+    const n=_nomNomK(a.nombre); if(n){ byNom[n]=byNom[n]===undefined?a:null; } // null = nombre repetido, no sirve
+  });
+  _NOMIDX={byRut,byNom}; _NOMIDX_N=src.length; return _NOMIDX;
+}
+// Código YourLift del atleta de una nómina (por código propio, RUT o nombre exacto)
+function _nomCodDe(codigo,rut,nombre){
+  if(codigo)return codigo;
+  const ix=_nomIdx();
+  const m=(rut&&ix.byRut[_nomRutK(rut)])||(nombre&&ix.byNom[_nomNomK(nombre)])||null;
+  return m&&m.codigo?m.codigo:'';
+}
+function _nomFotoDe(codigo,rut,nombre){
+  const cod=_nomCodDe(codigo,rut,nombre);
+  return (cod&&(window.ATL_FOTOS||{})[cod])||'';
+}
+function _nomAvatar(nombre,codigo,rut){
+  const foto=_nomFotoDe(codigo,rut,nombre);
+  const ini=String(nombre||'').split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
+  return `<span style="display:inline-flex;width:24px;height:24px;border-radius:50%;overflow:hidden;background:rgba(30,58,95,.5);border:1px solid ${foto?'rgba(212,168,67,.5)':'var(--border)'};vertical-align:middle;margin-right:7px;align-items:center;justify-content:center;flex-shrink:0">`
+    +(foto?`<img src="${foto}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`
+          :`<span style="font-size:9px;color:var(--muted);font-family:Oswald">${ini}</span>`)+`</span>`;
+}
+function _nomEvKey(ev,a){
+  return encodeURIComponent((ev.id||ev.name||'')+'|'+(a.nombre||'')).replace(/'/g,'%27');
+}
+// Ficha (mini perfil) de un atleta de una nómina de campeonato
+window.nomFichaEv=function(key){
+  const [evk,nombre]=decodeURIComponent(key).split('|');
+  const ev=(NM&&NM.events||[]).find(e=>(e.id||e.name)===evk);
+  const a=ev&&(ev.athletes||[]).find(x=>x.nombre===nombre);
+  if(!a)return;
+  const cod=_nomCodDe(a.codigo||a.cod||'',a.rut||'',a.nombre||''), foto=_nomFotoDe(cod,'','');
+  const ex=document.getElementById('nomFichaEvModal'); if(ex)ex.remove();
+  const m=document.createElement('div'); m.id='nomFichaEvModal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(4,10,20,.82);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px;backdrop-filter:blur(3px)';
+  const dato=(l,v)=>v?`<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid rgba(30,58,95,.35)"><span style="color:var(--muted);font-size:11px">${l}</span><span style="font-size:12px;font-weight:600;text-align:right">${v}</span></div>`:'';
+  m.innerHTML=`<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:20px;width:min(420px,95vw);max-height:88vh;overflow:auto">
+    <div style="display:flex;gap:14px;align-items:center;margin-bottom:14px">
+      <div style="width:64px;height:64px;border-radius:12px;overflow:hidden;background:rgba(30,58,95,.5);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center">
+        ${foto?`<img src="${foto}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-family:Oswald;font-size:20px;color:var(--muted)">${String(a.nombre||'').split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase()}</span>`}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-family:Oswald;font-size:16px;letter-spacing:.5px;line-height:1.2">${a.nombre||''}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${ev.name||''}</div>
+      </div>
+    </div>
+    ${dato('Categoría',a.categoria)}${dato('División',a.division)}${dato('Modalidad',a.modalidad)}
+    ${dato('Club',a.club)}${dato('Universidad',a.universidad)}${dato('Año nac.',_nomDobYear(a))}
+    <div style="display:flex;gap:8px;margin-top:14px">
+      ${cod?`<a href="atleta.html?codigo=${encodeURIComponent(cod)}" style="flex:1;text-align:center;padding:10px;border-radius:8px;background:var(--accent);color:#fff;font-family:Oswald;font-size:12px;text-decoration:none">VER PERFIL COMPLETO</a>`:''}
+      <button onclick="document.getElementById('nomFichaEvModal').remove()" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:12px;cursor:pointer">Cerrar</button>
+    </div></div>`;
+  m.onclick=e=>{if(e.target===m)m.remove()};
+  document.body.appendChild(m);
+};
 // ── Campeonatos (Firestore/nominas.json): filas normalizadas ──
 function _nomEvRows(ev){
   return (ev.athletes||[]).map(a=>{
@@ -1088,7 +1160,10 @@ function _nomEvRows(ev){
     const isPend=ev.fromFirebase&&a.status==='pending';
     return {n:a.nombre,year:_nomDobYear(a),sexo:male?'M':'F',cat:_nomCatN(a.categoria),div:a.division,
       mod:a.modalidad||'',team:a.club||'—',teamHtml:a.club||'—',uni:a.universidad||'',
-      nameHtml:`<span style="font-weight:${isPend?400:600};${isPend?'opacity:.75':''}">${a.nombre}</span>`,
+      _codigo:a.codigo||a.cod||'',_rut:a.rut||'',
+      // Avatar + nombre clickeable: misma experiencia que la nómina del Sudamericano
+      nameHtml:_nomAvatar(a.nombre,a.codigo||a.cod||'',a.rut||'')
+        +`<span onclick="nomFichaEv('${_nomEvKey(ev,a)}')" style="font-weight:${isPend?400:600};${isPend?'opacity:.75':''};cursor:pointer;border-bottom:1px dashed rgba(212,168,67,.4)" title="Ver ficha">${a.nombre}</span>`,
       estadoHtml:ev.fromFirebase?(a.status==='approved'
         ?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)">✓ OK</span>`
         :`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(212,168,67,.12);color:var(--gold);border:1px solid rgba(212,168,67,.3)">⏳</span>`):''};
