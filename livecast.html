@@ -777,11 +777,14 @@ function inOERanking(a){
 }
 function isOEClassic(a){return a&&a.mod==='oe_classic';}
 function isOEBench(a){return false;}  // OE no tiene bench-only
+// A la tabla de POWERLIFTING solo entran los que hacen los tres movimientos: el
+// que compite en PL y además en Only Bench (mod combinado) sí, el Only Bench puro
+// no. 'equipped_bench' vale para los dos casos, por eso se mira la bandera.
 function isMeetClassic(a){
-  return a&&(a.mod==='classic'||a.mod==='classic_bench');
+  return a&&(a.mod==='classic'||(a.mod==='classic_bench'&&_isPlusBench(a)));
 }
 function isMeetEquipped(a){
-  return a&&(a.mod==='equipped'||a.mod==='equipped_bench');
+  return a&&(a.mod==='equipped'||(a.mod==='equipped_bench'&&_isPlusBench(a)));
 }
 function bestOf(a,l){let b=0;a.att[l].forEach(x=>{if(x.r==='g'&&x.w>b)b=x.w});return b}
 function totalOf(a,view){
@@ -1182,7 +1185,7 @@ function pickEvent(i){
     const _rawSex=(a.sexo||a.sex||'').trim();
     const _normSex=(_rawSex==='Femenino'||_rawSex==='F'||_rawSex==='Mujer')?'Mujer':(_rawSex==='Masculino'||_rawSex==='M'||_rawSex==='Hombre')?'Hombre':_rawSex;
     const _countryCode=String(a.pais||a.country||a.pais3||'CHI').toUpperCase();
-    return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:_normSex,cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,country:_countryCode,bw:0,flight:a.flight||fl,jornada:a.jornada||'',born:String(a.born||'').slice(0,4)||(String(a.dob||'').match(/\d{4}/)||[''])[0],rackSQ:'',rackBP:'',bombed:false,
+    return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:_normSex,cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,plusBench:isCombined,country:_countryCode,bw:0,flight:a.flight||fl,jornada:a.jornada||'',born:String(a.born||'').slice(0,4)||(String(a.dob||'').match(/\d{4}/)||[''])[0],rackSQ:'',rackBP:'',bombed:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}};
   });
   const allFlights=flightMap?[...new Set(Object.values(flightMap))].filter(_inTarima).sort():[];
@@ -2142,7 +2145,7 @@ function _inscToAthlete(ins, j, flightMap){
   return{
     id:j,lot:j+1,name,rut:ins.rut||'',sex:ins.sexo||'',
     cat:catNum,div:ins.division||'',club:ins.club==='Otro'?ins.clubOtro:ins.club||'',
-    uni:ins.universidad||'',mod,bw:0,flight:fl,jornada:cronoEntry?cronoEntry.jornada:(ins.jornada||''),born:(String(ins.fechaNac||ins.dob||ins.born||'').match(/\d{4}/)||[''])[0],rackSQ:'',rackBP:'',
+    uni:ins.universidad||'',mod,plusBench:isCombined,bw:0,flight:fl,jornada:cronoEntry?cronoEntry.jornada:(ins.jornada||''),born:(String(ins.fechaNac||ins.dob||ins.born||'').match(/\d{4}/)||[''])[0],rackSQ:'',rackBP:'',
     bombed:false,weighedIn:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],
          bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],
@@ -3429,10 +3432,13 @@ function _stripAccentsForPdf(s){
 // ══════════════════════════════════════════════════════════════════
 function _actaModKey(a){
   const m=String(a.mod||'');
-  if(m==='onlybench')return 'ob_classic';
+  if(m==='oe_classic'||m==='oe_bench')return 'oe';
+  // Combinado (PL + Only Bench): su tabla base es la de powerlifting; la de Only
+  // Bench se le agrega aparte en _actaGrupos().
+  if(_isPlusBench(a))return m==='equipped_bench'?'equipped':'classic';
+  if(m==='onlybench'||m==='classic_bench')return 'ob_classic';
   if(m==='equipped_bench')return 'ob_equipped';
   if(m==='equipped')return 'equipped';
-  if(m==='oe_classic'||m==='oe_bench')return 'oe';
   return 'classic';
 }
 const _ACTA_MOD_N={classic:'POWERLIFTING CLASSIC',equipped:'POWERLIFTING EQUIPADO',
@@ -3443,14 +3449,21 @@ function _actaGrupos(){
   const solo=a=>_actaModKey(a).indexOf('ob_')===0||a.mod==='oe_bench';
   const g=new Map();
   DATA.athletes.filter(a=>!a.__is4).forEach(a=>{
-    const k=[_actaModKey(a),_srSexo(a),_srCat(a)].join('|');
-    if(!g.has(k))g.set(k,[]);
-    g.get(k).push(a);
+    // El que compite en PL y en Only Bench sale DOS VECES en el acta: una en la
+    // tabla de powerlifting con su total y otra en la de Only Bench con su banca.
+    // Es la misma banca en los dos lados — subió a tarima una sola vez.
+    const claves=[_actaModKey(a)];
+    if(_isPlusBench(a))claves.push(String(a.mod)==='equipped_bench'?'ob_equipped':'ob_classic');
+    claves.forEach(mk=>{
+      const k=[mk,_srSexo(a),_srCat(a)].join('|');
+      if(!g.has(k))g.set(k,[]);
+      g.get(k).push(a);
+    });
   });
   const out=[];
   g.forEach((arr,k)=>{
     const [mod,sexo,cat]=k.split('|');
-    const view=solo(arr[0])?'bench':'meet';
+    const view=(mod.indexOf('ob_')===0)?'bench':'meet';
     const filas=arr.map(a=>{
       const t=totalOf(a,view);
       return {a,total:t,gl:calcGL(t,a.bw,a.sex,a.mod,view),view};
@@ -7733,7 +7746,7 @@ function renderDirector(){
 function renderManage(){
   // Filtrar por tarima si está activo (modo 2 tarimas)
   const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th><th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:38px">VLO</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:80px">BW + 1ros</th>';
   ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:62px">'+LIFT_S[l]+r+'</th>'})});
@@ -7773,6 +7786,27 @@ function renderManage(){
         +'</td>';
     })});
     h+='</tr>';
+    // ── Segunda línea del MISMO atleta: su Only Bench ────────────────────
+    // El que compite en PL + Only Bench sube a tarima una sola vez. Su banca
+    // cuenta para los dos rankings, así que acá no va como otro atleta: va como
+    // una línea más abajo del suyo, bajo las columnas de banca, reflejando el
+    // mismo intento. Se marca sola cuando arriba se da válido o nulo.
+    if(_isPlusBench(a)){
+      const eqB=String(a.mod)==='equipped_bench';
+      h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3);background:rgba(167,139,250,.06);'+(a.bombed?'opacity:.4':'')+'">';
+      h+='<td style="padding:3px 2px;text-align:center;color:#a78bfa;font-size:13px">\u21B3</td>';
+      h+='<td style="padding:4px 4px"><div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span style="font-size:11px">'+a.name+'</span>'
+        +'<span style="background:#a78bfa;color:#0A1628;padding:1px 6px;border-radius:4px;font-size:8px;font-family:Oswald;font-weight:700;letter-spacing:1px">ONLY BENCH'+(eqB?' EQ':'')+'</span>'
+        +'<span style="font-size:9px;color:var(--muted)">mismo intento de banca \u2014 se marca solo</span></div></td>';
+      h+='<td></td><td></td>';
+      ['sq','bp','dl'].forEach(l=>{ for(let r=0;r<3;r++){
+        if(l!=='bp'){h+='<td></td>';continue;}
+        const at=a.att.bp[r]||{w:0,r:null};
+        const bc=at.r==='g'?'var(--green)':at.r==='n'?'var(--red)':at.w>0?LIFT_C.bp:'var(--border)';
+        h+='<td style="padding:2px"><div title="Reflejo del intento de banca (no se edita ac\u00e1)" style="border:1px solid '+bc+';border-radius:6px;padding:5px 2px;text-align:center;font-size:12px;font-weight:700;opacity:.9;'+(at.r==='n'?'text-decoration:line-through':'')+'">'+(at.w||'\u2014')+'</div></td>';
+      }});
+      h+='</tr>';
+    }
   });
   h+='</tbody></table></div></div>';return h;
 }
@@ -7806,7 +7840,13 @@ window.toggleCtAutoScroll=function(){
 // Banca: altura de seguros y cantidad de palmetas. Lo ve quien monta la barra.
 // ¿El atleta compite en Powerlifting Y en Only Bench de la misma línea?
 // (una sola banca en tarima que cuenta para los dos rankings)
-function _isPlusBench(a){const m=String(a&&a.mod||'');return m==='classic_bench'||m==='equipped_bench';}
+// La bandera la pone la conversión cuando la modalidad trae "+" (PL + Only Bench).
+// Antes se deducía del mod, pero 'equipped_bench' también le toca al Only Bench
+// Equipado PURO, así que a esos les salía una fila espejo que no correspondía.
+function _isPlusBench(a){
+  if(a&&a.plusBench!==undefined)return !!a.plusBench;
+  const m=String(a&&a.mod||'');return m==='classic_bench'||m==='equipped_bench';   // estado viejo
+}
 function _rackSetup(a,lift){
   if(!a)return '';
   const out=[];

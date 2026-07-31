@@ -91,10 +91,29 @@ def to_ath(a, flight, lot, jornada):
         'born': str(a['born']) if a.get('born') else '',
         'division': DIV.get(a['div'], a['div']),
         'categoria': f"{a['cat']} kg ({SEXO.get(a['sexo'],'')})",
-        'modalidad': MOD.get(a['mod'], a['mod']),
+        'modalidad': (MOD[a['mod'].replace(' + Only Bench', '')] + ' + Only Bench'
+                      if a['mod'].endswith(' + Only Bench') else MOD.get(a['mod'], a['mod'])),
         'club': uni or a['pais'], 'universidad': uni, 'pais': pais,
         'flight': flight, 'lot': lot, 'jornada': jornada,
     }
+
+FAM = lambda m: 'eq' if 'Equipado' in m else 'cl'
+def _fusionar_pl_ob(g):
+    """Junta la inscripción de Powerlifting con la de Only Bench de la misma línea.
+    Devuelve la lista de inscripciones ya fusionadas (el resto queda igual)."""
+    pl = [a for a in g if not a['mod'].startswith('Only Bench')]
+    ob = [a for a in g if a['mod'].startswith('Only Bench')]
+    if not pl or not ob: return g
+    out, usados = [], set()
+    for a in pl:
+        par = next((b for i, b in enumerate(ob)
+                    if i not in usados and FAM(b['mod']) == FAM(a['mod'])), None)
+        if par is not None:
+            usados.add(ob.index(par))
+            a = dict(a, mod=a['mod'] + ' + Only Bench', _ob=par['lista'])
+        out.append(a)
+    out += [b for i, b in enumerate(ob) if i not in usados]
+    return out
 
 CATN = lambda c: (float(re.sub(r'[^0-9.]', '', c) or 999)) + (0.5 if c.startswith('+') else 0)
 DIVORD = {'Sub-Junior':0,'Junior':1,'Universitario':2,'Open':3,
@@ -141,6 +160,12 @@ for d, info in dias.items():
         # mismo atleta figura Open en Only Bench y Master I en Classic), la fila
         # de Powerlifting va siempre arriba.
         grupos = [sorted(g, key=OBLAST) for g in pers.values()]
+        # PL + Only Bench de la MISMA línea son UNA sola persona en la tarima: sube
+        # una vez, tira una banca y le cuenta para los dos rankings. Se fusionan en
+        # un solo atleta con modalidad combinada ("... + Only Bench"), que es lo que
+        # el livecast entiende para mostrar la fila espejo debajo. Si no, el mismo
+        # atleta salía dos veces y el conteo quedaba inflado.
+        grupos = [_fusionar_pl_ob(g) for g in grupos]
         # Cortar la sesión en tandas PAREJAS de <=14 sin partir a una persona
         # (una sesión de 29 son tres tandas de 10, no 14+14+1).
         n = len(s['atletas'])
