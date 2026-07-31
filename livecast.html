@@ -7872,12 +7872,12 @@ function _nomDivShort(a){
 // [línea de equipamiento, modalidad competitiva]
 function _nomLineMod(a){
   const mod=String(a.mod||'').toLowerCase();
-  if(mod==='equipped')          return ['EQUIPADO','PL'];
-  if(mod==='equipped_bench')    return ['EQUIPADO','PL+BP'];
-  if(mod==='onlybench')         return ['CLASSIC','ONLY BENCH'];
-  if(mod==='oe_bench')          return ['CLASSIC','ONLY BENCH'];
-  if(mod==='classic_bench')     return ['CLASSIC','PL+BP'];
-  return ['CLASSIC','PL'];                                   // classic y oe_classic
+  const linea=(mod==='equipped'||mod==='equipped_bench')?'EQUIPADO':'CLASSIC';
+  // 'equipped_bench' le toca al combinado equipado Y al Only Bench Equipado puro,
+  // así que quién compite en las dos lo dice la bandera, no el código.
+  if(_isPlusBench(a))return [linea,'PL+BP'];
+  if(mod==='onlybench'||mod==='oe_bench'||mod==='equipped_bench')return [linea,'ONLY BENCH'];
+  return [linea,'PL'];                                       // classic, equipped y oe_classic
 }
 function _nomChips(a,sc){
   sc=sc||1;
