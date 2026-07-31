@@ -166,6 +166,7 @@ for d, info in dias.items():
         'location': 'Estadio Nacional, Ñuñoa, Chile', 'organizer': 'FESUPO / FECHIPO',
         'days': 1, 'pin': '', 'extraCols': [],
         'records': 'suda',            # habilita los récords sudamericanos de FESUPO
+        'parent': 'Sudamericano_2026',  # abrir el campeonato lleva al selector de días
         'sesiones': [{'pesaje': s['pesaje'], 'inicio': s['hora'], 'nombre': s['nombre'],
                       'atletas': len(s['atletas'])} for s in info['sesiones']],
         'resumen': nom_ses,

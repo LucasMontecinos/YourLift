@@ -6538,8 +6538,20 @@ function renderSetup(){
     return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">'+ss.map(x=>
       '<span style="font-size:10px;color:var(--muted);background:rgba(30,58,95,.35);border:1px solid var(--border);border-radius:6px;padding:2px 7px;white-space:nowrap">'
       +'<b style="color:var(--gold);font-family:Oswald">'+(x.inicio||'')+'</b> '+(x.nombre||'')+(x.atletas?' <span style="opacity:.6">('+x.atletas+')</span>':'')+'</span>').join('')+'</div>'; };
+  // Si se entró a un campeonato de varios días (?evento=Sudamericano_2026), acá se
+  // muestran SOLO sus días para elegir cuál operar/mirar, no la lista entera.
+  const _flt=window._EV_FILTER;
+  if(_flt){
+    const nD=DATA.events.filter(e=>e.parent===_flt.parent).length;
+    h+='<div class="card" style="margin-bottom:18px;padding:14px 18px;border:1px solid rgba(212,168,67,.45);background:rgba(212,168,67,.07);display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+      +'<div style="flex:1;min-width:200px"><div class="os" style="font-size:15px;letter-spacing:1px;color:var(--gold)">'+esc(_flt.name)+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">Elegí el día que querés '+(isAdmin?'operar':'seguir')+' — son '+nD+' jornadas.</div></div>'
+      +'<button onclick="window._EV_FILTER=null;R()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">Ver todas las competencias</button>'
+    +'</div>';
+  }
   DATA.events.forEach((ev,i)=>{
     if(_hidden&&(_hidden.has(ev.id)||_hiddenN?.has(ev.name)))return;
+    if(_flt&&ev.parent!==_flt.parent)return;
     // Conteo de atletas: usa el de Firestore (LIVE_EVENT_META) si el local es 0
     const fbCount = (window.LIVE_EVENT_META && window.LIVE_EVENT_META[ev.id] && window.LIVE_EVENT_META[ev.id].athleteCount) || 0;
     const athCount = ev.athletes.length || fbCount;
@@ -9357,6 +9369,14 @@ if(DEMO_MODE){
 // If the URL asks for a specific event and it differs from the saved session,
 // force phase back to 'setup' so the user picks again (or auto-pick if match).
 let _applyEvtRetries=0;
+// Nombre lindo del campeonato padre: el que tenga Firestore, si no el nombre de
+// los días sin el " — Día N".
+function _evParentName(id,hijos){
+  const m=(window.LIVE_EVENT_META||{})[id];
+  if(m&&m.name)return m.name;
+  const n=String((hijos[0]||{}).name||id);
+  return n.replace(/\s*[—-]\s*D[íi]a\s*\d+.*$/i,'').trim()||id;
+}
 function applyEventURLParam(){
   try{
     const p=new URLSearchParams(location.search).get('evento');
@@ -9372,6 +9392,19 @@ function applyEventURLParam(){
     // lo arregla, porque no es un problema de caché, es que apunta a otro documento.
     // Ahora los widgets TX pasan por la misma resolución de nombre real que el resto
     // (pasos 1-2 de abajo) antes de arrancar.
+    // 0) ¿Es un CAMPEONATO de varios días? Los días traen parent=<id del campeonato>
+    // en nominas.json, así que esto se resuelve sin depender de Firestore: se muestra
+    // el selector con sus jornadas en vez de meter a la gente en un día cualquiera.
+    if(!TX_MODE){
+      const hijos0=(DATA.events||[]).filter(e=>e.parent===want);
+      if(hijos0.length){
+        const yaAdentro=DATA.event&&DATA.event.parent===want;
+        if(!yaAdentro&&!(DATA.phase!=='setup'&&DATA.athletes&&DATA.athletes.length)){
+          window._EV_FILTER={parent:want,name:(hijos0[0].parentName||_evParentName(want,hijos0))};
+          _applyEvtRetries=0; DATA.phase='setup'; DATA.event=null; R(); return;
+        }
+      }
+    }
     // 1) Buscar en DATA.events (ya populado desde Firestore via LIVE_EVENT_META)
     let i=(DATA.events||[]).findIndex(e=>e.id===want||e.name===want);
     let wanted=i>=0?DATA.events[i]:null;
@@ -9403,7 +9436,12 @@ function applyEventURLParam(){
           if(!(DATA.events||[]).some(e=>e.name===en[1].name))
             cands.push({e:{id:en[0],name:en[1].name,organizer:en[1].org||'',location:en[1].location||'',athletes:[],_fromFirestore:true},i:-1,s:_slg(en[1].name),id:_slg(en[0])});
         });
-        let hit=cands.find(c=>c.s===ws||c.id===ws) || cands.find(c=>c.s.includes(ws)&&ws.length>=8);
+        // El match por "contiene" solo vale si es ÚNICO. Si no, agarraba cualquiera:
+        // ?evento=Sudamericano_2026 entraba derecho al Día 1 porque su nombre
+        // contiene el del campeonato. Con varios candidatos se espera al paso 3,
+        // que resuelve el id exacto contra Firestore.
+        const parciales=cands.filter(c=>c.s.includes(ws)&&ws.length>=8);
+        let hit=cands.find(c=>c.s===ws||c.id===ws) || (parciales.length===1?parciales[0]:null);
         if(hit){
           wanted=hit.e;
           if(hit.i>=0)i=hit.i;
@@ -9448,6 +9486,14 @@ function applyEventURLParam(){
       DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};
       try{localStorage.removeItem(SAVE_KEY)}catch(e){}
       R();return;
+    }
+    // Un campeonato que se corre en varios días (ej. el Sudamericano) no tiene
+    // atletas propios: sus nueve días son eventos aparte con parent=<id>. Entrar
+    // ahí no significa nada, así que se muestra el SELECTOR con esos días.
+    const hijos=(DATA.events||[]).filter(e=>e.parent&&(e.parent===wanted.id||e.parent===wanted.name));
+    if(hijos.length&&!(wanted.athletes||[]).length){
+      window._EV_FILTER={parent:wanted.id||wanted.name,name:wanted.name||wanted.id};
+      DATA.phase='setup';DATA.event=null;R();return;
     }
     // Fresh state: pick requested event directly.
     pickEvent(i);
