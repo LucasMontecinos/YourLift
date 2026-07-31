@@ -126,9 +126,16 @@ for d, info in dias.items():
         # inscripciones de un mismo atleta (PL + Only Bench) quedan juntas para que
         # levanten en la misma tanda — es la misma persona en la tarima.
         pers = collections.OrderedDict()
-        for a in sorted(s['atletas'], key=lambda x: (CATN(x['cat']), DIVORD.get(x['div'], 9), nrm(x['n']))):
+        # El Powerlifting va primero y el Only Bench justo debajo: el livecast
+        # espeja la fila de abajo desde la de arriba (das válido en banca en la
+        # Classic y se marca solo en la Only Bench).
+        OBLAST = lambda x: 1 if x['mod'].startswith('Only Bench') else 0
+        for a in sorted(s['atletas'], key=lambda x: (CATN(x['cat']), DIVORD.get(x['div'], 9), nrm(x['n']), OBLAST(x))):
             pers.setdefault(nrm(a['n']), []).append(a)
-        grupos = list(pers.values())
+        # Aunque la nómina traiga la fila Only Bench con otra división (pasa: el
+        # mismo atleta figura Open en Only Bench y Master I en Classic), la fila
+        # de Powerlifting va siempre arriba.
+        grupos = [sorted(g, key=OBLAST) for g in pers.values()]
         # Cortar la sesión en tandas PAREJAS de <=14 sin partir a una persona
         # (una sesión de 29 son tres tandas de 10, no 14+14+1).
         n = len(s['atletas'])
