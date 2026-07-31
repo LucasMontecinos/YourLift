@@ -1182,7 +1182,7 @@ function pickEvent(i){
     const _rawSex=(a.sexo||a.sex||'').trim();
     const _normSex=(_rawSex==='Femenino'||_rawSex==='F'||_rawSex==='Mujer')?'Mujer':(_rawSex==='Masculino'||_rawSex==='M'||_rawSex==='Hombre')?'Hombre':_rawSex;
     const _countryCode=String(a.pais||a.country||a.pais3||'CHI').toUpperCase();
-    return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:_normSex,cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,country:_countryCode,bw:0,flight:a.flight||fl,rackSQ:'',rackBP:'',bombed:false,
+    return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:_normSex,cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,country:_countryCode,bw:0,flight:a.flight||fl,jornada:a.jornada||'',rackSQ:'',rackBP:'',bombed:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}};
   });
   const allFlights=flightMap?[...new Set(Object.values(flightMap))].filter(_inTarima).sort():[];
@@ -2013,7 +2013,7 @@ function _inscToAthlete(ins, j, flightMap){
   return{
     id:j,lot:j+1,name,rut:ins.rut||'',sex:ins.sexo||'',
     cat:catNum,div:ins.division||'',club:ins.club==='Otro'?ins.clubOtro:ins.club||'',
-    uni:ins.universidad||'',mod,bw:0,flight:fl,jornada:cronoEntry?cronoEntry.jornada:'',rackSQ:'',rackBP:'',
+    uni:ins.universidad||'',mod,bw:0,flight:fl,jornada:cronoEntry?cronoEntry.jornada:(ins.jornada||''),rackSQ:'',rackBP:'',
     bombed:false,weighedIn:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],
          bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],
@@ -6203,12 +6203,22 @@ function renderSetup(){
     });
   }
   const _hidden=window.LIVE_EVENT_HIDDEN,_hiddenN=window.LIVE_EVENT_HIDDEN_NAMES;
+  // Fecha legible + sesiones del cronograma oficial (los eventos por día del
+  // Sudamericano traen `sesiones`): así se ve de un vistazo qué se levanta ese día
+  // y a qué hora, sin tener que entrar al evento.
+  const _fechaEv=f=>{ if(!f)return ''; const m=String(f).match(/^(\d{4})-(\d{2})-(\d{2})/); if(!m)return String(f);
+    const MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    return (+m[3])+' '+MES[(+m[2])-1]+' '+m[1]; };
+  const _sesEv=ev=>{ const ss=Array.isArray(ev.sesiones)?ev.sesiones:null; if(!ss||!ss.length)return '';
+    return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">'+ss.map(x=>
+      '<span style="font-size:10px;color:var(--muted);background:rgba(30,58,95,.35);border:1px solid var(--border);border-radius:6px;padding:2px 7px;white-space:nowrap">'
+      +'<b style="color:var(--gold);font-family:Oswald">'+(x.inicio||'')+'</b> '+(x.nombre||'')+(x.atletas?' <span style="opacity:.6">('+x.atletas+')</span>':'')+'</span>').join('')+'</div>'; };
   DATA.events.forEach((ev,i)=>{
     if(_hidden&&(_hidden.has(ev.id)||_hiddenN?.has(ev.name)))return;
     // Conteo de atletas: usa el de Firestore (LIVE_EVENT_META) si el local es 0
     const fbCount = (window.LIVE_EVENT_META && window.LIVE_EVENT_META[ev.id] && window.LIVE_EVENT_META[ev.id].athleteCount) || 0;
     const athCount = ev.athletes.length || fbCount;
-    h+='<div class="card" style="cursor:pointer;transition:all .2s" onclick="pickEvent('+i+')" onmouseenter="this.style.borderColor=\'var(--accent)\'" onmouseleave="this.style.borderColor=\'var(--border)\'"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="os" style="font-size:18px;font-weight:700">'+ev.name+'</div><p style="color:var(--muted);font-size:12px;margin-top:4px">'+(ev.organizer||'')+' \u00b7 '+(ev.location||'')+(ev._fromFirestore?' \u00b7 <span style="color:var(--gold)">creado en admin</span>':'')+'</p></div><div style="text-align:right"><div style="background:var(--accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;font-family:Oswald">'+athCount+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">atletas</div></div></div></div>'});
+    h+='<div class="card" style="cursor:pointer;transition:all .2s" onclick="pickEvent('+i+')" onmouseenter="this.style.borderColor=\'var(--accent)\'" onmouseleave="this.style.borderColor=\'var(--border)\'"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="os" style="font-size:18px;font-weight:700">'+ev.name+'</div><p style="color:var(--muted);font-size:12px;margin-top:4px">'+(ev.organizer||'')+' \u00b7 '+(ev.location||'')+(ev._fromFirestore?' \u00b7 <span style="color:var(--gold)">creado en admin</span>':'')+(ev.date?' \u00b7 <span style="color:var(--gold)">'+_fechaEv(ev.date)+'</span>':'')+'</p>'+_sesEv(ev)+'</div><div style="text-align:right"><div style="background:var(--accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;font-family:Oswald">'+athCount+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">atletas</div></div></div></div>'});
   h+='</div>';return h;
 }
 
@@ -8865,7 +8875,7 @@ fetch(_STOR+'public%2Frecords.json?alt=media',{cache:'no-cache'})
   .catch(()=>fetch('records.json').then(r=>r.json()))
   .then(d=>{RECORDS=d}).catch(()=>console.warn('[FECHIPO] records.json no cargado'));
 // DATA.events se construye desde Firestore (LIVE_EVENT_META en renderSetup) MÁS
-// los eventos con nómina propia de nominas.json (ej. Sudamericano Día 1..8, que
+// los eventos con nómina propia de nominas.json (ej. Sudamericano Día 1..9, que
 // no tienen inscripciones en Firestore: su roster viene del archivo). renderSetup
 // evita duplicar: si un evento ya está acá por nombre, no lo agrega de Firestore
 // — y para esos, loadLiveAthletes igual sincroniza atletas en vivo si existen.
