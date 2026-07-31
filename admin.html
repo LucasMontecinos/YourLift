@@ -6499,11 +6499,16 @@ function renderSudaFotos(){
 // Marca el campo publicoVisible en eventos/{id}.
 // ══════════════════════════════════════════════════════════════════
 window.pubToggle=async function(id,on){
-  const ev=(ST.eventos||[]).find(e=>e.id===id); if(!ev)return;
+  const ev=_pubEvs().find(e=>e.id===id); if(!ev)return;
   const prev=ev.publicoVisible===true;
   ev.publicoVisible=!!on; render();                    // respuesta inmediata
   try{
-    await setDoc(doc(db,'eventos',id),{publicoVisible:!!on},{merge:true});
+    // Los días del Sudamericano no son eventos de Firestore (su nómina viene del
+    // archivo), así que al mostrarlos se crea el doc con lo mínimo para que la
+    // tarjeta del público tenga nombre, fecha y lugar.
+    const extra=ev._deArchivo?{name:ev.name||id,fecha:ev.fecha||'',lugar:ev.location||'',desdeNomina:true}:{};
+    await setDoc(doc(db,'eventos',id),{publicoVisible:!!on,...extra},{merge:true});
+    if(ev._deArchivo){ const f=(ST.eventos||[]).find(e=>e.id===id); if(f)f.publicoVisible=!!on; else (ST.eventos=ST.eventos||[]).push({...ev,_deArchivo:undefined}); }
     showToast(on?('✓ "'+(ev.name||id)+'" ya se ve en Competencia en Vivo')
                 :('Oculto del público: "'+(ev.name||id)+'"'));
   }catch(e){
@@ -6512,17 +6517,55 @@ window.pubToggle=async function(id,on){
   }
 };
 window.pubHideAll=async function(){
-  const on=(ST.eventos||[]).filter(e=>e.publicoVisible===true);
+  const on=_pubEvs().filter(e=>e.publicoVisible===true);
   if(!on.length){showToast('No hay competencias visibles para el público');return;}
   if(!confirm('¿Ocultar del público las '+on.length+' competencia(s) visibles?\n\nLa pestaña "Competencia en Vivo" va a quedar vacía.'))return;
-  for(const e of on){ try{ await setDoc(doc(db,'eventos',e.id),{publicoVisible:false},{merge:true}); e.publicoVisible=false; }catch(_){} }
+  for(const e of on){ try{ await setDoc(doc(db,'eventos',e.id),{publicoVisible:false},{merge:true}); e.publicoVisible=false;
+    const f=(ST.eventos||[]).find(x=>x.id===e.id); if(f)f.publicoVisible=false; }catch(_){} }
   render(); showToast('Listo: no se muestra ninguna competencia al público');
 };
+// Deja visibles SOLO los días del Sudamericano y apaga todo lo demás. Es lo que
+// se pide durante el campeonato: que la gente entre y vea los nueve días, nada más.
+window.pubSoloSuda=async function(){
+  const evs=_pubEvs();
+  const suda=evs.filter(e=>/^suda2026_d\d+$/.test(e.id));
+  if(!suda.length){showToast('No encontré los días del Sudamericano',null,true);return;}
+  const apagar=evs.filter(e=>e.publicoVisible===true&&!/^suda2026_d\d+$/.test(e.id));
+  if(!confirm('Van a quedar visibles los '+suda.length+' días del Sudamericano'
+    +(apagar.length?(' y se ocultan '+apagar.length+' competencia(s): '+apagar.map(e=>e.name||e.id).join(', ')):'')+'.\n\n¿Seguimos?'))return;
+  for(const e of suda){ await window.pubToggle(e.id,true); }
+  for(const e of apagar){ await window.pubToggle(e.id,false); }
+  showToast('Listo: en Competencia en Vivo se ven solo los días del Sudamericano');
+};
+// Eventos que se le pueden mostrar al público: los de Firestore MÁS los que solo
+// viven en nominas.json (los nueve días del Sudamericano y el ensayo).
+function _pubEvs(){
+  const out=(ST.eventos||[]).slice();
+  (ST.nomFileEvents||[]).forEach(fe=>{
+    if(!fe.id)return;
+    if(out.some(e=>e.id===fe.id))return;
+    out.push({id:fe.id,name:fe.name,fecha:fe.date||'',location:fe.location||'',
+              logoUrl:'',status:'',publicoVisible:false,_deArchivo:true,_n:fe.n});
+  });
+  return out;
+}
+async function _pubLoadFile(){
+  if(ST.nomFileEvents)return;
+  ST.nomFileEvents=[];
+  try{
+    const j=await (await fetch('nominas.json?'+Date.now())).json();
+    ST.nomFileEvents=((j&&j.events)||[]).filter(e=>e.id&&(e.athletes||[]).length)
+      .map(e=>({id:e.id,name:e.name,date:e.date||'',location:e.location||'',n:e.athletes.length}));
+  }catch(_){}
+  render();
+}
 function renderPublico(){
-  const evs=(ST.eventos||[]).slice().sort((a,b)=>{
+  _pubLoadFile();
+  const evs=_pubEvs().sort((a,b)=>{
     const av=a.publicoVisible===true?0:1, bv=b.publicoVisible===true?0:1;
     if(av!==bv)return av-bv;                            // primero las visibles
-    return String(a.name||'').localeCompare(String(b.name||''));
+    return String(a.fecha||'').localeCompare(String(b.fecha||''))
+        || String(a.name||'').localeCompare(String(b.name||''));
   });
   const nOn=evs.filter(e=>e.publicoVisible===true).length;
   let h=`<div class="h1">YourLift Público</div>
@@ -6531,6 +6574,7 @@ function renderPublico(){
     <span style="font-family:Oswald;font-size:13px">${nOn} de ${evs.length} visibles para el público</span>
     <span style="flex:1"></span>
     <a href="index.html#envivo" target="_blank" class="btn" style="padding:8px 14px;font-size:12px;background:transparent;border:1px solid var(--border);text-decoration:none">Ver como público ↗</a>
+    <button class="btn" onclick="pubSoloSuda()" style="padding:8px 14px;font-size:12px;background:rgba(212,168,67,.12);border:1px solid var(--gold);color:var(--gold)" title="Deja visibles los nueve días del Sudamericano y oculta todo lo demás">Solo los 9 días del Sudamericano</button>
     ${nOn?`<button class="btn" onclick="pubHideAll()" style="padding:8px 14px;font-size:12px;background:transparent;border:1px solid var(--red);color:var(--red)">Ocultar todas</button>`:''}
   </div>`;
   if(!evs.length)return h+`<div class="card" style="padding:24px;text-align:center;color:var(--muted)">No hay campeonatos cargados todavía.</div>`;
@@ -6543,7 +6587,7 @@ function renderPublico(){
       </div>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis">${esc(e.name||e.id)}</div>
-        <div style="font-size:10px;color:var(--muted)">${esc(e.id)}${e.status?' · '+esc(e.status):''}</div>
+        <div style="font-size:10px;color:var(--muted)">${esc(e.id)}${e.fecha?' · '+esc(e.fecha):''}${e.status?' · '+esc(e.status):''}${e._deArchivo?` · <span style="color:var(--gold)">nómina de archivo${e._n?' · '+e._n+' atletas':''}</span>`:''}</div>
       </div>
       ${on?`<span style="font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--green);white-space:nowrap">● EN VIVO PARA EL PÚBLICO</span>`:''}
       <button onclick="pubToggle('${esc(e.id)}',${on?'false':'true'})" style="padding:7px 14px;border-radius:8px;border:1px solid ${on?'var(--red)':'var(--green)'};background:transparent;color:${on?'var(--red)':'var(--green)'};font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap">${on?'OCULTAR':'MOSTRAR'}</button>

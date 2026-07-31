@@ -101,6 +101,11 @@ DIVORD = {'Sub-Junior':0,'Junior':1,'Universitario':2,'Open':3,
           'Master I':4,'Master II':5,'Master III':6,'Master IV':7,'Special Olympics':8}
 FL = 'ABCDEFGHIJKL'
 MAXFL = 14        # tanda IPF típica; el desglose fino se hace en el pesaje
+# Las tandas todavía no están definidas (dependen del pesaje y del cupo de cada
+# sesión), así que todos los atletas arrancan SIN tanda: se muestra un guion y
+# quedan todos juntos. Poné SIN_TANDA = False para volver a repartirlos A, B, C…
+SIN_TANDA = True
+GUION = '—'
 
 dias = collections.OrderedDict()
 asignado, filas = {}, []
@@ -149,7 +154,7 @@ for d, info in dias.items():
         if cur: tandas.append(cur)
         base = len(set(x['flight'] for x in ath))
         for ti, t in enumerate(tandas):
-            fl = FL[base + ti]
+            fl = GUION if SIN_TANDA else FL[base + ti]
             jor = f"{s['hora']} · {s['nombre']}"
             for a in t:
                 lot += 1
@@ -160,6 +165,7 @@ for d, info in dias.items():
         'short': f'SUDA D{d}', 'date': info['fecha'], 'closeDate': info['fecha'],
         'location': 'Estadio Nacional, Ñuñoa, Chile', 'organizer': 'FESUPO / FECHIPO',
         'days': 1, 'pin': '', 'extraCols': [],
+        'records': 'suda',            # habilita los récords sudamericanos de FESUPO
         'sesiones': [{'pesaje': s['pesaje'], 'inicio': s['hora'], 'nombre': s['nombre'],
                       'atletas': len(s['atletas'])} for s in info['sesiones']],
         'resumen': nom_ses,

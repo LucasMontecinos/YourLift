@@ -1269,7 +1269,14 @@ function render(){const app=document.getElementById("app");
 // admin → YourLift Público (campo publicoVisible en eventos/{id}). Abre el
 // livecast en modo ESPECTADOR: sin sesión no se puede operar nada.
 function renderEnVivoPub(){
-  const evs=(window.EVENTOS_PUB||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  // Orden por fecha: durante el Sudamericano son los nueve días seguidos y tienen
+  // que salir Día 1, 2, 3… no alfabético.
+  const evs=(window.EVENTOS_PUB||[]).slice().sort((a,b)=>
+    String(a.fecha||'zzz').localeCompare(String(b.fecha||'zzz'))
+    ||String(a.name||'').localeCompare(String(b.name||'')));
+  const _fpub=f=>{const m=String(f||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return f||'';
+    const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    return (+m[3])+' '+M[(+m[2])-1]+' '+m[1];};
   let h=`<div style="max-width:900px;margin:0 auto;padding:0 4px">`;
   h+=`<h2 style="font-family:Oswald;font-size:clamp(20px,5vw,28px);letter-spacing:2px;text-transform:uppercase;margin:0 0 4px">Competencia en Vivo</h2>`;
   h+=`<p style="color:var(--muted);font-size:13px;margin-bottom:18px">Seguí la competencia en tiempo real: atleta en tarima, intentos y resultados.</p>`;
@@ -1292,7 +1299,7 @@ function renderEnVivoPub(){
         ${e.logoUrl?`<div style="flex-shrink:0;width:96px;background:#fff;display:flex;align-items:center;justify-content:center;padding:8px"><img src="${e.logoUrl}" alt="" style="max-width:100%;max-height:70px;object-fit:contain" onerror="this.parentElement.remove()"></div>`:''}
         <div style="padding:14px 16px;flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center">
           <div style="font-family:Oswald;font-size:clamp(14px,3.4vw,17px);letter-spacing:.5px;text-transform:uppercase;line-height:1.25">${e.name||e.id}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:3px">${[e.fecha,e.lugar].filter(Boolean).join(' · ')||'&nbsp;'}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">${[_fpub(e.fecha),e.lugar].filter(Boolean).join(' · ')||'&nbsp;'}</div>
         </div>
         <div style="padding:0 16px;display:flex;align-items:center;flex-shrink:0">
           <span style="background:var(--accent);color:#fff;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 14px;border-radius:20px;white-space:nowrap">VER EN VIVO</span>
