@@ -121,10 +121,10 @@ DIVORD = {'Sub-Junior':0,'Junior':1,'Universitario':2,'Open':3,
 FL = 'ABCDEFGHIJKL'
 MAXFL = 14        # tanda IPF típica; el desglose fino se hace en el pesaje
 # Las tandas todavía no están definidas (dependen del pesaje y del cupo de cada
-# sesión), así que todos los atletas arrancan SIN tanda: se muestra un guion y
-# quedan todos juntos. Poné SIN_TANDA = False para volver a repartirlos A, B, C…
-SIN_TANDA = True
-GUION = '—'
+# sesión), así que TODOS arrancan en la tanda A: es lo más cómodo para la logística
+# del pesaje, donde se reparten de verdad. Poné TANDA_UNICA = None para volver a
+# repartirlos automáticamente en A, B, C…
+TANDA_UNICA = 'A'
 
 dias = collections.OrderedDict()
 asignado, filas = {}, []
@@ -179,7 +179,7 @@ for d, info in dias.items():
         if cur: tandas.append(cur)
         base = len(set(x['flight'] for x in ath))
         for ti, t in enumerate(tandas):
-            fl = GUION if SIN_TANDA else FL[base + ti]
+            fl = TANDA_UNICA or FL[base + ti]
             jor = f"{s['hora']} · {s['nombre']}"
             for a in t:
                 lot += 1

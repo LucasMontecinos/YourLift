@@ -290,6 +290,9 @@ async function initFB(){
       window.LIVE_EVENT_META=window.LIVE_EVENT_META||{};
       window.LIVE_EVENT_HIDDEN=new Set();
       window.LIVE_EVENT_HIDDEN_NAMES=new Set();
+      // Competencias habilitadas para el público (admin → YourLift Público). El
+      // espectador solo ve estas: nunca la lista completa de lo que hay cargado.
+      window.LIVE_EVENT_PUB=new Set();
       const activeIds=[];
       snap.docs.forEach(d=>{
         const e=d.data();
@@ -299,6 +302,7 @@ async function initFB(){
           return;
         }
         evs[d.id]=e.name;
+        if(e.publicoVisible===true){window.LIVE_EVENT_PUB.add(d.id);if(e.name)window.LIVE_EVENT_PUB.add(e.name);}
         activeIds.push(d.id);
         const recordsEnabled=(typeof e.recordsEnabled==='boolean')
           ? e.recordsEnabled
@@ -1189,7 +1193,12 @@ function pickEvent(i){
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}};
   });
   const allFlights=flightMap?[...new Set(Object.values(flightMap))].filter(_inTarima).sort():[];
-  const firstFlight=allFlights[0]||(TARIMA?'A'+TARIMA:'A');
+  // La tanda activa arranca en la PRIMERA QUE EXISTE entre los atletas. Antes caía
+  // siempre en 'A' aunque nadie estuviera en la A (los días del Sudamericano
+  // arrancan todos sin tanda, con un guion), y el control quedaba apuntando a una
+  // tanda vacía.
+  const _flAth=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort();
+  const firstFlight=allFlights[0]||_flAth[0]||(TARIMA?'A'+TARIMA:'A');
   DATA.lift='sq';DATA.round=0;DATA.flight=firstFlight;DATA.changeTimers={};
   // Load athletes from Firestore in real time (overrides nominas.json when available)
   if(fbReady)loadLiveAthletes(ev);
@@ -1339,16 +1348,29 @@ function _srTotal(a){
 // atletas de la tanda activa, agrupado por categoría + división.
 function _srPanel(){
   if(!_srOn())return '';
-  const l=DATA.lift;
   const pool=DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed&&_inTarima(a.flight));
   const base=pool.length?pool:DATA.athletes.filter(a=>!a.bombed&&_inTarima(a.flight));
   if(!base.length)return '';
+  // Una fila por categoría + división + línea que esté en la tanda, con los cuatro
+  // récords: sentadilla, banca, peso muerto y TOTAL. El Only Bench solo tiene el de
+  // banca (bench press single lift, que es un récord aparte del de powerlifting).
+  const MOVS=['sq','bp','dl','total'];
   const filas=new Map();
   base.forEach(a=>{
     const eq=_srEquip(a); if(!eq)return;
-    _srRecords(a,l).forEach(r=>{
-      const k=[_srSexo(a),eq,r.div,r.cat,_srLiftKey(a,l)].join('|');
-      if(!filas.has(k))filas.set(k,{...r,sexo:_srSexo(a),eq,solo:_srSoloBanca(a),n:0});
+    const solo=_srSoloBanca(a)&&!_isPlusBench(a);
+    _srDivs(a).forEach(dv=>{
+      const k=[_srSexo(a),eq,dv,_srCat(a),solo?'ob':'pl'].join('|');
+      if(!filas.has(k)){
+        const f={sexo:_srSexo(a),eq,div:dv,cat:_srCat(a),solo,n:0,r:{}};
+        MOVS.forEach(l=>{
+          if(solo&&l!=='bp'){f.r[l]=null;return;}
+          const key=[f.sexo,eq,dv,f.cat,(l==='bp'&&solo)?'bpsl':l].join('|');
+          const rec=RECSUDA[key];
+          f.r[l]=rec?{kg:rec.kg,quien:rec.quien,pais:rec.pais}:{kg:0,vacio:true};
+        });
+        filas.set(k,f);
+      }
       filas.get(k).n++;
     });
   });
@@ -1357,28 +1379,38 @@ function _srPanel(){
   const DVO={'Sub-Junior':0,'Junior':1,'Open':2,'Master I':3,'Master II':4,'Master III':5,'Master IV':6};
   const rows=[...filas.values()].sort((x,y)=>
     (x.sexo===y.sexo?0:x.sexo==='F'?-1:1)||(x.eq===y.eq?0:x.eq==='classic'?-1:1)
-    ||CATN(x.cat)-CATN(y.cat)||(DVO[x.div]-DVO[y.div]));
+    ||CATN(x.cat)-CATN(y.cat)||(DVO[x.div]-DVO[y.div])||(x.solo?1:0)-(y.solo?1:0));
+  // Arranca ABIERTO: los récords tienen que estar a la vista durante la tanda,
+  // no escondidos detrás de un click (pedido de FESUPO).
+  if(window._SR_PANEL_OPEN===undefined)window._SR_PANEL_OPEN=true;
   const ab=!!window._SR_PANEL_OPEN;
-  let h='<div class="card" style="margin-bottom:10px;padding:0;overflow:hidden;border:1px solid rgba(212,168,67,.4)">';
-  h+='<button onclick="window._SR_PANEL_OPEN=!window._SR_PANEL_OPEN;R()" style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 13px;border:none;background:rgba(212,168,67,.10);color:var(--gold);font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;text-align:left">'
-    +'<span>🏆 RÉCORDS SUDAMERICANOS · '+LIFT_N[l]+'</span>'
-    +'<span style="font-size:10px;color:var(--muted);font-weight:400;letter-spacing:0">de las categorías que están en la tanda '+(DATA.flight||'—')+'</span>'
+  const celda=r=>{
+    if(!r)return '<td style="padding:4px 6px;text-align:center;color:rgba(150,170,200,.25)">—</td>';
+    if(r.vacio)return '<td style="padding:4px 6px;text-align:center;color:var(--muted);font-size:10px">sin récord</td>';
+    return '<td title="'+esc((r.quien||'')+(r.pais?' · '+r.pais:''))+'" style="padding:4px 6px;text-align:center;font-family:Oswald;font-weight:700;color:#F2C230;white-space:nowrap">'+r.kg+'</td>';
+  };
+  let h='<div class="card" style="margin-bottom:10px;padding:0;overflow:hidden;border:1px solid rgba(242,194,48,.45)">';
+  h+='<button onclick="window._SR_PANEL_OPEN=!window._SR_PANEL_OPEN;R()" style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 13px;border:none;background:rgba(242,194,48,.10);color:#F2C230;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;text-align:left">'
+    +'<span>🏆 RÉCORDS SUDAMERICANOS</span>'
+    +'<span style="font-size:10px;color:var(--muted);font-weight:400;letter-spacing:0">sentadilla · banca · peso muerto · total, de las categorías que están en la tanda '+(DATA.flight||'—')+'</span>'
     +'<span style="flex:1"></span><span style="font-size:13px">'+(ab?'▾':'▸')+'</span></button>';
   if(ab){
-    h+='<div style="max-height:270px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">';
-    h+='<tr style="position:sticky;top:0;background:#0D1F38">'+['Cat.','División','Modalidad','Récord','Poseedor',''].map(t=>'<th style="padding:5px 9px;text-align:left;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;border-bottom:1px solid var(--border);white-space:nowrap">'+t+'</th>').join('')+'</tr>';
+    h+='<div style="max-height:300px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">';
+    h+='<tr style="position:sticky;top:0;background:#0D1F38">'
+      +['Cat.','División','Modalidad'].map(t=>'<th style="padding:5px 9px;text-align:left;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;border-bottom:1px solid var(--border);white-space:nowrap">'+t+'</th>').join('')
+      +[['SQ',LIFT_C.sq],['BP',LIFT_C.bp],['DL',LIFT_C.dl],['TOTAL','#F2C230']].map(t=>'<th style="padding:5px 9px;text-align:center;color:'+t[1]+';font-family:Oswald;font-size:10px;letter-spacing:1px;border-bottom:1px solid var(--border)">'+t[0]+'</th>').join('')
+      +'<th style="border-bottom:1px solid var(--border)"></th></tr>';
     rows.forEach(r=>{
       h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3)">'
         +'<td style="padding:4px 9px;white-space:nowrap"><b>'+r.cat+'</b> <span style="color:var(--muted)">'+(r.sexo==='F'?'♀':'♂')+'</span></td>'
         +'<td style="padding:4px 9px;white-space:nowrap">'+r.div+'</td>'
         +'<td style="padding:4px 9px;color:var(--muted);white-space:nowrap">'+(r.eq==='classic'?'Classic':'Equipado')+(r.solo?' · Only Bench':'')+'</td>'
-        +'<td style="padding:4px 9px;white-space:nowrap;font-family:Oswald;font-weight:700;color:'+(r.vacio?'var(--muted)':'var(--gold)')+'">'+(r.vacio?'sin récord':r.kg+' kg')+'</td>'
-        +'<td style="padding:4px 9px;color:var(--muted);max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.quien||'—')+(r.pais?' · '+esc(r.pais):'')+'</td>'
+        +MOVS.map(l=>celda(r.r[l])).join('')
         +'<td style="padding:4px 9px;color:var(--muted);white-space:nowrap;font-size:10px">'+(r.n>1?r.n+' atletas':'')+'</td>'
       +'</tr>';
     });
     h+='</table></div>';
-    h+='<div style="padding:6px 13px;font-size:10px;color:var(--muted);border-top:1px solid var(--border)">Cada atleta se mide contra su división y contra el Open. '+(window._SR_FUENTE?esc(window._SR_FUENTE):'')+'</div>';
+    h+='<div style="padding:6px 13px;font-size:10px;color:var(--muted);border-top:1px solid var(--border)">Cada atleta se mide contra su división y contra el Open. Pasá el mouse por una marca para ver quién la tiene. '+(window._SR_FUENTE?esc(window._SR_FUENTE):'')+'</div>';
   }
   h+='</div>';
   return h;
@@ -2532,6 +2564,15 @@ window.toggleMainTimer=function(){ if(DATA.timerOn)pauseTimer(); else startTimer
 function resetTimer(){DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);mainTI=null;const el=document.getElementById('mainTimer');if(el){el.style.color='var(--green)';el.textContent='1:00';el.style.animation='none'}syncToFB()}
 // Tandas existentes (con atletas activos), orden alfabético — A, B, C...
 function _allFlightsSorted(){return [...new Set(DATA.athletes.filter(a=>!a.bombed).map(a=>a.flight))].sort();}
+// Orden de tandas ARRANCANDO POR LA ACTIVA y siguiendo en círculo: si están A B C D
+// y en tarima está la C, se ven C D A B. Así la tanda que está levantando queda
+// siempre arriba (y con ella sus récords), en vez de quedar enterrada abajo.
+// Es el mismo círculo que usa advanceLift() para pasar de tanda al terminar un lift.
+function _flightsFromCurrent(list){
+  const fl=(list||[]).slice();
+  const i=fl.indexOf(DATA.flight);
+  return i>0?fl.slice(i).concat(fl.slice(0,i)):fl;
+}
 // ¿La tanda "fl" ya terminó todos sus intentos de "lift" (los 3, o los que haya declarado)?
 function _flightDoneWithLift(fl,lift){
   const athletes=DATA.athletes.filter(a=>a.flight===fl&&!a.bombed);
@@ -6141,6 +6182,7 @@ function renderTxBarbell(cur,lifterChanged){
 const PI_LAYOUT_KEY='yl_pant_intentos_layout';
 const PI_DEFAULT_LAYOUT={
   liftLabel:{x:50,y:10,scale:100},
+  record:{x:50,y:16,scale:100},      // cartel de intento de récord sudamericano
   weight:{x:50,y:23,scale:100},
   barbell:{x:50,y:45,scale:100},
   name:{x:50,y:66,scale:100},
@@ -6444,6 +6486,14 @@ function renderScreenIntentos(cur,nxt){
   const accentColor=piSet.accentColor||PI_DEFAULT_SETTINGS.accentColor;
   const textColor=piSet.textColor||PI_DEFAULT_SETTINGS.textColor;
   const liftLabelHtml=`<div style="font-family:Oswald;font-size:22px;letter-spacing:4px;color:rgba(212,225,245,.6);white-space:nowrap">${liftName} · ${roundLabel}${_setup?` · ${_setup}`:''}</div>`;
+  // ── INTENTO DE RÉCORD SUDAMERICANO ──────────────────────────────
+  // Si el peso cargado supera el récord vigente de su división (o del Open), la
+  // pantalla de tarima lo canta: es lo que mira el público y la mesa técnica.
+  const _srCur=(typeof _srRompe==='function')?_srRompe(_realAth(cur),DATA.lift,weight):[];
+  const recordHtml=_srCur.length?`<div style="font-family:Oswald;white-space:nowrap;text-align:center">
+      <div style="display:inline-block;background:#F2C230;color:#1a1200;padding:8px 26px;border-radius:10px;font-size:30px;font-weight:900;letter-spacing:4px;box-shadow:0 0 34px rgba(242,194,48,.55)">INTENTO DE RÉCORD SUDAMERICANO</div>
+      <div style="font-size:17px;letter-spacing:2px;color:#F2C230;margin-top:6px">${_srCur.map(r=>(r.div+' '+r.cat+' · '+(r.vacio?'SIN RÉCORD PREVIO':'ACTUAL '+r.kg+' KG')).toUpperCase()).join('   ·   ')}</div>
+    </div>`:'';
   const weightHtml=`<div style="font-family:Oswald;font-size:120px;font-weight:900;color:${textColor};line-height:1;letter-spacing:2px;white-space:nowrap">${weight}<span style="font-size:0.32em;color:rgba(212,225,245,.55);margin-left:10px">KG</span></div>`;
   const nameHtml=`<div style="font-family:Oswald;font-size:56px;font-weight:700;letter-spacing:1px;color:${textColor};line-height:1.15;white-space:nowrap">${cur.name||''}</div>`;
   const subtitleHtml=`<div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:rgba(212,225,245,.5);white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
@@ -6472,6 +6522,7 @@ function renderScreenIntentos(cur,nxt){
     ${compHtml}
     ${piSet.showTimer!==false?`<div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`:''}
     ${_piBlock('liftLabel',liftLabelHtml)}
+    ${recordHtml?_piBlock('record',recordHtml):''}
     ${_piBlock('weight',weightHtml)}
     ${_piBlock('barbell',bbSvg)}
     ${_piBlock('name',nameHtml)}
@@ -6554,21 +6605,41 @@ function renderSetup(){
   // Si se entró a un campeonato de varios días (?evento=Sudamericano_2026), acá se
   // muestran SOLO sus días para elegir cuál operar/mirar, no la lista entera.
   const _flt=window._EV_FILTER;
+  // El ESPECTADOR solo ve lo que el admin habilitó en YourLift Público (y, si ese
+  // evento se corre en varios días, sus jornadas). Nunca la lista completa: lo que
+  // está cargado pero no publicado no se le muestra a nadie.
+  const _soloPub=!isAdmin;
+  const _pub=window.LIVE_EVENT_PUB;
+  const _esPub=ev=>!!(_pub&&(_pub.has(ev.id)||_pub.has(ev.name)||(ev.parent&&_pub.has(ev.parent))));
+  if(_soloPub&&!_pub){
+    h+='<div class="card" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">Cargando competencias…</div></div>';
+    return h;
+  }
   if(_flt){
-    const nD=DATA.events.filter(e=>e.parent===_flt.parent).length;
+    const nD=DATA.events.filter(e=>e.parent===_flt.parent&&(!_soloPub||_esPub(e))).length;
     h+='<div class="card" style="margin-bottom:18px;padding:14px 18px;border:1px solid rgba(212,168,67,.45);background:rgba(212,168,67,.07);display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
       +'<div style="flex:1;min-width:200px"><div class="os" style="font-size:15px;letter-spacing:1px;color:var(--gold)">'+esc(_flt.name)+'</div>'
       +'<div style="font-size:11px;color:var(--muted);margin-top:2px">Elegí el día que querés '+(isAdmin?'operar':'seguir')+' — son '+nD+' jornadas.</div></div>'
-      +'<button onclick="window._EV_FILTER=null;R()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">Ver todas las competencias</button>'
+      // Salir del campeonato es una acción de operador: al espectador no se le
+      // ofrece, porque no tiene por qué ver el resto de lo que hay cargado.
+      +(isAdmin?'<button onclick="window._EV_FILTER=null;R()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">Cambiar de competencia</button>':'')
     +'</div>';
   }
+  let _vistos=0;
   DATA.events.forEach((ev,i)=>{
     if(_hidden&&(_hidden.has(ev.id)||_hiddenN?.has(ev.name)))return;
     if(_flt&&ev.parent!==_flt.parent)return;
+    if(_soloPub&&!_esPub(ev))return;
+    _vistos++;
     // Conteo de atletas: usa el de Firestore (LIVE_EVENT_META) si el local es 0
     const fbCount = (window.LIVE_EVENT_META && window.LIVE_EVENT_META[ev.id] && window.LIVE_EVENT_META[ev.id].athleteCount) || 0;
     const athCount = ev.athletes.length || fbCount;
     h+='<div class="card" style="cursor:pointer;transition:all .2s" onclick="pickEvent('+i+')" onmouseenter="this.style.borderColor=\'var(--accent)\'" onmouseleave="this.style.borderColor=\'var(--border)\'"><div style="display:flex;justify-content:space-between;align-items:center"><div><div class="os" style="font-size:18px;font-weight:700">'+ev.name+'</div><p style="color:var(--muted);font-size:12px;margin-top:4px">'+(ev.organizer||'')+' \u00b7 '+(ev.location||'')+(ev._fromFirestore?' \u00b7 <span style="color:var(--gold)">creado en admin</span>':'')+(ev.date?' \u00b7 <span style="color:var(--gold)">'+_fechaEv(ev.date)+'</span>':'')+'</p>'+_sesEv(ev)+'</div><div style="text-align:right"><div style="background:var(--accent);color:#fff;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;font-family:Oswald">'+athCount+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px">atletas</div></div></div></div>'});
+  if(_soloPub&&!_vistos){
+    h+='<div class="card" style="padding:30px 22px;text-align:center">'
+      +'<div class="os" style="font-size:15px;letter-spacing:1px;color:var(--gold);margin-bottom:6px">NO HAY COMPETENCIAS EN VIVO</div>'
+      +'<div style="color:var(--muted);font-size:13px;line-height:1.5">Cuando haya una transmitiéndose, aparece acá.</div></div>';
+  }
   h+='</div>';return h;
 }
 
@@ -7918,7 +7989,7 @@ function _attCellCompete(a,l,j,isCurrentCell){
     const srCss=!srR.length?'':(srHecho
       ?'background:#F2C230;color:#1a1200;border:2px solid #F2C230;box-shadow:0 0 12px rgba(242,194,48,.55);'
       :'background:rgba(242,194,48,.22);border:2px dashed #F2C230;color:#F2C230;');
-    cell+='<div class="'+c+' att" onclick="editAtt('+a.id+',\''+l+'\','+j+')"'+(srR.length?' title="'+_srBadge(srR).replace(/"/g,'&quot;')+' — supera '+srR.map(function(x){return x.div+' '+(x.vacio?'(sin récord)':x.kg+'kg')}).join(', ')+'"':'')+' style="font-size:'+Math.round((isCurrentCell?15:12)*sc)+'px;font-weight:700;padding:'+Math.round((isCurrentCell?10:8)*sc)+'px 4px;'+srCss+(isCurrentCell?'box-shadow:inset 0 0 0 3px '+LIFT_C[l]+';':'')+'">'+(at.w||'—')+(srR.length?'<span style="display:block;font-family:Oswald;font-size:'+Math.round(8*sc)+'px;letter-spacing:.5px;line-height:1.1;margin-top:1px">'+(srHecho?'★ ':'')+'RÉCORD SUD</span>':'')+'</div>';
+    cell+='<div class="'+c+' att" onclick="editAtt('+a.id+',\''+l+'\','+j+')"'+(srR.length?' title="'+_srBadge(srR).replace(/"/g,'&quot;')+' — supera '+srR.map(function(x){return x.div+' '+(x.vacio?'(sin récord)':x.kg+'kg')}).join(', ')+'"':'')+' style="font-size:'+Math.round((isCurrentCell?15:12)*sc)+'px;font-weight:700;padding:'+Math.round((isCurrentCell?10:8)*sc)+'px 4px;'+srCss+(isCurrentCell?'box-shadow:inset 0 0 0 3px '+LIFT_C[l]+';':'')+'">'+(srR.length?'<span style="display:block;font-family:Oswald;font-size:'+Math.round(8.5*sc)+'px;font-weight:800;letter-spacing:.6px;line-height:1.1;margin-bottom:1px">'+(srHecho?'★ ':'')+'RÉCORD</span>':'')+(at.w||'—')+'</div>';
   }
   if(isCurrentCell){
     cell+='<div style="display:flex;gap:2px;margin-top:3px">'
@@ -8098,7 +8169,7 @@ function renderCompete(){
   // TODAS LAS TANDAS \u2014 SQ/BP/DL en la misma fila por atleta, todas las tandas apiladas.
   // Permite editar openers de cualquier tanda/lift sin cambiar de pesta\u00f1a. Los botones grandes
   // GOOD/NO LIFT solo aparecen en la celda que coincide con tanda+lift+intento activos arriba.
-  const allFlights = [...new Set(DATA.athletes.map(a=>a.flight))].sort();
+  const allFlights = _flightsFromCurrent([...new Set(DATA.athletes.map(a=>a.flight))].sort());
   h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:4px"><h3 class="os" style="font-size:13px;letter-spacing:1px;color:var(--gold);margin:0">TODAS LAS TANDAS</h3>';
   // Toggle de auto-scroll al atleta en tarima (estilo LiftingCast).
   {const on=window._ctAutoScroll!==false;
@@ -8151,7 +8222,12 @@ function renderCompete(){
           h+=_attCellCompete(a,l,j,isCurrentCell);
         }
       });
-      h+='<td style="text-align:center;padding:6px 4px;font-weight:700;font-family:Oswald;color:var(--gold);font-size:13px">'+(tot||'—')+'</td>';
+      // El TOTAL también tiene récord sudamericano: si el total logrado lo supera,
+      // la casilla se pinta igual que la de un intento de récord.
+      {const srT=(tot>0&&!_srSoloBanca(a))?_srRompe(a,'total',tot):[];
+       const cssT=srT.length?'background:#F2C230;color:#1a1200;':'color:var(--gold);';
+       h+='<td'+(srT.length?' title="'+_srBadge(srT).replace(/"/g,'&quot;')+'"':'')+' style="text-align:center;padding:6px 4px;font-weight:700;font-family:Oswald;'+cssT+'font-size:13px">'
+         +(srT.length?'<span style="display:block;font-size:8.5px;font-weight:800;letter-spacing:.6px;line-height:1.1">★ RÉCORD</span>':'')+(tot||'—')+'</td>';}
       h+=_posCellHtml(isCurrentAthlete?cur:a,{fs:Math.round(11*rsc)});
       h+='</tr>';
       // Fila del/los intento(s) EXTRA (duplicado abajo, solo si tiene)
@@ -9614,7 +9690,13 @@ function renderLiveView(){
     ...flQueue,
     ...curFlightAll.filter(a=>!queueIds.has(a.id)&&!a.bombed).sort((a,b)=>a.lot-b.lot),
     ...curFlightAll.filter(a=>a.bombed),
-    ...otherAthletes.sort((a,b)=>(a.flight||'').localeCompare(b.flight||'')||a.lot-b.lot),
+    // Las tandas que no están en tarima siguen el mismo círculo que el control:
+    // después de la actual va la siguiente, y al llegar al final vuelve a la primera.
+    ...(function(){
+      const orden=_flightsFromCurrent([...new Set(DATA.athletes.map(a=>a.flight))].sort());
+      const pos=f=>{const i=orden.indexOf(f);return i<0?999:i;};
+      return otherAthletes.sort((a,b)=>pos(a.flight)-pos(b.flight)||a.lot-b.lot);
+    })(),
   ];
   // Cuántas casillas por lift: 3, o 4 si algún atleta tuvo un intento extra/4º en
   // ese lift. Se calcula sobre los atletas REALES (el clon del 4º redirige su
@@ -9723,7 +9805,7 @@ function renderLiveView(){
         const srCss2=!srR2.length?'':(srOk2
           ?'background:#F2C230;color:#1a1200;border:2px solid #F2C230;box-shadow:0 0 10px rgba(242,194,48,.5);'
           :'background:rgba(242,194,48,.20);border:2px dashed #F2C230;color:#F2C230;');
-        h += '<div class="'+cls+' att"'+(srR2.length?' title="'+_srBadge(srR2).replace(/"/g,'&quot;')+'"':'')+' style="font-size:'+(isCurAtt?15:11)+'px;font-weight:700;padding:'+(isCurAtt?'10px 3px':'6px 3px')+';cursor:default;'+srCss2+(isCurAtt?'box-shadow:inset 0 0 0 2px '+LIFT_C[l]+';':'')+'min-width:46px;text-align:center">'+(at.w||'—')+(srR2.length?'<span style="display:block;font-family:Oswald;font-size:8px;letter-spacing:.5px;line-height:1;margin-top:1px">'+(srOk2?'★ ':'')+'RÉC. SUD</span>':'')+'</div>';
+        h += '<div class="'+cls+' att"'+(srR2.length?' title="'+_srBadge(srR2).replace(/"/g,'&quot;')+'"':'')+' style="font-size:'+(isCurAtt?15:11)+'px;font-weight:700;padding:'+(isCurAtt?'10px 3px':'6px 3px')+';cursor:default;'+srCss2+(isCurAtt?'box-shadow:inset 0 0 0 2px '+LIFT_C[l]+';':'')+'min-width:46px;text-align:center">'+(srR2.length?'<span style="display:block;font-family:Oswald;font-size:8px;font-weight:800;letter-spacing:.5px;line-height:1;margin-bottom:1px">'+(srOk2?'★ ':'')+'RÉCORD</span>':'')+(at.w||'—')+'</div>';
         h += '</td>';
       }
       // Subtotal / Total
