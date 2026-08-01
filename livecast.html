@@ -3471,6 +3471,138 @@ function _stripAccentsForPdf(s){
 // Los intentos nulos van con el peso en negativo, que es como se leen las actas
 // de la IPF.
 // ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// ESCRITOR DE .xlsx PROPIO
+// La versión libre de SheetJS guarda los datos pero TIRA A LA BASURA el formato:
+// negritas, tachados y colores no llegan al archivo (se puede comprobar abriendo
+// el .xlsx: styles.xml sale con una sola fuente). El acta los necesita, así que
+// el archivo se arma acá. Un .xlsx es un ZIP con cuatro XML; se guarda sin
+// comprimir (método "stored"), así no hace falta ninguna librería y se abre
+// igual en Excel, LibreOffice y Google Sheets.
+//
+// Estilos disponibles (el número va en cada celda):
+//   0 normal · 1 negrita · 2 nulo (gris + tachado) · 3 récord (amarillo, negrita)
+//   4 encabezado (negrita, fondo gris) · 5 título de grupo (negrita, más grande)
+// ══════════════════════════════════════════════════════════════════
+const XL_NORMAL=0, XL_BOLD=1, XL_NULO=2, XL_REC=3, XL_HEAD=4, XL_TITULO=5;
+function _crc32(buf){
+  let c, tabla=_crc32._t;
+  if(!tabla){
+    tabla=_crc32._t=new Int32Array(256);
+    for(let n=0;n<256;n++){ c=n; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); tabla[n]=c; }
+  }
+  let crc=-1;
+  for(let i=0;i<buf.length;i++) crc=(crc>>>8)^tabla[(crc^buf[i])&0xFF];
+  return (crc^-1)>>>0;
+}
+// ZIP sin compresión: cabecera local + datos por archivo, y el directorio central.
+function _zipStore(files){
+  const enc=new TextEncoder(), partes=[], dir=[];
+  let off=0;
+  const u16=n=>[n&255,(n>>8)&255], u32=n=>[n&255,(n>>8)&255,(n>>16)&255,(n>>24)&255];
+  files.forEach(f=>{
+    const nombre=enc.encode(f.name), data=(typeof f.data==='string')?enc.encode(f.data):f.data;
+    const crc=_crc32(data);
+    const local=[].concat([80,75,3,4],u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(nombre.length),u16(0));
+    partes.push(new Uint8Array(local),nombre,data);
+    dir.push({nombre,crc,len:data.length,off});
+    off+=local.length+nombre.length+data.length;
+  });
+  const centro=[];
+  let clen=0;
+  dir.forEach(d=>{
+    const h=[].concat([80,75,1,2],u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(d.crc),u32(d.len),u32(d.len),
+      u16(d.nombre.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(d.off));
+    centro.push(new Uint8Array(h),d.nombre);
+    clen+=h.length+d.nombre.length;
+  });
+  const fin=new Uint8Array([].concat([80,75,5,6],u16(0),u16(0),u16(dir.length),u16(dir.length),u32(clen),u32(off),u16(0)));
+  const todo=partes.concat(centro,[fin]);
+  const total=todo.reduce((n,p)=>n+p.length,0);
+  const out=new Uint8Array(total);
+  let i=0; todo.forEach(p=>{out.set(p,i);i+=p.length;});
+  return out;
+}
+function _xe(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _colLetra(n){ let s=''; n++; while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=(n-r-1)/26; } return s; }
+// filas: [[{v,s}|null, …], …]   cols: [ancho, …]
+function _xlsxDescargar(nombreArchivo, hoja, filas, cols){
+  const ESTILOS=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="0"/>
+<fonts count="6">
+<font><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/></font>
+<font><b/><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/></font>
+<font><strike/><sz val="11"/><color rgb="FF8C8C8C"/><name val="Calibri"/></font>
+<font><b/><sz val="11"/><color rgb="FF1A1200"/><name val="Calibri"/></font>
+<font><b/><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/></font>
+<font><b/><sz val="12"/><color rgb="FF000000"/><name val="Calibri"/></font>
+</fonts>
+<fills count="4">
+<fill><patternFill patternType="none"/></fill>
+<fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFF7D63A"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFEDEDED"/><bgColor indexed="64"/></patternFill></fill>
+</fills>
+<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="6">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="0" fontId="3" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+<xf numFmtId="0" fontId="4" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+<xf numFmtId="0" fontId="5" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+  let sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    +'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">';
+  if(cols&&cols.length){
+    sheet+='<cols>'+cols.map((w,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w+'" customWidth="1"/>').join('')+'</cols>';
+  }
+  sheet+='<sheetData>';
+  filas.forEach((fila,r)=>{
+    sheet+='<row r="'+(r+1)+'">';
+    (fila||[]).forEach((c,ci)=>{
+      if(c===null||c===undefined||c.v===''||c.v===null||c.v===undefined)return;
+      const ref=_colLetra(ci)+(r+1), st=c.s?' s="'+c.s+'"':'';
+      if(typeof c.v==='number'&&isFinite(c.v)) sheet+='<c r="'+ref+'"'+st+'><v>'+c.v+'</v></c>';
+      else sheet+='<c r="'+ref+'"'+st+' t="inlineStr"><is><t xml:space="preserve">'+_xe(c.v)+'</t></is></c>';
+    });
+    sheet+='</row>';
+  });
+  sheet+='</sheetData></worksheet>';
+  const archivos=[
+    {name:'[Content_Types].xml',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      +'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+      +'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+      +'<Default Extension="xml" ContentType="application/xml"/>'
+      +'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+      +'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+      +'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+      +'</Types>'},
+    {name:'_rels/.rels',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      +'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+      +'</Relationships>'},
+    {name:'xl/workbook.xml',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      +'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+      +'<sheets><sheet name="'+_xe(String(hoja||'Hoja1').slice(0,28))+'" sheetId="1" r:id="rId1"/></sheets></workbook>'},
+    {name:'xl/_rels/workbook.xml.rels',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      +'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+      +'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+      +'</Relationships>'},
+    {name:'xl/styles.xml',data:ESTILOS},
+    {name:'xl/worksheets/sheet1.xml',data:sheet}
+  ];
+  const bytes=_zipStore(archivos);
+  const url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  const a=document.createElement('a'); a.href=url; a.download=nombreArchivo;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+}
 function _actaModKey(a){
   const m=String(a.mod||'');
   if(m==='oe_classic'||m==='oe_bench')return 'oe';
@@ -3517,18 +3649,19 @@ function _actaGrupos(){
     (x.mod===y.mod?0:x.mod<y.mod?-1:1)||(x.sexo===y.sexo?0:x.sexo==='F'?-1:1)||_actaCatN(x.cat)-_actaCatN(y.cat));
 }
 // Celdas de intentos de un atleta: [{txt, rec}] — rec = fue récord sudamericano
+// Intentos de un atleta para el acta. Cada casilla dice el peso y CÓMO se lee:
+// válido → en negrita; nulo → gris y tachado (igual que las actas de FESUPO);
+// récord → resaltado en amarillo.
 function _actaAtts(a,l){
   const out=[];
-  for(let j=0;j<3;j++){
-    const at=(a.att[l]||[])[j];
-    if(!at||!at.w){out.push({txt:'',rec:false});continue;}
+  const cel=at=>{
+    if(!at||!at.w)return {w:'',ok:false,nulo:false,rec:false};
     const ok=at.r==='g';
-    out.push({txt:(ok?'':'-')+at.w, rec:ok&&_srRompe(a,l,at.w).length>0});
-  }
+    return {w:at.w, ok, nulo:at.r==='n', rec:ok&&_srRompe(a,l,at.w).length>0};
+  };
+  for(let j=0;j<3;j++)out.push(cel((a.att[l]||[])[j]));
   // 4º intento / intento extra: va como una columna más solo si alguien lo tiene
-  const at4=(a.att[l]||[])[3];
-  out.push(at4&&at4.w?{txt:(at4.r==='g'?'':'-')+at4.w,rec:at4.r==='g'&&_srRompe(a,l,at4.w).length>0,extra:true}
-                     :{txt:'',rec:false,extra:true});
+  out.push(Object.assign(cel((a.att[l]||[])[3]),{extra:true}));
   return out;
 }
 function _actaNombreArchivo(ext){
@@ -3567,22 +3700,27 @@ async function exportActaFesupoPDF(){
       lifts.forEach(l=>{ for(let j=0;j<3;j++)head[0].push({content:LIFT_S[l]+(j+1),styles:{halign:'center'}});
         if(n4[l])head[0].push({content:LIFT_S[l]+'4',styles:{halign:'center'}}); });
       head[0].push({content:soloBanca?'Mejor':'Total',styles:{halign:'center'}},{content:'IPF GL',styles:{halign:'center'}});
-      const body=[], marcar=[];
+      // marcar = récords (amarillo) · validos = negrita · nulos = gris y tachado
+      const body=[], marcar=[], validos=[], nulos=[];
       gr.filas.forEach((f,ri)=>{
         const a=f.a, row=[f.lugar||'-',a.div||'',a.name||'',_ctry(a),a.bw?a.bw.toFixed(2):'',a.born||a.dob||''];
         lifts.forEach(l=>{
-          const cs=_actaAtts(a,l);
-          cs.forEach((c,ci)=>{
+          _actaAtts(a,l).forEach(c=>{
             if(c.extra&&!n4[l])return;
-            row.push(c.txt);
-            if(c.rec)marcar.push([ri,row.length-1]);
+            row.push(c.w===''?'':String(c.w));
+            const ci=row.length-1;
+            if(c.rec)marcar.push([ri,ci]);
+            else if(c.ok)validos.push([ri,ci]);
+            if(c.nulo)nulos.push([ri,ci]);
           });
         });
         const esRec=f.total>0&&_srRompe(a,soloBanca?'bp':'total',f.total).length>0;
-        row.push(f.total>0?f.total:'-'); if(esRec&&!soloBanca)marcar.push([ri,row.length-1]);
+        row.push(f.total>0?f.total:'-');
+        if(esRec&&!soloBanca)marcar.push([ri,row.length-1]); else if(f.total>0)validos.push([ri,row.length-1]);
         row.push(f.gl?f.gl.toFixed(2):'-');
         body.push(row);
       });
+      const enLista=(L,d)=>L.some(m=>m[0]===d.row.index&&m[1]===d.column.index);
       if(y>178){doc.addPage();y=14;}
       doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(...NEGRO);
       doc.text(_ACTA_MOD_N[gr.mod]+'  -  '+(gr.sexo==='F'?'DAMAS':'CABALLEROS')+'  '+gr.cat+' kg',12,y);
@@ -3596,11 +3734,23 @@ async function exportActaFesupoPDF(){
         columnStyles:{0:{halign:'center',cellWidth:8},2:{cellWidth:52},4:{halign:'center'},5:{halign:'center'}},
         didParseCell:d=>{
           if(d.section!=='body')return;
-          if(d.column.index>=6&&String(d.cell.raw).indexOf('-')===0)d.cell.styles.textColor=GRIS;  // nulo
           if(d.column.index>=6)d.cell.styles.halign='center';
-          if(marcar.some(m=>m[0]===d.row.index&&m[1]===d.column.index)){
+          if(enLista(nulos,d)){ d.cell.styles.textColor=GRIS; }              // nulo: gris (y tachado abajo)
+          else if(enLista(validos,d)){ d.cell.styles.fontStyle='bold'; }     // válido: negrita
+          if(enLista(marcar,d)){
             d.cell.styles.fillColor=AMARILLO; d.cell.styles.fontStyle='bold'; d.cell.styles.textColor=NEGRO;
           }
+        },
+        // El tachado de los nulos no existe en autoTable: se dibuja una línea gris
+        // sobre el número, del mismo ancho que el texto.
+        didDrawCell:d=>{
+          if(d.section!=='body'||!enLista(nulos,d))return;
+          const txt=String((d.cell.text&&d.cell.text[0])||'');
+          if(!txt)return;
+          const w=doc.getTextWidth(txt);
+          const cx=d.cell.x+d.cell.width/2, cy=d.cell.y+d.cell.height/2;
+          doc.setDrawColor(GRIS[0],GRIS[1],GRIS[2]); doc.setLineWidth(0.3);
+          doc.line(cx-w/2-0.5,cy,cx+w/2+0.5,cy);
         },
         didDrawPage:()=>{ if(!primera){} }
       });
@@ -3610,7 +3760,7 @@ async function exportActaFesupoPDF(){
     const pgs=doc.internal.getNumberOfPages();
     for(let i=1;i<=pgs;i++){
       doc.setPage(i);doc.setFontSize(6.5);doc.setTextColor(...GRIS);
-      doc.text('Peso en negativo = intento nulo.  Celda amarilla = record sudamericano.  YourLift - yourlift.cl',10,203);
+      doc.text('Negrita = intento valido.  Gris tachado = intento nulo.  Celda amarilla = record sudamericano.  YourLift - yourlift.cl',10,203);
       doc.text(i+'/'+pgs,287,203,{align:'right'});
     }
     doc.save(_actaNombreArchivo('pdf'));
@@ -3623,48 +3773,43 @@ async function exportActaFesupoXLS(){
   const btn=document.getElementById('btnActaXls');
   if(btn){btn.disabled=true;btn.textContent='Generando…';}
   try{
-    if(!window.XLSX)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
-    const aoa=[], amarillos=[];
-    aoa.push([DATA.event?.name||'Competencia']);
-    aoa.push([[DATA.event?.location||'',DATA.event?.date||''].filter(Boolean).join(' · ')]);
-    aoa.push(['Peso en negativo = intento nulo · celda amarilla = récord sudamericano']);
-    aoa.push([]);
+    const F=[];                                   // filas: [{v,s}, …]
+    const T=(v,st)=>({v:v,s:st||XL_NORMAL});
+    F.push([T(DATA.event?.name||'Competencia',XL_TITULO)]);
+    F.push([T([DATA.event?.location||'',DATA.event?.date||''].filter(Boolean).join(' · '))]);
+    F.push([T('Negrita = intento válido · gris tachado = intento nulo · amarillo = récord sudamericano')]);
+    F.push([]);
     _actaGrupos().forEach(gr=>{
       const soloBanca=gr.view==='bench';
       const lifts=soloBanca?['bp']:['sq','bp','dl'];
-      aoa.push([_ACTA_MOD_N[gr.mod]+' — '+(gr.sexo==='F'?'DAMAS':'CABALLEROS')+' '+gr.cat+' kg']);
+      F.push([T(_ACTA_MOD_N[gr.mod]+' — '+(gr.sexo==='F'?'DAMAS':'CABALLEROS')+' '+gr.cat+' kg',XL_TITULO)]);
       const head=['#','División','Nombre','País','Peso corp.','Nac.'];
       lifts.forEach(l=>{for(let j=1;j<=3;j++)head.push(LIFT_S[l]+j);head.push(LIFT_S[l]+'4');});
       head.push(soloBanca?'Mejor':'Total','IPF GL','Récord');
-      aoa.push(head);
+      F.push(head.map(h=>T(h,XL_HEAD)));
       gr.filas.forEach(f=>{
-        const a=f.a, row=[f.lugar||'',a.div||'',a.name||'',_ctry(a),a.bw||'',a.born||a.dob||''];
+        const a=f.a;
+        const fila=[T(f.lugar||''),T(a.div||''),T(a.name||''),T(_ctry(a)),T(a.bw||''),T(a.born||a.dob||'')];
         const recs=[];
         lifts.forEach(l=>{
           _actaAtts(a,l).forEach(c=>{
-            row.push(c.txt===''?'':(isNaN(parseFloat(c.txt))?c.txt:parseFloat(c.txt)));
-            if(c.rec){amarillos.push([aoa.length,row.length-1]);recs.push(LIFT_S[l]);}
+            // válido → negrita · nulo → gris y tachado · récord → amarillo
+            const st=c.rec?XL_REC:c.nulo?XL_NULO:c.ok?XL_BOLD:XL_NORMAL;
+            fila.push(T(c.w===''?'':Number(c.w),st));
+            if(c.rec)recs.push(LIFT_S[l]);
           });
         });
         const esRec=f.total>0&&!soloBanca&&_srRompe(a,'total',f.total).length>0;
-        row.push(f.total>0?f.total:'');
-        if(esRec){amarillos.push([aoa.length,row.length-1]);recs.push('TOTAL');}
-        row.push(f.gl?Number(f.gl.toFixed(2)):'');
-        row.push(recs.length?('RÉCORD SUD: '+[...new Set(recs)].join(', ')):'');
-        aoa.push(row);
+        if(esRec)recs.push('TOTAL');
+        fila.push(T(f.total>0?f.total:'',esRec?XL_REC:(f.total>0?XL_BOLD:XL_NORMAL)));
+        fila.push(T(f.gl?Number(f.gl.toFixed(2)):''));
+        fila.push(T(recs.length?('RÉCORD SUD: '+[...new Set(recs)].join(', ')):'',recs.length?XL_BOLD:XL_NORMAL));
+        F.push(fila);
       });
-      aoa.push([]);
+      F.push([]);
     });
-    const ws=XLSX.utils.aoa_to_sheet(aoa);
-    // Amarillo en las celdas de récord (SheetJS solo escribe estilos en xlsx)
-    amarillos.forEach(([r,c])=>{
-      const ref=XLSX.utils.encode_cell({r,c});
-      if(ws[ref])ws[ref].s={fill:{patternType:'solid',fgColor:{rgb:'FFF7D63A'}},font:{bold:true}};
-    });
-    ws['!cols']=[{wch:4},{wch:13},{wch:30},{wch:6},{wch:10},{wch:7}].concat(Array(14).fill({wch:7}),[{wch:9},{wch:9},{wch:26}]);
-    const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,'Acta');
-    XLSX.writeFile(wb,_actaNombreArchivo('xlsx'));
+    const cols=[5,14,32,7,11,8].concat(Array(12).fill(7),[10,10,26]);
+    _xlsxDescargar(_actaNombreArchivo('xlsx'),'Acta',F,cols);
     showToastLC('✓ Excel generado');
   }catch(e){ showToastLC('Error generando el Excel: '+e.message); console.error(e); }
   finally{ if(btn){btn.disabled=false;btn.textContent='Excel';} }
@@ -8116,7 +8261,6 @@ function renderCompete(){
      +'<span style="font-size:11px;color:var(--muted)">Auto-rellenar intento al vencer el timer (nulo=mismo peso, válido=+2.5kg) <b style="color:'+(afon?'#3b82f6':'var(--muted)')+'">'+(afon?'ACTIVADO':'APAGADO')+'</b></span>'
      +'<button onclick="toggleChangeTimerAutofill()" style="padding:5px 14px;border-radius:6px;border:1px solid '+(afon?'#3b82f6':'var(--border)')+';background:transparent;color:'+(afon?'#3b82f6':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(afon?'APAGAR':'ACTIVAR')+'</button>'
    +'</div>';}
-  h+=_srPanel();
   h+='<div>';
   // Tiempo compensatorio (4º "se sigue a sí mismo") — se muestra siempre que esté
   // activo, aunque todavía no haya un atleta "actual" con peso cargado. Solo a la
@@ -8155,6 +8299,9 @@ function renderCompete(){
   }else{
     h+='<div class="card" style="text-align:center;padding:20px"><p class="os" style="font-size:15px;color:var(--gold);margin-bottom:10px">RONDA COMPLETADA</p><button class="btn btn-r" onclick="advanceLift()">Siguiente \u2192</button></div>';
   }
+  // Los récords van DEBAJO del atleta en tarima / del aviso de ronda completada:
+  // arriba tiene que estar lo que se juzga ahora.
+  h+=_srPanel();
   // Active change timers
   const activeCTs=Object.keys(DATA.changeTimers).filter(k=>{const ct=DATA.changeTimers[k];return ct&&!ct.expired&&ct.remaining>0});
   if(activeCTs.length){
