@@ -6809,7 +6809,9 @@ function R(){
   if(TX_MODE){ try{renderTxWidget();}catch(e){console.error('[TX] render error',e);} return; }
   try{
     const el=document.getElementById('R');if(!el)return;
-    if(DATA.phase==='scoreboard'){el.innerHTML=renderSB();return}
+    // El Scoreboard salió del menú: si alguien tenía esa pantalla guardada de antes,
+    // se lo lleva a Resultados en vez de dejarlo en una pantalla sin salida.
+    if(DATA.phase==='scoreboard'){DATA.phase='results';}
     if(DATA.phase==='transmision'){el.innerHTML=renderTransmision();setTimeout(initTxWidgets,0);return}
     if(DATA.phase==='setup'){el.innerHTML=renderSetup();return}
     el.innerHTML=renderShell();
@@ -6931,7 +6933,9 @@ function renderShell(){
   h+='<div class="side-label">Gesti\u00f3n</div><button class="side-btn '+(p==='manage'?'active':'')+'" onclick="go(\'manage\')"><span class="icon">\uD83D\uDCCB</span>Atletas & Pesaje</button>';
   h+='<div class="side-label">Competencia</div>';
   if(window._canAccess('compete'))h+='<button class="side-btn '+(p==='compete'?'active':'')+'" onclick="go(\'compete\')"><span class="icon">\uD83C\uDFCB\uFE0F</span>Control en Vivo</button>';
-  h+='<button class="side-btn '+(p==='scoreboard'?'active':'')+'" onclick="go(\'scoreboard\')"><span class="icon">\uD83D\uDCFA</span>Scoreboard</button>';
+  // "Scoreboard" se sacó del menú: era una pantalla vieja de proyección que quedó
+  // reemplazada por Pantalla de Tarima. Las descargas del acta NO estaban ahí, están
+  // en Resultados, así que no se pierde nada.
   h+='<button class="side-btn '+(p==='transmision'?'active':'')+'" onclick="go(\'transmision\')"><span class="icon">\uD83D\uDCE1</span>Transmisi\u00f3n</button>';
   h+='<button class="side-btn '+(p==='obsTx'?'active':'')+'" onclick="go(\'obsTx\')"><span class="icon">\uD83C\uDFAC</span>Widgets OBS</button>';
   if(window._canAccess('director'))h+='<button class="side-btn '+(p==='director'?'active':'')+'" onclick="go(\'director\')"><span class="icon"></span>Control TX</button>';
