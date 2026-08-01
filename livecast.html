@@ -6326,14 +6326,14 @@ function renderTxBarbell(cur,lifterChanged){
 // ════════════════════════════════════════════════════════════════
 const PI_LAYOUT_KEY='yl_pant_intentos_layout';
 const PI_DEFAULT_LAYOUT={
-  liftLabel:{x:50,y:10,scale:100},
-  record:{x:50,y:16,scale:100},      // cartel de intento de récord sudamericano
-  weight:{x:50,y:23,scale:100},
-  barbell:{x:50,y:45,scale:100},
-  name:{x:50,y:66,scale:100},
-  subtitle:{x:50,y:72,scale:100},
-  position:{x:50,y:78,scale:100},
-  next:{x:50,y:92,scale:100}
+  record:{x:50,y:7,scale:100},       // cartel de intento de récord: arriba de todo
+  liftLabel:{x:50,y:15,scale:100},
+  weight:{x:50,y:22,scale:100},
+  barbell:{x:50,y:50,scale:100},
+  name:{x:50,y:72,scale:100},
+  subtitle:{x:50,y:78,scale:100},
+  position:{x:50,y:84,scale:100},
+  next:{x:50,y:93,scale:100}
 };
 function _piLoadLayout(){
   try{
@@ -6356,11 +6356,20 @@ window.piResetLayout=function(){
 // (fondo/acento/texto), para adaptarse a la iluminación de cada recinto.
 // Se guardan por navegador/pantalla, igual que la disposición de bloques.
 const PI_SETTINGS_KEY='yl_pant_intentos_settings';
-const PI_DEFAULT_SETTINGS={showTimer:true,bgColor:'',accentColor:'#D4A843',textColor:'#ffffff'};
+// showTimer en false: la pantalla de tarima no muestra cronómetro (el reloj del
+// minuto lo lleva el control, no la proyección). Se puede prender desde el
+// engranaje de esa misma pantalla.
+const PI_DEFAULT_SETTINGS={showTimer:false,bgColor:'',accentColor:'#D4A843',textColor:'#ffffff'};
 function _piLoadSettings(){
   try{
     const raw=localStorage.getItem(PI_SETTINGS_KEY);
-    if(raw)return Object.assign({},PI_DEFAULT_SETTINGS,JSON.parse(raw));
+    if(raw){
+      const g=JSON.parse(raw);
+      // El cronómetro se sacó de la pantalla de tarima: si venía prendido de antes
+      // (era el default viejo) se apaga, salvo que se haya tocado el interruptor.
+      if(g.showTimer===true&&!g._timerElegido)delete g.showTimer;
+      return Object.assign({},PI_DEFAULT_SETTINGS,g);
+    }
   }catch(e){}
   return Object.assign({},PI_DEFAULT_SETTINGS);
 }
@@ -6511,7 +6520,7 @@ function _piSettingsPanelHtml(){
     h+=`<div style="background:rgba(10,22,40,.94);border:1px solid rgba(212,225,245,.25);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
       <div style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:rgba(212,225,245,.5)">AJUSTES DE PANTALLA</div>
       <label style="display:flex;align-items:center;gap:8px;font-family:Oswald;font-size:12px;color:#fff;cursor:pointer">
-        <input type="checkbox" ${piSet.showTimer!==false?'checked':''} onchange="piSetSetting('showTimer',this.checked)"> Mostrar cronómetro
+        <input type="checkbox" ${piSet.showTimer===true?'checked':''} onchange="piSetSetting('_timerElegido',true);piSetSetting('showTimer',this.checked)"> Mostrar cronómetro
       </label>
       <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:Oswald;font-size:12px;color:#fff">
         Fondo <input type="color" value="${piSet.bgColor||'#0A1628'}" onchange="piSetSetting('bgColor',this.value)" style="width:36px;height:24px;padding:0;border:1px solid rgba(212,225,245,.3);border-radius:4px;background:none;cursor:pointer">
@@ -6556,8 +6565,8 @@ function renderScreenIntentos(cur,nxt){
     if(kg>=15) return{h:222,w:52,fill:'#D97706',stroke:'#78350F',round:false};
     if(kg>=10) return{h:190,w:46,fill:'#16A34A',stroke:'#14532D',round:false};
     if(kg>=5)  return{h:150,w:38,fill:'#E5E7EB',stroke:'#9CA3AF',round:false};
-    if(kg>=2.5)return{h:110,w:30,fill:'#EF4444',stroke:'#991B1B',round:false};
-    if(kg>=1.25)return{h:80, w:18,fill:'#D1D5DB',stroke:'#6B7280',round:false};
+    if(kg>=2.5)return{h:112,w:34,fill:'#111827',stroke:'#000000',round:false};   // 2.5 negro
+    if(kg>=1.25)return{h:86, w:26,fill:'#2563EB',stroke:'#1E3A8A',round:false};  // 1.25 azul
     if(kg>=0.75)return{h:64, w:14,fill:'#9CA3AF',stroke:'#6B7280',round:false};
     if(kg>=0.5) return{h:54, w:12,fill:'#6B7280',stroke:'#374151',round:false};
     if(kg>=0.25)return{h:46, w:10,fill:'#4B5563',stroke:'#1F2937',round:false};
@@ -6572,7 +6581,7 @@ function renderScreenIntentos(cur,nxt){
   x+=stubW;
   for(let xi=20;xi<x-6;xi+=16)s.push(`<line x1="${xi}" y1="${cy-shaftThick/2-3}" x2="${xi}" y2="${cy+shaftThick/2+3}" stroke="#A1A1AA" stroke-width="2" opacity="0.5"/>`);
   s.push(`<rect x="${x}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="4" stroke="#27272A" stroke-width="2"/>`);
-  s.push(`<text x="${x+collarW/2}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="#D4D4D8" font-family="Oswald" font-weight="700" font-size="15" transform="rotate(-90 ${x+collarW/2} ${cy})">BAR+COL ${barW}</text>`);
+  s.push(`<text x="${x+collarW/2}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="#F4F4F5" stroke="rgba(0,0,0,.7)" stroke-width="2" paint-order="stroke" stroke-linejoin="round" font-family="Oswald" font-weight="700" font-size="16" transform="rotate(-90 ${x+collarW/2} ${cy})">BAR+COL ${barW}</text>`);
   x+=collarW+6;
   plates.forEach(kg=>{
     const p=pp(kg);const py=cy-p.h/2;
@@ -6586,13 +6595,16 @@ function renderScreenIntentos(cur,nxt){
       const stripeW=Math.max(2,Math.min(6,p.w*0.3));
       s.push(`<rect x="${x}" y="${py}" width="${p.w}" height="${p.h}" fill="${p.fill}" rx="${rx}" stroke="${p.stroke}" stroke-width="3"/>`);
       s.push(`<rect x="${x+4}" y="${py+6}" width="${stripeW}" height="${p.h-12}" fill="rgba(255,255,255,0.22)" rx="2"/>`);
-      const textColor=kg>=5&&kg<10?'#111827':'#fff';
-      // Discos angostos (1.25kg y menores): la etiqueta se rota para leerse a lo
-      // largo del disco, si no el número no entra en el ancho del disco.
-      const narrow=p.w<24;
-      const fs=narrow?Math.max(9,Math.min(14,p.w*0.75)):Math.min(30,p.w*0.62);
+      // El número del disco se tiene que leer desde la platea: letra grande y un
+      // contorno oscuro (paint-order:stroke) para que no se pierda contra el color
+      // del disco. En los angostos (2.5 y 1.25) se rota, si no no entra a lo ancho.
+      const claro=(kg>=5&&kg<10);                       // el de 5kg es blanco
+      const textColor=claro?'#111827':'#fff';
+      const halo=claro?'rgba(255,255,255,.85)':'rgba(0,0,0,.75)';
+      const narrow=p.w<30;
+      const fs=narrow?Math.max(15,Math.min(21,p.h*0.19)):Math.min(34,p.w*0.68);
       const rot=narrow?` transform="rotate(-90 ${x+p.w/2} ${cy})"`:'';
-      s.push(`<text x="${x+p.w/2}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="${textColor}" font-family="Oswald" font-weight="800" font-size="${fs}"${rot}>${label}</text>`);
+      s.push(`<text x="${x+p.w/2}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="${textColor}" stroke="${halo}" stroke-width="${Math.max(1.6,fs*0.11)}" paint-order="stroke" stroke-linejoin="round" font-family="Oswald" font-weight="800" font-size="${fs}" letter-spacing="0.5"${rot}>${label}</text>`);
     }
     x+=p.w+8;
   });
@@ -6665,7 +6677,7 @@ function renderScreenIntentos(cur,nxt){
     </div>`:'';
   return `<div style="position:fixed;inset:0;overflow:hidden${piSet.bgColor?';background:'+piSet.bgColor:''}" id="pantIntentosBox">
     ${compHtml}
-    ${piSet.showTimer!==false?`<div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`:''}
+    ${piSet.showTimer===true?`<div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`:''}
     ${_piBlock('liftLabel',liftLabelHtml)}
     ${recordHtml?_piBlock('record',recordHtml):''}
     ${_piBlock('weight',weightHtml)}
