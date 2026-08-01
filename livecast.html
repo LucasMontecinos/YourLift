@@ -296,13 +296,18 @@ async function initFB(){
       const activeIds=[];
       snap.docs.forEach(d=>{
         const e=d.data();
+        // "Visible para el público" y "visible en el livecast" son dos interruptores
+        // distintos: el primero es lo que ve la gente en Competencia en Vivo, el
+        // segundo es si aparece en la lista del operador. Se lee ANTES de la salida
+        // por archivado, porque si no un campeonato archivado pero publicado (el
+        // Sudamericano es justo eso) dejaba al público sin nada que ver.
+        if(e.publicoVisible===true){window.LIVE_EVENT_PUB.add(d.id);if(e.name)window.LIVE_EVENT_PUB.add(e.name);}
         if(e.status==='archived'||e.livecastVisible===false){
           window.LIVE_EVENT_HIDDEN.add(d.id);
           if(e.name)window.LIVE_EVENT_HIDDEN_NAMES.add(e.name);
           return;
         }
         evs[d.id]=e.name;
-        if(e.publicoVisible===true){window.LIVE_EVENT_PUB.add(d.id);if(e.name)window.LIVE_EVENT_PUB.add(e.name);}
         activeIds.push(d.id);
         const recordsEnabled=(typeof e.recordsEnabled==='boolean')
           ? e.recordsEnabled
@@ -6737,7 +6742,7 @@ function renderSetup(){
       }
     }
   }catch(e){}
-  let h='<div style="max-width:700px;margin:60px auto;padding:0 20px" class="fade">'+backupInfo+'<div style="text-align:center;margin-bottom:40px"><div class="os" style="font-size:clamp(30px,6vw,48px);font-weight:700;letter-spacing:3px"><div style="text-align:center;margin-bottom:40px"><div class="os" style="font-size:clamp(30px,6vw,48px);font-weight:700;letter-spacing:3px"><img src="YourLift_logo.png" style="height:50px;margin-bottom:8px" onerror="this.remove()"><br><span style="color:var(--accent)">Your</span>Lift</div><p style="color:var(--muted);font-size:14px;margin-top:6px">Sistema de Gesti\u00f3n de Competencia</p><div style="width:60px;height:3px;background:linear-gradient(90deg,var(--accent),var(--gold));margin:12px auto;border-radius:2px"></div><a href="index.html" style="display:inline-block;margin-top:10px;color:var(--muted);font-size:12px;text-decoration:none;padding:6px 16px;border:1px solid var(--border);border-radius:6px;transition:all .15s" onmouseenter="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--text)\'" onmouseleave="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--muted)\'">← YourLift</a></div>';
+  let h='<div style="max-width:700px;margin:60px auto;padding:0 20px" class="fade">'+backupInfo+'<div style="text-align:center;margin-bottom:40px"><img src="YourLift_logo.png" style="height:clamp(70px,11vw,120px);width:auto;max-width:90%;margin-bottom:6px" alt="YourLift" onerror="this.remove()"><p style="color:var(--muted);font-size:14px;margin-top:6px">Sistema de Gesti\u00f3n de Competencia</p><div style="width:60px;height:3px;background:linear-gradient(90deg,var(--accent),var(--gold));margin:12px auto;border-radius:2px"></div><a href="index.html" style="display:inline-block;margin-top:10px;color:var(--muted);font-size:12px;text-decoration:none;padding:6px 16px;border:1px solid var(--border);border-radius:6px;transition:all .15s" onmouseenter="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--text)\'" onmouseleave="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--muted)\'">← YourLift</a></div>';
   // Merge: agregar eventos creados desde admin (Firestore) que no est\u00e9n en nominas.json
   if(window.LIVE_EVENT_META){
     Object.entries(window.LIVE_EVENT_META).forEach(function(entry){
@@ -6767,8 +6772,11 @@ function renderSetup(){
   // está cargado pero no publicado no se le muestra a nadie.
   const _soloPub=!isAdmin;
   const _pub=window.LIVE_EVENT_PUB;
-  const _esPub=ev=>!!(_pub&&(_pub.has(ev.id)||_pub.has(ev.name)||(ev.parent&&_pub.has(ev.parent))));
-  if(_soloPub&&!_pub){
+  // Si entró por el link de un campeonato (?evento=…), sus jornadas se le muestran
+  // igual: ese link ES el permiso. El filtro está para que nadie curiosee la lista
+  // completa de lo que hay cargado, no para bloquear el link que le pasaron.
+  const _esPub=ev=>!!((_flt&&ev.parent===_flt.parent)||(_pub&&(_pub.has(ev.id)||_pub.has(ev.name)||(ev.parent&&_pub.has(ev.parent)))));
+  if(_soloPub&&!_pub&&!_flt){
     h+='<div class="card" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">Cargando competencias…</div></div>';
     return h;
   }
