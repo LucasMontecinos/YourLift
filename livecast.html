@@ -3677,8 +3677,13 @@ const _ACTA_MOD_N={classic:'POWERLIFTING CLASSIC',equipped:'POWERLIFTING EQUIPAD
   ob_classic:'ONLY BENCH CLASSIC',ob_equipped:'ONLY BENCH EQUIPADO',oe:'SPECIAL OLYMPICS'};
 function _actaCatN(c){const s=String(c||'');const n=parseFloat(s.replace(/[^0-9.]/g,''))||999;return n+(s.indexOf('+')>=0?0.5:0);}
 // Estructura del acta: [{mod, sexo, cat, filas:[…]}] ya ordenada y con lugares.
+const _ACTA_DIVORD={'Sub-Junior':0,'Subjunior':0,'Junior':1,'Universitario':2,'Open':3,
+  'Master I':4,'Master II':5,'Master III':6,'Master IV':7,'Special Olympics':8};
+// El acta se arma como la de la IPF: una tabla por MODALIDAD + SEXO + DIVISIÓN +
+// CATEGORÍA (ej. "Open -63 kg"), y adentro los atletas ordenados de mayor a menor
+// por total. Antes se agrupaba solo por categoría y quedaban Open, Junior y Master
+// mezclados en la misma tabla.
 function _actaGrupos(){
-  const solo=a=>_actaModKey(a).indexOf('ob_')===0||a.mod==='oe_bench';
   const g=new Map();
   DATA.athletes.filter(a=>!a.__is4).forEach(a=>{
     // El que compite en PL y en Only Bench sale DOS VECES en el acta: una en la
@@ -3687,25 +3692,44 @@ function _actaGrupos(){
     const claves=[_actaModKey(a)];
     if(_isPlusBench(a))claves.push(String(a.mod)==='equipped_bench'?'ob_equipped':'ob_classic');
     claves.forEach(mk=>{
-      const k=[mk,_srSexo(a),_srCat(a)].join('|');
+      const k=[mk,_srSexo(a),_normDiv(a.div||''),_srCat(a)].join('|');
       if(!g.has(k))g.set(k,[]);
       g.get(k).push(a);
     });
   });
   const out=[];
   g.forEach((arr,k)=>{
-    const [mod,sexo,cat]=k.split('|');
+    const [mod,sexo,div,cat]=k.split('|');
     const view=(mod.indexOf('ob_')===0)?'bench':'meet';
     const filas=arr.map(a=>{
       const t=totalOf(a,view);
       return {a,total:t,gl:calcGL(t,a.bw,a.sex,a.mod,view),view};
+    // A igual total gana el más liviano (criterio IPF).
     }).sort((x,y)=>(y.total-x.total)||(x.a.bw-y.a.bw));
     let lugar=0;
     filas.forEach(f=>{ f.lugar=f.total>0?++lugar:0; });
-    out.push({mod,sexo,cat,view,filas});
+    // Puesto de cada atleta EN CADA MOVIMIENTO dentro de su grupo: es el [n] que
+    // va al lado de la mejor marca. Sirve para premiar mejor sentadilla, mejor
+    // banca y mejor peso muerto, como en las actas de la IPF.
+    const lifts=(view==='bench')?['bp']:['sq','bp','dl'];
+    const puesto={};
+    lifts.forEach(l=>{
+      puesto[l]={};
+      filas.map(f=>({id:f.a.id,best:bestOf(f.a,l),bw:f.a.bw})).filter(x=>x.best>0)
+        .sort((x,y)=>(y.best-x.best)||(x.bw-y.bw))
+        .forEach((x,i)=>{puesto[l][x.id]=i+1;});
+    });
+    out.push({mod,sexo,div,cat,view,filas,puesto,lifts});
   });
   return out.sort((x,y)=>
-    (x.mod===y.mod?0:x.mod<y.mod?-1:1)||(x.sexo===y.sexo?0:x.sexo==='F'?-1:1)||_actaCatN(x.cat)-_actaCatN(y.cat));
+    (x.mod===y.mod?0:x.mod<y.mod?-1:1)
+    ||(x.sexo===y.sexo?0:x.sexo==='F'?-1:1)
+    ||_actaCatN(x.cat)-_actaCatN(y.cat)
+    ||((_ACTA_DIVORD[x.div]===undefined?9:_ACTA_DIVORD[x.div])-(_ACTA_DIVORD[y.div]===undefined?9:_ACTA_DIVORD[y.div])));
+}
+// Título de una tabla: "POWERLIFTING CLASSIC · DAMAS · Open -63 kg"
+function _actaTitulo(gr){
+  return _ACTA_MOD_N[gr.mod]+'  ·  '+(gr.sexo==='F'?'DAMAS':'CABALLEROS')+'  ·  '+(gr.div||'')+' '+gr.cat+' kg';
 }
 // Celdas de intentos de un atleta: [{txt, rec}] — rec = fue récord sudamericano
 // Intentos de un atleta para el acta. Cada casilla dice el peso y CÓMO se lee:
@@ -3740,8 +3764,6 @@ async function exportActaFesupoPDF(){
     const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
     const AMARILLO=[247,214,58], NEGRO=[0,0,0], GRIS=[130,130,130];
     const grupos=_actaGrupos();
-    const hay4=l=>DATA.athletes.some(a=>((a.att[l]||[])[3]||{}).w>0);
-    const n4={sq:hay4('sq'),bp:hay4('bp'),dl:hay4('dl')};
     let y=14, primera=true;
     const titulo=()=>{
       doc.setTextColor(...NEGRO);
@@ -3753,16 +3775,21 @@ async function exportActaFesupoPDF(){
     };
     titulo();
     grupos.forEach(gr=>{
-      const soloBanca=gr.view==='bench';
-      const lifts=soloBanca?['bp']:['sq','bp','dl'];
-      const head=[[{content:'#',styles:{halign:'center'}},'Division','Nombre','Pais','P.Corp.','Nac.']];
-      lifts.forEach(l=>{ for(let j=0;j<3;j++)head[0].push({content:LIFT_S[l]+(j+1),styles:{halign:'center'}});
-        if(n4[l])head[0].push({content:LIFT_S[l]+'4',styles:{halign:'center'}}); });
-      head[0].push({content:soloBanca?'Mejor':'Total',styles:{halign:'center'}},{content:'IPF GL',styles:{halign:'center'}});
+      const lifts=gr.lifts;
+      // La columna del 4º intento sale SOLO si alguien de ESTA tabla lo tuvo.
+      const n4={};
+      lifts.forEach(l=>{ n4[l]=gr.filas.some(f=>((f.a.att[l]||[])[3]||{}).w>0); });
+      const head=[[{content:'#',styles:{halign:'center'}},'Nombre','Pais','P.Corp.','Nac.']];
+      lifts.forEach(l=>{
+        for(let j=0;j<3;j++)head[0].push({content:LIFT_S[l]+(j+1),styles:{halign:'center'}});
+        if(n4[l])head[0].push({content:LIFT_S[l]+'4',styles:{halign:'center'}});
+        head[0].push({content:LIFT_S[l]+' [BST]',styles:{halign:'center'}});   // mejor marca [puesto]
+      });
+      head[0].push({content:gr.view==='bench'?'Mejor':'Total',styles:{halign:'center'}},{content:'IPF GL',styles:{halign:'center'}});
       // marcar = récords (amarillo) · validos = negrita · nulos = gris y tachado
-      const body=[], marcar=[], validos=[], nulos=[];
+      const body=[], marcar=[], validos=[], nulos=[], mejores=[];
       gr.filas.forEach((f,ri)=>{
-        const a=f.a, row=[f.lugar||'-',a.div||'',a.name||'',_ctry(a),a.bw?a.bw.toFixed(2):'',a.born||a.dob||''];
+        const a=f.a, row=[f.lugar||'-',a.name||'',_ctry(a),a.bw?a.bw.toFixed(2):'',a.born||a.dob||''];
         lifts.forEach(l=>{
           _actaAtts(a,l).forEach(c=>{
             if(c.extra&&!n4[l])return;
@@ -3772,30 +3799,35 @@ async function exportActaFesupoPDF(){
             else if(c.ok)validos.push([ri,ci]);
             if(c.nulo)nulos.push([ri,ci]);
           });
+          // Mejor marca del movimiento + puesto en la tabla, estilo IPF: 220.0 [3]
+          const b=bestOf(a,l), pl=gr.puesto[l]&&gr.puesto[l][a.id];
+          row.push(b>0?(b+(pl?' ['+pl+']':'')):'-');
+          if(b>0)mejores.push([ri,row.length-1]);
         });
-        const esRec=f.total>0&&_srRompe(a,soloBanca?'bp':'total',f.total).length>0;
+        const esRec=f.total>0&&_srRompe(a,gr.view==='bench'?'bp':'total',f.total).length>0;
         row.push(f.total>0?f.total:'-');
-        if(esRec&&!soloBanca)marcar.push([ri,row.length-1]); else if(f.total>0)validos.push([ri,row.length-1]);
+        if(esRec&&gr.view!=='bench')marcar.push([ri,row.length-1]); else if(f.total>0)validos.push([ri,row.length-1]);
         row.push(f.gl?f.gl.toFixed(2):'-');
         body.push(row);
       });
       const enLista=(L,d)=>L.some(m=>m[0]===d.row.index&&m[1]===d.column.index);
-      if(y>178){doc.addPage();y=14;}
+      if(y>172){doc.addPage();y=14;}
       doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(...NEGRO);
-      doc.text(_ACTA_MOD_N[gr.mod]+'  -  '+(gr.sexo==='F'?'DAMAS':'CABALLEROS')+'  '+gr.cat+' kg',12,y);
+      doc.text(_stripAccentsForPdf(_actaTitulo(gr)),12,y);
       y+=1.5;
       doc.autoTable({
         head, body, startY:y, margin:{left:10,right:10}, theme:'grid',
-        styles:{fontSize:7,cellPadding:1.1,textColor:NEGRO,lineColor:[170,170,170],lineWidth:.15,fillColor:[255,255,255]},
-        headStyles:{fillColor:[235,235,235],textColor:NEGRO,fontStyle:'bold',fontSize:6.8,halign:'center'},
+        styles:{fontSize:6.6,cellPadding:1,textColor:NEGRO,lineColor:[170,170,170],lineWidth:.15,fillColor:[255,255,255]},
+        headStyles:{fillColor:[235,235,235],textColor:NEGRO,fontStyle:'bold',fontSize:6.4,halign:'center'},
         bodyStyles:{fillColor:[255,255,255]},
         alternateRowStyles:{fillColor:[248,248,248]},
-        columnStyles:{0:{halign:'center',cellWidth:8},2:{cellWidth:52},4:{halign:'center'},5:{halign:'center'}},
+        columnStyles:{0:{halign:'center',cellWidth:7},1:{cellWidth:46},2:{halign:'center',cellWidth:10},3:{halign:'center',cellWidth:13},4:{halign:'center',cellWidth:10}},
         didParseCell:d=>{
           if(d.section!=='body')return;
-          if(d.column.index>=6)d.cell.styles.halign='center';
+          if(d.column.index>=5)d.cell.styles.halign='center';
           if(enLista(nulos,d)){ d.cell.styles.textColor=GRIS; }              // nulo: gris (y tachado abajo)
           else if(enLista(validos,d)){ d.cell.styles.fontStyle='bold'; }     // válido: negrita
+          if(enLista(mejores,d)){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[236,242,252]; }
           if(enLista(marcar,d)){
             d.cell.styles.fillColor=AMARILLO; d.cell.styles.fontStyle='bold'; d.cell.styles.textColor=NEGRO;
           }
@@ -3810,8 +3842,7 @@ async function exportActaFesupoPDF(){
           const cx=d.cell.x+d.cell.width/2, cy=d.cell.y+d.cell.height/2;
           doc.setDrawColor(GRIS[0],GRIS[1],GRIS[2]); doc.setLineWidth(0.3);
           doc.line(cx-w/2-0.5,cy,cx+w/2+0.5,cy);
-        },
-        didDrawPage:()=>{ if(!primera){} }
+        }
       });
       y=doc.lastAutoTable.finalY+5; primera=false;
     });
@@ -3819,7 +3850,7 @@ async function exportActaFesupoPDF(){
     const pgs=doc.internal.getNumberOfPages();
     for(let i=1;i<=pgs;i++){
       doc.setPage(i);doc.setFontSize(6.5);doc.setTextColor(...GRIS);
-      doc.text('Negrita = intento valido.  Gris tachado = intento nulo.  Celda amarilla = record sudamericano.  YourLift - yourlift.cl',10,203);
+      doc.text('Negrita = intento valido.  Gris tachado = intento nulo.  Amarillo = record sudamericano.  [n] = puesto en ese movimiento.  YourLift - yourlift.cl',10,203);
       doc.text(i+'/'+pgs,287,203,{align:'right'});
     }
     doc.save(_actaNombreArchivo('pdf'));
@@ -3836,29 +3867,37 @@ async function exportActaFesupoXLS(){
     const T=(v,st)=>({v:v,s:st||XL_NORMAL});
     F.push([T(DATA.event?.name||'Competencia',XL_TITULO)]);
     F.push([T([DATA.event?.location||'',DATA.event?.date||''].filter(Boolean).join(' · '))]);
-    F.push([T('Negrita = intento válido · gris tachado = intento nulo · amarillo = récord sudamericano')]);
+    F.push([T('Negrita = intento válido · gris tachado = intento nulo · amarillo = récord sudamericano · [n] = puesto en ese movimiento')]);
     F.push([]);
     _actaGrupos().forEach(gr=>{
-      const soloBanca=gr.view==='bench';
-      const lifts=soloBanca?['bp']:['sq','bp','dl'];
-      F.push([T(_ACTA_MOD_N[gr.mod]+' — '+(gr.sexo==='F'?'DAMAS':'CABALLEROS')+' '+gr.cat+' kg',XL_TITULO)]);
-      const head=['#','División','Nombre','País','Peso corp.','Nac.'];
-      lifts.forEach(l=>{for(let j=1;j<=3;j++)head.push(LIFT_S[l]+j);head.push(LIFT_S[l]+'4');});
-      head.push(soloBanca?'Mejor':'Total','IPF GL','Récord');
+      const lifts=gr.lifts;
+      // La columna del 4º intento sale solo si alguien de ESTA tabla lo tuvo.
+      const n4={}; lifts.forEach(l=>{ n4[l]=gr.filas.some(f=>((f.a.att[l]||[])[3]||{}).w>0); });
+      F.push([T(_actaTitulo(gr),XL_TITULO)]);
+      const head=['#','Nombre','País','Peso corp.','Nac.'];
+      lifts.forEach(l=>{
+        for(let j=1;j<=3;j++)head.push(LIFT_S[l]+j);
+        if(n4[l])head.push(LIFT_S[l]+'4');
+        head.push(LIFT_S[l]+' [BST]');
+      });
+      head.push(gr.view==='bench'?'Mejor':'Total','IPF GL','Récord');
       F.push(head.map(h=>T(h,XL_HEAD)));
       gr.filas.forEach(f=>{
         const a=f.a;
-        const fila=[T(f.lugar||''),T(a.div||''),T(a.name||''),T(_ctry(a)),T(a.bw||''),T(a.born||a.dob||'')];
+        const fila=[T(f.lugar||''),T(a.name||''),T(_ctry(a)),T(a.bw||''),T(a.born||a.dob||'')];
         const recs=[];
         lifts.forEach(l=>{
           _actaAtts(a,l).forEach(c=>{
+            if(c.extra&&!n4[l])return;
             // válido → negrita · nulo → gris y tachado · récord → amarillo
             const st=c.rec?XL_REC:c.nulo?XL_NULO:c.ok?XL_BOLD:XL_NORMAL;
             fila.push(T(c.w===''?'':Number(c.w),st));
             if(c.rec)recs.push(LIFT_S[l]);
           });
+          const b=bestOf(a,l), pl=gr.puesto[l]&&gr.puesto[l][a.id];
+          fila.push(T(b>0?(b+(pl?' ['+pl+']':'')):'',XL_BOLD));
         });
-        const esRec=f.total>0&&!soloBanca&&_srRompe(a,'total',f.total).length>0;
+        const esRec=f.total>0&&gr.view!=='bench'&&_srRompe(a,'total',f.total).length>0;
         if(esRec)recs.push('TOTAL');
         fila.push(T(f.total>0?f.total:'',esRec?XL_REC:(f.total>0?XL_BOLD:XL_NORMAL)));
         fila.push(T(f.gl?Number(f.gl.toFixed(2)):''));
@@ -3867,7 +3906,7 @@ async function exportActaFesupoXLS(){
       });
       F.push([]);
     });
-    const cols=[5,14,32,7,11,8].concat(Array(12).fill(7),[10,10,26]);
+    const cols=[5,32,7,11,8].concat(Array(15).fill(8),[10,10,26]);
     _xlsxDescargar(_actaNombreArchivo('xlsx'),'Acta',F,cols);
     showToastLC('✓ Excel generado');
   }catch(e){ showToastLC('Error generando el Excel: '+e.message); console.error(e); }
