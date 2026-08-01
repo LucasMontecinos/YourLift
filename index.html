@@ -121,6 +121,32 @@ a{color:var(--accent);text-decoration:none}
 @keyframes balloonUp{0%{transform:translateY(0) rotate(0deg);opacity:0.85}50%{opacity:0.9}100%{transform:translateY(-120vh) rotate(20deg);opacity:0}}
 @media(max-width:640px){.fl{flex-direction:column}.fl select{max-width:none}.pg{grid-template-columns:1fr}.cm{grid-template-columns:1fr}.bx{grid-template-columns:repeat(3,1fr)}.rr{grid-template-columns:30px 1fr 60px 50px 1fr 55px;font-size:11px;gap:4px}.rp{min-width:48px;padding:4px 5px}.rp .rv{font-size:13px}table th,table td{padding:5px 3px!important;font-size:10px!important}}
 
+/* ── Tarjeta de "Competencia en Vivo" ─────────────────────────────
+   Escritorio: logo · nombre · botón, todo en una fila. */
+.envivo-card{padding:0;overflow:hidden;display:flex;align-items:stretch;min-height:88px}
+.envivo-logo{flex-shrink:0;width:96px;background:#fff;display:flex;align-items:center;justify-content:center;padding:8px}
+.envivo-logo img{max-width:100%;max-height:70px;object-fit:contain}
+.envivo-info{padding:14px 16px;flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+.envivo-nom{font-family:Oswald,sans-serif;font-size:clamp(14px,3.4vw,17px);letter-spacing:.5px;text-transform:uppercase;line-height:1.25}
+.envivo-meta{font-size:11px;color:var(--muted);margin-top:3px}
+.envivo-cta{padding:0 16px;display:flex;align-items:center;flex-shrink:0}
+.envivo-cta span{background:var(--accent);color:#fff;font-family:Oswald,sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 14px;border-radius:20px;white-space:nowrap}
+/* Teléfono: el nombre del campeonato es largo y empujaba el botón fuera de la
+   pantalla (la tarjeta medía 477px en un ancho de 390). Se apila: el logo y el
+   nombre arriba, y el botón abajo ocupando todo el ancho para que se vea y sea
+   fácil de tocar. */
+@media (max-width:640px){
+  /* align-items:center para que el recuadro blanco del logo no se estire a lo
+     alto de toda la tarjeta: queda como una insignia cuadrada al lado del nombre. */
+  .envivo-card{flex-wrap:wrap;min-height:0;align-items:center}
+  .envivo-logo{width:58px;height:58px;padding:6px;margin:12px 0 4px 12px;border-radius:10px;flex-shrink:0}
+  .envivo-logo img{max-height:100%}
+  .envivo-info{padding:12px 14px;flex:1 1 0;min-width:0}
+  .envivo-nom{font-size:14px}
+  .envivo-cta{flex:1 1 100%;padding:0 12px 12px}
+  .envivo-cta span{display:block;width:100%;text-align:center;padding:11px 0;font-size:13px;border-radius:10px}
+}
+
 /* ── Tarjetas de nómina en TELÉFONO ───────────────────────────────
    En pantallas angostas la cabecera se apilaba en columnas de ~150px y cada
    palabra caía en su propia línea ("20 / al / 27 / de / septiembre…"). Acá se
@@ -1295,15 +1321,13 @@ function renderEnVivoPub(){
   evs.forEach(e=>{
     const url='livecast.html?evento='+encodeURIComponent(e.id);
     h+=`<a href="${url}" style="text-decoration:none;color:inherit">
-      <div class="cd2" style="padding:0;overflow:hidden;display:flex;align-items:stretch;min-height:88px">
-        ${e.logoUrl?`<div style="flex-shrink:0;width:96px;background:#fff;display:flex;align-items:center;justify-content:center;padding:8px"><img src="${e.logoUrl}" alt="" style="max-width:100%;max-height:70px;object-fit:contain" onerror="this.parentElement.remove()"></div>`:''}
-        <div style="padding:14px 16px;flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center">
-          <div style="font-family:Oswald;font-size:clamp(14px,3.4vw,17px);letter-spacing:.5px;text-transform:uppercase;line-height:1.25">${e.name||e.id}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:3px">${[_fpub(e.fecha),e.lugar].filter(Boolean).join(' · ')||'&nbsp;'}</div>
+      <div class="cd2 envivo-card">
+        ${e.logoUrl?`<div class="envivo-logo"><img src="${e.logoUrl}" alt="" onerror="this.parentElement.remove()"></div>`:''}
+        <div class="envivo-info">
+          <div class="envivo-nom">${e.name||e.id}</div>
+          <div class="envivo-meta">${[_fpub(e.fecha),e.lugar].filter(Boolean).join(' · ')||'&nbsp;'}</div>
         </div>
-        <div style="padding:0 16px;display:flex;align-items:center;flex-shrink:0">
-          <span style="background:var(--accent);color:#fff;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 14px;border-radius:20px;white-space:nowrap">VER EN VIVO</span>
-        </div>
+        <div class="envivo-cta"><span>VER EN VIVO</span></div>
       </div></a>`;
   });
   h+=`</div></div>`;
