@@ -1164,16 +1164,10 @@ window.ensayoToggleRole=function(){
   else{isAdmin=true;if(DATA.phase==='liveView')DATA.phase='compete';}
   R();
 };
-function pickEvent(i){
-  const ev=DATA.events[i];
-  DATA.event=ev;
-  _ensayoGrant();
-  // Load saved flight assignments from cronograma
-  const cronoKey='fechipo_crono_'+(ev.name||'').replace(/\s+/g,'_');
-  let flightMap=null;
-  try{const saved=localStorage.getItem(cronoKey);if(saved){const d=JSON.parse(saved);if(d.map)flightMap=d.map}}catch(e){}
-  
-  DATA.athletes=ev.athletes.map((a,j)=>{
+// Convierte un atleta de la nómina (archivo o Firestore) al formato del livecast.
+// Se usa al abrir un evento y también para sembrar los widgets TX antes del sync.
+function _evAthlete(a,j,flightMap){
+    j=j||0;
     const name=a.nombre||'';
     const fl=flightMap&&flightMap[name]?flightMap[name]:'A';
     const rawMod=(a.modalidad||a.mod||'').toLowerCase();
@@ -1194,9 +1188,31 @@ function pickEvent(i){
     const _rawSex=(a.sexo||a.sex||'').trim();
     const _normSex=(_rawSex==='Femenino'||_rawSex==='F'||_rawSex==='Mujer')?'Mujer':(_rawSex==='Masculino'||_rawSex==='M'||_rawSex==='Hombre')?'Hombre':_rawSex;
     const _countryCode=String(a.pais||a.country||a.pais3||'CHI').toUpperCase();
-    return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:_normSex,cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,plusBench:isCombined,country:_countryCode,bw:0,flight:a.flight||fl,jornada:a.jornada||'',born:String(a.born||'').slice(0,4)||(String(a.dob||'').match(/\d{4}/)||[''])[0],rackSQ:'',rackBP:'',bombed:false,
-    att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}};
-  });
+    // Los eventos de ENSAYO vienen con intentos y peso corporal ya cargados en el
+    // archivo, para poder practicar sobre una competencia a medio correr. Un evento
+    // normal no trae nada de esto y arranca en cero, como siempre.
+    const _att=l=>{
+      const src=(a.att&&a.att[l])||null;
+      const base=[0,1,2].map(j=>{
+        const x=src&&src[j];
+        return {w:(x&&+x.w)||0, r:(x&&(x.r==='g'||x.r==='n'))?x.r:null};
+      });
+      if(src&&src[3]&&+src[3].w)base.push({w:+src[3].w,r:(src[3].r==='g'||src[3].r==='n')?src[3].r:null,extra:true});
+      return base;
+    };
+    return{id:j,lot:a.lot||j+1,name,rut:a.rut||'',sex:_normSex,cat:a.categoria||'',div:a.division||'',club:a.club||'',uni:a.universidad||'',mod,plusBench:isCombined,country:_countryCode,bw:(+a.bw)||0,flight:a.flight||fl,jornada:a.jornada||'',born:String(a.born||'').slice(0,4)||(String(a.dob||'').match(/\d{4}/)||[''])[0],rackSQ:a.rackSQ||'',rackBP:a.rackBP||'',bombed:false,
+    att:{sq:_att('sq'),bp:_att('bp'),dl:_att('dl')}};
+}
+function pickEvent(i){
+  const ev=DATA.events[i];
+  DATA.event=ev;
+  _ensayoGrant();
+  // Load saved flight assignments from cronograma
+  const cronoKey='fechipo_crono_'+(ev.name||'').replace(/\s+/g,'_');
+  let flightMap=null;
+  try{const saved=localStorage.getItem(cronoKey);if(saved){const d=JSON.parse(saved);if(d.map)flightMap=d.map}}catch(e){}
+  
+  DATA.athletes=ev.athletes.map((a,j)=>_evAthlete(a,j,flightMap));
   const allFlights=flightMap?[...new Set(Object.values(flightMap))].filter(_inTarima).sort():[];
   // La tanda activa arranca en la PRIMERA QUE EXISTE entre los atletas. Antes caía
   // siempre en 'A' aunque nadie estuviera en la A (los días del Sudamericano
@@ -1204,7 +1220,12 @@ function pickEvent(i){
   // tanda vacía.
   const _flAth=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort();
   const firstFlight=allFlights[0]||_flAth[0]||(TARIMA?'A'+TARIMA:'A');
-  DATA.lift='sq';DATA.round=0;DATA.flight=firstFlight;DATA.changeTimers={};
+  // Un evento puede decir en qué movimiento/ronda arranca (los ENSAYOS vienen a
+  // mitad de competencia, así que abrir en sentadilla-1 mostraría todo terminado
+  // y los widgets de tarima en blanco). Los eventos normales arrancan en SQ1.
+  DATA.lift=(ev.startLift==='bp'||ev.startLift==='dl')?ev.startLift:'sq';
+  DATA.round=[0,1,2].includes(+ev.startRound)?+ev.startRound:0;
+  DATA.flight=firstFlight;DATA.changeTimers={};
   // Load athletes from Firestore in real time (overrides nominas.json when available)
   if(fbReady)loadLiveAthletes(ev);
 
@@ -1215,7 +1236,10 @@ function pickEvent(i){
       DATA.phase='liveView';save();R();startFBSync();
     });
   }else{
-    go(isAdmin?'manage':'liveView');startFBSync();
+    // ?remote=1 → aterrizar en el Control Remoto (pensado para el teléfono).
+    // Vale también para los ENSAYOS, que se operan sin iniciar sesión.
+    if(WANT_REMOTE&&isAdmin&&window._canAccess('director')){DATA.phase='remote';save();R();startFBSync();}
+    else{go(isAdmin?'manage':'liveView');startFBSync();}
   }
 }
 let judgeMode=false,judgeLights={izq:null,central:null,der:null},judgeUnsub=null,_lastTimerSignal=0;
@@ -6770,7 +6794,11 @@ function renderSetup(){
   // El ESPECTADOR solo ve lo que el admin habilitó en YourLift Público (y, si ese
   // evento se corre en varios días, sus jornadas). Nunca la lista completa: lo que
   // está cargado pero no publicado no se le muestra a nadie.
-  const _soloPub=!isAdmin;
+  // El admin que da un ENSAYO es prestado (para poder operar la prueba sin iniciar
+  // sesión). NO habilita a ver el resto de las competencias: para la lista sigue
+  // contando como público. Solo el admin de verdad ve todo.
+  const _adminReal=isAdmin&&window.ADMIN_ROLE!=='ensayo';
+  const _soloPub=!_adminReal;
   const _pub=window.LIVE_EVENT_PUB;
   // Si entró por el link de un campeonato (?evento=…), sus jornadas se le muestran
   // igual: ese link ES el permiso. El filtro está para que nadie curiosee la lista
@@ -6784,10 +6812,10 @@ function renderSetup(){
     const nD=DATA.events.filter(e=>e.parent===_flt.parent&&(!_soloPub||_esPub(e))).length;
     h+='<div class="card" style="margin-bottom:18px;padding:14px 18px;border:1px solid rgba(212,168,67,.45);background:rgba(212,168,67,.07);display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
       +'<div style="flex:1;min-width:200px"><div class="os" style="font-size:15px;letter-spacing:1px;color:var(--gold)">'+esc(_flt.name)+'</div>'
-      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">Elegí el día que querés '+(isAdmin?'operar':'seguir')+' — son '+nD+' jornadas.</div></div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">Elegí el día que querés '+(_adminReal?'operar':'seguir')+' — son '+nD+' jornadas.</div></div>'
       // Salir del campeonato es una acción de operador: al espectador no se le
       // ofrece, porque no tiene por qué ver el resto de lo que hay cargado.
-      +(isAdmin?'<button onclick="window._EV_FILTER=null;R()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">Cambiar de competencia</button>':'')
+      +(_adminReal?'<button onclick="window._EV_FILTER=null;R()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">Cambiar de competencia</button>':'')
     +'</div>';
   }
   let _vistos=0;
@@ -9515,7 +9543,7 @@ fetch('records_suda.json',{cache:'no-cache'}).then(r=>r.ok?r.json():null)
 // no tienen inscripciones en Firestore: su roster viene del archivo). renderSetup
 // evita duplicar: si un evento ya está acá por nombre, no lo agrega de Firestore
 // — y para esos, loadLiveAthletes igual sincroniza atletas en vivo si existen.
-if(!TX_MODE&&!DEMO_MODE&&!(PRACTICE_MODE&&!PRACTICE_REAL)){
+if(!DEMO_MODE&&!(PRACTICE_MODE&&!PRACTICE_REAL)){
   fetch('nominas.json',{cache:'no-cache'}).then(r=>r.json()).then(j=>{
     ((j&&j.events)||[]).forEach(ev=>{
       if(!ev||!ev.name||!Array.isArray(ev.athletes)||!ev.athletes.length)return;
@@ -9754,6 +9782,18 @@ function applyEventURLParam(){
     // TX widget mode: read-only. Just set DATA.event y suscribir a livecast_sync.
     if(TX_MODE){
       DATA.event=wanted;
+      // Los eventos que viven en nominas.json (los días del Sudamericano, los
+      // ensayos) traen su nómina en el archivo. Si el widget arranca antes de que
+      // algún control haya escrito en Firestore, se siembra desde ahí para que
+      // Control TX y la Pantalla de Tarima muestren algo en vez de quedar en
+      // blanco. Cuando llega el estado real por sync, lo reemplaza.
+      if(!(DATA.athletes||[]).length&&Array.isArray(wanted.athletes)&&wanted.athletes.length){
+        try{ DATA.athletes=wanted.athletes.map(_evAthlete);
+             DATA.flight=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort()[0]||DATA.flight;
+             if(wanted.startLift==='bp'||wanted.startLift==='dl')DATA.lift=wanted.startLift;
+             if([0,1,2].includes(+wanted.startRound))DATA.round=+wanted.startRound;
+        }catch(e){console.warn('[TX] no pude sembrar la nómina',e);}
+      }
       const tryStart=()=>{if(!fbReady){setTimeout(tryStart,300);return}startFBSync();
         // jornada/screen necesitan fechaNac (año nac) y el canal de control de pantalla
         if(TX_MODE==='jornada'||TX_MODE==='screen'){loadBirthYears();}

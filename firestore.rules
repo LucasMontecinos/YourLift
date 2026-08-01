@@ -97,9 +97,42 @@ service cloud.firestore {
     }
 
     // ── Livecast sync ──────────────────────────────────────────
+    // Los eventos de ENSAYO (livecast de prueba) se operan SIN iniciar sesión:
+    // su documento se llama ENSAYO_… porque sale del nombre del evento. Se deja
+    // escribir a cualquiera para que varias personas prueben a la vez sobre el
+    // mismo tablero y vean los cambios en el momento. Son datos descartables: no
+    // hay ninguna competencia real ahí, y el resto de los eventos sigue pidiendo
+    // admin. Si algún día molesta, se borra esta condición y el ensayo vuelve a
+    // funcionar, pero solo en el navegador de cada uno.
+    function esEnsayo(doc) { return doc.matches('ENSAYO_.*'); }
+
     match /livecast_sync/{doc} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAdmin() || esEnsayo(doc);
+    }
+
+    // Documentos auxiliares del livecast (director de transmisión, pantalla de
+    // tarima, alerta de récord, decisiones de jueces, control del reloj). Mismo
+    // criterio: lectura pública, escritura de admin, y libre para los ensayos.
+    match /livecast_director/{doc} {
+      allow read: if true;
+      allow write: if isAdmin() || esEnsayo(doc);
+    }
+    match /livecast_screen/{doc} {
+      allow read: if true;
+      allow write: if isAdmin() || esEnsayo(doc);
+    }
+    match /livecast_record/{doc} {
+      allow read: if true;
+      allow write: if isAdmin() || esEnsayo(doc);
+    }
+    match /judge_decisions/{doc} {
+      allow read: if true;
+      allow write: if isAdmin() || esEnsayo(doc);
+    }
+    match /timer_control/{doc} {
+      allow read: if true;
+      allow write: if isAdmin() || esEnsayo(doc);
     }
 
     // ── Records ────────────────────────────────────────────────
