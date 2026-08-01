@@ -3,171 +3,213 @@ rules_version = '2';
 // ═══════════════════════════════════════════════════════════════
 // YourLift — Firestore Security Rules
 // ═══════════════════════════════════════════════════════════════
-// Despliegue:
-//   firebase deploy --only firestore:rules
-//   o pegar en Firebase Console → Firestore → Reglas
+// Este archivo es una COPIA de lo que está publicado en el proyecto.
+// No se aplica solo: hay que pegarlo en
+//   Firebase Console → Firestore Database → Reglas → Publicar
+// (o `firebase deploy --only firestore:rules` desde una máquina con la CLI).
 //
-// Modelo de roles:
-//   - admins/{uid} en Firestore → administradores con acceso completo
-//   - usuarios autenticados → pueden leer perfiles públicos y enviar solicitudes
-//   - público (sin autenticación) → solo lectura de datos públicos
+// Roles:
+//   - admins/{uid}   → administradores, acceso completo
+//   - coaches/{uid}  → entrenadores, acceso acotado
+//   - sin sesión     → lectura de lo público, y escritura solo donde se
+//                      permite a propósito (formularios y ensayos)
 // ═══════════════════════════════════════════════════════════════
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper: verifica si el usuario actual es admin
-    function isAdmin() {
-      return request.auth != null
-          && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
-    }
-
-    // Helper: usuario autenticado
-    function isAuth() {
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    // ── Admins ─────────────────────────────────────────────────
-    match /admins/{uid} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
+    function isAdmin() {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // ── Atletas (data.json mirror / perfiles) ──────────────────
-    // Lectura pública; escritura solo admin
-    match /atletas/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
+    function isCoach() {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/coaches/$(request.auth.uid));
     }
 
-    // ── Atletas pendientes de revisión ─────────────────────────
-    match /atletas_pending/{doc} {
-      allow read: if isAdmin();
-      allow create: if isAuth();
-      allow update, delete: if isAdmin();
-    }
-
-    // ── Solicitudes de edición de perfil ───────────────────────
-    match /edit_requests/{doc} {
-      allow read: if isAdmin() || (isAuth() && request.auth.uid == resource.data.uid);
-      allow create: if isAuth();
-      allow update, delete: if isAdmin();
-    }
-
-    // ── Ediciones de atletas (campos editados por el atleta) ───
-    match /athlete_edits/{doc} {
-      allow read: if isAdmin() || isAuth();
-      allow write: if isAdmin();
-    }
-
-    // ── Inscripciones (datos públicos) ─────────────────────────
-    match /inscripciones/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // ── Inscripciones privadas (datos sensibles) ───────────────
-    match /inscripciones_private/{doc} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
-    }
-
-    // ── Eventos / Competencias ─────────────────────────────────
-    match /eventos/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // ── Cronograma ─────────────────────────────────────────────
-    match /cronograma/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // ── Resultados de competencia (livecast) ───────────────────
-    match /competition_results/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // ── Posiciones históricas (overrides manuales) ─────────────
-    match /comp_pos_overrides/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // ── Livecast sync ──────────────────────────────────────────
-    // Los eventos de ENSAYO (livecast de prueba) se operan SIN iniciar sesión:
-    // su documento se llama ENSAYO_… porque sale del nombre del evento. Se deja
+    // Los eventos de ENSAYO (livecast de prueba) se operan SIN iniciar sesión: su
+    // documento se llama ENSAYO_… porque sale del nombre del evento. Se deja
     // escribir a cualquiera para que varias personas prueben a la vez sobre el
-    // mismo tablero y vean los cambios en el momento. Son datos descartables: no
-    // hay ninguna competencia real ahí, y el resto de los eventos sigue pidiendo
-    // admin. Si algún día molesta, se borra esta condición y el ensayo vuelve a
-    // funcionar, pero solo en el navegador de cada uno.
+    // mismo tablero y vean los cambios en el momento. Son datos descartables:
+    // ahí no hay ninguna competencia real, y todo lo demás sigue pidiendo admin.
     function esEnsayo(doc) { return doc.matches('ENSAYO_.*'); }
 
-    match /livecast_sync/{doc} {
-      allow read: if true;
-      allow write: if isAdmin() || esEnsayo(doc);
+    // ── Livecast (sync + widgets de transmisión) ───────────────
+    // Un solo bloque por colección: si se repite el match más abajo, las reglas
+    // se suman (basta que una permita) y se vuelve difícil de leer.
+    match /livecast_sync/{doc}     { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
+    match /livecast_director/{doc} { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
+    match /livecast_screen/{doc}   { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
+    match /livecast_record/{doc}   { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
+    match /judge_decisions/{doc}   { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
+    match /timer_control/{doc}     { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
+
+    match /admins/{uid} {
+      allow read, write: if isAdmin();
     }
 
-    // Documentos auxiliares del livecast (director de transmisión, pantalla de
-    // tarima, alerta de récord, decisiones de jueces, control del reloj). Mismo
-    // criterio: lectura pública, escritura de admin, y libre para los ensayos.
-    match /livecast_director/{doc} {
-      allow read: if true;
-      allow write: if isAdmin() || esEnsayo(doc);
-    }
-    match /livecast_screen/{doc} {
-      allow read: if true;
-      allow write: if isAdmin() || esEnsayo(doc);
-    }
-    match /livecast_record/{doc} {
-      allow read: if true;
-      allow write: if isAdmin() || esEnsayo(doc);
-    }
-    match /judge_decisions/{doc} {
-      allow read: if true;
-      allow write: if isAdmin() || esEnsayo(doc);
-    }
-    match /timer_control/{doc} {
-      allow read: if true;
-      allow write: if isAdmin() || esEnsayo(doc);
-    }
-
-    // ── Records ────────────────────────────────────────────────
-    match /records/{doc} {
+    match /eventos/{id} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // ── Entrenadores / Coaches ─────────────────────────────────
-    match /coaches/{doc} {
+    match /inscripciones/{id} {
+      allow read: if true;
+      allow create: if isAdmin() || (
+                       request.resource.data.status == 'pending'
+                    && request.resource.data.nombre is string
+                    && request.resource.data.nombre.size() > 2
+                    && request.resource.data.rut is string
+                    && request.resource.data.evento is string
+                    && !request.resource.data.keys().hasAny(['pin','carnetURL','wadeURL','carnetPhotoURL'])
+                  );
+      allow update, delete: if isAdmin();
+    }
+
+    match /inscripciones_private/{id} {
+      allow read: if isAdmin();
+      allow create: if request.resource.data.keys().hasOnly(['pin','rut','correo','carnetURL','carnetBackURL','wadeURL','carnetPhotoURL','consentimientoURL','passportURL','ipfConsentURL','notasURL','docs','ts'])
+                    && request.resource.data.pin is string
+                    && request.resource.data.pin.size() == 4;
+      allow update, delete: if isAdmin();
+    }
+
+    match /edit_requests/{id} {
+      allow read, update, delete: if isAdmin();
+      allow create: if request.resource.data.keys().hasAll(['inscripcionId','rut','pin','changes','status','ts'])
+                    && request.resource.data.keys().hasOnly(['inscripcionId','rut','pin','changes','status','ts'])
+                    && request.resource.data.inscripcionId is string
+                    && request.resource.data.rut is string
+                    && request.resource.data.pin is string
+                    && request.resource.data.pin.size() == 4
+                    && request.resource.data.changes is map
+                    && request.resource.data.status == 'pending';
+    }
+
+    match /coaches/{uid} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      allow write: if isAdmin();
+    }
+
+    match /athlete_edits/{id} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    match /entrenadores/{doc} {
+    match /audit_log/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /analytics_daily/{day} {
+      allow read: if isAdmin();
+      allow create, update: if true;
+      allow delete: if false;
+    }
+
+    match /acreditaciones/{id} {
+      allow read: if true;
+      allow write: if isAdmin() || isCoach();
+    }
+
+    match /competition_results/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /site_backgrounds/{section} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // ── Logros de atletas ──────────────────────────────────────
-    match /atleta_achievements/{doc} {
+    match /atleta_fotos/{codigo} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+
+    match /atletas_pending/{rut} {
+      allow read: if true;
+      allow create: if isAdmin() || (
+                       request.resource.data.keys().hasAll(['nombre','rut','codigo','sexo','debut'])
+                    && request.resource.data.nombre is string
+                    && request.resource.data.nombre.size() > 2
+                    && request.resource.data.rut is string
+                    );
+      allow update, delete: if isAdmin();
+    }
+
+    match /atleta_achievements/{codigo} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+
+    match /actas/{id} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+
+    match /gallery_photos/{id} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+
+    match /cronograma/{evento} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // ── Fotos de atletas ───────────────────────────────────────
-    match /atleta_fotos/{doc} {
+    match /handlers/{id} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /coach_links/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /entrenadores/{rut} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // ── Fotos de la nómina del Sudamericano (incluye extranjeros) ──
-    // Lectura pública: son las fotos que se muestran en la nómina y en la
-    // ficha de cada atleta en yourlift.cl. Escritura solo admin (cargador
-    // masivo del panel: Admin → Fotos Sudamericano).
+    match /records/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /cert_config/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /cert_requests/{id} {
+      allow read, update, delete: if isAdmin();
+      allow create: if request.resource.data.status == 'pending'
+                    && request.resource.data.nombre is string
+                    && request.resource.data.nombre.size() > 1
+                    && request.resource.data.rut is string;
+    }
+
+    match /comp_pos_overrides/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /clubs/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Fotos de la nómina del Sudamericano (incluye extranjeros, sin código ni RUT).
+    // Las lee la nómina de yourlift.cl y también el livecast, para mostrar la foto
+    // en el perfil del atleta y en Control TX.
     match /nomina_suda_fotos/{doc} {
       allow read: if true;
       allow write: if isAdmin();
@@ -175,34 +217,18 @@ service cloud.firestore {
 
     // Correcciones a la nómina del Sudamericano hechas desde el panel
     // (Admin → Nóminas → "Sudamericano 2026 — nómina FESUPO"): categoría,
-    // división, modalidad, lista y bajas. Un solo doc (main) que yourlift.cl
-    // aplica encima del archivo nomina_sudamericano.json, así no hay que
-    // regenerarlo por cada arreglo. Lectura pública, escritura solo admin.
+    // división, modalidad, lista y bajas. Un solo doc que yourlift.cl aplica
+    // encima de nomina_sudamericano.json, así no hay que regenerar el archivo.
     match /nomina_suda_edits/{doc} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // ── Configuración de certificados ──────────────────────────
-    match /cert_config/{doc} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
+    match /sugerencias/{id} {
+      allow read, delete: if isAdmin();
+      allow create: if true;
     }
 
-    // ── Solicitudes de certificados ────────────────────────────
-    match /cert_requests/{doc} {
-      allow read: if isAdmin() || (isAuth() && request.auth.uid == resource.data.uid);
-      allow create: if isAuth();
-      allow update, delete: if isAdmin();
-    }
-
-    // ── Fondos del sitio ───────────────────────────────────────
-    match /site_backgrounds/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // ── Default deny ───────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }
