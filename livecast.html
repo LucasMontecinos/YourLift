@@ -284,6 +284,7 @@ async function initFB(){
     window._fbStInst=storageMod.getStorage(app);
     _setupFotoListener(); // in case data.json already loaded before Firebase was ready
     if(typeof _setupLcMediaListener==='function')_setupLcMediaListener(); // foto/gif persistente por atleta (livecast)
+    if(typeof _cargarFotosSuda==='function')_cargarFotosSuda();               // fotos de la nómina del Sudamericano
     // Keep LIVE_EVENTS in sync with Firestore eventos
     fb.onSnapshot(fb.collection(fbDB,'eventos'),async (snap)=>{
       const evs={};
@@ -1786,6 +1787,33 @@ window._LC_MEDIA = window._LC_MEDIA || {};
 window._ADMIN_FOTOS_BY_RUT = window._ADMIN_FOTOS_BY_RUT || {};
 function _rutKey(r){ return String(r||'').replace(/[^0-9kK]/gi,'').toUpperCase(); }
 function _adminFotoFor(a){ const r=_rutKey(a&&a.rut); return (r&&window._ADMIN_FOTOS_BY_RUT[r])||null; }
+// ── Fotos de la nómina del Sudamericano ───────────────────────────
+// Se cargaron desde Admin → Fotos Sudamericano a la colección nomina_suda_fotos,
+// con el nombre del atleta como clave (los extranjeros no tienen RUT ni código en
+// YourLift, así que por ahí no se les encuentra). Acá se leen igual para que el
+// perfil y Control TX muestren la foto de cualquiera, chileno o no.
+window.NSUDA_FOTOS_LC=window.NSUDA_FOTOS_LC||{};
+function _nsudaSlugLC(s){
+  return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,'-').slice(0,80);
+}
+function _fotoSudaFor(a){
+  const u=window.NSUDA_FOTOS_LC[_nsudaSlugLC(a&&a.name)];
+  return u?{foto_url:u}:null;
+}
+function _cargarFotosSuda(){
+  if(!fbReady||!window._fb||!fbDB||window._nsudaFotosLC)return;
+  window._nsudaFotosLC=true;
+  try{
+    window._fb.getDocs(window._fb.collection(fbDB,'nomina_suda_fotos')).then(snap=>{
+      snap.docs.forEach(d=>{const v=d.data();if(v&&v.foto_url)window.NSUDA_FOTOS_LC[d.id]=v.foto_url;});
+      const n=Object.keys(window.NSUDA_FOTOS_LC).length;
+      if(n){console.log('[livecast] fotos del Sudamericano:',n);
+        if(typeof renderTxWidget==='function')renderTxWidget();
+        if(typeof R==='function')R();}
+    }).catch(e=>console.warn('[livecast] nomina_suda_fotos:',e.message));
+  }catch(e){console.warn('[livecast] nomina_suda_fotos:',e.message);}
+}
 function _mediaKey(a){
   const rut=String((a&&a.rut)||'').replace(/[^0-9kK]/gi,'').toUpperCase();
   if(rut) return 'lc_rut_'+rut;
@@ -1797,7 +1825,9 @@ function _mediaKey(a){
 // livecast (foto o GIF distinto para la transmisión), si lo hay.
 function _lcMediaFor(a){
   const own=(a&&window._LC_MEDIA[_mediaKey(a)])||null;
-  const admin=_adminFotoFor(a);
+  // Orden: lo que se subió puntualmente desde livecast > la foto del perfil (por
+  // RUT) > la foto de la nómina del Sudamericano (por nombre).
+  const admin=_adminFotoFor(a)||_fotoSudaFor(a);
   if(!own&&!admin)return null;
   const merged=Object.assign({},admin?{foto_url:admin.foto_url}:{},own||{});
   if(!merged.foto_url&&admin&&admin.foto_url)merged.foto_url=admin.foto_url;
@@ -4791,11 +4821,24 @@ function _renderTxCerScoreboardBL(cur,opts){
   const champLogoHtml=champLogo?'<img src="'+champLogo+'" alt="" class="sb-logo-anim" style="height:46px;width:46px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 6px rgba(0,0,0,.7))" onerror="this.style.display=\'none\'">':'';
   return '<div class="sb-card-explode" style="position:fixed;bottom:24px;left:24px;width:min(640px,55vw);'+animOrTx+'border-radius:8px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.6)">'
     +'<div style="'+_sbRowAnim(animDir,0)+'display:flex;justify-content:space-between;align-items:center;background:'+_txC('headerBg')+';border-top:2px solid '+_txC('accent')+';padding:6px 14px;gap:12px">'
-      +'<div style="display:flex;align-items:center;gap:12px;font-family:Oswald;font-size:12px;color:rgba(200,215,240,.85);letter-spacing:1px">'+champLogoHtml+'<span>'+catLabel+'</span></div>'
+      +'<div style="display:flex;align-items:center;gap:12px;font-family:Oswald;font-size:12px;color:rgba(200,215,240,.85);letter-spacing:1px">'+champLogoHtml+'<span>'+catLabel+'</span>'
+        // Si el peso que va a levantar supera el récord de su división (o el Open),
+        // se canta acá al lado de la categoría, en blanco para que resalte.
+        +(function(){
+          const w=(cur.att[DATA.lift][DATA.round]||{}).w;
+          const rr=(typeof _srRompe==='function')?_srRompe(_realAth(cur),DATA.lift,w):[];
+          return rr.length?'<span style="background:#F2C230;color:#fff;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:1.5px;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.55);box-shadow:0 0 14px rgba(242,194,48,.6)">INTENTO DE RÉCORD SUDAMERICANO</span>':'';
+        })()
+      +'</div>'
       +'<div style="font-family:Oswald;font-size:18px;font-weight:800;color:'+_forecastColor+';letter-spacing:2px">'+_forecastTxt+'</div>'
     +'</div>'
     +'<div style="'+_sbRowAnim(animDir,1)+'background:linear-gradient(90deg,'+_txC('nameBg')+','+_txC('nameBg2')+');padding:5px 14px;display:flex;align-items:center;gap:10px">'
-      +'<div style="background:rgba(10,22,40,.9);color:'+_txC('nameBg')+';padding:3px 9px;border-radius:3px;font-family:Oswald;font-size:10px;letter-spacing:2px;font-weight:700">CHI</div>'
+      // Bandera + código del país DEL ATLETA. Antes acá decía "CHI" escrito a mano,
+      // así que a un ecuatoriano le salía Chile.
+      +'<div style="display:flex;align-items:center;gap:6px;background:rgba(10,22,40,.9);padding:3px 9px;border-radius:3px;flex-shrink:0">'
+        +_flagImg(_ctry(cur),14)
+        +'<span style="color:'+_txC('nameBg')+';font-family:Oswald;font-size:10px;letter-spacing:2px;font-weight:700">'+_ctry(cur)+'</span>'
+      +'</div>'
       +'<div style="flex:1;font-family:Oswald;color:'+_txC('nameText')+';letter-spacing:1px;overflow:hidden">'
         +'<div style="font-size:24px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(firstName?firstName+' ':'')+lastName+'</div>'
       +'</div>'
