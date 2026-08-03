@@ -5167,7 +5167,9 @@ function _startBarrido(dir){
     +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#ffffff;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .08s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
     +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#0a1f44;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .16s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
     +'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;animation:txLogoBeat '+dur+'s ease-out forwards;opacity:0">'
-      +'<img src="YourLift_logo.png" style="max-width:240px;max-height:240px;filter:drop-shadow(0 8px 24px rgba(0,0,0,.6))" onerror="this.style.display=\'none\'">'
+      // Va el archivo grande: este barrido es a pantalla completa y en OBS se
+      // escala todavía más, así que el logo chico se veía con los bordes rotos.
+      +'<img src="yourlift_logo_hd.png" style="max-width:240px;max-height:240px;filter:drop-shadow(0 8px 24px rgba(0,0,0,.6))" onerror="this.onerror=null;this.src=\'YourLift_logo.png\'">'
     +'</div>';
   document.body.appendChild(_txBarridoEl);
   setTimeout(()=>{if(_txBarridoEl&&_txBarridoEl.parentNode){_txBarridoEl.parentNode.removeChild(_txBarridoEl);_txBarridoEl=null;}},TX_ANIM_MS.fullscreen+200);
@@ -6910,12 +6912,25 @@ function renderSetup(){
   // igual: ese link ES el permiso. El filtro está para que nadie curiosee la lista
   // completa de lo que hay cargado, no para bloquear el link que le pasaron.
   const _esPub=ev=>!!((_flt&&ev.parent===_flt.parent)||(_pub&&(_pub.has(ev.id)||_pub.has(ev.name)||(ev.parent&&_pub.has(ev.parent)))));
+  // Qué se dibuja. El encabezado y la lista salen de esta misma función, si no
+  // pueden decir cosas distintas ("son 9 jornadas" y abajo ninguna).
+  const _verEv=ev=>{
+    // Adentro de un campeonato (?evento=…) NO se aplica el ocultar-de-la-lista:
+    // "archivado" y "no visible en el livecast" están para que la lista general no
+    // se llene de cosas viejas, no para esconder las jornadas del campeonato al
+    // que se entró a propósito. Si no, marcar un día como oculto (para que no
+    // apareciera en Nóminas, por ejemplo) lo borraba también de acá.
+    if(!_flt&&_hidden&&(_hidden.has(ev.id)||_hiddenN?.has(ev.name)))return false;
+    if(_flt&&ev.parent!==_flt.parent)return false;
+    if(_soloPub&&!_esPub(ev))return false;
+    return true;
+  };
   if(_soloPub&&!_pub&&!_flt){
     h+='<div class="card" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">Cargando competencias…</div></div>';
     return h;
   }
   if(_flt){
-    const nD=DATA.events.filter(e=>e.parent===_flt.parent&&(!_soloPub||_esPub(e))).length;
+    const nD=DATA.events.filter(_verEv).length;
     h+='<div class="card" style="margin-bottom:18px;padding:14px 18px;border:1px solid rgba(212,168,67,.45);background:rgba(212,168,67,.07);display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
       +'<div style="flex:1;min-width:200px"><div class="os" style="font-size:15px;letter-spacing:1px;color:var(--gold)">'+esc(_flt.name)+'</div>'
       +'<div style="font-size:11px;color:var(--muted);margin-top:2px">Elegí el día que querés '+(_adminReal?'operar':'seguir')+' — son '+nD+' jornadas.</div></div>'
@@ -6926,9 +6941,7 @@ function renderSetup(){
   }
   let _vistos=0;
   DATA.events.forEach((ev,i)=>{
-    if(_hidden&&(_hidden.has(ev.id)||_hiddenN?.has(ev.name)))return;
-    if(_flt&&ev.parent!==_flt.parent)return;
-    if(_soloPub&&!_esPub(ev))return;
+    if(!_verEv(ev))return;
     _vistos++;
     // Conteo de atletas: usa el de Firestore (LIVE_EVENT_META) si el local es 0
     const fbCount = (window.LIVE_EVENT_META && window.LIVE_EVENT_META[ev.id] && window.LIVE_EVENT_META[ev.id].athleteCount) || 0;

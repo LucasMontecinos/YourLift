@@ -647,10 +647,16 @@ function _applyNominas(all){
   const visible=all.filter(i=>i.status==='approved'||i.status==='pending');
   const byEvent={};
   visible.forEach(i=>{if(!byEvent[i.evento])byEvent[i.evento]=[];byEvent[i.evento].push(i)});
+  // Las JORNADAS de un campeonato (los 9 días del Sudamericano) tienen su doc en
+  // `eventos` para poder publicarlas en Competencia en Vivo, pero NO son nóminas:
+  // su gente está toda en la nómina grande del campeonato. Sin sacarlas, en la
+  // pestaña Nóminas salían nueve tarjetas "Día N — 0 inscritos".
+  const _jornadas=new Set();
+  ((NM&&NM._static)||[]).forEach(e=>{ if(e&&e.parent){ if(e.id)_jornadas.add(e.id); if(e.name)_jornadas.add(e.name); } });
   // Build events from NOM_EVENTS (loaded from Firestore eventos collection)
   // Show ALL non-archived events, even if they have 0 inscriptions
   const fbEvents=NOM_EVENTS
-    .filter(ev=>ev.status!=='archived'&&ev.status!=='draft')
+    .filter(ev=>ev.status!=='archived'&&ev.status!=='draft'&&!_jornadas.has(ev.id)&&!_jornadas.has(ev.name))
     .map(ev=>{
       const fbAths=(byEvent[ev.id]||byEvent[ev.name]||[])
         .sort((a,b)=>(a.timestamp?.seconds||0)-(b.timestamp?.seconds||0))
