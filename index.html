@@ -858,6 +858,33 @@ function _nsudaSlug(s){
     .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,'-').slice(0,80);
 }
 function _nsudaCatKey(c){const plus=(c||'').includes('+');return (parseFloat(String(c).replace(/[^0-9.]/g,''))||999)+(plus?0.5:0)}
+// ── Día en que compite cada inscripción del Sudamericano ──────────
+// Sale de las reglas del cronograma oficial de FESUPO que viaja en la nómina
+// (jornadas: sexo + categoría + modalidad + división). Se resuelve al vuelo y no
+// pegado a cada atleta: así, si desde el panel le corrigen la categoría o la
+// división a alguien, cambia de día solo, sin regenerar el archivo.
+function _nsudaJornada(a){
+  const js=(window.NOMSUDA&&window.NOMSUDA.jornadas)||[];
+  return js.find(j=>{
+    const r=j.regla||{};
+    if(r.sexo&&a.sexo!==r.sexo)return false;
+    if(r.cats&&!r.cats.includes(a.cat))return false;
+    if(r.mods&&!r.mods.includes(a.mod))return false;
+    if(r.divs&&!r.divs.includes(a.div))return false;
+    return true;
+  })||null;
+}
+const _NSUDA_DIAS=['dom','lun','mar','mié','jue','vie','sáb'],
+      _NSUDA_MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function _nsudaFechaCorta(f){
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(f||''); if(!m)return '';
+  const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]));
+  return `${_NSUDA_DIAS[d.getUTCDay()]} ${+m[3]} ${_NSUDA_MESES[+m[2]-1]}`;
+}
+function _nsudaDiaLbl(j){
+  if(!j)return '';
+  return `Día ${j.dia} · ${_nsudaFechaCorta(j.fecha)}${j.inicio?' · '+j.inicio+' hrs':''}`;
+}
 // ── FICHA del atleta de la nómina (modal). No es un perfil: junta las
 // inscripciones del atleta (puede estar en varias listas), su foto si fue
 // subida, país, año y marcas nominadas. Cierra con ✕, click afuera o Esc.
@@ -970,8 +997,14 @@ function _nomGLTable(rows,opts){
     Object.keys(sub).sort((a,b)=>{const[sa,ca]=a.split('|'),[sb,cb]=b.split('|');if(sa!==sb)return sa<sb?-1:1;return _nomCatKey(ca)-_nomCatKey(cb);}).forEach(k=>{
       const [sx,cat]=k.split('|');
       const lbl=(both?(sx==='0'?'Mujeres ':'Hombres '):'')+_nomCatLbl(cat);
-      h+=`<tr><td colspan="${nCols}" style="padding:6px 12px;background:rgba(212,168,67,.10);border-top:1px solid rgba(30,58,95,.45)"><span style="font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--gold)">${lbl}</span></td></tr>`;
       const g=sub[k];
+      // Día de competencia de la categoría (solo el Sudamericano lo trae). Casi
+      // siempre es uno; si la categoría se parte en dos sesiones van los dos.
+      const dias=[...new Set(g.map(r=>r.diaLbl).filter(Boolean))];
+      const diaHtml=dias.length
+        ?`<span title="${g.find(r=>r.diaLbl)?.diaSes||''}" style="font-family:Oswald;font-size:10px;font-weight:600;letter-spacing:.5px;color:var(--gold);background:rgba(212,168,67,.14);border:1px solid rgba(212,168,67,.35);border-radius:9px;padding:2px 9px;white-space:nowrap">${dias.join(' · ')}</span>`
+        :'';
+      h+=`<tr><td colspan="${nCols}" style="padding:6px 12px;background:rgba(212,168,67,.10);border-top:1px solid rgba(30,58,95,.45)"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--gold)">${lbl}</span>${diaHtml}</div></td></tr>`;
       if(marks)g.sort((a,b)=>(b.total||0)-(a.total||0)||(b.bp||0)-(a.bp||0)||a.n.localeCompare(b.n));
       else g.sort((a,b)=>a.n.localeCompare(b.n));
       g.forEach((r,i)=>{
@@ -1056,9 +1089,11 @@ function _nomSudaRows(){
     const nm=a.cod
       ?`<a href="atleta.html?codigo=${encodeURIComponent(a.cod)}" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(212,168,67,.5);font-weight:600" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${a.n}</a>`
       :`<span onclick="nsudaFicha('${slug}')" style="cursor:pointer">${a.n}</span>`;
+    const jo=_nsudaJornada(a);
     return {n:a.n,year:a.born||'',sexo:a.sexo,cat:_nomCatN(a.cat),div:a.div,mod:a.mod,
       team:a.pais,teamHtml:_nomFlag(a.pais)+a.pais,uni:a.uni||'',res:!!a.res,
-      sq:a.sq,bp:a.bp,dl:a.dl,total:a.total,nameHtml:av+nm};
+      sq:a.sq,bp:a.bp,dl:a.dl,total:a.total,nameHtml:av+nm,
+      diaLbl:_nsudaDiaLbl(jo),diaSes:jo?`${jo.nombre} · pesaje ${jo.pesaje}`:''};
   });
 }
 // Desglose del Sudamericano: inscripciones (una por lista/división) vs PERSONAS

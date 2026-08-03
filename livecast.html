@@ -555,7 +555,7 @@ function startFBSync(){
       // yo toqué hace <4s. Así varios controladores pueden cargar a la vez sin
       // pisarse. La NAVEGACIÓN (lift/ronda/tanda/changeTimers) sigue con el guard
       // grueso de 2.5s (normalmente la maneja un solo operador de tarima).
-      const _remoteAth = JSON.parse(d.athletes||'[]');
+      const _remoteAth = _normExtraAtts(JSON.parse(d.athletes||'[]'));
       try{
         DATA.athletes = _mergeAthletes(DATA.athletes, _remoteAth);
         // Si conservé ediciones mías que no estaban en el remoto, reenvío mi versión
@@ -857,7 +857,21 @@ function save(){if(PRACTICE_VIEWER)return;if(!_fbSyncing)window._lastLocalAction
 let _syncTimer=null;
 function debouncedSync(){if(_syncTimer)clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>{syncToFB();_syncTimer=null},800)}
 function saveNow(){if(PRACTICE_VIEWER)return;if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}syncToFB()}
-function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);return true}}}catch(e){}return false}
+function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);_normExtraAtts(DATA.athletes);return true}}}catch(e){}return false}
+// Un 4º intento puede llegar SIN la marca `extra`: lo guardó una versión anterior,
+// o entró desde otro control. Sin esa marca la fila del intento extra no se dibujaba
+// en Control en Vivo, así que el intento quedaba colgado — se veía en Resultados
+// (columna BP4*) y no había desde dónde borrarlo. Se marca al entrar, y de ahí en
+// más todo lo trata igual que a un 4º intento normal (incluido el 🗑 del menú ⋮).
+function _normExtraAtts(list){
+  (list||[]).forEach(a=>{
+    ['sq','bp','dl'].forEach(l=>{
+      const arr=a&&a.att&&a.att[l];
+      if(Array.isArray(arr)&&arr.length>=4&&arr[3]&&!arr[3].extra)arr[3].extra=true;
+    });
+  });
+  return list;
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // DESHACER / REHACER (Ctrl+Z / Ctrl+Y) — pila de estados de la competencia.
@@ -1071,7 +1085,7 @@ async function tryLoadFromFB(){
     const snap=await window._fb.getDoc(ref);
     if(!snap.exists())return false;
     const d=snap.data();
-    DATA.athletes=JSON.parse(d.athletes||'[]');
+    DATA.athletes=_normExtraAtts(JSON.parse(d.athletes||'[]'));
     if((Date.now()-(window._lastLocalAction||0))>=2500){
       DATA.lift=d.lift||DATA.lift;
       DATA.round=typeof d.round==='number'?d.round:DATA.round;
@@ -2849,6 +2863,14 @@ function editAtt(id,l,r){
     // Si hab\u00eda un change timer corriendo para este intento, cancelarlo
     const key=id+'_'+l+'_'+r;
     if(DATA.changeTimers[key])delete DATA.changeTimers[key];
+    // Dejar en blanco (o en 0) el 4\u00ba intento es borrarlo: la casilla sale del
+    // atleta y la columna SQ4/BP4/DL4 deja de aparecer en resultados y en el acta.
+    // Si ya fue juzgado se conserva \u2014 para eso est\u00e1 el \ud83d\uddd1 del men\u00fa \u22ee, que avisa.
+    if(r===3&&a.att[l].length===4&&!a.att[l][3].w&&a.att[l][3].r===null){
+      a.att[l].pop();
+      if(DATA.compTimer&&DATA.compTimer.id===id&&DATA.compTimer.lift===l)DATA.compTimer=null;
+      showToastLC('\ud83d\uddd1 4\u00ba intento eliminado: '+a.name+' \u2014 '+LIFT_S[l]);
+    }
     saveNow();R();
   }
 }
@@ -4961,7 +4983,7 @@ function _widgetHandleDirectObsEvent(d){
     if(d.lift)DATA.lift=d.lift;
     if(typeof d.round==='number')DATA.round=d.round;
     if(d.flight)DATA.flight=d.flight;
-    if(Array.isArray(d.athletes)&&d.athletes.length)DATA.athletes=d.athletes;
+    if(Array.isArray(d.athletes)&&d.athletes.length)DATA.athletes=_normExtraAtts(d.athletes);
     if(d.event)DATA.event=d.event;
     // No forzar re-render si hay un barrido activo — evita que se reinicie la animación
     const fsAnimRunning=Object.values(_txDirAnims).some(a=>a&&Date.now()-a.startedAt<(a.dur||TX_ANIM_MS.fullscreen));
@@ -8512,7 +8534,9 @@ function renderCompete(){
       h+=_posCellHtml(isCurrentAthlete?cur:a,{fs:Math.round(11*rsc)});
       h+='</tr>';
       // Fila del/los intento(s) EXTRA (duplicado abajo, solo si tiene)
-      const extraLifts = LIFTS.filter(l=>(a.att[l]||[]).length>=4 && a.att[l][3] && a.att[l][3].extra);
+      // No se exige la marca `extra`: si hay un 4º intento se muestra igual, para
+      // que siempre haya de dónde borrarlo (ver _normExtraAtts).
+      const extraLifts = LIFTS.filter(l=>(a.att[l]||[]).length>=4 && a.att[l][3]);
       if(extraLifts.length){
         const gr0=((a.att[extraLifts[0]][3]||{}).grantedRound)||0;
         const exLbl=gr0>=2?'4º INTENTO':'INTENTO EXTRA';
@@ -8520,7 +8544,7 @@ function renderCompete(){
         h+='<td style="text-align:center;padding:6px 4px;color:'+(curOnExtra?'#fff':'#60a5fa')+';font-size:'+Math.round(13*rsc)+'px">↳</td>';
         h+='<td style="padding:6px 8px"><div style="font-size:'+Math.round(11*rsc)+'px;font-weight:'+(curOnExtra?800:500)+';color:'+(curOnExtra?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px;flex-wrap:wrap">'+(curOnExtra?'<span style="background:#60a5fa;color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">▶</span>':'')+'<span>'+a.name+'</span><span style="background:#60a5fa;color:#fff;padding:1px 6px;border-radius:4px;font-size:8px;font-family:Oswald;letter-spacing:1px">'+exLbl+'</span></div></td>';
         LIFTS.forEach(l=>{
-          if((a.att[l]||[]).length>=4 && a.att[l][3] && a.att[l][3].extra){
+          if((a.att[l]||[]).length>=4 && a.att[l][3]){
             const isCurrentCell = curOnExtra && l===DATA.lift;
             h+=_attCellCompete(a,l,3,isCurrentCell); // la casilla del extra
             h+='<td></td><td></td>'; // 2 vacías para mantener la grilla de 3 por lift

@@ -20,12 +20,22 @@ MAS = {'Master I', 'Master II', 'Master III', 'Master IV'}
 JOV = {'Sub-Junior', 'Junior', 'Universitario'}
 
 def sel(sexo=None, cats=None, fam=None, divs=None):
+    """Filtro de una sesión. Además de filtrar, se queda con la regla en forma de
+    datos (`.regla`) para escribirla en nomina_sudamericano.json: así yourlift.cl
+    calcula el día de cada inscripción con la MISMA regla, y si desde el panel se
+    le cambia la categoría o la división a alguien, el día se recalcula solo."""
     def f(a):
         if sexo and a['sexo'] != sexo: return False
         if cats and a['cat'] not in cats: return False
         if fam and a['mod'] not in fam: return False
         if divs and a['div'] not in divs: return False
         return True
+    f.regla = {k: v for k, v in (
+        ('sexo', sexo),
+        ('cats', sorted(cats) if cats else None),
+        ('mods', sorted(fam) if fam else None),
+        ('divs', sorted(divs) if divs else None),
+    ) if v}
     return f
 
 # (fecha, día, hora pesaje, hora comp, nombre de la sesión, filtro, lifters según FESUPO)
@@ -203,6 +213,15 @@ otros = [e for e in OLD['events'] if not str(e.get('id', '')).startswith('suda20
 ins = min([i for i, e in enumerate(OLD['events']) if str(e.get('id', '')).startswith('suda2026_d')] or [len(otros)])
 OLD['events'] = otros[:ins] + events + otros[ins:]
 json.dump(OLD, open('nominas.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+
+# ── El día de competencia, dentro de la nómina ──
+# En la nómina de yourlift.cl cada cabecera de categoría dice qué día compite. Se
+# guarda la REGLA de cada sesión, no el día pegado a cada inscripción: si desde el
+# panel le corrigen la categoría o la división a alguien, el día se recalcula solo.
+NOM['jornadas'] = [{'dia': d, 'fecha': fecha, 'pesaje': pesaje, 'inicio': hora,
+                    'nombre': nombre, 'regla': filt.regla}
+                   for fecha, d, pesaje, hora, nombre, filt, esp in SES]
+json.dump(NOM, open('nomina_sudamericano.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 
 # ── Reporte ──
 print(f"{'fecha':11}{'D':>2}  {'sesión':44} {'total':>5} {'PL':>4} {'OB':>4} {'FESUPO':>7} {'Δ':>4}")
