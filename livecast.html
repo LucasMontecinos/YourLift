@@ -956,6 +956,13 @@ document.addEventListener('keydown',(e)=>{
 // ═══════════════════════════════════════════════════════════════════
 window._recentAtt = window._recentAtt || {};   // "athId|campo" -> ts
 const _MERGE_HOLD_MS = 4000;
+// Campos del atleta (todo lo que no son los intentos) que una edición reciente
+// conserva frente a lo que llega del servidor. Van también los de identidad
+// —nombre, división, categoría, sexo, club— porque una corrección de nómina
+// hecha desde una pantalla se perdía sola: el merge partía del remoto y esos
+// campos no estaban en la lista, así que el primer snapshot los devolvía.
+const _MERGE_META_FIELDS=['bw','rackSQ','rackBP','sqAbat','bpSeg','bpPalm','mod','country',
+  'flight','lot','bombed','weighedIn','jornada','name','div','cat','sex','club','uni'];
 // Ediciones locales todavía NO confirmadas en Firebase. A diferencia de
 // _recentAtt (ventana de 4s para el merge de LECTURA), estas se conservan hasta
 // que una escritura sale bien: así, con varios PCs operando, una edición mía
@@ -971,7 +978,7 @@ function _markAtt(id, field){
 function _mergeForWrite(localArr, remoteArr){
   if(!remoteArr||!remoteArr.length)return localArr;
   const pend=window._pendingEdits||new Set();
-  const META=['bw','rackSQ','rackBP','sqAbat','bpSeg','bpPalm','mod','country','flight','lot','bombed','weighedIn','jornada'];
+  const META=_MERGE_META_FIELDS;
   const byId={}; (localArr||[]).forEach(a=>{ if(a&&a.id!=null) byId[a.id]=a; });
   const out=(remoteArr||[]).map(ra=>{
     const la=byId[ra.id];
@@ -1007,7 +1014,7 @@ function _mergeAthletes(localArr, remoteArr){
     if(!la) return ra;
     const m=JSON.parse(JSON.stringify(ra));
     if(held[ra.id+'|meta']){
-      ['bw','rackSQ','rackBP','sqAbat','bpSeg','bpPalm','mod','country','flight','lot','bombed','weighedIn','jornada'].forEach(f=>{ if(la[f]!==undefined) m[f]=la[f]; });
+      _MERGE_META_FIELDS.forEach(f=>{ if(la[f]!==undefined) m[f]=la[f]; });
       overrode=true;
     }
     ['sq','bp','dl'].forEach(l=>{

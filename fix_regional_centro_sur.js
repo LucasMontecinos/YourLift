@@ -5,9 +5,9 @@
 // jornada, sexo y club salen de ahi. Al que no este en el cronograma se
 // lo saca. Los pesos, intentos y alturas de rack ya cargados NO se tocan.
 //
-// Se pega en Control en Vivo del Regional Centro Sur, con sesion de admin.
-// Si algo sale mal: Ctrl+Z deshace.
-(function(){
+// Se pega en Control en Vivo del Regional Centro Sur, con sesion de admin
+// y la pantalla en modo CONTROLADOR. Si algo sale mal: Ctrl+Z deshace.
+(async function(){
   const CRONO = [
  {
   "n": "Constanza Estefanía Contreras Roa",
@@ -635,14 +635,19 @@
                     .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   const pal = s => new Set(nrm(s).split(' ').filter(Boolean));
 
-  if(typeof DATA==='undefined' || !DATA.athletes || !DATA.athletes.length){
-    alert('Abri primero Control en Vivo del Regional Centro Sur.'); return;
-  }
+  if(typeof DATA==='undefined' || !DATA.athletes || !DATA.athletes.length)
+    return alert('Abri primero Control en Vivo del Regional Centro Sur.');
+  // Una pantalla en modo LECTURA no escribe en Firebase: los cambios se verian
+  // en este navegador y al rato el servidor los devolveria como estaban.
+  if(typeof isAdmin==='undefined' || !isAdmin || !window.IS_CONTROLLER)
+    return alert('Esta pantalla esta en modo LECTURA, no puede guardar.\n\n'
+      +'Agregale ?controller=1 a la URL (o toca "CAMBIAR A CONTROLADOR" en el aviso de arriba), '
+      +'recarga y volve a pegar el script.');
   const ev = (DATA.event&&(DATA.event.name||DATA.event.id))||'';
   if(!/centro\s*sur/i.test(ev) && !confirm('El evento abierto es "'+ev+'", no parece el Regional Centro Sur.\n\nSeguir igual?')) return;
 
-  // Emparejar 1 a 1 por palabras del nombre en comun (los nombres del
-  // livecast estan abreviados, por eso no alcanza con comparar el texto).
+  // Emparejar 1 a 1 por palabras del nombre en comun (en el livecast varios
+  // estan con el nombre abreviado, por eso no alcanza con comparar el texto).
   const libres = DATA.athletes.map((a,i)=>i);
   const par = {};
   CRONO.forEach((x,i)=>{
@@ -662,7 +667,8 @@
     set('name',x.n,'nombre'); set('div',x.div,'division'); set('cat',x.cat,'categoria');
     set('mod',x.mod,'modalidad'); set('flight',x.fl,'tanda'); set('jornada',x.jor,'jornada');
     set('sex',x.sex,'sexo'); set('club',x.club,'club');
-    if(d.length) cambios.push(x.n+' — '+d.join(' · '));
+    // Marcar la edicion para que un snapshot que llegue justo ahora no la pise.
+    if(d.length){ cambios.push(x.n+' — '+d.join(' · ')); _markAtt(a.id,'meta'); }
   });
   libres.slice().sort((a,b)=>b-a).forEach(j=>{
     borrados.push(DATA.athletes[j].name+' ('+DATA.athletes[j].div+' '+DATA.athletes[j].cat+'kg, tanda '+DATA.athletes[j].flight+')');
@@ -676,8 +682,26 @@
   if(sinPareja.length){ console.log('%cEstan en el cronograma y NO en el livecast — hay que agregarlos a mano:','font-weight:bold;color:#c60');
     sinPareja.forEach(c=>console.log('  '+c)); }
 
-  saveNow(); R();
-  alert('Listo.\n\n'+cambios.length+' corregidos\n'+borrados.length+' eliminados\n'
+  // Escritura AUTORITATIVA: reemplaza el documento en vez de mergearlo. Sin
+  // esto el borrado no viaja — el merge conserva a los que estan en el servidor
+  // y no en local, asi que el eliminado volvia con el primer snapshot.
+  R();
+  let ok=false;
+  for(let intento=1; intento<=3 && !ok; intento++){
+    window._forceFullWrite = true;
+    try{ await syncToFB(); }catch(e){ console.warn('escritura fallida', e); }
+    await new Promise(r=>setTimeout(r,1200));
+    try{
+      const snap = await window._fb.getDoc(window._fb.doc(fbDB,'livecast_sync',fbDocId()));
+      const rem = JSON.parse((snap.data()||{}).athletes||'[]');
+      ok = rem.length===CRONO.length && CRONO.every(x=>rem.some(a=>a.name===x.n && a.div===x.div
+              && String(a.cat)===x.cat && a.mod===x.mod && a.flight===x.fl));
+      console.log('verificacion '+intento+': el servidor tiene '+rem.length+' atletas · '+(ok?'COINCIDE con el cronograma':'todavia NO coincide'));
+    }catch(e){ console.warn('no se pudo verificar', e); break; }
+  }
+
+  alert((ok?'Listo y verificado en el servidor.':'OJO: se aplico local pero el servidor no confirmo. Mira la consola.')
+        +'\n\n'+cambios.length+' corregidos\n'+borrados.length+' eliminados\n'
         +sinPareja.length+' del cronograma sin atleta en el livecast\n'
         +DATA.athletes.length+' atletas quedan cargados.\n\nEl detalle esta en la consola (F12).');
 })();
