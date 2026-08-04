@@ -157,18 +157,25 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 // ══ Firebase ═══════════════════════════════════════════════
 const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
 
-let fbDB=null,fbReady=false;
+let fbDB=null,fbReady=false,fbSesion=false;
 
 (async()=>{
   try{
     const{initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
     const fb=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    // Las reglas piden sesión para escribir los votos. Esta página no tenía el
+    // módulo de auth, así que sus escrituras salían ANÓNIMAS y Firestore las
+    // rechazaba: el juez veía su luz en la tablet y no llegaba a ningún lado.
+    // Con el módulo cargado se usa la sesión que ya tiene ese navegador (la de
+    // haber entrado al livecast o al panel con la cuenta del evento).
+    const fa=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
     const app=initializeApp(FB_CFG);
     fbDB=fb.getFirestore(app);
     window._fb=fb;
     fbReady=true;
     setFBStatus(true);
     startAthleteListener();
+    fa.onAuthStateChanged(fa.getAuth(app),u=>{ fbSesion=!!u; setFBStatus(true); });
   }catch(e){
     console.error('Firebase error',e);
     setFBStatus(false);
@@ -176,8 +183,8 @@ let fbDB=null,fbReady=false;
 })();
 
 function setFBStatus(ok){
-  document.getElementById('fbDot').className='fb-dot'+(ok?' on':'');
-  document.getElementById('fbLabel').textContent=ok?'En vivo':'Sin conexión';
+  document.getElementById('fbDot').className='fb-dot'+(ok&&fbSesion?' on':'');
+  document.getElementById('fbLabel').textContent=!ok?'Sin conexión':(fbSesion?'En vivo':'Sin sesión — los votos no se envían');
 }
 
 // ══ State ══════════════════════════════════════════════════
@@ -235,7 +242,12 @@ window.castVote=async function(color){
     try{
       await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions','current'),{izq:null,central:null,der:null,[myPos]:color,reset_ts:0,athlete_name:'',athlete_weight:0,athlete_lift:'',athlete_round:0});
       showPulse('Voto enviado','#22c55e');
-    }catch(e2){showPulse('Error al enviar','#ef4444');console.error(e2);}
+    }catch(e2){
+      // Antes decía solo "Error al enviar" y el juez no tenía cómo saber por qué.
+      const sinPermiso=e2&&(e2.code==='permission-denied'||/permission/i.test(e2.message||''));
+      showPulse(sinPermiso?'Sin permiso — inicia sesión en este dispositivo':'Error al enviar','#ef4444');
+      console.error(e2);
+    }
   }
 };
 
