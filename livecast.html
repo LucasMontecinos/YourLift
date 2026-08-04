@@ -6974,12 +6974,19 @@ function renderScreenIntentos(cur,nxt){
   let nextHtml='';
   if(_sig&&_sig.a){
     const s=_sig;
-    nextHtml=`<div style="display:flex;align-items:baseline;gap:14px;white-space:nowrap">
-      <span style="font-family:Oswald;font-size:14px;letter-spacing:3px;color:rgba(212,225,245,.45)">SIGUIENTE${s.nota?' · '+s.nota:''}</span>
-      <span style="font-family:Oswald;font-size:26px;font-weight:700;color:${textColor}">${s.a.name||''}</span>
-      <span style="font-family:Oswald;font-size:26px;font-weight:900;color:${accentColor}">${s.w||'—'}<span style="font-size:0.6em;margin-left:4px">KG</span></span>
-      ${(()=>{const ns=_rackSetup(_realAth(s.a),s.lift||DATA.lift);return ns?`<span style="font-family:Oswald;font-size:16px;color:rgba(212,225,245,.55)">${ns}</span>`:''})()}
-    </div>`;
+    // Va en el MISMO gris del encabezado (movimiento · intento · rack), no en el
+    // blanco del nombre de quien está en tarima: la del que viene tiene que
+    // leerse pero sin competirle a la de arriba. Lleva su altura de rack y, según
+    // el movimiento, si el rack va abatible (sentadilla) o cuántas palmetas y
+    // seguros usa (banca) — es lo que necesitan los cargadores para ir armando.
+    const gris='rgba(212,225,245,.6)';
+    const ns=_rackSetup(_realAth(s.a),s.lift||DATA.lift);
+    nextHtml=`<div style="font-family:Oswald;font-size:22px;letter-spacing:3px;color:${gris};white-space:nowrap">`
+      +`SIGUIENTE${s.nota?' · '+s.nota:''} · `
+      +`<span style="font-weight:700">${s.a.name||''}</span>`
+      +(s.w?` · <span style="font-weight:700">${s.w} KG</span>`:'')
+      +(ns?` · ${ns}`:'')
+    +`</div>`;
   }
   // Tiempo compensatorio (4º "se sigue a sí mismo") — se ve arriba a la izquierda
   // en la pantalla de tarima. Solo informativo.
