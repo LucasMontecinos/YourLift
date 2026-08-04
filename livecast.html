@@ -1440,15 +1440,51 @@ function _srRecords(a,l){
   if(l==='total'&&_srSoloBanca(a))return [];                 // Only Bench no hace total
   const key=_srLiftKey(a,l), sx=_srSexo(a);
   return _srDivs(a).map(dv=>{
-    const r=RECSUDA[[sx,eq,dv,cat,key].join('|')];
-    return {div:dv,cat:cat,kg:r?r.kg:0,quien:r?r.quien:'',pais:r?r.pais:'',
-            fecha:r?r.fecha:'',lugar:r?r.lugar:'',vacio:!r};
+    const r=_srVigente([sx,eq,dv,cat,key].join('|'));
+    return {div:dv,cat:cat,kg:r.kg,quien:r.quien,pais:r.pais,
+            fecha:r.fecha,lugar:r.lugar,vacio:r.vacio,hoy:r.hoy,hoyId:r.hoyId};
   });
 }
+// ── Récords logrados EN ESTA competencia ───────────────────────────
+// El panel y los avisos tienen que mostrar el récord VIGENTE: si alguien lo
+// rompe, el que viene atrás ya no compite contra la marca del archivo sino
+// contra la nueva. No se guarda nada: se recalcula de los intentos válidos, así
+// deshacer, corregir un peso o anular una decisión lo dejan al día solo.
+// Se cachea por render (_SR_HOY) porque lo consulta cada casilla de la tabla.
+function _srHoyCalc(){
+  const out={};
+  if(!_srOn())return out;
+  const poner=(k,kg,a)=>{ if(!out[k]||kg>out[k].kg)out[k]={kg:kg,quien:a.name,id:a.id}; };
+  (DATA.athletes||[]).forEach(a=>{
+    const eq=_srEquip(a); if(!eq)return;
+    const cat=_srCat(a); if(!cat)return;
+    const sx=_srSexo(a), divs=_srDivs(a);
+    LIFTS.forEach(l=>{
+      let b=0;(a.att[l]||[]).forEach(x=>{ if(x&&x.r==='g'&&x.w>b)b=x.w; });
+      if(b<=0)return;
+      const lk=_srLiftKey(a,l);
+      divs.forEach(dv=>poner([sx,eq,dv,cat,lk].join('|'),b,a));
+    });
+    if(!_srSoloBanca(a)){ const t=_srTotal(a);
+      if(t>0)divs.forEach(dv=>poner([sx,eq,dv,cat,'total'].join('|'),t,a)); }
+  });
+  return out;
+}
+function _srHoyMap(){ if(!window._SR_HOY)window._SR_HOY=_srHoyCalc(); return window._SR_HOY; }
+// Récord vigente de una clave: el del archivo, o el de hoy si ya lo superaron.
+function _srVigente(k,hoy){
+  const base=RECSUDA&&RECSUDA[k], h=(hoy||_srHoyMap())[k];
+  if(h&&(!base||h.kg>base.kg))
+    return {kg:h.kg,quien:h.quien,pais:'',fecha:'',lugar:'',vacio:false,hoy:true,hoyId:h.id};
+  if(base)return {kg:base.kg,quien:base.quien,pais:base.pais,fecha:base.fecha,lugar:base.lugar,vacio:false,hoy:false};
+  return {kg:0,quien:'',pais:'',fecha:'',lugar:'',vacio:true,hoy:false};
+}
 // ¿Este peso sería récord? Devuelve las divisiones que rompería (vacío = no).
+// El propio atleta que acaba de poner el récord sigue viendo su casilla marcada
+// (si no, al darle válido la marca "RÉCORD" desaparecía justo al conseguirlo).
 function _srRompe(a,l,w){
   w=parseFloat(w)||0; if(w<=0)return [];
-  return _srRecords(a,l).filter(r=>w>r.kg);
+  return _srRecords(a,l).filter(r=>w>r.kg||(r.hoy&&r.hoyId===a.id&&w>=r.kg));
 }
 // Etiqueta corta para el badge: "SUD" o "SUD OPEN+JR"
 function _srBadge(rs){
@@ -1491,8 +1527,8 @@ function _srPanel(){
         MOVS.forEach(l=>{
           if(solo&&l!=='bp'){f.r[l]=null;return;}
           const key=[f.sexo,eq,dv,f.cat,(l==='bp'&&solo)?'bpsl':l].join('|');
-          const rec=RECSUDA[key];
-          f.r[l]=rec?{kg:rec.kg,quien:rec.quien,pais:rec.pais}:{kg:0,vacio:true};
+          const rec=_srVigente(key);
+          f.r[l]=rec.vacio?{kg:0,vacio:true}:{kg:rec.kg,quien:rec.quien,pais:rec.pais,hoy:rec.hoy};
         });
         filas.set(k,f);
       }
@@ -1512,6 +1548,8 @@ function _srPanel(){
   const celda=r=>{
     if(!r)return '<td style="padding:4px 6px;text-align:center;color:rgba(150,170,200,.25)">—</td>';
     if(r.vacio)return '<td style="padding:4px 6px;text-align:center;color:var(--muted);font-size:10px">sin récord</td>';
+    // Récord puesto HOY: se marca, para que se vea de dónde salió el número nuevo.
+    if(r.hoy)return '<td title="'+esc('NUEVO — '+(r.quien||'')+', en esta competencia')+'" style="padding:4px 6px;text-align:center;font-family:Oswald;font-weight:800;color:#0f1a10;background:#F2C230;white-space:nowrap">'+r.kg+' <span style="font-size:8px;letter-spacing:.5px">NUEVO</span></td>';
     return '<td title="'+esc((r.quien||'')+(r.pais?' · '+r.pais:''))+'" style="padding:4px 6px;text-align:center;font-family:Oswald;font-weight:700;color:#F2C230;white-space:nowrap">'+r.kg+'</td>';
   };
   let h='<div class="card" style="margin-bottom:10px;padding:0;overflow:hidden;border:1px solid rgba(242,194,48,.45)">';
@@ -6786,6 +6824,34 @@ function _piSettingsPanelHtml(){
   h+='</div>';
   return h;
 }
+// Quién levanta después del actual. Primero el que sigue en la cola de esta
+// ronda; si el actual es el último, se mira la ronda siguiente de la misma tanda
+// y, si tampoco hay, la primera tanda que quede pendiente en este movimiento.
+// Devuelve {a, w, lift, nota} — `nota` explica de dónde sale ("INT 1", "TANDA B").
+function _piQuienSigue(nxt){
+  if(nxt)return {a:nxt,w:(nxt.att[DATA.lift][curAtt(nxt)]||{}).w,lift:DATA.lift,nota:''};
+  const pend=(list,l,r)=>list.filter(a=>{const at=(a.att[l]||[])[r];return at&&at.r===null&&at.w>0;})
+    .sort((a,b)=>{const wa=a.att[l][r].w,wb=b.att[l][r].w;return wa!==wb?wa-wb:(a.lot||0)-(b.lot||0);});
+  // 1) rondas siguientes de la misma tanda
+  const mismaTanda=DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed);
+  for(let r=DATA.round+1;r<=2;r++){
+    const q=pend(mismaTanda,DATA.lift,r);
+    if(q.length)return {a:q[0],w:q[0].att[DATA.lift][r].w,lift:DATA.lift,nota:'INT '+(r+1)};
+  }
+  // 2) las otras tandas, en el orden en que van a subir
+  const fls=(typeof _allFlightsSorted==='function')?_allFlightsSorted():[];
+  const i=fls.indexOf(DATA.flight);
+  const rot=i>=0?[...fls.slice(i+1),...fls.slice(0,i)]:fls;
+  for(const fl of rot){
+    if(fl===DATA.flight)continue;
+    const list=DATA.athletes.filter(a=>a.flight===fl&&!a.bombed);
+    for(let r=0;r<=2;r++){
+      const q=pend(list,DATA.lift,r);
+      if(q.length)return {a:q[0],w:q[0].att[DATA.lift][r].w,lift:DATA.lift,nota:'TANDA '+fl};
+    }
+  }
+  return null;
+}
 function renderScreenIntentos(cur,nxt){
   const att=cur.att[DATA.lift][DATA.round];
   const weight=att?.w||0;
@@ -6900,16 +6966,19 @@ function renderScreenIntentos(cur,nxt){
   const subtitleHtml=`<div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:rgba(212,225,245,.5);white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
   const positionHtml=posTxt?`<div style="font-family:Oswald;font-size:22px;letter-spacing:1px;color:${accentColor};white-space:nowrap">${posTxt}</div>`:'';
   // Quién viene después — para que los cargadores/spotters se vayan preparando.
-  // Mismo lift+ronda que el atleta actual (nxt sale de la misma cola de intentos).
+  // Si el actual es el último de su ronda, el de al lado NO es null: se sigue
+  // buscando en la ronda siguiente y después en las otras tandas. Antes el cartel
+  // desaparecía justo cuando más se necesita (el último de la tanda es cuando hay
+  // que ir preparando la barra del que abre la que viene).
+  const _sig=_piQuienSigue(nxt);
   let nextHtml='';
-  if(nxt){
-    const nxtW=nxt.att[DATA.lift][DATA.round].w;
-    const nxtRack=DATA.lift==='sq'?nxt.rackSQ:DATA.lift==='bp'?nxt.rackBP:'';
+  if(_sig&&_sig.a){
+    const s=_sig;
     nextHtml=`<div style="display:flex;align-items:baseline;gap:14px;white-space:nowrap">
-      <span style="font-family:Oswald;font-size:14px;letter-spacing:3px;color:rgba(212,225,245,.45)">SIGUIENTE</span>
-      <span style="font-family:Oswald;font-size:26px;font-weight:700;color:${textColor}">${nxt.name||''}</span>
-      <span style="font-family:Oswald;font-size:26px;font-weight:900;color:${accentColor}">${nxtW||'—'}<span style="font-size:0.6em;margin-left:4px">KG</span></span>
-      ${(()=>{const ns=_rackSetup(_realAth(nxt),DATA.lift);return ns?`<span style="font-family:Oswald;font-size:16px;color:rgba(212,225,245,.55)">${ns}</span>`:''})()}
+      <span style="font-family:Oswald;font-size:14px;letter-spacing:3px;color:rgba(212,225,245,.45)">SIGUIENTE${s.nota?' · '+s.nota:''}</span>
+      <span style="font-family:Oswald;font-size:26px;font-weight:700;color:${textColor}">${s.a.name||''}</span>
+      <span style="font-family:Oswald;font-size:26px;font-weight:900;color:${accentColor}">${s.w||'—'}<span style="font-size:0.6em;margin-left:4px">KG</span></span>
+      ${(()=>{const ns=_rackSetup(_realAth(s.a),s.lift||DATA.lift);return ns?`<span style="font-family:Oswald;font-size:16px;color:rgba(212,225,245,.55)">${ns}</span>`:''})()}
     </div>`;
   }
   // Tiempo compensatorio (4º "se sigue a sí mismo") — se ve arriba a la izquierda
