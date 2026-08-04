@@ -617,14 +617,31 @@ function startFBSync(){
       // pisarse. La NAVEGACIÓN (lift/ronda/tanda/changeTimers) sigue con el guard
       // grueso de 2.5s (normalmente la maneja un solo operador de tarima).
       const _remoteAth = _normExtraAtts(JSON.parse(d.athletes||'[]'));
-      try{
-        DATA.athletes = _mergeAthletes(DATA.athletes, _remoteAth);
-        // Si conservé ediciones mías que no estaban en el remoto, reenvío mi versión
-        // para que Firestore (→ Control TX) quede con AMBOS cambios.
-        if(window.__mergeOverrode) _scheduleWriteback();
-      }catch(e){
-        // Ante cualquier problema, fallback al comportamiento anterior (no perder datos)
-        if(!_localFresh) DATA.athletes=_remoteAth;
+      // ¿El roster que tengo cargado es de ESTE campeonato? Si no, no se mezcla
+      // nada: se toma el del servidor tal cual. El merge va por id de atleta, y
+      // dos campeonatos distintos usan los mismos ids — mezclarlos metía gente
+      // de un evento en el otro (y después la reenviaba al servidor).
+      const _mismoEv=(()=>{
+        try{
+          const re=d.event||{}; const le=DATA.event||{};
+          if(!re.name&&!re.id)return true;                 // doc viejo sin evento: como antes
+          return String(re.id||'')===String(le.id||'') || String(re.name||'')===String(le.name||'');
+        }catch(e){ return true; }
+      })();
+      if(!_mismoEv){
+        console.warn('[FB] El roster local es de otro campeonato — se toma el del servidor sin mezclar');
+        DATA.athletes=_remoteAth;
+        try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(_){}
+      }else{
+        try{
+          DATA.athletes = _mergeAthletes(DATA.athletes, _remoteAth);
+          // Si conservé ediciones mías que no estaban en el remoto, reenvío mi versión
+          // para que Firestore (→ Control TX) quede con AMBOS cambios.
+          if(window.__mergeOverrode) _scheduleWriteback();
+        }catch(e){
+          // Ante cualquier problema, fallback al comportamiento anterior (no perder datos)
+          if(!_localFresh) DATA.athletes=_remoteAth;
+        }
       }
       // El cursor de la tarima se anota SIEMPRE — aunque esta pantalla ande por su
       // cuenta — para poder volver a él y para no pisarlo al escribir.
@@ -1056,7 +1073,8 @@ function _mergeForWrite(localArr, remoteArr){
   const byId={}; (localArr||[]).forEach(a=>{ if(a&&a.id!=null) byId[a.id]=a; });
   const out=(remoteArr||[]).map(ra=>{
     const la=byId[ra.id];
-    if(!la)return ra;
+    // Mismo id pero otra persona → roster de otro campeonato: manda el remoto.
+    if(!la || _nnCrono(la.name||'')!==_nnCrono(ra.name||''))return ra;
     const m=JSON.parse(JSON.stringify(ra));
     if(pend.has(ra.id+'|meta'))META.forEach(f=>{ if(la[f]!==undefined)m[f]=la[f]; });
     ['sq','bp','dl'].forEach(l=>{
@@ -1085,7 +1103,11 @@ function _mergeAthletes(localArr, remoteArr){
   let overrode=false;
   const out=(remoteArr||[]).map(ra=>{
     const la=localById[ra.id];
-    if(!la) return ra;
+    // Mismo id pero OTRA persona = rosters de campeonatos distintos. No se
+    // mezcla nada: manda el del servidor. Los ids se reparten por evento, así
+    // que sin este control las ediciones de un campeonato le caían encima a
+    // otro atleta en el otro.
+    if(!la || _nnCrono(la.name||'')!==_nnCrono(ra.name||'')) return ra;
     const m=JSON.parse(JSON.stringify(ra));
     if(held[ra.id+'|meta']){
       _MERGE_META_FIELDS.forEach(f=>{ if(la[f]!==undefined) m[f]=la[f]; });
@@ -1115,9 +1137,26 @@ function _mergeAthletes(localArr, remoteArr){
     });
     return m;
   });
-  // atletas que tengo local y no vinieron en el remoto, con edición reciente → conservarlos
+  // Atletas que tengo local y no vinieron en el remoto, con edición reciente →
+  // conservarlos (ej. acabo de agregar uno y todavía no llegó al servidor).
+  // PERO solo si los dos rosters son del MISMO campeonato: se compara cuántos
+  // nombres comparten. Si no comparten casi ninguno, lo que tengo cargado es el
+  // roster de otro evento y meterlo acá cruza las nóminas — fue exactamente lo
+  // que pasó entre el Sudamericano de prueba y el Regional Centro Sur.
   const remoteIds=new Set((remoteArr||[]).map(a=>a&&a.id));
-  (localArr||[]).forEach(a=>{ if(a && !remoteIds.has(a.id) && held[a.id+'|meta']){ out.push(a); overrode=true; } });
+  const remoteNames=new Set((remoteArr||[]).map(a=>_nnCrono(a&&a.name||'')));
+  const comunes=(localArr||[]).filter(a=>remoteNames.has(_nnCrono(a&&a.name||''))).length;
+  const mismoRoster=!(localArr||[]).length||!(remoteArr||[]).length
+    ||comunes>=Math.ceil(Math.min((localArr||[]).length,(remoteArr||[]).length)*0.5);
+  if(mismoRoster){
+    (localArr||[]).forEach(a=>{
+      if(a && !remoteIds.has(a.id) && !remoteNames.has(_nnCrono(a.name||'')) && held[a.id+'|meta']){
+        out.push(a); overrode=true;
+      }
+    });
+  }else{
+    console.warn('[FB] El roster local no coincide con el del servidor — no se agregan atletas locales');
+  }
   window.__mergeOverrode=overrode;
   return out;
 }
@@ -1301,6 +1340,12 @@ function _evAthlete(a,j,flightMap){
 }
 function pickEvent(i){
   const ev=DATA.events[i];
+  // Cambiar de campeonato borra las marcas de "edité esto recién". Si no, las
+  // que quedaban del evento anterior hacían que el merge metiera atletas de ESE
+  // evento en el documento del nuevo, y después los reenviaba: así se cruzaron
+  // los atletas del Sudamericano de prueba con los del Regional Centro Sur.
+  try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
+  window._SR_HOY=null;
   DATA.event=ev;
   _ensayoGrant();
   // Load saved flight assignments from cronograma
@@ -1485,6 +1530,54 @@ function _srVigente(k,hoy){
 function _srRompe(a,l,w){
   w=parseFloat(w)||0; if(w<=0)return [];
   return _srRecords(a,l).filter(r=>w>r.kg||(r.hoy&&r.hoyId===a.id&&w>=r.kg));
+}
+// ── Al romperse un récord, subir a los que quedaron cortos ─────────
+// Récord en 102.5, uno tira 103 y queda en 103: el que venía atrás con 103
+// declarado YA NO rompe nada (hay que superarlo, no igualarlo). Se le sube al
+// múltiplo de 2.5 siguiente por encima del récord nuevo — 105.
+// Solo se toca a quien todavía NO levantó ese intento, y solo si su peso ERA de
+// récord contra la marca anterior: a quien no iba por el récord no se le mueve
+// nada. El cambio entra en el historial, así que Ctrl+Z lo revierte.
+function _srMinRec(b,l,hoy){
+  const eq=_srEquip(b); if(!eq)return null;
+  const cat=_srCat(b); if(!cat)return null;
+  if(l==='total'&&_srSoloBanca(b))return null;
+  const sx=_srSexo(b), lk=_srLiftKey(b,l);
+  let min=Infinity;
+  _srDivs(b).forEach(dv=>{ const r=_srVigente([sx,eq,dv,cat,lk].join('|'),hoy); if(r.kg<min)min=r.kg; });
+  return min===Infinity?null:min;
+}
+// Múltiplo de 2.5 más chico que SUPERE el peso dado (105 para un récord de 103).
+function _srProxMultiplo(kg){ return Math.ceil((kg+0.0001)/2.5)*2.5; }
+function _srSubirDeclarados(hoyAntes){
+  if(!_srOn()||!hoyAntes)return [];
+  window._SR_HOY=null;                       // recalcular ya con la marca nueva
+  const cambios=[];
+  (DATA.athletes||[]).forEach(b=>{
+    if(b.bombed)return;
+    LIFTS.forEach(l=>{
+      const antes=_srMinRec(b,l,hoyAntes), ahora=_srMinRec(b,l,null);
+      if(antes===null||ahora===null||ahora<=antes)return;   // este récord no se movió
+      (b.att[l]||[]).forEach((at,j)=>{
+        if(!at||at.r!==null||!(at.w>0))return;               // ya levantado o sin declarar
+        if(at.w>ahora)return;                                // sigue siendo récord
+        if(!(at.w>antes))return;                             // no iba por el récord
+        const nuevo=_srProxMultiplo(ahora);
+        if(!(nuevo>at.w))return;
+        cambios.push({n:b.name,l:l,j:j,de:at.w,a:nuevo});
+        at.w=nuevo;
+        _markAtt(b.id,'att_'+l+'_'+j);
+        const ck=b.id+'_'+l+'_'+j; if(DATA.changeTimers[ck])delete DATA.changeTimers[ck];
+      });
+    });
+  });
+  if(cambios.length)window._SR_HOY=null;
+  return cambios;
+}
+function _srAvisarSubidas(cs){
+  if(!cs||!cs.length)return;
+  showToastLC('🏆 Récord nuevo — '+cs.map(c=>c.n+' '+LIFT_S[c.l]+(c.j+1)+': '+c.de+' → '+c.a+' kg').join(' · ')
+    +'  (con el peso anterior ya no era récord)');
 }
 // Etiqueta corta para el badge: "SUD" o "SUD OPEN+JR"
 function _srBadge(rs){
@@ -1716,8 +1809,13 @@ function _armarChangeTimer(a,l,rSig){
   }
 }
 function setResult(id,l,r,res){
-  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;a.att[l][r].r=res;
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  // Foto de los récords ANTES de esta decisión: si la marca los mueve, hay que
+  // saber contra qué estaban tirando los demás para reacomodar sus declarados.
+  const _hoyAntes=(res==='g'&&_srOn())?_srHoyCalc():null;
+  a.att[l][r].r=res;
   _markAtt(id,'att_'+l+'_'+r);
+  if(_hoyAntes)_srAvisarSubidas(_srSubirDeclarados(_hoyAntes));
   _clearCompIfJudged(id,l,r);
   // Al juzgar el EXTRA, el minuto del intento siguiente arranca recién ahora.
   if(r===3) _armarChangeTimer(a,l,((a.att[l][3]||{}).grantedRound??DATA.round)+1);
@@ -2504,8 +2602,10 @@ function overrideResult(id,l,r,res){
   if(!_confirmDecisionChange(a,l,r,res))return;
   // Toggle: clicking same result clears it
   const wasSame=(a.att[l][r].r===res);
+  const _hoyAntes=(!wasSame&&res==='g'&&_srOn())?_srHoyCalc():null;
   a.att[l][r].r=wasSame?null:res;
   _markAtt(id,'att_'+l+'_'+r);
+  if(_hoyAntes)_srAvisarSubidas(_srSubirDeclarados(_hoyAntes));
   // Si este intento era el forzado como "actual" a mano, se juzgó → volver al orden
   // automático normal (queue).
   if(!wasSame && res && DATA.forcedCurrent===id)DATA.forcedCurrent=null;
@@ -7011,6 +7111,10 @@ function renderScreenIntentos(cur,nxt){
 }
 
 function R(){
+  // Los récords logrados hoy se recalculan una vez por dibujado: los consulta cada
+  // casilla de la tabla, pero tienen que reflejar lo último (incluido lo que
+  // acaba de llegar de otro controlador).
+  window._SR_HOY=null;
   // Paracaídas de render: un error al dibujar NUNCA debe dejar la pantalla en
   // blanco/congelada (crítico con mucha gente operando en vivo). Para los widgets
   // de OBS/pantalla, si falla se conserva lo anterior. Para el admin, se muestra un
