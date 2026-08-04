@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0A1628;--card:#11223B;--border:#1E3A5F;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A;--blue:#1E5BA8;--gold:#D4A843;--green:#22c55e;--red:#ef4444;--orange:#f59e0b}
+:root{--bg:#0A1628;--card:#11223B;--border:#1E3A5F;--side:#0d1b30;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A;--blue:#1E5BA8;--gold:#D4A843;--green:#22c55e;--red:#ef4444;--orange:#f59e0b}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
 input,select,button{font-family:inherit;outline:none}
 .os{font-family:'Oswald',sans-serif}
@@ -25,7 +25,7 @@ body.nav-open .hamb{opacity:0;pointer-events:none}
 .nav-close{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:3}
 .nav-close:hover{color:#fff;border-color:var(--accent)}
 /* Sidebar como cajón deslizante (off-canvas) */
-.side{background:#0d1b30;border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;width:248px;overflow-y:auto;z-index:1000;transform:translateX(-106%);transition:transform .24s cubic-bezier(.4,0,.2,1)}
+.side{background:var(--side);border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;width:248px;overflow-y:auto;z-index:1000;transform:translateX(-106%);transition:transform .24s cubic-bezier(.4,0,.2,1)}
 body.nav-open .side{transform:translateX(0);box-shadow:0 0 44px rgba(0,0,0,.6)}
 .nav-backdrop{position:fixed;inset:0;background:rgba(2,8,20,.55);opacity:0;pointer-events:none;transition:opacity .24s;z-index:999}
 body.nav-open .nav-backdrop{opacity:1;pointer-events:auto}
@@ -248,6 +248,32 @@ window._WRITER_ID=(()=>{try{let w=sessionStorage.getItem('yl_writer');if(!w){w='
 // (lo normal, y como venía siendo) sigue a la tarima.
 // Es por navegador, no por cuenta: tres personas con el mismo correo pueden
 // tener una siguiendo la tarima y las otras dos mirando otra tanda.
+// ── FONDO DEL LIVECAST ──────────────────────────────────────────────
+// Preferencia de cada pantalla (no se sincroniza): el operador que trabaja con
+// luz encima ve mejor en negro, y en algunas salas el azul se lava en el
+// proyector. Solo toca el fondo y los paneles de la interfaz — la Pantalla de
+// Tarima y los widgets de OBS tienen sus propios colores en Transmisión, para
+// no romper lo que ya está calibrado para la cámara.
+const LC_FONDOS={
+  azul: {n:'Azul (por defecto)', bg:'#0A1628', card:'#11223B', border:'#1E3A5F', side:'#0d1b30'},
+  negro:{n:'Negro',              bg:'#000000', card:'#0e0e0e', border:'#2b2b2b', side:'#080808'},
+  gris: {n:'Gris',               bg:'#1b1e23', card:'#252930', border:'#3b414b', side:'#171a1f'},
+};
+window.lcFondo=(()=>{try{return LC_FONDOS[localStorage.getItem('yl_lc_fondo')]?localStorage.getItem('yl_lc_fondo'):'azul'}catch(e){return 'azul'}})();
+window.aplicarFondoLC=function(k){
+  const f=LC_FONDOS[k]||LC_FONDOS.azul;
+  const r=document.documentElement.style;
+  r.setProperty('--bg',f.bg); r.setProperty('--card',f.card);
+  r.setProperty('--border',f.border); r.setProperty('--side',f.side);
+};
+window.setFondoLC=function(k){
+  if(!LC_FONDOS[k])return;
+  window.lcFondo=k;
+  try{localStorage.setItem('yl_lc_fondo',k)}catch(e){}
+  window.aplicarFondoLC(k);
+  try{if(typeof R==='function')R();}catch(e){}
+};
+try{window.aplicarFondoLC(window.lcFondo);}catch(e){}
 window.NAV_LIBRE=(()=>{try{return localStorage.getItem('yl_nav_libre')==='1'}catch(e){return false}})();
 window._NAV_REMOTA=null;   // último cursor que publicó la tarima
 window.setNavLibre=function(v){
@@ -886,7 +912,11 @@ function liftQueue(){
   const flightAth=DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed);
   const normal=flightAth.filter(a=>{const at=a.att[DATA.lift][DATA.round];return at&&at.r===null&&at.w>0})
     .sort((a,b)=>{const wa=a.att[DATA.lift][DATA.round].w,wb=b.att[DATA.lift][DATA.round].w;return wa!==wb?wa-wb:a.lot-b.lot});
-  const has4=a=>{const at=a.att[DATA.lift][3];return at&&at.extra&&at.grantedRound===DATA.round&&at.r===null&&at.w>0;};
+  // El 4º sale en la cola desde la ronda en que se concedió y NO se pierde si la
+  // ronda avanzó sin haberlo levantado: sigue apareciendo al final hasta que se
+  // juzgue. Antes se exigía la ronda exacta, así que un extra al que todavía no
+  // le habían declarado el peso desaparecía en cuanto se pasaba de ronda.
+  const has4=a=>{const at=a.att[DATA.lift][3];return at&&at.extra&&(at.grantedRound||0)<=DATA.round&&at.r===null&&at.w>0;};
   const self4=flightAth.filter(a=>has4(a)&&a.att[DATA.lift][3].mode==='self').sort((a,b)=>a.lot-b.lot).map(_mk4clone);
   const end4=flightAth.filter(a=>has4(a)&&a.att[DATA.lift][3].mode!=='self').sort((a,b)=>{const wa=a.att[DATA.lift][3].w,wb=b.att[DATA.lift][3].w;return wa!==wb?wa-wb:a.lot-b.lot}).map(_mk4clone);
   let q=[...self4,...normal,...end4];
@@ -2714,9 +2744,29 @@ function _flightDoneWithLift(fl,lift){
 // tandas terminan el lift activo, pasa al siguiente lift arrancando en la primera tanda
 // con trabajo pendiente ahí (normalmente vuelve a la A). Con una sola tanda, este mismo
 // código simplemente avanza de lift sin saltar de tanda (no hay a dónde saltar).
+// Intentos extra de este lift, en esta tanda, que todavía no se levantaron.
+// Incluye los que aún no tienen el peso declarado: son justamente los que se
+// perdían: sin peso no entran en la cola, la ronda parecía terminada y al
+// avanzar el intento quedaba colgado sin que nadie se diera cuenta.
+function _extrasPendientes(l){
+  l=l||DATA.lift;
+  return DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed&&(()=>{
+    const at=(a.att[l]||[])[3]; return at&&at.extra&&at.r===null;
+  })());
+}
 function advanceLift(){
   const flights=_allFlightsSorted();
   const li=LIFTS.indexOf(DATA.lift);
+  // El extra "al final de la ronda" se toma al cerrar SU ronda: no se puede
+  // pasar de largo sin avisar.
+  {const pend=_extrasPendientes(DATA.lift);
+   if(pend.length){
+     const det=pend.map(a=>{const at=a.att[DATA.lift][3];
+       return '• '+a.name+(at.w>0?(' — '+at.w+' kg'):' — sin peso declarado')
+              +(at.mode==='self'?' (se sigue a sí mismo)':' (al final de la ronda)');}).join('\n');
+     if(!confirm('Queda intento extra sin levantar en '+(LIFT_N[DATA.lift]||DATA.lift)+', tanda '+DATA.flight+':\n\n'+det
+       +'\n\nSe toma al final de la ronda, antes de seguir.\n\n¿Avanzar igual?'))return;
+   }}
   if(DATA.round<2){DATA.round++;saveNow();R();return;}
   const pending=flights.filter(fl=>fl!==DATA.flight&&!_flightDoneWithLift(fl,DATA.lift));
   if(pending.length){
@@ -7043,6 +7093,11 @@ function renderShell(){
   h+='<div class="side-label">Vuelo Activo</div><div style="display:flex;gap:4px;flex-wrap:wrap">';
   flights.forEach(f=>{const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;h+='<button onclick="DATA.flight=\''+f+'\';saveNow();R()" style="flex:1;min-width:36px;padding:6px 0;border-radius:6px;border:2px solid '+(DATA.flight===f?FL_C[f]||'var(--muted)':'var(--border)')+';background:'+(DATA.flight===f?(FL_C[f]||'#666')+'22':'transparent')+';color:'+(DATA.flight===f?FL_C[f]||'#fff':'var(--muted)')+';font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">'+f+'<span style="font-size:9px;opacity:.6;display:block">'+n+'</span></button>'});
   h+='</div>';
+  // Fondo de la interfaz \u2014 preferencia de esta pantalla, no se sincroniza.
+  h+='<div class="side-label" style="margin-top:14px">Fondo</div><div style="display:flex;gap:4px">';
+  Object.keys(LC_FONDOS).forEach(k=>{const f=LC_FONDOS[k],on=window.lcFondo===k;
+    h+='<button onclick="setFondoLC(\''+k+'\')" title="'+f.n+'" style="flex:1;padding:7px 0;border-radius:6px;border:2px solid '+(on?'var(--gold)':'var(--border)')+';background:'+f.bg+';color:'+(on?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:10px;font-weight:700;letter-spacing:.5px;cursor:pointer">'+f.n.split(' ')[0].toUpperCase()+'</button>';});
+  h+='</div>';
   if(isAdmin){
   h+='<div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">';
   h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon">\uD83C\uDFC6</span>Selecci\u00F3n de Campeonato</button>';
@@ -8401,7 +8456,7 @@ function _attMenuHtml(a,l,j,sc){
     const TIP_SELF=(is4th?'4º intento — ':'Intento extra — ')+'el atleta se sigue a sí mismo (repite ENSEGUIDA el mismo intento). Se usa en: intento de récord, peso muerto (deadlift) en 3ª ronda, only bench en 3ª ronda, o cuando se le concede retomar por un error ajeno. Se le da un tiempo compensatorio de descanso (por defecto 4 min) que corre a la vista, sin bloquear el válido/nulo (criterio IPF).';
     const TIP_ENDROUND=(is4th?'4º intento — ':'Intento extra — ')+'el atleta lo toma AL FINAL de la ronda en curso — forma habitual IPF de conceder el intento por un error ajeno: espera al final de la ronda para repetir. Tiempo compensatorio opcional.';
     const TIP_REMOVE='Quita el intento extra / 4º (si se agregó por error o el jurado lo revoca). Solo borra el intento extra; los 3 base quedan intactos.';
-    h+='<div class="att-menu" onclick="event.stopPropagation()" style="position:absolute;z-index:60;top:calc(100% + 3px);left:0;min-width:210px;background:#0D1F38;border:1px solid var(--gold);border-radius:8px;box-shadow:0 8px 26px rgba(0,0,0,.6);overflow:hidden">';
+    h+='<div class="att-menu" onclick="event.stopPropagation()" style="position:absolute;z-index:60;top:calc(100% + 3px);left:0;min-width:210px;background:var(--card);border:1px solid var(--gold);border-radius:8px;box-shadow:0 8px 26px rgba(0,0,0,.6);overflow:hidden">';
     h+='<div style="padding:6px 10px;font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--muted);border-bottom:1px solid rgba(30,58,95,.4);background:rgba(30,58,95,.25)">'+a.name+' · '+LIFT_S[l]+(j+1)+'</div>';
     if(at.r===null)
       h+=item('window._attMenuOpen=null;forceCurrentAttempt('+a.id+',\''+l+'\','+j+')','▶','Marcar como actual','var(--gold)','Salta la cola y pone este intento como el que está en tarima ahora (por si se pasó por alto al atleta).');
@@ -8539,7 +8594,22 @@ function renderCompete(){
     // (Modo Jueces y el bot\u00F3n "Se permite r\u00E9cord nacional" se quitaron a pedido:
     //  las decisiones se marcan a mano con \u2713/\u2717 y los r\u00E9cords se cargan en admin.)
   }else{
-    h+='<div class="card" style="text-align:center;padding:20px"><p class="os" style="font-size:15px;color:var(--gold);margin-bottom:10px">RONDA COMPLETADA</p><button class="btn btn-r" onclick="advanceLift()">Siguiente \u2192</button></div>';
+    // Si queda un extra sin peso declarado, la ronda PARECE terminada (sin peso no
+    // entra en la cola). Se avisa ac\u00e1 para que no se pase de largo.
+    {const pend=_extrasPendientes(DATA.lift);
+     let aviso='';
+     if(pend.length){
+       aviso='<div style="margin:0 0 12px;padding:9px 12px;border-radius:8px;border:2px solid #60a5fa;background:rgba(96,165,250,.10);text-align:left">'
+         +'<div style="font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;color:#60a5fa">FALTA UN INTENTO EXTRA</div>'
+         +pend.map(a=>{const at=a.att[DATA.lift][3];
+            return '<div style="font-size:11px;color:var(--muted);margin-top:3px">'+esc(a.name)+' \u2014 '
+              +(at.w>0?(at.w+' kg'):'<b style="color:var(--orange)">sin peso declarado</b>')
+              +(at.mode==='self'?' \u00b7 se sigue a s\u00ed mismo':' \u00b7 al final de la ronda')+'</div>';}).join('')
+         +'</div>';
+     }
+     h+='<div class="card" style="text-align:center;padding:20px">'+aviso
+       +'<p class="os" style="font-size:15px;color:var(--gold);margin-bottom:10px">RONDA COMPLETADA</p>'
+       +'<button class="btn btn-r" onclick="advanceLift()">Siguiente \u2192</button></div>';}
   }
   // Los récords van DEBAJO del atleta en tarima / del aviso de ronda completada:
   // arriba tiene que estar lo que se juzga ahora.
