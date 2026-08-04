@@ -3059,6 +3059,51 @@ window._startManualComp=function(id,l,min){
 // revoca). Solo saca el índice 3, nunca los 3 base. Pide confirmación porque
 // borra datos. El 4º vive dentro de su ronda concedida (no hay "INT 4"), así
 // que basta con quitarlo del array; la cola deja de mostrarlo automáticamente.
+// ── Sacar atletas que no son de este campeonato ────────────────────
+// Si por un cruce de pantallas entraron atletas de OTRO evento (pasó entre el
+// Sudamericano de prueba y el Regional Centro Sur), acá se sacan sin tener que
+// abrir la consola. La referencia es el CRONOGRAMA del evento, que es la lista
+// oficial de quién compite. No toca nada de los que sí corresponden: pesos,
+// intentos, pesaje y racks quedan igual. Se deshace con Ctrl+Z.
+window.limpiarAtletasAjenos=async function(){
+  const map=window._cronoFlightMap;
+  if(!map||!Object.keys(map).length){
+    alert('No hay Cronograma cargado para este campeonato, así que no tengo con qué comparar.\n\n'
+      +'Cargalo en Admin → Cronograma y volvé a entrar.');
+    return;
+  }
+  const fuera=DATA.athletes.filter(a=>!_cronoLookup(map,a.name));
+  if(!fuera.length){ alert('Todo en orden: los '+DATA.athletes.length+' atletas cargados están en el Cronograma.'); return; }
+  if(!window.IS_CONTROLLER){
+    alert('Esta pantalla está en modo LECTURA, no puede guardar.\n\nCambiá a CONTROLADOR desde el menú y volvé a intentar.');
+    return;
+  }
+  const det=fuera.slice(0,30).map(a=>'• '+a.name+'  ('+(a.div||'')+' '+(a.cat||'')+', tanda '+(a.flight||'')+')').join('\n')
+    +(fuera.length>30?'\n… y '+(fuera.length-30)+' más':'');
+  if(!confirm('Hay '+fuera.length+' atleta(s) que NO están en el Cronograma de "'+((DATA.event&&DATA.event.name)||'')+'":\n\n'+det
+    +'\n\nSe eliminan y quedan '+(DATA.athletes.length-fuera.length)+'.\n¿Confirmás?'))return;
+  const ids=new Set(fuera.map(a=>a.id));
+  DATA.athletes=DATA.athletes.filter(a=>!ids.has(a.id));
+  Object.keys(DATA.changeTimers||{}).forEach(k=>{ if(ids.has(parseInt(k,10)))delete DATA.changeTimers[k]; });
+  if(DATA.forcedCurrent!=null&&ids.has(DATA.forcedCurrent))DATA.forcedCurrent=null;
+  try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
+  R();
+  // Escritura AUTORITATIVA + verificación: un borrado tiene que reemplazar el
+  // documento, si no el merge devuelve a los que saqué.
+  let ok=false;
+  for(let i=1;i<=3&&!ok;i++){
+    window._forceFullWrite=true;
+    try{ await syncToFB(); }catch(e){ console.warn('[limpiar] escritura',e); }
+    await new Promise(r=>setTimeout(r,1200));
+    try{
+      const snap=await window._fb.getDoc(window._fb.doc(fbDB,'livecast_sync',fbDocId()));
+      const rem=JSON.parse((snap.data()||{}).athletes||'[]');
+      ok=rem.length===DATA.athletes.length&&rem.every(a=>!!_cronoLookup(map,a.name));
+    }catch(e){ console.warn('[limpiar] verificación',e); break; }
+  }
+  alert((ok?'Listo y verificado en el servidor.':'Se aplicó en esta pantalla, pero el servidor no confirmó. Revisá la conexión y volvé a intentar.')
+    +'\n\n'+fuera.length+' eliminado(s)\n'+DATA.athletes.length+' atletas quedan cargados.');
+};
 window.remove4thAttempt=function(id,l){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   if(!a.att[l]||a.att[l].length<4){window._attMenuOpen=null;R();return;}
@@ -7300,6 +7345,12 @@ function renderShell(){
    +'</div>';}
   }
   h+='<button class="side-btn" onclick="exportBackupJSON()"><span class="icon">\uD83D\uDCBE</span>Exportar Backup</button>';
+  // Solo se ofrece si hay Cronograma cargado (es la lista contra la que compara)
+  // y si de verdad hay alguien de m\u00E1s: si no, es un bot\u00F3n peligroso al pedo.
+  {let _aj=0;
+   try{ const m=window._cronoFlightMap;
+     if(m&&Object.keys(m).length)_aj=DATA.athletes.filter(a=>!_cronoLookup(m,a.name)).length; }catch(e){}
+   if(_aj)h+='<button class="side-btn" onclick="limpiarAtletasAjenos()" style="color:#f59e0b;border:1px solid rgba(245,158,11,.5)" title="Saca a los atletas que no figuran en el Cronograma de este campeonato"><span class="icon">\u26A0</span>'+_aj+' atleta'+(_aj>1?'s':'')+' de otro campeonato</button>';}
   h+='<button class="side-btn" onclick="resetLiveData()" style="color:#ff8a8a"><span class="icon"></span>Reiniciar datos en vivo</button>';
   h+='<button class="side-btn" onclick="doLogout()"><span class="icon">\uD83D\uDD12</span>Cerrar sesi\u00f3n</button>';
   h+='</div>';
