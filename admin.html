@@ -3842,7 +3842,29 @@ window.cronoSet=function(i,field,val){
   else if(field==='h2c'){r.handler2={...(r.handler2||{}),correo:val};}
   else r[field]=val;
   cronoSaveDoc();
-  if(field==='tarima'||field==='flight'||field==='jornada')setTimeout(()=>{if(ST.view==='cronograma')render();},50);
+  if(field==='tarima'||field==='flight'||field==='jornada'||field==='dia')setTimeout(()=>{if(ST.view==='cronograma')render();},50);
+};
+// Orden de los días. Se escriben a mano ("Día 1", "Sábado 8", "8 de agosto"…),
+// así que se ordena por el primer número que aparezca y, si no hay, alfabético.
+// Los que todavía no tienen día quedan al final.
+function _cronoDiaKey(d){
+  const s=String(d||'').trim();
+  if(!s)return [2,Infinity,''];
+  const m=s.match(/\d+/);
+  return m?[0,parseInt(m[0],10),s.toLowerCase()]:[1,0,s.toLowerCase()];
+}
+function _cronoCmpDia(a,b){
+  const ka=_cronoDiaKey(a),kb=_cronoDiaKey(b);
+  return (ka[0]-kb[0])||(ka[1]-kb[1])||ka[2].localeCompare(kb[2]);
+}
+// Poner el mismo día a todo un flight de una — es como se arma en la práctica:
+// el día se decide por tanda, no atleta por atleta.
+window.cronoSetFlightDia=function(t,f,actual){
+  const d=prompt('Día en que compite el Flight '+f+' (Tarima '+t+')\n\n'
+    +'Escribilo como quieras: "Día 1", "Sábado 8", "8 de agosto"…\nVacío = sin día.', actual||'');
+  if(d===null)return;
+  let n=0;(ST.cronoRows||[]).forEach(r=>{if(String(r.tarima)===String(t)&&String(r.flight)===String(f)){r.dia=d.trim();n++;}});
+  if(n){cronoSaveDoc();showToast(n+' atletas del Flight '+f+' → '+(d.trim()||'sin día'));render();}
 };
 window.cronoImport=async function(){
   if(!ST.cronoEv){showToast('Elige un campeonato primero',null,true);return;}
@@ -3961,10 +3983,10 @@ function _xlsxDownload(aoa, sheetName, filename){
 window.cronoExportXlsx=function(){
   const rows=ST.cronoRows||[]; if(!rows.length){showToast('Nada que exportar',null,true);return;}
   const _jr=x=>x==='AM'?0:x==='PM'?1:2;
-  const order=rows.map((r,i)=>i).sort((a,b)=>(_jr(rows[a].jornada)-_jr(rows[b].jornada))||String(rows[a].flight).localeCompare(String(rows[b].flight)));
-  const head=['Nombre','División','Categoría','Sexo','Club','Modalidad','Flight','Jornada','Entrenador','Handler 1','Correo handler 1','Handler 2','Correo handler 2'];
+  const order=rows.map((r,i)=>i).sort((a,b)=>_cronoCmpDia(rows[a].dia,rows[b].dia)||(_jr(rows[a].jornada)-_jr(rows[b].jornada))||String(rows[a].flight).localeCompare(String(rows[b].flight)));
+  const head=['Nombre','División','Categoría','Sexo','Club','Modalidad','Día','Flight','Jornada','Entrenador','Handler 1','Correo handler 1','Handler 2','Correo handler 2'];
   const aoa=[head];
-  order.forEach(i=>{const r=rows[i];aoa.push([r.nombre||'',r.division||'',r.categoria||'',r.sexo||'',r.club||'',r.modalidad||'',r.flight||'',r.jornada||'',r.entrenador||'',(r.handler1||{}).nombre||'',(r.handler1||{}).correo||'',(r.handler2||{}).nombre||'',(r.handler2||{}).correo||'']);});
+  order.forEach(i=>{const r=rows[i];aoa.push([r.nombre||'',r.division||'',r.categoria||'',r.sexo||'',r.club||'',r.modalidad||'',r.dia||'',r.flight||'',r.jornada||'',r.entrenador||'',(r.handler1||{}).nombre||'',(r.handler1||{}).correo||'',(r.handler2||{}).nombre||'',(r.handler2||{}).correo||'']);});
   _xlsxDownload(aoa,'Cronograma','Cronograma_'+(ST.cronoEv||'evento')+'.xlsx');
 };
 // Importa un cronograma armado en Excel (mismas columnas que exporta cronoExportXlsx,
@@ -3988,6 +4010,9 @@ window.cronoImportXlsx=function(){
       const iNombre=idx('nombre'), iDiv=idx('divisi'), iCat=idx('categor'), iSexo=idx('sexo'),
         iClub=idx('club'), iMod=idx('modalidad'), iFlight=idx('flight'), iJor=idx('jornada'),
         iEnt=idx('entrenador'),
+        // Ojo: "dia" a secas también matchea "modalidad", así que la columna del
+        // día se busca exacta (con o sin tilde).
+        iDia=headers.findIndex(h=>/^d[ií]as?$/.test(h)),
         iH1n=headers.findIndex(h=>h.includes('handler 1')&&!h.includes('correo')),
         iH1c=headers.findIndex(h=>h.includes('correo')&&h.includes('1')),
         iH2n=headers.findIndex(h=>h.includes('handler 2')&&!h.includes('correo')),
@@ -3999,6 +4024,7 @@ window.cronoImportXlsx=function(){
         club:iClub>=0?String(r[iClub]??'').trim():'', modalidad:iMod>=0?String(r[iMod]??'').trim():'',
         tarima:'1', flight:iFlight>=0?String(r[iFlight]??'').trim()||'A':'A',
         jornada:iJor>=0?String(r[iJor]??'').trim():'',
+        dia:iDia>=0?String(r[iDia]??'').trim():'',
         entrenador:iEnt>=0?String(r[iEnt]??'').trim():'',
         handler1:{nombre:iH1n>=0?String(r[iH1n]??'').trim():'',correo:iH1c>=0?String(r[iH1c]??'').trim():''},
         handler2:{nombre:iH2n>=0?String(r[iH2n]??'').trim():'',correo:iH2c>=0?String(r[iH2c]??'').trim():''}
@@ -4034,22 +4060,25 @@ function renderCronoEditor(){
   if(!ST.cronoRows.length) return h+`<div class="card" style="color:var(--muted)">Este campeonato no tiene cronograma. Usa <b>“Cargar desde nómina”</b> (inscripciones aprobadas), <b>“Importar debutantes”</b> (solo debutantes) o <b>“+ Atleta”</b>.</div>`;
   // orden de visualización: jornada (AM/PM), flight
   const _jr=x=>x==='AM'?0:x==='PM'?1:2;
+  // Día primero: un campeonato de dos días se lee por día, y adentro por
+  // jornada (AM/PM) y flight.
   const order=ST.cronoRows.map((r,i)=>i).sort((a,b)=>{
     const ra=ST.cronoRows[a],rb=ST.cronoRows[b];
-    return (_jr(ra.jornada)-_jr(rb.jornada))||String(ra.flight).localeCompare(String(rb.flight))||0;
+    return _cronoCmpDia(ra.dia,rb.dia)||(_jr(ra.jornada)-_jr(rb.jornada))||String(ra.flight).localeCompare(String(rb.flight))||0;
   });
   const flOpts=(cur)=>CRONO_FLIGHTS.concat(CRONO_FLIGHTS.includes(cur)?[]:[cur].filter(Boolean)).map(f=>`<option ${f===cur?'selected':''}>${f}</option>`).join('');
   const inp=(i,f,v,w)=>`<input value="${esc(v||'')}" onchange="cronoSet(${i},'${f}',this.value)" style="width:${w||90}px;background:transparent;border:1px solid var(--border);border-radius:5px;padding:3px 5px;color:var(--text);font-size:11px">`;
   const sSel='background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:5px;padding:3px;color:var(--text);font-size:11px';
   let _prevFk=null,_colIdx=-1;
   const rows=order.map(i=>{const r=ST.cronoRows[i];
-    const _fk=String(r.jornada)+'|'+String(r.flight); let _first=false; if(_fk!==_prevFk){_colIdx++;_prevFk=_fk;_first=true;}
+    const _fk=String(r.dia||'')+'|'+String(r.jornada)+'|'+String(r.flight); let _first=false; if(_fk!==_prevFk){_colIdx++;_prevFk=_fk;_first=true;}
     const _blue=_colIdx%2===0; const _bg=_blue?'rgba(59,130,246,.12)':'rgba(196,30,58,.12)'; const _bd=_first?('border-top:3px solid '+(_blue?'rgba(59,130,246,.65)':'rgba(196,30,58,.65)')+';'):'';
     let _hdr='';
     if(_first){
       const _hbg=_blue?'rgba(59,130,246,.30)':'rgba(196,30,58,.30)';
       const _jl=(r.jornada==='AM'||r.jornada==='PM')?(' · '+r.jornada):'';
-      _hdr=`<tr><td colspan="12" style="background:${_hbg};padding:6px 10px;font-family:Oswald;font-weight:700;letter-spacing:1px;font-size:12px">Flight ${esc(r.flight)}${_jl} <span style="margin-left:8px;font-weight:400;color:var(--muted)">marcar todo el flight:</span> <button onclick="cronoSetFlightJornada('${esc(r.tarima)}','${esc(r.flight)}','AM')" style="padding:2px 10px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:rgba(59,130,246,.25);color:var(--text);cursor:pointer;font-family:Oswald">AM</button> <button onclick="cronoSetFlightJornada('${esc(r.tarima)}','${esc(r.flight)}','PM')" style="padding:2px 10px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:rgba(196,30,58,.25);color:var(--text);cursor:pointer;font-family:Oswald">PM</button></td></tr>`;
+      const _dl=r.dia?`<span style="color:var(--gold)"> · ${esc(r.dia)}</span>`:'';
+      _hdr=`<tr><td colspan="13" style="background:${_hbg};padding:6px 10px;font-family:Oswald;font-weight:700;letter-spacing:1px;font-size:12px">Flight ${esc(r.flight)}${_jl}${_dl} <span style="margin-left:8px;font-weight:400;color:var(--muted)">marcar todo el flight:</span> <button onclick="cronoSetFlightJornada('${esc(r.tarima)}','${esc(r.flight)}','AM')" style="padding:2px 10px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:rgba(59,130,246,.25);color:var(--text);cursor:pointer;font-family:Oswald">AM</button> <button onclick="cronoSetFlightJornada('${esc(r.tarima)}','${esc(r.flight)}','PM')" style="padding:2px 10px;font-size:10px;border-radius:5px;border:1px solid var(--border);background:rgba(196,30,58,.25);color:var(--text);cursor:pointer;font-family:Oswald">PM</button> <button onclick="cronoSetFlightDia('${esc(r.tarima)}','${esc(r.flight)}','${esc(r.dia||'')}')" title="Poner el día a todo este flight" style="padding:2px 10px;font-size:10px;border-radius:5px;border:1px solid rgba(212,168,67,.5);background:rgba(212,168,67,.2);color:var(--text);cursor:pointer;font-family:Oswald">DÍA…</button></td></tr>`;
     }
     return `${_hdr}<tr style="background:${_bg};${_bd}">
     <td>${inp(i,'nombre',r.nombre,128)}</td>
@@ -4058,6 +4087,7 @@ function renderCronoEditor(){
     <td><select onchange="cronoSet(${i},'sexo',this.value)" style="${sSel}"><option ${!r.sexo?'selected':''}></option><option ${r.sexo==='H'?'selected':''}>H</option><option ${r.sexo==='M'?'selected':''}>M</option></select></td>
     <td>${inp(i,'club',r.club,98)}</td>
     <td>${inp(i,'modalidad',r.modalidad,108)}</td>
+    <td>${inp(i,'dia',r.dia,84)}</td>
     <td><select onchange="cronoSet(${i},'flight',this.value)" style="${sSel}">${flOpts(r.flight)}</select></td>
     <td><select onchange="cronoSet(${i},'jornada',this.value)" style="${sSel}"><option value="" ${(r.jornada!=='AM'&&r.jornada!=='PM')?'selected':''}>—</option><option ${r.jornada==='AM'?'selected':''}>AM</option><option ${r.jornada==='PM'?'selected':''}>PM</option></select></td>
     <td>${inp(i,'entrenador',r.entrenador,104)}</td>
@@ -4067,7 +4097,7 @@ function renderCronoEditor(){
   </tr>`;}).join('');
   h+=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${ST.cronoRows.length} atletas · cambiar Tarima/Flight mueve al atleta · todo se guarda al instante</div>
     <div class="card" style="padding:0;overflow-x:auto"><table class="tbl" style="white-space:nowrap">
-      <tr><th>Nombre</th><th>División</th><th>Cat.</th><th>Sexo</th><th>Club</th><th>Modalidad</th><th>Flight</th><th>Jornada</th><th>Entrenador</th><th>Handler 1 (nombre / correo)</th><th>Handler 2 (nombre / correo)</th><th></th></tr>
+      <tr><th>Nombre</th><th>División</th><th>Cat.</th><th>Sexo</th><th>Club</th><th>Modalidad</th><th>Día</th><th>Flight</th><th>Jornada</th><th>Entrenador</th><th>Handler 1 (nombre / correo)</th><th>Handler 2 (nombre / correo)</th><th></th></tr>
       ${rows}
     </table></div>`;
   return h;

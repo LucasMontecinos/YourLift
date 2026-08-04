@@ -2227,6 +2227,10 @@ function _cronoLookup(map,name){
   }
   return null;
 }
+// El Cronograma ahora puede traer el DÍA además de la jornada (campeonatos de dos
+// o más días, como el Regional Norte). Viajan juntos en la misma etiqueta —
+// "Día 1 · AM" — porque `jornada` solo se muestra, no se compara con nada.
+const _cronoJor=r=>[r.dia,r.jornada].map(x=>String(x||'').trim()).filter(Boolean).join(' · ');
 async function _loadCronoFlightMap(evId){
   if(!fbReady||!window._fb||!evId)return null;
   try{
@@ -2254,7 +2258,7 @@ function _subscribeCronoFlightMap(evId){
       const rows=snap.data().rows;
       if(!Array.isArray(rows))return;
       const map={};
-      rows.forEach(r=>{if(r.nombre&&r.flight)map[_nnCrono(r.nombre)]={flight:r.flight,jornada:r.jornada||''};});
+      rows.forEach(r=>{if(r.nombre&&r.flight)map[_nnCrono(r.nombre)]={flight:r.flight,jornada:_cronoJor(r)};});
       window._cronoFlightMap=map;
       _applyCronoFlightsToAthletes(map);
     });

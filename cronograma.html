@@ -88,14 +88,25 @@ function handlerNames(ev,row){
 }
 function render(ev,rows){
   if(!rows.length){ $('out').innerHTML='<div class="muted">Sin atletas en este cronograma.</div>'; return; }
-  // agrupar por tarima -> flight
+  // agrupar por día -> tarima -> flight. El día se escribe a mano en el panel
+  // ("Día 1", "Sábado 8"…), así que se ordena por el primer número que traiga y,
+  // si no trae, alfabético. Los campeonatos de un solo día no ponen nada y
+  // quedan igual que antes.
+  const diaKey=d=>{const s=String(d||'').trim();if(!s)return [2,Infinity,''];const m=s.match(/\d+/);return m?[0,parseInt(m[0],10),s.toLowerCase()]:[1,0,s.toLowerCase()];};
+  const cmpDia=(a,b)=>{const ka=diaKey(a),kb=diaKey(b);return (ka[0]-kb[0])||(ka[1]-kb[1])||ka[2].localeCompare(kb[2]);};
   const groups={};
-  rows.forEach(r=>{ const key=(r.tarima||'?')+'||'+(r.flight||'?'); (groups[key]=groups[key]||[]).push(r); });
-  const keys=Object.keys(groups).sort((a,b)=>{const [ta,fa]=a.split('||'),[tb,fb]=b.split('||');return String(ta).localeCompare(String(tb))||String(fa).localeCompare(String(fb));});
-  let h='';
+  rows.forEach(r=>{ const key=(r.dia||'')+'||'+(r.tarima||'?')+'||'+(r.flight||'?'); (groups[key]=groups[key]||[]).push(r); });
+  const keys=Object.keys(groups).sort((a,b)=>{
+    const [da,ta,fa]=a.split('||'),[db,tb,fb]=b.split('||');
+    return cmpDia(da,db)||String(ta).localeCompare(String(tb))||String(fa).localeCompare(String(fb));
+  });
+  let h='',diaPrev=null;
   keys.forEach(k=>{
-    const [tar,fl]=k.split('||'); const aths=groups[k];
-    h+=`<div class="flight"><div class="fhd"><div class="t">Tarima ${esc(tar)} · Flight ${esc(fl)}</div><div class="b">${aths.length} atleta(s)${aths[0].jornada?(' · Jornada '+esc(aths[0].jornada)):''}</div></div>
+    const [dia,tar,fl]=k.split('||'); const aths=groups[k];
+    // Encabezado de día: solo si el cronograma tiene días cargados
+    if(dia&&dia!==diaPrev){ h+=`<h2 style="font-family:Oswald,sans-serif;font-size:15px;letter-spacing:2px;text-transform:uppercase;color:#D4A843;margin:22px 0 8px;padding-bottom:6px;border-bottom:1px solid rgba(212,168,67,.35)">${esc(dia)}</h2>`; }
+    diaPrev=dia;
+    h+=`<div class="flight"><div class="fhd"><div class="t">Tarima ${esc(tar)} · Flight ${esc(fl)}</div><div class="b">${aths.length} atleta(s)${aths[0].jornada?(' · Jornada '+esc(aths[0].jornada)):''}${dia?(' · '+esc(dia)):''}</div></div>
       <table><tr><th>#</th><th>Atleta</th><th class="hide-sm">Div / Cat</th><th class="hide-sm">Club</th><th>Modalidad</th><th>Entrenador</th><th>Handlers</th></tr>`;
     aths.forEach((r,i)=>{
       const hs=handlerNames(ev,r);
