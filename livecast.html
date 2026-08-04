@@ -239,6 +239,30 @@ if(window.IS_CONTROLLER){
 // Id único de este equipo/pestaña — para que en multi-controlador cada PC
 // ignore SOLO el eco de su propia escritura, pero aplique las de los demás.
 window._WRITER_ID=(()=>{try{let w=sessionStorage.getItem('yl_writer');if(!w){w='w'+Math.random().toString(36).slice(2)+Date.now().toString(36);sessionStorage.setItem('yl_writer',w);}return w;}catch(e){return 'w'+Math.random().toString(36).slice(2);}})();
+// ── VISTA LIBRE (navegación propia de esta pantalla) ────────────────
+// Los DATOS son siempre de todos: los pesos y las decisiones que carga uno le
+// aparecen al resto, a la tarima, a los widgets y al público. Lo que puede ser
+// de cada uno es el CURSOR — en qué movimiento, ronda y tanda está mirando esta
+// pantalla. Con la vista libre prendida, este equipo se mueve solo: ni le hacen
+// caso al cursor de los demás ni arrastra a nadie cuando guarda algo. Apagada
+// (lo normal, y como venía siendo) sigue a la tarima.
+// Es por navegador, no por cuenta: tres personas con el mismo correo pueden
+// tener una siguiendo la tarima y las otras dos mirando otra tanda.
+window.NAV_LIBRE=(()=>{try{return localStorage.getItem('yl_nav_libre')==='1'}catch(e){return false}})();
+window._NAV_REMOTA=null;   // último cursor que publicó la tarima
+window.setNavLibre=function(v){
+  window.NAV_LIBRE=!!v;
+  try{localStorage.setItem('yl_nav_libre',v?'1':'0')}catch(e){}
+  // Al volver a seguir la tarima, saltar de una a donde está ella.
+  if(!window.NAV_LIBRE&&window._NAV_REMOTA){
+    const n=window._NAV_REMOTA;
+    if(n.lift)DATA.lift=n.lift;
+    if(typeof n.round==='number')DATA.round=n.round;
+    if(n.flight)DATA.flight=n.flight;
+    DATA.forcedCurrent=(n.forcedCurrent!==undefined)?n.forcedCurrent:null;
+  }
+  try{if(typeof R==='function')R();}catch(e){}
+};
 // Cambiar entre Controlador (escribe+lee, sincronizado con otros) y Espectador
 // (solo lee/espeja, ej. PC de OBS o pantalla). Recarga para reiniciar el listener.
 window.setSyncMode=function(on){
@@ -459,7 +483,18 @@ async function syncToFB(){
     const ref=window._fb.doc(fbDB,'livecast_sync',id);
     for(let attempt=0;attempt<3;attempt++){
       try{
-        const _mkPayload=(ath)=>({event:DATA.event,athletes:JSON.stringify(ath||DATA.athletes),lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,timer:DATA.timer,timerOn:DATA.timerOn,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null,ts:Date.now(),writer:window._WRITER_ID});
+        // Con VISTA LIBRE esta pantalla no publica su cursor: manda el último que
+        // vio de la tarima. Si no, al guardar un peso arrastraría a la tarima, a
+        // los widgets y al público hasta donde está mirando ella.
+        const _nv=(window.NAV_LIBRE&&window._NAV_REMOTA)||null;
+        const _mkPayload=(ath)=>({event:DATA.event,athletes:JSON.stringify(ath||DATA.athletes),
+          lift:(_nv&&_nv.lift)||DATA.lift,
+          round:(_nv&&typeof _nv.round==='number')?_nv.round:DATA.round,
+          flight:(_nv&&_nv.flight)||DATA.flight,
+          changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,
+          timer:DATA.timer,timerOn:DATA.timerOn,
+          forcedCurrent:_nv?(_nv.forcedCurrent||null):(DATA.forcedCurrent||null),
+          compTimer:DATA.compTimer||null,ts:Date.now(),writer:window._WRITER_ID});
         // Ediciones que estoy por confirmar (se limpian solo si la escritura sale bien)
         const sent=[...(window._pendingEdits||[])];
         // Operaciones AUTORITATIVAS (reiniciar datos, borrar atletas, regenerar
@@ -565,13 +600,22 @@ function startFBSync(){
         // Ante cualquier problema, fallback al comportamiento anterior (no perder datos)
         if(!_localFresh) DATA.athletes=_remoteAth;
       }
+      // El cursor de la tarima se anota SIEMPRE — aunque esta pantalla ande por su
+      // cuenta — para poder volver a él y para no pisarlo al escribir.
+      window._NAV_REMOTA={lift:d.lift||null,
+        round:(typeof d.round==='number')?d.round:null,
+        flight:d.flight||null,
+        forcedCurrent:(typeof d.forcedCurrent!=='undefined')?d.forcedCurrent:null};
       if(!_localFresh){
-        DATA.lift=d.lift||DATA.lift;
-        DATA.round=typeof d.round==='number'?d.round:DATA.round;
-        DATA.flight=d.flight||DATA.flight;
         DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
-        DATA.forcedCurrent=typeof d.forcedCurrent!=='undefined'?d.forcedCurrent:null;
         DATA.compTimer=typeof d.compTimer!=='undefined'?d.compTimer:null;
+        // Con vista libre, el movimiento/ronda/tanda de esta pantalla no se toca.
+        if(!window.NAV_LIBRE){
+          DATA.lift=d.lift||DATA.lift;
+          DATA.round=typeof d.round==='number'?d.round:DATA.round;
+          DATA.flight=d.flight||DATA.flight;
+          DATA.forcedCurrent=typeof d.forcedCurrent!=='undefined'?d.forcedCurrent:null;
+        }
       }
       DATA.lotsGenerated=d.lotsGenerated||false;
       // Alinear la firma con lo que acaba de llegar: así el aviso de "modo
@@ -8412,12 +8456,30 @@ function renderCompete(){
   h+='<button id="histUndoBtn" onclick="histUndo()"'+(window._histUndo&&window._histUndo.length?'':' disabled')+' title="Deshacer (Ctrl+Z)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:700;cursor:pointer;opacity:'+(window._histUndo&&window._histUndo.length?'1':'.4')+'">↶ Deshacer</button>';
   h+='<button id="histRedoBtn" onclick="histRedo()"'+(window._histRedo&&window._histRedo.length?'':' disabled')+' title="Rehacer (Ctrl+Y)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:700;cursor:pointer;opacity:'+(window._histRedo&&window._histRedo.length?'1':'.4')+'">↷ Rehacer</button>';
   h+='</div>';
+  // ── Vista libre ─────────────────────────────────────────────────
+  // Con varias personas operando (aunque sea con el mismo correo), cada pantalla
+  // puede mirar donde quiera sin arrastrar a las demás. Los pesos y las decisiones
+  // siguen siendo de todos: eso NO cambia, se comparte igual.
+  {const libre=!!window.NAV_LIBRE, nv=window._NAV_REMOTA;
+   const donde=nv?((LIFT_S[nv.lift]||'—')+' · Int '+((typeof nv.round==='number'?nv.round:0)+1)+' · Tanda '+(nv.flight||'—')):'—';
+   if(libre){
+     h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:8px 12px;border-radius:8px;border:2px solid #60a5fa;background:rgba(96,165,250,.10)">'
+       +'<div><span class="os" style="font-size:12px;font-weight:700;letter-spacing:1px;color:#60a5fa">👁 VISTA LIBRE</span>'
+       +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Te movés por tu cuenta y no arrastrás a nadie. Lo que cargues lo siguen viendo todos. La tarima está en <b style="color:var(--gold)">'+donde+'</b></div></div>'
+       +'<button onclick="setNavLibre(false)" style="padding:6px 14px;border-radius:6px;border:1px solid #60a5fa;background:transparent;color:#60a5fa;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;white-space:nowrap">VOLVER A LA TARIMA</button>'
+     +'</div>';
+   }else{
+     h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:6px 12px;border-radius:8px;border:1px solid var(--border)">'
+       +'<span style="font-size:11px;color:var(--muted)">Esta pantalla sigue a la tarima: el movimiento, la ronda y la tanda te los mueve quien opera</span>'
+       +'<button onclick="setNavLibre(true)" title="Mirar otra tanda u otro movimiento sin mover a los demás. Los pesos y las decisiones se siguen compartiendo." style="padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;white-space:nowrap">👁 VISTA LIBRE</button>'
+     +'</div>';
+   }}
   // Selector de tanda activa — lo mismo que "Vuelo Activo" del menú hamburguesa, pero acá
   // directo, sin tener que abrir la sidebar. Define qué tanda ve Control TX ahora mismo.
   {const flightsCE=_allFlightsSorted();
    if(flightsCE.length){
      h+='<div style="display:flex;align-items:center;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
-     h+='<span style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-right:2px">TANDA EN TARIMA (Control TX)</span>';
+     h+='<span style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-right:2px">'+(window.NAV_LIBRE?'TANDA QUE ESTÁS MIRANDO (solo vos)':'TANDA EN TARIMA (Control TX)')+'</span>';
      h+=flightsCE.map(f=>{
        const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;
        const on=DATA.flight===f;
