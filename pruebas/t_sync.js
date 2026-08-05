@@ -1,0 +1,30 @@
+const {chromium}=require('playwright');
+(async()=>{
+ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'});
+ const ctx=await b.newContext({viewport:{width:1400,height:900}});const p=await ctx.newPage();
+ const errs=[];p.on('pageerror',e=>errs.push(e.message));
+ await p.goto('http://localhost:8972/livecast.html?evento=suda2026_fesupo_full&controller=1',{waitUntil:'domcontentloaded'});
+ await p.waitForFunction(()=>typeof DATA!=='undefined'&&DATA.athletes&&DATA.athletes.length,null,{timeout:30000});
+ const pill=()=>p.evaluate(()=>{const e=document.getElementById('syncPill');
+   return e?{txt:e.innerText.trim(),color:getComputedStyle(e).color,tip:e.title}:null;});
+ const set=async f=>{await p.evaluate(f);await p.waitForTimeout(150);};
+ await set(()=>{isAdmin=true;window.IS_CONTROLLER=true;fbReady=true;fbUnsub=function(){};DATA.phase='compete';
+   window._lastSyncedSig=_dataSig(); _fbLastOk=Date.now(); window._syncFallo=0; window._desincDesde=0; R();});
+ console.log('1) todo guardado, recién            →', JSON.stringify(await pill()));
+ await set(()=>{ _fbLastOk=Date.now()-3*60*1000; R(); });   // 3 min sin tocar nada
+ console.log('2) 3 min sin tocar nada (era ROJO)  →', JSON.stringify(await pill()));
+ await set(()=>{ DATA.athletes[0].att.sq[0].w=123; window._desincDesde=0; R(); });
+ console.log('3) cambio recién hecho              →', JSON.stringify(await pill()));
+ await set(()=>{ window._desincDesde=Date.now()-20000; R(); });
+ console.log('4) 20s sin poder confirmar          →', JSON.stringify(await pill()));
+ await set(()=>{ window._syncFallo=Date.now(); R(); });
+ console.log('5) escritura fallida                →', JSON.stringify(await pill()));
+ await set(()=>{ window._syncFallo=0; fbUnsub=null; R(); });
+ console.log('6) listener caido                   →', JSON.stringify(await pill()));
+ await set(()=>{ fbUnsub=function(){}; window.IS_CONTROLLER=false; R(); });
+ console.log('7) modo espectador                  →', JSON.stringify(await pill()));
+ await set(()=>{ window.IS_CONTROLLER=true; window._lastSyncedSig=_dataSig(); window._desincDesde=0; R(); });
+ console.log('8) vuelve a estar todo guardado     →', JSON.stringify(await pill()));
+ console.log('errores:',errs.length?errs.slice(0,3):'ninguno');
+ await b.close();
+})();

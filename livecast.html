@@ -546,7 +546,10 @@ async function syncToFB(){
         // idéntica a la última confirmada, no se escribe. Cada escritura le
         // reparte el documento entero (~40 KB) a todas las pantallas, así que
         // repetir una igual es puro gasto de red — y contención al pedo.
-        const _huella=(p)=>{const {ts,writer,timer,timerStartedAt,...r}=p;return JSON.stringify(r);};
+        // `timerStartedAt` SÍ entra: reiniciar el reloj para el atleta siguiente
+        // no cambia nada más, y si se saltea esa escritura las otras pantallas
+        // siguen descontando desde el arranque viejo.
+        const _huella=(p)=>{const {ts,writer,timer,...r}=p;return JSON.stringify(r);};
         // Ediciones que estoy por confirmar (se limpian solo si la escritura sale bien)
         const sent=[...(window._pendingEdits||[])];
         // Operaciones AUTORITATIVAS (reiniciar datos, borrar atletas, regenerar
