@@ -530,9 +530,14 @@ async function syncToFB(){
           round:(_nv&&typeof _nv.round==='number')?_nv.round:DATA.round,
           flight:(_nv&&_nv.flight)||DATA.flight,
           changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,
-          timer:DATA.timer,timerOn:DATA.timerOn,
+          timer:DATA.timer,timerOn:DATA.timerOn,timerStartedAt:DATA.timerStartedAt||0,
           forcedCurrent:_nv?(_nv.forcedCurrent||null):(DATA.forcedCurrent||null),
           compTimer:DATA.compTimer||null,ts:Date.now(),writer:window._WRITER_ID});
+        // Huella de lo que se va a escribir, sin la hora ni el firmante: si es
+        // idéntica a la última confirmada, no se escribe. Cada escritura le
+        // reparte el documento entero (~40 KB) a todas las pantallas, así que
+        // repetir una igual es puro gasto de red — y contención al pedo.
+        const _huella=(p)=>{const {ts,writer,timer,timerStartedAt,...r}=p;return JSON.stringify(r);};
         // Ediciones que estoy por confirmar (se limpian solo si la escritura sale bien)
         const sent=[...(window._pendingEdits||[])];
         // Operaciones AUTORITATIVAS (reiniciar datos, borrar atletas, regenerar
@@ -542,6 +547,11 @@ async function syncToFB(){
         if(window._forceFullWrite){
           await window._fb.setDoc(ref,_mkPayload());
           window._forceFullWrite=false;
+        }else if(_huella(_mkPayload())===window._ultHuella){
+          // Nada cambió desde la última escritura confirmada: no se escribe.
+          window._lastSyncedSig=_dataSig();
+          _fbLastOk=Date.now(); _syncWriteOk();
+          return;
         }else if(window._fb.runTransaction && !PRACTICE_MODE){
           // TRANSACCIÓN: lee el estado actual, le aplica MIS cambios y escribe, todo
           // atómico. Con varios controladores esto elimina el "lost update" clásico
@@ -559,6 +569,7 @@ async function syncToFB(){
         }
         sent.forEach(k=>{ try{window._pendingEdits.delete(k)}catch(_){} });
         window._lastSyncedSig=_dataSig();
+        window._ultHuella=_huella(_mkPayload());
         _fbLastOk=Date.now();
         _syncWriteOk(); _spectatorEditOk();
         return;
@@ -583,17 +594,32 @@ async function syncToFB(){
 // Sync liviano solo del timer — corre cada 1s mientras el timer está activo,
 // así los widgets de OBS ven el countdown segundo a segundo sin reescribir
 // el doc completo (athletes incluido).
-async function syncTimerOnlyToFB(){
-  if(!fbReady||!isAdmin)return;
+// Reloj de la tarima: se manda CUÁNDO ARRANCÓ, no el segundo en que va.
+// Firestore entrega el documento ENTERO en cada snapshot, así que escribir el
+// timer una vez por segundo hacía que cada pantalla, cada widget de OBS y cada
+// espectador se bajaran los ~40 KB del estado completo 60 veces por minuto. Con
+// la hora de arranque, cada pantalla calcula el descuento sola y solo hace falta
+// refrescar de vez en cuando. Es lo que más pesaba en el wifi del gimnasio.
+const _TIMER_LATIDO_MS=10000;
+let _ultLatidoTimer=0;
+// Reloj de referencia corregido: cada snapshot trae el `ts` de quien escribió,
+// así se mide la diferencia de hora entre esta máquina y la de tarima. Sin esto,
+// un equipo con la hora corrida mostraría el descuento adelantado o atrasado.
+function _ahora(){ return Date.now()-(window._skewMs||0); }
+async function syncTimerOnlyToFB(forzar){
+  if(!fbReady||!window._fb||!fbDB||!isAdmin)return;
   if(!window.IS_CONTROLLER)return; // Solo el controller escribe
-  if(!window._iOwnTimer)return; // Solo QUIEN inició el reloj lo escribe cada segundo.
+  if(!window._iOwnTimer)return;    // Solo QUIEN inició el reloj lo refresca.
   // Los demás controladores lo muestran localmente (startTimer(false)) sin escribir
   // → evita 5 escrituras/seg sobre el mismo doc (contención Firestore).
+  if(!forzar&&Date.now()-_ultLatidoTimer<_TIMER_LATIDO_MS)return;
+  _ultLatidoTimer=Date.now();
   const id=fbDocId();if(!id)return;
   _fbLastWrite=Date.now();
   try{
     const ref=window._fb.doc(fbDB,'livecast_sync',id);
-    await window._fb.updateDoc(ref,{timer:DATA.timer,timerOn:DATA.timerOn,ts:Date.now(),writer:window._WRITER_ID});
+    await window._fb.updateDoc(ref,{timer:DATA.timer,timerOn:DATA.timerOn,
+      timerStartedAt:DATA.timerStartedAt||0,ts:Date.now(),writer:window._WRITER_ID});
   }catch(e){/* silencioso: si el doc no existe el setDoc completo lo crea */}
 }
 function startFBSync(){
@@ -607,6 +633,12 @@ function startFBSync(){
     _lastFbUpdate=Date.now();
     window._fbSyncRetries=0; // llegó un snapshot OK → reset del backoff de recuperación
     const d=snap.data();
+    // Diferencia de hora entre esta máquina y la que escribió. Se usa para el
+    // descuento del reloj, que ahora se calcula acá con la hora de arranque.
+    if(typeof d.ts==='number'&&d.writer&&d.writer!==window._WRITER_ID){
+      const s=Date.now()-d.ts;
+      window._skewMs=(typeof window._skewMs==='number')?Math.round(window._skewMs*0.7+s*0.3):s;
+    }
     // Multi-controlador: ignorar SOLO el eco de mi propia escritura (evita parpadeo),
     // pero SÍ aplicar lo que escribieron los demás controladores → todos sincronizados.
     if(d.writer && d.writer===window._WRITER_ID)return;
@@ -678,7 +710,20 @@ function startFBSync(){
       // Alinear la firma con lo que acaba de llegar: así el aviso de "modo
       // espectador" solo aparece si ESTA pantalla editó algo por su cuenta.
       try{window._lastSyncedSig=_dataSig();}catch(e){}
-      if(typeof d.timer==='number'){DATA.timer=d.timer;DATA.timerOn=d.timerOn||false;if(DATA.timerOn&&!mainTI)startTimer(false);if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}}
+      if(typeof d.timer==='number'){
+        DATA.timerOn=d.timerOn||false;
+        // Con la hora de arranque, esta pantalla descuenta sola: no necesita que
+        // le manden el segundo. Si el documento es viejo y no la trae, se cae al
+        // comportamiento anterior (tomar el valor tal cual).
+        if(DATA.timerOn&&d.timerStartedAt){
+          DATA.timerStartedAt=d.timerStartedAt;
+          DATA.timer=Math.max(0,60-Math.floor((_ahora()-DATA.timerStartedAt)/1000));
+        }else{
+          DATA.timer=d.timer;
+        }
+        if(DATA.timerOn&&!mainTI)startTimer(false);
+        if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}
+      }
       const newSig = JSON.stringify(DATA.athletes)+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight;
       const structuralChange = prevSig !== newSig;
       // Solo re-renderizar si hubo cambio estructural (no solo timer) — evita flicker en vista pública
@@ -2871,7 +2916,7 @@ function showChangeExpiredAlert(name,lift,rnd){
 }
 
 let mainTI=null;
-function startTimer(isLocal){window._iOwnTimer=(isLocal!==false);DATA.timerOn=true;DATA.timerStartedAt=Date.now()-((60-(DATA.timer||60))*1000);if(window._iOwnTimer)syncToFB();mainTI=setInterval(()=>{DATA.timer=Math.max(0,60-Math.floor((Date.now()-DATA.timerStartedAt)/1000));const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}const txp=document.getElementById('txTimerPanel');if(txp){txp.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');txp.style.color=DATA.timer<=10?'#ef4444':DATA.timer<=30?'#f59e0b':'#ffffff'}const pit=document.getElementById('pantIntentosTimer');if(pit){pit.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');pit.style.color=DATA.timerOn&&DATA.timer<=10?'#ef4444':DATA.timerOn&&DATA.timer<=30?'#f59e0b':'#22c55e'}if(window._iOwnTimer)syncTimerOnlyToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;if(window._iOwnTimer)syncToFB()}},1000)}
+function startTimer(isLocal){window._iOwnTimer=(isLocal!==false);DATA.timerOn=true;if(window._iOwnTimer)DATA.timerStartedAt=_ahora()-((60-(DATA.timer||60))*1000);if(!DATA.timerStartedAt)DATA.timerStartedAt=_ahora();if(window._iOwnTimer){_ultLatidoTimer=0;syncToFB();}mainTI=setInterval(()=>{DATA.timer=Math.max(0,60-Math.floor((_ahora()-DATA.timerStartedAt)/1000));const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}const txp=document.getElementById('txTimerPanel');if(txp){txp.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');txp.style.color=DATA.timer<=10?'#ef4444':DATA.timer<=30?'#f59e0b':'#ffffff'}const pit=document.getElementById('pantIntentosTimer');if(pit){pit.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');pit.style.color=DATA.timerOn&&DATA.timer<=10?'#ef4444':DATA.timerOn&&DATA.timer<=30?'#f59e0b':'#22c55e'}if(window._iOwnTimer)syncTimerOnlyToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;if(window._iOwnTimer)syncToFB()}},1000)}
 function pauseTimer(){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}
 // Toggle manual del reloj de 1:00 (para iniciarlo cuando se va a tirar un intento
 // extra, o pausarlo/reanudarlo cuando haga falta). Re-renderiza para actualizar el botón.
