@@ -5525,13 +5525,11 @@ window.openAthleteProfile = function(codigo){
 // ═══════════════════════════════════════════
 // AGREGAR / ELIMINAR COMPETENCIAS A ATLETAS (owner) — guardado en vivo
 // ═══════════════════════════════════════════
+// Un solo cálculo de GL en todo el panel. Antes esta función solo miraba
+// classic/equipado y NUNCA la banca sola: a un Only Bench —classic o equipado—
+// le aplicaba los coeficientes de powerlifting completo, que son otra escala.
 function _glPoints(total,bw,sex,modalidad){
-  if(!total||!bw)return 0;
-  const eq=/equip/i.test(modalidad||''); const fem=/muj|fem/i.test(sex||'');
-  let A,B,C;
-  if(eq){ if(fem){A=758.63878;B=949.31382;C=0.02435;} else {A=1236.25115;B=1449.21864;C=0.01644;} }
-  else  { if(fem){A=610.32796;B=1045.59282;C=0.03048;} else {A=1199.72839;B=1025.18162;C=0.00921;} }
-  return +(total*100/(A-B*Math.exp(-C*bw))).toFixed(2);
+  return _calcGL(total,bw,modalidad,sex);
 }
 function _dotsPoints(total,bw,sex){
   if(!total||!bw)return 0;
@@ -6000,11 +5998,16 @@ function renderAthleteProfile(){
 // ═══════════════════════════════════════════════════════════
 
 // IPF GL coefficients (same as livecast)
+// Coeficientes oficiales IPF GL. La tabla anterior estaba CORRIDA: lo que
+// figuraba como classic eran los valores de equipado, y las demás series no
+// correspondían a ninguna oficial. Daba entre 13 y 39 puntos de menos según el
+// caso, en ranking, perfiles y resultados guardados.
+// Son los mismos ocho juegos que ya usaban livecast.html e index.html.
 const _GL_COEFS = {
-  'cl_M':[1236.25115,1449.21864,0.01644],'cl_F':[758.63878,949.31382,0.02435],
-  'eq_M':[1734.77461,2016.88442,0.01513],'eq_F':[1082.96783,1483.20778,0.02097],
-  'bench_cl_M':[327.89535,586.52174,0.02564],'bench_cl_F':[225.04394,330.66667,0.02694],
-  'bench_eq_M':[588.86016,755.03316,0.02239],'bench_eq_F':[260.66000,391.00000,0.02800],
+  'cl_M':[1199.72839,1025.18162,0.00921],'cl_F':[610.32796,1045.59282,0.03048],
+  'eq_M':[1236.25115,1449.21864,0.01644],'eq_F':[758.63878, 949.31382, 0.02435],
+  'bench_cl_M':[320.98041,281.40258,0.01008],'bench_cl_F':[142.40398,442.52671,0.04724],
+  'bench_eq_M':[381.22073,733.79378,0.02398],'bench_eq_F':[221.82209,357.00377,0.02937],
 };
 function _glKey(m,s){const eq=(m||'').toLowerCase().includes('equip');const bench=(m||'').toLowerCase().includes('bench')&&!(m||'').toLowerCase().includes('powerlifting');const sex=(s||'').match(/mujer|fem|f/i)?'F':'M';return(bench?(eq?'bench_eq_':'bench_cl_'):(eq?'eq_':'cl_'))+sex;}
 function _calcGL(total,bw,m,s){if(!total||!bw)return 0;const c=_GL_COEFS[_glKey(m,s)];if(!c)return 0;const d=c[0]-c[1]*Math.exp(-c[2]*bw);return d>0?Math.round(total*100/d*100)/100:0;}

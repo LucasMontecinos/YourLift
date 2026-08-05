@@ -924,13 +924,26 @@ const BAR=20,COLLARS=5;
 // Parámetro `view` indica para qué tabla calcular:
 //   'meet'  → ranking de Powerlifting completo (default)
 //   'bench' → ranking de Bench-only
+// Modalidad sin ambigüedad para el GL. 'equipped_bench' lo usan DOS casos: el
+// equipado que además compite en Only Bench, y el Only Bench Equipado puro. Al
+// puro hay que darle los coeficientes de banca sola; al combinado, los de
+// powerlifting completo cuando se lo mide por su total.
+function _glMod(a){
+  if(!a)return '';
+  if(a.mod==='equipped_bench'&&typeof _isPlusBench==='function'&&!_isPlusBench(a))return 'onlybench_eq';
+  return a.mod;
+}
 function calcGL(t,bw,sex,mod,view){
   if(!t||!bw||t<=0)return 0;
   const isMale=(sex==='Hombre'||sex==='M'||sex==='Masculino');
   view=view||'meet';
 
-  // Detectar la modalidad efectiva según la tabla a la que pertenece este cálculo
-  const isOnlyBenchPure=(mod==='onlybench'||mod==='oe_bench');
+  // Detectar la modalidad efectiva según la tabla a la que pertenece este cálculo.
+  // 'onlybench_eq' lo pone _glMod() para el Only Bench Equipado PURO: comparte el
+  // código 'equipped_bench' con el equipado que además hace banca, y sin
+  // distinguirlos al puro se le aplicaban los coeficientes de powerlifting
+  // completo sobre un total que es solo su banca.
+  const isOnlyBenchPure=(mod==='onlybench'||mod==='oe_bench'||mod==='onlybench_eq');
   const isClassicBench=(mod==='classic_bench');
   const isEquippedBench=(mod==='equipped_bench');
   const isEquippedMeet=(mod==='equipped'||mod==='Equipado'||mod==='SP');
@@ -942,7 +955,7 @@ function calcGL(t,bw,sex,mod,view){
 
   if(view==='bench' || isOnlyBenchPure){
     // Coeficientes Bench-only
-    if(isEquippedBench){
+    if(isEquippedBench||mod==='onlybench_eq'){
       // Bench Equipped
       c=isMale?{a:381.22073,b:733.79378,c:0.02398}
               :{a:221.82209,b:357.00377,c:0.02937};
@@ -1004,7 +1017,7 @@ function totalOf(a,view){
   const s=bestOf(a,'sq'),b=bestOf(a,'bp'),d=bestOf(a,'dl');
   return(s&&b&&d)?s+b+d:0;
 }
-function rankings(){return DATA.athletes.map(a=>({...a,total:totalOf(a),gl:calcGL(totalOf(a),a.bw,a.sex,a.mod)})).filter(a=>a.total>0).sort((a,b)=>b.gl-a.gl)}
+function rankings(){return DATA.athletes.map(a=>({...a,total:totalOf(a),gl:calcGL(totalOf(a),a.bw,a.sex,_glMod(a))})).filter(a=>a.total>0).sort((a,b)=>b.gl-a.gl)}
 // Índice del intento "actual" de una entrada de la cola. Para un 4º intento la
 // entrada es un clon con __ai=3; para el resto es la ronda activa (DATA.round).
 function curAtt(c){ return (c && c.__ai!=null) ? c.__ai : DATA.round; }
@@ -4161,7 +4174,7 @@ function _actaGrupos(){
     const view=(mod.indexOf('ob_')===0)?'bench':'meet';
     const filas=arr.map(a=>{
       const t=totalOf(a,view);
-      return {a,total:t,gl:calcGL(t,a.bw,a.sex,a.mod,view),view};
+      return {a,total:t,gl:calcGL(t,a.bw,a.sex,_glMod(a),view),view};
     // A igual total gana el más liviano (criterio IPF).
     }).sort((x,y)=>(y.total-x.total)||(x.a.bw-y.a.bw));
     let lugar=0;
@@ -4419,7 +4432,7 @@ async function generateActaPDF(){
     const all=DATA.athletes.map(a=>({
       ...a,
       total:totalOf(a),
-      gl:calcGL(totalOf(a),a.bw,a.sex,a.mod)
+      gl:calcGL(totalOf(a),a.bw,a.sex,_glMod(a))
     }));
 
     // Best Lifter per division (highest GL)
@@ -4791,7 +4804,7 @@ async function cerrarCompetencia(evId, evName){
       const t = totalOf(a, view);
       // Saltar si no hay total ni DQ ni intentos
       if(t<=0 && !dq) continue;
-      const gl = dq ? 0 : calcGL(t, a.bw, a.sex, a.mod, view);
+      const gl = dq ? 0 : calcGL(t, a.bw, a.sex, _glMod(a), view);
       const isEq = isMeetEquipped(a);
       const isOE = isOEClassic(a);
       let modLabel;
@@ -4869,7 +4882,7 @@ function exportCompetenciasParaPerfiles(){
       const t=totalOf(a,view);
       // Excluir solo si NO hay total Y NO está DQ (i.e. no compitió ese movimiento)
       if(t<=0 && !dq)return;
-      const gl=dq?0:calcGL(t,a.bw,a.sex,a.mod,view);
+      const gl=dq?0:calcGL(t,a.bw,a.sex,_glMod(a),view);
       const isEq=isMeetEquipped(a);
       let modLabel;
       if(view==='bench')modLabel=isEq?'Only Bench Equipado':'Only Bench Classic';
@@ -6530,7 +6543,7 @@ function renderTxJornada(){
     // ranking dentro del grupo por total (luego GL)
     const list=groups[k].map(a=>{
       const tot=totalOf(a);
-      return {a,tot,gl:calcGL(tot,a.bw,a.sex,a.mod)};
+      return {a,tot,gl:calcGL(tot,a.bw,a.sex,_glMod(a))};
     }).sort((x,y)=>(y.tot-x.tot)||(y.gl-x.gl));
     // header de categoría
     rows+='<tr style="height:'+hdrH.toFixed(2)+'px"><td colspan="16" style="padding:0 12px;background:linear-gradient(90deg,rgba(196,30,58,.32),rgba(196,30,58,.05));border-left:'+Math.max(3,Math.round(4*s))+'px solid #C41E3A;vertical-align:middle">'
@@ -6805,14 +6818,14 @@ function renderTxBarbell(cur,lifterChanged){
   }
   // Position forecast
   const peers=DATA.athletes.filter(a=>a.sex===cur.sex&&a.cat===cur.cat&&a.div===cur.div&&a.mod===cur.mod);
-  const curGL=calcGL(totalOf(cur),cur.bw,cur.sex,cur.mod);
+  const curGL=calcGL(totalOf(cur),cur.bw,cur.sex,_glMod(cur));
   const hypBest=Math.max(bestOf(cur,DATA.lift),weight);
   const sqH=DATA.lift==='sq'?hypBest:bestOf(cur,'sq');
   const bpH=DATA.lift==='bp'?hypBest:bestOf(cur,'bp');
   const dlH=DATA.lift==='dl'?hypBest:bestOf(cur,'dl');
   const hypTotal=(sqH&&bpH&&dlH)?sqH+bpH+dlH:0;
-  const hypGL=hypTotal>0?calcGL(hypTotal,cur.bw,cur.sex,cur.mod):0;
-  const othersGL=peers.filter(a=>a.id!==cur.id).map(a=>calcGL(totalOf(a),a.bw,a.sex,a.mod)).filter(g=>g>0).sort((a,b)=>b-a);
+  const hypGL=hypTotal>0?calcGL(hypTotal,cur.bw,cur.sex,_glMod(cur)):0;
+  const othersGL=peers.filter(a=>a.id!==cur.id).map(a=>calcGL(totalOf(a),a.bw,a.sex,_glMod(a))).filter(g=>g>0).sort((a,b)=>b-a);
   const curRank=curGL>0?othersGL.filter(g=>g>curGL).length+1:null;
   const newRank=hypGL>0?othersGL.filter(g=>g>hypGL).length+1:null;
   let posHtml='';
@@ -7211,14 +7224,14 @@ function renderScreenIntentos(cur,nxt){
   const bbSvg=`<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" style="height:${Math.round(VH*0.85)}px;width:auto;max-width:none;display:block">${s.join('')}</svg>`;
   // Pronóstico de posición (idéntico criterio al del widget de OBS)
   const peers=DATA.athletes.filter(a=>a.sex===cur.sex&&a.cat===cur.cat&&a.div===cur.div&&a.mod===cur.mod);
-  const curGL=calcGL(totalOf(cur),cur.bw,cur.sex,cur.mod);
+  const curGL=calcGL(totalOf(cur),cur.bw,cur.sex,_glMod(cur));
   const hypBest=Math.max(bestOf(cur,DATA.lift),weight);
   const sqH=DATA.lift==='sq'?hypBest:bestOf(cur,'sq');
   const bpH=DATA.lift==='bp'?hypBest:bestOf(cur,'bp');
   const dlH=DATA.lift==='dl'?hypBest:bestOf(cur,'dl');
   const hypTotal=(sqH&&bpH&&dlH)?sqH+bpH+dlH:0;
-  const hypGL=hypTotal>0?calcGL(hypTotal,cur.bw,cur.sex,cur.mod):0;
-  const othersGL=peers.filter(a=>a.id!==cur.id).map(a=>calcGL(totalOf(a),a.bw,a.sex,a.mod)).filter(g=>g>0).sort((a,b)=>b-a);
+  const hypGL=hypTotal>0?calcGL(hypTotal,cur.bw,cur.sex,_glMod(cur)):0;
+  const othersGL=peers.filter(a=>a.id!==cur.id).map(a=>calcGL(totalOf(a),a.bw,a.sex,_glMod(a))).filter(g=>g>0).sort((a,b)=>b-a);
   const curRank=curGL>0?othersGL.filter(g=>g>curGL).length+1:null;
   const newRank=hypGL>0?othersGL.filter(g=>g>hypGL).length+1:null;
   let posTxt='';
@@ -9200,7 +9213,7 @@ const _DIV_ORDER=function(d){
 function _renderResultsTable(opts){
   const view=opts.view||'meet';
   const isBench=view==='bench';
-  const all=opts.athletes.map(a=>({...a,total:totalOf(a,view),gl:calcGL(totalOf(a,view),a.bw,a.sex,a.mod,view)}));
+  const all=opts.athletes.map(a=>({...a,total:totalOf(a,view),gl:calcGL(totalOf(a,view),a.bw,a.sex,_glMod(a),view)}));
   if(!all.length)return '';
   // Cuántas casillas de intento mostrar por lift: 3 normalmente, 4 si algún atleta
   // de la tabla tuvo un 4º intento en ese lift (solo esos lo ven). Header y filas
@@ -9328,7 +9341,7 @@ function renderResults(){
     const t=totalOf(e.a,e.view);if(t<=0)return;
     const d=e.a.div||'Sin División';
     if(!divGroups[d])divGroups[d]=[];
-    divGroups[d].push({...e.a,total:t,gl:calcGL(t,e.a.bw,e.a.sex,e.a.mod,e.view),_view:e.view});
+    divGroups[d].push({...e.a,total:t,gl:calcGL(t,e.a.bw,e.a.sex,_glMod(e.a),e.view),_view:e.view});
   });
   Object.values(divGroups).forEach(arr=>arr.sort((a,b)=>b.gl-a.gl));
 
@@ -10728,7 +10741,7 @@ function renderLiveView(){
 
     // GLP
     const tot = totalOf(ra);
-    const glp = tot ? calcGL(tot,ra.bw,ra.sex,ra.mod) : null;
+    const glp = tot ? calcGL(tot,ra.bw,ra.sex,_glMod(ra)) : null;
     h += '<td style="text-align:center;padding:3px 5px">';
     h += '<span style="font-family:Oswald;font-size:'+(glp?12:9)+'px;font-weight:700;color:'+(glp?'var(--gold)':'rgba(100,120,150,.5)')+';">'+(glp||'—')+'</span>';
     h += '</td>';
@@ -10770,7 +10783,7 @@ function renderAtletaInfo(){
     
     // Current competition lifts
     const curSq=bestOf(a,'sq'),curBp=bestOf(a,'bp'),curDl=bestOf(a,'dl');
-    const curTotal=totalOf(a);const curGL=calcGL(curTotal,a.bw,a.sex,a.mod);
+    const curTotal=totalOf(a);const curGL=calcGL(curTotal,a.bw,a.sex,_glMod(a));
     
     // Career PRs from DB
     const prSq=bl.sq||0,prBp=bl.bp||0,prDl=bl.dl||0,prTotal=bl.total||0;
