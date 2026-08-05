@@ -274,7 +274,16 @@ window.setFondoLC=function(k){
   try{if(typeof R==='function')R();}catch(e){}
 };
 try{window.aplicarFondoLC(window.lcFondo);}catch(e){}
-window.NAV_LIBRE=(()=>{try{return localStorage.getItem('yl_nav_libre')==='1'}catch(e){return false}})();
+// Solo vale para quien OPERA. Una pantalla de público, de tarima o un widget de
+// OBS tiene que seguir siempre a la tarima: si se le queda el cursor, muestra la
+// ronda vieja y nadie aparece "en tarima". Por eso se consulta con esta función
+// y no con la variable suelta.
+window._navLibreGuardada=(()=>{try{return localStorage.getItem('yl_nav_libre')==='1'}catch(e){return false}})();
+Object.defineProperty(window,'NAV_LIBRE',{
+  get(){ return !!(window._navLibreGuardada && window.IS_CONTROLLER && typeof isAdmin!=='undefined' && isAdmin && !TX_MODE); },
+  set(v){ window._navLibreGuardada=!!v; },
+  configurable:true
+});
 window._NAV_REMOTA=null;   // último cursor que publicó la tarima
 window.setNavLibre=function(v){
   window.NAV_LIBRE=!!v;
@@ -7417,7 +7426,8 @@ function renderShell(){
   h+='<div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">';
   h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'\uD83D\uDCE1 Datos en vivo':'\u23F3 Conectando...')+'</div>';
   h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon">\ud83c\udfc6</span>Selecci\u00f3n de Campeonato</button>';
-  h+='<button class="side-btn" onclick="openLoginModal()"><span class="icon">\uD83D\uDD10</span>Iniciar sesi\u00f3n</button>';
+  // Sin bot\u00f3n de iniciar sesi\u00f3n: esta pantalla la mira el p\u00fablico. Quien opera
+  // entra por el panel; dejarlo ac\u00e1 solo invitaba a que alguien lo tocara.
   h+='</div>';
   }
   h+='</div><div class="main">';
