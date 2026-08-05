@@ -2523,6 +2523,51 @@ function _cronoLookup(map,name){
 // o más días, como el Regional Norte). Viajan juntos en la misma etiqueta —
 // "Día 1 · AM" — porque `jornada` solo se muestra, no se compara con nada.
 const _cronoJor=r=>[r.dia,r.jornada].map(x=>String(x||'').trim()).filter(Boolean).join(' · ');
+// El Cronograma manda también en división de edad, categoría y modalidad, no solo
+// en la tanda: es la planilla que la federación revisa y firma, mientras que la
+// inscripción la llenó el atleta y suele venir con la división vieja o sin marcar
+// Olimpiadas Especiales. Estos tres helpers traducen lo que trae el Cronograma al
+// formato que guarda el livecast.
+function _modDesdeTexto(txt){
+  const t=String(txt||'').toLowerCase();
+  const eq=t.includes('equipado')||t.includes('equipped');
+  const bench=t.includes('only bench')||t.includes('onlybench')||t.includes('only_bench');
+  const comb=t.includes('+');
+  const oe=t.includes('special olympics')||t.includes('olimpiadas')||t.includes(' oe')||t.trim().endsWith('oe');
+  let mod;
+  if(oe) mod=bench?'oe_bench':'oe_classic';
+  else if(comb&&eq) mod='equipped_bench';
+  else if(comb) mod='classic_bench';
+  else if(bench&&eq) mod='equipped_bench';
+  else if(bench) mod='onlybench';
+  else if(eq) mod='equipped';
+  else mod='classic';
+  return {mod,plusBench:comb};
+}
+// "-83 kg" -> "83", "+120 kg" -> "120+", "84+" -> "84+"
+function _cronoCat(txt){
+  const m=String(txt||'').match(/(\d+)\s*\+|\+\s*(\d+)|(\d+)/);
+  if(!m)return '';
+  return m[1]?m[1]+'+':(m[2]?m[2]+'+':m[3]);
+}
+// Divisiones válidas. Si el Cronograma trae algo que no está en la lista (un error de
+// tipeo como "Subunior") NO se pisa lo que ya tiene el atleta: mejor dejarlo como está
+// que meterle una división inventada a la nómina.
+const _CRONO_DIVS=['Sub-Junior','Junior','Open','Master I','Master II','Master III','Master IV'];
+function _cronoDiv(txt){
+  const t=_nnCrono(txt).replace(/[^a-z0-9]/g,'');
+  return _CRONO_DIVS.find(d=>_nnCrono(d).replace(/[^a-z0-9]/g,'')===t)||'';
+}
+function _cronoMapDeRows(rows){
+  const map={};
+  (rows||[]).forEach(r=>{
+    if(!r.nombre)return;
+    const e={flight:r.flight||'',jornada:_cronoJor(r),div:_cronoDiv(r.division),cat:_cronoCat(r.categoria)};
+    if(String(r.modalidad||'').trim()){const m=_modDesdeTexto(r.modalidad);e.mod=m.mod;e.plusBench=m.plusBench;}
+    map[_nnCrono(r.nombre)]=e;
+  });
+  return map;
+}
 async function _loadCronoFlightMap(evId){
   if(!fbReady||!window._fb||!evId)return null;
   try{
@@ -2530,9 +2575,7 @@ async function _loadCronoFlightMap(evId){
     if(!snap.exists())return null;
     const rows=snap.data().rows;
     if(!Array.isArray(rows)||!rows.length)return null;
-    const map={};
-    rows.forEach(r=>{if(r.nombre&&r.flight)map[_nnCrono(r.nombre)]={flight:r.flight,jornada:r.jornada||''};});
-    return map;
+    return _cronoMapDeRows(rows);
   }catch(e){console.warn('[crono] flightMap',e.message);return null;}
 }
 // Suscripción en vivo al Cronograma (además del getDoc puntual de arriba, usado para la
@@ -2549,8 +2592,7 @@ function _subscribeCronoFlightMap(evId){
       if(!snap.exists())return;
       const rows=snap.data().rows;
       if(!Array.isArray(rows))return;
-      const map={};
-      rows.forEach(r=>{if(r.nombre&&r.flight)map[_nnCrono(r.nombre)]={flight:r.flight,jornada:_cronoJor(r)};});
+      const map=_cronoMapDeRows(rows);
       window._cronoFlightMap=map;
       _applyCronoFlightsToAthletes(map);
     });
@@ -2561,42 +2603,47 @@ function _subscribeCronoFlightMap(evId){
 // si un atleta no está ahí.
 function _applyCronoFlightsToAthletes(map){
   if(!map||!DATA.athletes||!DATA.athletes.length)return;
-  let changed=false;
+  let tandas=0,datos=0;
+  const armando=(DATA.phase==='setup'||DATA.phase==='manage');
   DATA.athletes.forEach(a=>{
     const entry=_cronoLookup(map,a.name);
-    if(entry){
-      if(entry.flight && a.flight!==entry.flight){a.flight=entry.flight;changed=true;}
-      if(typeof entry.jornada==='string' && a.jornada!==entry.jornada){a.jornada=entry.jornada;changed=true;}
+    if(!entry)return;
+    if(entry.flight && a.flight!==entry.flight){a.flight=entry.flight;tandas++;}
+    if(typeof entry.jornada==='string' && a.jornada!==entry.jornada){a.jornada=entry.jornada;tandas++;}
+    // División, categoría y modalidad: manda el Cronograma. Solo se pisa cuando el
+    // Cronograma trae el dato y es distinto — nunca se borra lo que ya tiene el atleta.
+    // Y solo mientras se arma la nómina: con la competencia andando manda el operador,
+    // porque un atleta que se pasa de peso cambia de categoría en el pesaje y el
+    // Cronograma no se entera. La categoría además se respeta apenas está pesado.
+    if(!armando)return;
+    if(entry.div && a.div!==entry.div){a.div=entry.div;datos++;}
+    if(entry.cat && String(a.cat)!==entry.cat && !a.weighedIn && !(+a.bw>0)){a.cat=entry.cat;datos++;}
+    if(entry.mod && (a.mod!==entry.mod||!!a.plusBench!==!!entry.plusBench)){
+      a.mod=entry.mod;a.plusBench=entry.plusBench;datos++;
     }
   });
-  if(changed){save();R();showToastLC('Tandas actualizadas desde el Cronograma');}
+  if(tandas||datos){
+    save();R();
+    showToastLC(datos?'Nómina actualizada desde el Cronograma (división, categoría y modalidad)'
+                     :'Tandas actualizadas desde el Cronograma');
+  }
 }
 function _inscToAthlete(ins, j, flightMap){
   const name=ins.nombre||'';
   const cronoEntry=_cronoLookup(flightMap,name);
   const fl=cronoEntry?cronoEntry.flight:(ins.flight||'A');
-  const rawMod=(ins.modalidad||'').toLowerCase();
-  let mod;
-  const isEq=rawMod.includes('equipado')||rawMod.includes('equipped');
-  const isBench=rawMod.includes('only bench')||rawMod.includes('onlybench')||rawMod.includes('only_bench');
-  const isCombined=rawMod.includes('+');
-  // Special Olympics: faltaba acá (sí estaba en pickEvent). Sin esto, los OE de
-  // eventos EN VIVO quedaban como 'classic' y competían en el ranking general
-  // en vez del suyo. Cubre 'Powerlifting Classic Special Olympics',
-  // 'Olimpiadas Especiales (OE)', etc.
-  const isOE=rawMod.includes('special olympics')||rawMod.includes('olimpiadas')||rawMod.includes(' oe')||rawMod.trim().endsWith('oe');
-  if(isOE) mod=isBench?'oe_bench':'oe_classic';
-  else if(isCombined&&isEq) mod='equipped_bench';
-  else if(isCombined) mod='classic_bench';
-  else if(isBench&&isEq) mod='equipped_bench';
-  else if(isBench) mod='onlybench';
-  else if(isEq) mod='equipped';
-  else mod='classic';
-  const catRaw=ins.categoria||'';
-  const catNum=catRaw.match(/(\d+\+?)/)?catRaw.match(/(\d+\+?)/)[1]:catRaw;
+  // Modalidad, división y categoría: si el Cronograma las trae, manda el Cronograma;
+  // la inscripción queda de respaldo para los atletas que no figuren ahí.
+  // (Special Olympics vive acá: sin esto los OE de eventos EN VIVO quedaban como
+  // 'classic' y competían en el ranking general en vez del suyo.)
+  const insMod=_modDesdeTexto(ins.modalidad||'');
+  const mod=(cronoEntry&&cronoEntry.mod)||insMod.mod;
+  const isCombined=(cronoEntry&&cronoEntry.mod)?!!cronoEntry.plusBench:insMod.plusBench;
+  const catNum=(cronoEntry&&cronoEntry.cat)||_cronoCat(ins.categoria)||(ins.categoria||'');
+  const div=(cronoEntry&&cronoEntry.div)||ins.division||'';
   return{
     id:j,lot:j+1,name,rut:ins.rut||'',sex:ins.sexo||'',
-    cat:catNum,div:ins.division||'',club:ins.club==='Otro'?ins.clubOtro:ins.club||'',
+    cat:catNum,div,club:ins.club==='Otro'?ins.clubOtro:ins.club||'',
     uni:ins.universidad||'',mod,plusBench:isCombined,bw:0,flight:fl,jornada:cronoEntry?cronoEntry.jornada:(ins.jornada||''),born:(String(ins.fechaNac||ins.dob||ins.born||'').match(/\d{4}/)||[''])[0],rackSQ:'',rackBP:'',
     bombed:false,weighedIn:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],
@@ -2623,6 +2670,17 @@ function _mergeFirebaseAthletes(fbAthletes){
     }else{
       // Update flight if changed in Firestore
       if(fa.flight&&fa.flight!==existing.flight){existing.flight=fa.flight;changed=true;}
+      // División, categoría y modalidad vienen del Cronograma (ver _inscToAthlete),
+      // que es lo que manda. Sin esto la re-sincronización solo arreglaba la tanda y
+      // dejaba, por ejemplo, a los de Olimpiadas Especiales corriendo como Classic.
+      // La categoría no se toca si el atleta ya está pesado: ahí manda la balanza.
+      if(fa.div&&fa.div!==existing.div){existing.div=fa.div;changed=true;}
+      if(fa.cat&&String(fa.cat)!==String(existing.cat)&&!existing.weighedIn&&!(+existing.bw>0)){
+        existing.cat=fa.cat;changed=true;
+      }
+      if(fa.mod&&(fa.mod!==existing.mod||!!fa.plusBench!==!!existing.plusBench)){
+        existing.mod=fa.mod;existing.plusBench=fa.plusBench;changed=true;
+      }
     }
   });
 
@@ -7565,7 +7623,7 @@ function generateLots(){
 window.resyncFromAdmin=async function(){
   if(!fbReady||!window._fb){alert('Firebase no listo todavía. Esperá unos segundos y reintentá.');return}
   if(!DATA.event){alert('No hay competencia activa');return}
-  if(!confirm('Re-sincronizar la nómina con el admin?\n\n• Trae atletas nuevos\n• Borra los que ya no están en admin (si NO tienen pesos/intentos cargados acá)\n• Te avisa de los borrados que sí tienen datos para revisar a mano\n• Actualiza el flight de cada atleta según lo armado en la pestaña Cronograma\n\nLots y pesaje se conservan.'))return;
+  if(!confirm('Re-sincronizar la nómina con el admin?\n\n• Trae atletas nuevos\n• Borra los que ya no están en admin (si NO tienen pesos/intentos cargados acá)\n• Avisa de los borrados que sí tienen datos para revisarlos a mano\n• Toma tanda, división, categoría y modalidad de la pestaña Cronograma\n\nLotes y pesaje se conservan. La categoría de los que ya están pesados no se toca.'))return;
   const evId=Object.keys(LIVE_EVENTS).find(k=>LIVE_EVENTS[k]===DATA.event.name)||DATA.event.id||DATA.event.name;
   try{
     const q=window._fb.query(
@@ -8644,7 +8702,7 @@ function renderDirector(){
 function renderManage(){
   // Filtrar por tarima si está activo (modo 2 tarimas)
   const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin (trae cambios, borra eliminados sin datos)">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin: trae cambios, borra eliminados sin datos y toma tanda, división, categoría y modalidad del Cronograma">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
   h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th><th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:38px">VLO</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:80px">BW + 1ros</th>';
   ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:62px">'+LIFT_S[l]+r+'</th>'})});
