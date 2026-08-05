@@ -9930,6 +9930,17 @@ function txPremiacion(evName){
 try{localStorage.removeItem('fechipo_lc2');localStorage.removeItem('fechipo_livecast')}catch(e){}
 
 const loaded=load();
+// Entrando desde el panel (Admin → YourLift) se quiere ELEGIR campeonato, no
+// seguir en el último que quedó abierto en ese navegador. Sin esto, el link
+// entraba directo al de la última vez y nunca se veía el selector.
+try{
+  if(new URLSearchParams(location.search).get('operar')==='1'
+     && !new URLSearchParams(location.search).get('evento')){
+    DATA.phase='setup'; DATA.event=null; DATA.athletes=[];
+    window._EV_FILTER=null;
+    try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
+  }
+}catch(e){}
 try{_ensayoGrant();}catch(e){}
 let DB_FULL=[];
 

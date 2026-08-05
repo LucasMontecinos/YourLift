@@ -6306,13 +6306,43 @@ window.editorFotoSetZoom = function(v){
 };
 
 // ── Clubes ────────────────────────────────────────────────────────────────────
+// ── Eliminar un club que ya no está en FECHIPO ─────────────────────
+// La lista de clubes NO es una lista: se arma de los atletas. Un club figura
+// mientras alguien lo tenga puesto, así que "eliminarlo" es vaciarle el club a
+// sus atletas — ahí desaparece solo. Los atletas y TODO su historial de
+// competencias quedan intactos: solo pierden la referencia al club.
+window.clubEliminar=async function(club){
+  if(ST.adminInfo?.role!=='owner'&&!ST.adminInfo?.bootstrap){
+    showToast('Solo el owner puede eliminar clubes',null,true); return;
+  }
+  const atletas=(ST.data||[]).filter(a=>a.club===club);
+  if(!confirm('Eliminar el club "'+club+'"\n\n'
+    +'Se le va a VACIAR el club a '+atletas.length+' atleta(s).\n'
+    +'Sus perfiles, resultados y récords NO se tocan: siguen igual, solo quedan sin club.\n\n'
+    +'El club desaparece de la lista porque ya no lo tiene nadie.\n\n¿Seguir?'))return;
+  if(!confirm('Confirmá de nuevo.\n\n'+atletas.length+' atleta(s) van a quedar sin club.\n'
+    +'Para revertirlo hay que volver a asignárselo uno por uno.'))return;
+  let ok=0,fallaron=[];
+  for(const a of atletas){
+    try{ a.club=''; await _saveEdit(a); ok++; }
+    catch(e){ fallaron.push(a.nombre||a.codigo); console.warn('[clubEliminar]',a.codigo,e); }
+  }
+  // El logo guardado del club ya no tiene a quién representar
+  try{ const slug=window.normClub(club); if((window._CLUBS_FS||{})[slug]) await deleteDoc(doc(db,'clubs',slug)); }catch(e){}
+  await logAction('club_eliminado',club,atletas.length+' atletas',null,{atletas:atletas.map(a=>a.codigo).slice(0,80)});
+  render();
+  if(fallaron.length) showToast('Club eliminado en '+ok+' atleta(s), fallaron '+fallaron.length+': '+fallaron.slice(0,3).join(', '),null,true);
+  else showToast('Club "'+club+'" eliminado — '+ok+' atleta(s) quedaron sin club');
+};
 function renderClubs(){
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const allClubs=[...new Set((ST.data||[]).map(a=>a.club).filter(Boolean))].sort();
   const athletesByClub={};
   (ST.data||[]).forEach(a=>{if(a.club)(athletesByClub[a.club]=athletesByClub[a.club]||[]).push(a);});
   const expanded=ST._clubExpanded||null;
-  let h=`<div style="font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:2px;margin-bottom:18px">CLUBES</div>`;
+  const esOwner=(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap);
+  let h=`<div style="font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:2px;margin-bottom:6px">CLUBES</div>`;
+  h+=`<div style="font-size:12px;color:var(--muted);margin-bottom:18px">${allClubs.length} clubes · la lista sale de los atletas: un club figura mientras alguien lo tenga puesto${esOwner?'. <b>Eliminar</b> le vacía el club a sus atletas — perfiles y resultados quedan intactos':''}</div>`;
   h+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">`;
   for(const club of allClubs){
     const slug=window.normClub(club);
@@ -6338,6 +6368,7 @@ function renderClubs(){
         <button class="btn btn-b" style="padding:5px 10px;font-size:11px" onclick="ST._clubExpanded=ST._clubExpanded==='${esc(club)}'?null:'${esc(club)}';render()">
           ${isOpen?'Ocultar':'Ver atletas'}
         </button>
+        ${esOwner?`<button class="btn" style="padding:5px 10px;font-size:11px;border-color:var(--red);color:var(--red)" onclick="clubEliminar('${esc(club).replace(/'/g,"\\'")}')" title="Le vacía el club a sus ${athletes.length} atleta(s). Perfiles y resultados quedan intactos.">Eliminar</button>`:''}
       </div>
       ${isOpen?`<div style="margin-top:10px;max-height:220px;overflow-y:auto;border-top:1px solid var(--border);padding-top:8px">
         ${athletes.sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')).map(a=>`
