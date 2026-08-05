@@ -1569,6 +1569,7 @@ function render(){
       <a href="livecast.html?operar=1" target="_blank" class="side-btn" style="text-decoration:none" title="Abre el livecast: campeonatos publicados y los de prueba">YourLift <span style="opacity:.55;font-size:11px">(LiftingCast)</span></a>
       <button class="side-btn ${ST.view==='campeonatos'?'active':''}" onclick="go('campeonatos')">Campeonatos</button>
       <button class="side-btn ${ST.view==='publico'?'active':''}" onclick="go('publico')">YourLift Público</button>
+      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='nomcards'?'active':''}" onclick="go('nomcards')">Tarjetas de Nóminas</button>`:''}
       <button class="side-btn ${ST.view==='exports'?'active':''}" onclick="go('exports')">Exports</button>
       <button class="side-btn ${ST.view==='audit'?'active':''}" onclick="go('audit')">Audit Log</button>
       ${ST.pendingResults?`<button class="side-btn ${ST.view==='mergeResults'?'active':''}" onclick="go('mergeResults')" style="border-color:var(--green);color:var(--green)">Resultados Pendientes <span style="background:var(--green);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.pendingResults}</span></button>`:''}
@@ -1581,7 +1582,8 @@ function render(){
   
   let content='';
   if(ST.view==='athletes')content=renderAthletes();
-  else if(ST.view==='nominas')content=(ST.filterEv===NS_EV?'':renderNomCards())+renderNominas();
+  else if(ST.view==='nominas')content=renderNominas();
+  else if(ST.view==='nomcards')content=renderNomCards();
   else if(ST.view==='stats'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderStats();else go('athletes');}
   else if(ST.view==='bgvideos'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderBgVideos();else go('athletes');}
   else if(ST.view==='sponsors'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderSponsors();else go('athletes');}
@@ -3411,8 +3413,9 @@ window.ncFoto=async function(id,inp){
 };
 function renderNomCards(){
   if(!ST.ncList){ncLoad();return `<div style="padding:30px;text-align:center;color:var(--muted)">Cargando nóminas…</div>`;}
-  let h=`<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:18px">
-    <div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:4px">TARJETAS DE NÓMINAS (yourlift.cl)</div>
+  let h=`<div style="font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:2px;margin-bottom:18px">TARJETAS DE NÓMINAS</div>`;
+  h+=`<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:18px">
+    <div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:4px">CÓMO SE VE CADA CAMPEONATO EN yourlift.cl</div>
     <p style="font-size:11px;color:var(--muted);margin-bottom:14px">La foto, fecha, organizador y lugar que se ven en la tarjeta de cada campeonato en la pestaña Nóminas del sitio. La foto se convierte a WebP automáticamente.</p>`;
   ST.ncList.forEach(ev=>{
     const d=ST.ncData[ev.id]||{};
