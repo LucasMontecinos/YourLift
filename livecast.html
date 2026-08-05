@@ -481,10 +481,19 @@ function _syncWriteAlert(e){
     +(perm?' <b>Iniciá sesión con tu cuenta de administrador.</b>':' Revisá la conexión a internet.')
     +' <span style="opacity:.85;font-size:11px">(se reintenta solo)</span>';
 }
-function _syncWriteOk(){ const el=document.getElementById('syncErrBanner'); if(el)el.remove(); }
+function _syncWriteOk(){ const el=document.getElementById('syncErrBanner'); if(el)el.remove(); window._syncFallo=0; }
 let _syncInFlight=false,_syncPending=false,_fbLastOk=0;
+window._syncFallo=0;      // ts del último fallo definitivo de escritura
+let _reintentoTO=null;
+// Tras un fallo definitivo se vuelve a intentar solo. Antes se quedaba esperando
+// a que el operador tocara algo: con una caída corta de wifi, el cartel rojo se
+// quedaba puesto aunque la conexión ya hubiera vuelto.
+function _reintentarSync(){
+  if(_reintentoTO)return;
+  _reintentoTO=setTimeout(()=>{ _reintentoTO=null; try{ syncToFB(); }catch(e){} },4000);
+}
 async function syncToFB(){
-  if(!fbReady||!isAdmin||_fbSyncing)return;
+  if(!fbReady||!window._fb||!fbDB||!isAdmin||_fbSyncing)return;
   if(!window.IS_CONTROLLER){
     // Modo ESPECTADOR: esta pantalla no escribe. Si además se están EDITANDO datos
     // (pesos/decisiones cambiaron respecto de lo último sincronizado), se avisa —
@@ -507,7 +516,10 @@ async function syncToFB(){
   _syncInFlight=true;
   try{
     const ref=window._fb.doc(fbDB,'livecast_sync',id);
-    for(let attempt=0;attempt<3;attempt++){
+    // 5 intentos con espera creciente (0.3s → 4.8s). En un gimnasio el wifi se
+    // cae de a ratos y con 3 intentos cortos la escritura se daba por perdida
+    // enseguida; así aguanta un bache de varios segundos sin molestar a nadie.
+    for(let attempt=0;attempt<5;attempt++){
       try{
         // Con VISTA LIBRE esta pantalla no publica su cursor: manda el último que
         // vio de la tarima. Si no, al guardar un peso arrastraría a la tarima, a
@@ -551,14 +563,16 @@ async function syncToFB(){
         _syncWriteOk(); _spectatorEditOk();
         return;
       }catch(e){
-        if(attempt===2){
+        if(attempt===4){
           console.warn('[FB] Sync write error (tras reintentos)',e);
           // Aviso VISIBLE: que el operador se entere de que lo que carga NO está
           // llegando al espectador/OBS, en vez de descubrirlo tarde.
+          window._syncFallo=Date.now();
           _syncWriteAlert(e);
+          _reintentarSync();          // y se sigue intentando solo
           return;
         }
-        await new Promise(r=>setTimeout(r,250*(attempt+1)));
+        await new Promise(r=>setTimeout(r,300*Math.pow(2,attempt)));
       }
     }
   }finally{
@@ -8733,14 +8747,30 @@ function renderCompete(){
   // de un vistazo si sus cambios están llegando. Verde = guardado recién; ámbar =
   // hace rato; rojo = no está guardando (o es una pantalla espectadora).
   if(!PRACTICE_MODE){
-    const secs=_fbLastOk?Math.round((Date.now()-_fbLastOk)/1000):null;
+    // El indicador mide si hay algo SIN GUARDAR, no cuánto hace que se guardó.
+    // Antes se ponía rojo con "HACE 3min" cuando simplemente nadie había tocado
+    // nada en 3 minutos (entre tandas, en un descanso): una alarma falsa que
+    // termina enseñando a ignorar el indicador, justo el que tiene que avisar en
+    // serio cuando los cambios NO están llegando al público y a OBS.
     const ctrl=!!window.IS_CONTROLLER;
+    const secs=_fbLastOk?Math.round((Date.now()-_fbLastOk)/1000):null;
+    const ultimo=secs===null?'todavía no se guardó nada desde esta pantalla'
+      :(secs<60?'último guardado hace '+secs+'s':'último guardado hace '+Math.round(secs/60)+'min');
+    // ¿Lo que tengo en pantalla es distinto de lo último confirmado por el servidor?
+    let desinc=false;
+    try{ desinc=(_dataSig()!==window._lastSyncedSig); }catch(e){}
+    const enVuelo=_syncInFlight||_syncPending;
+    const pendiente=desinc||enVuelo;
+    if(pendiente){ if(!window._desincDesde)window._desincDesde=Date.now(); }
+    else window._desincDesde=0;
+    const esperando=window._desincDesde?Math.round((Date.now()-window._desincDesde)/1000):0;
     let col,txt,tip;
     if(!ctrl){col='var(--red)';txt='NO GUARDA';tip='Esta pantalla está en modo ESPECTADOR: no escribe nada.';}
-    else if(secs===null){col='var(--muted)';txt='SIN GUARDAR AÚN';tip='Todavía no se guardó nada desde esta pantalla.';}
-    else if(secs<15){col='var(--green)';txt='EN LÍNEA';tip='Último guardado hace '+secs+'s.';}
-    else if(secs<60){col='var(--orange)';txt='HACE '+secs+'s';tip='Hace '+secs+'s que no se guarda.';}
-    else {col='var(--red)';txt='HACE '+Math.round(secs/60)+'min';tip='Hace más de un minuto que no se guarda: revisá conexión/sesión.';}
+    else if(!fbReady||!fbUnsub){col='var(--red)';txt='SIN CONEXIÓN';tip='No hay conexión con el servidor. Se reintenta solo — revisá internet.';}
+    else if(window._syncFallo){col='var(--red)';txt='NO SE GUARDA';tip='La última escritura falló. Se sigue reintentando solo. '+ultimo;}
+    else if(pendiente&&esperando>=12){col='var(--red)';txt='NO SE GUARDA';tip='Hace '+esperando+'s que hay cambios sin confirmar. Revisá conexión y sesión.';}
+    else if(pendiente){col='var(--orange)';txt='GUARDANDO…';tip='Mandando los últimos cambios al servidor.';}
+    else {col='var(--green)';txt='EN LÍNEA';tip='Todo guardado — '+ultimo+'.';}
     h+='<span id="syncPill" title="'+tip+'" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;border:1px solid '+col+';color:'+col+';font-family:Oswald;font-size:10px;font-weight:700;letter-spacing:.5px"><span style="width:7px;height:7px;border-radius:50%;background:'+col+'"></span>SYNC '+txt+'</span>';
   }
   // En práctica: link de la vista de espectador (lo que ve el público) para compartir.
