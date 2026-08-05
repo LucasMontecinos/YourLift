@@ -2978,6 +2978,30 @@ function _flightsFromCurrent(list){
   return i>0?fl.slice(i).concat(fl.slice(0,i)):fl;
 }
 // ¿La tanda "fl" ya terminó todos sus intentos de "lift" (los 3, o los que haya declarado)?
+// ── Sesiones (jornadas) ────────────────────────────────────────────
+// La jornada sale del Cronograma (AM/PM, o "Día 1 · AM" en campeonatos de
+// varios días) y define qué tandas van juntas. Sirve para que la competencia
+// avance DENTRO de la sesión: sentadilla A, B y C; después banca A, B y C;
+// después peso muerto A, B y C. Recién cuando la mañana termina entera se pasa
+// a la tarde con la D y la E. Si el evento no tiene jornadas cargadas, todas las
+// tandas son una sola sesión y el comportamiento es el de siempre.
+function _jornadaDeFlight(fl){
+  const a=DATA.athletes.find(x=>x.flight===fl&&!x.bombed&&String(x.jornada||'').trim());
+  return a?String(a.jornada).trim():'';
+}
+function _flightsDeJornada(fl){
+  const todas=_allFlightsSorted();
+  const j=_jornadaDeFlight(fl);
+  if(!j)return todas;
+  const mismas=todas.filter(f=>_jornadaDeFlight(f)===j);
+  return mismas.length?mismas:todas;
+}
+// Las sesiones en el orden en que van a competir (por la primera tanda de cada una).
+function _jornadasEnOrden(){
+  const out=[];
+  _allFlightsSorted().forEach(f=>{const j=_jornadaDeFlight(f);if(out.indexOf(j)<0)out.push(j);});
+  return out;
+}
 function _flightDoneWithLift(fl,lift){
   const athletes=DATA.athletes.filter(a=>a.flight===fl&&!a.bombed);
   if(!athletes.length)return true;
@@ -3001,7 +3025,10 @@ function _extrasPendientes(l){
   })());
 }
 function advanceLift(){
-  const flights=_allFlightsSorted();
+  // Solo las tandas de ESTA sesión: la mañana no salta a la tarde a mitad de un
+  // movimiento. Con jornadas cargadas queda sentadilla A-B-C, banca A-B-C, peso
+  // muerto A-B-C, y recién ahí empieza la tarde con la D y la E.
+  const flights=_flightsDeJornada(DATA.flight);
   const li=LIFTS.indexOf(DATA.lift);
   // El extra "al final de la ronda" se toma al cerrar SU ronda: no se puede
   // pasar de largo sin avisar.
@@ -3028,9 +3055,23 @@ function advanceLift(){
     DATA.flight=flights.find(fl=>!_flightDoneWithLift(fl,nextLift))||flights[0]||DATA.flight;
     DATA.lift=nextLift;DATA.round=0;
     saveNow();R();
-  } else {
-    go('results');
+    return;
   }
+  // Terminó el peso muerto de toda la sesión → arranca la sesión siguiente
+  // (la tarde) por su primera tanda y de nuevo en sentadilla, intento 1.
+  const js=_jornadasEnOrden(), jAct=_jornadaDeFlight(DATA.flight);
+  const sig=js[js.indexOf(jAct)+1];
+  if(sig!==undefined){
+    const fs=_allFlightsSorted().filter(f=>_jornadaDeFlight(f)===sig)
+      .filter(f=>LIFTS.some(l=>!_flightDoneWithLift(f,l)));
+    if(fs.length){
+      DATA.flight=fs[0];DATA.lift='sq';DATA.round=0;
+      saveNow();R();
+      showToastLC('Empieza la jornada '+(sig||'siguiente')+' — tanda '+fs[0]);
+      return;
+    }
+  }
+  go('results');
 }
 // Fuerza un intento específico como "el actual" en Control en Vivo, saltándose el orden
 // automático de la cola — para corregir cuando se pasó por alto a un atleta. Cambia
@@ -7345,6 +7386,10 @@ function renderSetup(){
   const _adminReal=isAdmin&&window.ADMIN_ROLE!=='ensayo';
   const _soloPub=!_adminReal;
   const _pub=window.LIVE_EVENT_PUB;
+  // Entrada desde el panel (Admin → YourLift): la lista corta con la que se
+  // trabaja — lo que está publicado para el público, más los ensayos de prueba.
+  // Es además la ÚNICA puerta a los ensayos: en la lista del público no salen.
+  const _OPERAR=(()=>{try{return new URLSearchParams(location.search).get('operar')==='1'}catch(e){return false}})();
   // Si entró por el link de un campeonato (?evento=…), sus jornadas se le muestran
   // igual: ese link ES el permiso. El filtro está para que nadie curiosee la lista
   // completa de lo que hay cargado, no para bloquear el link que le pasaron.
@@ -7352,6 +7397,12 @@ function renderSetup(){
   // Qué se dibuja. El encabezado y la lista salen de esta misma función, si no
   // pueden decir cosas distintas ("son 9 jornadas" y abajo ninguna).
   const _verEv=ev=>{
+    // Modo operar: solo lo publicado y los ensayos, sin la lista completa de
+    // todo lo que hay cargado (que para el día a día es ruido).
+    if(_OPERAR&&!_flt){
+      const pubOk=!!(_pub&&(_pub.has(ev.id)||_pub.has(ev.name)||(ev.parent&&_pub.has(ev.parent))));
+      return pubOk||_isEnsayo(ev);
+    }
     // Adentro de un campeonato (?evento=…) NO se aplica el ocultar-de-la-lista:
     // "archivado" y "no visible en el livecast" están para que la lista general no
     // se llene de cosas viejas, no para esconder las jornadas del campeonato al
