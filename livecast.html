@@ -763,7 +763,39 @@ function startFBSync(){
     }
   });
   console.log('[FB] Listener started for',id);
+  _armarVigilante();
 }
+// Vigilante de la conexión. Una pantalla de público o de OBS queda prendida
+// horas sin que nadie la toque: si el listener se corta (wifi, suspensión del
+// equipo, Firestore que cierra el stream), se queda mostrando datos viejos para
+// siempre y nadie se entera. Cada minuto se revisa cuándo llegó el último dato y,
+// si pasaron más de 5, se vuelve a suscribir — eso además trae el estado actual
+// de una, así la pantalla se pone al día sola.
+let _vigilanteTI=null;
+function _armarVigilante(){
+  if(_vigilanteTI)return;
+  _vigilanteTI=setInterval(()=>{
+    if(PRACTICE_MODE||!fbReady||!DATA.event)return;
+    if(document.visibilityState==='hidden')return;      // pestaña en segundo plano: no gastar
+    const silencio=Date.now()-(_lastFbUpdate||0);
+    if(silencio>5*60*1000){
+      console.warn('[FB] '+Math.round(silencio/1000)+'s sin datos — reconectando');
+      _lastFbUpdate=Date.now();                          // no reintentar en bucle
+      window._fbSyncRetries=0;
+      try{ startFBSync(); }catch(e){ console.warn('[FB] reconexión',e); }
+    }
+  },60000);
+}
+// Al volver a la pestaña (o al despertar el equipo) se revisa enseguida: es
+// justo cuando el stream suele haber quedado colgado.
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible')return;
+  if(PRACTICE_MODE||!fbReady||!DATA.event)return;
+  if(Date.now()-(_lastFbUpdate||0)>60000){
+    _lastFbUpdate=Date.now();
+    try{ startFBSync(); }catch(e){}
+  }
+});
 // Práctica ficticia + espectador: nunca inicia Firebase. Práctica con NÓMINA REAL
 // (&real=1): sí inicia Firebase, pero de SOLO LECTURA (el candado de initFB bloquea
 // toda escritura). El espectador de práctica lee del localStorage, no necesita FB.
@@ -10495,7 +10527,12 @@ function renderLiveView(){
   // ese lift. Se calcula sobre los atletas REALES (el clon del 4º redirige su
   // att, así que para la tabla usamos siempre _realAth).
   const _liveReal=sortedAthletes.map(_realAth);
-  const maxAtts={};['sq','bp','dl'].forEach(l=>{maxAtts[l]=Math.max(3,..._liveReal.map(a=>(a.att[l]||[]).length));});
+  // La columna EXTRA aparece solo si alguien tiene un 4º intento DE VERDAD (con
+  // peso declarado o ya juzgado). Antes bastaba con que quedara la casilla vacía
+  // —de un extra borrado, o de datos viejos— para que la columna le saliera a
+  // todos, que es lo que se veía en la pantalla del público.
+  const _tieneExtra=(a,l)=>{const x=(a.att[l]||[])[3];return !!(x&&(x.w>0||x.r));};
+  const maxAtts={};['sq','bp','dl'].forEach(l=>{maxAtts[l]=_liveReal.some(a=>_tieneExtra(a,l))?4:3;});
   const totalCols=2+(maxAtts.sq+1)+(maxAtts.bp+1)+(maxAtts.dl+1)+1+1; // +1 = columna POSICIÓN
 
   // ── Tabla completa de resultados ─────────────────────────────
