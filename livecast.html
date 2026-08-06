@@ -702,7 +702,15 @@ function startFBSync(){
     try{
       // Detectar si SOLO cambió el timer (eso pasa cada segundo y no debe causar re-render
       // en la vista pública "Competencia en Vivo")
-      const prevSig = (DATA.athletes?JSON.stringify(DATA.athletes):'')+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight;
+      // La firma decide si vale la pena redibujar. Tiene que incluir TODO lo que
+      // cambia lo que se ve, no solo los atletas y el cursor: `forcedCurrent` (marcar
+      // a mano el intento actual) y `compTimer` mueven al atleta de tarima sin tocar
+      // movimiento, ronda ni tanda, así que sin ellos la firma quedaba igual, no se
+      // redibujaba y el Control TX, el perfil y el marcador seguían mostrando al
+      // atleta anterior.
+      const _firma=()=>JSON.stringify(DATA.athletes||[])+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
+        +'|'+(DATA.forcedCurrent==null?'':DATA.forcedCurrent)+'|'+JSON.stringify(DATA.compTimer||null);
+      const prevSig = _firma();
       DATA.event=d.event||DATA.event;
       // NO pisar lo que acabo de editar localmente si la acción local fue hace <2.5s.
       // Esto cubre: pesos/intentos (DATA.athletes), navegación (lift/round/flight) y
@@ -777,7 +785,7 @@ function startFBSync(){
         if(DATA.timerOn&&!mainTI)startTimer(false);
         if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}
       }
-      const newSig = JSON.stringify(DATA.athletes)+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight;
+      const newSig = _firma();
       const structuralChange = prevSig !== newSig;
       // Solo re-renderizar si hubo cambio estructural (no solo timer) — evita flicker en vista pública
       if(structuralChange){
