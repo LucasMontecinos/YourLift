@@ -74,18 +74,29 @@ FALTAN = {
     comp("II Campeonarto Nacional Classic Raw Chile 2017", "2017-01-01", "105",
          "Powerlifting Classic", "cl", 102, 200, 137.5, 245, "2",
          opl="fechipo/1701"),
+    # Powerlifting y Only Bench son campeonatos aparte, con su propio título: en
+    # los dos sudamericanos ganó la banca sola además de su puesto en powerlifting.
+    # Van en líneas separadas, con el nombre oficial de cada uno.
     comp("XXXV Campeonato Sudamericano FESUPO 2021", "2021-12-08", "105",
-         "Powerlifting Equipado + Only Bench Equipado IPF", "eq", 97.2, 255, 172.5, 250, "2",
+         "Powerlifting Equipado IPF", "eq", 97.2, 255, 172.5, 250, "2",
          intentos={"sq": att((225,'g'), (240,'g'), (255,'g')),
                    "bp": att((145,'g'), (160,'g'), (172.5,'g')),
                    "dl": att((230,'g'), (250,'g'), (265,'n'))},
          opl="fesupo/2101", internacional=True),
-    comp("Campeonato Sudamericano de Powerlifting y Bench Press Equipado 2023", "2023-09-09",
-         "105", "Powerlifting Equipado + Only Bench Equipado IPF", "eq", 96.8, 292.5, 200, 280, "1",
+    comp("XXXV Campeonato Sudamericano FESUPO 2021 (Only Bench)", "2021-12-08", "105",
+         "Only Bench Equipado IPF", "beq", 97.2, None, 172.5, None, "1",
+         intentos={"bp": att((145,'g'), (160,'g'), (172.5,'g'))},
+         opl="fesupo/2101", internacional=True),
+    comp("Campeonato Sudamericano de Powerlifting Equipado 2023", "2023-09-09",
+         "105", "Powerlifting Equipado IPF", "eq", 96.8, 292.5, 200, 280, "1",
          intentos={"sq": att((270,'g'), (280,'g'), (292.5,'g')),
                    "bp": att((180,'g'), (190,'g'), (200,'g')),
                    "dl": att((255,'g'), (270,'g'), (280,'g'))},
          lugar="Lima, Perú", anio=2023, opl="fesupo/2305", internacional=True),
+    comp("Campeonato Sudamericano de Bench Press Equipado 2023", "2023-09-09",
+         "105", "Only Bench Equipado IPF", "beq", 96.8, None, 200, None, "1",
+         intentos={"bp": att((180,'g'), (190,'g'), (200,'g'))},
+         lugar="Lima, Perú", anio=2023, opl="fesupo/2304", internacional=True),
   ],
   # Mundial Classic 2026 (Druskininkai, Lituania). Los dos chilenos que fueron
   # no tenían cargado el resultado — ipf/2603 en opl-data.
@@ -106,6 +117,16 @@ FALTAN = {
          lugar="Druskininkai, Lituania", anio=2026, opl="ipf/2603", internacional=True,
          sexo="Mujer"),
   ],
+}
+
+# Competencias que se reemplazan por las de arriba (cambió el nombre del evento o
+# se separó powerlifting de la banca sola). Se quitan antes de agregar las nuevas.
+QUITAR = {
+  '1769FPA-2017': {'Campeonato Sudamericano de Powerlifting y Bench Press Equipado 2023'},
+}
+# Además, campos que hay que corregir en competencias que ya estaban cargadas.
+CORREGIR = {
+  '1769FPA-2017': {'XXXV Campeonato Sudamericano FESUPO 2021': {'modalidad': 'Powerlifting Equipado IPF'}},
 }
 
 def orden(c):
@@ -129,6 +150,19 @@ def main():
         a = por_cod.get(cod)
         if not a:
             print(f'!! no está el atleta {cod}'); continue
+        fuera = QUITAR.get(cod) or set()
+        if fuera:
+            antes = len(a.get('competencias') or [])
+            a['competencias'] = [c for c in (a.get('competencias') or []) if (c.get('evento') or '') not in fuera]
+            if antes != len(a['competencias']):
+                print(f"  − se quita (queda reemplazada): {', '.join(sorted(fuera))}")
+        for ev, campos in (CORREGIR.get(cod) or {}).items():
+            for c in a.get('competencias') or []:
+                if (c.get('evento') or '') == ev:
+                    for k, v in campos.items():
+                        if c.get(k) != v:
+                            print(f"  ~ {ev}: {k} '{c.get(k)}' → '{v}'")
+                            c[k] = v
         ya = {(c.get('evento') or '') for c in a.get('competencias') or []}
         agrego = [c for c in nuevas if c['evento'] not in ya]
         print(f"\n{a['nombre']} ({cod}) — tenía {len(a.get('competencias') or [])} competencias")
