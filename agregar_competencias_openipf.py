@@ -53,8 +53,9 @@ def comp(evento, fecha, cat, modalidad, serie, bw, sq, bp, dl, place, intentos=N
          lugar=None, anio=None, source='openpowerlifting', opl=None, internacional=False,
          division='Open', sexo='Hombre'):
     total = round((sq or 0) + (bp or 0) + (dl or 0), 2)
+    sx = 'F' if str(sexo).lower().startswith(('muj', 'fem')) else 'M'
     res = {"bw": bw, "sq": sq, "bp": bp, "dl": dl, "total": total,
-           "glp": gl(total, bw, serie), "dots": dots(total, bw)}
+           "glp": gl(total, bw, serie, sx), "dots": dots(total, bw, sx)}
     if intentos:
         res["intentos"] = intentos
     res.update({"categoria": cat, "division": division, "pesoCorporal": bw})
@@ -85,6 +86,25 @@ FALTAN = {
                    "bp": att((180,'g'), (190,'g'), (200,'g')),
                    "dl": att((255,'g'), (270,'g'), (280,'g'))},
          lugar="Lima, Perú", anio=2023, opl="fesupo/2305", internacional=True),
+  ],
+  # Mundial Classic 2026 (Druskininkai, Lituania). Los dos chilenos que fueron
+  # no tenían cargado el resultado — ipf/2603 en opl-data.
+  '1718SMM-2025': [
+    comp("IPF World Classic Powerlifting Championships 2026", "2026-06-13", "120+",
+         "Powerlifting Classic IPF", "cl", 182.7, 420, 222.5, 310, "9",
+         intentos={"sq": att((365,'g'), (405,'g'), (420,'g')),
+                   "bp": att((185,'g'), (205,'g'), (222.5,'g')),
+                   "dl": att((265,'g'), (290,'g'), (310,'g'))},
+         lugar="Druskininkai, Lituania", anio=2026, opl="ipf/2603", internacional=True),
+  ],
+  '1981MDZ-2025': [
+    comp("IPF World Classic Powerlifting Championships 2026", "2026-06-13", "84+",
+         "Powerlifting Classic IPF", "cl", 98.8, 180, 102.5, 175, "12",
+         intentos={"sq": att((170,'g'), (180,'g'), (187.5,'n')),
+                   "bp": att((97.5,'g'), (102.5,'g'), (105,'n')),
+                   "dl": att((162.5,'g'), (175,'g'), (190,'n'))},
+         lugar="Druskininkai, Lituania", anio=2026, opl="ipf/2603", internacional=True,
+         sexo="Mujer"),
   ],
 }
 

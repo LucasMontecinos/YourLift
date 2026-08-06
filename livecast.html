@@ -3551,6 +3551,21 @@ async function generateHojaRack(){
 // ═══════════════════════════════════════════════════════════
 // HOJA DE REVISIÓN DE EQUIPO PDF  (landscape A4)
 // ═══════════════════════════════════════════════════════════
+// Modalidad en la que se inscribió el atleta, en corto y sin acentos, para la
+// hoja de revisión de equipo. 'equipped_bench' le toca tanto al combinado
+// equipado como al Only Bench Equipado puro, así que los separa la bandera
+// plusBench, igual que en el resto del livecast.
+function _modHojaEquipo(a){
+  const m=String(a&&a.mod||'');
+  const plus=(typeof _isPlusBench==='function')?_isPlusBench(a):false;
+  if(m==='oe_classic')  return 'OE';
+  if(m==='oe_bench')    return 'OE ONLY BENCH';
+  if(m==='onlybench')   return 'ONLY BENCH';
+  if(m==='equipped')    return 'EQUIPADO';
+  if(m==='classic_bench')  return plus?'CLASSIC + ONLY BENCH':'CLASSIC';
+  if(m==='equipped_bench') return plus?'EQUIPADO + ONLY BENCH':'ONLY BENCH EQUIPADO';
+  return 'CLASSIC';
+}
 async function generateHojaEquipo(){
   const btn=document.getElementById('btnHojaEquipo');
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
@@ -3576,21 +3591,25 @@ async function generateHojaEquipo(){
 
     // Cols: Tanda|Categoría|Nombre|Singlet|Polera|Cinturón|Rodilleras|Muñequeras|Calzado SQ|Calzado BP|Calzado DL|Calcetas
     // Total usable: 297 - 2*8 = 281mm
+    // La columna Nombre se ensancha para que quepa la modalidad entre paréntesis:
+    // en revisión de equipo importa saber de una si es classic o equipado, y quién
+    // además hace Only Bench. Los milímetros salen de las casillas, que igual
+    // quedan de sobra para una marca a mano.
     const cols=[
-      {h:'Tanda',      w:15,  align:'center', check:false},
-      {h:'Cat.',       w:18,  align:'center', check:false},
-      {h:'Nombre',     w:58,  align:'left',   check:false},
-      {h:'Singlet',    w:20,  align:'center', check:true},
-      {h:'Polera',     w:20,  align:'center', check:true},
-      {h:'Cinturon',   w:20,  align:'center', check:true},
-      {h:'Rodilleras', w:22,  align:'center', check:true},
-      {h:'Munequeras', w:22,  align:'center', check:true},
-      {h:'Calz. SQ',   w:22,  align:'center', check:true},
-      {h:'Calz. BP',   w:22,  align:'center', check:true},
-      {h:'Calz. DL',   w:22,  align:'center', check:true},
-      {h:'Calcetas',   w:20,  align:'center', check:true},
+      {h:'Tanda',      w:14,  align:'center', check:false},
+      {h:'Cat.',       w:17,  align:'center', check:false},
+      {h:'Nombre (modalidad inscrita)', w:78, align:'left', check:false},
+      {h:'Singlet',    w:18,  align:'center', check:true},
+      {h:'Polera',     w:18,  align:'center', check:true},
+      {h:'Cinturon',   w:18,  align:'center', check:true},
+      {h:'Rodilleras', w:20,  align:'center', check:true},
+      {h:'Munequeras', w:20,  align:'center', check:true},
+      {h:'Calz. SQ',   w:20,  align:'center', check:true},
+      {h:'Calz. BP',   w:20,  align:'center', check:true},
+      {h:'Calz. DL',   w:20,  align:'center', check:true},
+      {h:'Calcetas',   w:18,  align:'center', check:true},
     ];
-    // total = 15+18+58+20+20+20+22+22+22+22+22+20 = 281 ✓
+    // total = 14+17+78+18+18+18+20+20+20+20+20+18 = 281 ✓
     const totalW=cols.reduce((s,c)=>s+c.w,0);
     const startX=(PW-totalW)/2;
     const BOX=11; // checkbox size mm — large enough to write/mark
@@ -3657,7 +3676,25 @@ async function generateHojaEquipo(){
             const al=(cell.align||col.align)==='center'?'center':'left';
             const px=al==='center'?cx+col.w/2:cx+2;
             let txt=cell.t;
-            if(ci===2){const maxW=col.w-4;while(txt.length>1&&doc.getTextWidth(txt)>maxW)txt=txt.slice(0,-1);if(txt!==cell.t)txt+='.';}
+            if(ci===2){
+              // Nombre + modalidad entre paréntesis. Si no entra todo, se recorta
+              // el NOMBRE y nunca la modalidad, que es el dato que se viene a mirar.
+              const lbl=' ('+_modHojaEquipo(a)+')';
+              doc.setFontSize(5.6);const wLbl=doc.getTextWidth(lbl);
+              doc.setFontSize(7);
+              const maxW=col.w-4-wLbl;
+              while(txt.length>1&&doc.getTextWidth(txt)>maxW)txt=txt.slice(0,-1);
+              if(txt!==cell.t)txt+='.';
+              doc.text(txt,px,ty,{align:al});
+              const wNom=doc.getTextWidth(txt);
+              doc.setFontSize(5.6);doc.setTextColor(...C.muted);
+              doc.text(lbl,px+wNom,ty,{align:'left'});
+              doc.setTextColor(...C.text);
+              cx+=col.w;
+              doc.setDrawColor(...C.line);doc.setLineWidth(0.15);
+              doc.line(cx,curY,cx,curY+rowH);
+              return;
+            }
             doc.text(txt,px,ty,{align:al});
           }
         }

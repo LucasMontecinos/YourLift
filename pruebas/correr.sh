@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.." || exit 1
 python3 -m http.server 8972 >/dev/null 2>&1 &
 SRV=$!; sleep 2
 cd pruebas || exit 1
-for t in t_meet.js t_cruce2.js t_extra.js t_ct.js t_rec.js t_next3.js t_extra_col.js t_sync.js t_sync2.js t_bug.js t_gl.js t_ordenextra.js t_crono.js t_pdf.js; do
+for t in t_meet.js t_cruce2.js t_extra.js t_ct.js t_rec.js t_next3.js t_extra_col.js t_sync.js t_sync2.js t_bug.js t_gl.js t_ordenextra.js t_crono.js t_hojaequipo.js t_peers.js t_pdf.js; do
   echo "════════ $t"
   NODE_PATH=/opt/node22/lib/node_modules "${NODE:-/opt/node22/bin/node}" "$t" 2>&1 | tail -14
 done
