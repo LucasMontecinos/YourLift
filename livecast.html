@@ -317,7 +317,14 @@ async function initFB(){
     const storageMod=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js');
     const app=initializeApp(FB_CFG);
     try{
-      fbDB=fb.initializeFirestore(app,{localCache:fb.persistentLocalCache({tabManager:fb.persistentMultipleTabManager()})});
+      // experimentalAutoDetectLongPolling: en el wifi de un gimnasio (portal
+      // cautivo, proxy, router que corta conexiones largas) el canal en tiempo
+      // real de Firestore a veces queda a medias y los cambios llegan tarde o de
+      // a montones. Con esto el SDK lo detecta y se pasa solo a long polling.
+      // Si la red está bien, no cambia nada.
+      fbDB=fb.initializeFirestore(app,{
+        localCache:fb.persistentLocalCache({tabManager:fb.persistentMultipleTabManager()}),
+        experimentalAutoDetectLongPolling:true});
     }catch(e){
       fbDB=fb.getFirestore(app); // fallback si ya fue inicializado
     }
@@ -634,6 +641,34 @@ async function syncTimerOnlyToFB(forzar){
       timerStartedAt:DATA.timerStartedAt||0,ts:Date.now(),writer:window._WRITER_ID});
   }catch(e){/* silencioso: si el doc no existe el setDoc completo lo crea */}
 }
+// Redibujado que quedó esperando porque el operador estaba escribiendo un peso.
+// Se hace apenas suelta el campo: así la pantalla se pone al día con lo que
+// llegó mientras tanto, sin haberle borrado lo que estaba tecleando.
+window._renderPendiente=false;
+function _soltoElCampo(){
+  if(!window._renderPendiente)return;
+  const f=document.activeElement;
+  if(f&&(f.tagName==='INPUT'||f.tagName==='SELECT'||f.tagName==='TEXTAREA'))return; // sigue editando
+  window._renderPendiente=false;
+  if(typeof R==='function')R();
+}
+document.addEventListener('focusout',()=>setTimeout(_soltoElCampo,0),true);
+// Red de seguridad: si el foco se queda pegado en un campo (pasa cuando el
+// operador deja el cursor puesto y se va a mirar la tarima), igual hay que
+// mostrarle lo que llegó. Se refresca cada 3 s sin tocar el campo que edita.
+setInterval(()=>{
+  if(!window._renderPendiente)return;
+  const f=document.activeElement;
+  if(!f||!(f.tagName==='INPUT'||f.tagName==='SELECT'||f.tagName==='TEXTAREA')){_soltoElCampo();return;}
+  const id=f.id, val=f.value, ini=f.selectionStart, fin=f.selectionEnd;
+  window._renderPendiente=false;
+  if(typeof R==='function')R();
+  // Devolver el foco y lo tecleado a la misma casilla tras el redibujado.
+  try{
+    const el=id&&document.getElementById(id);
+    if(el){ el.value=val; el.focus(); if(el.setSelectionRange&&ini!=null)el.setSelectionRange(ini,fin); }
+  }catch(e){}
+},3000);
 function startFBSync(){
   if(PRACTICE_MODE)return; // práctica: aislada, NO se suscribe al estado en vivo real
   if(!fbReady)return;
@@ -654,9 +689,15 @@ function startFBSync(){
     // Multi-controlador: ignorar SOLO el eco de mi propia escritura (evita parpadeo),
     // pero SÍ aplicar lo que escribieron los demás controladores → todos sincronizados.
     if(d.writer && d.writer===window._WRITER_ID)return;
-    // Si hay un input enfocado, no re-renderizar (el usuario está editando)
+    // Si hay un campo enfocado, el operador está escribiendo un peso: NO se
+    // re-dibuja la pantalla (le borraría lo que está tecleando). Pero los datos
+    // sí se aplican igual. Antes acá se descartaba el snapshot COMPLETO, y como
+    // Firestore manda cada cambio una sola vez, todo lo que pasara mientras el
+    // cursor estaba en una casilla se perdía para siempre en esa pantalla: los
+    // válidos y nulos del control remoto, el movimiento, la ronda, la tanda. El
+    // dibujo se hace apenas suelta el campo (_soltoElCampo).
     const focused=document.activeElement;
-    if(focused&&(focused.tagName==='INPUT'||focused.tagName==='SELECT'||focused.tagName==='TEXTAREA'))return;
+    const editando=!!(focused&&(focused.tagName==='INPUT'||focused.tagName==='SELECT'||focused.tagName==='TEXTAREA'));
     _fbSyncing=true;
     try{
       // Detectar si SOLO cambió el timer (eso pasa cada segundo y no debe causar re-render
@@ -740,7 +781,8 @@ function startFBSync(){
       const structuralChange = prevSig !== newSig;
       // Solo re-renderizar si hubo cambio estructural (no solo timer) — evita flicker en vista pública
       if(structuralChange){
-        R();
+        if(editando){ window._renderPendiente=true; }   // se dibuja al soltar el campo
+        else R();
       } else {
         // Actualizar solo el timer en pantalla sin re-render
         const tmEls = [];
@@ -1062,7 +1104,11 @@ function liftQueue(){
 }
 function save(){if(PRACTICE_VIEWER)return;if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}if(!_fbSyncing)debouncedSync()}
 let _syncTimer=null;
-function debouncedSync(){if(_syncTimer)clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>{syncToFB();_syncTimer=null},800)}
+// 800 ms era mucho: en competencia cada cambio esperaba casi un segundo antes de
+// salir del equipo, y recién ahí viajaba a la tarima y al público. Se baja a 150,
+// que sigue juntando ráfagas de cambios en una sola escritura (el guard de
+// _syncInFlight/_syncPending ya impide que se pisen) pero deja de notarse.
+function debouncedSync(){if(_syncTimer)clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>{syncToFB();_syncTimer=null},150)}
 function saveNow(){if(PRACTICE_VIEWER)return;if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}syncToFB()}
 function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);_normExtraAtts(DATA.athletes);return true}}}catch(e){}return false}
 // Un 4º intento puede llegar SIN la marca `extra`: lo guardó una versión anterior,
@@ -1880,7 +1926,10 @@ function setAtt(id,l,r,val){
   a.att[l][r].w=w;
   _markAtt(id,'att_'+l+'_'+r);
   if(DATA.changeTimers[key])delete DATA.changeTimers[key];
-  save();
+  // El peso sale YA, sin esperar el debounce: es el dato que la pantalla de tarima
+  // necesita para cargar la barra. Además setAtt corre en 'change' (una vez, al
+  // salir de la casilla), así que acá no hay ráfaga de tecleo que juntar.
+  saveNow();
   // Refrescar la UI para que la celda muestre el peso (no el countdown viejo)
   if(typeof R==='function')R();
 }
