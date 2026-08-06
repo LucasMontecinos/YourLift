@@ -6848,6 +6848,10 @@ window.uploadClubLogo=async function(club,slug,input){
   const btn=input.closest('label'); if(btn)btn.textContent='Subiendo...';
   try{
     const compressed=await compressImg(file,400,0.85);
+    // Faltaba tomar la instancia de Storage: `storage` no existía en esta función
+    // y subir un logo moría con "Can't find variable: storage". El resto de las
+    // subidas la piden así, cada una en su propio ámbito.
+    const storage=getStorage(app);
     const sref=storageRef(storage,`logos/clubs/${slug}.webp`);
     await uploadBytes(sref,compressed,{contentType:'image/webp'});
     const url=await getDownloadURL(sref);

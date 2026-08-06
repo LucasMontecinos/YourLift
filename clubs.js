@@ -20,7 +20,8 @@ window.CLUBS_LOGOS = {
   'lostoros':         'clubs/Lostoros.png',
   'potenciamuscular': 'clubs/PotenciaMuscular.png',
   'rema':             'clubs/Rema.jpg',
-  'southside':        'clubs/SouthSide.png'
+  'southside':        'clubs/SouthSide.png',
+  'wolfstrength':     'clubs/WolfStrength.png'
 };
 
 // Logos subidos desde admin (Firestore 'clubs'). Cada página lo popula
