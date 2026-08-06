@@ -19,6 +19,7 @@ window.CLUBS_LOGOS = {
   'kaizen':           'clubs/Kaizen.png',
   'lostoros':         'clubs/Lostoros.png',
   'potenciamuscular': 'clubs/PotenciaMuscular.png',
+  'primalstrength':   'clubs/PrimalStrength.png',
   'rema':             'clubs/Rema.jpg',
   'southside':        'clubs/SouthSide.png',
   'wolfstrength':     'clubs/WolfStrength.png'
