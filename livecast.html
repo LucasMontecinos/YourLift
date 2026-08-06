@@ -16,6 +16,12 @@ input,select,button{font-family:inherit;outline:none}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulseRed{0%,100%{opacity:1}50%{opacity:.7}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* Intento de récord sudamericano: el cartel entra y sale, como en las pantallas
+   de la IPF. Se ve casi dos segundos y desaparece uno, para que el público lo
+   note sin que tape el peso — la carga de la barra tiene que leerse siempre. */
+@keyframes srParpadeo{0%,58%{opacity:1;transform:scale(1)}68%,90%{opacity:0;transform:scale(.97)}100%{opacity:1;transform:scale(1)}}
+.sr-parpadea{animation:srParpadeo 3s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.sr-parpadea{animation:none}}
 .fade{animation:fadeIn .3s ease}
 .shell{min-height:100vh}
 /* Botón hamburguesa: siempre visible arriba a la izquierda */
@@ -5508,7 +5514,7 @@ function _renderTxCerScoreboardBL(cur,opts){
         +(function(){
           const w=(cur.att[DATA.lift][DATA.round]||{}).w;
           const rr=(typeof _srRompe==='function')?_srRompe(_realAth(cur),DATA.lift,w):[];
-          return rr.length?'<span style="background:#F2C230;color:#fff;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:1.5px;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.55);box-shadow:0 0 14px rgba(242,194,48,.6)">INTENTO DE RÉCORD SUDAMERICANO</span>':'';
+          return rr.length?'<span class="sr-parpadea" style="background:#F2C230;color:#fff;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:1.5px;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.55);box-shadow:0 0 14px rgba(242,194,48,.6)">INTENTO DE RÉCORD SUDAMERICANO</span>':'';
         })()
       +'</div>'
       +'<div style="font-family:Oswald;font-size:18px;font-weight:800;color:'+_forecastColor+';letter-spacing:2px">'+_forecastTxt+'</div>'
@@ -7430,7 +7436,7 @@ function renderScreenIntentos(cur,nxt){
   // Si el peso cargado supera el récord vigente de su división (o del Open), la
   // pantalla de tarima lo canta: es lo que mira el público y la mesa técnica.
   const _srCur=(typeof _srRompe==='function')?_srRompe(_realAth(cur),DATA.lift,weight):[];
-  const recordHtml=_srCur.length?`<div style="font-family:Oswald;white-space:nowrap;text-align:center">
+  const recordHtml=_srCur.length?`<div class="sr-parpadea" style="font-family:Oswald;white-space:nowrap;text-align:center">
       <div style="display:inline-block;background:#F2C230;color:#1a1200;padding:8px 26px;border-radius:10px;font-size:30px;font-weight:900;letter-spacing:4px;box-shadow:0 0 34px rgba(242,194,48,.55)">INTENTO DE RÉCORD SUDAMERICANO</div>
       <div style="font-size:17px;letter-spacing:2px;color:#F2C230;margin-top:6px">${_srCur.map(r=>(r.div+' '+r.cat+' · '+(r.vacio?'SIN RÉCORD PREVIO':'ACTUAL '+r.kg+' KG')).toUpperCase()).join('   ·   ')}</div>
     </div>`:'';
