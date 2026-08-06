@@ -2650,6 +2650,22 @@ function _subscribeCronoFlightMap(evId){
 // Reaplica flight/jornada del Cronograma a los atletas ya cargados (por si cambiaron
 // DESPUÉS de la carga inicial). Solo toca lo que vino del Cronograma — no inventa nada
 // si un atleta no está ahí.
+// El número de lote LLEVA la tanda adentro: se sortean como base de tanda + posición
+// (A → 100, 101…; B → 200, 201…). Así que si un atleta cambia de tanda, su lote queda
+// de la tanda vieja: aparece un 104 en la tanda E y el orden de salida se desordena.
+// Acá se le da el primer lote libre de su tanda nueva. NO se toca el de nadie más:
+// re-sortear todo cambiaría el orden de salida de los 62.
+function _reubicarLote(a){
+  if(!DATA.lotsGenerated||!a||!a.flight)return false;
+  const base=(String(a.flight).charCodeAt(0)-64)*100;
+  if(!(base>0))return false;
+  if(a.lot>=base&&a.lot<base+100)return false;      // ya está en el rango de su tanda
+  const usados=new Set(DATA.athletes.filter(x=>x!==a).map(x=>x.lot));
+  let n=base;
+  while(usados.has(n))n++;
+  a.lot=n;
+  return true;
+}
 function _applyCronoFlightsToAthletes(map){
   if(!map||!DATA.athletes||!DATA.athletes.length)return;
   let tandas=0,datos=0;
@@ -2657,7 +2673,7 @@ function _applyCronoFlightsToAthletes(map){
   DATA.athletes.forEach(a=>{
     const entry=_cronoLookup(map,a.name);
     if(!entry)return;
-    if(entry.flight && a.flight!==entry.flight){a.flight=entry.flight;tandas++;}
+    if(entry.flight && a.flight!==entry.flight){a.flight=entry.flight;tandas++;if(_reubicarLote(a))tandas++;}
     if(typeof entry.jornada==='string' && a.jornada!==entry.jornada){a.jornada=entry.jornada;tandas++;}
     // División, categoría y modalidad: manda el Cronograma. Solo se pisa cuando el
     // Cronograma trae el dato y es distinto — nunca se borra lo que ya tiene el atleta.
@@ -2718,7 +2734,10 @@ function _mergeFirebaseAthletes(fbAthletes){
       }
     }else{
       // Update flight if changed in Firestore
-      if(fa.flight&&fa.flight!==existing.flight){existing.flight=fa.flight;changed=true;}
+      if(fa.flight&&fa.flight!==existing.flight){
+        existing.flight=fa.flight;changed=true;
+        _reubicarLote(existing);   // el lote lleva la tanda adentro (A→100, B→200…)
+      }
       // División, categoría y modalidad vienen del Cronograma (ver _inscToAthlete),
       // que es lo que manda. Sin esto la re-sincronización solo arreglaba la tanda y
       // dejaba, por ejemplo, a los de Olimpiadas Especiales corriendo como Classic.
