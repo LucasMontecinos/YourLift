@@ -7721,8 +7721,16 @@ function renderShell(){
   h+='<div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">';
   h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'\uD83D\uDCE1 Datos en vivo':'\u23F3 Conectando...')+'</div>';
   h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon">\ud83c\udfc6</span>Selecci\u00f3n de Campeonato</button>';
-  // Sin bot\u00f3n de iniciar sesi\u00f3n: esta pantalla la mira el p\u00fablico. Quien opera
-  // entra por el panel; dejarlo ac\u00e1 solo invitaba a que alguien lo tocara.
+  // El bot\u00f3n de iniciar sesi\u00f3n se hab\u00eda sacado del todo porque esta pantalla la mira
+  // el p\u00fablico. El problema: si al operador se le vence la sesi\u00f3n EN MEDIO de la
+  // competencia, el livecast deja de guardar en silencio y no queda forma de volver
+  // a entrar desde ac\u00e1. Ahora se muestra SOLO cuando no hay sesi\u00f3n, que es
+  // justamente cuando hace falta, y desaparece apenas se entra.
+  if(!isAdmin && !TX_MODE){
+    h+='<button class="side-btn" onclick="openLoginModal()" style="color:var(--gold);border:1px solid rgba(212,168,67,.5)" '
+      +'title="Solo para quien opera la competencia. Sin sesi\u00f3n iniciada, esta pantalla NO guarda nada.">'
+      +'<span class="icon">\ud83d\udd11</span>Iniciar sesi\u00f3n (operador)</button>';
+  }
   h+='</div>';
   }
   h+='</div><div class="main">';
