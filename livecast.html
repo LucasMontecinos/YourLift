@@ -2734,8 +2734,23 @@ function _inscToAthlete(ins, j, flightMap){
 function _mergeFirebaseAthletes(fbAthletes){
   // Merge: update existing athletes by name/rut, add new ones, remove deleted
   let changed=false;
-  // Helper: matchea atleta local con uno de Firestore (por RUT primero, luego nombre)
-  const matches=(local,fa)=>(fa.rut&&local.rut&&local.rut.replace(/[^0-9kK]/g,'')===fa.rut.replace(/[^0-9kK]/g,''))||local.name===fa.name;
+  // Matchea atleta local con uno de Firestore: RUT primero; si no, nombre. El nombre
+  // se compara igual que en el Cronograma (sin tildes, y aceptando que a uno le falte
+  // el segundo nombre). Con la comparación exacta anterior, un "José Salamanca Ormeño"
+  // contra "José Tomás Salamanca Ormeño" NO matcheaba: el atleta entraba como nuevo,
+  // el viejo se borraba por sobrante, y de paso perdía su número de lote.
+  const _r=s=>String(s||'').replace(/[^0-9kK]/g,'');
+  const _mismoNombre=(x,y)=>{
+    const a=_nnCrono(x||'').split(' ').filter(Boolean), b=_nnCrono(y||'').split(' ').filter(Boolean);
+    if(!a.length||!b.length)return false;
+    if(a.join(' ')===b.join(' '))return true;
+    const A=new Set(a), B=new Set(b);
+    const chico=A.size<=B.size?A:B, grande=A.size<=B.size?B:A;
+    if(chico.size<2)return false;
+    for(const t of chico){ if(!grande.has(t))return false; }
+    return true;
+  };
+  const matches=(local,fa)=>(_r(fa.rut)&&_r(local.rut)&&_r(local.rut)===_r(fa.rut))||_mismoNombre(local.name,fa.name);
 
   fbAthletes.forEach((fa,j)=>{
     const existing=DATA.athletes.find(a=>matches(a,fa));
@@ -2743,7 +2758,11 @@ function _mergeFirebaseAthletes(fbAthletes){
       // New athlete — only add if competition not started
       if(DATA.phase==='manage'||DATA.phase==='setup'){
         const newId=DATA.athletes.length?Math.max(...DATA.athletes.map(a=>a.id))+1:0;
-        DATA.athletes.push({...fa,id:newId,lot:newId+1});
+        const nuevo={...fa,id:newId,lot:newId+1};
+        DATA.athletes.push(nuevo);
+        // Con los lotes ya sorteados, el que entra toma el primer lote libre de SU
+        // tanda (A→100…, B→200…) en vez de un correlativo suelto que rompe el orden.
+        _reubicarLote(nuevo);
         changed=true;
       }
     }else{
