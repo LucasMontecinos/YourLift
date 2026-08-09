@@ -885,7 +885,25 @@ async function doLogout(){
   R();
 }
 const LIFTS=['sq','bp','dl'],LIFT_N={sq:'SQUAT',bp:'BENCH PRESS',dl:'DEADLIFT'},LIFT_S={sq:'SQ',bp:'BP',dl:'DL'},LIFT_C={sq:'#3b82f6',bp:'#f59e0b',dl:'#ef4444'};
-const FL_C={A:'#3b82f6',B:'#f59e0b',C:'#22c55e',D:'#a855f7',E:'#ec4899',F:'#06b6d4'};
+// Tandas de la A a la Z. Antes llegaban hasta la F y un Regional con tres tandas
+// en la mañana, dos en la tarde y dos al otro día ya se quedaba sin letras.
+const FL_LETTERS=Array.from({length:26},(_,i)=>String.fromCharCode(65+i));
+// Un color por tanda. Los seis primeros son los de siempre, para no cambiarle la
+// referencia a nadie que ya conoce las pantallas; del resto se reparten los tonos
+// por la rueda de color (ángulo áureo) para que dos tandas seguidas nunca se
+// parezcan. Van en HEX porque en varios lugares se les pega la transparencia
+// ('...22') al final, y con hsl() eso no es un color válido.
+const FL_C=(function(){
+  const c={A:'#3b82f6',B:'#f59e0b',C:'#22c55e',D:'#a855f7',E:'#ec4899',F:'#06b6d4'};
+  const dosDig=n=>Math.round(n*255).toString(16).padStart(2,'0');
+  const hsl=(h,s,l)=>{
+    const a=s*Math.min(l,1-l);
+    const f=n=>{const k=(n+h/30)%12;return l-a*Math.max(-1,Math.min(k-3,9-k,1));};
+    return '#'+dosDig(f(0))+dosDig(f(8))+dosDig(f(4));
+  };
+  for(let i=6;i<26;i++)c[FL_LETTERS[i]]=hsl((i*137.508)%360,.68,.60);
+  return c;
+})();
 // ── TX Widget Color System ───────────────────────────────────────────
 const _TX_COLOR_DEFAULTS={
   goodLift:    '#22c55e', // good attempt cell & GOOD LIFT slam
@@ -2185,7 +2203,7 @@ const CAT_LIMITS={"47":47,"52":52,"57":57,"63":63,"69":69,"76":76,"84":84,"53":5
 // ── Agregar atleta manualmente (atletas internacionales / altas de último momento) ──
 function openAddAthlete(){
   const ex=document.getElementById('addAthModal');if(ex)ex.remove();
-  const flights=TARIMA?['A','B','C','D','E','F'].map(L=>L+TARIMA):['A','B','C','D','E','F'];
+  const flights=TARIMA?FL_LETTERS.map(L=>L+TARIMA):FL_LETTERS.slice();
   const inp='padding:9px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:14px';
   const lbl='display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)';
   const m=document.createElement('div');m.id='addAthModal';
@@ -8916,11 +8934,11 @@ function renderManage(){
   h+='</tr></thead><tbody>';
   ath.forEach(a=>{
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3);'+(a.bombed?'opacity:.4':'')+'">';
-    h+='<td style="padding:3px 2px;text-align:center"><input type="number" min="1" value="'+a.lot+'" onchange="setLot('+a.id+',this.value)" title="Editá el número de lote — si ya existe se hace swap" style="width:42px;padding:3px 2px;font-family:Oswald;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:13px"></td>';
+    h+='<td style="padding:3px 2px;text-align:center"><input type="number" min="1" value="'+a.lot+'" onchange="setLot('+a.id+',this.value)" title="Edita el número de lote — si ya existe se hace swap" style="width:42px;padding:3px 2px;font-family:Oswald;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:13px"></td>';
     h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+_flagImg(_ctry(a),13)+a.name+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+_ctry(a)+' \u00b7 '+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
     {
       // Opciones del dropdown de vuelo: si hay tarima, suffix con 1/2; si no, letras simples.
-      const _flOpts = TARIMA ? ['A','B','C','D','E','F'].map(L=>L+TARIMA) : ['A','B','C','D','E','F'];
+      const _flOpts = TARIMA ? FL_LETTERS.map(L=>L+TARIMA) : FL_LETTERS.slice();
       h+='<td style="padding:3px 2px"><select class="inp-sm" onchange="updA('+a.id+',\'flight\',this.value);R()" style="width:42px;padding:4px 1px;font-size:11px">'+_flOpts.map(f=>'<option value="'+f+'" '+(a.flight===f?'selected':'')+'>'+f+'</option>').join('')+'</select></td>';
     }
     h+='<td style="padding:3px 2px;text-align:center">';
@@ -9628,7 +9646,7 @@ function renderResults(){
       +'<button id="btnActaFesupo" class="btn" onclick="exportActaFesupoPDF()" style="background:#fff;border:1px solid #999;color:#111;font-weight:700" title="PDF de fondo blanco, agrupado por modalidad y categoría, con los récords sudamericanos resaltados en amarillo">Acta FESUPO (PDF)</button>'
       +'<button id="btnActaXls" class="btn" onclick="exportActaFesupoXLS()" style="background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);font-weight:700" title="La misma acta en Excel, con los récords marcados">Excel</button>';
   }
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:24px;letter-spacing:2px">RESULTADOS <span style="background:'+FL_C[DATA.flight]+';color:#fff;padding:2px 10px;border-radius:6px;font-size:14px;vertical-align:middle">VUELO '+DATA.flight+'</span></h2><p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+' · '+DATA.athletes.length+' atletas</p></div>'+adminButtons+'</div>';
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:24px;letter-spacing:2px">RESULTADOS <span style="background:'+(FL_C[DATA.flight]||'#666')+';color:#fff;padding:2px 10px;border-radius:6px;font-size:14px;vertical-align:middle">VUELO '+DATA.flight+'</span></h2><p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+' · '+DATA.athletes.length+' atletas</p></div>'+adminButtons+'</div>';
 
   // Stats
   h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">';

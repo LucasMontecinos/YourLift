@@ -3865,7 +3865,9 @@ function renderEditRequests(){
 // ═══════════════════════════════════════════
 // Una sola tarima: flights son letras simples (A, B, C...), AM/PM es un campo
 // aparte y opcional (columna Jornada), no va pegado al código del flight.
-const CRONO_FLIGHTS=['A','B','C','D','E','F','G','H'];
+// De la A a la Z: un Regional con tres tandas en la mañana, dos en la tarde y dos
+// al día siguiente ya pasaba de la H.
+const CRONO_FLIGHTS=Array.from({length:26},(_,i)=>String.fromCharCode(65+i));
 window.cronoPickEvent=function(ev){
   ST.cronoEv=ev; ST.cronoRows=null;
   if(window._cronoUnsub){try{window._cronoUnsub()}catch(e){}window._cronoUnsub=null;}
@@ -4162,7 +4164,7 @@ function renderCronograma(){
   if(!ST.filterEv&&events.length)ST.filterEv=events[0];
   if(events.length&&!events.includes(ST.filterEv))ST.filterEv=events[0];
   const filtered=ST.inscripciones.filter(i=>i.evento===ST.filterEv&&i.status==='approved');
-  const flights=['A','B','C','D','E','F'];
+  const flights=CRONO_FLIGHTS;
   // Find event ID for public cronograma.html link
   const evObj=(ST.eventos||[]).find(e=>e.name===ST.filterEv||e.id===ST.filterEv);
   const publicLinkId=encodeURIComponent(evObj?.id||ST.filterEv||'');
@@ -4184,7 +4186,7 @@ function renderCronograma(){
           <td>${esc(i.nombre)}</td>
           <td><span class="badge b-y">${esc(i.categoria||'?')}</span></td>
           <td>${esc((i.sexo||'?').substring(0,1))}</td>
-          <td>${flights.map(f=>`<button onclick="assignFlight('${sid}','${f}')" style="background:${i.flight===f?'var(--accent)':'transparent'};color:${i.flight===f?'#fff':'var(--muted)'};border:1px solid var(--border);padding:4px 9px;border-radius:5px;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">${f}</button>`).join('')}</td>
+          <td><select class="inp" onchange="assignFlight('${sid}',this.value)" style="padding:4px 6px;font-family:Oswald;font-size:11px;font-weight:700;width:64px">${flights.map(f=>`<option ${i.flight===f?'selected':''}>${f}</option>`).join('')}</select></td>
         </tr>`;}).join('')}
       </table>
       ${filtered.length===0?'<div class="empty">Sin atletas aprobados en este campeonato</div>':''}
