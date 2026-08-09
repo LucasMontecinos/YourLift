@@ -86,6 +86,21 @@ let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,fligh
 const TX_URL=new URLSearchParams(location.search);
 const TX_MODE=TX_URL.get('tx')||null; // 'profile' | 'scoreboard' | 'leaderboard' | 'lbauto' | 'slam' | 'timer' | 'lights' | 'ceremony' | null
 const TARIMA=TX_URL.get('tarima')||null; // '1' o '2' para modo 2 tarimas; null = todas
+// ¿Estamos adentro de una fuente de navegador de OBS? OBS inyecta window.obsstudio
+// en cada browser source, y además se anuncia en el user agent. Importa porque su
+// navegador interno (CEF) no es Chrome: el canal en tiempo real de Firestore se
+// queda colgado ahí — la página carga bien, muestra el estado del momento y ya no
+// se entera de nada más. Es lo que pasó en el Regional: el control remoto movía la
+// competencia, el mismo link abierto en Chrome respondía, y el de OBS no.
+// ?longpoll=1 fuerza el mismo tratamiento en cualquier navegador que se comporte así.
+const EN_OBS=(function(){
+  try{
+    if(window.obsstudio)return true;
+    if(/\bOBS\b/i.test(navigator.userAgent||''))return true;
+  }catch(e){}
+  return false;
+})();
+const FORZAR_LONGPOLL=EN_OBS||TX_URL.get('longpoll')==='1';
 const DEMO_MODE=TX_URL.get('demo')==='1'; // Modo demo para grabar videos promocionales
 // Modo práctica (?practica=1): livecast.html completo (Control en Vivo, Atletas y
 // Pesaje, Control TX, todo) pero con una tanda ficticia de atletas inventados, sin
@@ -328,9 +343,23 @@ async function initFB(){
       // real de Firestore a veces queda a medias y los cambios llegan tarde o de
       // a montones. Con esto el SDK lo detecta y se pasa solo a long polling.
       // Si la red está bien, no cambia nada.
-      fbDB=fb.initializeFirestore(app,{
-        localCache:fb.persistentLocalCache({tabManager:fb.persistentMultipleTabManager()}),
-        experimentalAutoDetectLongPolling:true});
+      //
+      // Adentro de OBS no alcanza con detectarlo: en su navegador interno la
+      // detección da por bueno un canal que después nunca entrega nada, y la
+      // fuente se queda congelada en el estado que había al abrirla. Ahí se fuerza
+      // el long polling de entrada. Y se usa caché en memoria en vez de
+      // IndexedDB, que en OBS es inestable y no aporta nada a una pantalla que
+      // solo muestra.
+      let _cfgFS;
+      if(FORZAR_LONGPOLL){
+        _cfgFS={experimentalForceLongPolling:true};
+        if(fb.memoryLocalCache)_cfgFS.localCache=fb.memoryLocalCache();
+      }else{
+        _cfgFS={localCache:fb.persistentLocalCache({tabManager:fb.persistentMultipleTabManager()}),
+                experimentalAutoDetectLongPolling:true};
+      }
+      fbDB=fb.initializeFirestore(app,_cfgFS);
+      if(FORZAR_LONGPOLL)console.log('[FB] long polling forzado'+(EN_OBS?' (fuente de navegador de OBS)':''));
     }catch(e){
       fbDB=fb.getFirestore(app); // fallback si ya fue inicializado
     }
@@ -835,7 +864,11 @@ function _armarVigilante(){
   if(_vigilanteTI)return;
   _vigilanteTI=setInterval(()=>{
     if(PRACTICE_MODE||!fbReady||!DATA.event)return;
-    if(document.visibilityState==='hidden')return;      // pestaña en segundo plano: no gastar
+    // Pestaña en segundo plano: no gastar. Pero una fuente de OBS se declara
+    // "hidden" aunque esté al aire, así que ahí el vigilante tiene que seguir
+    // corriendo — es justo la pantalla que nadie mira de cerca para darse cuenta
+    // de que se quedó pegada.
+    if(!EN_OBS&&document.visibilityState==='hidden')return;
     const silencio=Date.now()-(_lastFbUpdate||0);
     if(silencio>5*60*1000){
       console.warn('[FB] '+Math.round(silencio/1000)+'s sin datos — reconectando');
