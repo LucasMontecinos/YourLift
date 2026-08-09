@@ -984,6 +984,13 @@ const BAR=20,COLLARS=5;
 // equipado que además compite en Only Bench, y el Only Bench Equipado puro. Al
 // puro hay que darle los coeficientes de banca sola; al combinado, los de
 // powerlifting completo cuando se lo mide por su total.
+// Invitado/a: el atleta que no dio el peso (o entra fuera de nómina) y compite
+// igual. Sale a tarima, se le cargan y juzgan los intentos y se ve en pantalla,
+// pero NO entra al ranking de su categoría ni al acta como competidor: va aparte,
+// en el cuadro de fuera de competencia. Antes había que dejarlo en su modalidad
+// —y entonces le ganaba el lugar a quien sí dio el peso— o inventarle una
+// división, que ensuciaba el acta.
+function _esInvitado(a){ return String(a&&a.mod||'')==='invitado'; }
 function _glMod(a){
   if(!a)return '';
   if(a.mod==='equipped_bench'&&typeof _isPlusBench==='function'&&!_isPlusBench(a))return 'onlybench_eq';
@@ -1073,7 +1080,7 @@ function totalOf(a,view){
   const s=bestOf(a,'sq'),b=bestOf(a,'bp'),d=bestOf(a,'dl');
   return(s&&b&&d)?s+b+d:0;
 }
-function rankings(){return DATA.athletes.map(a=>({...a,total:totalOf(a),gl:calcGL(totalOf(a),a.bw,a.sex,_glMod(a))})).filter(a=>a.total>0).sort((a,b)=>b.gl-a.gl)}
+function rankings(){return DATA.athletes.filter(a=>!_esInvitado(a)).map(a=>({...a,total:totalOf(a),gl:calcGL(totalOf(a),a.bw,a.sex,_glMod(a))})).filter(a=>a.total>0).sort((a,b)=>b.gl-a.gl)}
 // Índice del intento "actual" de una entrada de la cola. Para un 4º intento la
 // entrada es un clon con __ai=3; para el resto es la ronda activa (DATA.round).
 function curAtt(c){ return (c && c.__ai!=null) ? c.__ai : DATA.round; }
@@ -1115,6 +1122,43 @@ function liftQueue(){
     if(idx>0){const [f]=q.splice(idx,1);q.unshift(f);}
   }
   return q;
+}
+// Peso del próximo intento DECLARADO y todavía sin juzgar del atleta, en el lift
+// activo. Sirve para ordenar en la vista del público a los que ya levantaron el
+// intento de la ronda: apenas declaran el siguiente se acomodan entre ellos de
+// menor a mayor, en vez de quedar todos amontonados al final hasta que cambie la
+// ronda. Devuelve 0 si todavía no declararon nada.
+function _proxPeso(a){
+  const arr=(a&&a.att&&a.att[DATA.lift])||[];
+  for(let r=0;r<3;r++){ const t=arr[r]; if(t&&t.r===null&&+t.w>0) return +t.w; }
+  return 0;
+}
+// Orden de menor a mayor por el próximo intento declarado; a igual peso manda el
+// lote más chico, como en la tarima. Los que todavía no declararon van al final.
+function _cmpProx(a,b){
+  const wa=_proxPeso(a), wb=_proxPeso(b);
+  if(!wa&&!wb)return a.lot-b.lot;
+  if(!wa)return 1;
+  if(!wb)return -1;
+  return wa!==wb?wa-wb:a.lot-b.lot;
+}
+// Último atleta que salió a tarima en el lift activo. Los intentos no guardan
+// hora, pero la tanda sale de menor a mayor: dentro de la ronda que se corre, el
+// último en salir es el intento YA JUZGADO más pesado (a igual peso, el de lote
+// mayor). Si la ronda recién empezó y nadie levantó todavía, se mira la anterior.
+function _ultimoEnTarima(){
+  const l=DATA.lift;
+  for(let r=DATA.round;r>=0;r--){
+    let mejor=null;
+    DATA.athletes.forEach(a=>{
+      if(a.flight!==DATA.flight)return;
+      const t=(a.att&&a.att[l]||[])[r];
+      if(!t||t.r===null||!(+t.w>0))return;
+      if(!mejor||+t.w>mejor.w||(+t.w===mejor.w&&a.lot>mejor.lot))mejor={id:a.id,w:+t.w,lot:a.lot,lift:l,round:r};
+    });
+    if(mejor)return mejor;
+  }
+  return null;
 }
 function save(){if(PRACTICE_VIEWER)return;if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}if(!_fbSyncing)debouncedSync()}
 let _syncTimer=null;
@@ -1214,7 +1258,7 @@ document.addEventListener('keydown',(e)=>{
 
 // ═══════════════════════════════════════════════════════════════════
 // MULTI-ESCRITOR: merge por-celda para que varios controladores (ej. la
-// planilla cargando pesos + vos/otros marcando resultados o cargando pesos
+// planilla cargando pesos + tú u otros marcando resultados o cargando pesos
 // en otras casillas) NO se pisen. Cada edición local marca su "celda" con
 // timestamp; cuando llega un snapshot de OTRO escritor, se absorben todos
 // sus cambios EXCEPTO las celdas que toqué en los últimos HOLD ms (esas las
@@ -1630,6 +1674,7 @@ function _srSexo(a){ return /^(f|muj|dam|fem)/i.test(String(a&&a.sex||''))?'F':'
 function _srEquip(a){
   const m=String(a&&a.mod||'');
   if(m.indexOf('oe_')===0)return null;                       // Special Olympics: sin récords
+  if(m==='invitado')return null;                             // fuera de competencia: no marca récord
   return (m==='equipped'||m==='equipped_bench')?'equipped':'classic';
 }
 function _srSoloBanca(a){ const m=String(a&&a.mod||''); return m==='onlybench'||m==='equipped_bench'; }
@@ -2380,7 +2425,9 @@ function openWeighIn(id){
           <option value="onlybench" ${a.mod==='onlybench'?'selected':''}>Only Bench</option>
           <option value="classic_bench" ${a.mod==='classic_bench'?'selected':''}>Classic + Only Bench</option>
           <option value="equipped_bench" ${a.mod==='equipped_bench'?'selected':''}>Equipado + Only Bench</option>
+          <option value="invitado" ${a.mod==='invitado'?'selected':''}>Invitado/a (fuera de competencia)</option>
         </select>
+        ${a.mod==='invitado'?'<span style="font-size:10px;color:var(--gold)">Levanta igual, pero no entra al ranking de su categoría.</span>':''}
       </label>
       <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)">
         PAÍS
@@ -2445,7 +2492,7 @@ function openWeighIn(id){
         <button id="wi_confirm_btn" onclick="confirmWeighIn(${id},${catKg},${limit||0})" style="padding:10px 24px;border-radius:8px;border:none;background:var(--green);color:#000;font-family:Oswald;font-size:13px;font-weight:700;cursor:pointer">✓ CONFIRMAR PESAJE</button>
       </div>
     </div>
-    <div style="text-align:center;margin-top:10px;font-size:10px;color:var(--muted)">Usá <kbd style="background:var(--bg);padding:1px 6px;border-radius:3px;border:1px solid var(--border);font-family:monospace">Enter</kbd> para avanzar al siguiente campo</div>
+    <div style="text-align:center;margin-top:10px;font-size:10px;color:var(--muted)">Usa <kbd style="background:var(--bg);padding:1px 6px;border-radius:3px;border:1px solid var(--border);font-family:monospace">Enter</kbd> para avanzar al siguiente campo</div>
   </div>`;
   document.body.appendChild(m);
   // Auto-focus en BW
@@ -2492,10 +2539,13 @@ window.clearWeighIn = function(id){
   a.rackBP = '';
   a.sqAbat = ''; a.bpSeg = ''; a.bpPalm = '';
   a.weighedIn = false;
-  // Limpiar intentos del atleta (pesos y resultados)
+  _markAtt(id,'meta');
+  // Limpiar intentos del atleta (pesos y resultados). Igual que en el confirmar:
+  // sin marcar cada celda, el borrado no viajaba y el primer snapshot del
+  // servidor le devolvía los intentos al atleta.
   ['sq','bp','dl'].forEach(l=>{
     if(a.att && a.att[l]){
-      a.att[l].forEach(at=>{at.w=0; at.r=null;});
+      a.att[l].forEach((at,r)=>{at.w=0; at.r=null; _markAtt(id,'att_'+l+'_'+r);});
     }
   });
   // Limpiar cualquier change timer activo del atleta
@@ -2539,11 +2589,16 @@ function confirmWeighIn(id,catKg,limit){
   a.bw=bw;a.rackSQ=rSQ;a.rackBP=rBP;a.sqAbat=sqAbat;a.bpSeg=bpSeg;a.bpPalm=bpPalm;a.mod=mod;a.country=country;
   _markAtt(id,'meta');
   a.weighedIn=true;
-  // Guardar primeros intentos (apertura) si vinieron en el modal
+  // Guardar primeros intentos (apertura) si vinieron en el modal.
+  // Cada celda que se toca hay que MARCARLA: el merge de escritura parte del
+  // estado remoto y solo le pega encima las celdas marcadas. Sin la marca, la
+  // apertura cargada acá se perdía — el BW y las alturas de rack sí subían
+  // (van en 'meta'), pero los primeros intentos no llegaban ni al público ni a
+  // la pantalla de tarima, y al recargar la página desaparecían.
   if(a.att){
-    if(sq1>0 && a.att.sq && a.att.sq[0] && a.att.sq[0].r===null) a.att.sq[0].w = sq1;
-    if(bp1>0 && a.att.bp && a.att.bp[0] && a.att.bp[0].r===null) a.att.bp[0].w = bp1;
-    if(dl1>0 && a.att.dl && a.att.dl[0] && a.att.dl[0].r===null) a.att.dl[0].w = dl1;
+    if(sq1>0 && a.att.sq && a.att.sq[0] && a.att.sq[0].r===null){ a.att.sq[0].w = sq1; _markAtt(id,'att_sq_0'); }
+    if(bp1>0 && a.att.bp && a.att.bp[0] && a.att.bp[0].r===null){ a.att.bp[0].w = bp1; _markAtt(id,'att_bp_0'); }
+    if(dl1>0 && a.att.dl && a.att.dl[0] && a.att.dl[0].r===null){ a.att.dl[0].w = dl1; _markAtt(id,'att_dl_0'); }
   }
   saveNow();
   document.getElementById('weighInModal').remove();
@@ -2697,6 +2752,9 @@ function _applyCronoFlightsToAthletes(map){
     if(!armando)return;
     if(entry.div && a.div!==entry.div){a.div=entry.div;datos++;}
     if(entry.cat && String(a.cat)!==entry.cat && !a.weighedIn && !(+a.bw>0)){a.cat=entry.cat;datos++;}
+    // Un invitado/a lo marca el operador en el pesaje, por algo que el Cronograma
+    // no puede saber (no dio el peso). No se le devuelve la modalidad de nómina.
+    if(_esInvitado(a))return;
     if(entry.mod && (a.mod!==entry.mod||!!a.plusBench!==!!entry.plusBench)){
       a.mod=entry.mod;a.plusBench=entry.plusBench;datos++;
     }
@@ -3659,6 +3717,7 @@ async function generateHojaRack(){
 function _modHojaEquipo(a){
   const m=String(a&&a.mod||'');
   const plus=(typeof _isPlusBench==='function')?_isPlusBench(a):false;
+  if(m==='invitado')    return 'INVITADO/A';
   if(m==='oe_classic')  return 'OE';
   if(m==='oe_bench')    return 'OE ONLY BENCH';
   if(m==='onlybench')   return 'ONLY BENCH';
@@ -4331,6 +4390,7 @@ function _xlsxDescargar(nombreArchivo, hoja, filas, cols){
 }
 function _actaModKey(a){
   const m=String(a.mod||'');
+  if(m==='invitado')return 'invitado';   // cuadro aparte, fuera de competencia
   if(m==='oe_classic'||m==='oe_bench')return 'oe';
   // Combinado (PL + Only Bench): su tabla base es la de powerlifting; la de Only
   // Bench se le agrega aparte en _actaGrupos().
@@ -4341,7 +4401,8 @@ function _actaModKey(a){
   return 'classic';
 }
 const _ACTA_MOD_N={classic:'POWERLIFTING CLASSIC',equipped:'POWERLIFTING EQUIPADO',
-  ob_classic:'ONLY BENCH CLASSIC',ob_equipped:'ONLY BENCH EQUIPADO',oe:'SPECIAL OLYMPICS'};
+  ob_classic:'ONLY BENCH CLASSIC',ob_equipped:'ONLY BENCH EQUIPADO',oe:'SPECIAL OLYMPICS',
+  invitado:'INVITADOS/AS · FUERA DE COMPETENCIA'};
 function _actaCatN(c){const s=String(c||'');const n=parseFloat(s.replace(/[^0-9.]/g,''))||999;return n+(s.indexOf('+')>=0?0.5:0);}
 // Estructura del acta: [{mod, sexo, cat, filas:[…]}] ya ordenada y con lugares.
 const _ACTA_DIVORD={'Sub-Junior':0,'Subjunior':0,'Junior':1,'Universitario':2,'Open':3,
@@ -5123,13 +5184,13 @@ function renderObsTx(){
     {id:'profile',icon:'',title:'Perfil del atleta',desc:'Pantalla completa con foto placeholder, nombre, club, categoría, edad, años compitiendo y PB. Animación cascada al entrar. Mostrar ~10s antes de la tarima.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
     {id:'scoreboard',icon:'',title:'Scoreboard (lower-third)',desc:'Barra inferior con categoría, rank, timer, nombre, club e intentos. Aparece al cambiar levantador / intento / peso, queda 20s en pantalla y se va con animación. Hasta el próximo cambio queda oculto.',obsBg:'Transparente (superpuesto sobre cámara).',size:'1920×320 (parte inferior)'},
     {id:'barbell',icon:'',title:'Barra con discos (lower-third)',desc:'Franja inferior que muestra la barra con discos IPF a color, nombre del atleta, club, categoría, peso del intento en kg/lbs, ronda y pronóstico de posición ("Si es válido pasará del X° al Y° lugar"). Se anima al entrar cuando cambia el levantador.',obsBg:'Transparente (overlay sobre cámara). Fondo se fusiona hacia abajo.',size:'1920×1080 (contenido en el tercio inferior)'},
-    {id:'leaderboard',icon:'',title:'Tabla de clasificación (FIJO)',desc:'Ranking completo de la categoría actual. Cascada fila por fila. SIEMPRE visible mientras la escena esté activa — usalo para escenas de pausa entre rondas que vos manejás manualmente.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
+    {id:'leaderboard',icon:'',title:'Tabla de clasificación (FIJO)',desc:'Ranking completo de la categoría actual. Cascada fila por fila. SIEMPRE visible mientras la escena esté activa — úsalo para escenas de pausa entre rondas que manejas tú manualmente.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
     {id:'tablaactual',icon:'',title:'Tabla actual (corner)',desc:'Ranking de la categoría del lifter en pantalla, esquina inferior derecha. Entra deslizando desde abajo, queda fijo. El levantador actual se resalta y muestra una flecha de proyección: posición actual → posición que tendría si el intento es válido (ej. 2→1 si se mueve al primer lugar). Activá/desactivá con el botón "Tabla actual" en Control TX o tecla A.',obsBg:'Transparente (overlay sobre cámara). Solo ocupa el cuadrante inferior derecho.',size:'1920×1080 (overlay)'},
     {id:'lbauto',icon:'',title:'Tabla de clasificación (AUTO)',desc:'Igual al leaderboard fijo, pero APARECE SOLO al detectar fin de ronda (cuando cambia lift/round/flight). Queda 10s en pantalla y se va. Ideal como overlay siempre activo en una escena de cámara.',obsBg:'Transparente (overlay sobre cámara).',size:'1920×1080 (overlay fullscreen)'},
     {id:'slam',icon:'',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activá una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcás ✓/✗ en Control en Vivo. Volvé a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
     {id:'lights',icon:'',title:'Luces de jueces',desc:'3 círculos para izq / central / der. Se prenden blanco (good) o rojo (no lift) cuando los jueces votan en su panel. Ideal arriba de la cámara o en pantalla aparte.',obsBg:'Transparente. Funciona solo si activás "Modo Jueces" en Control en Vivo.',size:'1920×1080 (autoescala)'},
     {id:'ceremony',icon:'',title:'Ceremonia (TODO-EN-UNO automático)',desc:'Widget orquestador. Detecta nuevo levantador → PROFILE fullscreen 5s → SCOREBOARD bottom-left (30s) → SLAM top-left flash al marcar resultado → IDLE hasta el próximo. Sin tabla de clasificación: ese ciclo lo manejás aparte con el widget Leaderboard fijo. (El tiempo para dar el intento ya no se muestra acá — es privado, solo lo ve el juez en Control en Vivo.)',obsBg:'Mixto: fullscreen opaco durante PROFILE, transparente sobre cámara durante SCOREBOARD/IDLE. Una sola escena con cámara de fondo + este browser source encima.',size:'1920×1080'},
-    {id:'director',icon:'',title:'Director (control 100% MANUAL)',desc:'NO se activa solo. Lee comandos desde Firestore (livecast_director/current) que pusheás vos desde la sidebar "Control TX". Cada componente (perfil, marcador, tabla, timer, slam) se muestra/esconde con un botón. Ideal si querés controlar todo a mano sin tocar OBS.',obsBg:'Mixto. Una sola escena con cámara de fondo + este browser source encima. Vos elegís qué se ve y por cuánto desde el panel Control TX.',size:'1920×1080'},
+    {id:'director',icon:'',title:'Director (control 100% MANUAL)',desc:'NO se activa solo. Lee comandos desde Firestore (livecast_director/current) que envías tú desde la barra lateral "Control TX". Cada componente (perfil, marcador, tabla, timer, slam) se muestra/esconde con un botón. Ideal si quieres controlar todo a mano sin tocar OBS.',obsBg:'Mixto. Una sola escena con cámara de fondo + este browser source encima. Tú eliges qué se ve y por cuánto tiempo desde el panel Control TX.',size:'1920×1080'},
   ];
   let h='<div class="fade"><h2 class="os" style="font-size:22px;letter-spacing:1px;margin-bottom:6px">WIDGETS PARA OBS</h2>';
   h+='<p style="color:var(--muted);font-size:12px;margin-bottom:18px">Cada widget es una URL que se agrega como Browser Source en OBS. Actualiza en tiempo real desde Firestore — no necesita login.</p>';
@@ -8606,7 +8667,7 @@ function renderDirector(){
   h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">';
   h+='<div style="flex:1;min-width:200px">';
   h+='<div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">Slam GOOD / NO LIFT</div>';
-  h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Flash de 2s en la esquina superior izquierda. Disparalo vos cuando los jueces dictaminen.</div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Flash de 2s en la esquina superior izquierda. Dispáralo tú cuando los jueces dictaminen.</div>';
   h+='</div>';
   h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
   h+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px"><button class="btn btn-g" onclick="dirShowSlam(\'g\')" style="padding:14px 22px;font-size:13px;background:#22c55e;border-color:#22c55e;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:140px">✓ GOOD LIFT</button>'+kbd('G')+'</div>';
@@ -8974,6 +9035,7 @@ function _nomDivShort(a){
 // [línea de equipamiento, modalidad competitiva]
 function _nomLineMod(a){
   const mod=String(a.mod||'').toLowerCase();
+  if(mod==='invitado')return ['INVITADO/A','FUERA DE COMP.'];
   const linea=(mod==='equipped'||mod==='equipped_bench')?'EQUIPADO':'CLASSIC';
   // 'equipped_bench' le toca al combinado equipado Y al Only Bench Equipado puro,
   // así que quién compite en las dos lo dice la bandera, no el código.
@@ -8991,6 +9053,13 @@ function _nomChips(a,sc){
   const eq=(linea==='EQUIPADO');
   const bench=/BENCH/.test(modal);
   let h='<div style="display:flex;flex-wrap:wrap;gap:'+Math.round(3*sc)+'px;margin-top:'+Math.round(2*sc)+'px">';
+  // Invitado/a: un solo chip, para que se lea de una que no está compitiendo por
+  // el lugar. Su división y categoría ya no significan nada en el ranking.
+  if(_esInvitado(a)){
+    h+=chip('INVITADO/A','#0A1628','#f59e0b','#f59e0b','Fuera de competencia: levanta pero no entra al ranking');
+    h+=chip(txCatLabel(a.cat)||'—','var(--muted)','rgba(30,58,95,.55)','var(--border)','Categoría de peso');
+    return h+'</div>';
+  }
   h+=chip(dv, esp?'#0A1628':'var(--muted)', esp?'var(--gold)':'rgba(30,58,95,.55)', esp?'var(--gold)':'var(--border)', 'División: '+(a.div||'—'));
   h+=chip(txCatLabel(a.cat)||'—','var(--gold)','rgba(212,168,67,.12)','rgba(212,168,67,.35)','Categoría de peso');
   h+=chip(linea, eq?'#f59e0b':'#60a5fa', eq?'rgba(245,158,11,.12)':'rgba(96,165,250,.12)', eq?'rgba(245,158,11,.4)':'rgba(96,165,250,.4)','Línea competitiva');
@@ -9161,7 +9230,7 @@ function renderCompete(){
   {const flightsCE=_allFlightsSorted();
    if(flightsCE.length){
      h+='<div style="display:flex;align-items:center;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
-     h+='<span style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-right:2px">'+(window.NAV_LIBRE?'TANDA QUE ESTÁS MIRANDO (solo vos)':'TANDA EN TARIMA (Control TX)')+'</span>';
+     h+='<span style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-right:2px">'+(window.NAV_LIBRE?'TANDA QUE ESTÁS MIRANDO (solo para ti)':'TANDA EN TARIMA (Control TX)')+'</span>';
      h+=flightsCE.map(f=>{
        const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;
        const on=DATA.flight===f;
@@ -9206,7 +9275,7 @@ function renderCompete(){
      const _mtColor=_mt<=10?'var(--red)':_mt<=30?'var(--orange)':'var(--green)';
      const _mtTxt=Math.floor(_mt/60)+':'+String(_mt%60).padStart(2,'0');
      h+='<div class="card" style="margin-bottom:10px;padding:8px 14px;display:flex;align-items:center;justify-content:space-between">'
-       +'<span style="font-size:11px;color:var(--muted)">\u23f1 Tiempo para el pr\u00f3ximo intento <span style="opacity:.6">(solo lo ves vos ac\u00e1 \u2014 no es p\u00fablico)</span></span>'
+       +'<span style="font-size:11px;color:var(--muted)">\u23f1 Tiempo para el pr\u00f3ximo intento <span style="opacity:.6">(solo lo ves tú ac\u00e1 \u2014 no es p\u00fablico)</span></span>'
        +'<span style="display:flex;align-items:center;gap:10px">'
          +'<button onclick="openManualComp()" title="Asignar un tiempo compensatorio a mano (ej. el atleta abre dos intentos seguidos)" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(96,165,250,.5);background:rgba(96,165,250,.08);color:#60a5fa;font-family:Oswald;font-size:10px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap">\uD83D\uDD52 COMPENSATORIO MANUAL</button>'
          +'<button onclick="toggleMainTimer()" title="'+(DATA.timerOn?'Pausar el reloj':'Iniciar el reloj (ej. cuando se va a tirar el intento extra)')+'" style="padding:5px 12px;border-radius:6px;border:1px solid '+(DATA.timerOn?'var(--orange)':'var(--green)')+';background:'+(DATA.timerOn?'rgba(245,158,11,.12)':'rgba(34,197,94,.12)')+';color:'+(DATA.timerOn?'var(--orange)':'var(--green)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap">'+(DATA.timerOn?'\u23F8 Pausar':'\u25B6 Iniciar')+'</button>'
@@ -9633,6 +9702,7 @@ function subTotal(a,lift){
 function _posForecast(a,lift,round){
   if(!a)return null;
   const ra=(typeof _realAth==='function')?_realAth(a):a;
+  if(_esInvitado(ra))return null;   // fuera de competencia: no ocupa lugar
   const l=lift||DATA.lift;
   const at=(ra.att&&ra.att[l])?ra.att[l][(typeof curAtt==='function')?curAtt(a):round||0]:null;
   const w=(at&&at.w)||0;
@@ -9672,7 +9742,8 @@ function _posCellHtml(a,opts){
 }
 function catRankBySub(athlete){
   // Ranking dentro del mismo sexo + categoría + división (no mezcla divisiones de edad)
-  const sameCat=DATA.athletes.filter(a=>a.cat===athlete.cat&&a.div===athlete.div&&a.sex===athlete.sex&&a.flight===DATA.flight&&!a.bombed);
+  if(_esInvitado(athlete))return{pos:0,of:0};
+  const sameCat=DATA.athletes.filter(a=>a.cat===athlete.cat&&a.div===athlete.div&&a.sex===athlete.sex&&a.flight===DATA.flight&&!a.bombed&&!_esInvitado(a));
   const withSub=sameCat.map(a=>({id:a.id,sub:subTotal(a,DATA.lift)})).filter(x=>x.sub>0).sort((a,b)=>b.sub-a.sub);
   const idx=withSub.findIndex(x=>x.id===athlete.id);
   return{pos:idx>=0?idx+1:0,of:withSub.length};
@@ -10805,8 +10876,14 @@ function renderLiveView(){
   const otherAthletes = DATA.athletes.filter(a=>a.flight!==currentFlight);
 
   const sortedAthletes = [
+    // Primero los que todavía deben el intento de la ronda: esos ya vienen de
+    // menor a mayor peso (y a igual peso, por lote) desde liftQueue().
     ...flQueue,
-    ...curFlightAll.filter(a=>!queueIds.has(a.id)&&!a.bombed).sort((a,b)=>a.lot-b.lot),
+    // Y detrás los que ya levantaron. Antes iban por lote, así que un 2º intento
+    // recién declarado quedaba al final y la lista solo se acomodaba al terminar
+    // la ronda. Ahora se ordenan entre ellos por el peso que acaban de declarar,
+    // de menor a mayor, con el lote como desempate.
+    ...curFlightAll.filter(a=>!queueIds.has(a.id)&&!a.bombed).sort(_cmpProx),
     ...curFlightAll.filter(a=>a.bombed),
     // Las tandas que no están en tarima siguen el mismo círculo que el control:
     // después de la actual va la siguiente, y al llegar al final vuelve a la primera.
@@ -10861,6 +10938,9 @@ function renderLiveView(){
   h += '<th style="padding:5px 4px;text-align:center;color:var(--gold);font-size:9px;width:52px">GL PTS</th>';
   h += '<th style="padding:5px 4px;text-align:center;color:#60a5fa;font-size:9px;width:74px" title="Posición actual → posición si el intento es válido">POSICIÓN</th>';
   h += '</tr></thead><tbody>';
+
+  // Quién acaba de salir a tarima, para marcarlo bajo su intento.
+  const ultimo = _ultimoEnTarima();
 
   let lastFlight = currentFlight;
   sortedAthletes.forEach(a=>{
@@ -10929,6 +11009,10 @@ function renderLiveView(){
           ?'background:#F2C230;color:#1a1200;border:2px solid #F2C230;box-shadow:0 0 10px rgba(242,194,48,.5);'
           :'background:rgba(242,194,48,.20);border:2px dashed #F2C230;color:#F2C230;');
         h += '<div class="'+cls+' att"'+(srR2.length?' title="'+_srBadge(srR2).replace(/"/g,'&quot;')+'"':'')+' style="font-size:'+(isCurAtt?15:11)+'px;font-weight:700;padding:'+(isCurAtt?'10px 3px':'6px 3px')+';cursor:default;'+srCss2+(isCurAtt?'box-shadow:inset 0 0 0 2px '+LIFT_C[l]+';':'')+'min-width:46px;text-align:center">'+(srR2.length?'<span style="display:block;font-family:Oswald;font-size:8px;font-weight:800;letter-spacing:.5px;line-height:1;margin-bottom:1px">'+(srOk2?'★ ':'')+'RÉCORD</span>':'')+(at.w||'—')+'</div>';
+        // El que acaba de salir a tarima: cartelito chico bajo su intento, para
+        // no perder de vista por dónde va la tanda cuando la lista se reordena.
+        if(ultimo && !a.__is4 && ra.id===ultimo.id && l===ultimo.lift && j===ultimo.round)
+          h += '<div style="font-family:Oswald;font-size:7px;letter-spacing:.5px;color:var(--muted);text-align:center;line-height:1.2;margin-top:1px">RECIÉN SALIÓ</div>';
         h += '</td>';
       }
       // Subtotal / Total

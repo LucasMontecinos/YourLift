@@ -801,7 +801,10 @@ window.showProfile=function(codigo){
           +(isDQ
             ? '<div class="os" style="font-size:19px;font-weight:700;color:var(--red)">DQ</div>'
               +(dqLiftedTotal>0?'<div style="font-size:13px;font-weight:700;color:var(--muted)">'+dqLiftedTotal+' kg levantados</div>':'')
-              +'<div style="font-size:10px;color:var(--red);opacity:.85">3 fallos en algún lift</div>'
+              // El motivo por defecto es el habitual (tres nulos en un lift), pero
+              // no es el único: también se queda sin total quien no da el peso de
+              // su categoría. Cuando el resultado trae `motivo`, manda ese.
+              +'<div style="font-size:10px;color:var(--red);opacity:.85">'+(r.motivo||'3 fallos en algún lift')+'</div>'
             : '<div class="os" style="font-size:19px;font-weight:700;color:var(--gold)">'+(r.total||'—')+' kg</div>'
               +(delta!==null?'<div style="font-size:11px;font-weight:700;color:'+(delta>0?'var(--green)':delta<0?'var(--red)':'var(--muted)')+'">'+  (delta>0?'+':'')+delta+' kg</div>':'')
               +(glVal?'<div style="font-size:10px;color:var(--muted)">GL '+glVal+(r.pos?' · #'+r.pos:'')+'</div>':'')
