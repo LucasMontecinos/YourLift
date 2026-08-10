@@ -3910,11 +3910,23 @@ window.cronoSet=function(i,field,val){
 // Orden de los días. Se escriben a mano ("Día 1", "Sábado 8", "8 de agosto"…),
 // así que se ordena por el primer número que aparezca y, si no hay, alfabético.
 // Los que todavía no tienen día quedan al final.
+// Orden de los días del cronograma. El día se escribe a mano ("Día 1", "Sábado 8",
+// "sábado"…), así que hay que entender las tres formas. Con el nombre del día suelto
+// el orden alfabético dejaba el domingo ANTES del sábado, que es justo al revés de
+// como se corre un fin de semana.
+const _DIAS_SEMANA=['lunes','martes','miercoles','jueves','viernes','sabado','domingo'];
 function _cronoDiaKey(d){
   const s=String(d||'').trim();
-  if(!s)return [2,Infinity,''];
-  const m=s.match(/\d+/);
-  return m?[0,parseInt(m[0],10),s.toLowerCase()]:[1,0,s.toLowerCase()];
+  if(!s)return [3,Infinity,''];                                  // sin día: al final
+  const n=s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  let i=_DIAS_SEMANA.findIndex(x=>n.indexOf(x)>=0);              // "sábado", "Sábado 8"
+  // Abreviaturas, con borde de palabra para no confundir "mar" con "marzo".
+  if(i<0){const m=n.match(/\b(lun|mar|mie|jue|vie|sab|dom)\b/);
+          if(m)i=['lun','mar','mie','jue','vie','sab','dom'].indexOf(m[1]);}
+  if(i>=0)return [0,i,n];
+  const num=n.match(/\d+/);
+  if(num)return [1,parseInt(num[0],10),n];                       // "Día 1", "8 de agosto"
+  return [2,0,n];                                                // texto suelto: alfabético
 }
 function _cronoCmpDia(a,b){
   const ka=_cronoDiaKey(a),kb=_cronoDiaKey(b);

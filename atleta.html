@@ -160,6 +160,19 @@ function _peersBuild(db){
   return out;
 }
 
+// ── Overlays que dependen de data.json ────────────────────
+// Los datos que llegan de Firestore y se pegan sobre un atleta (resultados de
+// competencias cerradas en el livecast, fotos, logros, posiciones) buscan al atleta
+// dentro de DB. Si DB todavía no cargó, no encuentran a nadie y se pierden — no hay
+// reintento. Con la caché caliente eso pasaba SIEMPRE: los overlays salen del
+// localStorage y se aplican al toque, mucho antes de que termine de bajar data.json,
+// así que un atleta se quedaba sin su última competencia hasta que a alguien se le
+// vencía la caché. Ahora se encolan y se aplican apenas DB está lista.
+window._DB_LISTA=false;
+const _pendientesDB=[];
+function _conDB(fn){ if(window._DB_LISTA)fn(); else _pendientesDB.push(fn); }
+function _dbLista(){ window._DB_LISTA=true; while(_pendientesDB.length){ try{ _pendientesDB.shift()(); }catch(e){ console.warn('[overlay]',e); } } }
+
 // ── Cache helpers ─────────────────────────────────────────
 function _aC(k,ttl){try{const v=localStorage.getItem('_yfc_'+k);if(!v)return null;const o=JSON.parse(v);if(Date.now()-o.ts<ttl)return o.d;}catch(e){}return null;}
 function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.now(),d}));}catch(e){}}
@@ -186,14 +199,14 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
     // Fotos de perfil: getDocs + caché 30min
     const cf=_aC('atl_fotos',30*60*1000);
     const _applyFotos=docs=>{docs.forEach(data=>{const codigo=data.codigo||data.id;const ath=(DB||[]).find(a=>a.codigo===codigo);if(ath&&data.foto_url)ath.foto_url=data.foto_url;});if(window._curCodigo)showProfile(window._curCodigo);};
-    if(cf){_applyFotos(cf);}
-    else{fb.getDocs(fb.collection(db,'atleta_fotos')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_fotos',docs);_applyFotos(docs);});}
+    if(cf){_conDB(()=>_applyFotos(cf));}
+    else{fb.getDocs(fb.collection(db,'atleta_fotos')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_fotos',docs);_conDB(()=>_applyFotos(docs));});}
 
     // Logros: getDocs + caché 30min
     const ca=_aC('atl_ach',30*60*1000);
     const _applyAch=docs=>{docs.forEach(data=>{const codigo=data.codigo||data.id;const ath=(DB||[]).find(a=>a.codigo===codigo);if(ath)ath.achievements=data.achievements||[];});if(window._curCodigo)showProfile(window._curCodigo);};
-    if(ca){_applyAch(ca);}
-    else{fb.getDocs(fb.collection(db,'atleta_achievements')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_ach',docs);_applyAch(docs);});}
+    if(ca){_conDB(()=>_applyAch(ca));}
+    else{fb.getDocs(fb.collection(db,'atleta_achievements')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_ach',docs);_conDB(()=>_applyAch(docs));});}
 
     // Resultados de competencias cerradas en livecast (en vivo, sin redeploy).
     // Mergea cada doc en el atleta correspondiente como nueva competencia.
@@ -219,14 +232,14 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
       if(window._curCodigo)showProfile(window._curCodigo);
     };
     const cr=_aC('atl_res',10*60*1000);
-    if(cr){_applyResults(cr);}
-    else{fb.getDocs(fb.collection(db,'competition_results')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_res',docs);_applyResults(docs);});}
+    if(cr){_conDB(()=>_applyResults(cr));}
+    else{fb.getDocs(fb.collection(db,'competition_results')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_res',docs);_conDB(()=>_applyResults(docs));});}
 
     // Overrides de posición para competencias históricas (data.json): getDocs + caché 1h
     const _applyPos=docs=>{window._HIST_POS={};docs.forEach(v=>{if(v.codigo&&v.evento)window._HIST_POS[v.codigo+'__'+v.evento]=v;});if(window._curCodigo)showProfile(window._curCodigo);};
     const cp=_aC('atl_pos',60*60*1000);
-    if(cp){_applyPos(cp);}
-    else{fb.getDocs(fb.collection(db,'comp_pos_overrides')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_pos',docs);_applyPos(docs);});}
+    if(cp){_conDB(()=>_applyPos(cp));}
+    else{fb.getDocs(fb.collection(db,'comp_pos_overrides')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_pos',docs);_conDB(()=>_applyPos(docs));});}
 
     // Logos de clubes: getDocs + caché 24h (reutiliza _yfc_clubs de index.html)
     const _applyClubs=docs=>{window._CLUBS_FS={};docs.forEach(v=>{if(v.slug&&v.logoUrl)window._CLUBS_FS[v.slug]=v;});};
@@ -304,6 +317,10 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
       }catch(ee){console.warn('[athlete_edits]',ee.message);}
     }
 
+    // Recién acá DB está completa (data.json + altas pendientes + ediciones del
+    // admin, que pueden cambiar código o RUT). Se sueltan los overlays encolados.
+    _dbLista();
+
     const params=new URLSearchParams(location.search);
     const cod=params.get('codigo');
     const q=params.get('q');
@@ -315,6 +332,9 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
       onSearch(q);
     }
   }catch(e){console.warn('data.json unavailable',e)}
+  // Si data.json no cargó, igual hay que soltar la cola: sin esto los overlays
+  // quedarían esperando para siempre y la página no mostraría nada.
+  if(!window._DB_LISTA)_dbLista();
 })();
 
 // ── Helpers ──────────────────────────────────────────────
