@@ -946,6 +946,11 @@ const _TX_COLOR_DEFAULTS={
   nameBg:      '#D4A843', // name bar gradient start (scoreboard + profile)
   nameBg2:     '#c19735', // name bar gradient end
   nameText:    '#0A1628', // dark text on name bar
+  // Letra del marcador (nombre del atleta y su categoría). Va aparte de nameText
+  // porque ahí el texto es blanco con contorno negro, no oscuro sobre la barra.
+  // El contorno queda fijo a propósito: es lo que lo mantiene legible sobre
+  // cualquier color de barra. Lo que se cambia desde Control TX es este color.
+  marcadorText:'#ffffff',
   accent:      '#D4A843', // borders, total cell, LB highlights
   headerBg:    '#1c324a', // scoreboard/LB header background
   gridBg:      '#0b1826', // attempt grid row background
@@ -959,6 +964,14 @@ const _TX_COLOR_PALETTES={
     colors:{goodLift:'#22c55e',noLift:'#ef4444',puesto:'#ffffff',
       curAttempt:'#0f2544',nameBg:'#D4A843',nameBg2:'#b8882e',
       nameText:'#0A1628',accent:'#D4A843',headerBg:'#0A1628',
+      gridBg:'#0b1826',lbHighlight:'#C41E3A',cardBg:'#0d1e38'}
+  },
+  bandera:{
+    label:'YourLift Bandera',desc:'Azul · Rojo · Blanco',
+    preview:['#0A1628','#C41E3A','#ffffff','#22c55e','#ef4444'],
+    colors:{goodLift:'#22c55e',noLift:'#ef4444',puesto:'#ffffff',
+      curAttempt:'#122c52',nameBg:'#C41E3A',nameBg2:'#8B1525',
+      nameText:'#ffffff',accent:'#ffffff',headerBg:'#0A1628',
       gridBg:'#0b1826',lbHighlight:'#C41E3A',cardBg:'#0d1e38'}
   },
   rojo:{
@@ -5586,6 +5599,30 @@ function _renderTxCerTimerCorner(scale){
 }
 // IPF-style row animation: rows appear/disappear one by one
 // rows: 0=header, 1=name, 2=attempts
+// Nombre del atleta como se escribe de verdad: "Lucas Andres Montecinos Alarcon".
+// Antes el apellido salía en MAYÚSCULAS y quedaba más marcado que el nombre; se pidió
+// todo del mismo tamaño y solo la inicial en mayúscula. Las partículas ("de", "la",
+// "del", "van") van en minúscula, salvo que abran el nombre, y los apellidos con
+// guion o apóstrofo llevan mayúscula en cada parte.
+function _nombrePropio(s){
+  const chicas=new Set(['de','del','la','las','los','y','da','das','do','dos','van','von','di','della','du','el']);
+  return String(s||'').trim().toLowerCase().split(/\s+/).map((p,i)=>{
+    if(i>0&&chicas.has(p))return p;
+    return p.replace(/(^|[-'\u2019])(\p{Ll})/gu,(m,a,b)=>a+b.toUpperCase());
+  }).join(' ');
+}
+// Contorno negro del texto del marcador. Es lo que hace que se lea sobre cualquier
+// fondo, pase lo que pase con el color de la letra: por eso el contorno queda fijo
+// y lo que se cambia desde Control TX es el COLOR DE LA LETRA (Texto nombre).
+function _contorno(px){
+  const n=px||2;
+  // Ocho sombras alrededor en vez de -webkit-text-stroke: el trazo se dibuja
+  // CENTRADO sobre el contorno de la letra y a este tamaño se la come entera
+  // (queda negra con un filo blanco, justo al revés). La sombra siempre va detrás.
+  const o=[[-n,-n],[0,-n],[n,-n],[-n,0],[n,0],[-n,n],[0,n],[n,n]]
+    .map(d=>d[0]+'px '+d[1]+'px 0 #000').join(',');
+  return 'text-shadow:'+o+',0 2px 6px rgba(0,0,0,.45);';
+}
 function _sbRowAnim(animDir,row){
   if(!animDir)return '';
   if(animDir==='in'){
@@ -5603,9 +5640,7 @@ function _renderTxCerScoreboardBL(cur,opts){
   const scale=opts.scale||1;
   const noAnimate=!!opts.noAnimate;
   // Variante compacta del scoreboard, posicionada abajo-izquierda
-  const parts=(cur.name||'').trim().split(/\s+/);
-  const firstName=parts.length>2?parts.slice(0,-2).join(' '):parts.slice(0,-1).join(' ');
-  const lastName=(parts.length>2?parts.slice(-2).join(' '):parts[parts.length-1]).toUpperCase();
+  const nombreAtleta=_nombrePropio(cur.name);
   const divS=txDivShort(cur.div);
   const catLabel=(cur.cat?txCatLabel(cur.cat)+' ':'')+divS;
   const cw=cur.att[DATA.lift][DATA.round].w;
@@ -5657,8 +5692,8 @@ function _renderTxCerScoreboardBL(cur,opts){
         +_flagImg(_ctry(cur),14)
         +'<span style="color:'+_txC('nameBg')+';font-family:Oswald;font-size:10px;letter-spacing:2px;font-weight:700">'+_ctry(cur)+'</span>'
       +'</div>'
-      +'<div style="flex:1;font-family:Oswald;color:'+_txC('nameText')+';letter-spacing:1px;overflow:hidden">'
-        +'<div style="font-size:24px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(firstName?firstName+' ':'')+lastName+'</div>'
+      +'<div style="flex:1;font-family:Oswald;color:'+_txC('marcadorText')+';letter-spacing:1px;overflow:hidden">'
+        +'<div style="font-size:24px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+_contorno(1.6)+'">'+nombreAtleta+'</div>'
       +'</div>'
       +logo
     +'</div>'
@@ -6485,9 +6520,7 @@ function renderTxScoreboard(cur,lifterChanged){
     }
     if(Date.now()-_txSbShownAt>TX_SCOREBOARD_DURATION)return '';
   }
-  const parts=(cur.name||'').trim().split(/\s+/);
-  const firstName=parts.length>2?parts.slice(0,-2).join(' '):parts.slice(0,-1).join(' ');
-  const lastName=(parts.length>2?parts.slice(-2).join(' '):parts[parts.length-1]).toUpperCase();
+  const nombreAtleta=_nombrePropio(cur.name);
   const divS=txDivShort(cur.div);
   const catLabel=(cur.cat?txCatLabel(cur.cat)+' ':'')+divS;
   const rk=catRankBySub(ra);
@@ -6519,8 +6552,10 @@ function renderTxScoreboard(cur,lifterChanged){
     forecastColor=forecastPos===1?_txC('goodLift'):forecastPos<=3?_txC('accent'):_txC('puesto');
   }
   const _animDir=TX_MODE==='scoreboard'?null:(lifterChanged?'in':null);
-  // ── Colores de marca YourLift (fijos para este widget, no dependen de la paleta seleccionable) ──
-  const YL_NAVY='#0A1628', YL_RED='#C41E3A', YL_GOLD='#D4A843';
+  // ── Colores: el marcador sigue la paleta elegida en Control TX ──
+  // Antes estaban fijos acá y la paleta no le hacía nada. El contorno negro del
+  // texto NO entra en la paleta, a propósito: es lo que lo mantiene legible.
+  const YL_NAVY=_txC('headerBg'), YL_GOLD=_txC('accent'), YL_TXT=_txC('marcadorText');
   const WHITE='#ffffff', WHITE_DIM='rgba(255,255,255,.55)', GREEN='#22c55e', RED='#ef4444';
   // ── SQUAT / BENCH PRESS / DEADLIFT / TOTAL — mejor marca válida de cada uno + estado ──
   const sqB=bestOf(ra,'sq'), bpB=bestOf(ra,'bp'), dlB=bestOf(ra,'dl');
@@ -6554,14 +6589,14 @@ function renderTxScoreboard(cur,lifterChanged){
           <div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:rgba(255,255,255,.6)">${(rk.pos&&totalAth?rk.pos+'/'+totalAth+' en categoría':'')}</div>
           <div style="font-family:Oswald;font-size:${willChange?'15px':'18px'};font-weight:800;color:${forecastColor};letter-spacing:${willChange?'1px':'2px'};white-space:nowrap" title="Posición forecast en su sexo+categoría+división">${forecastTxt}</div>
         </div>
-        <div style="${_sbRowAnim(_animDir,1)}background:linear-gradient(90deg,${YL_GOLD},#b8882e);padding:7px 22px;display:flex;align-items:center;gap:12px">
+        <div style="${_sbRowAnim(_animDir,1)}background:linear-gradient(90deg,${_txC('nameBg')},${_txC('nameBg2')});padding:7px 22px;display:flex;align-items:center;gap:12px">
           ${flagHtml}
-          <div style="flex:1;font-family:Oswald;color:${YL_NAVY};letter-spacing:1px;overflow:hidden">
-            <div style="font-size:28px;font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${firstName?firstName+' ':''}${lastName}</div>
+          <div style="flex:1;font-family:Oswald;color:${YL_TXT};letter-spacing:1px;overflow:hidden">
+            <div style="font-size:28px;font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${_contorno(2)}">${nombreAtleta}</div>
           </div>
-          <div style="background:rgba(10,22,40,.9);color:${YL_GOLD};padding:5px 14px;border-radius:4px;font-family:Oswald;font-size:16px;letter-spacing:1px;font-weight:700;white-space:nowrap">${catLabel}</div>
+          <div style="background:rgba(10,22,40,.9);color:${YL_TXT};padding:5px 14px;border-radius:4px;font-family:Oswald;font-size:16px;letter-spacing:1px;font-weight:700;white-space:nowrap;${_contorno(1)}">${catLabel}</div>
         </div>
-        <div style="${_sbRowAnim(_animDir,2)}display:grid;grid-template-columns:repeat(${ra.att[DATA.lift].length},1fr) repeat(4,1fr);background:${YL_NAVY}">
+        <div style="${_sbRowAnim(_animDir,2)}display:grid;grid-template-columns:repeat(${ra.att[DATA.lift].length},1fr) repeat(4,1fr);background:${_txC('gridBg')}">
           ${ra.att[DATA.lift].map((at,j)=>{
             let clr,td='none',boxSh='';
             const is4=j===3&&at.extra;
@@ -8904,6 +8939,7 @@ function renderDirector(){
       {key:'nameBg',     label:'Fondo nombre',     desc:'Color principal de la barra del nombre'},
       {key:'nameBg2',    label:'Fondo nombre 2',   desc:'Color derecho del gradiente de la barra'},
       {key:'nameText',   label:'Texto nombre',     desc:'Texto sobre la barra del nombre'},
+      {key:'marcadorText',label:'Letra del marcador',desc:'Nombre y categoría en el marcador. El contorno negro va fijo'},
     ]},
     {title:'POSICIÓN',items:[
       {key:'puesto',     label:'# Posición',       desc:'Texto del puesto en marcador (pos 4+)'},
