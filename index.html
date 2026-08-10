@@ -228,6 +228,7 @@ function buildMenu(){
     {v:'home',l:'Inicio',ic:''},
     {v:'nominas',l:'Nóminas',ic:''},
     {v:'envivo',l:'Competencia en Vivo',ic:'',cls:'special-r'},
+    {v:'pasadas',l:'Competencias pasadas',ic:''},
     {v:'stats',l:'Estadísticas',ic:''},
     {v:'records',l:'Records',ic:''},
     {v:'trans',l:'Transmisiones',ic:''},
@@ -506,6 +507,20 @@ async function initFB(){
           .map(e=>({id:e.id,name:e.name||e.id,logoUrl:e.logoUrl||'',fecha:e.fecha||e.fechas||'',lugar:e.lugar||e.location||''}));
         if(ST.v==='envivo')render();
       }catch(_){ window.EVENTOS_PUB=window.EVENTOS_PUB||[]; }
+      // Actas de competencias pasadas (admin → Competencias pasadas). Solo las
+      // que el admin marcó como visibles.
+      try{
+        const cp=_fsCache('pasadas',10*60*1000);
+        if(cp){window.COMPES_PASADAS=cp;if(ST.v==='pasadas')render();}
+        else{
+          const ps=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'competencias_pasadas'));
+          const list=ps.docs.map(d=>({...d.data(),id:d.id}))
+            .filter(e=>e.publicado&&(e.docs||[]).length);
+          _fsSetCache('pasadas',list);
+          window.COMPES_PASADAS=list;
+          if(ST.v==='pasadas')render();
+        }
+      }catch(e){ console.warn('[pasadas]',e); window.COMPES_PASADAS=window.COMPES_PASADAS||[]; }
     }catch(e){console.warn('[eventos]',e);}
     // ── Edits de atletas ──
     await loadEdits();
@@ -1328,6 +1343,7 @@ function render(){const app=document.getElementById("app");
     else if(ST.v==="entrenadores")h+=renderEntrenadoresPub();
     else if(ST.v==="terminos")h+=renderTerminos();
     else if(ST.v==="envivo")h+=renderEnVivoPub();
+    else if(ST.v==="pasadas")h+=renderPasadasPub();
     else h+=nom();
     if(typeof buildMenu==='function')buildMenu();
   }
@@ -1372,6 +1388,66 @@ function renderEnVivoPub(){
       </div></a>`;
   });
   h+=`</div></div>`;
+  return h;
+}
+// ── COMPETENCIAS PASADAS (público) ────────────────────────────────
+// Las actas que el admin subió en admin → Competencias pasadas. Se lista un
+// campeonato por tarjeta, con sus documentos para bajar. Solo salen los que el
+// admin marcó como visibles y que tienen al menos un archivo.
+function renderPasadasPub(){
+  const _fp=f=>{const m=String(f||'').match(/^(\d{4})-(\d{2})-(\d{2})/);if(!m)return f||'';
+    const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    return (+m[3])+' '+M[(+m[2])-1]+' '+m[1];};
+  const _peso=b=>{const n=+b||0;return !n?'':(n<1024*1024?Math.max(1,Math.round(n/1024))+' KB':(n/1024/1024).toFixed(1)+' MB');};
+  const _ext=d=>{const m=String(d.archivo||d.nombre||'').match(/\.([A-Za-z0-9]{2,5})$/);return m?m[1].toUpperCase():'ARCHIVO';};
+  // Para lo que va DENTRO de un atributo hay que escapar también las comillas:
+  // _escH solo cubre & < >, y estas URLs y nombres los escribe el admin.
+  const _at=v=>_escH(v).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+  const evs=(window.COMPES_PASADAS||[]).slice()
+    .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))
+              ||String(a.name||'').localeCompare(String(b.name||'')));
+
+  let h=`<div style="max-width:900px;margin:0 auto;padding:0 4px">`;
+  h+=`<h2 style="font-family:Oswald;font-size:clamp(20px,5vw,28px);letter-spacing:2px;text-transform:uppercase;margin:0 0 4px">Competencias pasadas</h2>`;
+  h+=`<p style="color:var(--muted);font-size:13px;margin-bottom:18px">Actas oficiales de los campeonatos ya disputados, para descargar.</p>`;
+
+  if(!window.COMPES_PASADAS){
+    h+=`<div class="cd2" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">Cargando actas…</div></div>`;
+    return h;
+  }
+  if(!evs.length){
+    h+=`<div class="cd2" style="padding:30px 22px;text-align:center">
+      <div style="font-family:Oswald;font-size:16px;letter-spacing:1px;color:var(--gold);margin-bottom:6px">TODAVÍA NO HAY ACTAS PUBLICADAS</div>
+      <div style="color:var(--muted);font-size:13px;line-height:1.5">Cuando termine un campeonato y se publique su acta, aparece acá para descargar.</div>
+    </div></div>`;
+    return h;
+  }
+
+  evs.forEach(e=>{
+    const meta=[_fp(e.fecha),e.lugar].filter(Boolean).join(' · ');
+    h+=`<div class="cd2" style="padding:0;overflow:hidden;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:0">
+        ${e.logoUrl?`<div class="envivo-logo" style="align-self:stretch"><img src="${_at(e.logoUrl)}" alt="" onerror="this.parentElement.remove()"></div>`:''}
+        <div class="envivo-info">
+          <div class="envivo-nom">${_escH(e.name||e.id)}</div>
+          <div class="envivo-meta">${_escH(meta)||'&nbsp;'}</div>
+        </div>
+      </div>
+      <div style="padding:0 16px 14px;display:flex;flex-wrap:wrap;gap:8px">`;
+    (e.docs||[]).forEach(d=>{
+      if(!d||!d.url)return;
+      const tam=_peso(d.tamano);
+      h+=`<a href="${_at(d.url)}" target="_blank" rel="noopener" download
+        style="display:inline-flex;align-items:center;gap:8px;text-decoration:none;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 13px;color:var(--text);font-size:13px">
+        <span style="font-family:Oswald;font-size:10px;letter-spacing:1px;background:var(--gold);color:var(--bg);border-radius:4px;padding:2px 6px">${_escH(_ext(d))}</span>
+        <span>${_escH(d.nombre||d.archivo||'Acta')}</span>
+        ${tam?`<span style="color:var(--muted);font-size:11px">${_escH(tam)}</span>`:''}
+      </a>`;
+    });
+    h+=`</div></div>`;
+  });
+  h+=`</div>`;
   return h;
 }
 function embedded(url){return `<iframe src="${url}?embedded=1" style="width:100%;height:calc(100vh - 110px);min-height:600px;border:0;background:transparent;display:block" loading="lazy"></iframe>`}

@@ -53,6 +53,16 @@ service firebase.storage {
       allow delete: if isAdmin();
     }
 
+    // ── Actas de competencias pasadas ────────────────────────────
+    // El acta se genera en el livecast (PDF o Excel) y el admin la sube desde
+    // admin → Competencias pasadas. Cualquiera puede bajarla desde el sitio.
+    match /actas/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin()
+                    && request.resource.size < 20 * 1024 * 1024;
+      allow delete: if isAdmin();
+    }
+
     // ── Backup admin (exports JSON, logs, etc.) ──────────────────
     match /backups/{allPaths=**} {
       allow read, write: if isAdmin();

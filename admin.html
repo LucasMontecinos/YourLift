@@ -192,7 +192,7 @@ function _getPeerKey(a){
 }
 function _peerPerc(myTotal,key){const g=PEERS[key];if(!g)return null;const all=[...g.members.map(m=>m.total),myTotal].sort((a,b)=>b-a);const rank=all.indexOf(myTotal)+1;return{rank,n:all.length,pct:Math.round((1-rank/all.length)*100),g};}
 
-const ST={user:null,adminInfo:null,view:'athletes',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',filterClasif:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{},achievementsByCodigo:{},fotosByCodigo:{},
+const ST={user:null,adminInfo:null,view:'athletes',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',filterClasif:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{},achievementsByCodigo:{},fotosByCodigo:{},pasadas:{},cpSel:'',
   // Filtros globales del dashboard de estadísticas (tipo Power BI)
   statsFilters:{ yearFrom:'', yearTo:'', sex:'', mod:'', div:'', club:'' }};
 window.ST=ST;
@@ -485,6 +485,16 @@ async function loadAll(){
         if(ST.view==='campeonatos'||ST.view==='dashboard'||ST.view==='athletes')render();
       },(e)=>console.warn('[listener] eventos:',e.message));
     }catch(e){console.warn('[loadAll] eventos listener:',e.message);}
+  }
+  // Actas de competencias pasadas (para saber cuáles ya tienen documento subido).
+  if(!window._pasadasListener){
+    try{
+      window._pasadasListener=onSnapshot(collection(db,'competencias_pasadas'),(snap)=>{
+        const m={}; snap.docs.forEach(d=>{ m[d.id]={...d.data(),id:d.id}; });
+        ST.pasadas=m;
+        if(ST.view==='pasadas')render();
+      },(e)=>console.warn('[listener] competencias_pasadas:',e.message));
+    }catch(e){console.warn('[loadAll] pasadas listener:',e.message);}
   }
   if(!window._resultsListener){
     try{
@@ -1613,6 +1623,7 @@ function render(){
       <button class="side-btn ${ST.view==='campeonatos'?'active':''}" onclick="go('campeonatos')">Campeonatos</button>
       <button class="side-btn ${ST.view==='publico'?'active':''}" onclick="go('publico')">YourLift Público</button>
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='nomcards'?'active':''}" onclick="go('nomcards')">Tarjetas de Nóminas</button>`:''}
+      <button class="side-btn ${ST.view==='pasadas'?'active':''}" onclick="go('pasadas')">Competencias pasadas</button>
       <button class="side-btn ${ST.view==='exports'?'active':''}" onclick="go('exports')">Exports</button>
       <button class="side-btn ${ST.view==='audit'?'active':''}" onclick="go('audit')">Audit Log</button>
       ${ST.pendingResults?`<button class="side-btn ${ST.view==='mergeResults'?'active':''}" onclick="go('mergeResults')" style="border-color:var(--green);color:var(--green)">Resultados Pendientes <span style="background:var(--green);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.pendingResults}</span></button>`:''}
@@ -1645,6 +1656,7 @@ function render(){
   else if(ST.view==='cronograma')content=renderCronoEditor();
   else if(ST.view==='campeonatos')content=renderCampeonatos();
   else if(ST.view==='publico')content=renderPublico();
+  else if(ST.view==='pasadas')content=renderCompetenciasPasadas();
   else if(ST.view==='exports')content=renderExports();
   else if(ST.view==='audit')content=renderAudit();
   else if(ST.view==='admins'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderAdmins();else go('athletes');}
@@ -4226,6 +4238,208 @@ function renderLivecast(){
       }).join('')}
     </div>`;
 }
+
+// ═══════════════════════════════════════════
+// COMPETENCIAS PASADAS — actas para descargar desde yourlift.cl
+// ═══════════════════════════════════════════
+// El acta se genera en el livecast (PDF o Excel) y se baja al computador. Acá se
+// sube y queda publicada en la sección "Competencias pasadas" del sitio, para que
+// cualquiera la descargue sin tener que pedirla.
+//
+// Se guarda el archivo en Storage (actas/{evento}/…) y la ficha en Firestore
+// (competencias_pasadas/{evento}), con la lista de documentos de ese campeonato.
+// Un campeonato puede tener varios: acta oficial, acta en Excel, resultados por
+// tanda, lo que haga falta.
+const CP_TIPOS='.pdf,.xlsx,.xls,.csv';
+const CP_MAX_MB=20;
+
+// Un campeonato es "pasado" si está archivado o si su fecha ya quedó atrás.
+function cpEsPasado(e){
+  if(!e)return false;
+  if(e.status==='archived')return true;
+  const f=String(e.date||e.fecha||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return false;
+  return f < new Date().toISOString().slice(0,10);
+}
+function cpPasados(){
+  return (ST.eventos||[]).filter(cpEsPasado)
+    .slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+}
+function cpFicha(id){ return (ST.pasadas||{})[id]||null; }
+function cpFecha(f){
+  const m=String(f||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return f||'—';
+  const M=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  return (+m[3])+' de '+M[(+m[2])-1]+' de '+m[1];
+}
+function cpPeso(b){
+  const n=+b||0;
+  return n<1024*1024 ? Math.max(1,Math.round(n/1024))+' KB' : (n/1024/1024).toFixed(1)+' MB';
+}
+
+function renderCompetenciasPasadas(){
+  const evs=cpPasados();
+  const sel=ST.cpSel&&evs.find(e=>e.id===ST.cpSel)?ST.cpSel:'';
+  let h='<div class="h1">Competencias pasadas</div>';
+  h+='<p class="subtitle">Sube el acta que bajaste del livecast y queda para descargar en yourlift.cl → Competencias pasadas. Se listan los campeonatos archivados y los que ya tienen fecha cumplida.</p>';
+
+  if(!evs.length){
+    h+='<div class="card" style="text-align:center;color:var(--muted);font-size:13px;padding:30px">Todavía no hay campeonatos terminados.</div>';
+    return h;
+  }
+
+  h+='<div class="card"><label style="font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px">CAMPEONATO</label>';
+  h+='<select class="inp" style="margin-top:6px" onchange="cpElegir(this.value)">';
+  h+='<option value="">— Elige un campeonato —</option>';
+  evs.forEach(e=>{
+    const f=cpFicha(e.id);
+    const n=f&&f.docs?f.docs.length:0;
+    h+=`<option value="${esc(e.id)}" ${sel===e.id?'selected':''}>${esc(e.name||e.id)}${e.date?' · '+esc(e.date):''}${n?` · ${n} documento(s)`:''}</option>`;
+  });
+  h+='</select></div>';
+
+  if(!sel){
+    // Resumen: qué campeonatos ya tienen acta publicada y cuáles no.
+    h+='<div class="card"><div style="font-family:Oswald;letter-spacing:1px;font-size:13px;margin-bottom:10px">ESTADO</div>';
+    h+='<table style="width:100%;border-collapse:collapse;font-size:13px">';
+    h+='<tr style="color:var(--muted);font-size:11px;text-align:left"><th style="padding:6px 4px">Campeonato</th><th style="padding:6px 4px">Fecha</th><th style="padding:6px 4px">Documentos</th><th style="padding:6px 4px">En el sitio</th></tr>';
+    evs.forEach(e=>{
+      const f=cpFicha(e.id); const n=f&&f.docs?f.docs.length:0;
+      const pub=!!(f&&f.publicado&&n);
+      h+=`<tr style="border-top:1px solid var(--border)">
+        <td style="padding:7px 4px"><a href="#" onclick="cpElegir('${esc(e.id)}');return false" style="color:var(--text)">${esc(e.name||e.id)}</a></td>
+        <td style="padding:7px 4px;color:var(--muted)">${esc(e.date||'—')}</td>
+        <td style="padding:7px 4px;color:${n?'var(--text)':'var(--muted)'}">${n||'—'}</td>
+        <td style="padding:7px 4px;color:${pub?'var(--green)':'var(--muted)'}">${pub?'Publicado':'No'}</td>
+      </tr>`;
+    });
+    h+='</table></div>';
+    return h;
+  }
+
+  const ev=evs.find(e=>e.id===sel);
+  const f=cpFicha(sel)||{};
+  const docs=f.docs||[];
+  h+='<div class="card">';
+  h+=`<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+        <div><div style="font-family:Oswald;font-size:17px;letter-spacing:1px">${esc(ev.name||ev.id)}</div>
+        <div style="color:var(--muted);font-size:12px">${esc(cpFecha(ev.date))}${ev.location?' · '+esc(ev.location):''}</div></div>
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer">
+          <input type="checkbox" ${f.publicado?'checked':''} onchange="cpPublicar('${esc(sel)}',this.checked)"> Visible en yourlift.cl
+        </label>
+      </div>`;
+
+  h+=`<label class="btn btn-g" style="display:inline-block">
+        <input type="file" accept="${CP_TIPOS}" multiple style="display:none" onchange="cpSubir('${esc(sel)}',this)">
+        + Subir acta
+      </label>
+      <span style="color:var(--muted);font-size:12px;margin-left:10px">PDF o Excel, hasta ${CP_MAX_MB} MB. Puedes subir varios de una.</span>`;
+
+  if(!docs.length){
+    h+='<div style="color:var(--muted);font-size:13px;margin-top:16px">Todavía no subiste ningún documento de este campeonato.</div>';
+  }else{
+    h+='<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:16px">';
+    h+='<tr style="color:var(--muted);font-size:11px;text-align:left"><th style="padding:6px 4px">Nombre que se ve en el sitio</th><th style="padding:6px 4px">Archivo</th><th style="padding:6px 4px"></th></tr>';
+    docs.forEach((d,i)=>{
+      h+=`<tr style="border-top:1px solid var(--border)">
+        <td style="padding:7px 4px"><input class="inp" style="padding:6px 8px;font-size:12px" value="${esc(d.nombre||'')}" onchange="cpRenombrar('${esc(sel)}',${i},this.value)"></td>
+        <td style="padding:7px 4px;color:var(--muted);white-space:nowrap">${esc((d.archivo||'').slice(-34))} · ${esc(cpPeso(d.tamano))}</td>
+        <td style="padding:7px 4px;white-space:nowrap;text-align:right">
+          <a class="btn" href="${esc(d.url)}" target="_blank" rel="noopener" style="background:var(--border);color:var(--text);text-decoration:none">Ver</a>
+          <button class="btn" onclick="cpBorrar('${esc(sel)}',${i})" style="background:transparent;border:1px solid var(--red);color:var(--red);margin-left:5px">Borrar</button>
+        </td>
+      </tr>`;
+    });
+    h+='</table>';
+  }
+  h+='</div>';
+  return h;
+}
+
+window.cpElegir=function(id){ ST.cpSel=id||''; render(); };
+
+// Guarda la ficha entera del campeonato. Se manda completa (no merge parcial) para
+// que borrar un documento borre de verdad la entrada de la lista.
+async function cpGuardar(id, ficha){
+  const ev=(ST.eventos||[]).find(e=>e.id===id)||{};
+  const dato={
+    evento:id,
+    name:ev.name||id,
+    fecha:ev.date||'',
+    lugar:ev.location||'',
+    logoUrl:ev.logoUrl||'',
+    publicado:!!ficha.publicado,
+    docs:ficha.docs||[],
+    updatedAt:serverTimestamp()
+  };
+  await setDoc(doc(db,'competencias_pasadas',id),dato);
+  ST.pasadas=ST.pasadas||{};
+  ST.pasadas[id]={...dato};
+  render();
+}
+
+window.cpSubir=async function(id,input){
+  const files=[...(input.files||[])];
+  input.value='';
+  if(!files.length)return;
+  const btn=input.closest('label');
+  const original=btn?btn.textContent:'';
+  try{
+    const storage=getStorage(app);
+    const ficha=cpFicha(id)||{docs:[],publicado:false};
+    const docs=(ficha.docs||[]).slice();
+    for(let i=0;i<files.length;i++){
+      const file=files[i];
+      if(file.size>CP_MAX_MB*1024*1024){ showToast(file.name+' pesa más de '+CP_MAX_MB+' MB',null,true); continue; }
+      if(btn)btn.textContent=`Subiendo ${i+1}/${files.length}…`;
+      // El nombre del archivo se limpia, pero el que se ve en el sitio es editable.
+      const limpio=file.name.replace(/[^A-Za-z0-9._-]+/g,'_').slice(-70);
+      const ruta=`actas/${id}/${Date.now()}_${limpio}`;
+      const sref=storageRef(storage,ruta);
+      await uploadBytes(sref,file,{contentType:file.type||'application/octet-stream'});
+      docs.push({
+        nombre:file.name.replace(/\.[^.]+$/,''),
+        archivo:file.name,
+        url:await getDownloadURL(sref),
+        ruta,
+        tamano:file.size,
+        subidoEn:new Date().toISOString()
+      });
+    }
+    await cpGuardar(id,{...ficha,docs});
+    showToast(files.length>1?files.length+' documentos subidos':'Acta subida');
+  }catch(e){ showToast('Error: '+e.message,null,true); }
+  finally{ if(btn)btn.textContent=original; render(); }
+};
+
+window.cpRenombrar=async function(id,i,valor){
+  const ficha=cpFicha(id); if(!ficha||!ficha.docs||!ficha.docs[i])return;
+  const docs=ficha.docs.slice();
+  docs[i]={...docs[i],nombre:String(valor||'').trim()||docs[i].archivo};
+  try{ await cpGuardar(id,{...ficha,docs}); showToast('Nombre actualizado'); }
+  catch(e){ showToast('Error: '+e.message,null,true); }
+};
+
+window.cpBorrar=async function(id,i){
+  const ficha=cpFicha(id); if(!ficha||!ficha.docs||!ficha.docs[i])return;
+  const d=ficha.docs[i];
+  if(!confirm('¿Borrar "'+(d.nombre||d.archivo)+'"?\n\nDeja de estar disponible para descargar en el sitio.'))return;
+  try{
+    // Primero la ficha: si el archivo de Storage ya no está, igual queremos que
+    // deje de aparecer en el sitio en vez de quedar con un enlace roto.
+    const docs=ficha.docs.filter((_,k)=>k!==i);
+    await cpGuardar(id,{...ficha,docs});
+    if(d.ruta){ try{ await deleteObject(storageRef(getStorage(app),d.ruta)); }catch(e){ console.warn('[actas] borrar archivo',e.message); } }
+    showToast('Documento borrado');
+  }catch(e){ showToast('Error: '+e.message,null,true); }
+};
+
+window.cpPublicar=async function(id,on){
+  const ficha=cpFicha(id)||{docs:[]};
+  if(on&&!(ficha.docs||[]).length){ showToast('Sube al menos un documento antes de publicarlo',null,true); render(); return; }
+  try{ await cpGuardar(id,{...ficha,publicado:!!on}); showToast(on?'Publicado en yourlift.cl':'Sacado del sitio'); }
+  catch(e){ showToast('Error: '+e.message,null,true); }
+};
 
 function renderExports(){
   const isOwner=ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap;

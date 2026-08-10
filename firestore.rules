@@ -224,6 +224,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Actas de campeonatos ya disputados (admin → Competencias pasadas). El
+    // público las lee para descargarlas desde yourlift.cl; solo un admin las sube.
+    match /competencias_pasadas/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /sugerencias/{id} {
       allow read, delete: if isAdmin();
       allow create: if true;
