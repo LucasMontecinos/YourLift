@@ -946,11 +946,6 @@ const _TX_COLOR_DEFAULTS={
   nameBg:      '#D4A843', // name bar gradient start (scoreboard + profile)
   nameBg2:     '#c19735', // name bar gradient end
   nameText:    '#0A1628', // dark text on name bar
-  // Letra del marcador (nombre del atleta y su categoría). Va aparte de nameText
-  // porque ahí el texto es blanco con contorno negro, no oscuro sobre la barra.
-  // El contorno queda fijo a propósito: es lo que lo mantiene legible sobre
-  // cualquier color de barra. Lo que se cambia desde Control TX es este color.
-  marcadorText:'#ffffff',
   accent:      '#D4A843', // borders, total cell, LB highlights
   headerBg:    '#1c324a', // scoreboard/LB header background
   gridBg:      '#0b1826', // attempt grid row background
@@ -5611,18 +5606,6 @@ function _nombrePropio(s){
     return p.replace(/(^|[-'\u2019])(\p{Ll})/gu,(m,a,b)=>a+b.toUpperCase());
   }).join(' ');
 }
-// Contorno negro del texto del marcador. Es lo que hace que se lea sobre cualquier
-// fondo, pase lo que pase con el color de la letra: por eso el contorno queda fijo
-// y lo que se cambia desde Control TX es el COLOR DE LA LETRA (Texto nombre).
-function _contorno(px){
-  const n=px||2;
-  // Ocho sombras alrededor en vez de -webkit-text-stroke: el trazo se dibuja
-  // CENTRADO sobre el contorno de la letra y a este tamaño se la come entera
-  // (queda negra con un filo blanco, justo al revés). La sombra siempre va detrás.
-  const o=[[-n,-n],[0,-n],[n,-n],[-n,0],[n,0],[-n,n],[0,n],[n,n]]
-    .map(d=>d[0]+'px '+d[1]+'px 0 #000').join(',');
-  return 'text-shadow:'+o+',0 2px 6px rgba(0,0,0,.45);';
-}
 function _sbRowAnim(animDir,row){
   if(!animDir)return '';
   if(animDir==='in'){
@@ -5692,8 +5675,8 @@ function _renderTxCerScoreboardBL(cur,opts){
         +_flagImg(_ctry(cur),14)
         +'<span style="color:'+_txC('nameBg')+';font-family:Oswald;font-size:10px;letter-spacing:2px;font-weight:700">'+_ctry(cur)+'</span>'
       +'</div>'
-      +'<div style="flex:1;font-family:Oswald;color:'+_txC('marcadorText')+';letter-spacing:1px;overflow:hidden">'
-        +'<div style="font-size:24px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+_contorno(1.6)+'">'+nombreAtleta+'</div>'
+      +'<div style="flex:1;font-family:Oswald;color:'+_txC('nameText')+';letter-spacing:1px;overflow:hidden">'
+        +'<div style="font-size:24px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nombreAtleta+'</div>'
       +'</div>'
       +logo
     +'</div>'
@@ -6427,7 +6410,10 @@ function renderTxProfile(cur){
   const media=Object.assign({},full||{});
   if(_lm){ if(_lm.foto_url)media.foto_url=_lm.foto_url; if(_lm.gif_url)media.gif_url=_lm.gif_url; ['gif_blend','gif_zoom','gif_offset_x','gif_offset_y','gif_start','gif_end'].forEach(k=>{if(_lm[k]!==undefined)media[k]=_lm[k];}); }
   const parts=(cur.name||'').trim().split(/\s+/);
-  const firstName=parts.slice(0,-2).join(' ')||parts[0]||'';
+  // Nombre y apellido con la MISMA tipografía, tamaño y mayúsculas. Antes el
+  // nombre iba en fina y el apellido en negrita, y se leían como dos cosas
+  // distintas en la pantalla de perfil.
+  const firstName=(parts.slice(0,-2).join(' ')||parts[0]||'').toUpperCase();
   const lastName=parts.slice(-2).join(' ').toUpperCase();
   const club=cur.club||full?.club||'';
   const cat=txCatLabel(cur.cat)||(txCatNum(cur.cat)+'kg');
@@ -6467,7 +6453,7 @@ function renderTxProfile(cur){
               <span style="font-family:Oswald;font-weight:700;font-size:clamp(13px,1.4vw,22px);color:${_txC('nameText')};letter-spacing:2px">${_ctry(cur)}</span>
             </div>
             <div style="font-family:Oswald;font-size:clamp(26px,3.2vw,44px);font-weight:700;letter-spacing:2px;color:${_txC('nameText')}">
-              <span style="font-weight:400">${firstName}</span> ${lastName}
+              ${firstName?firstName+' ':''}${lastName}
             </div>
           </div>
         </div>
@@ -6555,7 +6541,7 @@ function renderTxScoreboard(cur,lifterChanged){
   // ── Colores: el marcador sigue la paleta elegida en Control TX ──
   // Antes estaban fijos acá y la paleta no le hacía nada. El contorno negro del
   // texto NO entra en la paleta, a propósito: es lo que lo mantiene legible.
-  const YL_NAVY=_txC('headerBg'), YL_GOLD=_txC('accent'), YL_TXT=_txC('marcadorText');
+  const YL_NAVY=_txC('headerBg'), YL_GOLD=_txC('accent'), YL_TXT=_txC('nameText');
   const WHITE='#ffffff', WHITE_DIM='rgba(255,255,255,.55)', GREEN='#22c55e', RED='#ef4444';
   // ── SQUAT / BENCH PRESS / DEADLIFT / TOTAL — mejor marca válida de cada uno + estado ──
   const sqB=bestOf(ra,'sq'), bpB=bestOf(ra,'bp'), dlB=bestOf(ra,'dl');
@@ -6592,9 +6578,9 @@ function renderTxScoreboard(cur,lifterChanged){
         <div style="${_sbRowAnim(_animDir,1)}background:linear-gradient(90deg,${_txC('nameBg')},${_txC('nameBg2')});padding:7px 22px;display:flex;align-items:center;gap:12px">
           ${flagHtml}
           <div style="flex:1;font-family:Oswald;color:${YL_TXT};letter-spacing:1px;overflow:hidden">
-            <div style="font-size:28px;font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${_contorno(2)}">${nombreAtleta}</div>
+            <div style="font-size:28px;font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nombreAtleta}</div>
           </div>
-          <div style="background:rgba(10,22,40,.9);color:${YL_TXT};padding:5px 14px;border-radius:4px;font-family:Oswald;font-size:16px;letter-spacing:1px;font-weight:700;white-space:nowrap;${_contorno(1)}">${catLabel}</div>
+          <div style="background:rgba(10,22,40,.9);color:${YL_GOLD};padding:5px 14px;border-radius:4px;font-family:Oswald;font-size:16px;letter-spacing:1px;font-weight:700;white-space:nowrap">${catLabel}</div>
         </div>
         <div style="${_sbRowAnim(_animDir,2)}display:grid;grid-template-columns:repeat(${ra.att[DATA.lift].length},1fr) repeat(4,1fr);background:${_txC('gridBg')}">
           ${ra.att[DATA.lift].map((at,j)=>{
@@ -8939,7 +8925,6 @@ function renderDirector(){
       {key:'nameBg',     label:'Fondo nombre',     desc:'Color principal de la barra del nombre'},
       {key:'nameBg2',    label:'Fondo nombre 2',   desc:'Color derecho del gradiente de la barra'},
       {key:'nameText',   label:'Texto nombre',     desc:'Texto sobre la barra del nombre'},
-      {key:'marcadorText',label:'Letra del marcador',desc:'Nombre y categoría en el marcador. El contorno negro va fijo'},
     ]},
     {title:'POSICIÓN',items:[
       {key:'puesto',     label:'# Posición',       desc:'Texto del puesto en marcador (pos 4+)'},
