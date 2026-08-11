@@ -4569,6 +4569,13 @@ async function exportActaFesupoPDF(){
     const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
     const AMARILLO=[247,214,58], NEGRO=[0,0,0], GRIS=[130,130,130];
     const grupos=_actaGrupos();
+    // Columna de procedencia. En un internacional el país es lo que importa; en un
+    // campeonato nacional todos ponen CHI y la columna no dice nada, así que ahí va
+    // el club, que es lo que la gente busca en el acta. Se decide solo: si hay más
+    // de un país en la nómina, manda el país.
+    const _paises=new Set(DATA.athletes.filter(a=>!a.__is4).map(a=>_ctry(a)).filter(Boolean));
+    const _porClub=_paises.size<=1;
+    const _proc=a=>_porClub?(a.club||'—'):_ctry(a);
     let y=14, primera=true;
     const titulo=()=>{
       doc.setTextColor(...NEGRO);
@@ -4584,7 +4591,7 @@ async function exportActaFesupoPDF(){
       // La columna del 4º intento sale SOLO si alguien de ESTA tabla lo tuvo.
       const n4={};
       lifts.forEach(l=>{ n4[l]=gr.filas.some(f=>((f.a.att[l]||[])[3]||{}).w>0); });
-      const head=[[{content:'#',styles:{halign:'center'}},'Nombre','Pais','P.Corp.','Nac.']];
+      const head=[[{content:'#',styles:{halign:'center'}},'Nombre',_porClub?'Club':'Pais','P.Corp.','Nac.']];
       lifts.forEach(l=>{
         for(let j=0;j<3;j++)head[0].push({content:LIFT_S[l]+(j+1),styles:{halign:'center'}});
         if(n4[l])head[0].push({content:LIFT_S[l]+'4',styles:{halign:'center'}});
@@ -4594,7 +4601,7 @@ async function exportActaFesupoPDF(){
       // marcar = récords (amarillo) · validos = negrita · nulos = gris y tachado
       const body=[], marcar=[], validos=[], nulos=[], mejores=[];
       gr.filas.forEach((f,ri)=>{
-        const a=f.a, row=[f.lugar||'-',a.name||'',_ctry(a),a.bw?a.bw.toFixed(2):'',a.born||a.dob||''];
+        const a=f.a, row=[f.lugar||'-',a.name||'',_proc(a),a.bw?a.bw.toFixed(2):'',a.born||a.dob||''];
         lifts.forEach(l=>{
           _actaAtts(a,l).forEach(c=>{
             if(c.extra&&!n4[l])return;
@@ -4626,7 +4633,9 @@ async function exportActaFesupoPDF(){
         headStyles:{fillColor:[235,235,235],textColor:NEGRO,fontStyle:'bold',fontSize:6.4,halign:'center'},
         bodyStyles:{fillColor:[255,255,255]},
         alternateRowStyles:{fillColor:[248,248,248]},
-        columnStyles:{0:{halign:'center',cellWidth:7},1:{cellWidth:46},2:{halign:'center',cellWidth:10},3:{halign:'center',cellWidth:13},4:{halign:'center',cellWidth:10}},
+        columnStyles:{0:{halign:'center',cellWidth:7},1:{cellWidth:_porClub?42:46},
+          2:_porClub?{cellWidth:34}:{halign:'center',cellWidth:10},
+          3:{halign:'center',cellWidth:13},4:{halign:'center',cellWidth:10}},
         didParseCell:d=>{
           if(d.section!=='body')return;
           if(d.column.index>=5)d.cell.styles.halign='center';

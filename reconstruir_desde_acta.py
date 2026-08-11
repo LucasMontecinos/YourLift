@@ -97,7 +97,8 @@ def leer(pdf):
         # trae ninguno. Se distinguen porque el año es un entero de cuatro cifras.
         bw = ''
         if k < fin and NUM.match(cs[k][0]) and not ANIO.match(cs[k][0]): bw = cs[k][0]; k += 1
-        if k < fin and ANIO.match(cs[k][0]): k += 1
+        nac = ''
+        if k < fin and ANIO.match(cs[k][0]): nac = cs[k][0]; k += 1
 
         resto = cs[k:fin]
         att = {'sq': [], 'bp': [], 'dl': []}
@@ -117,7 +118,7 @@ def leer(pdf):
                 att[L.lower()] = tres
             if z < len(resto) and NUM.match(resto[z][0]): total = float(resto[z][0])
         out.append({'nombre': nombre, 'pais': cs[jp][0], 'bw': float(bw) if bw else 0.0,
-                    'total': total, 'att': att, **grupo})
+                    'nac': nac, 'total': total, 'att': att, **grupo})
         i = fin
     return out
 
@@ -154,8 +155,8 @@ def roster(filas, ins):
     por = {}
     for f in filas:
         a = por.setdefault(_nn(f['nombre']), {
-            'nombre': f['nombre'], 'pais': f['pais'], 'bw': f['bw'], 'sex': f['sex'],
-            'div': f['div'], 'cat': f['cat'], 'mods': set(),
+            'nombre': f['nombre'], 'pais': f['pais'], 'bw': f['bw'], 'nac': f.get('nac', ''),
+            'sex': f['sex'], 'div': f['div'], 'cat': f['cat'], 'mods': set(),
             'att': {'sq': [], 'bp': [], 'dl': []}})
         a['mods'].add(f['mod'])
         for l in ('sq', 'bp', 'dl'):
@@ -176,8 +177,8 @@ def roster(filas, ins):
         out.append({'id': i, 'name': a['nombre'], 'sex': a['sex'], 'cat': a['cat'].lstrip('-'),
                     'div': a['div'], 'mod': mod, 'plusBench': plus,
                     'club': ficha.get('club') or ficha.get('clubOtro') or '',
-                    'country': a['pais'], 'bw': a['bw'], 'lot': 100 + i, 'flight': 'A',
-                    'bombed': False,
+                    'country': a['pais'], 'bw': a['bw'], 'born': a.get('nac', ''),
+                    'lot': 100 + i, 'flight': 'A', 'bombed': False,
                     'att': {l: (a['att'][l] or vacio()) for l in ('sq', 'bp', 'dl')}})
     return out
 
