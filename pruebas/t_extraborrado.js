@@ -130,5 +130,34 @@ console.log('\nBorrar el extra estando marcado se sigue respetando');
   window._recentAtt = {}; window._pendingEdits = new Set();
 }
 
+console.log('\nUna nómina vieja tampoco se le sube al resto del equipo');
+{
+  // Una pantalla que quedó con atletas de más (nómina revuelta de otro momento):
+  // el servidor tiene 2, acá hay 4. Los dos sobrantes no se tocaron nunca.
+  const local = [atleta(tres), atleta(tres), atleta(tres), atleta(tres)]
+    .map((a, i) => Object.assign(a, { id: i + 1, name: 'Atleta ' + (i + 1) }));
+  const remoto = local.slice(0, 2).map(a => JSON.parse(JSON.stringify(a)));
+  const salida = _mergeForWrite(local, remoto);
+  ok(salida.length === 2, 'sube la nómina del servidor, no la de acá (' + salida.length + ')');
+  ok(salida.every(a => a.id <= 2), 'los sobrantes se quedan en esta pantalla');
+}
+{
+  // Pero el atleta que acabo de agregar acá sí tiene que subir.
+  const local = [atleta(tres), atleta(tres)].map((a, i) =>
+    Object.assign(a, { id: i + 1, name: 'Atleta ' + (i + 1) }));
+  const remoto = [JSON.parse(JSON.stringify(local[0]))];
+  window._pendingEdits = new Set(['2|meta']);
+  const salida = _mergeForWrite(local, remoto);
+  ok(salida.length === 2, 'el alta reciente sí sube');
+  ok(salida.some(a => a.id === 2), 'con su ficha');
+  window._pendingEdits = new Set();
+}
+{
+  // Y en un evento recién abierto, con el servidor vacío, sube todo.
+  const local = [atleta(tres), atleta(tres)].map((a, i) =>
+    Object.assign(a, { id: i + 1, name: 'Atleta ' + (i + 1) }));
+  ok(_mergeForWrite(local, []).length === 2, 'con el servidor vacío sube la nómina entera');
+}
+
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');
 process.exit(fallas ? 1 : 0);

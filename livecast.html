@@ -1373,8 +1373,13 @@ function _mergeForWrite(localArr, remoteArr){
     });
     return m;
   });
+  // Atletas que están acá y no en el servidor. Se suben solo si son un alta MÍA
+  // sin confirmar; si no, es nómina vieja de esta pantalla y no tiene por qué
+  // volver a subir. Sin esta condición, un equipo que quedó con la nómina revuelta
+  // se la mandaba entera al servidor en cuanto lograba guardar, y el desorden se
+  // le contagiaba a todos los demás.
   const rids=new Set((remoteArr||[]).map(a=>a&&a.id));
-  (localArr||[]).forEach(a=>{ if(a&&!rids.has(a.id))out.push(a); });
+  (localArr||[]).forEach(a=>{ if(a&&!rids.has(a.id)&&pend.has(a.id+'|meta'))out.push(a); });
   return out;
 }
 function _mergeAthletes(localArr, remoteArr){
