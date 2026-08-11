@@ -1362,7 +1362,10 @@ function _mergeForWrite(localArr, remoteArr){
       for(let r=0;r<n;r++){
         if(pend.has(ra.id+'|att_'+l+'_'+r)){ if(lL[r])arr[r]=lL[r]; }  // mío (incluye borrar el 4º)
         else if(lR[r]!==undefined)arr[r]=lR[r];
-        else if(lL[r]!==undefined)arr[r]=lL[r];
+        // Sin la condición de arriba, un intento extra que otro control ya borró
+        // volvía a subir desde acá y le revivía a todo el equipo. Lo que tengo
+        // local y no está ni en el servidor ni entre mis ediciones pendientes es
+        // data vieja: no se reenvía.
       }
       while(arr.length&&arr[arr.length-1]===undefined)arr.pop();
       if(!m.att)m.att={};
@@ -1376,6 +1379,7 @@ function _mergeForWrite(localArr, remoteArr){
 }
 function _mergeAthletes(localArr, remoteArr){
   const now=Date.now();
+  const pend=window._pendingEdits||new Set();
   const held={};
   for(const k in window._recentAtt){ if(now-window._recentAtt[k]<_MERGE_HOLD_MS) held[k]=true; else delete window._recentAtt[k]; }
   const localById={}; (localArr||[]).forEach(a=>{ if(a&&a.id!=null) localById[a.id]=a; });
@@ -1407,7 +1411,16 @@ function _mergeAthletes(localArr, remoteArr){
           overrode=true;
         }
         else if(lRemote[r]!==undefined){ arr[r]=lRemote[r]; }
-        else if(lLocal[r]!==undefined){ arr[r]={w:lLocal[r].w,r:lLocal[r].r}; overrode=true; } // remoto más corto: conservo mi 4º recién agregado
+        // El remoto viene más corto que lo que tengo acá: o alguien borró ese
+        // intento extra, o yo lo acabo de agregar y todavía no salió de este
+        // equipo. Solo se conserva en el segundo caso — o sea, si es una edición
+        // MÍA sin confirmar. Sin esa condición, una pantalla de espectador se
+        // quedaba con el 4º intento para siempre: el servidor ya no lo traía, pero
+        // acá seguía en memoria y ganaba en cada snapshot. Por eso, al borrar el
+        // extra o reiniciar los datos en vivo, el público lo seguía viendo.
+        else if(lLocal[r]!==undefined && pend.has(ra.id+'|att_'+l+'_'+r)){
+          arr[r]={w:lLocal[r].w,r:lLocal[r].r}; overrode=true;
+        }
       }
       // Sacar huecos finales (ej. borré el último índice estando held).
       while(arr.length && arr[arr.length-1]===undefined) arr.pop();
