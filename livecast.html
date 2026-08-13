@@ -9611,10 +9611,10 @@ function _renderResultsTable(opts){
   });
   catKeys.forEach(k=>catGroups[k].forEach(a=>sorted.push(a)));
   const withTotal=all.filter(a=>a.total>0).length;
-  // Pos,Atleta,BW,Div,Cat (5) + intentos + subtotales + Total,GL (2).
+  // Pos,Atleta,BW,Div,Cat (5) + intentos + subtotales + Virtual,Total,GL (3).
   const colspanTotal=isBench
-    ? 5+maxAtts.bp+1+2
-    : 5+maxAtts.sq+maxAtts.bp+maxAtts.dl+3+2;
+    ? 5+maxAtts.bp+1+3
+    : 5+maxAtts.sq+maxAtts.bp+maxAtts.dl+3+3;
   let h='<div class="card" style="padding:0;overflow:hidden;margin-bottom:18px">';
   h+='<div style="padding:10px 16px;background:linear-gradient(90deg,'+opts.color+'22,transparent);border-bottom:2px solid '+opts.color+';display:flex;justify-content:space-between;align-items:center">';
   h+='<div class="os" style="font-size:15px;font-weight:700;letter-spacing:2px;color:'+opts.color+'">'+opts.icon+' '+opts.title+'</div>';
@@ -9632,7 +9632,8 @@ function _renderResultsTable(opts){
   } else {
     ['sq','bp','dl'].forEach(l=>{for(let r=1;r<=maxAtts[l];r++){const is4=r===4;h+='<th style="padding:8px 2px;text-align:center;color:'+(is4?'#60a5fa':LIFT_C[l])+';font-size:9px;width:46px"'+(is4?' title="4º intento"':'')+'>'+LIFT_S[l]+r+(is4?'*':'')+'</th>'}h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:48px;font-weight:800">Sub</th>'});
   }
-  h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--text);font-size:10px;width:46px">Total</th>';
+  h+='<th class="os" title="Suma los intentos que tiene puestos como si fueran válidos, junto con lo que ya validó" style="padding:8px 4px;text-align:center;color:#f59e0b;font-size:10px;width:46px">Virtual</th>';
+  h+='<th class="os" title="Solo lo que ya validó" style="padding:8px 4px;text-align:center;color:var(--text);font-size:10px;width:46px">Total</th>';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--gold);font-size:10px;width:48px">GL</th>';
   h+='</tr></thead><tbody>';
   let prevCat='';
@@ -9677,8 +9678,13 @@ function _renderResultsTable(opts){
     }
     if(dq){
       h+='<td class="os" style="padding:6px 4px;text-align:center;font-weight:700;font-size:13px;color:var(--red);background:rgba(239,68,68,.12)">DQ</td>';
+      h+='<td class="os" style="padding:6px 4px;text-align:center;font-weight:700;font-size:13px;color:var(--red);background:rgba(239,68,68,.12)">DQ</td>';
       h+='<td class="os" style="padding:6px 4px;text-align:center;font-weight:700;font-size:13px;color:var(--red);background:rgba(239,68,68,.06)">DQ</td></tr>';
     } else {
+      // El virtual solo se destaca mientras le quede algo por levantar: si ya está
+      // todo juzgado es el mismo número que el total y no tiene nada que aportar.
+      const vDist=a.proy>0&&a.proy!==a.total;
+      h+='<td class="os" title="'+(vDist?'Si levanta lo que tiene declarado':'Ya no le queda nada por levantar')+'" style="padding:6px 4px;text-align:center;font-weight:700;font-size:14px;color:'+(vDist?'#f59e0b':'rgba(120,143,166,.6)')+';background:'+(vDist?'rgba(245,158,11,.08)':'transparent')+'">'+(a.proy||'—')+'</td>';
       h+='<td class="os" style="padding:6px 4px;text-align:center;font-weight:700;font-size:14px">'+(a.total||'—')+'</td><td class="os" style="padding:6px 4px;text-align:center;font-weight:700;font-size:14px;color:var(--gold)">'+(a.gl||'—')+'</td></tr>';
     }
   });
@@ -9752,9 +9758,10 @@ function renderResults(){
   }
 
   h+='<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5">'
-    +'Mientras una categoría siga compitiendo, la posición es <b style="color:#f59e0b">virtual</b> (marcada con ~): '
-    +'la que tendría cada atleta si levanta lo que tiene declarado — al empezar, su apertura. '
-    +'Cuando se juzgan los nueve intentos de todos, pasa a ser la <b style="color:var(--green)">posición final</b>.</div>';
+    +'<b style="color:#f59e0b">Virtual</b>: suma los intentos que tiene puestos como si fueran válidos, junto con lo que ya validó. '
+    +'<b style="color:var(--text)">Total</b>: solo lo válido. '
+    +'La posición sale del virtual — mientras la categoría siga compitiendo va marcada con <b style="color:#f59e0b">~</b>, '
+    +'y cuando se juzgan los nueve intentos de todos pasa a ser la <b style="color:var(--green)">posición final</b>.</div>';
 
   // 3 tablas separadas por modalidad
   h+=_renderResultsTable({title:'POWERLIFTING CLASSIC',icon:'',color:'#22c55e',athletes:classicAthletes,view:'meet'});

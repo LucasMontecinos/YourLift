@@ -177,6 +177,52 @@ const TEXTO = () => document.querySelector('.main').innerText;
   ok(op[1] && op[1].pos === '2', 'y 2° el otro');
   ok(/POSICIÓN FINAL/.test(vr.texto), 'la categoría cerrada se marca como final');
 
+  console.log('\nLas dos columnas de total: virtual y real');
+  await p.evaluate(() => {
+    const nueve = () => ({ sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],
+                           bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],
+                           dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}] });
+    const mk = (id, name, bw) => ({ id, name, sex:'Hombre', cat:'83', div:'Open',
+      mod:'classic', club:'Club', flight:'A', bw, lot:100+id, bombed:false, att:nueve() });
+    // Sentadilla terminada (mejor válido 65) y banca y peso muerto solo declarados.
+    const a = mk(1, 'Con sentadilla lista', 82.0);
+    a.att.sq[0]={w:60,r:'g'}; a.att.sq[1]={w:65,r:'g'}; a.att.sq[2]={w:70,r:'n'};
+    a.att.bp[0]={w:50,r:null}; a.att.dl[0]={w:90,r:null};
+    // Sin levantar nada: las tres aperturas.
+    const b2 = mk(2, 'Solo aperturas', 82.5);
+    b2.att.sq[0]={w:70,r:null}; b2.att.bp[0]={w:45,r:null}; b2.att.dl[0]={w:95,r:null};
+    // Los nueve intentos juzgados.
+    const c = mk(3, 'Terminado', 81.5);
+    ['sq','bp','dl'].forEach((l,j)=>{ const w=[80,55,100][j];
+      c.att[l][0]={w:w-5,r:'g'}; c.att[l][1]={w:w,r:'g'}; c.att[l][2]={w:w+5,r:'n'}; });
+    DATA.athletes = [a, b2, c];
+    go('results');
+  });
+  await p.waitForTimeout(400);
+  const tot = await p.evaluate(() => {
+    const th = [...document.querySelectorAll('.main thead th')].map(e => e.innerText.trim());
+    const iV = th.indexOf('Virtual'), iT = th.indexOf('Total');
+    const filas = [...document.querySelectorAll('.main tbody tr')]
+      .map(tr => [...tr.children].map(td => td.innerText.trim())).filter(f => f.length > 5);
+    return { th, filas: filas.map(f => ({ nombre: f[1].split('\n')[0], virtual: f[iV], total: f[iT] })) };
+  });
+  const at = n => tot.filas.find(f => f.nombre === n) || {};
+
+  ok(tot.th.includes('Virtual') && tot.th.includes('Total'), 'están las dos columnas');
+  ok(tot.th.indexOf('Virtual') < tot.th.indexOf('Total'), 'el virtual va antes del total');
+
+  // 65 de sentadilla ya válidos + 50 de banca declarados + 90 de peso muerto declarados.
+  ok(at('Con sentadilla lista').virtual === '205',
+     'suma lo válido con lo declarado: ' + at('Con sentadilla lista').virtual);
+  ok(at('Con sentadilla lista').total === '—',
+     'y el total real queda vacío hasta que valide los tres movimientos');
+
+  ok(at('Solo aperturas').virtual === '210', 'con solo aperturas, el virtual es su suma: 70+45+95');
+  ok(at('Solo aperturas').total === '—', 'sin total real todavía');
+
+  ok(at('Terminado').virtual === '235' && at('Terminado').total === '235',
+     'con los nueve intentos juzgados, virtual y total coinciden');
+
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.join(' | ') : ''));
   console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');
   await b.close();
