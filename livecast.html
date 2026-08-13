@@ -295,13 +295,21 @@ window.setFondoLC=function(k){
   try{if(typeof R==='function')R();}catch(e){}
 };
 try{window.aplicarFondoLC(window.lcFondo);}catch(e){}
-// Solo vale para quien OPERA. Una pantalla de público, de tarima o un widget de
-// OBS tiene que seguir siempre a la tarima: si se le queda el cursor, muestra la
-// ronda vieja y nadie aparece "en tarima". Por eso se consulta con esta función
-// y no con la variable suelta.
+// Vista libre: esta pantalla se queda en la tanda y el movimiento que está mirando,
+// aunque la tarima avance. Lo que NO puede quedarse pegado es un widget de OBS o la
+// pantalla de tarima: ahí el cursor tiene que seguir siempre a la competencia, si no
+// muestran la ronda vieja y nadie aparece en tarima. Por eso la única condición es
+// que no sea un modo de transmisión.
+//
+// Antes se exigía además ser admin y controlador, o sea que solo el operador podía
+// desengancharse. Pero el espectador que sigue la competencia desde su teléfono
+// también quiere revisar otra tanda sin que lo devuelvan de un salto cada vez que
+// cargan un peso — y como no escribe nada, congelar SU pantalla no le afecta a nadie.
+// Al operador se le sigue respetando: cuando guarda en vista libre publica el cursor
+// de la tarima, no el suyo (ver syncToFB).
 window._navLibreGuardada=(()=>{try{return localStorage.getItem('yl_nav_libre')==='1'}catch(e){return false}})();
 Object.defineProperty(window,'NAV_LIBRE',{
-  get(){ return !!(window._navLibreGuardada && window.IS_CONTROLLER && typeof isAdmin!=='undefined' && isAdmin && !TX_MODE); },
+  get(){ return !!(window._navLibreGuardada && !TX_MODE); },
   set(v){ window._navLibreGuardada=!!v; },
   configurable:true
 });
@@ -10874,9 +10882,117 @@ async function doLogin(){showLogin();}
 // ═══════════════════════════════════════════════════════════════
 function _ytId(url){if(!url)return'';const m=url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|live\/|embed\/))([A-Za-z0-9_-]{11})/);return m?m[1]:'';}
 
+// ── Vista del espectador: qué tanda mirar y en qué formato ──────────────────
+// El espectador puede quedarse mirando una tanda aunque la tarima avance. Se apoya
+// en la vista libre que ya usa el operador: con NAV_LIBRE, el lift/ronda/tanda de
+// ESTA pantalla no se toca cuando llega un snapshot, así que cargar un peso en la
+// tanda que está compitiendo ya no lo devuelve de un salto.
+window.liveVerTanda=function(f){
+  if(!f){ setNavLibre(false); }
+  else { window.setNavLibre(true); DATA.flight=f; }
+  try{ R(); }catch(e){}
+};
+window.liveVista=function(v){ window._VISTA_LIVE=v; try{ R(); }catch(e){} };
+
+// Proyección de una categoría: dónde quedaría cada atleta si levanta lo que tiene
+// declarado y todavía no le juzgan. Al empezar el movimiento eso es el opener, que
+// es justo lo que se quiere ver — la tabla arranca ordenada por los declarados en
+// vez de quedar toda en cero hasta que levante alguien.
+function _liveProyeccion(gr){
+  const bench=gr.view==='bench';
+  const lref=bench?'bp':DATA.lift;
+  const filas=gr.filas.map(f=>{
+    const a=f.a;
+    // Primer intento declarado y sin juzgar del movimiento de referencia.
+    const arr=(a.att&&a.att[lref])||[];
+    let decl=0;
+    for(let r=0;r<3;r++){ const t=arr[r]; if(t&&t.r===null&&+t.w>0){ decl=+t.w; break; } }
+    const mejorProj=Math.max(bestOf(a,lref),decl);
+    let sub,proj;
+    if(bench){ sub=bestOf(a,'bp'); proj=mejorProj; }
+    else if(lref==='sq'){ sub=bestOf(a,'sq'); proj=mejorProj; }
+    else if(lref==='bp'){ sub=bestOf(a,'sq')+bestOf(a,'bp'); proj=bestOf(a,'sq')+mejorProj; }
+    else { sub=bestOf(a,'sq')+bestOf(a,'bp')+bestOf(a,'dl'); proj=bestOf(a,'sq')+bestOf(a,'bp')+mejorProj; }
+    return {a,decl,sub,proj,bench};
+  });
+  // A igual marca gana el más liviano, como en el acta.
+  const puestos=(clave)=>{
+    const m={};
+    filas.filter(x=>x[clave]>0).sort((x,y)=>(y[clave]-x[clave])||(x.a.bw-y.a.bw))
+      .forEach((x,i)=>{ m[x.a.id]=i+1; });
+    return m;
+  };
+  const pAhora=puestos('sub'), pProj=puestos('proj');
+  filas.forEach(x=>{ x.lugar=pAhora[x.a.id]||0; x.lugarProj=pProj[x.a.id]||0; });
+  // Las filas van en el mismo orden que el puesto proyectado que muestran. Ordenar
+  // por otro criterio dejaba a un 1° dibujado debajo de un 2°: con el total
+  // empatado gana el más liviano, y ese desempate lo hace `puestos`.
+  filas.sort((x,y)=>(x.lugarProj||999)-(y.lugarProj||999)||(x.lugar||999)-(y.lugar||999)||(x.a.bw-y.a.bw));
+  return filas;
+}
+
+// Tabla por categoría con la posición proyectada. Cubre TODAS las tandas: una
+// categoría se reparte entre varias y el atleta quiere verse contra todos los de
+// su grupo, no solo contra los que le tocan al lado.
+function renderLiveCategorias(){
+  const grupos=_actaGrupos().filter(gr=>gr.filas.length);
+  if(!grupos.length) return '<div class="cd2" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">Todavía no hay atletas cargados.</div>';
+  const enTarima=(liftQueue()[0]||{}).id;
+  const lref=l=>({sq:'SENTADILLA',bp:'BANCA',dl:'PESO MUERTO'})[l]||l;
+  let h='<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">'
+    +'La posición proyectada supone que cada atleta levanta el peso que tiene declarado en '
+    +lref(DATA.lift).toLowerCase()+'. Antes de que empiece el movimiento, ese peso es su apertura.</div>';
+  grupos.forEach(gr=>{
+    const filas=_liveProyeccion(gr);
+    const bench=gr.view==='bench';
+    h+='<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">';
+    h+='<div style="background:rgba(30,58,95,.55);padding:8px 14px;font-family:Oswald;font-size:12px;letter-spacing:1.5px;color:var(--gold)">'
+      +_actaTitulo(gr)+'<span style="color:var(--muted);font-weight:400;margin-left:8px">· '+filas.length+' atleta'+(filas.length>1?'s':'')+'</span></div>';
+    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;min-width:620px">';
+    h+='<tr style="background:rgba(30,58,95,.3);color:var(--muted);font-size:9px;text-align:left">'
+      +'<th style="padding:5px 6px;width:52px">POS</th><th style="padding:5px 8px">ATLETA</th>'
+      +'<th style="padding:5px 4px;width:46px;text-align:center">BW</th>';
+    (bench?['bp']:['sq','bp','dl']).forEach(l=>{
+      h+='<th style="padding:5px 4px;width:48px;text-align:center;color:'+LIFT_C[l]+'">'+LIFT_S[l].toUpperCase()+'</th>';
+    });
+    h+='<th style="padding:5px 4px;width:56px;text-align:center">'+(bench?'MEJOR':'TOTAL')+'</th>'
+      +'<th style="padding:5px 4px;width:58px;text-align:center;color:#60a5fa" title="Peso declarado y todavía sin juzgar">DECLARA</th>'
+      +'<th style="padding:5px 4px;width:62px;text-align:center;color:var(--gold)" title="Si levanta lo declarado">SI VALE</th></tr>';
+    filas.forEach((f,i)=>{
+      const a=f.a, act=a.id===enTarima;
+      const sube=f.lugarProj&&f.lugar&&f.lugarProj<f.lugar;
+      const col=p=>p===1?'var(--gold)':p<=3?'#60a5fa':'var(--muted)';
+      h+='<tr style="border-top:1px solid rgba(30,58,95,.3);'+(act?'background:'+LIFT_C[DATA.lift]+'18;':i%2?'background:rgba(30,58,95,.10);':'')+'">';
+      h+='<td style="padding:6px;font-family:Oswald;font-weight:700;white-space:nowrap">'
+        +'<span style="color:'+col(f.lugarProj)+'">'+(f.lugarProj?f.lugarProj+'°':'—')+'</span>'
+        +(sube?'<span style="color:var(--green);font-size:9px;margin-left:3px">▲</span>':'')+'</td>';
+      h+='<td style="padding:5px 8px"><div style="font-weight:600;font-size:12px">'
+        +(act?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:0 5px;border-radius:3px;font-family:Oswald;font-size:8px;letter-spacing:1px;margin-right:5px">EN TARIMA</span>':'')
+        +a.name+'</div><div style="font-size:9px;color:rgba(255,255,255,.75)">'+(a.club||'—')
+        +(a.flight?' · tanda '+a.flight:'')+'</div></td>';
+      h+='<td style="padding:5px 4px;text-align:center;color:var(--muted)">'+(a.bw||'—')+'</td>';
+      (bench?['bp']:['sq','bp','dl']).forEach(l=>{
+        const b=bestOf(a,l);
+        h+='<td style="padding:5px 4px;text-align:center;color:'+(b?'var(--green)':'rgba(100,120,150,.5)')+'">'+(b||'—')+'</td>';
+      });
+      h+='<td style="padding:5px 4px;text-align:center;font-family:Oswald;font-weight:700">'+(f.sub||'—')+'</td>';
+      h+='<td style="padding:5px 4px;text-align:center;color:#60a5fa;font-family:Oswald;font-weight:700">'+(f.decl||'—')+'</td>';
+      h+='<td style="padding:5px 4px;text-align:center;color:var(--gold);font-family:Oswald;font-weight:800">'+(f.proj||'—')+'</td>';
+      h+='</tr>';
+    });
+    h+='</table></div></div>';
+  });
+  return h;
+}
+
 function renderLiveView(){
   const currentFlight = DATA.flight;
   const liftColor = LIFT_C[DATA.lift];
+  // Vista libre: el espectador eligió una tanda y la pantalla se queda ahí aunque
+  // la tarima avance. _NAV_REMOTA guarda el último cursor que publicó la tarima.
+  const libre = !!window.NAV_LIBRE;
+  const _tandaEnTarima = (libre && window._NAV_REMOTA && window._NAV_REMOTA.flight) || (libre?null:currentFlight);
+  const _vistaLive = window._VISTA_LIVE || 'salida';
 
   // YouTube embed
   const evMeta = DATA.event?.id ? (window.LIVE_EVENT_META||{})[DATA.event.id] : null;
@@ -10903,9 +11019,51 @@ function renderLiveView(){
   h += '<div><h2 class="os" style="font-size:22px;letter-spacing:2px">COMPETENCIA EN VIVO</h2>';
   h += '<p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+'</p></div>';
   h += '<div style="display:flex;gap:6px;align-items:center">';
-  h += '<span style="font-size:11px;color:var(--muted)">Tanda activa:</span>';
+  h += '<span style="font-size:11px;color:var(--muted)">'+(libre?'Estás mirando:':'Tanda activa:')+'</span>';
   h += '<span style="background:'+(FL_C[currentFlight]||'#666')+';color:#fff;padding:4px 12px;border-radius:6px;font-family:Oswald;font-weight:700">'+(currentFlight||'—')+'</span>';
   h += '</div></div>';
+
+  // ── Elegir qué tanda mirar ───────────────────────────────────
+  // AUTOMÁTICO sigue a la tarima, como siempre. Si el espectador elige una tanda,
+  // se queda ahí: cargar un peso en la tanda que está compitiendo ya no lo devuelve
+  // de un salto. Es la misma vista libre que usa el operador, expuesta acá.
+  {
+    const tandas=[...new Set(DATA.athletes.map(a=>a.flight).filter(Boolean))].sort();
+    if(tandas.length>1){
+      h += '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:12px">';
+      h += '<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-right:2px">VER TANDA</span>';
+      h += '<button onclick="liveVerTanda(null)" style="padding:5px 12px;border-radius:6px;border:2px solid '
+        +(libre?'var(--border)':'var(--green)')+';background:'+(libre?'transparent':'rgba(34,197,94,.12)')
+        +';color:'+(libre?'var(--muted)':'var(--green)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer" '
+        +'title="Sigue sola a la tanda que está en tarima">AUTOMÁTICO</button>';
+      tandas.forEach(f=>{
+        const on=libre&&f===currentFlight, enTarima=f===_tandaEnTarima;
+        const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;
+        h += '<button onclick="liveVerTanda(\''+f+'\')" style="padding:5px 12px;border-radius:6px;border:2px solid '
+          +(on?(FL_C[f]||'var(--gold)'):'var(--border)')+';background:'+(on?(FL_C[f]||'#666')+'22':'transparent')
+          +';color:'+(on?(FL_C[f]||'#fff'):'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'
+          +f+'<span style="font-size:9px;opacity:.65;margin-left:4px">'+n+'</span>'
+          +(enTarima?'<span style="font-size:8px;color:var(--green);margin-left:5px">EN TARIMA</span>':'')+'</button>';
+      });
+      h += '</div>';
+    }
+    if(libre&&_tandaEnTarima&&_tandaEnTarima!==currentFlight){
+      h += '<div style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.45);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#9dc4f5;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+        +'<span>Estás mirando la tanda '+currentFlight+'. En tarima está compitiendo la '+_tandaEnTarima+'.</span>'
+        +'<button onclick="liveVerTanda(null)" style="padding:5px 12px;border-radius:6px;border:1px solid #60a5fa;background:transparent;color:#60a5fa;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;white-space:nowrap">IR A LA TARIMA</button>'
+        +'</div>';
+    }
+  }
+
+  // ── Orden de salida / tabla por categoría ────────────────────
+  h += '<div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap">';
+  [['salida','Orden de salida'],['categoria','Por categoría']].forEach(([k,lbl])=>{
+    const on=_vistaLive===k;
+    h += '<button onclick="liveVista(\''+k+'\')" style="padding:6px 14px;border-radius:6px;border:2px solid '
+      +(on?'var(--gold)':'var(--border)')+';background:'+(on?'rgba(212,168,67,.12)':'transparent')
+      +';color:'+(on?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+lbl+'</button>';
+  });
+  h += '</div>';
 
   // ── Indicadores de levantamiento ─────────────────────────────
   h += '<div style="display:flex;gap:6px;margin-bottom:14px">';
@@ -10914,6 +11072,14 @@ function renderLiveView(){
     h += '<div style="flex:1;padding:9px 0;border-radius:6px;text-align:center;border:2px solid '+(isCur?LIFT_C[l]:'var(--border)')+';background:'+(isCur?LIFT_C[l]+'25':'transparent')+';color:'+(isCur?LIFT_C[l]:'var(--muted)')+';font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:2px">'+LIFT_N[l]+(isCur?' · INT '+(DATA.round+1):'')+'</div>';
   });
   h += '</div>';
+
+  // En "Por categoría" se cambia la tabla de orden de salida por el cuadro de cada
+  // grupo con la posición proyectada. El resto del encabezado queda igual.
+  if(_vistaLive==='categoria'){
+    h += renderLiveCategorias();
+    h += '</div>';
+    return h;
+  }
 
   // ── Orden de levantamiento ────────────────────────────────────
   const flQueue = liftQueue();
@@ -11090,6 +11256,9 @@ function renderLiveView(){
   setTimeout(()=>{
     const el = document.getElementById('liveCurrentLifter');
     if(!el) return;
+    // Con una tanda elegida a mano no se mueve la pantalla sola: el espectador
+    // está mirando ahí a propósito.
+    if(window.NAV_LIBRE) return;
     const flQ = liftQueue();
     const curId = flQ[0]?.id;
     const key = currentFlight+'_'+DATA.lift+'_'+DATA.round+'_'+(curId||'');
