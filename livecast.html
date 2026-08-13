@@ -7795,6 +7795,7 @@ function renderShell(){
   // oculta (tiene su propio "Control en Vivo"), como se pidi\u00f3.
   if(!isAdmin)h+='<button class="side-btn '+(p==='liveView'?'active':'')+'" onclick="go(\'liveView\')"><span class="icon">\ud83d\udcfa</span>Competencia en Vivo</button>';
   h+='<button class="side-btn '+(p==='results'?'active':'')+'" onclick="go(\'results\')"><span class="icon">\uD83C\uDFC6</span>Resultados</button>';
+  h+='<button class="side-btn '+(p==='catResults'?'active':'')+'" onclick="go(\'catResults\')" title="Todas las tandas, agrupadas por categoría y división, con la posición proyectada"><span class="icon">\uD83D\uDCCA</span>Resultados por categoría</button>';
   h+='<button class="side-btn '+(p==='atletaInfo'?'active':'')+'" onclick="go(\'atletaInfo\')"><span class="icon">\uD83D\uDC64</span>Atletas</button>';
   if(window._ensayoFree)h+='<button class="side-btn" onclick="ensayoToggleRole()" style="border:1px solid rgba(96,165,250,.5);color:#60a5fa;margin-top:4px"><span class="icon">'+(isAdmin?'\uD83D\uDC41':'\uD83C\uDF9B')+'</span>'+(isAdmin?'Cambiar a modo espectador':'Cambiar a modo admin')+'</button>';
   h+='<div class="side-label">Vuelo Activo</div><div style="display:flex;gap:4px;flex-wrap:wrap">';
@@ -7850,7 +7851,7 @@ function renderShell(){
   }
   h+='</div><div class="main">';
   if((p==='compete'||p==='director')&&isAdmin&&!window._canAccess(p)){DATA.phase='manage';p='manage';}
-  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='remote'&&isAdmin)h+=renderRemote();else if(p==='screen'&&isAdmin)h+=renderScreenControl();else if(p==='results')h+=renderResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director'||p==='remote'||p==='screen')){DATA.phase='liveView';h+=renderLiveView();}
+  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='remote'&&isAdmin)h+=renderRemote();else if(p==='screen'&&isAdmin)h+=renderScreenControl();else if(p==='results')h+=renderResults();else if(p==='catResults')h+=renderCatResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director'||p==='remote'||p==='screen')){DATA.phase='liveView';h+=renderLiveView();}
   h+='</div></div>';return h;
 }
 
@@ -10892,7 +10893,6 @@ window.liveVerTanda=function(f){
   else { window.setNavLibre(true); DATA.flight=f; }
   try{ R(); }catch(e){}
 };
-window.liveVista=function(v){ window._VISTA_LIVE=v; try{ R(); }catch(e){} };
 
 // Proyección de una categoría: dónde quedaría cada atleta si levanta lo que tiene
 // declarado y todavía no le juzgan. Al empezar el movimiento eso es el opener, que
@@ -10929,6 +10929,18 @@ function _liveProyeccion(gr){
   // empatado gana el más liviano, y ese desempate lo hace `puestos`.
   filas.sort((x,y)=>(x.lugarProj||999)-(y.lugarProj||999)||(x.lugar||999)-(y.lugar||999)||(x.a.bw-y.a.bw));
   return filas;
+}
+
+// Página "Resultados por categoría": la de Resultados muestra solo la tanda que
+// está en tarima, y para ver cómo va una categoría hace falta mirarlas todas —
+// una categoría se reparte entre varias tandas.
+function renderCatResults(){
+  let h='<div class="fade">';
+  h+='<div style="margin-bottom:14px"><h2 class="os" style="font-size:22px;letter-spacing:2px">RESULTADOS POR CATEGORÍA</h2>';
+  h+='<p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+' · todas las tandas</p></div>';
+  h+=renderLiveCategorias();
+  h+='</div>';
+  return h;
 }
 
 // Tabla por categoría con la posición proyectada. Cubre TODAS las tandas: una
@@ -10992,7 +11004,6 @@ function renderLiveView(){
   // la tarima avance. _NAV_REMOTA guarda el último cursor que publicó la tarima.
   const libre = !!window.NAV_LIBRE;
   const _tandaEnTarima = (libre && window._NAV_REMOTA && window._NAV_REMOTA.flight) || (libre?null:currentFlight);
-  const _vistaLive = window._VISTA_LIVE || 'salida';
 
   // YouTube embed
   const evMeta = DATA.event?.id ? (window.LIVE_EVENT_META||{})[DATA.event.id] : null;
@@ -11053,32 +11064,6 @@ function renderLiveView(){
         +'<button onclick="liveVerTanda(null)" style="padding:5px 12px;border-radius:6px;border:1px solid #60a5fa;background:transparent;color:#60a5fa;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;white-space:nowrap">IR A LA TARIMA</button>'
         +'</div>';
     }
-  }
-
-  // ── Orden de salida / tabla por categoría ────────────────────
-  h += '<div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap">';
-  [['salida','Orden de salida'],['categoria','Por categoría']].forEach(([k,lbl])=>{
-    const on=_vistaLive===k;
-    h += '<button onclick="liveVista(\''+k+'\')" style="padding:6px 14px;border-radius:6px;border:2px solid '
-      +(on?'var(--gold)':'var(--border)')+';background:'+(on?'rgba(212,168,67,.12)':'transparent')
-      +';color:'+(on?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+lbl+'</button>';
-  });
-  h += '</div>';
-
-  // ── Indicadores de levantamiento ─────────────────────────────
-  h += '<div style="display:flex;gap:6px;margin-bottom:14px">';
-  LIFTS.forEach(l=>{
-    const isCur = l===DATA.lift;
-    h += '<div style="flex:1;padding:9px 0;border-radius:6px;text-align:center;border:2px solid '+(isCur?LIFT_C[l]:'var(--border)')+';background:'+(isCur?LIFT_C[l]+'25':'transparent')+';color:'+(isCur?LIFT_C[l]:'var(--muted)')+';font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:2px">'+LIFT_N[l]+(isCur?' · INT '+(DATA.round+1):'')+'</div>';
-  });
-  h += '</div>';
-
-  // En "Por categoría" se cambia la tabla de orden de salida por el cuadro de cada
-  // grupo con la posición proyectada. El resto del encabezado queda igual.
-  if(_vistaLive==='categoria'){
-    h += renderLiveCategorias();
-    h += '</div>';
-    return h;
   }
 
   // ── Orden de levantamiento ────────────────────────────────────

@@ -37,7 +37,6 @@ const MONTAR = `(()=>{
   DATA.athletes[0].att.sq[1]={w:190,r:null};
   DATA.athletes[1].att.sq[0]={w:190,r:'g'};
   isAdmin=false;
-  window._VISTA_LIVE='salida';
   setNavLibre(false);
   go('liveView');
 })()`;
@@ -84,8 +83,9 @@ const TEXTO = () => document.querySelector('.main').innerText;
   await p.waitForTimeout(250);
   ok(await p.evaluate(() => !window.NAV_LIBRE), 'AUTOMÁTICO vuelve a seguir a la tarima');
 
-  console.log('\nPosición proyectada por categoría y división');
-  await p.evaluate(() => { DATA.flight = 'A'; liveVista('categoria'); });
+  console.log('\nPestaña "Resultados por categoría"');
+  // Ahora es una pestaña propia del menú, no un botón dentro de Competencia en Vivo.
+  await p.evaluate(() => { DATA.flight = 'A'; go('catResults'); });
   await p.waitForTimeout(300);
   const cat = await p.evaluate(() => {
     const filas = [...document.querySelectorAll('.main table')].map(t => ({
