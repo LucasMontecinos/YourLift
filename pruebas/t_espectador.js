@@ -1,10 +1,10 @@
-// La vista del espectador en Competencia en Vivo: elegir qué tanda mirar, y ver la
-// posición proyectada de cada categoría.
+// Lo que ve el espectador: elegir qué tanda mirar en Competencia en Vivo, y los
+// resultados de TODAS las categorías en la pestaña de Resultados.
 //
 // Lo que pidieron los que la usaron: poder revisar otra tanda sin que la pantalla
 // los devuelva de un salto en cuanto alguien carga un peso en la tanda que está
-// compitiendo; y ver dónde quedaría cada atleta en su categoría y división si
-// levanta lo que tiene declarado — al empezar el movimiento, su apertura.
+// compitiendo; y que Resultados muestre todas las categorías con su división, no
+// solo las de la tanda que está en tarima.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_espectador.js
 const { chromium } = require('playwright');
 
@@ -83,43 +83,46 @@ const TEXTO = () => document.querySelector('.main').innerText;
   await p.waitForTimeout(250);
   ok(await p.evaluate(() => !window.NAV_LIBRE), 'AUTOMÁTICO vuelve a seguir a la tarima');
 
-  console.log('\nPestaña "Resultados por categoría"');
-  // Ahora es una pestaña propia del menú, no un botón dentro de Competencia en Vivo.
-  await p.evaluate(() => { DATA.flight = 'A'; go('catResults'); });
-  await p.waitForTimeout(300);
-  const cat = await p.evaluate(() => {
-    const filas = [...document.querySelectorAll('.main table')].map(t => ({
-      titulo: (t.closest('.card') || {}).innerText.split('\n')[0] || '',
-      filas: [...t.querySelectorAll('tr')].slice(1).map(tr =>
-        [...tr.children].map(td => td.innerText.replace(/\s+/g, ' ').trim())),
+  console.log('\nResultados: todas las categorías, de todas las tandas');
+  // La pestaña de Resultados miraba solo la tanda en tarima. Una categoría se
+  // reparte entre varias, así que nunca se veía completa.
+  await p.evaluate(() => {
+    // Marcas en las tres tandas para que todas clasifiquen.
+    DATA.athletes.forEach(a => ['sq','bp','dl'].forEach((l, k) => {
+      const base = [a.att.sq[0].w || 150, Math.round((a.att.sq[0].w || 150) * .6),
+                    Math.round((a.att.sq[0].w || 150) * 1.15)][k];
+      a.att[l][0] = { w: base, r: 'g' };
+      a.att[l][1] = { w: base + 10, r: 'n' };
+      a.att[l][2] = { w: base + 5, r: 'g' };
     }));
-    return { filas, texto: document.querySelector('.main').innerText };
+    DATA.flight = 'A';
+    go('results');
   });
-  const grupo = t => cat.filas.find(g => new RegExp(t).test(g.titulo));
+  await p.waitForTimeout(400);
+  const res = await p.evaluate(() => {
+    const t = document.querySelector('.main').innerText;
+    return { texto: t, titulo: t.split('\n')[0],
+             menu: [...document.querySelectorAll('.side-btn')].map(e => e.textContent.trim()) };
+  });
+  ok(res.titulo === 'RESULTADOS', 'el título ya no habla de una tanda: "' + res.titulo + '"');
+  ok(!/VUELO/.test(res.texto), 'no queda la insignia del vuelo');
+  ok(/todas las tandas/.test(res.texto), 'y dice que están todas');
 
-  ok(!!grupo('Junior -83'), 'hay un cuadro para Junior -83 kg');
-  ok(!!grupo('Open -83'), 'y otro aparte para Open -83 kg');
-  ok(!!grupo('DAMAS.*Open -63'), 'y uno para las damas -63 Open');
+  console.log('\n  Salen los atletas de las tres tandas');
+  ['Juan Perez Soto', 'Marco Nunez Paz', 'Ana Rios Leiva'].forEach(n =>
+    ok(res.texto.includes(n), n + ' (estaba en otra tanda que la de tarima)'));
 
-  console.log('\n  Con los openers ya se ve el orden, antes de que levante nadie');
-  const d63 = grupo('DAMAS.*Open -63');
-  ok(d63 && d63.filas.length === 2, 'las dos atletas de -63 están');
-  ok(d63 && /Sofia/.test(d63.filas[0].join(' ')), 'primera la de la apertura más alta: ' +
-     (d63 ? d63.filas[0][1].split('\n')[0] : '—'));
-  ok(d63 && d63.filas[0].join('|').includes('125'), 'con su declarado y su proyectado en 125');
+  console.log('\n  Agrupadas por categoría CON su división');
+  ok(/83 — Junior/.test(res.texto), 'hay un grupo "83 — Junior"');
+  ok(/83 — Open/.test(res.texto), 'y otro "83 — Open", aparte');
+  ok(/63 — Open/.test(res.texto), 'y "63 — Open" para las damas');
+  ok(/93 — Open/.test(res.texto), 'y "93 — Open"');
+  // Cada grupo numera desde 1: los cuatro de -83 no pueden ir del 1 al 4 seguidos.
+  const jrIdx = res.texto.indexOf('83 — Junior'), opIdx = res.texto.indexOf('83 — Open');
+  ok(jrIdx > 0 && opIdx > jrIdx, 'Junior va antes que Open dentro de la misma categoría');
 
-  console.log('\n  Y el puesto proyectado manda sobre el orden de las filas');
-  // Junior -83: Pedro hizo 190; Juan hizo 180 y pidió 190. Empatan en 190, y con el
-  // total empatado gana el más liviano (82.1 contra 82.8): Juan va 1°.
-  const jr = grupo('Junior -83');
-  ok(jr && jr.filas.length === 2, 'los dos de Junior están');
-  ok(jr && /^1°/.test(jr.filas[0][0]), 'la primera fila es la que muestra 1°: ' + (jr ? jr.filas[0][0] : '—'));
-  ok(jr && /Juan/.test(jr.filas[0][1]), 'y es Juan, que empata en 190 y pesa menos');
-  ok(jr && /▲/.test(jr.filas[0][0]), 'marcado con ▲ porque sube de puesto si lo levanta');
-
-  console.log('\n  Se ven todas las tandas, no solo la que está en tarima');
-  ok(/tanda B/.test(cat.texto) && /tanda C/.test(cat.texto),
-     'los cuadros traen atletas de la B y de la C aunque la tarima esté en la A');
+  console.log('\n  Y no quedó la pestaña que se descartó');
+  ok(!res.menu.some(x => /por categor/i.test(x)), 'no hay "Resultados por categoría" en el menú');
 
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.join(' | ') : ''));
   console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');

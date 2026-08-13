@@ -7795,7 +7795,6 @@ function renderShell(){
   // oculta (tiene su propio "Control en Vivo"), como se pidi\u00f3.
   if(!isAdmin)h+='<button class="side-btn '+(p==='liveView'?'active':'')+'" onclick="go(\'liveView\')"><span class="icon">\ud83d\udcfa</span>Competencia en Vivo</button>';
   h+='<button class="side-btn '+(p==='results'?'active':'')+'" onclick="go(\'results\')"><span class="icon">\uD83C\uDFC6</span>Resultados</button>';
-  h+='<button class="side-btn '+(p==='catResults'?'active':'')+'" onclick="go(\'catResults\')" title="Todas las tandas, agrupadas por categoría y división, con la posición proyectada"><span class="icon">\uD83D\uDCCA</span>Resultados por categoría</button>';
   h+='<button class="side-btn '+(p==='atletaInfo'?'active':'')+'" onclick="go(\'atletaInfo\')"><span class="icon">\uD83D\uDC64</span>Atletas</button>';
   if(window._ensayoFree)h+='<button class="side-btn" onclick="ensayoToggleRole()" style="border:1px solid rgba(96,165,250,.5);color:#60a5fa;margin-top:4px"><span class="icon">'+(isAdmin?'\uD83D\uDC41':'\uD83C\uDF9B')+'</span>'+(isAdmin?'Cambiar a modo espectador':'Cambiar a modo admin')+'</button>';
   h+='<div class="side-label">Vuelo Activo</div><div style="display:flex;gap:4px;flex-wrap:wrap">';
@@ -7851,7 +7850,7 @@ function renderShell(){
   }
   h+='</div><div class="main">';
   if((p==='compete'||p==='director')&&isAdmin&&!window._canAccess(p)){DATA.phase='manage';p='manage';}
-  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='remote'&&isAdmin)h+=renderRemote();else if(p==='screen'&&isAdmin)h+=renderScreenControl();else if(p==='results')h+=renderResults();else if(p==='catResults')h+=renderCatResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director'||p==='remote'||p==='screen')){DATA.phase='liveView';h+=renderLiveView();}
+  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='remote'&&isAdmin)h+=renderRemote();else if(p==='screen'&&isAdmin)h+=renderScreenControl();else if(p==='results')h+=renderResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director'||p==='remote'||p==='screen')){DATA.phase='liveView';h+=renderLiveView();}
   h+='</div></div>';return h;
 }
 
@@ -9652,7 +9651,10 @@ function _renderResultsTable(opts){
 }
 
 function renderResults(){
-  const flightAth=DATA.athletes.filter(a=>a.flight===DATA.flight);
+  // Todas las tandas, no solo la que está en tarima. Una categoría se reparte entre
+  // varias tandas, así que filtrando por la tanda nunca se veía cómo va la categoría
+  // completa — que es justamente lo que se viene a mirar acá.
+  const flightAth=DATA.athletes.filter(a=>!a.__is4);
   const classicAthletes=flightAth.filter(a=>isMeetClassic(a));
   const equippedAthletes=flightAth.filter(a=>isMeetEquipped(a));
   const benchAthletes=flightAth.filter(a=>inBenchRanking(a));
@@ -9683,7 +9685,7 @@ function renderResults(){
       +'<button id="btnActaFesupo" class="btn" onclick="exportActaFesupoPDF()" style="background:#fff;border:1px solid #999;color:#111;font-weight:700" title="PDF de fondo blanco, agrupado por modalidad y categoría, con los récords sudamericanos resaltados en amarillo">Acta FESUPO (PDF)</button>'
       +'<button id="btnActaXls" class="btn" onclick="exportActaFesupoXLS()" style="background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);font-weight:700" title="La misma acta en Excel, con los récords marcados">Excel</button>';
   }
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:24px;letter-spacing:2px">RESULTADOS <span style="background:'+(FL_C[DATA.flight]||'#666')+';color:#fff;padding:2px 10px;border-radius:6px;font-size:14px;vertical-align:middle">VUELO '+DATA.flight+'</span></h2><p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+' · '+DATA.athletes.length+' atletas</p></div>'+adminButtons+'</div>';
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:24px;letter-spacing:2px">RESULTADOS</h2><p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+' · '+flightAth.length+' atletas · todas las tandas</p></div>'+adminButtons+'</div>';
 
   // Stats
   h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">';
@@ -10894,108 +10896,6 @@ window.liveVerTanda=function(f){
   try{ R(); }catch(e){}
 };
 
-// Proyección de una categoría: dónde quedaría cada atleta si levanta lo que tiene
-// declarado y todavía no le juzgan. Al empezar el movimiento eso es el opener, que
-// es justo lo que se quiere ver — la tabla arranca ordenada por los declarados en
-// vez de quedar toda en cero hasta que levante alguien.
-function _liveProyeccion(gr){
-  const bench=gr.view==='bench';
-  const lref=bench?'bp':DATA.lift;
-  const filas=gr.filas.map(f=>{
-    const a=f.a;
-    // Primer intento declarado y sin juzgar del movimiento de referencia.
-    const arr=(a.att&&a.att[lref])||[];
-    let decl=0;
-    for(let r=0;r<3;r++){ const t=arr[r]; if(t&&t.r===null&&+t.w>0){ decl=+t.w; break; } }
-    const mejorProj=Math.max(bestOf(a,lref),decl);
-    let sub,proj;
-    if(bench){ sub=bestOf(a,'bp'); proj=mejorProj; }
-    else if(lref==='sq'){ sub=bestOf(a,'sq'); proj=mejorProj; }
-    else if(lref==='bp'){ sub=bestOf(a,'sq')+bestOf(a,'bp'); proj=bestOf(a,'sq')+mejorProj; }
-    else { sub=bestOf(a,'sq')+bestOf(a,'bp')+bestOf(a,'dl'); proj=bestOf(a,'sq')+bestOf(a,'bp')+mejorProj; }
-    return {a,decl,sub,proj,bench};
-  });
-  // A igual marca gana el más liviano, como en el acta.
-  const puestos=(clave)=>{
-    const m={};
-    filas.filter(x=>x[clave]>0).sort((x,y)=>(y[clave]-x[clave])||(x.a.bw-y.a.bw))
-      .forEach((x,i)=>{ m[x.a.id]=i+1; });
-    return m;
-  };
-  const pAhora=puestos('sub'), pProj=puestos('proj');
-  filas.forEach(x=>{ x.lugar=pAhora[x.a.id]||0; x.lugarProj=pProj[x.a.id]||0; });
-  // Las filas van en el mismo orden que el puesto proyectado que muestran. Ordenar
-  // por otro criterio dejaba a un 1° dibujado debajo de un 2°: con el total
-  // empatado gana el más liviano, y ese desempate lo hace `puestos`.
-  filas.sort((x,y)=>(x.lugarProj||999)-(y.lugarProj||999)||(x.lugar||999)-(y.lugar||999)||(x.a.bw-y.a.bw));
-  return filas;
-}
-
-// Página "Resultados por categoría": la de Resultados muestra solo la tanda que
-// está en tarima, y para ver cómo va una categoría hace falta mirarlas todas —
-// una categoría se reparte entre varias tandas.
-function renderCatResults(){
-  let h='<div class="fade">';
-  h+='<div style="margin-bottom:14px"><h2 class="os" style="font-size:22px;letter-spacing:2px">RESULTADOS POR CATEGORÍA</h2>';
-  h+='<p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+' · todas las tandas</p></div>';
-  h+=renderLiveCategorias();
-  h+='</div>';
-  return h;
-}
-
-// Tabla por categoría con la posición proyectada. Cubre TODAS las tandas: una
-// categoría se reparte entre varias y el atleta quiere verse contra todos los de
-// su grupo, no solo contra los que le tocan al lado.
-function renderLiveCategorias(){
-  const grupos=_actaGrupos().filter(gr=>gr.filas.length);
-  if(!grupos.length) return '<div class="cd2" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">Todavía no hay atletas cargados.</div>';
-  const enTarima=(liftQueue()[0]||{}).id;
-  const lref=l=>({sq:'SENTADILLA',bp:'BANCA',dl:'PESO MUERTO'})[l]||l;
-  let h='<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">'
-    +'La posición proyectada supone que cada atleta levanta el peso que tiene declarado en '
-    +lref(DATA.lift).toLowerCase()+'. Antes de que empiece el movimiento, ese peso es su apertura.</div>';
-  grupos.forEach(gr=>{
-    const filas=_liveProyeccion(gr);
-    const bench=gr.view==='bench';
-    h+='<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">';
-    h+='<div style="background:rgba(30,58,95,.55);padding:8px 14px;font-family:Oswald;font-size:12px;letter-spacing:1.5px;color:var(--gold)">'
-      +_actaTitulo(gr)+'<span style="color:var(--muted);font-weight:400;margin-left:8px">· '+filas.length+' atleta'+(filas.length>1?'s':'')+'</span></div>';
-    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;min-width:620px">';
-    h+='<tr style="background:rgba(30,58,95,.3);color:var(--muted);font-size:9px;text-align:left">'
-      +'<th style="padding:5px 6px;width:52px">POS</th><th style="padding:5px 8px">ATLETA</th>'
-      +'<th style="padding:5px 4px;width:46px;text-align:center">BW</th>';
-    (bench?['bp']:['sq','bp','dl']).forEach(l=>{
-      h+='<th style="padding:5px 4px;width:48px;text-align:center;color:'+LIFT_C[l]+'">'+LIFT_S[l].toUpperCase()+'</th>';
-    });
-    h+='<th style="padding:5px 4px;width:56px;text-align:center">'+(bench?'MEJOR':'TOTAL')+'</th>'
-      +'<th style="padding:5px 4px;width:58px;text-align:center;color:#60a5fa" title="Peso declarado y todavía sin juzgar">DECLARA</th>'
-      +'<th style="padding:5px 4px;width:62px;text-align:center;color:var(--gold)" title="Si levanta lo declarado">SI VALE</th></tr>';
-    filas.forEach((f,i)=>{
-      const a=f.a, act=a.id===enTarima;
-      const sube=f.lugarProj&&f.lugar&&f.lugarProj<f.lugar;
-      const col=p=>p===1?'var(--gold)':p<=3?'#60a5fa':'var(--muted)';
-      h+='<tr style="border-top:1px solid rgba(30,58,95,.3);'+(act?'background:'+LIFT_C[DATA.lift]+'18;':i%2?'background:rgba(30,58,95,.10);':'')+'">';
-      h+='<td style="padding:6px;font-family:Oswald;font-weight:700;white-space:nowrap">'
-        +'<span style="color:'+col(f.lugarProj)+'">'+(f.lugarProj?f.lugarProj+'°':'—')+'</span>'
-        +(sube?'<span style="color:var(--green);font-size:9px;margin-left:3px">▲</span>':'')+'</td>';
-      h+='<td style="padding:5px 8px"><div style="font-weight:600;font-size:12px">'
-        +(act?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:0 5px;border-radius:3px;font-family:Oswald;font-size:8px;letter-spacing:1px;margin-right:5px">EN TARIMA</span>':'')
-        +a.name+'</div><div style="font-size:9px;color:rgba(255,255,255,.75)">'+(a.club||'—')
-        +(a.flight?' · tanda '+a.flight:'')+'</div></td>';
-      h+='<td style="padding:5px 4px;text-align:center;color:var(--muted)">'+(a.bw||'—')+'</td>';
-      (bench?['bp']:['sq','bp','dl']).forEach(l=>{
-        const b=bestOf(a,l);
-        h+='<td style="padding:5px 4px;text-align:center;color:'+(b?'var(--green)':'rgba(100,120,150,.5)')+'">'+(b||'—')+'</td>';
-      });
-      h+='<td style="padding:5px 4px;text-align:center;font-family:Oswald;font-weight:700">'+(f.sub||'—')+'</td>';
-      h+='<td style="padding:5px 4px;text-align:center;color:#60a5fa;font-family:Oswald;font-weight:700">'+(f.decl||'—')+'</td>';
-      h+='<td style="padding:5px 4px;text-align:center;color:var(--gold);font-family:Oswald;font-weight:800">'+(f.proj||'—')+'</td>';
-      h+='</tr>';
-    });
-    h+='</table></div></div>';
-  });
-  return h;
-}
 
 function renderLiveView(){
   const currentFlight = DATA.flight;
