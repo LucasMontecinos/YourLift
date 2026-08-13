@@ -124,6 +124,59 @@ const TEXTO = () => document.querySelector('.main').innerText;
   console.log('\n  Y no quedó la pestaña que se descartó');
   ok(!res.menu.some(x => /por categor/i.test(x)), 'no hay "Resultados por categoría" en el menú');
 
+  console.log('\nLa posición virtual, con lo declarado');
+  // Se arma una categoría que recién arranca (solo aperturas) y otra ya terminada.
+  await p.evaluate(() => {
+    const nueve = () => ({ sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],
+                           bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],
+                           dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}] });
+    DATA.athletes = [
+      // -93 Sub-Junior: nadie levantó, solo aperturas declaradas
+      ['Aldrin Ticona Choque', 92.5, 140, 50, 130],
+      ['Javier Pizarro Castillo', 92.0, 120, 40, 120],
+      ['Renato Martinez Aguirre', 91.0, 0, 0, 0],
+    ].map(([name, bw, sq, bp, dl], i) => {
+      const a = { id:i+1, name, sex:'Hombre', cat:'93', div:'Sub-Junior', mod:'classic',
+                  club:'Club', flight:'A', bw, lot:100+i, bombed:false, att:nueve() };
+      if (sq) { a.att.sq[0]={w:sq,r:null}; a.att.bp[0]={w:bp,r:null}; a.att.dl[0]={w:dl,r:null}; }
+      return a;
+    });
+    // -83 Open: los nueve intentos juzgados
+    [[200,'Sebastian Cabrera',82.5],[190,'Michael Lecaros',82.1]].forEach(([base,name,bw],k)=>{
+      const a = { id:10+k, name, sex:'Hombre', cat:'83', div:'Open', mod:'classic',
+                  club:'Club', flight:'B', bw, lot:200+k, bombed:false, att:nueve() };
+      ['sq','bp','dl'].forEach((l,j)=>{
+        const w=[base,Math.round(base*.6),Math.round(base*1.2)][j];
+        a.att[l][0]={w:w-10,r:'g'}; a.att[l][1]={w:w,r:'g'}; a.att[l][2]={w:w+10,r:'n'};
+      });
+      DATA.athletes.push(a);
+    });
+    go('results');
+  });
+  await p.waitForTimeout(400);
+  const vr = await p.evaluate(() => ({
+    texto: document.querySelector('.main').innerText,
+    filas: [...document.querySelectorAll('.main tbody tr')]
+      .map(tr => [...tr.children].map(td => td.innerText.trim()))
+      .filter(f => f.length > 3).map(f => ({ pos: f[0], nombre: f[1].split('\n')[0] })),
+  }));
+
+  // Aldrin declara 140+50+130 = 320; Javier 120+40+120 = 280. Sin levantar nada,
+  // la tabla ya los ordena: primero el de las aperturas más altas.
+  const sj = vr.filas.filter(f => /Ticona|Pizarro|Renato/.test(f.nombre));
+  ok(sj[0] && /Ticona/.test(sj[0].nombre), 'con solo las aperturas ya hay un 1°: ' + (sj[0]||{}).nombre);
+  ok(sj[0] && sj[0].pos.startsWith('1'), 'y le pone el puesto: ' + (sj[0]||{}).pos);
+  ok(sj[1] && /Pizarro/.test(sj[1].nombre), '2° el de las aperturas más bajas');
+  ok(sj[2] && sj[2].pos === '—', 'el que no declaró nada queda sin puesto');
+  ok(sj[0] && sj[0].pos.includes('~'), 'el puesto va marcado como virtual (~)');
+  ok(/POSICIÓN VIRTUAL/.test(vr.texto), 'y la categoría lo dice en su encabezado');
+
+  console.log('\n  Y cuando la categoría termina, el puesto queda firme');
+  const op = vr.filas.filter(f => /Cabrera|Lecaros/.test(f.nombre));
+  ok(op[0] && /Cabrera/.test(op[0].nombre) && op[0].pos === '1', 'sale 1° sin el ~: "' + (op[0]||{}).pos + '"');
+  ok(op[1] && op[1].pos === '2', 'y 2° el otro');
+  ok(/POSICIÓN FINAL/.test(vr.texto), 'la categoría cerrada se marca como final');
+
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.join(' | ') : ''));
   console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');
   await b.close();

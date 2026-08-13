@@ -9536,11 +9536,36 @@ const _DIV_ORDER=function(d){
   return 99;
 };
 
+// Mejor marca PROYECTADA de un movimiento: lo mejor que ya validó o, si todavía
+// no valida nada, lo que tiene declarado y sin juzgar. Al empezar la competencia
+// eso es su apertura.
+function _proyLift(a,l){
+  const arr=(a.att&&a.att[l])||[];
+  let decl=0;
+  for(let r=0;r<3;r++){ const t=arr[r]; if(t&&t.r===null&&+t.w>0){ decl=+t.w; break; } }
+  return Math.max(bestOf(a,l)||0, decl);
+}
+// Total proyectado: dónde quedaría el atleta si levanta todo lo que tiene pedido.
+// Cuando ya se juzgaron los nueve intentos coincide con el total real, así que la
+// misma cuenta sirve durante la competencia y al final.
+function _proyTotal(a,view){
+  if(view==='bench')return _proyLift(a,'bp');
+  if(isDQ(a))return 0;                       // tres nulos en un movimiento: sin total
+  const s=_proyLift(a,'sq'), b=_proyLift(a,'bp'), d=_proyLift(a,'dl');
+  return (s&&b&&d)?s+b+d:0;
+}
+// ¿A este atleta le queda algo por levantar? Si a nadie del grupo le queda, el
+// puesto que muestra la tabla ya es el definitivo.
+function _quedaPorLevantar(a,view){
+  const lifts=view==='bench'?['bp']:['sq','bp','dl'];
+  return lifts.some(l=>((a.att&&a.att[l])||[]).some(t=>t&&t.r===null&&+t.w>0));
+}
 // Renderiza UNA tabla de resultados filtrando por modalidad/vista
 function _renderResultsTable(opts){
   const view=opts.view||'meet';
   const isBench=view==='bench';
-  const all=opts.athletes.map(a=>({...a,total:totalOf(a,view),gl:calcGL(totalOf(a,view),a.bw,a.sex,_glMod(a),view)}));
+  const all=opts.athletes.map(a=>({...a,total:totalOf(a,view),gl:calcGL(totalOf(a,view),a.bw,a.sex,_glMod(a),view),
+    proy:_proyTotal(a,view), pendiente:_quedaPorLevantar(a,view)}));
   if(!all.length)return '';
   // Cuántas casillas de intento mostrar por lift: 3 normalmente, 4 si algún atleta
   // de la tabla tuvo un 4º intento en ese lift (solo esos lo ven). Header y filas
@@ -9549,23 +9574,29 @@ function _renderResultsTable(opts){
   const SEP='|';
   const catGroups={};
   all.forEach(a=>{const k=_catGroupKey(a);if(!catGroups[k])catGroups[k]=[];catGroups[k].push(a);});
-  // Orden dentro de cada cat+div+sex: primero los con total válido (mayor a menor),
-  // luego los DQ (3 fails en algún lift), luego los sin total / no clasificados.
+  // Orden dentro de cada cat+div+sex por el total PROYECTADO: mientras la categoría
+  // esté compitiendo, eso es la posición virtual con lo que cada uno tiene declarado
+  // —al principio, sus aperturas—; cuando ya se juzgó todo, el proyectado es el
+  // total real y el puesto queda firme. Antes se ordenaba por el total ya levantado,
+  // así que hasta el primer válido la tabla salía toda en blanco y sin orden.
+  // A igual marca gana el más liviano, como manda la IPF.
   Object.values(catGroups).forEach(arr=>arr.sort((a,b)=>{
     const aDQ = view==='meet' && isDQ(a);
     const bDQ = view==='meet' && isDQ(b);
     if(aDQ!==bDQ) return aDQ?1:-1;  // no-DQ primero
-    return b.total-a.total;
+    return (b.proy-a.proy)||(b.total-a.total)||((a.bw||999)-(b.bw||999));
   }));
   const catPos={};
-  // Posición solo se asigna a atletas con total válido (excluye DQ)
   Object.values(catGroups).forEach(arr=>{
     let p=1;
     arr.forEach(a=>{
       const dq = view==='meet' && isDQ(a);
-      if(a.total>0 && !dq){catPos[a.id]=p;p++;}
+      if(a.proy>0 && !dq){catPos[a.id]=p;p++;}
     });
   });
+  // Una categoría está cerrada cuando a nadie le queda un intento por levantar.
+  const catCerrada={};
+  Object.entries(catGroups).forEach(([k,arr])=>{ catCerrada[k]=!arr.some(a=>a.pendiente); });
   const sorted=[];
   const catKeys=Object.keys(catGroups).sort((a,b)=>{
     const [sa,ca,da]=a.split(SEP);
@@ -9609,13 +9640,18 @@ function _renderResultsTable(opts){
     const catKey=_catGroupKey(a);
     if(catKey!==prevCat){
       const symb=(_normSex(a.sex)==='F'?'♀':'♂');
-      h+='<tr><td colspan="'+colspanTotal+'" style="padding:7px 8px;background:rgba(196,30,58,.1);border-bottom:2px solid var(--accent);font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--accent)">'+symb+' '+_normCat(a.cat||'?')+' — '+_normDiv(a.div||'Sin Div')+'</td></tr>';
+      const cerrada=catCerrada[catKey];
+      const sello=cerrada
+        ? '<span style="background:rgba(34,197,94,.18);border:1px solid rgba(34,197,94,.5);color:var(--green);font-size:9px;letter-spacing:1px;padding:1px 7px;border-radius:4px;margin-left:8px">POSICIÓN FINAL</span>'
+        : '<span style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.45);color:#f59e0b;font-size:9px;letter-spacing:1px;padding:1px 7px;border-radius:4px;margin-left:8px" title="Todavía quedan intentos por levantar en esta categoría">POSICIÓN VIRTUAL</span>';
+      h+='<tr><td colspan="'+colspanTotal+'" style="padding:7px 8px;background:rgba(196,30,58,.1);border-bottom:2px solid var(--accent);font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--accent)">'+symb+' '+_normCat(a.cat||'?')+' — '+_normDiv(a.div||'Sin Div')+sello+'</td></tr>';
       prevCat=catKey;
     }
     const dq = view==='meet' && isDQ(a);
     const pos = dq ? 'DQ' : (catPos[a.id]||'—');
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.25);'+(a.bombed?'opacity:.4':dq?'opacity:.7':'')+'">';
-    h+='<td class="os" style="padding:6px 4px;text-align:center;color:'+(dq?'var(--red)':typeof pos==="number"&&pos<=3?'var(--gold)':'var(--muted)')+';font-weight:700;font-size:14px">'+pos+'</td>';
+    const virtual=!dq&&typeof pos==='number'&&!catCerrada[catKey];
+    h+='<td class="os" title="'+(dq?'Descalificado':virtual?'Posición virtual: todavía quedan intentos':'Posición final')+'" style="padding:6px 4px;text-align:center;color:'+(dq?'var(--red)':typeof pos==="number"&&pos<=3?'var(--gold)':'var(--muted)')+';font-weight:700;font-size:14px;'+(virtual?'opacity:.85':'')+'">'+pos+(virtual?'<span style="font-size:9px;color:#f59e0b;margin-left:1px">~</span>':'')+'</td>';
     h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+a.name+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+'</span></div></td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:11px">'+(a.bw||'—')+'</td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:10px">'+(a.div||'—')+'</td>';
@@ -9714,6 +9750,11 @@ function renderResults(){
     });
     h+='</div></div>';
   }
+
+  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5">'
+    +'Mientras una categoría siga compitiendo, la posición es <b style="color:#f59e0b">virtual</b> (marcada con ~): '
+    +'la que tendría cada atleta si levanta lo que tiene declarado — al empezar, su apertura. '
+    +'Cuando se juzgan los nueve intentos de todos, pasa a ser la <b style="color:var(--green)">posición final</b>.</div>';
 
   // 3 tablas separadas por modalidad
   h+=_renderResultsTable({title:'POWERLIFTING CLASSIC',icon:'',color:'#22c55e',athletes:classicAthletes,view:'meet'});
