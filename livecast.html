@@ -236,8 +236,16 @@ let isAdmin=false;
 window.ADMIN_ROLE=null;
 // Páginas del panel bloqueadas para ciertos roles: transmisión no entra a Control en Vivo,
 // jueces no entran a Control TX. El resto de roles (owner/superadmin/admin) tiene acceso total.
+//
+// "streaming" es la cuenta de quien transmite: elige el campeonato como cualquiera,
+// pero de ahí en adelante solo ve lo de la transmisión (Control TX, Control Remoto,
+// Transmisión, Widgets OBS y Pantalla de Tarima). No entra a Atletas & Pesaje ni a
+// Control en Vivo, así que no puede tocar la competencia por accidente.
+const _PAGS_STREAMING=['setup','transmision','obsTx','director','remote','screen','results','atletaInfo','liveView'];
+window._esStreaming=function(){return window.ADMIN_ROLE==='streaming';};
 window._canAccess=function(page){
   const role=window.ADMIN_ROLE;
+  if(role==='streaming')return _PAGS_STREAMING.indexOf(page)>=0;
   if(role==='transmision'&&page==='compete')return false;
   if(role==='juez'&&page==='director')return false;
   return true;
@@ -463,7 +471,7 @@ async function initFB(){
               console.log('[LiveCast] Admin · Modo',window.IS_CONTROLLER?'CONTROLADOR':'ESPECTADOR');
             }
             // ?remote=1: aterrizar en el Control Remoto (para el teléfono)
-            if(WANT_REMOTE && window._canAccess('director') && DATA.phase!=='remote'){DATA.phase='remote';}
+            if(WANT_REMOTE && window._canAccess('remote') && DATA.phase!=='remote'){DATA.phase='remote';}
           } else if(window._ensayoFree){
             // ENSAYO abierto: el usuario anónimo no es admin en Firestore, pero
             // el ensayo se opera sin sesión — se mantiene el rol local.
@@ -1684,8 +1692,9 @@ function pickEvent(i){
   }else{
     // ?remote=1 → aterrizar en el Control Remoto (pensado para el teléfono).
     // Vale también para los ENSAYOS, que se operan sin iniciar sesión.
-    if(WANT_REMOTE&&isAdmin&&window._canAccess('director')){DATA.phase='remote';save();R();startFBSync();}
-    else{go(isAdmin?'manage':'liveView');startFBSync();}
+    if(WANT_REMOTE&&isAdmin&&window._canAccess('remote')){DATA.phase='remote';save();R();startFBSync();}
+    // La cuenta de streaming no tiene Atletas & Pesaje: aterriza en Control TX.
+    else{go(isAdmin?(window._canAccess('manage')?'manage':'director'):'liveView');startFBSync();}
   }
 }
 let judgeMode=false,judgeLights={izq:null,central:null,der:null},judgeUnsub=null,_lastTimerSignal=0;
@@ -7768,7 +7777,12 @@ function renderSetup(){
 }
 
 function renderShell(){
-  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort();const p=DATA.phase;
+  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort();
+  // Si el rol no puede abrir esta página (el juez en Control TX, la cuenta de
+  // streaming en Atletas & Pesaje…) se lo manda a la primera que sí tenga. Va
+  // ANTES de dibujar el menú para que quede marcada la que realmente se abre.
+  if(isAdmin&&!window._canAccess(DATA.phase))DATA.phase=window._canAccess('manage')?'manage':'director';
+  const p=DATA.phase;
   // El botón "Volver a YourLift" sobre el logo (estilo unificado)
   let h='<button class="hamb" onclick="toggleNav()" aria-label="Menú">☰</button>';
   h+='<div class="nav-backdrop" onclick="toggleNav(false)"></div>';
@@ -7777,17 +7791,17 @@ function renderShell(){
   h+='<a href="index.html" class="side-back-yl" style="display:flex;align-items:center;gap:6px;padding:8px 12px;margin-bottom:12px;margin-right:42px;background:rgba(10,22,40,.6);border:1px solid rgba(212,168,67,.4);border-radius:8px;color:rgba(220,230,245,.85);font-family:Oswald,sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-decoration:none;cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap" onmouseenter="this.style.borderColor=\'#D4A843\';this.style.color=\'#D4A843\'" onmouseleave="this.style.borderColor=\'rgba(212,168,67,.4)\';this.style.color=\'rgba(220,230,245,.85)\'">← YourLift</a>';
   h+='<div class="logo"><img src="YourLift_logo.png" style="height:28px" onerror="this.remove()"> YourLift</div><div class="event-name-side" style="font-size:11px;color:var(--muted);margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(DATA.event?.short||DATA.event?.name||'')+'</div>';
   if(isAdmin){
-  h+='<div class="side-label">Gesti\u00f3n</div><button class="side-btn '+(p==='manage'?'active':'')+'" onclick="go(\'manage\')"><span class="icon">\uD83D\uDCCB</span>Atletas & Pesaje</button>';
-  h+='<div class="side-label">Competencia</div>';
+  if(window._canAccess('manage'))h+='<div class="side-label">Gesti\u00f3n</div><button class="side-btn '+(p==='manage'?'active':'')+'" onclick="go(\'manage\')"><span class="icon">\uD83D\uDCCB</span>Atletas & Pesaje</button>';
+  h+='<div class="side-label">'+(window._esStreaming()?'Transmisi\u00f3n':'Competencia')+'</div>';
   if(window._canAccess('compete'))h+='<button class="side-btn '+(p==='compete'?'active':'')+'" onclick="go(\'compete\')"><span class="icon">\uD83C\uDFCB\uFE0F</span>Control en Vivo</button>';
   // "Scoreboard" se sacó del menú: era una pantalla vieja de proyección que quedó
   // reemplazada por Pantalla de Tarima. Las descargas del acta NO estaban ahí, están
   // en Resultados, así que no se pierde nada.
-  h+='<button class="side-btn '+(p==='transmision'?'active':'')+'" onclick="go(\'transmision\')"><span class="icon">\uD83D\uDCE1</span>Transmisi\u00f3n</button>';
-  h+='<button class="side-btn '+(p==='obsTx'?'active':'')+'" onclick="go(\'obsTx\')"><span class="icon">\uD83C\uDFAC</span>Widgets OBS</button>';
+  if(window._canAccess('transmision'))h+='<button class="side-btn '+(p==='transmision'?'active':'')+'" onclick="go(\'transmision\')"><span class="icon">\uD83D\uDCE1</span>Transmisi\u00f3n</button>';
+  if(window._canAccess('obsTx'))h+='<button class="side-btn '+(p==='obsTx'?'active':'')+'" onclick="go(\'obsTx\')"><span class="icon">\uD83C\uDFAC</span>Widgets OBS</button>';
   if(window._canAccess('director'))h+='<button class="side-btn '+(p==='director'?'active':'')+'" onclick="go(\'director\')"><span class="icon"></span>Control TX</button>';
-  if(window._canAccess('director'))h+='<button class="side-btn '+(p==='remote'?'active':'')+'" onclick="go(\'remote\')"><span class="icon">📱</span>Control Remoto</button>';
-  h+='<button class="side-btn '+(p==='screen'?'active':'')+'" onclick="go(\'screen\')"><span class="icon"></span>Pantalla Tarima</button>';
+  if(window._canAccess('remote'))h+='<button class="side-btn '+(p==='remote'?'active':'')+'" onclick="go(\'remote\')"><span class="icon">📱</span>Control Remoto</button>';
+  if(window._canAccess('screen'))h+='<button class="side-btn '+(p==='screen'?'active':'')+'" onclick="go(\'screen\')"><span class="icon"></span>Pantalla Tarima</button>';
   }
   h+='<div class="side-label">P\u00fablico</div>';
   // "Competencia en Vivo": para el espectador (no admin) es su vista principal, as\u00ed
@@ -7822,6 +7836,9 @@ function renderShell(){
      +'<button onclick="setSyncMode('+(ctrl?'false':'true')+')" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;font-size:10px;letter-spacing:.5px;cursor:pointer">Cambiar a '+(ctrl?'\uD83D\uDC41 Espectador':'\uD83C\uDF9B Controlador')+'</button>'
    +'</div>';}
   }
+  // La cuenta de streaming no administra la competencia: no se le ofrece el backup
+  // ni nada que borre datos. Solo entra, transmite y se va.
+  if(!window._esStreaming()){
   h+='<button class="side-btn" onclick="exportBackupJSON()"><span class="icon">\uD83D\uDCBE</span>Exportar Backup</button>';
   // Solo se ofrece si hay Cronograma cargado (es la lista contra la que compara)
   // y si de verdad hay alguien de m\u00E1s: si no, es un bot\u00F3n peligroso al pedo.
@@ -7830,6 +7847,7 @@ function renderShell(){
      if(m&&Object.keys(m).length)_aj=DATA.athletes.filter(a=>!_cronoLookup(m,a.name)).length; }catch(e){}
    if(_aj)h+='<button class="side-btn" onclick="limpiarAtletasAjenos()" style="color:#f59e0b;border:1px solid rgba(245,158,11,.5)" title="Saca a los atletas que no figuran en el Cronograma de este campeonato"><span class="icon">\u26A0</span>'+_aj+' atleta'+(_aj>1?'s':'')+' de otro campeonato</button>';}
   h+='<button class="side-btn" onclick="resetLiveData()" style="color:#ff8a8a"><span class="icon"></span>Reiniciar datos en vivo</button>';
+  }
   h+='<button class="side-btn" onclick="doLogout()"><span class="icon">\uD83D\uDD12</span>Cerrar sesi\u00f3n</button>';
   h+='</div>';
   }else{
@@ -7849,7 +7867,6 @@ function renderShell(){
   h+='</div>';
   }
   h+='</div><div class="main">';
-  if((p==='compete'||p==='director')&&isAdmin&&!window._canAccess(p)){DATA.phase='manage';p='manage';}
   if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='remote'&&isAdmin)h+=renderRemote();else if(p==='screen'&&isAdmin)h+=renderScreenControl();else if(p==='results')h+=renderResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director'||p==='remote'||p==='screen')){DATA.phase='liveView';h+=renderLiveView();}
   h+='</div></div>';return h;
 }
@@ -9721,7 +9738,9 @@ function renderResults(){
   let adminButtons = '';
   if(isAdmin){
     adminButtons = '<button class="btn btn-g" onclick="exportJSON()">Exportar</button>'
-      +'<button class="btn" onclick="cerrarCompetenciaConfirm()" style="background:rgba(168,85,247,.15);border:1px solid #a855f7;color:#a855f7;font-weight:700" title="Publica todos los resultados a Firestore — visibles inmediatamente en perfiles + ranking">Cerrar competencia</button>'
+      // Cerrar la competencia publica los resultados en los perfiles y en el ranking:
+      // es del que dirige, no de quien transmite.
+      +(window._esStreaming()?'':'<button class="btn" onclick="cerrarCompetenciaConfirm()" style="background:rgba(168,85,247,.15);border:1px solid #a855f7;color:#a855f7;font-weight:700" title="Publica todos los resultados a Firestore — visibles inmediatamente en perfiles + ranking">Cerrar competencia</button>')
       +'<button id="btnActaPDF" class="btn btn-r" onclick="generateActaPDF()" style="background:rgba(196,30,58,.15);border-color:var(--accent)">Generar Acta PDF</button>'
       // Acta en el formato que publica FESUPO: fondo blanco y los récords en amarillo.
       +'<button id="btnActaFesupo" class="btn" onclick="exportActaFesupoPDF()" style="background:#fff;border:1px solid #999;color:#111;font-weight:700" title="PDF de fondo blanco, agrupado por modalidad y categoría, con los récords sudamericanos resaltados en amarillo">Acta FESUPO (PDF)</button>'
