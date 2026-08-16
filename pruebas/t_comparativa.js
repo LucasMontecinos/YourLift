@@ -127,7 +127,33 @@ const R_BENCH = { ...BASE, id: 'r2', view: 'bench', modalidad: 'Only Bench Class
   ok(soloBp[0] && soloBp[0].top1 < 400,
      'y es la de banca, con marcas de banca: top ' + (soloBp[0] && soloBp[0].top1));
 
-  console.log('\nSi no entra al top 10, igual se ve dónde quedó');
+  // ── El caso tal cual se reportó ────────────────────────────────────────────
+// Los grupos se arman con data.json, que se publica cada tanto. Un resultado
+// recién cerrado en el livecast NO está ahí: el atleta se comparaba con su marca
+// de hoy contra un grupo que todavía no lo tenía. Como no se encontraba a sí
+// mismo, `peerPerc` lo agregaba al top 10 y devolvía "de 11" — de ahí el
+// "47 atletas en el grupo" arriba y el "#5 de 11" al lado. Por eso pasaba con
+// TODAS las competencias cerradas desde YourLift.
+const R_GRANDE = { ...BASE, id: 'r3', view: 'meet', modalidad: 'Powerlifting Classic',
+  division: 'Open', categoria: '83',
+  resultado: { bw: 82.4, sq: 265, bp: 165, dl: 282.5, total: 712.5, glp: 99.3, status: 'OK' } };
+
+console.log('\nUn resultado recién cerrado en el livecast entra al grupo');
+const { p: p4, errs: e4 } = await abrir([R_GRANDE]);
+const grande = await p4.evaluate(TARJETAS);
+ok(grande.length === 1, 'tiene su comparativa');
+ok(grande[0] && grande[0].de > 20,
+   'el grupo de -83 Open es grande de verdad, no once: ' + (grande[0] && grande[0].de));
+ok(grande[0] && grande[0].de === grande[0].grupo,
+   '"#' + grande[0].rank + ' de ' + grande[0].de + '" coincide con los ' + grande[0].grupo + ' anunciados');
+ok(grande[0] && grande[0].rank > 1 && grande[0].rank < grande[0].de,
+   'y queda en el medio de la tabla, donde le toca: #' + (grande[0] && grande[0].rank));
+ok(grande[0] && grande[0].top <= 20,
+   'con un percentil acorde — top ' + (grande[0] && grande[0].top) + '%, no top 45%');
+ok(/PEERS=_peersBuild\(DB\);\n      if\(window\._curCodigo\)showProfile/.test(src),
+   'los grupos se rehacen cuando llegan los resultados del livecast');
+
+console.log('\nSi no entra al top 10, igual se ve dónde quedó');
   const dentro = tarj.concat(solo).every(t => t.rank <= 10 ? true : t.yo);
   ok(dentro, 'los que quedan fuera del top 10 llevan su propia barra al final');
 
@@ -141,7 +167,7 @@ const R_BENCH = { ...BASE, id: 'r2', view: 'bench', modalidad: 'Only Bench Class
   ok(!/const peer=peerKey&&bl\.total\?peerPerc\(bl\.total,peerKey\)/.test(src),
      'ya no se compara con el mejor total de cualquier categoría');
 
-  const todos = [...errs, ...e2, ...e3];
+  const todos = [...errs, ...e2, ...e3, ...e4];
   ok(todos.length === 0, 'sin errores de JavaScript' + (todos.length ? ': ' + todos.join(' | ') : ''));
   console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');
   await b.close();
