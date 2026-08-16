@@ -1659,6 +1659,10 @@ function pickEvent(i){
   // los atletas del Sudamericano de prueba con los del Regional Centro Sur.
   try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
   window._SR_HOY=null;
+  // Los filtros de Resultados son de un campeonato: si quedaran puestos al cambiar
+  // de evento, la tabla del nuevo abriría vacía sin motivo aparente.
+  window._RES_F={sex:'',cat:'',div:'',mod:''};
+  window._ACTA_DIA='';
   DATA.event=ev;
   _ensayoGrant();
   // Load saved flight assignments from cronograma
@@ -9765,15 +9769,43 @@ function _renderResultsTable(opts){
   return h;
 }
 
+// ── Filtros de la tabla de Resultados ────────────────────────────────────────
+// Género, categoría, división de edad y modalidad. Es una preferencia de ESTA
+// pantalla: no se sincroniza con el resto del equipo y no toca las actas, que
+// siguen saliendo con el campeonato completo.
+window._RES_F={sex:'',cat:'',div:'',mod:''};
+window.setResF=function(campo,val){
+  const F=window._RES_F||(window._RES_F={sex:'',cat:'',div:'',mod:''});
+  if(campo in F)F[campo]=val||'';
+  R();
+};
+window.limpiarResF=function(){ window._RES_F={sex:'',cat:'',div:'',mod:''}; R(); };
+// Las cuatro tablas de Resultados, para el filtro de modalidad.
+const _RES_MODS=[['classic','Powerlifting Classic'],['equipped','Powerlifting Equipado'],
+  ['bench','Only Bench'],['oe','Olimpiadas Especiales']];
+function _resModTest(k){
+  return k==='classic'?isMeetClassic:k==='equipped'?isMeetEquipped
+        :k==='bench'?inBenchRanking:isOEClassic;
+}
 function renderResults(){
   // Todas las tandas, no solo la que está en tarima. Una categoría se reparte entre
   // varias tandas, así que filtrando por la tanda nunca se veía cómo va la categoría
   // completa — que es justamente lo que se viene a mirar acá.
   const flightAth=DATA.athletes.filter(a=>!a.__is4);
-  const classicAthletes=flightAth.filter(a=>isMeetClassic(a));
-  const equippedAthletes=flightAth.filter(a=>isMeetEquipped(a));
-  const benchAthletes=flightAth.filter(a=>inBenchRanking(a));
-  const oeClassicAthletes=flightAth.filter(a=>isOEClassic(a));
+  // Filtros de la vista. Género, categoría y división son justo las tres cosas por
+  // las que ya se agrupa la tabla, así que filtrar saca GRUPOS ENTEROS: la posición
+  // de los que quedan no se mueve ni un lugar. La modalidad elige qué tabla se
+  // dibuja, que es como se ve en pantalla.
+  const F=window._RES_F||(window._RES_F={sex:'',cat:'',div:'',mod:''});
+  const visibles=flightAth.filter(a=>
+    (!F.sex||_normSex(a.sex)===F.sex)
+    &&(!F.cat||_normCat(a.cat||'?')===F.cat)
+    &&(!F.div||_normDiv(a.div||'Sin Div')===F.div));
+  const _modOn=k=>!F.mod||F.mod===k;
+  const classicAthletes=_modOn('classic')?visibles.filter(a=>isMeetClassic(a)):[];
+  const equippedAthletes=_modOn('equipped')?visibles.filter(a=>isMeetEquipped(a)):[];
+  const benchAthletes=_modOn('bench')?visibles.filter(a=>inBenchRanking(a)):[];
+  const oeClassicAthletes=_modOn('oe')?visibles.filter(a=>isOEClassic(a)):[];
 
   // Top 3 GL por división combinando todas las modalidades
   const allEntries=[
@@ -9832,10 +9864,44 @@ function renderResults(){
   }
   let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:24px;letter-spacing:2px">RESULTADOS</h2><p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+' · '+flightAth.length+' atletas · todas las tandas</p></div>'+adminButtons+'</div>'+avisoDia;
 
+  // ── Barra de filtros ──────────────────────────────────────────────────────
+  // Las opciones se arman con lo que hay EN ESTE campeonato, así que no aparecen
+  // categorías ni divisiones vacías. La lista se saca de la nómina completa, no de
+  // lo ya filtrado: si no, al elegir una opción se borrarían las demás.
+  {
+    const SS='padding:6px 9px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:11px;letter-spacing:.5px;cursor:pointer';
+    const SSon=SS+';border-color:var(--gold);color:var(--gold);background:rgba(212,168,67,.12)';
+    const uniq=(f)=>[...new Set(flightAth.map(f).filter(Boolean))];
+    const sexos=uniq(a=>_normSex(a.sex)).sort();
+    const cats=uniq(a=>_normCat(a.cat||'')).sort((x,y)=>_actaCatN(x)-_actaCatN(y));
+    const divs=uniq(a=>_normDiv(a.div||'')).sort((x,y)=>_DIV_ORDER(x)-_DIV_ORDER(y));
+    const mods=_RES_MODS.filter(([k])=>flightAth.some(a=>_resModTest(k)(a)));
+    const sel=(campo,todos,lista)=>{
+      const v=F[campo]||'';
+      return '<select onchange="setResF(\''+campo+'\',this.value)" style="'+(v?SSon:SS)+'">'
+        +'<option value="">'+todos+'</option>'
+        +lista.map(([val,lbl])=>'<option value="'+esc(val)+'"'+(v===val?' selected':'')+'>'+esc(lbl)+'</option>').join('')
+        +'</select>';
+    };
+    const activo=!!(F.sex||F.cat||F.div||F.mod);
+    let fh='<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">'
+      +'<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">FILTRAR</span>';
+    if(sexos.length>1)fh+=sel('sex','Todos los géneros',sexos.map(x=>[x,x==='F'?'Damas':x==='M'?'Caballeros':x]));
+    if(cats.length>1) fh+=sel('cat','Todas las categorías',cats.map(x=>[x,x+' kg']));
+    if(divs.length>1) fh+=sel('div','Todas las divisiones',divs.map(x=>[x,x]));
+    if(mods.length>1) fh+=sel('mod','Todas las modalidades',mods);
+    if(activo)fh+='<button onclick="limpiarResF()" style="padding:6px 11px;border-radius:7px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-family:Oswald;font-size:11px;letter-spacing:.5px;cursor:pointer">Limpiar</button>';
+    fh+='<span style="margin-left:auto;font-size:11px;color:'+(activo?'var(--gold)':'var(--muted)')+'">'
+      +(activo?visibles.length+' de '+flightAth.length+' atletas':flightAth.length+' atletas')+'</span>'
+      +'</div>';
+    // Con una sola categoría y una sola división no hay nada que filtrar.
+    if(sexos.length>1||cats.length>1||divs.length>1||mods.length>1)h+=fh;
+  }
+
   // Stats
   h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">';
   [
-    [DATA.athletes.length,'Total atletas','var(--blue)'],
+    [visibles.length,'Total atletas','var(--blue)'],
     [classicAthletes.length,'Classic','var(--green)'],
     [equippedAthletes.length,'Equipado','var(--orange)'],
     [benchAthletes.length,'Only Bench','var(--gold)']
@@ -9871,6 +9937,15 @@ function renderResults(){
   h+=_renderResultsTable({title:'POWERLIFTING EQUIPADO',icon:'',color:'#f59e0b',athletes:equippedAthletes,view:'meet'});
   h+=_renderResultsTable({title:'ONLY BENCH',icon:'',color:'#D4A843',athletes:benchAthletes,view:'bench'});
   h+=_renderResultsTable({title:'POWERLIFTING — OLIMPIADAS ESPECIALES (OE)',icon:'',color:'#a855f7',athletes:oeClassicAthletes,view:'meet'});
+  // Un filtro puede dejar la pantalla sin ninguna tabla (ej. "Equipado" en un
+  // campeonato donde nadie compite equipado). Se dice, en vez de dejar el vacío.
+  if(!classicAthletes.length&&!equippedAthletes.length&&!benchAthletes.length&&!oeClassicAthletes.length){
+    h+='<div class="card" style="padding:28px;text-align:center">'
+      +'<div class="os" style="font-size:14px;letter-spacing:1px;color:var(--gold);margin-bottom:6px">NO HAY ATLETAS CON ESOS FILTROS</div>'
+      +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">Probá con otra combinación.</div>'
+      +'<button onclick="limpiarResF()" style="padding:8px 16px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-family:Oswald;font-size:12px;letter-spacing:.5px;cursor:pointer">Limpiar filtros</button>'
+    +'</div>';
+  }
 
   h+='</div>';
   return h;
