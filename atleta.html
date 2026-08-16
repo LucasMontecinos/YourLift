@@ -121,6 +121,23 @@ let _fbDB=null, _fbMod=null; // Exposed for atletas_pending merge after data.jso
 // generó, no el de hoy. Ahora se arma en el momento desde el padrón que la página ya
 // carga (`_peersBuild`), así que un resultado nuevo aparece apenas se publica.
 let PEERS={};
+// Cómo se lee la modalidad de un resultado. Son CUATRO cosas distintas y hasta
+// ahora la comparativa miraba solo dos (clásico vs equipado), así que una banca
+// sola entraba a la bolsa del powerlifting: el que solo hizo Only Bench aparecía
+// en el grupo de powerlifting con su banca puesta como si fuera un total, y el que
+// hizo las dos podía terminar comparando peras con manzanas.
+function _modalKey(c){
+  const m=String((c&&c.modalidad)||'').toLowerCase();
+  const isEq=/equip/.test(m);
+  // "Powerlifting Classic + Only Bench Classic" es una inscripción a las dos cosas,
+  // pero el resultado que la trae es el total: manda powerlifting.
+  if(/powerlifting|potencia/.test(m))return isEq?'equipped':'classic';
+  if(/only ?bench|bench ?only|solo ?banca|press ?banca/.test(m)||(c&&c.view==='bench'))
+    return isEq?'bench_eq':'bench';
+  return isEq?'equipped':'classic';
+}
+const _MODAL_LABEL={classic:'Powerlifting Clásico',equipped:'Powerlifting Equipado',
+  bench:'Only Bench Clásico',bench_eq:'Only Bench Equipado'};
 // Mejor total del atleta DENTRO de la categoría y modalidad del grupo. No se filtra
 // por división: si un Junior hizo su mejor total compitiendo en Open en la misma
 // categoría, ese es el que vale para compararse.
@@ -130,8 +147,7 @@ function _peerMejor(a,key){
   (a.competencias||[]).forEach(c=>{
     const r=c.resultado||{};
     if(!(r.total>0))return;
-    const m=String(c.modalidad||'').toLowerCase().includes('equip')?'equipped':'classic';
-    if(m!==modal)return;
+    if(_modalKey(c)!==modal)return;
     if(String(c.categoria||'').trim()!==cat)return;
     if(r.total>total){total=r.total;glp=+(r.glp||r.gl||0)||0;}
   });
@@ -140,11 +156,13 @@ function _peerMejor(a,key){
 function _peersBuild(db){
   const grupos={};
   (db||[]).forEach(a=>{
-    const key=(typeof getPeerKey==='function'?getPeerKey:_getPeerKey)(a);
-    if(!key)return;
-    const m=_peerMejor(a,key);
-    if(!(m.total>0))return;
-    (grupos[key]=grupos[key]||[]).push({codigo:a.codigo,nombre:a.nombre,total:m.total,glp:m.glp});
+    // Un atleta puede pertenecer a varios grupos: el que compite en powerlifting y
+    // en banca sola entra en los dos, cada uno con la marca de ESE grupo.
+    _peerKeys(a).forEach(key=>{
+      const m=_peerMejor(a,key);
+      if(!(m.total>0))return;
+      (grupos[key]=grupos[key]||[]).push({codigo:a.codigo,nombre:a.nombre,total:m.total,glp:m.glp});
+    });
   });
   const out={};
   Object.keys(grupos).forEach(k=>{
@@ -155,6 +173,11 @@ function _peersBuild(db){
     out[k]={n:ms.length,
       avg:+prom(tot).toFixed(1), top:tot[0], p75:pct(.75), p50:pct(.5), p25:pct(.25),
       glp_avg:+prom(gl).toFixed(2), glp_top:gl.length?Math.max.apply(null,gl):0,
+      // `totals` es el grupo ENTERO: con él se calcula el puesto y el percentil.
+      // `members` son solo los que se dibujan (el top 10). Antes el puesto salía de
+      // members, así que un atleta de un grupo de 47 quedaba "#5 de 11" y con el
+      // percentil hundido: el cartel de arriba decía 47 y el de al lado, 11.
+      totals:tot,
       members:ms.slice(0,10)};
   });
   return out;
@@ -229,6 +252,10 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
         const comp={evento:d.evento,fecha:d.fecha||'',sexo:d.sexo||'',division:d.division||'',categoria:_catPlus2(d.categoria||'',(d.resultado||{}).bw||0,d.sexo||''),modalidad:d.modalidad||'',posicion:((d.posicion!=null&&d.posicion!=='')?parseInt(d.posicion,10):0)||_placeMap[d.id]||null,resultado:d.resultado||{},source:d.source||'yourlift_livecast'};
         if(sameIdx>=0)ath.competencias[sameIdx]=comp;else ath.competencias.push(comp);
       });
+      // Los grupos de la comparativa se arman con data.json, que es de ayer. Estos
+      // resultados son de recién, así que hay que rehacerlos: si no, el atleta se
+      // compara con su marca nueva contra un grupo que todavía no la tiene.
+      PEERS=_peersBuild(DB);
       if(window._curCodigo)showProfile(window._curCodigo);
     };
     const cr=_aC('atl_res',10*60*1000);
@@ -340,15 +367,15 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
 // ── Helpers ──────────────────────────────────────────────
 function nrm(s){return(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
 
-function getPeerKey(a){
-  // Only compare within same modality (classic vs equipped are separate disciplines)
+// Sexo + categoría + división con los que se compara el atleta. Sale de su
+// resultado más reciente. La modalidad se agrega aparte (ver _peerKeys).
+function _peerBase(a){
   const comps=[...(a.competencias||[])]
     .filter(c=>c.sexo&&c.categoria&&c.resultado&&(c.resultado.total>0||c.resultado.status==='DQ'))
     .sort((x,y)=>(y.fecha||'').localeCompare(x.fecha||''));
   if(!comps.length)return null;
   const l=comps[0];
   const sex=(l.sexo||'').match(/mujer|fem/i)?'F':'M';
-  const modal=(l.modalidad||'').toLowerCase().includes('equip')?'equipped':'classic';
   const cat=(l.categoria||'').trim();
   const div=(l.division||'Open').trim();
   // Si el resultado más reciente (por fecha) es de división etaria (Junior, Sub-Junior,
@@ -361,10 +388,30 @@ function getPeerKey(a){
       (c.categoria||'').trim()===cat&&
       (c.resultado||{}).total>0
     );
-    if(hasOpen)return sex+'|'+cat+'|Open|'+modal;
+    if(hasOpen)return sex+'|'+cat+'|Open';
   }
-  return sex+'|'+cat+'|'+div+'|'+modal;
+  return sex+'|'+cat+'|'+div;
 }
+// Los grupos a los que pertenece: uno por cada modalidad en la que tiene marca
+// dentro de esa categoría. Powerlifting y Only Bench son competencias distintas y
+// no se comparan entre sí — un total de 712.5 y una banca de 165 no son lo mismo.
+// El que hizo las dos tiene las dos comparativas.
+const _MODAL_ORDEN=['classic','equipped','bench','bench_eq'];
+function _peerKeys(a){
+  const base=_peerBase(a);
+  if(!base)return [];
+  const cat=base.split('|')[1];
+  const mods=new Set();
+  (a.competencias||[]).forEach(c=>{
+    const r=c.resultado||{};
+    if(!(r.total>0))return;
+    if(String(c.categoria||'').trim()!==cat)return;
+    mods.add(_modalKey(c));
+  });
+  return _MODAL_ORDEN.filter(m=>mods.has(m)).map(m=>base+'|'+m);
+}
+// Se mantiene para quien la use: la clave principal (la primera modalidad).
+function getPeerKey(a){ return _peerKeys(a)[0]||null; }
 
 function peerPerc(myTotal,key){
   let g=PEERS[key];
@@ -379,12 +426,15 @@ function peerPerc(myTotal,key){
     }
   }
   if(!g)return null;
-  // myTotal puede que ya esté en members (mismo atleta) → no duplicar
-  const totals=g.members.map(m=>m.total);
+  // El puesto sale del grupo COMPLETO. Antes salía de `members`, que son solo los
+  // diez que se dibujan: un atleta de un grupo de 47 quedaba "#5 de 11" y con el
+  // percentil hundido (55 en vez de ~89), contradiciendo al cartel de arriba.
+  const totals=g.totals||g.members.map(m=>m.total);
   const all=[...totals];
+  // Solo si el atleta no está en el grupo (pasa con el fallback a Open).
   if(!totals.includes(myTotal))all.push(myTotal);
   all.sort((a,b)=>b-a);
-  const rank=all.indexOf(myTotal)+1;
+  const rank=all.indexOf(myTotal)+1;   // a igual marca, el mejor puesto de los empatados
   return{rank,n:all.length,pct:Math.round((1-rank/all.length)*100),g,_key:key};
 }
 
@@ -454,14 +504,9 @@ window.showProfile=function(codigo){
 
   // GL history for chart — clasificar cada competencia en su modalidad real:
   // 'classic' (Powerlifting clásico), 'bench' (Only Bench), 'equipped' (Equipado)
-  function glModalKey(c){
-    const m=(c.modalidad||'').toLowerCase();
-    const isBench=/only ?bench|solo ?banca|bench ?only/.test(m)||(c.view==='bench');
-    const isEq=/equip/.test(m);
-    if(isBench) return isEq?'bench_eq':'bench';
-    if(isEq) return 'equipped';
-    return 'classic';
-  }
+  // Un solo clasificador de modalidad para toda la página (ver _modalKey arriba):
+  // si el gráfico y la comparativa la leyeran distinto, dirían cosas distintas.
+  const glModalKey=_modalKey;
   const GL_MODAL_LABEL={classic:'Powerlifting Clásico',equipped:'Powerlifting Equipado',bench:'Only Bench Clásico',bench_eq:'Only Bench Equipado'};
   // Agrupar todas las competencias con GL por modalidad
   const glByModal={};
@@ -474,10 +519,16 @@ window.showProfile=function(codigo){
     glByModal[k].sort((x,y)=>(x.fecha||x.evento||'').localeCompare(y.fecha||y.evento||''));
   });
 
-  // Peer comparison
-  const peerKey=getPeerKey(a);
-  const peer=peerKey&&bl.total?peerPerc(bl.total,peerKey):null;
-  const pg=peer?.g;
+  // Peer comparison. Una tarjeta por cada modalidad en la que compite dentro de su
+  // categoría, y en cada una se lo compara con SU marca de ese grupo — no con su
+  // mejor total de cualquier lado, que era lo que pasaba antes: un atleta que
+  // cambió de categoría se comparaba en la nueva con el total de la vieja.
+  const peerCards=_peerKeys(a).map(k=>{
+    const mio=_peerMejor(a,k);
+    if(!(mio.total>0))return null;
+    const pp=peerPerc(mio.total,k);
+    return pp?{peer:pp,pg:pp.g,mio:mio.total}:null;
+  }).filter(Boolean);
 
   // Active inscriptions
   const activeInsc=INSC.filter(i=>{
@@ -712,14 +763,22 @@ window.showProfile=function(codigo){
   }
 
   // ── Peer comparison ─────────────────────────────────────
-  if(peer&&pg){
+  peerCards.forEach(({peer,pg,mio})=>{
     const pctColor=peer.pct>=75?'var(--green)':peer.pct>=50?'var(--gold)':'var(--accent)';
-    const keyParts=(peer._key||peerKey).split('|'); // usar la key real del grupo (puede ser fallback Open)
+    const keyParts=String(peer._key).split('|'); // la key real del grupo (puede ser fallback Open)
     const peerLabel=(keyParts[0]==='F'?'Mujer':'Hombre')+' · '+keyParts[1]+' kg · '+keyParts[2];
-    const maxT=pg.members[0]?.total||1;
+    const modLabel=_MODAL_LABEL[keyParts[3]]||'';
+    const maxT=Math.max(pg.members[0]?.total||1,mio);
+    // Con más de una modalidad, el título dice cuál es cada una: si no, quedan dos
+    // tarjetas iguales con números distintos y no se entiende de qué habla cada una.
+    const titulo=peerCards.length>1?'Comparativa · '+modLabel:'Comparativa en categoría';
 
-    h+='<div class="card"><div class="sec-title">Comparativa en categoría</div>'
-      +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+peerLabel+' · '+pg.n+' atletas en el grupo</div>'
+    h+='<div class="card"><div class="sec-title">'+titulo+'</div>'
+      // El tamaño que se anuncia es EL MISMO contra el que se contó el puesto. Antes
+      // uno salía del grupo y el otro del top 10, y el cuadro se contradecía solo:
+      // "47 atletas en el grupo" arriba y "#5 de 11" al lado.
+      +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+peerLabel
+        +(peerCards.length>1?'':' · '+modLabel)+' · '+peer.n+' atletas en el grupo</div>'
       // Percentile gauge
       +'<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">'
         +'<div style="flex:1">'
@@ -765,8 +824,21 @@ window.showProfile=function(codigo){
           +'</div>'
         +'</div>';
       }).join('')
+      // Si el atleta no entró al top 10, igual se muestra su barra al final: si no,
+      // el cuadro dice "#14 de 47" y abajo no aparece por ningún lado.
+      +(pg.members.some(m=>m.codigo===a.codigo)?''
+        :'<div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(30,58,95,.3)">'
+          +'<span style="font-size:10px;font-family:Oswald;color:var(--accent);min-width:14px">'+peer.rank+'</span>'
+          +'<div style="flex:1">'
+            +'<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">'
+              +'<span style="font-weight:700;color:var(--accent)">'+a.nombre+' ← tú</span>'
+              +'<span class="os" style="font-size:12px">'+mio+' kg</span>'
+            +'</div>'
+            +'<div class="bar-bg"><div class="bar-fill" style="background:var(--accent);width:'+Math.round(mio/maxT*100)+'%"></div></div>'
+          +'</div>'
+        +'</div>')
     +'</div>';
-  }
+  });
 
   // ── Active inscriptions ──────────────────────────────────
   if(activeInsc.length){
