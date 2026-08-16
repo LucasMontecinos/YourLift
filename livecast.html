@@ -4501,13 +4501,66 @@ function _actaCatN(c){const s=String(c||'');const n=parseFloat(s.replace(/[^0-9.
 // Estructura del acta: [{mod, sexo, cat, filas:[…]}] ya ordenada y con lugares.
 const _ACTA_DIVORD={'Sub-Junior':0,'Subjunior':0,'Junior':1,'Universitario':2,'Open':3,
   'Master I':4,'Master II':5,'Master III':6,'Master IV':7,'Special Olympics':8};
+// ── Actas por día ────────────────────────────────────────────────────────────
+// Un campeonato de dos días premia al final de cada día. Para eso el acta tiene
+// que salir con los atletas de ESE día, no con todo el campeonato.
+//
+// El dato ya está: el Cronograma del admin guarda día + sesión, y el livecast lo
+// deja en cada atleta como jornada = "Sábado · AM". Acá se separa esa mitad.
+const _DIAS_ACTA=['lunes','martes','miercoles','jueves','viernes','sabado','domingo'];
+function _esNombreDeDia(s){
+  const n=String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  if(!n)return false;
+  if(/^d[ií]a\s*\d/.test(n))return true;          // "Día 1", "Dia 2"
+  if(/^\d{1,2}[\/-]\d{1,2}/.test(n))return true;   // "08/11"
+  return _DIAS_ACTA.some(d=>n.indexOf(d)>=0);     // "Sábado", "sabado 8"
+}
+function _diaDeAtleta(a){
+  const partes=String((a&&a.jornada)||'').split('·').map(x=>x.trim()).filter(Boolean);
+  return partes.find(_esNombreDeDia)||'';
+}
+// Los días del campeonato, en el orden en que se corren (el de las tandas).
+function _diasDelEvento(){
+  const out=[];
+  DATA.athletes.filter(a=>!a.__is4).slice()
+    .sort((x,y)=>String(x.flight||'').localeCompare(String(y.flight||'')))
+    .forEach(a=>{const d=_diaDeAtleta(a);if(d&&out.indexOf(d)<0)out.push(d);});
+  return out;
+}
+// Día elegido para el acta. Vacío = el campeonato entero, que es como salía antes.
+window._ACTA_DIA='';
+window.setActaDia=function(d){
+  window._ACTA_DIA=_diasDelEvento().indexOf(d)>=0?d:'';
+  R();
+};
+// Los atletas que entran al acta.
+function _actaAthletes(){
+  const d=window._ACTA_DIA||'';
+  return DATA.athletes.filter(a=>!a.__is4&&(!d||_diaDeAtleta(a)===d));
+}
+// Para el título y el nombre del archivo.
+function _actaSufijoDia(){ return window._ACTA_DIA?(' · '+window._ACTA_DIA.toUpperCase()):''; }
+// Categorías que quedan repartidas entre dos días: si se premia por día, en el
+// acta de hoy ese podio sale incompleto. Se avisa antes de generarla.
+function _catsPartidas(){
+  const porCat=new Map();
+  DATA.athletes.filter(a=>!a.__is4).forEach(a=>{
+    const d=_diaDeAtleta(a); if(!d)return;
+    const k=[_actaModKey(a),_srSexo(a),_normDiv(a.div||''),_srCat(a)].join('|');
+    if(!porCat.has(k))porCat.set(k,new Set());
+    porCat.get(k).add(d);
+  });
+  const out=[];
+  porCat.forEach((dias,k)=>{ if(dias.size>1)out.push(k.split('|').slice(1).join(' ')); });
+  return out;
+}
 // El acta se arma como la de la IPF: una tabla por MODALIDAD + SEXO + DIVISIÓN +
 // CATEGORÍA (ej. "Open -63 kg"), y adentro los atletas ordenados de mayor a menor
 // por total. Antes se agrupaba solo por categoría y quedaban Open, Junior y Master
 // mezclados en la misma tabla.
 function _actaGrupos(){
   const g=new Map();
-  DATA.athletes.filter(a=>!a.__is4).forEach(a=>{
+  _actaAthletes().forEach(a=>{
     // El que compite en PL y en Only Bench sale DOS VECES en el acta: una en la
     // tabla de powerlifting con su total y otra en la de Only Bench con su banca.
     // Es la misma banca en los dos lados — subió a tarima una sola vez.
@@ -4571,7 +4624,10 @@ function _actaAtts(a,l){
 }
 function _actaNombreArchivo(ext){
   const ev=_stripAccentsForPdf(DATA.event?.short||DATA.event?.name||'competencia').replace(/[^A-Za-z0-9]+/g,'_');
-  return 'Acta_'+ev+'_'+new Date().toISOString().slice(0,10)+'.'+ext;
+  // El acta de un día lleva el día en el nombre: si no, la del sábado y la del
+  // domingo se pisan en la carpeta de descargas.
+  const dia=window._ACTA_DIA?('_'+_stripAccentsForPdf(window._ACTA_DIA).replace(/[^A-Za-z0-9]+/g,'_')):'';
+  return 'Acta_'+ev+dia+'_'+new Date().toISOString().slice(0,10)+'.'+ext;
 }
 // ── PDF blanco ────────────────────────────────────────────────────
 async function exportActaFesupoPDF(){
@@ -4590,7 +4646,7 @@ async function exportActaFesupoPDF(){
     // campeonato nacional todos ponen CHI y la columna no dice nada, así que ahí va
     // el club, que es lo que la gente busca en el acta. Se decide solo: si hay más
     // de un país en la nómina, manda el país.
-    const _paises=new Set(DATA.athletes.filter(a=>!a.__is4).map(a=>_ctry(a)).filter(Boolean));
+    const _paises=new Set(_actaAthletes().map(a=>_ctry(a)).filter(Boolean));
     const _porClub=_paises.size<=1;
     const _proc=a=>_porClub?(a.club||'—'):_ctry(a);
     let y=14, primera=true;
@@ -4599,7 +4655,7 @@ async function exportActaFesupoPDF(){
       doc.setFont('helvetica','bold');doc.setFontSize(13);
       doc.text(_stripAccentsForPdf(DATA.event?.name||'Competencia'),148.5,y,{align:'center'});
       doc.setFont('helvetica','normal');doc.setFontSize(8);
-      doc.text(_stripAccentsForPdf([DATA.event?.location||'',DATA.event?.date||''].filter(Boolean).join(' - ')),148.5,y+4.5,{align:'center'});
+      doc.text(_stripAccentsForPdf([DATA.event?.location||'',DATA.event?.date||'',window._ACTA_DIA||''].filter(Boolean).join(' - ')),148.5,y+4.5,{align:'center'});
       y+=10;
     };
     titulo();
@@ -4697,7 +4753,7 @@ async function exportActaFesupoXLS(){
     const F=[];                                   // filas: [{v,s}, …]
     const T=(v,st)=>({v:v,s:st||XL_NORMAL});
     F.push([T(DATA.event?.name||'Competencia',XL_TITULO)]);
-    F.push([T([DATA.event?.location||'',DATA.event?.date||''].filter(Boolean).join(' · '))]);
+    F.push([T([DATA.event?.location||'',DATA.event?.date||'',window._ACTA_DIA||''].filter(Boolean).join(' · '))]);
     F.push([T('Negrita = intento válido · gris tachado = intento nulo · amarillo = récord sudamericano · [n] = puesto en ese movimiento')]);
     F.push([]);
     _actaGrupos().forEach(gr=>{
@@ -4891,7 +4947,7 @@ async function generateActaPDF(){
       doc.setTextColor(...C.gold);
       doc.setFont('helvetica','bold');
       doc.setFontSize(8);
-      doc.text(_stripAccentsForPdf('ACTA OFICIAL DE RESULTADOS - POWERLIFTING CHILE'),PW/2,17,{align:'center'});
+      doc.text(_stripAccentsForPdf('ACTA OFICIAL DE RESULTADOS - POWERLIFTING CHILE'+_actaSufijoDia()),PW/2,17,{align:'center'});
     }
 
     let curY=0;
@@ -9746,7 +9802,35 @@ function renderResults(){
       +'<button id="btnActaFesupo" class="btn" onclick="exportActaFesupoPDF()" style="background:#fff;border:1px solid #999;color:#111;font-weight:700" title="PDF de fondo blanco, agrupado por modalidad y categoría, con los récords sudamericanos resaltados en amarillo">Acta FESUPO (PDF)</button>'
       +'<button id="btnActaXls" class="btn" onclick="exportActaFesupoXLS()" style="background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);font-weight:700" title="La misma acta en Excel, con los récords marcados">Excel</button>';
   }
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:24px;letter-spacing:2px">RESULTADOS</h2><p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+' · '+flightAth.length+' atletas · todas las tandas</p></div>'+adminButtons+'</div>';
+  // ── Actas por día ─────────────────────────────────────────────────────────
+  // En un campeonato de dos días la premiación es al final de cada uno, así que
+  // el acta tiene que salir con los atletas de ESE día. Los días los pone el
+  // Cronograma; si el campeonato es de un día, este selector no aparece.
+  const _diasActa=isAdmin?_diasDelEvento():[];
+  let avisoDia='';
+  if(_diasActa.length>1){
+    const _dSel=window._ACTA_DIA||'';
+    const _nDia=d=>DATA.athletes.filter(a=>!a.__is4&&_diaDeAtleta(a)===d).length;
+    adminButtons='<select onchange="setActaDia(this.value)" title="Con qué atletas se generan las actas de abajo" '
+      +'style="padding:7px 10px;border-radius:8px;border:1px solid '+(_dSel?'var(--gold)':'var(--border)')+';background:'+(_dSel?'rgba(212,168,67,.12)':'transparent')+';color:'+(_dSel?'var(--gold)':'var(--text)')+';font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:.5px;cursor:pointer">'
+      +'<option value=""'+(_dSel?'':' selected')+'>Acta: todo el campeonato ('+DATA.athletes.filter(a=>!a.__is4).length+')</option>'
+      +_diasActa.map(d=>'<option value="'+esc(d)+'"'+(_dSel===d?' selected':'')+'>Acta: solo '+esc(d)+' ('+_nDia(d)+')</option>').join('')
+      +'</select>'+adminButtons;
+    if(_dSel){
+      // Si una categoría se reparte entre los dos días, el podio del acta de hoy
+      // sale a medias. Mejor avisarlo antes de premiar que descubrirlo después.
+      const partidas=_catsPartidas();
+      avisoDia='<div style="margin-bottom:14px;padding:10px 14px;border-radius:8px;border:1px solid '
+        +(partidas.length?'rgba(245,158,11,.5);background:rgba(245,158,11,.08);color:#f59e0b':'rgba(212,168,67,.45);background:rgba(212,168,67,.07);color:var(--gold)')
+        +';font-size:12px;line-height:1.5">'
+        +(partidas.length
+          ?'<b>Ojo:</b> las actas van a salir solo con <b>'+esc(_dSel)+'</b>, pero '+partidas.length+' categoría'+(partidas.length>1?'s se reparten':' se reparte')
+            +' entre los dos días, así que ese podio queda incompleto: '+esc(partidas.slice(0,6).join(' · '))+(partidas.length>6?' …':'')
+          :'Las actas se van a generar solo con los atletas de <b>'+esc(_dSel)+'</b>. Ninguna categoría queda partida entre días.')
+        +'</div>';
+    }
+  }
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:24px;letter-spacing:2px">RESULTADOS</h2><p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+' · '+flightAth.length+' atletas · todas las tandas</p></div>'+adminButtons+'</div>'+avisoDia;
 
   // Stats
   h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">';
