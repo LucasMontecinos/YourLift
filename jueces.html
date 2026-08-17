@@ -24,6 +24,11 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 .pick-btn.cen:hover{border-color:#f0f0f0}
 .pick-btn.der:hover{border-color:#3b82f6}
 
+/* ── Login ────────────────────────────────────────── */
+.log-in{width:min(320px,88vw);padding:16px;border-radius:12px;border:2px solid var(--border);background:var(--card);color:var(--text);font-family:Oswald;font-size:17px;letter-spacing:1px;outline:none}
+.log-in:focus{border-color:var(--gold)}
+.log-in::placeholder{color:var(--muted)}
+
 /* ── Panel screen ─────────────────────────────────── */
 /* overflow-y:auto: con los motivos abajo, en un teléfono chico el contenido
    puede pasarse de alto. Antes se cortaban los botones de voto, que es lo
@@ -101,6 +106,29 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 </head>
 <body>
 
+<!-- ══ LOGIN ════════════════════════════════════════════════
+     Cada dispositivo que juzgue entra una vez. La sesión queda guardada en ese
+     navegador, así que esto se ve una sola vez por teléfono o tablet. -->
+<div id="login" class="screen">
+  <div>
+    <div class="logo">YOUR<span>LIFT</span></div>
+    <div class="subtitle">Panel de Jueces</div>
+  </div>
+  <p style="font-size:13px;color:var(--muted);text-align:center;max-width:320px;line-height:1.6">
+    Este dispositivo todavía no tiene sesión. Entrá con la cuenta del campeonato
+    para que tus luces lleguen a la tarima.
+  </p>
+  <input id="logEmail" class="log-in" type="email" inputmode="email" autocomplete="username"
+         placeholder="Correo" autocapitalize="off" spellcheck="false">
+  <input id="logPass" class="log-in" type="password" autocomplete="current-password"
+         placeholder="Clave" onkeydown="if(event.key==='Enter')entrar()">
+  <div id="logErr" style="font-size:12px;color:#ef4444;min-height:16px;text-align:center"></div>
+  <button id="logBtn" class="pick-btn cen" onclick="entrar()" style="font-size:18px">ENTRAR</button>
+  <button onclick="saltarLogin()" style="background:none;border:none;color:var(--muted);font-family:Oswald;font-size:12px;letter-spacing:1px;text-decoration:underline;cursor:pointer;padding:8px">
+    Seguir sin entrar (solo para mirar)
+  </button>
+</div>
+
 <!-- ══ PICK SCREEN ══════════════════════════════════════════ -->
 <div id="pick" class="screen active">
   <div>
@@ -120,7 +148,7 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
   <div class="panel-header">
     <div class="pos-badge" id="posBadge">—</div>
     <div style="text-align:center;font-size:11px;color:var(--muted)" id="liftBadge">—</div>
-    <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted)">
+    <div onclick="abrirLogin()" style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted);cursor:pointer">
       <div class="fb-dot" id="fbDot"></div><span id="fbLabel">Conectando</span>
     </div>
   </div>
@@ -207,7 +235,17 @@ let fbDB=null,fbReady=false,fbSesion=false;
     fbReady=true;
     setFBStatus(true);
     startAthleteListener();
-    fa.onAuthStateChanged(fa.getAuth(app),u=>{ fbSesion=!!u; setFBStatus(true); });
+    // …y si ese navegador NO tiene sesión, se inicia acá mismo. Antes había que
+    // ir a entrar al admin o al livecast en el mismo navegador y recién volver:
+    // en la tablet donde ya se había entrado funcionaba, en el teléfono del juez
+    // decía "sin permiso" y no había en la página dónde arreglarlo.
+    fbAuth=fa.getAuth(app);
+    _fa=fa;
+    fa.onAuthStateChanged(fbAuth,u=>{
+      fbSesion=!!u;
+      setFBStatus(true);
+      if(u)cerrarLogin(); else if(!_loginDescartado)abrirLogin();
+    });
   }catch(e){
     console.error('Firebase error',e);
     setFBStatus(false);
@@ -216,8 +254,53 @@ let fbDB=null,fbReady=false,fbSesion=false;
 
 function setFBStatus(ok){
   document.getElementById('fbDot').className='fb-dot'+(ok&&fbSesion?' on':'');
-  document.getElementById('fbLabel').textContent=!ok?'Sin conexión':(fbSesion?'En vivo':'Sin sesión — los votos no se envían');
+  document.getElementById('fbLabel').textContent=!ok?'Sin conexión':(fbSesion?'En vivo':'Sin sesión — tocá acá');
 }
+
+// ══ Sesión ═════════════════════════════════════════════════
+// La sesión de Firebase vive en el navegador, no en la cuenta: entrar en la
+// tablet no sirve para el teléfono, y Chrome no comparte con el navegador de
+// Samsung ni con una pestaña de incógnito. Por eso cada dispositivo que vaya a
+// juzgar necesita entrar una vez — y ahora se hace desde acá.
+let fbAuth=null,_fa=null,_loginDescartado=false;
+window.abrirLogin=function(){
+  if(fbSesion)return;
+  _loginDescartado=false;
+  document.getElementById('login').classList.add('active');
+  document.getElementById('panel').style.display='none';
+  document.getElementById('pick').style.display='none';
+};
+function cerrarLogin(){
+  document.getElementById('login').classList.remove('active');
+  document.getElementById('panel').style.display='';
+  document.getElementById('pick').style.display='';
+}
+window.saltarLogin=function(){ _loginDescartado=true; cerrarLogin(); };
+window.entrar=async function(){
+  const em=document.getElementById('logEmail').value.trim();
+  const pw=document.getElementById('logPass').value;
+  const err=document.getElementById('logErr');
+  err.textContent='';
+  if(!em||!pw){err.textContent='Falta el correo o la clave';return;}
+  if(!fbAuth||!_fa){err.textContent='Conectando con el servidor… probá de nuevo en unos segundos';return;}
+  const btn=document.getElementById('logBtn');
+  btn.disabled=true; btn.textContent='ENTRANDO…';
+  try{
+    await _fa.signInWithEmailAndPassword(fbAuth,em,pw);
+    // Se cierra acá, sin esperar a onAuthStateChanged. El observador igual va a
+    // avisar, pero si por lo que sea no llega, el juez quedaría mirando el login
+    // con la sesión ya iniciada y sin entender qué le falta.
+    fbSesion=true; setFBStatus(true); cerrarLogin();
+    showPulse('Sesión iniciada','#22c55e');
+  }catch(e){
+    const c=(e&&e.code)||'';
+    err.textContent=/wrong-password|invalid-credential|user-not-found/.test(c)
+      ? 'Correo o clave incorrectos'
+      : (/network/.test(c)?'Sin internet':'No se pudo entrar');
+    console.error(e);
+  }
+  btn.disabled=false; btn.textContent='ENTRAR';
+};
 
 // ══ State ══════════════════════════════════════════════════
 let myPos=null;     // 'izq' | 'central' | 'der'
@@ -337,7 +420,9 @@ window.castVote=async function(color){
     }catch(e2){
       // Antes decía solo "Error al enviar" y el juez no tenía cómo saber por qué.
       const sinPermiso=e2&&(e2.code==='permission-denied'||/permission/i.test(e2.message||''));
-      showPulse(sinPermiso?'Sin permiso — inicia sesión en este dispositivo':'Error al enviar','#ef4444');
+      showPulse(sinPermiso?'Sin permiso — iniciá sesión en este dispositivo':'Error al enviar','#ef4444');
+      // Y se abre el login en vez de dejar al juez leyendo un cartel sin salida.
+      if(sinPermiso&&!fbSesion)abrirLogin();
       console.error(e2);
     }
   }
