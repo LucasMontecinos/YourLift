@@ -38,7 +38,13 @@ const BASE = {
   source: 'yourlift_livecast', codigo: '', rut: '21523046-5',
   nombre: 'Benjamin Ignacio García Pino', club: 'Hannya Strength', sexo: 'Masculino',
   division: 'Junior', categoria: '93',
-  evento: 'Campeonato Regional CENTRO SUR  FECHIPO 2026', evento_id: 'regionalcentrosur',
+  // El nombre del campeonato lleva una marca que NO puede estar en data.json.
+  // Sirve para saber con certeza que ya se aplicaron los resultados inyectados:
+  // esperar por el nombre del atleta no alcanza, porque ese nombre lo trae
+  // data.json y aparece en el primer dibujo, antes del overlay. Ahí la prueba
+  // leía la ficha a medio armar y veía la comparativa vieja. El agrupamiento no
+  // mira el nombre del campeonato, así que cambiarlo no altera lo que se prueba.
+  evento: 'CENTRO SUR ⟪OVERLAY⟫ FECHIPO 2026', evento_id: 'regionalcentrosur',
   fecha: '2026-08-09',
 };
 const R_PL = { ...BASE, id: 'r1', view: 'meet', modalidad: 'Powerlifting Classic',
@@ -71,16 +77,17 @@ const R_BENCH = { ...BASE, id: 'r2', view: 'bench', modalidad: 'Only Bench Class
     const errs = [];
     p.on('pageerror', e => errs.push(e.message));
     await p.goto('http://localhost:8972/atleta.html?codigo=2152BGP-2024', { waitUntil: 'domcontentloaded' });
-    // La ficha se dibuja una primera vez con lo que trae data.json, y recién después
-    // llega el overlay con los resultados inyectados. Si se lee apenas aparece el
-    // nombre, se lee a medio armar: en una corrida rápida faltaba la segunda
-    // comparativa y la prueba pasaba o fallaba según lo cargada que estuviera la
-    // máquina. Se espera el nombre y se le da tiempo al overlay a asentarse.
+    // La ficha se dibuja una primera vez con lo que trae data.json, y recién
+    // después llega el overlay con los resultados inyectados. Antes se esperaba el
+    // nombre del atleta más 1,5 s: el nombre está en data.json, así que la espera
+    // se cumplía con el PRIMER dibujo y el tiempo fijo tapaba el resto — de ahí que
+    // fallara de a ratos y solo dentro de la batería. Se espera la marca del
+    // overlay, que no puede venir de data.json: cuando está, los resultados
+    // inyectados ya se aplicaron.
     await p.waitForFunction(() => {
       const el = document.getElementById('profileSection');
-      return el && el.style.display !== 'none' && /Benjamin/i.test(el.innerText);
-    }, null, { timeout: 40000 });
-    await p.waitForTimeout(1500);
+      return el && el.style.display !== 'none' && el.innerText.indexOf('⟪OVERLAY⟫') >= 0;
+    }, null, { timeout: 90000 });
     return { p, errs };
   }
 

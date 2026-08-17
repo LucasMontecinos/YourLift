@@ -106,7 +106,11 @@ const LEER = `()=>{
     ok(modo === false, 'y no se enciende el modo jueces (' + modo + ')');
   }
   // Lo mismo, mirando el código: la pantalla solo se suscribe, nunca escribe.
-  const iLuces = src.indexOf('function renderLucesTarima()');
+  // Se busca por el nombre, no por la firma completa: la función recibió después
+  // un parámetro (para poder ir adentro de un bloque movible) y esta prueba se
+  // quedó buscando "renderLucesTarima()" exacto. No encontraba nada, se llevaba
+  // un pedazo cualquiera del archivo y fallaba por eso, no por el código.
+  const iLuces = src.indexOf('function renderLucesTarima(');
   const cuerpo = src.slice(iLuces, src.indexOf('\n}', iLuces));
   ok(!/setDoc|setAtt|updA|_markAtt/.test(cuerpo), 'la función de las luces no escribe nada');
   ok(/_txStartLightsListener\(\);/.test(cuerpo), 'solo se suscribe al documento de los jueces');
