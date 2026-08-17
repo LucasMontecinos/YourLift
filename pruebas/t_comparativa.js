@@ -48,9 +48,20 @@ const R_BENCH = { ...BASE, id: 'r2', view: 'bench', modalidad: 'Only Bench Class
 
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+  process.on('uncaughtException', async e => {
+    console.log('\n  ✗ la prueba reventó: ' + (e && e.message));
+    try { await b.close(); } catch (x) {}
+    process.exit(1);
+  });
 
+  const abiertos = [];
   async function abrir(resultados) {
+    // El servidor de las pruebas atiende de a una petición. Con varios contextos
+    // vivos a la vez las cargas se encolan y da timeout, así que se cierra el
+    // anterior antes de abrir el siguiente.
+    while (abiertos.length) { try { await abiertos.pop().close(); } catch (e) {} }
     const ctx = await b.newContext({ viewport: { width: 900, height: 1400 } });
+    abiertos.push(ctx);
     await ctx.addInitScript(rs => {
       localStorage.setItem('_yfc_atl_res', JSON.stringify({ ts: Date.now(), d: rs }));
     }, resultados);
@@ -60,10 +71,16 @@ const R_BENCH = { ...BASE, id: 'r2', view: 'bench', modalidad: 'Only Bench Class
     const errs = [];
     p.on('pageerror', e => errs.push(e.message));
     await p.goto('http://localhost:8972/atleta.html?codigo=2152BGP-2024', { waitUntil: 'domcontentloaded' });
+    // La ficha se dibuja una primera vez con lo que trae data.json, y recién después
+    // llega el overlay con los resultados inyectados. Si se lee apenas aparece el
+    // nombre, se lee a medio armar: en una corrida rápida faltaba la segunda
+    // comparativa y la prueba pasaba o fallaba según lo cargada que estuviera la
+    // máquina. Se espera el nombre y se le da tiempo al overlay a asentarse.
     await p.waitForFunction(() => {
       const el = document.getElementById('profileSection');
       return el && el.style.display !== 'none' && /Benjamin/i.test(el.innerText);
     }, null, { timeout: 40000 });
+    await p.waitForTimeout(1500);
     return { p, errs };
   }
 
