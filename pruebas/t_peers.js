@@ -17,7 +17,29 @@ function sacar(nombre) {
   }
   return src.slice(start, p);
 }
-eval(['getPeerKey', '_peerMejor', '_peersBuild', 'peerPerc'].map(sacar).join('\n'));
+// Las constantes se sacan aparte: `sacar` solo entiende declaraciones de función.
+function sacarConst(nombre) {
+  const i = src.search(new RegExp('(?:^|\\n)const ' + nombre + '='));
+  if (i < 0) throw new Error('no encontré la constante ' + nombre);
+  const start = src.indexOf('const', i);
+  let p = start, open = 0, abrio = false;
+  while (p < src.length) {
+    const c = src[p];
+    if (c === '{' || c === '[') { open++; abrio = true; }
+    else if (c === '}' || c === ']') { open--; if (abrio && open === 0) { p++; break; } }
+    p++;
+  }
+  return src.slice(start, p) + ';';
+}
+// Esta lista hay que mantenerla al día. Cuando se reescribió la comparativa,
+// _peersBuild pasó a apoyarse en _modalKey/_peerBase/_peerKeys y esta prueba
+// quedó tirando "_peerKeys is not defined" — o sea, sin probar nada. Nadie se
+// enteró porque revienta antes de imprimir "FALLA", y la batería miraba esa
+// palabra para decidir si una prueba había pasado.
+eval([
+  sacarConst('_MODAL_LABEL'), sacarConst('_MODAL_ORDEN'),
+  ...['_modalKey', '_peerBase', '_peerKeys', 'getPeerKey', '_peerMejor', '_peersBuild', 'peerPerc'].map(sacar),
+].join('\n'));
 
 const db = JSON.parse(fs.readFileSync(__dirname + '/../data.json', 'utf8'));
 const PEERS = _peersBuild(db);
@@ -57,8 +79,10 @@ Object.entries(PEERS).forEach(([k, v]) => {
     const a = db.find(x => x.codigo === m.codigo);
     const calza = (a.competencias || []).some(c => {
       const r = c.resultado || {};
-      const mm = String(c.modalidad || '').toLowerCase().includes('equip') ? 'equipped' : 'classic';
-      return r.total === m.total && String(c.categoria || '').trim() === cat && mm === modal;
+      // Con el mismo clasificador que usa la ficha. Acá había una copia que
+      // repartía todo entre 'classic' y 'equipped'; desde que existen Only Bench
+      // y Only Bench equipado, ningún miembro de un grupo de banca podía calzar.
+      return r.total === m.total && String(c.categoria || '').trim() === cat && _modalKey(c) === modal;
     });
     if (!calza) cruces.push(k + ' → ' + m.nombre + ' ' + m.total);
   });
