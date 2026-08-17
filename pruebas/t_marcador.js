@@ -99,9 +99,15 @@ const LEER = () => {
   ok(!/const YL_NAVY='#0A1628', YL_RED='#C41E3A', YL_GOLD='#D4A843';/.test(src),
      'ya no quedan colores fijos en el código del marcador');
 
-  console.log('\n  La paleta azul-rojo-blanco está disponible');
-  ok(/label:'YourLift Bandera'/.test(src), 'aparece en el panel de Control TX');
+  console.log('\n  Las paletas están disponibles en el panel');
+  ok(/label:'YourLift Bandera'/.test(src), 'la azul-rojo-blanco aparece');
   ok(/desc:'Azul · Rojo · Blanco'/.test(src), 'y dice de qué colores es');
+  // La que se estaba usando en transmisión, agregada como una más (no reemplaza).
+  ok(/label:'Pizarra'/.test(src), 'y la Pizarra, la de la transmisión');
+  ok(/nameText:'#ffffff',accent:'#2563eb'/.test(src),
+     'con el nombre en blanco y el azul eléctrico del intento en curso');
+  ok(/label:'YourLift',desc:'Rojo · Dorado · Azul marino'/.test(src),
+     'la de siempre sigue estando: ninguna se reemplazó');
 
   console.log('\nPerfil: nombre y apellido con la misma letra');
   const { p: p3, errs: e3 } = await abrir(b, 'screen', null, 'profile');
