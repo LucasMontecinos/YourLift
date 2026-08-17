@@ -8278,6 +8278,16 @@ window.dirShow=async function(comp,seconds,opts){
       _dirState.tablaActual=Object.assign({},ta,{active:false,until:0});
     }
   }
+  // El medallero es una banda de abajo, no un fullscreen, así que quedaba tapado
+  // por el Perfil, la Tabla Actual o el Break Timer — y el panel igual mostraba
+  // "EN PANTALLA" en verde. Se activa a propósito para premiar, así que ahora
+  // apaga lo que lo taparía: apretar MEDALLERO muestra el medallero.
+  if(comp==='medals'){
+    ['profile','leaderboard','breakTimer'].forEach(otro=>{
+      const o=_dirState[otro];
+      if(o&&o.active)_dirState[otro]=Object.assign({},o,{active:false,until:0});
+    });
+  }
   _dirState[comp]=Object.assign({},_dirState[comp]||{},{active:true,until},opts||{});
   await _dirPush();R();
 };
