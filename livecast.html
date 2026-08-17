@@ -9251,15 +9251,71 @@ function renderDirector(){
   return h;
 }
 
+// ── Buscar y filtrar en Atletas & Pesaje ────────────────────────────────────
+// Con 552 atletas y tandas hasta la Z, la tabla de corrido no sirve: en el cuarto
+// día encontrar a alguien es bajar por quinientas filas. Esto filtra SOLO lo que
+// se dibuja — los lotes, el orden y todo lo que se calcula siguen viendo la nómina
+// completa.
+window._MAN_F={q:'',flight:''};
+window.manBuscar=function(v){
+  window._MAN_F.q=String(v||'');
+  R();
+  // Devolver el cursor al buscador y al final del texto, que si no hay que
+  // volver a hacer clic entre letra y letra.
+  const i=document.getElementById('manQ');
+  if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}
+};
+window.manTanda=function(f){ window._MAN_F.flight=(window._MAN_F.flight===f)?'':f; R(); };
+window.manLimpiar=function(){ window._MAN_F={q:'',flight:''}; R(); };
+function _manNorm(x){ return String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+// Busca por nombre, club, país, categoría o lote. Todas las palabras tienen que
+// aparecer en algún lado, así "juan 83" encuentra al Juan de la -83.
+function _manCoincide(a,q){
+  if(!q)return true;
+  const heno=_manNorm([a.name,a.club,_ctry(a),a.cat,a.div,a.lot].join(' '));
+  return _manNorm(q).split(/\s+/).filter(Boolean).every(w=>heno.indexOf(w)>=0);
+}
 function renderManage(){
   // Filtrar por tarima si está activo (modo 2 tarimas)
   const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
   let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin: trae cambios, borra eliminados sin datos y toma tanda, división, categoría y modalidad del Cronograma">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
-  h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
+    // ── Barra de búsqueda y tandas ────────────────────────────────────────────
+  {
+    const _mf0=window._MAN_F||{q:'',flight:''};
+    const _tandas=[...new Set(ath.map(a=>a.flight))].filter(Boolean).sort();
+    const _vis=ath.filter(a=>(!_mf0.flight||a.flight===_mf0.flight)&&_manCoincide(a,_mf0.q)).length;
+    const _activo=!!(_mf0.q||_mf0.flight);
+    h+='<div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">';
+    h+='<input id="manQ" type="text" value="'+esc(_mf0.q)+'" oninput="manBuscar(this.value)" placeholder="Buscar por nombre, club, país, categoría o lote…" '
+      +'style="flex:1;min-width:240px;padding:9px 12px;border-radius:8px;border:1px solid '+(_mf0.q?'var(--gold)':'var(--border)')+';background:var(--bg);color:var(--text);font-size:13px">';
+    if(_tandas.length>1){
+      h+='<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">';
+      h+='<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-right:2px">TANDA</span>';
+      _tandas.forEach(f=>{
+        const on=_mf0.flight===f, col=FL_C[f]||'var(--muted)';
+        const n=ath.filter(a=>a.flight===f).length;
+        h+='<button onclick="manTanda(\''+f+'\')" title="'+n+' atletas" style="min-width:34px;padding:6px 7px;border-radius:6px;border:2px solid '
+          +(on?col:'var(--border)')+';background:'+(on?col+'22':'transparent')+';color:'+(on?col:'var(--muted)')
+          +';font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">'+f+'</button>';
+      });
+      h+='</div>';
+    }
+    if(_activo)h+='<button onclick="manLimpiar()" style="padding:8px 13px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-family:Oswald;font-size:11px;letter-spacing:.5px;cursor:pointer">Limpiar</button>';
+    h+='<span style="font-size:11px;color:'+(_activo?'var(--gold)':'var(--muted)')+';margin-left:auto;white-space:nowrap">'
+      +(_activo?('mostrando '+_vis+' de '+ath.length):(ath.length+' atletas'))+'</span>';
+    h+='</div>';
+  }
+h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">#</th><th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">ATLETA</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:38px">VLO</th><th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:80px">BW + 1ros</th>';
   ['sq','bp','dl'].forEach(l=>{[1,2,3].forEach(r=>{h+='<th style="padding:8px 2px;text-align:center;color:'+LIFT_C[l]+';font-size:9px;width:62px">'+LIFT_S[l]+r+'</th>'})});
   h+='</tr></thead><tbody>';
-  ath.forEach(a=>{
+  const _mf=window._MAN_F||{q:'',flight:''};
+  const _visibles=ath.filter(a=>(!_mf.flight||a.flight===_mf.flight)&&_manCoincide(a,_mf.q));
+  if(!_visibles.length){
+    h+='<tr><td colspan="30" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">'
+      +'Ningún atleta con esa búsqueda. <button onclick="manLimpiar()" style="margin-left:8px;padding:4px 12px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-family:Oswald;font-size:11px;cursor:pointer">Limpiar</button></td></tr>';
+  }
+  _visibles.forEach(a=>{
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3);'+(a.bombed?'opacity:.4':'')+'">';
     h+='<td style="padding:3px 2px;text-align:center"><input type="number" min="1" value="'+a.lot+'" onchange="setLot('+a.id+',this.value)" title="Edita el número de lote — si ya existe se hace swap" style="width:42px;padding:3px 2px;font-family:Oswald;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:13px"></td>';
     h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+_flagImg(_ctry(a),13)+a.name+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+_ctry(a)+' \u00b7 '+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
