@@ -6559,6 +6559,35 @@ function renderTxLights(){
   return h;
 }
 
+// Las tres luces, en chico, para meterlas dentro de una pantalla de tarima.
+// Es SOLO un espejo de lo que marcan los jueces: esta pantalla no decide nada.
+// El válido/nulo se sigue dando en Control en Vivo o en la planilla, como
+// siempre — acá no se toca ese camino ni se enciende el modo jueces.
+function renderLucesTarima(){
+  _txStartLightsListener();
+  const orden=['izq','central','der'];
+  let h='<div style="position:absolute;left:50%;bottom:2.5vh;transform:translateX(-50%);'
+    +'display:flex;gap:clamp(10px,1.6vw,26px);pointer-events:none;z-index:5">';
+  orden.forEach((j,i)=>{
+    const v=_txLights[j];
+    const on=v==='white'||v==='red';
+    const bg=v==='white'?'#fff':(v==='red'?'#ef4444':'rgba(255,255,255,.07)');
+    const bd=v==='white'?'#fff':(v==='red'?'#ef4444':'rgba(255,255,255,.22)');
+    const glow=v==='white'?'0 0 26px rgba(255,255,255,.8)'
+              :(v==='red'?'0 0 26px rgba(239,68,68,.8)':'none');
+    h+='<div style="width:clamp(42px,5.2vw,84px);height:clamp(42px,5.2vw,84px);border-radius:50%;'
+      +'background:'+bg+';border:4px solid '+bd+';box-shadow:'+glow+',inset 0 0 14px rgba(0,0,0,'+(on?'.15':'.45')+');'
+      +(on?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards;animation-delay:'+(i*0.07)+'s':'')+'"></div>';
+  });
+  h+='</div>';
+  return h;
+}
+// ¿Se muestran las luces en la pantalla de tarima? Arranca apagado: se prende
+// desde el panel cuando el campeonato las usa.
+function _lucesEnTarima(){
+  const st=window._SCREEN_STATE||{};
+  return !!st.luces;
+}
 function renderTxProfile(cur){
   const full=txLookupFull(cur);
   // Media efectiva: foto/gif subida en el livecast (persistente) tiene prioridad
@@ -6769,7 +6798,7 @@ function renderTxScoreboard(cur,lifterChanged){
 // distancia desde el panel "Pantalla Tarima".
 // ════════════════════════════════════════════════════════════════
 // ─── Panel de control de la Pantalla de Tarima (admin) ──────────
-window._SCREEN_LOCAL={mode:'jornada',flights:[],nameScale:1,fondo:'bandera'};
+window._SCREEN_LOCAL={mode:'jornada',flights:[],nameScale:1,fondo:'bandera',luces:false};
 async function _screenPush(){
   // Modo práctica: sin Firebase. El estado de la pantalla (modo/tandas/tamaño) va
   // por localStorage; la otra pestaña (?tx=screen&practica=1) lo lee por 'storage'.
@@ -6779,6 +6808,7 @@ async function _screenPush(){
       flights:window._SCREEN_LOCAL.flights,
       nameScale:window._SCREEN_LOCAL.nameScale||1,
       fondo:window._SCREEN_LOCAL.fondo||'bandera',
+      luces:!!window._SCREEN_LOCAL.luces,
       ts:Date.now()
     }));}catch(e){}
     return;
@@ -6791,6 +6821,7 @@ async function _screenPush(){
       flights:window._SCREEN_LOCAL.flights,
       nameScale:window._SCREEN_LOCAL.nameScale||1,
       fondo:window._SCREEN_LOCAL.fondo||'bandera',
+      luces:!!window._SCREEN_LOCAL.luces,
       ts:Date.now()
     });
   }catch(e){showToastLC('Error: '+e.message);}
@@ -6798,6 +6829,10 @@ async function _screenPush(){
 window.screenSetMode=function(m){window._SCREEN_LOCAL.mode=m;_screenPush();R();};
 // Fondo del modo "Atleta en barra": bandera del país · logo del campeonato · azul.
 window.screenSetFondo=function(f){window._SCREEN_LOCAL.fondo=f;_screenPush();R();};
+// Luces de jueces en la pantalla de tarima. Es un espejo: no da válido ni nulo.
+window.screenToggleLuces=function(){
+  window._SCREEN_LOCAL.luces=!window._SCREEN_LOCAL.luces;_screenPush();R();
+};
 window.screenSetNameScale=function(v){
   let n=parseFloat(v)||1; n=Math.max(0.6,Math.min(2.2,n)); n=Math.round(n*100)/100;
   window._SCREEN_LOCAL.nameScale=n; window._JORNADA_NAMESCALE=n;
@@ -6853,6 +6888,17 @@ function renderScreenControl(){
   h+=mb('off','APAGAR','','#ef4444');
   h+='</div></div>';
 
+  // Luces de jueces: solo aplica a las dos pantallas que muestran al atleta.
+  if(mode==='barra'||mode==='intentos'){
+    const on=!!window._SCREEN_LOCAL.luces;
+    h+='<div class="card" style="padding:14px 18px;margin-bottom:16px;border-left:4px solid '+(on?'var(--green)':'var(--border)')+'">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">';
+    h+='<div style="flex:1;min-width:260px"><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">Luces de jueces en pantalla</div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Muestra las tres luces abajo, sincronizadas con las de los jueces. Es solo un espejo: el válido o nulo se sigue dando en Control en Vivo o en la planilla, esta pantalla no decide nada. Si el campeonato no usa luces, se apaga y desaparece.</div></div>';
+    h+='<button class="btn '+(on?'btn-r':'btn-g')+'" onclick="screenToggleLuces()" style="padding:12px 24px;font-family:Oswald;font-weight:700;letter-spacing:1px;min-width:150px">'+(on?'QUITAR':'MOSTRAR')+'</button>';
+    h+='</div></div>';
+  }
+
   // Fondo del modo "Atleta en barra". La cadena se corta en el primero que exista:
   // si se elige el logo y el campeonato no tiene uno cargado, queda el azul.
   if(mode==='barra'){
@@ -6904,7 +6950,7 @@ function renderScreenControl(){
   return h;
 }
 
-window._SCREEN_STATE={mode:'jornada',flights:null,fondo:'bandera'}; // mode: 'profile' | 'jornada' | 'barra' | 'intentos' | 'off'
+window._SCREEN_STATE={mode:'jornada',flights:null,fondo:'bandera',luces:false}; // mode: 'profile' | 'jornada' | 'barra' | 'intentos' | 'off'
 async function loadBirthYears(){
   if(!fbReady||!DATA.event)return;
   try{
@@ -6939,6 +6985,7 @@ function subscribeScreenChannel(){
         window._SCREEN_LOCAL.nameScale=window._SCREEN_STATE.nameScale;
         if(window._SCREEN_STATE.mode)window._SCREEN_LOCAL.mode=window._SCREEN_STATE.mode;
         if(window._SCREEN_STATE.fondo)window._SCREEN_LOCAL.fondo=window._SCREEN_STATE.fondo;
+        window._SCREEN_LOCAL.luces=!!window._SCREEN_STATE.luces;
         if(Array.isArray(window._SCREEN_STATE.flights))window._SCREEN_LOCAL.flights=window._SCREEN_STATE.flights;
       }
       if(TX_MODE==='screen'||TX_MODE==='jornada')R();
@@ -6962,7 +7009,8 @@ function renderTxScreen(c){
   if(st.mode==='barra'){
     const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
     document.body.classList.add('tx-opaque');
-    c.innerHTML=cur?renderScreenBarra(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>';
+    c.innerHTML=(cur?renderScreenBarra(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')
+      +(_lucesEnTarima()?renderLucesTarima():'');
     return;
   }
   if(st.mode==='intentos'){
@@ -6970,7 +7018,8 @@ function renderTxScreen(c){
     const cur=_piQ[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
     const nxt=_piQ[1]||null;
     document.body.classList.add('tx-opaque');
-    c.innerHTML=cur?renderScreenIntentos(cur,nxt):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>';
+    c.innerHTML=(cur?renderScreenIntentos(cur,nxt):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')
+      +(_lucesEnTarima()?renderLucesTarima():'');
     return;
   }
   // jornada (default)
