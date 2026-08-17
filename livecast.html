@@ -1670,6 +1670,7 @@ function pickEvent(i){
   // los atletas del Sudamericano de prueba con los del Regional Centro Sur.
   try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
   window._SR_HOY=null;
+  window._VARIOS_PAISES=undefined;
   // Los filtros de Resultados son de un campeonato: si quedaran puestos al cambiar
   // de evento, la tabla del nuevo abriría vacía sin motivo aparente.
   window._RES_F={sex:'',cat:'',div:'',mod:''};
@@ -1781,6 +1782,28 @@ const FLAG_SVG={
   CAN:'<rect width="30" height="20" fill="#fff"/><rect width="7.5" height="20" fill="#D80621"/><rect x="22.5" width="7.5" height="20" fill="#D80621"/><path d="M15 4.4l1.1 2.6 2.4-1-1.1 2.7 2.3.6-2.1 1.6.6 1.5-2.5-.5.2 2.7h-1.8l.2-2.7-2.5.5.6-1.5-2.1-1.6 2.3-.6L11.5 6l2.4 1z" fill="#D80621"/>',
   USA:'<rect width="30" height="20" fill="#fff"/><g fill="#B22234"><rect width="30" height="1.54"/><rect y="3.08" width="30" height="1.54"/><rect y="6.15" width="30" height="1.54"/><rect y="9.23" width="30" height="1.54"/><rect y="12.31" width="30" height="1.54"/><rect y="15.38" width="30" height="1.54"/><rect y="18.46" width="30" height="1.54"/></g><rect width="12" height="10.77" fill="#3C3B6E"/>',
 };
+// ── Qué se muestra junto al nombre: bandera o logo del club ────────────────
+// En un sudamericano la bandera es el dato: identifica a quién representa cada
+// uno. En un campeonato chileno son todos CHI y la bandera no dice nada — ahí lo
+// que se busca es de qué club viene. Se decide solo, mirando cuántos países hay
+// en el campeonato, igual que el acta elige entre columna "País" y columna "Club".
+// Así nadie tiene que configurar nada y siempre se ve lo que informa.
+function _variosPaises(){
+  if(window._VARIOS_PAISES===undefined){
+    const p=new Set((DATA.athletes||[]).filter(a=>!a.__is4).map(a=>_ctry(a)).filter(Boolean));
+    window._VARIOS_PAISES=p.size>1;
+  }
+  return window._VARIOS_PAISES;
+}
+function _insignia(a,alto){
+  alto=alto||14;
+  if(_variosPaises())return _flagImg(_ctry(a),alto,true);
+  if(window.clubLogoImg&&a&&a.club){
+    const l=window.clubLogoImg(a.club,alto,'background:rgba(10,22,40,.4);padding:1px;margin-right:6px;vertical-align:middle;');
+    if(l)return l;
+  }
+  return _flagImg(_ctry(a),alto,true);   // sin logo de club, la bandera igual sirve
+}
 // La misma bandera, como imagen, para usarla de fondo.
 function _flagDataUri(code){
   const svg=FLAG_SVG[code];
@@ -7049,7 +7072,7 @@ function renderTxJornada(){
       const td='vertical-align:middle;text-align:center;font-family:Oswald;font-size:'+fs(14)+'px';
       rows+='<tr style="height:'+unit.toFixed(2)+'px;border-bottom:1px solid rgba(212,168,67,.12);background:'+(i%2?'rgba(255,255,255,.035)':'transparent')+'">'
         +'<td style="'+td+';font-weight:700;color:#D4A843;padding:0 4px">'+(row.tot>0?(i+1):'—')+'</td>'
-        +'<td style="vertical-align:middle;padding:0 10px;font-family:Inter,sans-serif;font-weight:600;color:#fff;font-size:'+Math.round(fs(15)*nameScale)+'px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="display:inline-flex;align-items:center">'+_flagImg(_ctry(a),fs(13),true)+'<span>'+a.name+'</span></span></td>'
+        +'<td style="vertical-align:middle;padding:0 10px;font-family:Inter,sans-serif;font-weight:600;color:#fff;font-size:'+Math.round(fs(15)*nameScale)+'px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="display:inline-flex;align-items:center">'+_insignia(a,fs(13))+'<span>'+a.name+'</span></span></td>'
         +'<td style="'+td+';color:rgba(220,230,245,.85);white-space:nowrap">'+_flagImg(_ctry(a),fs(14),true)+_ctry(a)+'</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.65)">'+(_yob2(a)||'—')+'</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.9)">'+(a.bw?a.bw.toFixed(1):'—')+'</td>'
@@ -7221,7 +7244,7 @@ function renderTxTablaActual(cur,opts){
           return `<div style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:${isCur?'14px 18px':'8px 18px'};${rowBg};border-bottom:1px solid rgba(212,168,67,.08);align-items:center">
             <div style="font-family:Oswald;font-size:${isCur?'18px':'13px'};font-weight:700;color:${isCur?'#D4A843':'rgba(220,230,245,.5)'};text-shadow:${isCur?'0 0 8px rgba(212,168,67,.5)':'none'}">${posShown}</div>
             <div style="overflow:hidden">
-              <div style="font-family:Oswald;font-size:${fS};font-weight:${fW};color:${nameC};letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.5)">${a.name}</div>
+              <div style="font-family:Oswald;font-size:${fS};font-weight:${fW};color:${nameC};letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.5);display:flex;align-items:center">${_insignia(a,15)}<span style="overflow:hidden;text-overflow:ellipsis">${a.name}</span></div>
               ${extra}
             </div>
             <div style="font-family:Oswald;font-size:${isCur?'17px':'13px'};font-weight:${fW};text-align:right;color:${isCur?'#D4A843':'rgba(220,230,245,.75)'};text-shadow:${isCur?'0 0 8px rgba(212,168,67,.4)':'none'}">${(totalShown||0).toFixed(1)}</div>
@@ -10016,7 +10039,7 @@ function _renderResultsTable(opts){
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.25);'+(a.bombed?'opacity:.4':dq?'opacity:.7':'')+'">';
     const virtual=!dq&&typeof pos==='number'&&!catCerrada[catKey];
     h+='<td class="os" title="'+(dq?'Descalificado':virtual?'Posición virtual: todavía quedan intentos':'Posición final')+'" style="padding:6px 4px;text-align:center;color:'+(dq?'var(--red)':typeof pos==="number"&&pos<=3?'var(--gold)':'var(--muted)')+';font-weight:700;font-size:14px;'+(virtual?'opacity:.85':'')+'">'+pos+(virtual?'<span style="font-size:9px;color:#f59e0b;margin-left:1px">~</span>':'')+'</td>';
-    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap;display:flex;align-items:center">'+_flagImg(_ctry(a),12,true)+'<span>'+a.name+'</span></div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+'</span></div></td>';
+    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap;display:flex;align-items:center">'+(_variosPaises()?_flagImg(_ctry(a),12,true):'')+'<span>'+a.name+'</span></div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+'</span></div></td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:11px">'+(a.bw||'—')+'</td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:10px">'+(a.div||'—')+'</td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:10px">'+(a.cat||'—')+'</td>';
@@ -11703,7 +11726,7 @@ function renderAtletaInfo(){
     }
     h+='</div>';
     h+='<div style="flex:1;min-width:0">';
-    h+='<div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center">'+_flagImg(_ctry(a),13,true)+'<span style="overflow:hidden;text-overflow:ellipsis">'+a.name+'</span></div>';
+    h+='<div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center">'+_insignia(a,13)+'<span style="overflow:hidden;text-overflow:ellipsis">'+a.name+'</span></div>';
     if(codigo)h+='<div style="font-size:10px;color:var(--gold);font-family:Oswald;letter-spacing:.5px">'+codigo+'</div>';
     h+='<div style="font-size:11px;color:var(--muted);margin-top:2px">'+a.div+' · '+a.cat+'</div>';
     h+='<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,16,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+(debut?' · Debut '+debut:'')+'</span></div>';
