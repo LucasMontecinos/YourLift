@@ -25,7 +25,10 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 .pick-btn.der:hover{border-color:#3b82f6}
 
 /* ── Panel screen ─────────────────────────────────── */
-#panel{padding:16px;justify-content:space-between}
+/* overflow-y:auto: con los motivos abajo, en un teléfono chico el contenido
+   puede pasarse de alto. Antes se cortaban los botones de voto, que es lo
+   último que puede faltarle a un juez. */
+#panel{padding:16px;justify-content:space-between;overflow-y:auto;gap:12px}
 .panel-header{width:100%;display:flex;justify-content:space-between;align-items:center}
 .pos-badge{font-size:13px;font-weight:700;letter-spacing:3px;padding:6px 14px;border-radius:8px;border:2px solid var(--border);color:var(--muted)}
 .fb-dot{width:8px;height:8px;border-radius:50%;background:#ef4444}
@@ -41,6 +44,22 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 .preview-big{width:72px;height:72px;border-radius:50%;background:var(--border);border:4px solid var(--border);transition:all .2s}
 .preview-small{width:22px;height:22px;border-radius:50%;background:var(--border);border:3px solid var(--border);transition:all .2s}
 .preview-label{font-size:11px;color:var(--muted);letter-spacing:2px;margin-top:2px}
+
+/* ── Motivos de nulo ──────────────────────────────── */
+/* El juez ve, al lado de cada combinación de luces, por qué se da ese nulo.
+   Cambia solo según el movimiento que está en la tarima. */
+.motivos{width:100%;max-width:360px;border:1px solid var(--border);border-radius:12px;background:rgba(15,30,53,.55);overflow:hidden}
+.motivos-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;cursor:pointer}
+.motivos-head span{font-size:10px;letter-spacing:2px;color:var(--gold);font-weight:700}
+.motivos-head .chev{font-size:11px;color:var(--muted)}
+.motivos-body{padding:0 12px 10px;display:flex;flex-direction:column;gap:8px}
+.motivos.closed .motivos-body{display:none}
+.mot-row{display:flex;align-items:flex-start;gap:9px}
+.mot-dots{display:flex;align-items:center;gap:3px;flex-shrink:0;padding-top:2px}
+.mot-dots i{display:block;border-radius:50%}
+.mot-dots i.big{width:13px;height:13px;background:#ef4444}
+.mot-dots i.small{width:9px;height:9px}
+.mot-txt{font-size:11px;line-height:1.4;color:var(--text);font-weight:400;letter-spacing:.2px}
 
 /* ── Vote buttons ─────────────────────────────────── */
 .vote-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:360px}
@@ -121,6 +140,19 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
     <div class="preview-label" id="prevLabel">SIN VOTO</div>
   </div>
 
+  <!-- Motivos de nulo del movimiento en tarima -->
+  <div class="motivos" id="motivos">
+    <div class="motivos-head" onclick="toggleMotivos()">
+      <span id="motTitulo">MOTIVOS DE NULO</span>
+      <span class="chev" id="motChev">▾</span>
+    </div>
+    <div class="motivos-body">
+      <div class="mot-row"><div class="mot-dots"><i class="big"></i><i class="small" style="background:#ef4444"></i></div><div class="mot-txt" id="motRed">—</div></div>
+      <div class="mot-row"><div class="mot-dots"><i class="big"></i><i class="small" style="background:#3b82f6"></i></div><div class="mot-txt" id="motBlue">—</div></div>
+      <div class="mot-row"><div class="mot-dots"><i class="big"></i><i class="small" style="background:#f59e0b"></i></div><div class="mot-txt" id="motYellow">—</div></div>
+    </div>
+  </div>
+
   <!-- Vote buttons -->
   <div class="vote-grid">
     <button class="vote-btn white-btn" onclick="castVote('white')">
@@ -194,6 +226,64 @@ const POS_LABEL={izq:'◀ JUEZ IZQ',central:'● CENTRAL',der:'JUEZ DER ▶'};
 const LIFT_LABEL={sq:'SQUAT',bp:'BENCH PRESS',dl:'DEADLIFT'};
 const VOTE_COLOR={white:'#f0f0f0',red:'#ef4444',blue:'#3b82f6',yellow:'#f59e0b'};
 
+// ══ Motivos de nulo ════════════════════════════════════════
+// Qué significa cada combinación de luces, por movimiento. El juez marca el
+// color; esto es solo el recordatorio de por qué. Si algún criterio cambia, se
+// edita acá y listo — no está repartido por la página.
+const MOTIVOS={
+  sq:{
+    nombre:'SENTADILLA',
+    red:'Profundidad: no alcanza la paralela.',
+    blue:'Descenso de la barra · doble rebote · rodillas no bloqueadas.',
+    yellow:'Se salta el comando · cambia la posición inicial · no termina el movimiento.'
+  },
+  bp:{
+    nombre:'PRESS DE BANCA',
+    red:'No toca el pecho · no da la profundidad de codos.',
+    blue:'Descenso de la barra · codos no bloqueados al inicio o al término del movimiento.',
+    yellow:'Se salta el comando · cambia la postura inicial · levanta glúteo, cabeza o pies · sube la barra con el pecho.'
+  },
+  dl:{
+    nombre:'PESO MUERTO',
+    red:'Hombros no bloqueados o por delante de la línea de la barra.',
+    blue:'Tirones en la barra al subir · apoya la barra en las piernas o la sube contra los muslos.',
+    yellow:'Se salta el comando · cambia la posición inicial · no termina el movimiento.'
+  }
+};
+let _liftActual=null;
+function pintarMotivos(lift){
+  const m=MOTIVOS[lift];
+  const tit=document.getElementById('motTitulo');
+  if(!m){
+    // Todavía no hay atleta en la tarima: no se inventa un movimiento.
+    tit.textContent='MOTIVOS DE NULO';
+    ['motRed','motBlue','motYellow'].forEach(id=>{document.getElementById(id).textContent='—';});
+    return;
+  }
+  tit.textContent='MOTIVOS DE NULO · '+m.nombre;
+  document.getElementById('motRed').textContent=m.red;
+  document.getElementById('motBlue').textContent=m.blue;
+  document.getElementById('motYellow').textContent=m.yellow;
+}
+window.pintarMotivos=pintarMotivos;
+// Se puede plegar: el juez que ya se los sabe recupera la pantalla, y la
+// elección le queda guardada en ese teléfono.
+window.toggleMotivos=function(){
+  const el=document.getElementById('motivos');
+  const cerrado=el.classList.toggle('closed');
+  document.getElementById('motChev').textContent=cerrado?'▸':'▾';
+  try{localStorage.setItem('_yl_jueces_motivos',cerrado?'0':'1');}catch(e){}
+};
+(function(){
+  try{
+    if(localStorage.getItem('_yl_jueces_motivos')==='0'){
+      document.getElementById('motivos').classList.add('closed');
+      document.getElementById('motChev').textContent='▸';
+    }
+  }catch(e){}
+  pintarMotivos(null);
+})();
+
 // ══ Position selection ═════════════════════════════════════
 window.selectPos=function(pos){
   myPos=pos;
@@ -223,6 +313,8 @@ function startAthleteListener(){
     if(d.athlete_weight)document.getElementById('athWeight').textContent=d.athlete_weight+'  kg';
     if(d.athlete_lift)document.getElementById('liftBadge').textContent=(LIFT_LABEL[d.athlete_lift]||d.athlete_lift)+' · Int.'+(d.athlete_round!=null?d.athlete_round+1:'—');
     if(d.athlete_lift)document.getElementById('athLiftLabel').textContent=(LIFT_LABEL[d.athlete_lift]||d.athlete_lift)+' · Intento '+(d.athlete_round!=null?d.athlete_round+1:'—');
+    // Los motivos siguen al movimiento que está en la tarima.
+    if(d.athlete_lift&&d.athlete_lift!==_liftActual){_liftActual=d.athlete_lift;pintarMotivos(_liftActual);}
   });
 }
 let _lastReset=0;

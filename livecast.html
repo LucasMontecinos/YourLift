@@ -1808,8 +1808,15 @@ function _insignia(a,alto){
 function _flagDataUri(code){
   const svg=FLAG_SVG[code];
   if(!svg)return '';
-  return 'data:image/svg+xml;utf8,'+encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 20" preserveAspectRatio="xMidYMid slice">'+svg+'</svg>');
+  // encodeURIComponent deja pasar ' ( ) ! * — y esos cuatro rompen un url() de CSS
+  // sin comillas. Se codifican acá para poder escribirlo SIN comillas: el fondo
+  // viaja dentro de un atributo style="…" del HTML, y una comilla doble ahí corta
+  // el atributo en seco. Eso hacía que el navegador recibiera url("") y la pantalla
+  // de "Atleta en barra" saliera azul lisa por más que se eligiera la bandera.
+  const uri=encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 20" preserveAspectRatio="xMidYMid slice">'+svg+'</svg>')
+    .replace(/'/g,'%27').replace(/\(/g,'%28').replace(/\)/g,'%29').replace(/!/g,'%21').replace(/\*/g,'%2A');
+  return 'data:image/svg+xml;utf8,'+uri;
 }
 // Bandera del país. Si no está en la tabla, queda el código de tres letras.
 // `sinChip` para las pantallas donde el código ya se escribe al lado.
@@ -1840,6 +1847,13 @@ const BANDERA_COLORES={
 };
 // Fondo del modo "Atleta en barra": bandera del país → logo del campeonato →
 // azul YourLift. La cadena se corta en el primero que exista.
+// Cuán difuminada va la bandera de fondo. 0 = la bandera tal cual; 1 = tapada.
+// Se elige desde el panel de Pantalla de Tarima y viaja con el resto del estado.
+function _veloBandera(){
+  const st=window._SCREEN_STATE||{};
+  const v=typeof st.veloBandera==='number'?st.veloBandera:0.55;
+  return Math.max(0.05,Math.min(0.92,v));
+}
 function _fondoBarra(a,modo){
   const AZUL='linear-gradient(160deg,#0d2141,#0A1628 55%,#060d1a)';
   if(modo==='bandera'){
@@ -1847,8 +1861,19 @@ function _fondoBarra(a,modo){
     // dibujaban franjas diagonales con sus colores, y así Chile perdía la estrella y
     // el blanco, Uruguay sus rayas y Argentina su sol: quedaban dos diagonales que
     // no identificaban a nadie. Solo Colombia, que es tres franjas, se salvaba.
+    // El velo no es parejo. Con uno parejo pasaba una de dos: o la bandera no se
+    // veía, o el sol de Argentina y la estrella de Chile quedaban como una mancha
+    // justo detrás del nombre. Va más claro arriba y abajo —donde se reconoce el
+    // país, que es para lo que está— y más oscuro en la franja del medio, que es
+    // donde va el nombre y tiene que leerse desde el fondo del gimnasio.
+    // (Lo que la hacía invisible no era el velo sino un url() roto: ver _flagDataUri.)
+    // Cuánto se difumina lo decide el operador desde el panel: cada gimnasio tiene
+    // su luz y su proyector, y lo que acá se ve bien allá puede quedar lavado.
     const uri=_flagDataUri(_ctry(a));
-    if(uri)return 'linear-gradient(rgba(10,22,40,.80),rgba(10,22,40,.80)),url("'+uri+'") center/cover no-repeat,'+AZUL;
+    const v=_veloBandera();
+    const medio=Math.min(.97,v+.33);
+    const velo='linear-gradient(rgba(10,22,40,'+v+'),rgba(10,22,40,'+medio+') 34%,rgba(10,22,40,'+medio+') 66%,rgba(10,22,40,'+v+'))';
+    if(uri)return velo+',url('+uri+') center/cover no-repeat,'+AZUL;
     return AZUL;
   }
   if(modo==='logo'&&DATA.event&&DATA.event.logoUrl){
@@ -6543,17 +6568,41 @@ function _txStartLightsListener(){
     });
   }catch(e){console.warn('[TX] lights subscribe fail',e)}
 }
+// Cómo se ve una luz. El juez marca cuatro cosas, no dos: blanco (válido) y tres
+// nulos que se diferencian por la tarjeta — rojo, azul o amarillo.
+//
+// Antes acá solo se miraba 'white' y 'red': un juez que apretaba AZUL o AMARILLO
+// salía en la pantalla como si no hubiera votado todavía. Ahora los tres nulos
+// encienden la luz roja, y debajo va un punto chico con el color de la tarjeta,
+// que es lo que le dice al atleta POR QUÉ le dieron nulo. El blanco no lleva
+// punto: en un intento válido no hay nada que explicar.
+function _luzEstilo(v){
+  const nulo=(v==='red'||v==='blue'||v==='yellow');
+  const CHIP={red:'#ef4444',blue:'#3b82f6',yellow:'#f59e0b'};
+  return {
+    on:(v==='white'||nulo),
+    bg:v==='white'?'#fff':(nulo?'#ef4444':'rgba(255,255,255,.07)'),
+    bd:v==='white'?'#fff':(nulo?'#ef4444':'rgba(255,255,255,.22)'),
+    glow:v==='white'?'0 0 26px rgba(255,255,255,.8)':(nulo?'0 0 26px rgba(239,68,68,.8)':'none'),
+    chip:nulo?CHIP[v]:'',   // el color de la tarjeta; vacío en blanco y sin voto
+  };
+}
 function renderTxLights(){
   if(TX_MODE==='lights')_txStartLightsListener();
   const order=['izq','central','der'];
   let h='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;gap:clamp(20px,3vw,60px)">';
   order.forEach((j,i)=>{
     const v=_txLights[j];
-    const lit=v==='white'||v==='red';
-    const bg=v==='white'?'#fff':(v==='red'?'#ef4444':'rgba(255,255,255,.08)');
-    const border=v==='white'?'#fff':(v==='red'?'#ef4444':'rgba(255,255,255,.25)');
-    const glow=v==='white'?'0 0 60px rgba(255,255,255,.85),0 0 120px rgba(255,255,255,.45)':(v==='red'?'0 0 60px rgba(239,68,68,.85),0 0 120px rgba(239,68,68,.45)':'none');
-    h+='<div style="width:clamp(120px,14vw,220px);height:clamp(120px,14vw,220px);border-radius:50%;background:'+bg+';border:6px solid '+border+';box-shadow:'+glow+',inset 0 0 30px rgba(0,0,0,'+(lit?'.15':'.5')+');'+(lit?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards;animation-delay:'+(i*0.08)+'s':'')+'"></div>';
+    const e=_luzEstilo(v);
+    const lit=e.on;
+    const glow=v==='white'?'0 0 60px rgba(255,255,255,.85),0 0 120px rgba(255,255,255,.45)'
+              :(e.chip?'0 0 60px rgba(239,68,68,.85),0 0 120px rgba(239,68,68,.45)':'none');
+    h+='<div style="display:flex;flex-direction:column;align-items:center;gap:clamp(8px,1vw,18px)">';
+    h+='<div style="width:clamp(120px,14vw,220px);height:clamp(120px,14vw,220px);border-radius:50%;background:'+e.bg+';border:6px solid '+e.bd+';box-shadow:'+glow+',inset 0 0 30px rgba(0,0,0,'+(lit?'.15':'.5')+');'+(lit?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards;animation-delay:'+(i*0.08)+'s':'')+'"></div>';
+    // El punto de la tarjeta, abajo de la luz. Solo en los nulos.
+    h+='<div style="width:clamp(26px,3vw,46px);height:clamp(26px,3vw,46px);border-radius:50%;'
+      +(e.chip?'background:'+e.chip+';box-shadow:0 0 22px '+e.chip:'background:transparent')+'"></div>';
+    h+='</div>';
   });
   h+='</div>';
   return h;
@@ -6566,21 +6615,62 @@ function renderTxLights(){
 function renderLucesTarima(){
   _txStartLightsListener();
   const orden=['izq','central','der'];
-  let h='<div style="position:absolute;left:50%;bottom:2.5vh;transform:translateX(-50%);'
+  // bottom:4vh — antes 2.5vh, pero con el punto de la tarjeta abajo la columna
+  // creció y el punto quedaba pegado al borde de la pantalla.
+  let h='<div style="position:absolute;left:50%;bottom:4vh;transform:translateX(-50%);'
     +'display:flex;gap:clamp(10px,1.6vw,26px);pointer-events:none;z-index:5">';
   orden.forEach((j,i)=>{
-    const v=_txLights[j];
-    const on=v==='white'||v==='red';
-    const bg=v==='white'?'#fff':(v==='red'?'#ef4444':'rgba(255,255,255,.07)');
-    const bd=v==='white'?'#fff':(v==='red'?'#ef4444':'rgba(255,255,255,.22)');
-    const glow=v==='white'?'0 0 26px rgba(255,255,255,.8)'
-              :(v==='red'?'0 0 26px rgba(239,68,68,.8)':'none');
+    const e=_luzEstilo(_txLights[j]);
+    h+='<div style="display:flex;flex-direction:column;align-items:center;gap:clamp(4px,.6vw,10px)">';
     h+='<div style="width:clamp(42px,5.2vw,84px);height:clamp(42px,5.2vw,84px);border-radius:50%;'
-      +'background:'+bg+';border:4px solid '+bd+';box-shadow:'+glow+',inset 0 0 14px rgba(0,0,0,'+(on?'.15':'.45')+');'
-      +(on?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards;animation-delay:'+(i*0.07)+'s':'')+'"></div>';
+      +'background:'+e.bg+';border:4px solid '+e.bd+';box-shadow:'+e.glow+',inset 0 0 14px rgba(0,0,0,'+(e.on?'.15':'.45')+');'
+      +(e.on?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards;animation-delay:'+(i*0.07)+'s':'')+'"></div>';
+    // Punto chico con el color de la tarjeta: le dice al atleta por qué fue nulo.
+    h+='<div style="width:clamp(11px,1.35vw,22px);height:clamp(11px,1.35vw,22px);border-radius:50%;'
+      +(e.chip?'background:'+e.chip+';box-shadow:0 0 12px '+e.chip:'background:transparent')+'"></div>';
+    h+='</div>';
   });
   h+='</div>';
   return h;
+}
+// Pantalla de tarima dedicada SOLO a las luces: las tres grandes al centro y
+// arriba de quién es el intento que se está juzgando. Sirve para el monitor que
+// mira el público cuando no se quiere mostrar nada más.
+// Igual que las chicas: es un espejo, acá no se decide nada.
+function renderScreenLuces(a){
+  _txStartLightsListener();
+  const orden=['izq','central','der'];
+  let luces='<div style="display:flex;gap:clamp(24px,4vw,90px);align-items:center;justify-content:center">';
+  orden.forEach((j,i)=>{
+    const v=_txLights[j];
+    const e=_luzEstilo(v);
+    const glow=v==='white'?'0 0 70px rgba(255,255,255,.85),0 0 140px rgba(255,255,255,.4)'
+              :(e.chip?'0 0 70px rgba(239,68,68,.85),0 0 140px rgba(239,68,68,.4)':'none');
+    luces+='<div style="display:flex;flex-direction:column;align-items:center;gap:clamp(10px,1.4vh,26px)">';
+    luces+='<div style="width:clamp(110px,17vw,280px);height:clamp(110px,17vw,280px);border-radius:50%;'
+      +'background:'+e.bg+';border:7px solid '+e.bd+';box-shadow:'+glow+',inset 0 0 34px rgba(0,0,0,'+(e.on?'.15':'.5')+');'
+      +(e.on?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards;animation-delay:'+(i*0.07)+'s':'')+'"></div>';
+    luces+='<div style="width:clamp(28px,4.2vw,68px);height:clamp(28px,4.2vw,68px);border-radius:50%;'
+      +(e.chip?'background:'+e.chip+';box-shadow:0 0 28px '+e.chip:'background:transparent')+'"></div>';
+    luces+='</div>';
+  });
+  luces+='</div>';
+
+  // Encabezado con el atleta: sin esto, tres luces solas no dicen de quién son.
+  let cab='';
+  if(a){
+    const l=DATA.lift, r=(typeof curAtt==='function')?curAtt(a):DATA.round;
+    const at=(a.att&&a.att[l])?a.att[l][r]:null;
+    const kg=(at&&at.w)||0;
+    cab='<div style="text-align:center;margin-bottom:clamp(18px,4vh,52px)">'
+      +'<div style="font-size:clamp(20px,3.4vw,52px);font-weight:700;letter-spacing:.04em;color:#fff;line-height:1.1">'
+      +esc(a.name||'')+'</div>'
+      +'<div style="margin-top:.5em;font-size:clamp(15px,2.4vw,34px);font-weight:600;letter-spacing:.12em;color:#D4A843">'
+      +(_LIFT_SIGLA[l]||'')+' '+(r+1)+(kg?' · '+kg.toFixed(1).replace(/\.0$/,'')+' KG':'')+'</div></div>';
+  }
+  return '<div style="position:absolute;inset:0;background:linear-gradient(160deg,#0d2141,#0A1628 55%,#060d1a);'
+    +'display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Oswald,sans-serif">'
+    +cab+luces+'</div>';
 }
 // ¿Se muestran las luces en la pantalla de tarima? Arranca apagado: se prende
 // desde el panel cuando el campeonato las usa.
@@ -6798,7 +6888,7 @@ function renderTxScoreboard(cur,lifterChanged){
 // distancia desde el panel "Pantalla Tarima".
 // ════════════════════════════════════════════════════════════════
 // ─── Panel de control de la Pantalla de Tarima (admin) ──────────
-window._SCREEN_LOCAL={mode:'jornada',flights:[],nameScale:1,fondo:'bandera',luces:false};
+window._SCREEN_LOCAL={mode:'jornada',flights:[],nameScale:1,fondo:'bandera',luces:false,veloBandera:0.55};
 async function _screenPush(){
   // Modo práctica: sin Firebase. El estado de la pantalla (modo/tandas/tamaño) va
   // por localStorage; la otra pestaña (?tx=screen&practica=1) lo lee por 'storage'.
@@ -6808,6 +6898,7 @@ async function _screenPush(){
       flights:window._SCREEN_LOCAL.flights,
       nameScale:window._SCREEN_LOCAL.nameScale||1,
       fondo:window._SCREEN_LOCAL.fondo||'bandera',
+      veloBandera:typeof window._SCREEN_LOCAL.veloBandera==='number'?window._SCREEN_LOCAL.veloBandera:0.55,
       luces:!!window._SCREEN_LOCAL.luces,
       ts:Date.now()
     }));}catch(e){}
@@ -6821,6 +6912,7 @@ async function _screenPush(){
       flights:window._SCREEN_LOCAL.flights,
       nameScale:window._SCREEN_LOCAL.nameScale||1,
       fondo:window._SCREEN_LOCAL.fondo||'bandera',
+      veloBandera:typeof window._SCREEN_LOCAL.veloBandera==='number'?window._SCREEN_LOCAL.veloBandera:0.55,
       luces:!!window._SCREEN_LOCAL.luces,
       ts:Date.now()
     });
@@ -6829,6 +6921,16 @@ async function _screenPush(){
 window.screenSetMode=function(m){window._SCREEN_LOCAL.mode=m;_screenPush();R();};
 // Fondo del modo "Atleta en barra": bandera del país · logo del campeonato · azul.
 window.screenSetFondo=function(f){window._SCREEN_LOCAL.fondo=f;_screenPush();R();};
+// Difuminado de la bandera de fondo. Sin R(): un re-render en medio del arrastre
+// corta el deslizador, igual que pasaba con el del tamaño de los nombres.
+window.screenSetVelo=function(v){
+  let n=parseFloat(v); if(isNaN(n))n=0.55;
+  n=Math.max(0.15,Math.min(0.85,n)); n=Math.round(n*100)/100;
+  window._SCREEN_LOCAL.veloBandera=n;
+  _screenPush();
+  const sl=document.getElementById('scrVeloRange'); if(sl&&parseFloat(sl.value)!==n)sl.value=n;
+  const lb=document.getElementById('scrVeloPct'); if(lb)lb.textContent=Math.round(n*100)+'%';
+};
 // Luces de jueces en la pantalla de tarima. Es un espejo: no da válido ni nulo.
 window.screenToggleLuces=function(){
   window._SCREEN_LOCAL.luces=!window._SCREEN_LOCAL.luces;_screenPush();R();
@@ -6885,8 +6987,14 @@ function renderScreenControl(){
   h+=mb('barra','ATLETA EN BARRA','','#a855f7');
   h+=mb('intentos','PANTALLA DE INTENTOS','','#22c55e');
   h+=mb('jornada','TABLA JORNADA','','#D4A843');
+  h+=mb('luces','LUCES JUECES','','#f0f0f0');
   h+=mb('off','APAGAR','','#ef4444');
   h+='</div></div>';
+  if(mode==='luces'){
+    h+='<div class="card" style="padding:12px 18px;margin-bottom:16px;font-size:11px;color:var(--muted);line-height:1.55">'
+      +'Pantalla completa con las tres luces y el nombre del atleta arriba. Sigue en vivo lo que marcan los jueces desde <span style="color:var(--gold);font-family:monospace">yourlift.cl/jueces</span>. '
+      +'Es un espejo: el válido o nulo se sigue dando en Control en Vivo o en la planilla.</div>';
+  }
 
   // Luces de jueces: solo aplica a las dos pantallas que muestran al atleta.
   if(mode==='barra'||mode==='intentos'){
@@ -6915,6 +7023,21 @@ function renderScreenControl(){
     h+=fb2('yourlift','AZUL YOURLIFT','El fondo de siempre');
     h+='</div>';
     if(!hayLogo)h+='<div style="font-size:11px;color:var(--muted);margin-top:10px">El logo se carga en Admin → Campeonatos, en la ficha del campeonato.</div>';
+    // Cuánto se difumina la bandera. Depende de la luz del lugar y del proyector:
+    // lo que en un gimnasio se lee perfecto, en otro queda lavado.
+    if(fondo==='bandera'){
+      const vb=typeof window._SCREEN_LOCAL.veloBandera==='number'?window._SCREEN_LOCAL.veloBandera:0.55;
+      h+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+      h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">QUÉ TAN DIFUMINADA VA LA BANDERA</div>';
+      h+='<p style="font-size:11px;color:var(--muted);margin-bottom:12px">A la izquierda la bandera se ve más; a la derecha queda más tapada y el nombre resalta más. Se aplica en vivo — movelo mirando la pantalla.</p>';
+      h+='<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
+      h+='<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">BANDERA</span>';
+      h+='<input id="scrVeloRange" type="range" min="0.15" max="0.85" step="0.05" value="'+vb+'" oninput="screenSetVelo(this.value)" style="flex:1;min-width:200px;accent-color:#a855f7;cursor:pointer">';
+      h+='<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">NOMBRE</span>';
+      h+='<span id="scrVeloPct" style="font-family:Oswald;font-size:16px;font-weight:700;color:#a855f7;min-width:56px;text-align:center">'+Math.round(vb*100)+'%</span>';
+      h+='<button onclick="screenSetVelo(0.55)" style="padding:8px 14px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:8px;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">NORMAL</button>';
+      h+='</div></div>';
+    }
     h+='</div>';
   }
 
@@ -6978,7 +7101,14 @@ function subscribeScreenChannel(){
   try{
     _screenUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_screen',id),(snap)=>{
       const d=snap.data()||{};
-      window._SCREEN_STATE={mode:d.mode||'jornada',flights:Array.isArray(d.flights)?d.flights:null,nameScale:typeof d.nameScale==='number'?d.nameScale:1};
+      // OJO: acá hay que copiar TODO lo que manda el panel. Faltaban `fondo` y
+      // `luces`: el panel los guardaba bien en Firestore, pero la pantalla los
+      // tiraba al rearmar el estado, así que quedaban en undefined. Por eso las
+      // luces no aparecían aunque estuvieran prendidas, y "Atleta en barra" salía
+      // siempre azul aunque el fondo estuviera en bandera.
+      window._SCREEN_STATE={mode:d.mode||'jornada',flights:Array.isArray(d.flights)?d.flights:null,nameScale:typeof d.nameScale==='number'?d.nameScale:1,
+        fondo:d.fondo||'bandera',luces:!!d.luces,
+        veloBandera:typeof d.veloBandera==='number'?d.veloBandera:0.55};
       window._JORNADA_FLIGHTS=window._SCREEN_STATE.flights;
       window._JORNADA_NAMESCALE=window._SCREEN_STATE.nameScale;
       if(window._SCREEN_LOCAL){
@@ -6986,6 +7116,7 @@ function subscribeScreenChannel(){
         if(window._SCREEN_STATE.mode)window._SCREEN_LOCAL.mode=window._SCREEN_STATE.mode;
         if(window._SCREEN_STATE.fondo)window._SCREEN_LOCAL.fondo=window._SCREEN_STATE.fondo;
         window._SCREEN_LOCAL.luces=!!window._SCREEN_STATE.luces;
+        window._SCREEN_LOCAL.veloBandera=window._SCREEN_STATE.veloBandera;
         if(Array.isArray(window._SCREEN_STATE.flights))window._SCREEN_LOCAL.flights=window._SCREEN_STATE.flights;
       }
       if(TX_MODE==='screen'||TX_MODE==='jornada')R();
@@ -7020,6 +7151,12 @@ function renderTxScreen(c){
     document.body.classList.add('tx-opaque');
     c.innerHTML=(cur?renderScreenIntentos(cur,nxt):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')
       +(_lucesEnTarima()?renderLucesTarima():'');
+    return;
+  }
+  if(st.mode==='luces'){
+    const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
+    document.body.classList.add('tx-opaque');
+    c.innerHTML=renderScreenLuces(cur||null);
     return;
   }
   // jornada (default)
@@ -11001,7 +11138,9 @@ function _initPracticeMode(){
   try{
     const sc=JSON.parse(localStorage.getItem(PRACTICE_SCREEN_KEY)||'null');
     if(sc){
-      window._SCREEN_STATE={mode:sc.mode||'jornada',flights:Array.isArray(sc.flights)?sc.flights:null,nameScale:typeof sc.nameScale==='number'?sc.nameScale:1};
+      window._SCREEN_STATE={mode:sc.mode||'jornada',flights:Array.isArray(sc.flights)?sc.flights:null,nameScale:typeof sc.nameScale==='number'?sc.nameScale:1,
+        fondo:sc.fondo||'bandera',luces:!!sc.luces,
+        veloBandera:typeof sc.veloBandera==='number'?sc.veloBandera:0.55};
       window._JORNADA_FLIGHTS=window._SCREEN_STATE.flights;
       window._JORNADA_NAMESCALE=window._SCREEN_STATE.nameScale;
       if(window._SCREEN_LOCAL){window._SCREEN_LOCAL.mode=window._SCREEN_STATE.mode;if(Array.isArray(sc.flights))window._SCREEN_LOCAL.flights=sc.flights;window._SCREEN_LOCAL.nameScale=window._SCREEN_STATE.nameScale;}
@@ -11059,10 +11198,14 @@ function _initPracticeSync(){
       }}catch(_){}
     } else if(e.key===PRACTICE_SCREEN_KEY && e.newValue){
       try{const d=JSON.parse(e.newValue);
-        window._SCREEN_STATE={mode:d.mode||'jornada',flights:Array.isArray(d.flights)?d.flights:null,nameScale:typeof d.nameScale==='number'?d.nameScale:1};
+        window._SCREEN_STATE={mode:d.mode||'jornada',flights:Array.isArray(d.flights)?d.flights:null,nameScale:typeof d.nameScale==='number'?d.nameScale:1,
+          fondo:d.fondo||'bandera',luces:!!d.luces,
+        veloBandera:typeof d.veloBandera==='number'?d.veloBandera:0.55};
         window._JORNADA_FLIGHTS=window._SCREEN_STATE.flights;
         window._JORNADA_NAMESCALE=window._SCREEN_STATE.nameScale;
-        if(window._SCREEN_LOCAL){window._SCREEN_LOCAL.mode=window._SCREEN_STATE.mode;if(Array.isArray(d.flights))window._SCREEN_LOCAL.flights=d.flights;window._SCREEN_LOCAL.nameScale=window._SCREEN_STATE.nameScale;}
+        if(window._SCREEN_LOCAL){window._SCREEN_LOCAL.mode=window._SCREEN_STATE.mode;if(Array.isArray(d.flights))window._SCREEN_LOCAL.flights=d.flights;window._SCREEN_LOCAL.nameScale=window._SCREEN_STATE.nameScale;
+          window._SCREEN_LOCAL.fondo=window._SCREEN_STATE.fondo;window._SCREEN_LOCAL.luces=window._SCREEN_STATE.luces;
+          window._SCREEN_LOCAL.veloBandera=window._SCREEN_STATE.veloBandera;}
       }catch(_){}
     } else return;
     if(TX_MODE){if(typeof _txLastLifter!=='undefined')_txLastLifter=null;}

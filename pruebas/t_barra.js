@@ -100,8 +100,16 @@ const MONTAR = `(pais,logo,fondo)=>{
   {
     const conLogo = await montar('CHI', 'https://ejemplo.cl/logo.png', 'logo');
     ok(/ejemplo\.cl\/logo\.png/.test(conLogo), 'con fondo "logo" y logo cargado, se usa el logo');
-    const sinLogo = await montar('CHI', '', 'logo');
-    ok(!/url\(\)/.test(sinLogo) && /0A1628/i.test(sinLogo),
+    await montar('CHI', '', 'logo');
+    // Igual que arriba: innerHTML trae también el código fuente del <script>, así
+    // que un comentario que mencione url() da un falso positivo. Se mira el estilo
+    // que quedó puesto en el contenedor, que es lo que el navegador va a pintar.
+    const sinLogo = await p.evaluate(() => {
+      const d = [...document.querySelectorAll('div')]
+        .find(e => /linear-gradient/.test(e.getAttribute('style') || ''));
+      return d ? d.getAttribute('style') : '';
+    });
+    ok(!/url\(/.test(sinLogo) && /0A1628/i.test(sinLogo),
        'con fondo "logo" y sin logo cargado, cae al azul YourLift');
     const azul = await montar('CHI', 'https://ejemplo.cl/logo.png', 'yourlift');
     ok(/0A1628/i.test(azul), 'y el azul se puede elegir a mano');
