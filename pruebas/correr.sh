@@ -13,10 +13,22 @@ for t in t_meet.js t_cruce2.js t_extra.js t_ct.js t_rec.js t_next3.js t_extra_co
   # imprimen TODAS las líneas con ✗ aunque hayan quedado fuera del recorte. Antes
   # el tail se comía los fallos y solo quedaba "N FALLA(S)" sin decir cuáles.
   out=$(NODE_PATH=/opt/node22/lib/node_modules "${NODE:-/opt/node22/bin/node}" "$t" 2>&1)
+  cod=$?
   echo "$out" | tail -14
-  if echo "$out" | grep -q "FALLA"; then
-    echo "  ── fallas de $t ──"
+  # El veredicto es el CÓDIGO DE SALIDA, no el texto. Una prueba que revienta —un
+  # timeout, un error de Node— no alcanza a imprimir "FALLA", y buscando esa
+  # palabra la batería la daba por buena. Así se perdió una falla real.
+  if [ "$cod" -ne 0 ]; then
+    MALAS="$MALAS $t"
+    echo "  ── falló $t (código $cod) ──"
     echo "$out" | grep "✗"
   fi
 done
 kill $SRV 2>/dev/null
+if [ -n "$MALAS" ]; then
+  echo ""
+  echo "════════ RESULTADO: FALLARON:$MALAS"
+  exit 1
+fi
+echo ""
+echo "════════ RESULTADO: todas las pruebas pasaron"

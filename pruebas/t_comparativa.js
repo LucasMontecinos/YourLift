@@ -84,10 +84,20 @@ const R_BENCH = { ...BASE, id: 'r2', view: 'bench', modalidad: 'Only Bench Class
     // fallara de a ratos y solo dentro de la batería. Se espera la marca del
     // overlay, que no puede venir de data.json: cuando está, los resultados
     // inyectados ya se aplicaron.
-    await p.waitForFunction(() => {
+    // Corriendo sola, la marca aparece en unos pocos segundos. Dentro de la batería
+    // —46 pruebas contra un solo servidor local— de a ratos alguna carga se queda
+    // colgada y no llega nunca. Recargar la corta y arranca de nuevo; no se afloja
+    // ninguna comprobación, solo se le da una segunda oportunidad al navegador.
+    const listo = () => p.waitForFunction(() => {
       const el = document.getElementById('profileSection');
       return el && el.style.display !== 'none' && el.innerText.indexOf('⟪OVERLAY⟫') >= 0;
-    }, null, { timeout: 90000 });
+    }, null, { timeout: 30000 });
+    try { await listo(); }
+    catch (e) {
+      console.log('    (la página se colgó cargando; se recarga y se reintenta)');
+      await p.reload({ waitUntil: 'domcontentloaded' });
+      await listo();
+    }
     return { p, errs };
   }
 
