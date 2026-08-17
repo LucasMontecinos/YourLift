@@ -211,6 +211,11 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
     <button class="btn-clear" id="btnClear" onclick="clearVote()">✕ LIMPIAR</button>
   </div>
 
+  <!-- Para no dejar la sesión abierta en un teléfono al terminar el campeonato. -->
+  <button onclick="salir()" style="background:none;border:none;color:var(--muted);font-family:Oswald;font-size:11px;letter-spacing:1px;text-decoration:underline;cursor:pointer;padding:4px 8px">
+    Cerrar sesión en este dispositivo
+  </button>
+
 </div>
 
 <script type="module">
@@ -276,6 +281,12 @@ function cerrarLogin(){
   document.getElementById('pick').style.display='';
 }
 window.saltarLogin=function(){ _loginDescartado=true; cerrarLogin(); };
+window.salir=async function(){
+  if(!confirm('¿Cerrar la sesión en este teléfono?\nTus luces dejan de llegar a la tarima hasta que vuelvas a entrar.'))return;
+  try{ if(_fa&&fbAuth)await _fa.signOut(fbAuth); }catch(e){ console.warn(e); }
+  fbSesion=false; myVote=null; updatePreview(); updateButtons();
+  setFBStatus(true); abrirLogin();
+};
 window.entrar=async function(){
   const em=document.getElementById('logEmail').value.trim();
   const pw=document.getElementById('logPass').value;

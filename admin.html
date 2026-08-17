@@ -5673,8 +5673,15 @@ let _adminsList = []; // cache
 
 async function loadAdminsList(){
   try{
-    const snap = await getDocs(collection(db,'admins'));
-    _adminsList = snap.docs.map(d=>({uid:d.id,...d.data()}));
+    // Las cuentas viven en dos colecciones: admins/ y jueces/. La lista las
+    // muestra juntas, pero cada una lleva de dónde salió para poder revocarla
+    // en la colección correcta.
+    const [snap,snapJ] = await Promise.all([
+      getDocs(collection(db,'admins')),
+      getDocs(collection(db,'jueces')).catch(()=>({docs:[]})),
+    ]);
+    _adminsList = snap.docs.map(d=>({uid:d.id,col:'admins',...d.data()}))
+      .concat(snapJ.docs.map(d=>({uid:d.id,col:'jueces',...d.data(),role:'juez'})));
   }catch(e){console.warn('loadAdminsList error',e);}
 }
 
@@ -5709,9 +5716,9 @@ function renderAdmins(){
             <option value="superadmin">Superadmin — puede crear/eliminar admins</option>
             <option value="streaming">Streaming — solo YourLift, únicamente pantallas de transmisión</option>
             <option value="transmision">Transmisión — en YourLift no entra a Control en Vivo</option>
-            <option value="juez">Juez — en YourLift no entra a Control TX</option>
+            <option value="juez">Juez — SOLO marcar luces, no entra a ningún panel</option>
           </select>
-          <div style="font-size:10px;color:var(--muted);margin-top:3px">Transmisión y Juez son roles solo para YourLift (livecast.html) — en este panel de admin tienen el mismo acceso que "Admin".<br><b>Streaming</b> es más cerrado: en este panel solo ve el acceso a YourLift, y adentro solo Control TX, Control Remoto, Transmisión, Widgets OBS y Pantalla de Tarima.</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px"><b>Juez</b> es la única cuenta realmente cerrada: no se guarda entre los admins, así que este panel y el control en vivo la rechazan. Lo único que puede hacer es marcar su luz en <b>yourlift.cl/jueces</b> y arrancar el cronómetro. Es la que va en los teléfonos de los jueces — si queda una sesión abierta, no da acceso a nada más.<br><b>Streaming</b>: en este panel solo ve el acceso a YourLift, y adentro solo Control TX, Control Remoto, Transmisión, Widgets OBS y Pantalla de Tarima.<br>Transmisión es un rol solo de YourLift — en este panel tiene el mismo acceso que "Admin".</div>
         </label>
         <div id="naError" style="color:var(--red);font-size:12px;display:none"></div>
         <button class="btn btn-g" onclick="createAdmin()" style="margin-top:4px">Crear cuenta</button>
@@ -5731,11 +5738,14 @@ function renderAdmins(){
             <div>
               <div style="font-weight:600;font-size:13px">${a.nombre||a.email||a.uid}</div>
               <div style="font-size:11px;color:var(--muted);margin-top:2px">${a.email||'—'}</div>
-              <span style="font-size:10px;padding:2px 8px;border-radius:4px;background:${a.role==='superadmin'?'rgba(196,30,58,.15)':'rgba(59,130,246,.15)'};color:${a.role==='superadmin'?'var(--accent)':'var(--blue)'}">${a.role||'admin'}${a.bootstrap?' ':''}</span>
+              <span style="font-size:10px;padding:2px 8px;border-radius:4px;background:${a.role==='superadmin'?'rgba(196,30,58,.15)':(a.col==='jueces'?'rgba(34,197,94,.15)':'rgba(59,130,246,.15)')};color:${a.role==='superadmin'?'var(--accent)':(a.col==='jueces'?'var(--green)':'var(--blue)')}">${a.role||'admin'}${a.col==='jueces'?' · solo luces':''}${a.bootstrap?' ':''}</span>
+              ${a.col!=='jueces'&&a.role==='juez'
+                ? `<div style="font-size:10px;color:var(--red);margin-top:4px;line-height:1.4">⚠ Cuenta de juez guardada entre los admins: para Firestore tiene acceso completo. Revocala y creala de nuevo como "Juez" para que quede cerrada.</div>`
+                : ''}
             </div>
             <div style="display:flex;gap:6px">
               ${a.uid!==ST.user?.uid
-                ? `<button onclick="revokeAdmin('${a.uid}','${(a.nombre||a.email||'').replace(/'/g,"\\'")}' )" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:transparent;color:var(--red);font-size:11px;cursor:pointer">Revocar</button>`
+                ? `<button onclick="revokeAdmin('${a.uid}','${(a.nombre||a.email||'').replace(/'/g,"\\'")}','${a.col||'admins'}')" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:transparent;color:var(--red);font-size:11px;cursor:pointer">Revocar</button>`
                 : '<span style="font-size:10px;color:var(--muted);padding:4px 8px">(tú)</span>'}
             </div>
           </div>`).join('')}
@@ -5776,8 +5786,13 @@ window.createAdmin = async function(){
     const {signOut:signOutSec,deleteUser} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
     await signOutSec(secondaryAuth);
 
-    // Write to Firestore admins collection
-    await setDoc(doc(db,'admins',newUID),{
+    // Los jueces NO van a admins/. Estar en admins/ es, para las reglas de
+    // Firestore, acceso total: el rol solo esconde botones. Una cuenta de juez en
+    // el teléfono de otra persona, o una sesión que quedó abierta después del
+    // campeonato, sería un admin suelto. En jueces/ solo puede marcar su luz y
+    // arrancar el cronómetro, y el panel de administración la rechaza solo.
+    const esJuez = role==='juez';
+    await setDoc(doc(db, esJuez?'jueces':'admins', newUID),{
       uid: newUID,
       email,
       nombre,
@@ -5786,8 +5801,10 @@ window.createAdmin = async function(){
       createdAt: new Date().toISOString()
     });
 
-    await logAction('create_admin', email, null, role, {nombre, createdBy:ST.user.email});
-    showToast('Admin creado: '+nombre+' ('+email+')');
+    await logAction(esJuez?'create_juez':'create_admin', email, null, role, {nombre, createdBy:ST.user.email});
+    showToast(esJuez
+      ? 'Juez creado: '+nombre+' — solo puede marcar luces, no entra al panel'
+      : 'Admin creado: '+nombre+' ('+email+')');
 
     // Clear form
     ST.adminForm = {};
@@ -5806,10 +5823,14 @@ window.createAdmin = async function(){
   }
 };
 
-window.revokeAdmin = async function(uid, nombre){
-  if(!confirm('¿Revocar acceso de admin a '+nombre+'?\nSu cuenta de Firebase se mantiene pero ya no podrá entrar al panel.')) return;
+window.revokeAdmin = async function(uid, nombre, col){
+  col = col==='jueces' ? 'jueces' : 'admins';
+  const q = col==='jueces'
+    ? '¿Revocar a '+nombre+' como juez?\nSu cuenta de Firebase se mantiene, pero sus luces dejan de llegar a la tarima.'
+    : '¿Revocar acceso de admin a '+nombre+'?\nSu cuenta de Firebase se mantiene pero ya no podrá entrar al panel.';
+  if(!confirm(q)) return;
   try{
-    await deleteDoc(doc(db,'admins',uid));
+    await deleteDoc(doc(db,col,uid));
     await logAction('revoke_admin', uid, nombre, 'revoked', {by:ST.user.email});
     showToast('Acceso revocado: '+nombre);
     await refreshAdmins();

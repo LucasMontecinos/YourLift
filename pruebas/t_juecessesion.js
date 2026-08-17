@@ -37,7 +37,8 @@ export async function signInWithEmailAndPassword(a,em,pw){
   a._u={uid:'u1',email:em};
   window.__entro=em;
   return {user:a._u};
-}`;
+}
+export async function signOut(a){ a._u=null; window.__salio=true; }`;
 }
 const STUB_APP = `export function initializeApp(){return{};}`;
 const STUB_FS = `
@@ -127,6 +128,48 @@ async function abrir(b, haySesion) {
     await p4.click('#fbLabel');
     ok(await p4.evaluate(VISIBLE, 'login'), 'tocando "Sin sesión" vuelve el login');
     errs.push(...e4);
+  }
+
+  console.log('\nSe puede cerrar la sesión al terminar');
+  {
+    const { p: p6, errs: e6 } = await abrir(b, true);
+    await p6.evaluate(() => selectPos('der'));
+    p6.on('dialog', d => d.accept());
+    await p6.click('text=Cerrar sesión en este dispositivo');
+    await p6.waitForTimeout(400);
+    ok(await p6.evaluate(() => window.__salio) === true, 'la sesión se cierra de verdad');
+    ok(await p6.evaluate(VISIBLE, 'login'), 'y vuelve a pedir entrar');
+    errs.push(...e6);
+  }
+
+  console.log('\nUna cuenta de juez NO es una cuenta de admin');
+  {
+    // Esto es lo que importa de todo el cambio. La sesión de un juez queda abierta
+    // en un teléfono que se presta, se pierde o se olvida; tiene que no servir
+    // para nada más que marcar la luz.
+    const reglas = fs.readFileSync(__dirname + '/../firestore.rules', 'utf8');
+    const admin = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+
+    ok(/function esJuez\(\)[\s\S]{0,200}documents\/jueces\/\$\(request\.auth\.uid\)/.test(reglas),
+       'los jueces viven en su propia colección, no en admins/');
+    ok(/match \/judge_decisions\/\{doc\}[^\n]*esJuez\(\)/.test(reglas), 'un juez puede marcar su luz');
+    ok(/match \/timer_control\/\{doc\}[^\n]*esJuez\(\)/.test(reglas), 'y arrancar el cronómetro');
+
+    // Y NADA más: ninguna otra colección lo nombra.
+    const otras = reglas.split('\n')
+      .filter(l => /esJuez\(\)/.test(l) && /^\s*match /.test(l))
+      .map(l => (l.match(/match \/([a-z_]+)/) || [])[1]);
+    ok(otras.length === 2 && otras.indexOf('judge_decisions') >= 0 && otras.indexOf('timer_control') >= 0,
+       'y no toca ninguna otra colección (' + otras.join(', ') + ')');
+    ok(!/inscripciones[\s\S]{0,300}esJuez/.test(reglas), 'no escribe inscripciones');
+    ok(!/competition_results[\s\S]{0,200}esJuez/.test(reglas), 'ni resultados');
+    ok(!/match \/admins\/\{uid\}[\s\S]{0,120}esJuez/.test(reglas), 'ni se puede hacer admin a sí mismo');
+
+    ok(/const esJuez = role==='juez';/.test(admin), 'al crear la cuenta, el panel separa al juez');
+    ok(/setDoc\(doc\(db, esJuez\?'jueces':'admins', newUID\)/.test(admin),
+       'y la guarda en jueces/ en vez de admins/');
+    ok(/⚠ Cuenta de juez guardada entre los admins/.test(admin),
+       'y avisa si quedó alguna cuenta vieja de juez con acceso completo');
   }
 
   console.log('\nEl login no toca el voto');

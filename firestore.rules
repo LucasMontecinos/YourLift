@@ -32,6 +32,22 @@ service cloud.firestore {
              exists(/databases/$(database)/documents/coaches/$(request.auth.uid));
     }
 
+    // Los JUECES van en su propia colección, NO en admins/.
+    //
+    // Antes la cuenta que usaba un juez en su teléfono estaba en admins/, y para
+    // estas reglas eso es acceso total: podía escribir inscripciones, resultados,
+    // eventos, todo. El rol 'juez' solo escondía botones en la pantalla, que no es
+    // ninguna protección. Un teléfono prestado, o uno que quedó con la sesión
+    // abierta después del campeonato, era un admin suelto.
+    //
+    // Un juez ahora puede exactamente dos cosas: marcar su luz y arrancar el
+    // cronómetro. Nada más. Y como no está en admins/, el panel de administración
+    // y el control en vivo lo rechazan solos, sin que haya que acordarse de nada.
+    function esJuez() {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/jueces/$(request.auth.uid));
+    }
+
     // Los eventos de ENSAYO (livecast de prueba) se operan SIN iniciar sesión: su
     // documento se llama ENSAYO_… porque sale del nombre del evento. Se deja
     // escribir a cualquiera para que varias personas prueben a la vez sobre el
@@ -46,11 +62,19 @@ service cloud.firestore {
     match /livecast_director/{doc} { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
     match /livecast_screen/{doc}   { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
     match /livecast_record/{doc}   { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
-    match /judge_decisions/{doc}   { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
-    match /timer_control/{doc}     { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
+    // Las dos únicas cosas que puede escribir un juez.
+    match /judge_decisions/{doc}   { allow read: if true; allow write: if isAdmin() || esJuez() || esEnsayo(doc); }
+    match /timer_control/{doc}     { allow read: if true; allow write: if isAdmin() || esJuez() || esEnsayo(doc); }
 
     match /admins/{uid} {
       allow read, write: if isAdmin();
+    }
+
+    // Un juez puede leer su propia ficha (para saber que su cuenta sigue vigente);
+    // crearlas y borrarlas es cosa del admin.
+    match /jueces/{uid} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      allow write: if isAdmin();
     }
 
     match /eventos/{id} {
