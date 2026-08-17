@@ -6612,13 +6612,17 @@ function renderTxLights(){
 // Es SOLO un espejo de lo que marcan los jueces: esta pantalla no decide nada.
 // El válido/nulo se sigue dando en Control en Vivo o en la planilla, como
 // siempre — acá no se toca ese camino ni se enciende el modo jueces.
-function renderLucesTarima(){
+// enBloque: las luces van adentro de un bloque movible (pantalla "Atleta en
+// barra"), así que ahí NO se posicionan solas ni bloquean el click — si no,
+// no habría cómo agarrarlas para moverlas.
+function renderLucesTarima(enBloque){
   _txStartLightsListener();
   const orden=['izq','central','der'];
   // bottom:4vh — antes 2.5vh, pero con el punto de la tarjeta abajo la columna
   // creció y el punto quedaba pegado al borde de la pantalla.
-  let h='<div style="position:absolute;left:50%;bottom:4vh;transform:translateX(-50%);'
-    +'display:flex;gap:clamp(10px,1.6vw,26px);pointer-events:none;z-index:5">';
+  let h='<div style="'+(enBloque?''
+      :'position:absolute;left:50%;bottom:4vh;transform:translateX(-50%);pointer-events:none;')
+    +'display:flex;gap:clamp(10px,1.6vw,26px);z-index:5">';
   orden.forEach((j,i)=>{
     const e=_luzEstilo(_txLights[j]);
     h+='<div style="display:flex;flex-direction:column;align-items:center;gap:clamp(4px,.6vw,10px)">';
@@ -7140,8 +7144,9 @@ function renderTxScreen(c){
   if(st.mode==='barra'){
     const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
     document.body.classList.add('tx-opaque');
-    c.innerHTML=(cur?renderScreenBarra(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')
-      +(_lucesEnTarima()?renderLucesTarima():'');
+    // Las luces van adentro de renderScreenBarra, como un bloque más que se puede
+    // mover; por eso acá no se agregan aparte.
+    c.innerHTML=(cur?renderScreenBarra(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>');
     return;
   }
   if(st.mode==='intentos'){
@@ -7655,41 +7660,44 @@ function renderScreenBarra(a){
   const modS=(typeof _txModLabel==='function')?_txModLabel(a.mod):'';
   const esRec=_esIntentoRecord(a);
   const etiqRec=_recordEtiqueta();
-  return `<div style="position:absolute;inset:0;background:${fondo};display:flex;flex-direction:column;justify-content:center;padding:4vh 5vw;font-family:Oswald,sans-serif;color:#fff">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:3vw">
-      <div style="font-size:clamp(28px,5.4vw,86px);font-weight:700;letter-spacing:.06em;color:#D4A843;line-height:1">
-        ${_LIFT_SIGLA[l]||''} ${r+1}
-      </div>
-      <div style="text-align:right;line-height:1">
-        <div style="font-size:clamp(46px,10vw,150px);font-weight:800;letter-spacing:-.01em">
-          ${kg?kg.toFixed(1).replace(/\.0$/,''):'—'}<span style="font-size:.34em;font-weight:600;margin-left:.15em;opacity:.75">KG</span>
-        </div>
-      </div>
-    </div>
+  // Cada cosa es un bloque que se puede mover y agrandar: click para elegirlo,
+  // arrastrar para moverlo, la manija de la esquina para el tamaño. Click en el
+  // fondo deselecciona y la pantalla queda limpia para la competencia.
+  const B=_piBlock;
+  return `<div class="pi-canvas" style="position:absolute;inset:0;background:${fondo};font-family:Oswald,sans-serif;color:#fff;overflow:hidden">
+    ${B('bSigla',`<div style="font-size:clamp(28px,5.4vw,86px);font-weight:700;letter-spacing:.06em;color:#D4A843;line-height:1;white-space:nowrap">${_LIFT_SIGLA[l]||''} ${r+1}</div>`)}
 
-    <div style="text-align:center;margin:3.5vh 0 2vh">
+    ${B('bPeso',`<div style="line-height:1;white-space:nowrap;font-size:clamp(46px,10vw,150px);font-weight:800;letter-spacing:-.01em">
+      ${kg?kg.toFixed(1).replace(/\.0$/,''):'—'}<span style="font-size:.34em;font-weight:600;margin-left:.15em;opacity:.75">KG</span>
+    </div>`)}
+
+    ${B('bNombre',`<div style="text-align:center;white-space:nowrap">
       ${nombres?`<div style="font-size:clamp(18px,3.2vw,46px);font-weight:400;letter-spacing:.08em;opacity:.8">${esc(nombres)}</div>`:''}
       <div style="font-size:clamp(30px,6.6vw,104px);font-weight:800;letter-spacing:.02em;line-height:1.05;text-shadow:0 3px 14px rgba(0,0,0,.55)">${esc(apellidos||a.name||'')}</div>
-    </div>
+    </div>`)}
 
-    ${esRec&&etiqRec?`<div style="text-align:center;margin-bottom:2vh">
-      <span style="display:inline-block;padding:.5vh 2.2vw;border:3px solid #D4A843;border-radius:8px;
-        font-size:clamp(14px,2.2vw,32px);font-weight:700;letter-spacing:.22em;color:#D4A843;
-        animation:barraParpadeo 1.05s ease-in-out infinite" class="barra-rec">${etiqRec}</span>
-    </div>`:''}
+    ${esRec&&etiqRec?B('bRecord',`<span style="display:inline-block;white-space:nowrap;padding:.5vh 2.2vw;border:3px solid #D4A843;border-radius:8px;
+      font-size:clamp(14px,2.2vw,32px);font-weight:700;letter-spacing:.22em;color:#D4A843;
+      animation:barraParpadeo 1.05s ease-in-out infinite" class="barra-rec">${etiqRec}</span>`):''}
 
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:3vw;
-      border-top:2px solid rgba(255,255,255,.22);padding-top:2.2vh">
-      <div style="display:flex;align-items:center;gap:1.1vw;font-size:clamp(16px,2.6vw,40px);font-weight:700;letter-spacing:.06em">
-        ${_flagImg(_ctry(a),34,true)}<span>${esc(_ctry(a))}</span>
-      </div>
-      <div style="font-size:clamp(15px,2.4vw,36px);font-weight:600;letter-spacing:.1em;opacity:.9;text-align:center">
-        ${esc(cat)} <span style="opacity:.6">·</span> ${esc(divS)}${modS?` <span style="opacity:.6">·</span> ${esc(modS)}`:''}
-      </div>
-      <div style="min-width:14vw;display:flex;justify-content:flex-end;align-items:center">
-        ${logo?`<img src="${logo}" alt="" style="max-height:11vh;max-width:14vw;object-fit:contain" onerror="this.style.display='none'">`:''}
-      </div>
-    </div>
+    ${B('bLinea',`<div style="width:90vw;height:2px;background:rgba(255,255,255,.22)"></div>`)}
+
+    ${B('bPais',`<div style="display:flex;align-items:center;gap:1.1vw;white-space:nowrap;font-size:clamp(16px,2.6vw,40px);font-weight:700;letter-spacing:.06em">
+      ${_flagImg(_ctry(a),34,true)}<span>${esc(_ctry(a))}</span>
+    </div>`)}
+
+    ${B('bDatos',`<div style="white-space:nowrap;font-size:clamp(15px,2.4vw,36px);font-weight:600;letter-spacing:.1em;opacity:.9;text-align:center">
+      ${esc(cat)} <span style="opacity:.6">·</span> ${esc(divS)}${modS?` <span style="opacity:.6">·</span> ${esc(modS)}`:''}
+    </div>`)}
+
+    ${logo?B('bLogo',`<img src="${logo}" alt="" style="max-height:11vh;max-width:14vw;object-fit:contain;display:block" onerror="this.style.display='none'">`):''}
+
+    ${_lucesEnTarima()?B('bLuces',renderLucesTarima(true)):''}
+
+    <button onclick="barraResetLayout()" title="Volver a dejar la pantalla como venía"
+      style="position:absolute;right:10px;bottom:8px;z-index:9;width:26px;height:26px;border-radius:50%;
+      border:1px solid rgba(212,225,245,.15);background:rgba(10,22,40,.15);color:rgba(255,255,255,.2);
+      font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center">⟲</button>
   </div>`;
 }
 
@@ -7722,7 +7730,21 @@ const PI_DEFAULT_LAYOUT={
   name:{x:50,y:72,scale:100},
   subtitle:{x:50,y:78,scale:100},
   position:{x:50,y:84,scale:100},
-  next:{x:50,y:93,scale:100}
+  next:{x:50,y:93,scale:100},
+  // "Atleta en barra" usa el mismo editor. Las claves llevan b- adelante para no
+  // pisarse con las de arriba: las dos disposiciones conviven en el mismo archivo
+  // guardado, y cada pantalla dibuja las suyas.
+  // Los valores de fábrica reproducen la pantalla tal como estaba antes de que se
+  // pudiera mover nada: quien no toque nada no debería notar el cambio.
+  bSigla:{x:9,y:11,scale:100},        // SQ 1 / BP 3
+  bPeso:{x:91,y:12,scale:100},        // 92 KG
+  bNombre:{x:50,y:45,scale:100},
+  bRecord:{x:50,y:60,scale:100},      // INTENTO DE RÉCORD
+  bLinea:{x:50,y:68,scale:100},
+  bPais:{x:10,y:75,scale:100},        // bandera + ARG
+  bDatos:{x:50,y:75,scale:100},       // -63 kg · JR · Classic
+  bLogo:{x:90,y:75,scale:100},        // logo del campeonato
+  bLuces:{x:50,y:90,scale:100}        // las luces de los jueces
 };
 function _piLoadLayout(){
   try{
@@ -7734,12 +7756,25 @@ function _piLoadLayout(){
 window._piLayout=_piLoadLayout();
 window._piSelected=null;
 function _piSaveLayout(){try{localStorage.setItem(PI_LAYOUT_KEY,JSON.stringify(window._piLayout))}catch(e){}}
-window.piResetLayout=function(){
-  if(!confirm('¿Restablecer las posiciones y tamaños de la Pantalla de Intentos a los valores por defecto?'))return;
-  window._piLayout=JSON.parse(JSON.stringify(PI_DEFAULT_LAYOUT));
+// Restablece solo las claves de una pantalla: las dos disposiciones viven en el
+// mismo archivo guardado, y acomodar una no tiene por qué deshacer la otra.
+function _piResetClaves(pred){
+  Object.keys(PI_DEFAULT_LAYOUT).forEach(k=>{
+    if(pred(k))window._piLayout[k]=Object.assign({},PI_DEFAULT_LAYOUT[k]);
+  });
   _piSaveLayout();
   window._piSelected=null;
   if(typeof R==='function')R();
+}
+window.piResetLayout=function(){
+  if(!confirm('¿Restablecer las posiciones y tamaños de la Pantalla de Intentos a los valores por defecto?'))return;
+  // Las de "Atleta en barra" son las que empiezan con b y mayúscula (bSigla,
+  // bPeso…). 'barbell' es de esta pantalla, por eso se pide la mayúscula.
+  _piResetClaves(k=>!/^b[A-Z]/.test(k));
+};
+window.barraResetLayout=function(){
+  if(!confirm('¿Volver a dejar "Atleta en barra" como venía de fábrica?\nSe pierden las posiciones y tamaños que acomodaste en esta pantalla.'))return;
+  _piResetClaves(k=>/^b[A-Z]/.test(k));
 };
 // Ajustes de pantalla: mostrar/ocultar cronómetro y colores personalizados
 // (fondo/acento/texto), para adaptarse a la iluminación de cada recinto.
@@ -7804,8 +7839,10 @@ if(!window._piHandlersInit){
   // el navegador dispare 'click', y ese click se pierde — por ejemplo al hacer
   // clic en el engranaje de ajustes justo después de tener un bloque seleccionado.
   document.addEventListener('mousedown',function(e){
-    const container=document.getElementById('pantIntentosBox');
-    if(!container||!container.contains(e.target))return;
+    // El editor sirve en cualquier pantalla que se marque como lienzo, no solo
+    // en la de Intentos: "Atleta en barra" usa el mismo mecanismo.
+    const container=e.target.closest&&e.target.closest('.pi-canvas');
+    if(!container)return;
     const resizeEl=e.target.closest && e.target.closest('.pi-resize');
     if(resizeEl){
       e.preventDefault();
@@ -7822,8 +7859,10 @@ if(!window._piHandlersInit){
     window._piDrag={key,startX:e.clientX,startY:e.clientY,startPosX:pos.x,startPosY:pos.y,rectW:rect.width,rectH:rect.height};
   });
   document.addEventListener('click',function(e){
-    const container=document.getElementById('pantIntentosBox');
-    if(!container||!container.contains(e.target))return;
+    // El editor sirve en cualquier pantalla que se marque como lienzo, no solo
+    // en la de Intentos: "Atleta en barra" usa el mismo mecanismo.
+    const container=e.target.closest&&e.target.closest('.pi-canvas');
+    if(!container)return;
     if(e.target.closest && e.target.closest('.pi-resize'))return;
     const block=e.target.closest && e.target.closest('.pi-block');
     if(!block){
@@ -7859,8 +7898,8 @@ if(!window._piHandlersInit){
   // Touch — mismo criterio, con un solo dedo. La selección/deselección no se
   // toca acá: el tap sintetiza un 'click' propio, que ya cubre eso arriba.
   document.addEventListener('touchstart',function(e){
-    const container=document.getElementById('pantIntentosBox');
-    if(!container||!e.touches[0]||!container.contains(e.target))return;
+    const container=e.target.closest&&e.target.closest('.pi-canvas');
+    if(!container||!e.touches[0])return;
     const t=e.touches[0];
     const resizeEl=e.target.closest && e.target.closest('.pi-resize');
     if(resizeEl){
@@ -8106,7 +8145,7 @@ function renderScreenIntentos(cur,nxt){
       <div style="font-size:16px;letter-spacing:3px;opacity:.8">TIEMPO COMPENSATORIO</div>
       <div id="compTimerPant" style="font-size:56px;font-weight:900;color:${_ci.neg?'#ef4444':'#60a5fa'};line-height:1">${_ci.mmss}</div>
     </div>`:'';
-  return `<div style="position:fixed;inset:0;overflow:hidden${piSet.bgColor?';background:'+piSet.bgColor:''}" id="pantIntentosBox">
+  return `<div class="pi-canvas" style="position:fixed;inset:0;overflow:hidden${piSet.bgColor?';background:'+piSet.bgColor:''}" id="pantIntentosBox">
     ${compHtml}
     ${piSet.showTimer===true?`<div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`:''}
     ${_piBlock('liftLabel',liftLabelHtml)}
