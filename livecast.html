@@ -1741,10 +1741,24 @@ const COUNTRY={
 };
 function _ctry(a){const c=(a&&(a.country||a.pais||a.pais3));return (c&&String(c).toUpperCase())||'CHI';}
 function _ctryName(code){const c=COUNTRY[code];return c?c[1]:code;}
+// Bandera del país. La imagen viene de un servidor externo (flagcdn), y en una
+// transmisión eso puede no cargar: mala señal en el gimnasio, red del recinto que
+// bloquea, el servicio caído. Antes, si no cargaba, el onerror la escondía y no
+// quedaba NADA — el medallero salía sin ninguna referencia de país.
+// Ahora detrás de la imagen va el código de tres letras, que aparece solo si la
+// bandera no llegó. Siempre se ve algo.
 function _flagImg(code,h){
-  const c=COUNTRY[code]; if(!c||!c[0])return '';
+  const c=COUNTRY[code];
   h=Math.round(h||18);
-  return '<img src="https://flagcdn.com/h'+(h*2)+'/'+c[0]+'.png" alt="'+code+'" style="height:'+h+'px;width:auto;border-radius:2px;vertical-align:middle;margin-right:6px;box-shadow:0 0 2px rgba(0,0,0,.5)" onerror="this.style.display=\'none\'">';
+  const chip='<span class="flag-code" style="display:none;padding:1px 5px;border-radius:3px;background:rgba(212,168,67,.9);color:#0A1628;'
+    +'font-family:Oswald,sans-serif;font-weight:700;font-size:'+Math.round(h*0.62)+'px;letter-spacing:.5px;'
+    +'vertical-align:middle;margin-right:6px">'+(code||'')+'</span>';
+  if(!c||!c[0])return chip.replace('display:none','display:inline-block');
+  return '<span class="flag-wrap" style="display:inline-flex;align-items:center">'
+    +'<img class="flag-img" src="https://flagcdn.com/h'+(h*2)+'/'+c[0]+'.png" alt="'+code+'" '
+    +'style="height:'+h+'px;width:auto;border-radius:2px;vertical-align:middle;margin-right:6px;box-shadow:0 0 2px rgba(0,0,0,.5)" '
+    +'onerror="this.style.display=\'none\';if(this.nextElementSibling)this.nextElementSibling.style.display=\'inline-block\'">'
+    +chip+'</span>';
 }
 // <option>s para selects de país (CHI primero)
 function _countryOptions(sel){
@@ -7130,12 +7144,14 @@ function renderTxMedals(md){
   const RANK_BG={1:'#D4A843',2:'#C0C0C0',3:'#CD7F32'};
   const row=(r,x)=>{
     if(!x)return '';
-    const flag=_flagImg(_ctry(x.a),18);
     const big=r===1;
+    // La bandera va entre el nombre y el total: en un sudamericano es lo que se
+    // busca de un vistazo, y ahí no compite con el número de puesto.
+    const flag=_flagImg(_ctry(x.a),big?26:22);
     return `<div style="display:flex;align-items:center;gap:12px;background:linear-gradient(90deg,rgba(10,22,40,.94),rgba(10,22,40,.86));border-left:6px solid ${RANK_BG[r]};border-radius:8px;padding:${big?'12px 20px':'9px 18px'};box-shadow:0 8px 20px rgba(0,0,0,.5)">
       <div style="width:${big?'40px':'32px'};height:${big?'40px':'32px'};flex-shrink:0;border-radius:50%;background:${RANK_BG[r]};display:flex;align-items:center;justify-content:center;font-family:Oswald;font-weight:800;font-size:${big?'20px':'16px'};color:#0A1628">${r}</div>
-      ${flag}
       <div style="flex:1;font-family:Oswald;font-weight:700;font-size:${big?'24px':'18px'};color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.5)">${x.a.name||''}</div>
+      ${flag}
       <div style="font-family:Oswald;font-weight:800;font-size:${big?'24px':'18px'};color:${RANK_BG[r]}">${x.total.toFixed(1)}</div>
     </div>`;
   };
