@@ -1741,24 +1741,75 @@ const COUNTRY={
 };
 function _ctry(a){const c=(a&&(a.country||a.pais||a.pais3));return (c&&String(c).toUpperCase())||'CHI';}
 function _ctryName(code){const c=COUNTRY[code];return c?c[1]:code;}
-// Bandera del país. La imagen viene de un servidor externo (flagcdn), y en una
-// transmisión eso puede no cargar: mala señal en el gimnasio, red del recinto que
-// bloquea, el servicio caído. Antes, si no cargaba, el onerror la escondía y no
-// quedaba NADA — el medallero salía sin ninguna referencia de país.
-// Ahora detrás de la imagen va el código de tres letras, que aparece solo si la
-// bandera no llegó. Siempre se ve algo.
-function _flagImg(code,h){
-  const c=COUNTRY[code];
+// Banderas dibujadas acá adentro, no traídas de un servidor externo.
+// Antes venían de un servidor externo con tamaños fijos (h20, h40, h120…): el
+// medallero pedía alturas que ese servicio no sirve, daba 404 y el país desaparecía
+// de la pantalla sin dejar rastro. Son trece países más
+// Estados Unidos: se dibujan simplificadas, que a 20 o 30 píxeles es lo que se lee.
+const FLAG_SVG={
+  CHI:'<rect width="30" height="10" fill="#fff"/><rect y="10" width="30" height="10" fill="#D52B1E"/><rect width="10" height="10" fill="#0039A6"/><path d="M5 2.2l.9 2.7h2.9l-2.3 1.7.9 2.7L5 7.6 2.6 9.3l.9-2.7L1.2 4.9h2.9z" fill="#fff"/>',
+  ARG:'<rect width="30" height="20" fill="#fff"/><rect width="30" height="6.7" fill="#74ACDF"/><rect y="13.3" width="30" height="6.7" fill="#74ACDF"/><circle cx="15" cy="10" r="2.6" fill="#F6B40E" stroke="#85340A" stroke-width=".4"/>',
+  BRA:'<rect width="30" height="20" fill="#009C3B"/><path d="M15 2.4L27.6 10 15 17.6 2.4 10z" fill="#FFDF00"/><circle cx="15" cy="10" r="4.4" fill="#002776"/><path d="M10.9 8.6a11 11 0 0 1 8.2 2.6" stroke="#fff" stroke-width="1.1" fill="none"/>',
+  URU:'<rect width="30" height="20" fill="#fff"/><rect y="2.2" width="30" height="2.2" fill="#0038A8"/><rect y="6.7" width="30" height="2.2" fill="#0038A8"/><rect y="11.1" width="30" height="2.2" fill="#0038A8"/><rect y="15.6" width="30" height="2.2" fill="#0038A8"/><rect width="11.5" height="8.9" fill="#fff"/><circle cx="5.7" cy="4.4" r="2.4" fill="#FCD116" stroke="#85340A" stroke-width=".35"/>',
+  PAR:'<rect width="30" height="6.7" fill="#D52B1E"/><rect y="6.7" width="30" height="6.6" fill="#fff"/><rect y="13.3" width="30" height="6.7" fill="#0038A8"/><circle cx="15" cy="10" r="2.5" fill="#fff" stroke="#0038A8" stroke-width=".4"/><circle cx="15" cy="10" r="1.1" fill="#FCD116"/>',
+  PER:'<rect width="30" height="20" fill="#fff"/><rect width="10" height="20" fill="#D91023"/><rect x="20" width="10" height="20" fill="#D91023"/>',
+  BOL:'<rect width="30" height="6.7" fill="#D52B1E"/><rect y="6.7" width="30" height="6.6" fill="#F9E300"/><rect y="13.3" width="30" height="6.7" fill="#007A33"/>',
+  ECU:'<rect width="30" height="10" fill="#FFDD00"/><rect y="10" width="30" height="5" fill="#0072CE"/><rect y="15" width="30" height="5" fill="#D52B1E"/><circle cx="15" cy="10" r="2.3" fill="#FFDD00" stroke="#0072CE" stroke-width=".5"/>',
+  COL:'<rect width="30" height="10" fill="#FCD116"/><rect y="10" width="30" height="5" fill="#003893"/><rect y="15" width="30" height="5" fill="#CE1126"/>',
+  VEN:'<rect width="30" height="6.7" fill="#FFCC00"/><rect y="6.7" width="30" height="6.6" fill="#00247D"/><rect y="13.3" width="30" height="6.7" fill="#CF142B"/><g fill="#fff"><circle cx="11" cy="11.4" r=".7"/><circle cx="13.3" cy="10.6" r=".7"/><circle cx="16.7" cy="10.6" r=".7"/><circle cx="19" cy="11.4" r=".7"/><circle cx="15" cy="10.2" r=".7"/></g>',
+  GUY:'<rect width="30" height="20" fill="#009E49"/><path d="M0 0l22 10L0 20z" fill="#FCD116"/><path d="M0 0l12 10L0 20z" fill="#CE1126"/>',
+  SUR:'<rect width="30" height="20" fill="#377E3F"/><rect y="4.4" width="30" height="11.2" fill="#fff"/><rect y="6.7" width="30" height="6.6" fill="#B40A2D"/><path d="M15 7.2l.85 2.6h2.75l-2.2 1.6.83 2.6L15 12.4l-2.23 1.6.83-2.6-2.2-1.6h2.75z" fill="#FCD116"/>',
+  USA:'<rect width="30" height="20" fill="#fff"/><g fill="#B22234"><rect width="30" height="1.54"/><rect y="3.08" width="30" height="1.54"/><rect y="6.15" width="30" height="1.54"/><rect y="9.23" width="30" height="1.54"/><rect y="12.31" width="30" height="1.54"/><rect y="15.38" width="30" height="1.54"/><rect y="18.46" width="30" height="1.54"/></g><rect width="12" height="10.77" fill="#3C3B6E"/>',
+};
+// Bandera del país. Si no está en la tabla, queda el código de tres letras.
+// `sinChip` para las pantallas donde el código ya se escribe al lado.
+function _flagImg(code,h,sinChip){
   h=Math.round(h||18);
-  const chip='<span class="flag-code" style="display:none;padding:1px 5px;border-radius:3px;background:rgba(212,168,67,.9);color:#0A1628;'
-    +'font-family:Oswald,sans-serif;font-weight:700;font-size:'+Math.round(h*0.62)+'px;letter-spacing:.5px;'
-    +'vertical-align:middle;margin-right:6px">'+(code||'')+'</span>';
-  if(!c||!c[0])return chip.replace('display:none','display:inline-block');
-  return '<span class="flag-wrap" style="display:inline-flex;align-items:center">'
-    +'<img class="flag-img" src="https://flagcdn.com/h'+(h*2)+'/'+c[0]+'.png" alt="'+code+'" '
-    +'style="height:'+h+'px;width:auto;border-radius:2px;vertical-align:middle;margin-right:6px;box-shadow:0 0 2px rgba(0,0,0,.5)" '
-    +'onerror="this.style.display=\'none\';if(this.nextElementSibling)this.nextElementSibling.style.display=\'inline-block\'">'
-    +chip+'</span>';
+  const svg=FLAG_SVG[code];
+  if(!svg){
+    if(sinChip)return '';
+    return '<span class="flag-code" style="display:inline-block;padding:1px 5px;border-radius:3px;background:rgba(212,168,67,.9);color:#0A1628;'
+      +'font-family:Oswald,sans-serif;font-weight:700;font-size:'+Math.round(h*0.62)+'px;letter-spacing:.5px;'
+      +'vertical-align:middle;margin-right:6px">'+(code||'')+'</span>';
+  }
+  return '<svg class="flag-img" viewBox="0 0 30 20" role="img" aria-label="'+(code||'')+'" '
+    +'style="height:'+h+'px;width:'+Math.round(h*1.5)+'px;border-radius:2px;vertical-align:middle;margin-right:6px;'
+    +'box-shadow:0 0 2px rgba(0,0,0,.5);flex-shrink:0">'+svg+'</svg>';
+}
+// Colores de la bandera de cada país, para el fondo de la Pantalla de Tarima.
+// Solo los que compiten en el Sudamericano: fuera de eso el fondo es el azul de
+// YourLift. Van dos o tres colores por país, en el orden en que se leen en su
+// bandera; se usan muy diluidos, así que no compiten con el texto de encima.
+const BANDERA_COLORES={
+  CHI:['#0039A6','#D52B1E'], ARG:['#74ACDF','#FFFFFF','#74ACDF'], BRA:['#009C3B','#FFDF00'],
+  URU:['#0038A8','#FFFFFF'], PAR:['#D52B1E','#FFFFFF','#0038A8'], PER:['#D91023','#FFFFFF'],
+  BOL:['#D52B1E','#F9E300','#007A33'], ECU:['#FFDD00','#0072CE','#D52B1E'],
+  COL:['#FCD116','#003893','#CE1126'], VEN:['#FFCC00','#00247D','#CF142B'],
+  GUY:['#009E49','#FCD116','#CE1126'], SUR:['#377E3F','#FFFFFF','#B40A2D'],
+  USA:['#3C3B6E','#FFFFFF','#B22234'],
+};
+// Fondo del modo "Atleta en barra": bandera del país → logo del campeonato →
+// azul YourLift. La cadena se corta en el primero que exista.
+function _fondoBarra(a,modo){
+  const AZUL='linear-gradient(160deg,#0d2141,#0A1628 55%,#060d1a)';
+  if(modo==='bandera'){
+    const cols=BANDERA_COLORES[_ctry(a)];
+    if(cols&&cols.length){
+      const paso=100/cols.length;
+      const tramos=cols.map((c,i)=>_hexRgba(c,.22)+' '+Math.round(i*paso)+'% '+Math.round((i+1)*paso)+'%');
+      return 'linear-gradient(135deg,'+tramos.join(',')+'),'+AZUL;
+    }
+    return AZUL;
+  }
+  if(modo==='logo'&&DATA.event&&DATA.event.logoUrl){
+    return 'linear-gradient(0deg,rgba(10,22,40,.86),rgba(10,22,40,.86)),url('+DATA.event.logoUrl+') center/contain no-repeat,'+AZUL;
+  }
+  return AZUL;
+}
+function _hexRgba(hex,a){
+  const h=String(hex).replace('#','');
+  const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);
+  return 'rgba('+r+','+g+','+b+','+a+')';
 }
 // <option>s para selects de país (CHI primero)
 function _countryOptions(sel){
@@ -6504,7 +6555,7 @@ function renderTxProfile(cur){
           <div style="background:${_txC('nameBg')};padding:clamp(10px,1.6vw,18px) clamp(18px,2.2vw,28px);border-radius:6px;display:flex;align-items:center;gap:clamp(10px,1.5vw,18px);box-shadow:0 4px 20px rgba(212,168,67,.35)">
             <div style="background:rgba(0,0,0,.2);padding:clamp(6px,0.7vw,10px) clamp(10px,1.2vw,16px);border-radius:5px;display:flex;align-items:center;gap:clamp(8px,0.9vw,14px)">
               <div style="width:clamp(44px,5vw,72px);height:clamp(30px,3.3vw,48px);position:relative;overflow:hidden;border-radius:2px;flex-shrink:0;box-shadow:0 1px 8px rgba(0,0,0,.5);background:#0a1628">
-                <img src="https://flagcdn.com/h120/${(COUNTRY[_ctry(cur)]||['cl'])[0]}.png" alt="${_ctry(cur)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">
+                ${FLAG_SVG[_ctry(cur)]?`<svg viewBox="0 0 30 20" preserveAspectRatio="none" role="img" aria-label="${_ctry(cur)}" style="position:absolute;inset:0;width:100%;height:100%">${FLAG_SVG[_ctry(cur)]}</svg>`:''}
               </div>
               <span style="font-family:Oswald;font-weight:700;font-size:clamp(13px,1.4vw,22px);color:${_txC('nameText')};letter-spacing:2px">${_ctry(cur)}</span>
             </div>
@@ -6668,7 +6719,7 @@ function renderTxScoreboard(cur,lifterChanged){
 // distancia desde el panel "Pantalla Tarima".
 // ════════════════════════════════════════════════════════════════
 // ─── Panel de control de la Pantalla de Tarima (admin) ──────────
-window._SCREEN_LOCAL={mode:'jornada',flights:[],nameScale:1};
+window._SCREEN_LOCAL={mode:'jornada',flights:[],nameScale:1,fondo:'bandera'};
 async function _screenPush(){
   // Modo práctica: sin Firebase. El estado de la pantalla (modo/tandas/tamaño) va
   // por localStorage; la otra pestaña (?tx=screen&practica=1) lo lee por 'storage'.
@@ -6677,6 +6728,7 @@ async function _screenPush(){
       mode:window._SCREEN_LOCAL.mode,
       flights:window._SCREEN_LOCAL.flights,
       nameScale:window._SCREEN_LOCAL.nameScale||1,
+      fondo:window._SCREEN_LOCAL.fondo||'bandera',
       ts:Date.now()
     }));}catch(e){}
     return;
@@ -6688,11 +6740,14 @@ async function _screenPush(){
       mode:window._SCREEN_LOCAL.mode,
       flights:window._SCREEN_LOCAL.flights,
       nameScale:window._SCREEN_LOCAL.nameScale||1,
+      fondo:window._SCREEN_LOCAL.fondo||'bandera',
       ts:Date.now()
     });
   }catch(e){showToastLC('Error: '+e.message);}
 }
 window.screenSetMode=function(m){window._SCREEN_LOCAL.mode=m;_screenPush();R();};
+// Fondo del modo "Atleta en barra": bandera del país · logo del campeonato · azul.
+window.screenSetFondo=function(f){window._SCREEN_LOCAL.fondo=f;_screenPush();R();};
 window.screenSetNameScale=function(v){
   let n=parseFloat(v)||1; n=Math.max(0.6,Math.min(2.2,n)); n=Math.round(n*100)/100;
   window._SCREEN_LOCAL.nameScale=n; window._JORNADA_NAMESCALE=n;
@@ -6742,10 +6797,30 @@ function renderScreenControl(){
   h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:12px">QUÉ MOSTRAR EN LA PANTALLA</div>';
   h+='<div style="display:flex;gap:12px;flex-wrap:wrap">';
   h+=mb('profile','PERFIL ATLETA','','#3b82f6');
+  h+=mb('barra','ATLETA EN BARRA','','#a855f7');
   h+=mb('intentos','PANTALLA DE INTENTOS','','#22c55e');
   h+=mb('jornada','TABLA JORNADA','','#D4A843');
   h+=mb('off','APAGAR','','#ef4444');
   h+='</div></div>';
+
+  // Fondo del modo "Atleta en barra". La cadena se corta en el primero que exista:
+  // si se elige el logo y el campeonato no tiene uno cargado, queda el azul.
+  if(mode==='barra'){
+    const fondo=window._SCREEN_LOCAL.fondo||'bandera';
+    const hayLogo=!!(DATA.event&&DATA.event.logoUrl);
+    const fb2=(f,lbl,nota)=>'<button onclick="screenSetFondo(\''+f+'\')" style="flex:1;min-width:190px;padding:13px;border-radius:10px;border:2px solid '
+      +(fondo===f?'#a855f7':'var(--border)')+';background:'+(fondo===f?'rgba(168,85,247,.13)':'transparent')
+      +';color:'+(fondo===f?'#a855f7':'var(--text)')+';font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer;text-align:left">'
+      +lbl+(fondo===f?' ●':'')+'<div style="font-size:10px;font-weight:400;letter-spacing:0;opacity:.75;margin-top:3px">'+nota+'</div></button>';
+    h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:12px">FONDO DE LA PANTALLA</div>';
+    h+='<div style="display:flex;gap:10px;flex-wrap:wrap">';
+    h+=fb2('bandera','BANDERA DEL PAÍS','Los colores del país del atleta, muy diluidos');
+    h+=fb2('logo','LOGO DEL CAMPEONATO',hayLogo?'El logo que subiste en Campeonatos':'Este campeonato no tiene logo cargado → queda azul');
+    h+=fb2('yourlift','AZUL YOURLIFT','El fondo de siempre');
+    h+='</div>';
+    if(!hayLogo)h+='<div style="font-size:11px;color:var(--muted);margin-top:10px">El logo se carga en Admin → Campeonatos, en la ficha del campeonato.</div>';
+    h+='</div>';
+  }
 
   // Tamaño de los nombres en la tabla
   const nscale=window._SCREEN_LOCAL.nameScale||1;
@@ -6779,7 +6854,7 @@ function renderScreenControl(){
   return h;
 }
 
-window._SCREEN_STATE={mode:'jornada',flights:null}; // mode: 'profile' | 'jornada' | 'off'
+window._SCREEN_STATE={mode:'jornada',flights:null,fondo:'bandera'}; // mode: 'profile' | 'jornada' | 'barra' | 'intentos' | 'off'
 async function loadBirthYears(){
   if(!fbReady||!DATA.event)return;
   try{
@@ -6813,6 +6888,7 @@ function subscribeScreenChannel(){
       if(window._SCREEN_LOCAL){
         window._SCREEN_LOCAL.nameScale=window._SCREEN_STATE.nameScale;
         if(window._SCREEN_STATE.mode)window._SCREEN_LOCAL.mode=window._SCREEN_STATE.mode;
+        if(window._SCREEN_STATE.fondo)window._SCREEN_LOCAL.fondo=window._SCREEN_STATE.fondo;
         if(Array.isArray(window._SCREEN_STATE.flights))window._SCREEN_LOCAL.flights=window._SCREEN_STATE.flights;
       }
       if(TX_MODE==='screen'||TX_MODE==='jornada')R();
@@ -6831,6 +6907,12 @@ function renderTxScreen(c){
     const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
     document.body.classList.add('tx-opaque');
     c.innerHTML=cur?renderTxProfile(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>';
+    return;
+  }
+  if(st.mode==='barra'){
+    const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
+    document.body.classList.add('tx-opaque');
+    c.innerHTML=cur?renderScreenBarra(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>';
     return;
   }
   if(st.mode==='intentos'){
@@ -6941,7 +7023,7 @@ function renderTxJornada(){
       rows+='<tr style="height:'+unit.toFixed(2)+'px;border-bottom:1px solid rgba(212,168,67,.12);background:'+(i%2?'rgba(255,255,255,.035)':'transparent')+'">'
         +'<td style="'+td+';font-weight:700;color:#D4A843;padding:0 4px">'+(row.tot>0?(i+1):'—')+'</td>'
         +'<td style="vertical-align:middle;padding:0 10px;font-family:Inter,sans-serif;font-weight:600;color:#fff;font-size:'+Math.round(fs(15)*nameScale)+'px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+a.name+'</td>'
-        +'<td style="'+td+';color:rgba(220,230,245,.85);white-space:nowrap">'+_flagImg(_ctry(a),fs(14))+_ctry(a)+'</td>'
+        +'<td style="'+td+';color:rgba(220,230,245,.85);white-space:nowrap">'+_flagImg(_ctry(a),fs(14),true)+_ctry(a)+'</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.65)">'+(_yob2(a)||'—')+'</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.9)">'+(a.bw?a.bw.toFixed(1):'—')+'</td>'
         // SQ 3 intentos + subtotal
@@ -7276,6 +7358,101 @@ function renderTxBarbell(cur,lifterChanged){
         <div style="font-family:Oswald;font-size:12px;letter-spacing:2.5px;color:rgba(212,225,245,.45);margin-top:5px">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>
       </div>
       ${posHtml}
+    </div>
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// ATLETA EN BARRA — modo de la Pantalla de Tarima al estilo del tablero
+// de intentos de la IPF: quién está en tarima, qué movimiento e intento,
+// y cuánto pesa la barra. Nada más.
+//
+// Se sacaron a propósito tres cosas que trae el tablero de la IPF: el nombre
+// largo del país (la bandera y el código ya lo dicen), la conversión a libras
+// (acá no se usa) y el cronómetro (ese vive en la Pantalla de Intentos, que la
+// mira el juez).
+//
+// El fondo es una cadena: bandera del país del atleta → logo del campeonato →
+// azul de YourLift. Se corta en el primero que exista.
+// ════════════════════════════════════════════════════════════════
+const _LIFT_SIGLA={sq:'SQ',bp:'BP',dl:'DL'};
+(function(){
+  if(typeof document==='undefined'||document.getElementById('cssBarraParpadeo'))return;
+  const st=document.createElement('style'); st.id='cssBarraParpadeo';
+  st.textContent='@keyframes barraParpadeo{0%,100%{opacity:1}50%{opacity:.25}}'
+    +'@media (prefers-reduced-motion:reduce){.barra-rec{animation:none!important}}';
+  document.head.appendChild(st);
+})();
+// Qué tabla de récords rige este campeonato. Hoy solo está cargada la
+// sudamericana; cuando se cargue la nacional, el evento dirá records:'nacional'
+// y el cartel cambia solo, sin tocar esta pantalla.
+function _recordEtiqueta(){
+  const r=String((DATA.event&&DATA.event.records)||'');
+  if(r==='nacional')return 'INTENTO DE RÉCORD NACIONAL';
+  if(_srOn())return 'INTENTO DE RÉCORD SUDAMERICANO';
+  return '';
+}
+// ¿El peso que va a levantar sería récord? Usa la misma detección que la tabla.
+function _esIntentoRecord(a){
+  if(!a||typeof _srRompe!=='function')return false;
+  try{
+    const l=DATA.lift, r=(typeof curAtt==='function')?curAtt(a):DATA.round;
+    const at=(a.att&&a.att[l])?a.att[l][r]:null;
+    const w=(at&&at.w)||0;
+    if(!(w>0)||at.r)return false;              // ya juzgado: no es "intento"
+    return _srRompe(a,l,w).length>0;
+  }catch(e){ return false; }
+}
+function renderScreenBarra(a){
+  if(!a)return '';
+  const l=DATA.lift, r=(typeof curAtt==='function')?curAtt(a):DATA.round;
+  const at=(a.att&&a.att[l])?a.att[l][r]:null;
+  const kg=(at&&at.w)||0;
+  const modo=(window._SCREEN_STATE&&window._SCREEN_STATE.fondo)||'bandera';
+  const fondo=_fondoBarra(a,modo);
+  const logo=DATA.event&&DATA.event.logoUrl;
+  const partes=String(a.name||'').trim().split(/\s+/);
+  const apellidos=partes.slice(-2).join(' ');
+  const nombres=partes.slice(0,-2).join(' ');
+  const cat=(a.cat||'').replace(/\s*\(.*\)/,'');
+  const divS=(typeof txDivShort==='function')?txDivShort(a.div):(a.div||'');
+  const modS=(typeof _txModLabel==='function')?_txModLabel(a.mod):'';
+  const esRec=_esIntentoRecord(a);
+  const etiqRec=_recordEtiqueta();
+  return `<div style="position:absolute;inset:0;background:${fondo};display:flex;flex-direction:column;justify-content:center;padding:4vh 5vw;font-family:Oswald,sans-serif;color:#fff">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:3vw">
+      <div style="font-size:clamp(28px,5.4vw,86px);font-weight:700;letter-spacing:.06em;color:#D4A843;line-height:1">
+        ${_LIFT_SIGLA[l]||''} ${r+1}
+      </div>
+      <div style="text-align:right;line-height:1">
+        <div style="font-size:clamp(46px,10vw,150px);font-weight:800;letter-spacing:-.01em">
+          ${kg?kg.toFixed(1).replace(/\.0$/,''):'—'}<span style="font-size:.34em;font-weight:600;margin-left:.15em;opacity:.75">KG</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin:3.5vh 0 2vh">
+      ${nombres?`<div style="font-size:clamp(18px,3.2vw,46px);font-weight:400;letter-spacing:.08em;opacity:.8">${esc(nombres)}</div>`:''}
+      <div style="font-size:clamp(30px,6.6vw,104px);font-weight:800;letter-spacing:.02em;line-height:1.05;text-shadow:0 3px 14px rgba(0,0,0,.55)">${esc(apellidos||a.name||'')}</div>
+    </div>
+
+    ${esRec&&etiqRec?`<div style="text-align:center;margin-bottom:2vh">
+      <span style="display:inline-block;padding:.5vh 2.2vw;border:3px solid #D4A843;border-radius:8px;
+        font-size:clamp(14px,2.2vw,32px);font-weight:700;letter-spacing:.22em;color:#D4A843;
+        animation:barraParpadeo 1.05s ease-in-out infinite" class="barra-rec">${etiqRec}</span>
+    </div>`:''}
+
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:3vw;
+      border-top:2px solid rgba(255,255,255,.22);padding-top:2.2vh">
+      <div style="display:flex;align-items:center;gap:1.1vw;font-size:clamp(16px,2.6vw,40px);font-weight:700;letter-spacing:.06em">
+        ${_flagImg(_ctry(a),34,true)}<span>${esc(_ctry(a))}</span>
+      </div>
+      <div style="font-size:clamp(15px,2.4vw,36px);font-weight:600;letter-spacing:.1em;opacity:.9;text-align:center">
+        ${esc(cat)} <span style="opacity:.6">·</span> ${esc(divS)}${modS?` <span style="opacity:.6">·</span> ${esc(modS)}`:''}
+      </div>
+      <div style="min-width:14vw;display:flex;justify-content:flex-end;align-items:center">
+        ${logo?`<img src="${logo}" alt="" style="max-height:11vh;max-width:14vw;object-fit:contain" onerror="this.style.display='none'">`:''}
+      </div>
     </div>
   </div>`;
 }
