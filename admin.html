@@ -3870,6 +3870,34 @@ function _histDe(rut,nombre){
   });
   return out.sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
 }
+// ── Orden de prioridad cuando hay menos cupos que inscritos ──────────────────
+// Es el reglamento, no un cálculo: va como recordatorio para la comisión técnica
+// y NO dice en qué punto cae cada atleta. Eso lo resuelve la comisión mirando el
+// caso; el sistema no tiene cómo saber, por ejemplo, si alguien quiere bajar de
+// categoría o de qué organización viene.
+// Si el reglamento cambia, se edita acá y cambia en todas partes.
+const PRIORIDAD_CUPOS=[
+  'Atletas debutantes sin registros de participación de ninguna organización diferente a IPF, reconocidas por la WADA como federación firmante.',
+  'Atletas que ya han competido pero que no tienen registro en el actual circuito competitivo (ranking). En este punto se consideran los atletas que compitieron y fueron descalificados en alguna competencia durante el año.',
+  'Atletas debutantes que han cumplido su período de restricción de participación, según el Anexo 2, por ingreso desde organizaciones de powerlifting fuera del reconocimiento de la WADA.',
+  'Atletas que durante el año competitivo fueron descalificados en la modalidad de powerlifting, en el evento clásico o equipado según corresponda.',
+  'Atletas cuyo último registro competitivo fue en el Campeonato Nacional, hasta el segundo lugar.',
+  'Atletas campeones de su categoría en el último Campeonato Nacional.',
+  'Atletas cuyo último registro competitivo fue en un evento internacional y competirán en la misma categoría de peso.',
+  'Atletas que compitieron y desean bajar de categoría de peso corporal respecto a la última competencia en campeonato nacional o internacional.',
+  'Atletas que compitieron y desean subir de categoría de peso corporal respecto a la última competencia en campeonato nacional o internacional, sin considerar el registro en una nueva categoría de peso corporal distinta de la anterior.',
+];
+const PRIORIDAD_NOTA='Los puntos 7, 8 y 9 quedarán a criterio de la comisión técnica y del organizador, considerando la disposición de cupos totales para el evento, el volumen de inscritos según prioridad y la factibilidad de tiempos y costos.';
+function _prioridadHtml(){
+  return `<div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(212,168,67,.28)">
+    <div style="font-family:Oswald;font-size:10px;letter-spacing:1.5px;color:var(--gold);margin-bottom:3px">ORDEN DE PRIORIDAD SI FALTAN CUPOS</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.5">Recordatorio del reglamento. <b>No dice en qué punto cae este atleta</b> — eso lo define la comisión técnica.</div>
+    <ol style="margin:0;padding-left:20px;font-size:11px;line-height:1.55;color:var(--text)">
+      ${PRIORIDAD_CUPOS.map(t=>`<li style="padding:2px 0">${esc(t)}</li>`).join('')}
+    </ol>
+    <div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5;font-style:italic">${esc(PRIORIDAD_NOTA)}</div>
+  </div>`;
+}
 window.apprToggleHist=function(id){
   ST.apprHist=ST.apprHist||{};
   ST.apprHist[id]=!ST.apprHist[id];
@@ -3930,6 +3958,7 @@ function apprListHtml(){
         </div>`).join('')}
         <div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5">
           Sale de los resultados ya cargados en YourLift. Un campeonato que no se cerró desde acá no aparece.</div>
+        ${_prioridadHtml()}
       </td></tr>`;
     }
     return fila;

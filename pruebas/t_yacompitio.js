@@ -160,6 +160,46 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
   ok(/ST\.view==='athleteProfile'\|\|ST\.view==='approvals'/.test(src),
      'la pantalla se actualiza sola cuando llegan los resultados');
 
+  console.log('\nEl recordatorio de prioridad va abajo del detalle');
+  {
+    // Los nueve puntos son el reglamento, no un cálculo. Van como recordatorio
+    // para la comisión y NO deben decir en qué punto cae el atleta: el sistema no
+    // tiene cómo saber si alguien quiere bajar de categoría o de qué organización
+    // viene, y una pantalla que insinúe un veredicto que no puede sostener es peor
+    // que no mostrar nada.
+    const i = src.indexOf('const PRIORIDAD_CUPOS=[');
+    ok(i > 0, 'los nueve puntos están escritos en un solo lugar');
+    const bloque = src.slice(i, src.indexOf('];', i));
+    const n = (bloque.match(/^\s+'/gm) || []).length;
+    ok(n === 9, 'son nueve, del uno al nueve (' + n + ')');
+    ok(/Atletas debutantes sin registros de participación/.test(bloque),
+       'el 1 es el de los debutantes sin registro en otra organización');
+    ok(/no tienen registro en el actual circuito competitivo/.test(bloque),
+       'el 2, los que compitieron y no están en el ranking');
+    ok(/Anexo 2/.test(bloque), 'el 3 cita el Anexo 2');
+    ok(/desean bajar de categoría/.test(bloque), 'el 8, los que quieren bajar de categoría');
+    ok(/desean subir de categoría/.test(bloque), 'y el 9, los que quieren subir');
+    ok(/Los puntos 7, 8 y 9 quedarán a criterio de la comisión técnica/.test(src),
+       'y queda la nota de que 7, 8 y 9 los define la comisión');
+
+    ok(/<ol /.test(src.slice(src.indexOf('function _prioridadHtml'))),
+       'se dibuja como lista numerada, para poder decir "es el punto 4"');
+    ok(/\$\{_prioridadHtml\(\)\}/.test(src), 'y aparece al abrir el ✓, debajo de los campeonatos');
+  }
+
+  console.log('\n  Es un recordatorio, no un veredicto');
+  {
+    const j = src.indexOf('function _prioridadHtml');
+    const cuerpo = src.slice(j, src.indexOf('\n}', j));
+    ok(/No dice en qué punto cae este atleta/.test(cuerpo),
+       'lo dice en la propia pantalla');
+    // Que no reciba al atleta es la garantía de que no puede señalarlo.
+    ok(/function _prioridadHtml\(\)\{/.test(src),
+       'la función no recibe al atleta, así que no puede marcar ninguno');
+    ok(!/hist|regional|rut/i.test(cuerpo.replace(/PRIORIDAD_\w+/g, '')),
+       'y no mira su historial para nada');
+  }
+
   console.log('\n  Es solo de lectura: no cambia ninguna inscripción');
   {
     const i = src.indexOf('function _histDe(');
