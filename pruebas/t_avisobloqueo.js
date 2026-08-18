@@ -188,6 +188,44 @@ console.log('\nMira las dos fuentes: data.json y lo cerrado hace poco');
      'si llegan mientras el atleta escribe, no se le redibuja el campo encima');
 }
 
+console.log('\nUn campeonato de 2025 NO dispara el aviso de 2026');
+{
+  // Es el riesgo que se levantó: en data.json conviven el Regional Centro de 2025
+  // (212 personas), el Centro Sur 2025, el Norte 2025 y el Sur Austral 2025 —el
+  // mismo nombre del que abre ahora— junto a los de 2026. Si la clave no
+  // distinguiera el año, a 212 personas les saltaría un aviso que no corresponde.
+  //
+  // Los nombres reales, tal como están en el archivo que se sirve hoy.
+  const pares = [
+    ['Regional Centro 2025',                          'Regional Centro 2026'],
+    ['Regional Centro Sur 2025',                      'Campeonato Regional CENTRO SUR  FECHIPO 2026'],
+    ['Regional Norte 2025',                           'Campeonato Regional Norte 2026'],
+    ['Regional Sur Austral 2025',                     'Regional Sur Austral 2026'],
+    ['Campeonato Nacional FECHIPO 2025',              'Campeonato Nacional FECHIPO 2026'],
+  ];
+  pares.forEach(([viejo, nuevo]) => {
+    ok(_evClaveIns(viejo) !== _evClaveIns(nuevo),
+       '"' + viejo + '" ≠ "' + nuevo + '"');
+  });
+
+  // Y se comprueba de punta a punta, no solo la clave.
+  EVENTS = [SUR_AUSTRAL];
+  athleteDB.push({ rut: '40404040-4', nombre: 'Del Año Pasado', competencias: [
+    { evento: 'Regional Centro 2025', fecha: '2025-05-10' },
+    { evento: 'Regional Norte 2025', fecha: '' },
+    { evento: 'Regional Sur Austral 2025', fecha: '2025-09-01' },
+  ] });
+  state.form = { evento: 'sur_austral', rut: '40404040-4' };
+  ok(bloqueoDetectado().length === 0,
+     'el que corrió tres regionales en 2025 se inscribe sin aviso: su cupo de 2026 está libre');
+  ok(bloqueoAvisoHtml() === '', 'y no se le dibuja nada');
+}
+
+console.log('\n  El que no trae año en el nombre queda señalado');
+ok(/SIN AÑO<\/span>/.test(adm), 'el selector lo marca');
+ok(/const sinAnio=!\/\\b20\\d\\d\\b\/\.test\(x\.nombre\)/.test(adm),
+   'porque es el único que se puede confundir entre temporadas');
+
 console.log('\nLa comisión ve lo mismo al revisar');
 ok(/Se inscribió con el aviso a la vista/.test(adm), 'la inscripción sale marcada en Revisión inscripciones');
 ok(/\(i\.bloqueoAvisado\|\|\[\]\)\.length/.test(adm), 'solo cuando corresponde');

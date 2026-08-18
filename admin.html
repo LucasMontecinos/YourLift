@@ -5773,9 +5773,15 @@ function _bloqueoFormHtml(editing){
   let anio='';
   H.todos.forEach(x=>{
     if(x.anio!==anio){anio=x.anio;h+=`<div style="font-family:Oswald;font-size:10px;letter-spacing:1.5px;color:var(--gold);margin:9px 0 4px">${esc(anio||'sin año')}</div>`;}
+    // Un campeonato sin año en el NOMBRE es el único que puede confundirse con el
+    // de otra temporada: la clave se arma con el nombre, así que "Regional Norte"
+    // a secas de 2025 y de 2026 darían lo mismo. Hoy no pasa —todos lo traen— pero
+    // si alguien crea uno así, tiene que verlo antes de marcarlo.
+    const sinAnio=!/\b20\d\d\b/.test(x.nombre);
     h+=`<label style="display:flex;align-items:center;gap:8px;padding:2px 0;font-size:12px;cursor:pointer;color:${sel.has(x.clave)?'var(--text)':'var(--muted)'}">
       <input type="checkbox" class="ef-bloq" data-clave="${esc(x.clave)}" ${sel.has(x.clave)?'checked':''} style="cursor:pointer">
-      <span>${esc(x.nombre)}</span><span style="font-size:10px;color:var(--muted)">· ${x.n}</span></label>`;
+      <span>${esc(x.nombre)}</span><span style="font-size:10px;color:var(--muted)">· ${x.n}</span>
+      ${sinAnio?'<span title="Sin año en el nombre: se puede confundir con el mismo campeonato de otra temporada" style="font-size:9px;font-family:Oswald;letter-spacing:1px;background:rgba(245,158,11,.18);color:var(--orange);padding:1px 6px;border-radius:8px">SIN AÑO</span>':''}</label>`;
   });
   h+='</div>';
   return h;

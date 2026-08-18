@@ -237,6 +237,27 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
        'aunque no haya competido: la nómina final ya gastó el cupo');
   }
 
+  console.log('\nLos campeonatos de 2025 no se cuelan como si fueran de este año');
+  {
+    // En data.json conviven los mismos nombres de las dos temporadas —Regional
+    // Centro 2025 con 212 personas, Centro Sur 2025, Norte 2025, Sur Austral
+    // 2025— y varios vienen SIN FECHA. Si el año saliera solo de la fecha, esos
+    // quedarían sin año y podrían contarse como del año en curso.
+    ST.allCompResults = []; ST.cupoCfg = null;
+    ST.data = [{ rut: '40.404.040-4', nombre: 'Del Año Pasado', competencias: [
+      { evento: 'Regional Centro 2025', fecha: '' },          // sin fecha, como en el archivo real
+      { evento: 'Regional Norte 2025', fecha: '' },
+      { evento: 'Regional Centro Sur 2025', fecha: '' },
+      { evento: 'Regional Sur Austral 2025', fecha: '2025-09-01' },
+    ] }];
+    window_._HIST_ANIO = null;
+    ok(_histDe('40.404.040-4', '').length === 0,
+       'ninguno cuenta: el año sale del nombre cuando falta la fecha');
+    const H = _histAnio();
+    ok(H.todos.every(x => x.anio === '2025'), 'y el selector los ordena bajo 2025');
+    ok(H.delAnio.length === 0, 'así que no entran en "los del año en curso"');
+  }
+
   console.log('\nQué campeonatos cuentan se puede elegir a mano');
   {
     // "Los de este año" sirve para arrancar, pero el sistema va a correr muchos
