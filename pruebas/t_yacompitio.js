@@ -36,10 +36,10 @@ function sacar(nombre) {
   }
   return src.slice(start, p);
 }
-const ST = { allCompResults: [], data: [] };
+const ST = { allCompResults: [], data: [], cupoCfg: null };
 const window_ = {};
-eval(['_hRut', '_hNom', '_esRegional', '_evClave', '_histAnio', '_histDe'].map(sacar).join('\n')
-  .replace(/window\._HIST_ANIO/g, 'window_._HIST_ANIO'));
+eval(['_hRut', '_hNom', '_esRegional', '_evClave', '_cupoCfg', '_cuentaEvento', '_histAnio', '_histDe']
+  .map(sacar).join('\n').replace(/window\._HIST_ANIO/g, 'window_._HIST_ANIO'));
 
 const ANIO = String(new Date().getFullYear());
 const R = (rut, nombre, evento, fecha, extra) => Object.assign(
@@ -219,6 +219,68 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
     const det = src.slice(j, src.indexOf('\n}', j));
     ok(!/REGIONAL/.test(det), 'y en el detalle tampoco se resalta ningún campeonato');
   }
+
+  console.log('\nLos dos casos que se reportaron desde la nómina');
+  {
+    // Markos Salgado salía con ✗ habiendo competido, y Andrea Fábregas con ✗
+    // estando en la nómina final aunque no compitió. Los dos estaban en data.json
+    // y no en competition_results: es el mismo agujero de una sola fuente.
+    const db = JSON.parse(fs.readFileSync(__dirname + '/../data.json', 'utf8'));
+    ST.allCompResults = []; ST.data = db; ST.cupoCfg = null;
+    window_._HIST_ANIO = null;
+    const markos = _histDe('19839518-9', '');
+    ok(markos.length > 0, 'Markos Salgado aparece con ✓ (' + markos.length + ' campeonatos)');
+    ok(markos.some(x => /Regional Centro/i.test(x.evento)), 'con su Regional Centro');
+    const andrea = _histDe('21031231-5', '');
+    ok(andrea.length > 0, 'Andrea Fábregas también, por estar en la nómina final');
+    ok(andrea.some(x => /Regional Centro/i.test(x.evento)),
+       'aunque no haya competido: la nómina final ya gastó el cupo');
+  }
+
+  console.log('\nQué campeonatos cuentan se puede elegir a mano');
+  {
+    // "Los de este año" sirve para arrancar, pero el sistema va a correr muchos
+    // años y el circuito no siempre calza con el año calendario.
+    ST.allCompResults = [
+      R('44.444.444-4', 'Config', 'Campeonato Regional Norte ' + ANIO, ANIO + '-06-14'),
+      R('44.444.444-4', 'Config', 'Campeonato Debutantes All Power CD ' + ANIO, ANIO + '-05-10'),
+    ];
+    ST.data = []; ST.cupoCfg = null;
+    window_._HIST_ANIO = null;
+    ok(_histDe('44.444.444-4', '').length === 2, 'sin configurar nada, cuentan los dos del año');
+
+    const H = _histAnio();
+    ok(Array.isArray(H.todos) && H.todos.length === 2, 'el selector ofrece los campeonatos detectados (' + H.todos.length + ')');
+    ok(H.todos.every(x => x.clave && x.nombre && x.n > 0), 'cada uno con su nombre y cuántos registros trae');
+    ok(H.delAnio.length === 2, 'y sabe cuáles son los del año en curso');
+
+    // Ahora se elige solo el regional.
+    ST.cupoCfg = { seleccionados: [_evClave('Campeonato Regional Norte ' + ANIO)] };
+    window_._HIST_ANIO = null;
+    const h = _histDe('44.444.444-4', '');
+    ok(h.length === 1, 'eligiendo uno solo, cuenta uno solo (' + h.length + ')');
+    ok(/Norte/.test(h[0].evento), 'y es el que se eligió: ' + h[0].evento);
+
+    // Un campeonato de otro año se puede hacer contar, si el circuito lo cruza.
+    ST.allCompResults.push(R('44.444.444-4', 'Config', 'Campeonato Nacional FECHIPO 2025', '2025-11-20'));
+    ST.cupoCfg = { seleccionados: [_evClave('Campeonato Nacional FECHIPO 2025')] };
+    window_._HIST_ANIO = null;
+    const h2 = _histDe('44.444.444-4', '');
+    ok(h2.length === 1 && /2025/.test(h2[0].evento),
+       'y se puede contar uno de otro año, para temporadas que cruzan diciembre');
+  }
+
+  console.log('\n  Lo elegido queda guardado, y lo nuevo se avisa');
+  ok(/setDoc\(doc\(db,'config','participacion'\)/.test(src), 'se guarda en Firestore, no en el navegador');
+  ok(/match \/config\/\{id\} \{[\s\S]{0,80}allow read, write: if isAdmin\(\);/.test(
+       fs.readFileSync(__dirname + '/../firestore.rules', 'utf8')),
+     'con su regla, y solo para el admin');
+  ok(/vistos:H\.todos\.map\(x=>x\.clave\)/.test(src), 'se anota qué campeonatos había al guardar');
+  ok(/NUEVO<\/span>/.test(src), 'para marcar como NUEVO lo que aparezca después');
+  ok(/campeonato\$\{nuevos\.length===1\?'':'s'\} nuevo/.test(src),
+     'y avisarlo arriba, sin abrir el panel');
+  ok(/window\.cupoVolverAlAnio=function/.test(src), 'se puede volver a "los del año en curso"');
+  ok(/return anioEv===anioActual;/.test(src), 'que sigue siendo el comportamiento por defecto');
 
   console.log('\nLa columna está en las DOS pantallas');
   ok(/<th title="Si ya compitió este año[^>]*>Compitió<\/th>/.test(src), 'en Nóminas');

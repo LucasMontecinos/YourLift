@@ -337,6 +337,8 @@ async function loadAll(){
     const dRes=await fetch('data.json').then(r=>r.json()).catch(()=>[]);
     ST.data=Array.isArray(dRes)?dRes:[];
     PEERS=_peersBuild(ST.data);
+    window._HIST_ANIO=null;   // el cruce de participación ya puede usar data.json
+    cargarCupoCfg();          // qué campeonatos cuentan (si se eligieron a mano)
   }catch(e){
     console.warn('[loadAll] JSON fetch failed:',e.message);
     ST.data=ST.data||[];
@@ -3604,6 +3606,7 @@ function renderNominas(){
     </div>
     ${needsMetaSync?'<div class="card" style="background:rgba(212,168,67,.08);border-color:rgba(212,168,67,.3);padding:12px 16px;margin-bottom:12px"><span style="color:var(--gold);font-size:12px">Las inscripciones están en Firebase pero falta el doc de evento en <code>eventos/</code>. Sin eso no podés editar fecha/cierre/ubicación desde <b>Campeonatos</b>. Creá el evento desde el panel de Campeonatos.</span></div>':''}
     <div class="card" style="padding:0;overflow-x:auto">
+      ${_cupoSelectorHtml()}
       <table class="tbl">
         <tr><th>#</th><th>Nombre</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Modalidad</th><th>Club</th><th title="Comuna / Región">Zona</th>${_uniCol?'<th title="Universidad del atleta (modalidad Universitario)">Universidad</th>':''}${_posNacCol?'<th title="Posición y marcas del Nacional 2026">Nacional 2026</th>':''}${_posNacCol?'<th title="Clasificación Sudamericano">Clasif. Sud.</th>':''}<th title="Si ya compitió este año, según los resultados cargados en YourLift">Compitió</th><th title="Documentos subidos">Docs</th><th>Estado</th><th></th></tr>
         ${filtered.map((i,idx)=>{
@@ -3866,6 +3869,57 @@ function _evClave(ev){
     .replace(/\b(campeonato|fechipo|torneo|de|del|cd)\b/g,' ')
     .replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 }
+// ── Qué campeonatos cuentan ──────────────────────────────────────────────────
+// Al principio esto era "los de este año", calculado del calendario. Sirve para
+// arrancar, pero el sistema va a estar corriendo muchos años y el circuito no
+// siempre calza con el año calendario: hay campeonatos que no gastan cupo, otros
+// que sí, y temporadas que cruzan diciembre. Así que la lista se puede elegir a
+// mano desde el panel y queda guardada.
+//
+// Sin nada elegido se sigue comportando como antes —los del año en curso— para
+// que funcione sin configurar nada. Los campeonatos que aparezcan DESPUÉS de
+// guardar salen marcados como nuevos, para que no se cuelen sin que nadie decida.
+function _cupoCfg(){ return ST.cupoCfg||null; }
+function _cuentaEvento(evento,anioEv,anioActual){
+  const cfg=_cupoCfg();
+  if(cfg&&Array.isArray(cfg.seleccionados))return cfg.seleccionados.indexOf(_evClave(evento))>=0;
+  return anioEv===anioActual;
+}
+async function cargarCupoCfg(){
+  try{
+    const s=await getDoc(doc(db,'config','participacion'));
+    ST.cupoCfg=s.exists()?s.data():null;
+  }catch(e){ ST.cupoCfg=null; }
+  window._HIST_ANIO=null;
+}
+window.cupoToggle=function(clave){
+  const H=_histAnio();
+  const actuales=(_cupoCfg()&&_cupoCfg().seleccionados)||H.delAnio;
+  const s=new Set(actuales);
+  if(s.has(clave))s.delete(clave); else s.add(clave);
+  ST.cupoCfg=Object.assign({},ST.cupoCfg||{},{seleccionados:[...s]});
+  window._HIST_ANIO=null;
+  render();
+};
+window.cupoGuardar=async function(){
+  const H=_histAnio();
+  const sel=(_cupoCfg()&&_cupoCfg().seleccionados)||H.delAnio;
+  try{
+    await setDoc(doc(db,'config','participacion'),
+      {seleccionados:sel,vistos:H.todos.map(x=>x.clave),ts:new Date().toISOString(),por:ST.user?.email||''});
+    ST.cupoCfg={seleccionados:sel,vistos:H.todos.map(x=>x.clave)};
+    window._HIST_ANIO=null;
+    showToast('Campeonatos guardados: '+sel.length+' cuentan para el control');
+    render();
+  }catch(e){ showToast('No se pudo guardar: '+e.message,null,true); }
+};
+window.cupoVolverAlAnio=function(){
+  ST.cupoCfg=null; window._HIST_ANIO=null;
+  setDoc(doc(db,'config','participacion'),{seleccionados:null,ts:new Date().toISOString()}).catch(()=>{});
+  render();
+};
+window.cupoPanel=function(){ ST.cupoPanelOpen=!ST.cupoPanelOpen; render(); };
+
 function _histAnio(){
   if(window._HIST_ANIO)return window._HIST_ANIO;
   const anio=String(new Date().getFullYear());
@@ -3874,11 +3928,18 @@ function _histAnio(){
     const k=_hRut(rut); if(k)(porRut[k]=porRut[k]||[]).push(it);
     const n=_hNom(nombre); if(n)(porNom[n]=porNom[n]||[]).push(it);
   };
-  const delAnio=(evento,fecha)=>{
-    // El año sale de la fecha; si no la trae, del nombre del campeonato. Los
-    // resultados viejos de data.json muchas veces vienen sin fecha.
-    const a=String(fecha||'').slice(0,4)||(String(evento||'').match(/\b(20\d\d)\b/)||[])[1]||'';
-    return a===anio;
+  // Catálogo de TODO lo que aparece, para poder ofrecerlo en el selector.
+  const catalogo={};
+  const anioDe=(evento,fecha)=>
+    String(fecha||'').slice(0,4)||(String(evento||'').match(/\b(20\d\d)\b/)||[])[1]||'';
+  const cuenta=(evento,fecha)=>{
+    const a=anioDe(evento,fecha);
+    const clave=_evClave(evento);
+    const c=catalogo[clave]||(catalogo[clave]={clave,nombre:evento||'',anio:a,n:0});
+    c.n++;
+    if((evento||'').length>c.nombre.length)c.nombre=evento;
+    if(!c.anio&&a)c.anio=a;
+    return _cuentaEvento(evento,a,anio);
   };
   const arma=(evento,fecha,categoria,division,modalidad,r)=>({
     evento:evento||'',fecha:String(fecha||''),regional:_esRegional(evento),
@@ -3887,7 +3948,7 @@ function _histAnio(){
 
   // 1) Lo cerrado desde el livecast.
   (ST.allCompResults||[]).forEach(d=>{
-    if(!delAnio(d.evento,d.fecha))return;
+    if(!cuenta(d.evento,d.fecha))return;
     meter(d.rut,d.nombre,arma(d.evento,d.fecha,d.categoria,d.division,d.modalidad,d.resultado));
   });
   // 2) Y el histórico publicado (data.json). Sin esto faltaba el Campeonato
@@ -3896,11 +3957,14 @@ function _histAnio(){
   //    competido en todo el año.
   (ST.data||[]).forEach(a=>{
     (a.competencias||[]).forEach(c=>{
-      if(!delAnio(c.evento,c.fecha))return;
+      if(!cuenta(c.evento,c.fecha))return;
       meter(a.rut,a.nombre,arma(c.evento,c.fecha,c.categoria,c.division,c.modalidad,c.resultado));
     });
   });
-  return (window._HIST_ANIO={anio,porRut,porNom});
+  const todos=Object.values(catalogo).sort((a,b)=>
+    String(b.anio).localeCompare(String(a.anio))||a.nombre.localeCompare(b.nombre));
+  const delAnio=todos.filter(x=>x.anio===anio).map(x=>x.clave);
+  return (window._HIST_ANIO={anio,porRut,porNom,todos,delAnio});
 }
 // Devuelve los campeonatos de este año de una persona, sin repetir. El Debutantes
 // vino partido en "Tarima 1" y "Tarima 2": es un solo campeonato en dos tarimas,
@@ -3982,6 +4046,42 @@ function _detalleHist(hist,anio){
       Sale de los resultados ya cargados en YourLift. Un campeonato que no se cerró desde acá no aparece.</div>
     ${_prioridadHtml()}`;
 }
+// El selector de campeonatos. Va arriba de la tabla, plegado: se abre cuando hay
+// que decidir y no estorba el resto del tiempo.
+function _cupoSelectorHtml(){
+  const H=_histAnio();
+  const cfg=_cupoCfg();
+  const sel=new Set((cfg&&cfg.seleccionados)||H.delAnio);
+  const vistos=new Set((cfg&&cfg.vistos)||[]);
+  const aMano=!!(cfg&&Array.isArray(cfg.seleccionados));
+  const nuevos=aMano?H.todos.filter(x=>!vistos.has(x.clave)):[];
+  let h='<div style="padding:8px 14px;border-bottom:1px solid var(--border);font-size:11px;color:var(--muted);display:flex;gap:10px;align-items:center;flex-wrap:wrap">';
+  h+=`<span>Contando <b style="color:var(--gold)">${sel.size}</b> campeonato${sel.size===1?'':'s'} `
+    +(aMano?'elegidos a mano':`de ${H.anio}`)+'.</span>';
+  h+=`<button onclick="cupoPanel()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:3px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:Oswald">${ST.cupoPanelOpen?'Cerrar':'Elegir cuáles'}</button>`;
+  if(nuevos.length)h+=`<span style="color:var(--orange)">⚠ ${nuevos.length} campeonato${nuevos.length===1?'':'s'} nuevo${nuevos.length===1?'':'s'} sin decidir</span>`;
+  h+='</div>';
+  if(!ST.cupoPanelOpen)return h;
+
+  h+='<div style="padding:12px 14px;border-bottom:1px solid var(--border);background:rgba(10,22,40,.4)">';
+  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.55">Marcá los campeonatos que gastan cupo. Sirve para cuando el circuito no calza con el año calendario, o cuando algún torneo no debe contar. Si no se guarda nada, se usan los del año en curso.</div>';
+  let anioAct='';
+  H.todos.forEach(x=>{
+    if(x.anio!==anioAct){anioAct=x.anio;h+=`<div style="font-family:Oswald;font-size:10px;letter-spacing:1.5px;color:var(--gold);margin:10px 0 5px">${esc(anioAct||'sin año')}</div>`;}
+    const on=sel.has(x.clave), nuevo=aMano&&!vistos.has(x.clave);
+    h+=`<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;cursor:pointer;color:${on?'var(--text)':'var(--muted)'}">
+      <input type="checkbox" ${on?'checked':''} onchange="cupoToggle('${esc(x.clave)}')" style="cursor:pointer">
+      <span>${esc(x.nombre)}</span>
+      <span style="font-size:10px;color:var(--muted)">· ${x.n} registro${x.n===1?'':'s'}</span>
+      ${nuevo?'<span style="font-size:9px;font-family:Oswald;letter-spacing:1px;background:rgba(245,158,11,.18);color:var(--orange);padding:1px 6px;border-radius:8px">NUEVO</span>':''}
+    </label>`;
+  });
+  h+='<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">';
+  h+='<button class="btn btn-g" onclick="cupoGuardar()" style="padding:6px 14px;font-size:11px">Guardar</button>';
+  h+='<button onclick="cupoVolverAlAnio()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 14px;border-radius:6px;font-size:11px;cursor:pointer;font-family:Oswald">Volver a "los del año en curso"</button>';
+  h+='</div></div>';
+  return h;
+}
 function _marcaCompitio(hist,id,cargando,abierto){
   if(cargando)return '<span style="color:var(--muted);font-size:11px">…</span>';
   if(!hist.length)return '<span title="Sin competencias registradas este año" style="color:var(--muted);font-family:Oswald;font-size:14px;font-weight:700">✗</span>';
@@ -4037,7 +4137,7 @@ function apprListHtml(){
     return fila;
   }).join('');
   const nCon=cargando?0:list.filter(i=>_histDe(i.rut,i.nombre).length).length;
-  return `${nCon?`<div style="padding:9px 14px;background:rgba(212,168,67,.08);border-bottom:1px solid rgba(212,168,67,.25);font-size:12px;color:var(--muted)">
+  return `${_cupoSelectorHtml()}${nCon?`<div style="padding:9px 14px;background:rgba(212,168,67,.08);border-bottom:1px solid rgba(212,168,67,.25);font-size:12px;color:var(--muted)">
       <b style="color:var(--gold)">${nCon}</b> de estas inscripciones ${nCon===1?'es de un atleta que ya compitió':'son de atletas que ya compitieron'} en ${H.anio}. Tocá el ✓ para ver dónde.</div>`:''}
     <table class="tbl">
       <tr><th>Fecha</th><th>Nombre</th><th>Evento</th><th>Cat.</th><th>Club</th><th title="Si ya compitió este año, según los resultados cargados en YourLift">Compitió ${H.anio}</th><th>Acción</th></tr>

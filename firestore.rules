@@ -208,6 +208,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Configuración del panel. Hoy guarda qué campeonatos cuentan para el control
+    // de participación por año (Revisión inscripciones y Nóminas). No la lee nadie
+    // fuera del panel, así que no se abre a lectura pública.
+    match /config/{id} {
+      allow read, write: if isAdmin();
+    }
+
     match /cert_config/{id} {
       allow read: if true;
       allow write: if isAdmin();
