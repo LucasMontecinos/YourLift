@@ -149,12 +149,58 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
     ok(rotas.length === 0, 'todas las fichas traen campeonato y fecha' + (rotas.length ? ' — fallan ' + rotas.length : ''));
   }
 
+  console.log('\nEl ✓ y la ✗ van sin colores ni etiquetas');
+  {
+    // Al principio esto separaba los regionales del resto, dando por hecho que el
+    // Debutantes no gastaba cupo. Sí lo gasta: todos los campeonatos del año
+    // gastan. Así que la marca es una sola y el detalle se ve abriendo el ✓.
+    const i = src.indexOf('function _marcaCompitio');
+    const cuerpo = src.slice(i, src.indexOf('\n}', i));
+    ok(!/REGIONAL/.test(cuerpo), 'el ✓ no lleva la etiqueta REGIONAL');
+    ok(!/var\(--red\)|var\(--green\)/.test(cuerpo), 'ni colores que separen unos de otros');
+    ok(/✓/.test(cuerpo) && /✗/.test(cuerpo), 'solo un ✓ o una ✗');
+    const j = src.indexOf('function _detalleHist');
+    const det = src.slice(j, src.indexOf('\n}', j));
+    ok(!/REGIONAL/.test(det), 'y en el detalle tampoco se resalta ningún campeonato');
+  }
+
+  console.log('\nLa columna está en las DOS pantallas');
+  ok(/<th title="Si ya compitió este año[^>]*>Compitió<\/th>/.test(src), 'en Nóminas');
+  ok(/_marcaCompitio\(_hCargando\(\)\?\[\]:_histDe\(i\.rut,i\.nombre\),'nom_'\+i\.id/.test(src),
+     'con su propia marca por fila');
+  ok(/return `<tr><td colspan="20"[\s\S]{0,120}_detalleHist\(_h,_histAnio\(\)\.anio\)/.test(src),
+     'y el mismo detalle se abre ahí');
+  ok(/if\(el&&ST\.view==='approvals'\)el\.innerHTML=apprListHtml\(\);\n\s*else render\(\);/.test(src),
+     'abrir el ✓ funciona en las dos, cada una como le corresponde');
+  ok(/ST\.view==='nominas'\)render\(\)/.test(src), 'y Nóminas también se actualiza sola');
+
+  console.log('\nUna cuenta de juez no entra a ningún panel');
+  {
+    const liv = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    // El respaldo del livecast daba admin ante CUALQUIER error al leer admins/.
+    // Las reglas solo dejan esa lectura a un admin, así que una cuenta de juez
+    // rebotaba ahí y salía con acceso completo — al revés de lo que se buscaba.
+    ok(/const negado=err&&\(err\.code==='permission-denied'/.test(liv),
+       'el livecast distingue "permiso denegado" de una caída de red');
+    ok(/if\(negado\)\{\n\s*isAdmin=false;/.test(liv),
+       'y con permiso denegado NO da admin');
+    ok(/isAdmin=true;window\.ADMIN_ROLE='admin';/.test(liv),
+       'pero ante una caída de red sigue dejando operar, que era para lo que estaba');
+    ok(/try\{ adminDoc=await getDoc\(doc\(db,'admins',u\.uid\)\); \}catch\(e\)\{ adminDoc=null; \}/.test(src),
+       'el admin trata el permiso denegado como "no es admin", no como error de sistema');
+    ok(/Esta es una cuenta de juez: sirve solamente para marcar las luces/.test(src),
+       'y se lo dice al juez con esas palabras, en vez de "acceso denegado"');
+    ok(/Luces jueces — SOLO yourlift\.cl\/jueces/.test(src), 'el rol se llama "Luces jueces"');
+    ok(/setDoc\(doc\(db, esJuez\?'jueces':'admins', newUID\)/.test(src),
+       'y la cuenta se crea fuera de admins/');
+  }
+
   console.log('\nLa columna está en la pantalla de revisión');
   ok(/<th title="Si ya compitió este año/.test(src), 'hay una columna con su encabezado');
   ok(/window\.apprToggleHist=function/.test(src), 'el ✓ se puede abrir para ver en qué compitió');
   ok(/✗<\/span>/.test(src), 'y el que no compitió lleva una ✗');
-  ok(/apprToggleHist\('\$\{esc\(i\.id\|\|''\)\}'\)/.test(src), 'cada fila abre la suya');
-  ok(/COMPITIÓ EN \$\{H\.anio\}/.test(src), 'el detalle dice el año');
+  ok(/apprToggleHist\('\$\{esc\(id\|\|''\)\}'\)/.test(src), 'cada fila abre la suya');
+  ok(/COMPITIÓ EN \$\{anio\}/.test(src), 'el detalle dice el año');
   ok(/Un campeonato que no se cerró desde acá no aparece/.test(src),
      'y avisa hasta dónde llega el dato, para no dar por limpio a alguien que no lo está');
   ok(/ST\.view==='athleteProfile'\|\|ST\.view==='approvals'/.test(src),

@@ -481,7 +481,22 @@ async function initFB(){
             console.log('[LiveCast] Logged in but not admin:',u.email);
           }
           R();
-        }).catch(()=>{isAdmin=true;window.ADMIN_ROLE='admin';if(localStorage.getItem('yl_controller')===null){window.IS_CONTROLLER=true;try{localStorage.setItem('yl_controller','1')}catch(e){}}R();}); // fallback: trust auth
+        }).catch((err)=>{
+          // Este respaldo existe para que una caída de red en pleno campeonato no
+          // deje al controlador sin poder operar. Pero "permiso denegado" no es una
+          // caída de red: es el servidor diciendo que NO es admin. Las reglas solo
+          // dejan leer admins/{uid} a un admin, así que una cuenta de juez rebotaba
+          // acá y salía con acceso completo — al revés de lo que se buscaba.
+          const negado=err&&(err.code==='permission-denied'||/permission/i.test(err.message||''));
+          if(negado){
+            isAdmin=false; window.ADMIN_ROLE=null;
+            console.log('[LiveCast] Sesión sin permisos de admin (¿cuenta de juez?)');
+            R(); return;
+          }
+          isAdmin=true;window.ADMIN_ROLE='admin';
+          if(localStorage.getItem('yl_controller')===null){window.IS_CONTROLLER=true;try{localStorage.setItem('yl_controller','1')}catch(e){}}
+          R();
+        });
       } else {
         if(isAdmin&&!window._ensayoFree){isAdmin=false;DATA.phase='liveView';R();}
       }
