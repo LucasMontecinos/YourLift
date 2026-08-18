@@ -216,17 +216,35 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
     const i = src.indexOf('const PRIORIDAD_CUPOS=[');
     ok(i > 0, 'los nueve puntos están escritos en un solo lugar');
     const bloque = src.slice(i, src.indexOf('];', i));
-    const n = (bloque.match(/^\s+'/gm) || []).length;
-    ok(n === 9, 'son nueve, del uno al nueve (' + n + ')');
-    ok(/Atletas debutantes sin registros de participación/.test(bloque),
-       'el 1 es el de los debutantes sin registro en otra organización');
-    ok(/no tienen registro en el actual circuito competitivo/.test(bloque),
-       'el 2, los que compitieron y no están en el ranking');
-    ok(/Anexo 2/.test(bloque), 'el 3 cita el Anexo 2');
-    ok(/desean bajar de categoría/.test(bloque), 'el 8, los que quieren bajar de categoría');
-    ok(/desean subir de categoría/.test(bloque), 'y el 9, los que quieren subir');
-    ok(/Los puntos 7, 8 y 9 quedarán a criterio de la comisión técnica/.test(src),
-       'y queda la nota de que 7, 8 y 9 los define la comisión');
+    const puestos = (bloque.match(/^\s+'.*',$/gm) || [])
+      .map(l => l.trim().replace(/^'/, '').replace(/',$/, '').replace(/\\'/g, "'"));
+    ok(puestos.length === 9, 'son nueve, del uno al nueve (' + puestos.length + ')');
+
+    // Se comparan LETRA POR LETRA contra el Anexo 3 del compendio oficial, sacado
+    // del PDF. Es normativa: una paráfrasis bien intencionada le puede cambiar el
+    // sentido a un punto, y de hecho pasó — el punto 2 estaba escrito al revés,
+    // "se consideran" en vez de "no considera", que es justo el error capaz de
+    // dejar entrar a quien no correspondía.
+    const oficial = JSON.parse(fs.readFileSync(__dirname + '/anexo3_oficial.json', 'utf8'));
+    // El PDF deja espacios sueltos donde hay negrita ("Anexo 2 ,"), así que se
+    // normalizan los espacios antes de puntuación antes de comparar.
+    const limpiar = s => String(s).replace(/\s+/g, ' ').replace(/\s+([,.;:])/g, '$1')
+      .trim().toLowerCase().replace(/\.$/, '');
+    oficial.puntos.forEach((txt, k) => {
+      ok(limpiar(puestos[k]) === limpiar(txt),
+         'el punto ' + (k + 1) + ' dice lo mismo que el compendio'
+         + (limpiar(puestos[k]) === limpiar(txt) ? '' : '\n      nuestro: ' + puestos[k] + '\n      oficial: ' + txt));
+    });
+    // El punto 2 aparte, porque es el que ya salió mal una vez.
+    ok(/Este punto no considera a los atletas que compitieron y fueron descalificados/.test(bloque),
+       'el punto 2 dice NO CONSIDERA, no lo contrario');
+    ok(!/En este punto se consideran los atletas/.test(bloque), 'y no quedó rastro de la versión invertida');
+    ok(limpiar(src.slice(src.indexOf("const PRIORIDAD_NOTA='") + 22, src.indexOf("';", src.indexOf("const PRIORIDAD_NOTA='"))))
+       === limpiar(oficial.nota), 'la nota final también es la del compendio');
+    ok(/ANEXO 3/.test(src) && /Compendio de Normas de Clasificación FECHIPO 2026/.test(src),
+       'y se dice de dónde sale, para poder ir a verificarlo');
+    ok(/65 atletas de Powerlifting/.test(src) && /71 en total/.test(src),
+       'van también los cupos, que son la razón por la que existe la priorización');
 
     ok(/<ol /.test(src.slice(src.indexOf('function _prioridadHtml'))),
        'se dibuja como lista numerada, para poder decir "es el punto 4"');
