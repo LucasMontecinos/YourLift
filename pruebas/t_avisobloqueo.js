@@ -119,7 +119,7 @@ console.log('\nEl aviso NO frena la inscripción');
   // venir mal tipeado y el compendio tiene excepciones (salvoconductos,
   // invitados, cambio de residencia) que resuelve la comisión.
   const html = sacar(src, '_bloqueoAvisoHtml');
-  ok(/De igual forma podés continuar con la inscripción/.test(html),
+  ok(/De igual forma puedes continuar con la inscripción/.test(html),
      'se lo dice al atleta con todas las letras');
   ok(/queda a revisión y aprobación\s*\n?\s*por parte de la Comisión Técnica/.test(html),
      'y el texto dice "queda a revisión y aprobación", no que será rechazada');
