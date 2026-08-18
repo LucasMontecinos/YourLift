@@ -4124,7 +4124,8 @@ function apprListHtml(){
     const marca=_marcaCompitio(hist,i.id,cargando,abierto);
     let fila=`<tr>
       <td style="font-size:10px;color:var(--muted)">${d?d.toLocaleDateString('es-CL'):'—'}</td>
-      <td>${esc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${esc(i.rut||'')} · ${esc(i.sexo||'')} · ${esc(i.division||'')}</span></td>
+      <td>${esc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${esc(i.rut||'')} · ${esc(i.sexo||'')} · ${esc(i.division||'')}</span>
+        ${(i.bloqueoAvisado||[]).length?`<div style="margin-top:3px;font-size:10px;color:var(--red);line-height:1.4">⚠ Se inscribió con el aviso a la vista: ya tenía ${esc((i.bloqueoAvisado||[]).join(' · '))}</div>`:''}</td>
       <td style="font-size:10px">${esc(i.evento||'')}</td>
       <td><span class="badge b-y">${esc(i.categoria||'?')}</span></td>
       <td style="font-size:11px"><span style="display:inline-flex;align-items:center;gap:5px">${window.clubLogoImg?window.clubLogoImg(i.club,18,'background:var(--bg);padding:1px;'):''}${esc(i.club||'—')}</span></td>
@@ -5575,6 +5576,7 @@ function renderCampeonatos(){
           </div>
         </div>
       </div>
+      ${_bloqueoFormHtml(editing)}
       ${!isNew?`<div style="margin-top:14px;padding:10px 14px;background:rgba(30,58,95,.3);border-radius:8px;font-size:12px;color:var(--muted)">
         <span style="color:var(--text)">Estado actual:</span>
         ${inscCount} inscripciones · ${ST.inscripciones.filter(i=>i.evento===editing.id&&i.status==='approved').length} aprobadas
@@ -5745,6 +5747,28 @@ window.uploadStreamLogo = async function(file){
     if(st)st.textContent='✓ Logo subido';
   }catch(e){ if(st)st.textContent=''+e.message; console.warn('[streamlogo]',e); }
 };
+// ── Campeonatos que impiden inscribirse a este ───────────────────────────────
+// El compendio dice que no se puede correr más de un regional al año, pero cuáles
+// bloquean a cuál no es algo fijo: depende del calendario de cada temporada. Así
+// que se elige por campeonato, al crearlo o editarlo, y queda guardado en su ficha
+// —no en una lista aparte que después nadie recuerda actualizar.
+function _bloqueoFormHtml(editing){
+  const H=_histAnio();
+  const sel=new Set(editing.bloqueaClaves||[]);
+  let h='<div style="margin-top:18px;padding:14px;border:1px solid rgba(239,68,68,.28);border-radius:10px;background:rgba(239,68,68,.05)">';
+  h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:1.5px;color:var(--red);margin-bottom:5px">QUIÉNES NO PUEDEN INSCRIBIRSE A ESTE CAMPEONATO</div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.55">Marcá los campeonatos que dejan a un atleta fuera de este. Al escribir su RUT en el formulario, el atleta ve el aviso en el momento — y la inscripción queda marcada para la comisión. Si no marcás ninguno, no se avisa nada.</div>';
+  if(!H.todos.length)h+='<div style="font-size:11px;color:var(--muted)">Todavía no hay campeonatos con registros para ofrecer.</div>';
+  let anio='';
+  H.todos.forEach(x=>{
+    if(x.anio!==anio){anio=x.anio;h+=`<div style="font-family:Oswald;font-size:10px;letter-spacing:1.5px;color:var(--gold);margin:9px 0 4px">${esc(anio||'sin año')}</div>`;}
+    h+=`<label style="display:flex;align-items:center;gap:8px;padding:2px 0;font-size:12px;cursor:pointer;color:${sel.has(x.clave)?'var(--text)':'var(--muted)'}">
+      <input type="checkbox" class="ef-bloq" data-clave="${esc(x.clave)}" ${sel.has(x.clave)?'checked':''} style="cursor:pointer">
+      <span>${esc(x.nombre)}</span><span style="font-size:10px;color:var(--muted)">· ${x.n}</span></label>`;
+  });
+  h+='</div>';
+  return h;
+}
 window.saveEvento = async function(){
   const isNew = ST.eventoFormMode === 'create';
   const id  = isNew ? (document.getElementById('ef_id').value||'').trim().replace(/\s+/g,'_') : ST.eventoForm.id;
@@ -5783,7 +5807,10 @@ window.saveEvento = async function(){
   if(!id || !name){ showToast('ID y nombre son obligatorios', null, true); return; }
   if(isNew && ST.eventos.find(e=>e.id===id)){ showToast('Ya existe un campeonato con ese ID', null, true); return; }
 
-  const data = {id, name, date, closeDate, preNominaCloseAt, nominaCloseAt, location, org, days, status,
+  // Campeonatos que dejan a un atleta fuera de este.
+  const bloqueaClaves = Array.from(document.querySelectorAll('.ef-bloq:checked'))
+    .map(cb=>cb.getAttribute('data-clave'));
+  const data = {id, name, date, closeDate, preNominaCloseAt, nominaCloseAt, location, org, days, status, bloqueaClaves,
     extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, posNac2026, youtubeUrl,
     organizers, logoUrl, instagram,    // organizadores (con IG) + logo del campeonato (se muestran en el home)
     streamLogoUrl, streamInstagram,    // logo de productora + IG para la tarjeta de Transmisiones

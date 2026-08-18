@@ -352,6 +352,68 @@ fetch(_STOR+'public%2Fdata.json?alt=media',{cache:'no-cache'})
   .catch(()=>fetch('data.json?v='+Date.now()).then(r=>r.json()))
   .then(d=>{athleteDB=d;}).catch(()=>{});
 
+// ══ Aviso de participación previa ══════════════════════════════════════════
+// El compendio no deja correr más de un regional clasificatorio por temporada.
+// Cuáles bloquean a cuál se configura en la ficha de cada campeonato (Admin →
+// Campeonatos), porque cambia con el calendario de cada año.
+//
+// El aviso NO frena la inscripción, y es a propósito: los datos pueden estar
+// incompletos, un RUT puede venir mal tipeado, y el compendio tiene excepciones
+// que resuelve la comisión (salvoconductos, invitados, cambios de residencia).
+// Cerrarle la puerta a alguien un domingo a las once de la noche, sin nadie a
+// quien apelar, es peor que dejarlo seguir con el aviso a la vista. La comisión
+// lo ve marcado al revisar, que es donde se decide de verdad.
+const COMPENDIO_CITA='Los atletas podrán competir solo una vez por temporada/año competitivo en torneos regionales clasificatorios, ya sea en disciplina powerlifting, only bench o simultánea, modalidad Classic o equipado y diferentes en líneas competitivas de Universitarios, OE o IPF, limitados a la zona de residencia declarado con total obtenido o competencia completa.';
+const COMPENDIO_FUENTE='Compendio de Normas de Clasificación FECHIPO 2026 — Normas Generales, "De los Atletas", punto F';
+function _evClaveIns(ev){
+  return String(ev||'')
+    .replace(/\s*[-–]\s*Tarima\s*\d+\s*$/i,'')
+    .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/\b(campeonato|fechipo|torneo|de|del|cd)\b/g,' ')
+    .replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+}
+// Devuelve los campeonatos que chocan con el que se está inscribiendo.
+function bloqueoDetectado(){
+  const f=state.form;
+  const ev=EVENTS.find(e=>e.id===f.evento);
+  const claves=(ev&&ev.bloqueaClaves)||[];
+  if(!claves.length||!f.rut)return [];
+  const a=findAthleteByRut(formatRut(f.rut));
+  if(!a)return [];
+  const vistos={},out=[];
+  (a.competencias||[]).forEach(c=>{
+    const k=_evClaveIns(c.evento);
+    if(claves.indexOf(k)<0||vistos[k])return;
+    vistos[k]=1;
+    out.push({evento:String(c.evento||'').replace(/\s*[-–]\s*Tarima\s*\d+\s*$/i,'').trim(),fecha:c.fecha||''});
+  });
+  return out;
+}
+function bloqueoAvisoHtml(){
+  const ch=bloqueoDetectado();
+  if(!ch.length)return '';
+  const ev=EVENTS.find(e=>e.id===state.form.evento);
+  // display:block: la clase .alert es flex y pondría cada párrafo en su propia
+  // columna. Acá el aviso es un texto largo que se lee de arriba a abajo.
+  return `<div class="alert" style="display:block;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.45);color:var(--text);text-align:left;line-height:1.6">
+    <div style="font-family:Oswald;font-size:14px;letter-spacing:1px;color:#ef4444;margin-bottom:8px">⚠️ YA REGISTRÁS UNA PARTICIPACIÓN ESTE AÑO</div>
+    <div style="font-size:13px;margin-bottom:10px">
+      Según el Compendio ${new Date().getFullYear()}, tu inscripción a <b>${(ev&&ev.name)||'este campeonato'}</b> no será aceptada por la Comisión Técnica,
+      porque ya participaste en un campeonato clasificatorio de esta temporada:
+    </div>
+    <ul style="margin:0 0 10px 18px;font-size:13px">
+      ${ch.map(x=>`<li style="padding:2px 0"><b>${x.evento}</b>${x.fecha?` <span style="color:var(--muted);font-size:11px">· ${x.fecha}</span>`:''}</li>`).join('')}
+    </ul>
+    <div style="font-size:12px;color:var(--muted);font-style:italic;border-left:2px solid rgba(239,68,68,.4);padding-left:10px;margin-bottom:10px">
+      “${COMPENDIO_CITA}”<br>
+      <span style="font-style:normal;font-size:11px">${COMPENDIO_FUENTE}</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted)">
+      De igual forma podés continuar con la inscripción: la Comisión Técnica revisa cada caso y aplica las excepciones que correspondan.
+      Si creés que esto es un error, seguí y avisá a la Comisión.
+    </div>
+  </div>`;
+}
 function findAthleteByRut(rut) {
   if (!rut) return null;
   const clean = rut.replace(/[^0-9kK]/g, '').toUpperCase();
@@ -645,6 +707,7 @@ function renderForm() {
   h += `<p style="font-size:12px;color:var(--muted);margin-bottom:16px">Paso ${s+1} de ${steps.length}: <strong style="color:var(--text)">${steps[s]}</strong></p>`;
 
   if (state.error) h += `<div class="alert alert-error">⚠️ ${state.error}</div>`;
+  h += bloqueoAvisoHtml();
 
   // STEP 0: Event selection
   if (s === 0) {
@@ -1584,6 +1647,10 @@ async function submitForm() {
       privacyConsent: true,
       privacyConsentTs: new Date().toISOString(),
       status: 'pending',
+      // Si al inscribirse ya registraba una participación que choca con este
+      // campeonato, queda anotado. El atleta vio el aviso y siguió igual; la
+      // comisión tiene que ver lo mismo al revisar, sin depender de acordarse.
+      bloqueoAvisado: bloqueoDetectado().map(x=>x.evento),
     };
 
     // Datos PRIVADOS (inscripciones_private): solo admin.
