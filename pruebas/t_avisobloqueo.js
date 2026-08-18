@@ -36,11 +36,11 @@ function sacar(texto, nombre) {
 }
 
 // El entorno mínimo del formulario.
-let EVENTS = [], athleteDB = [], state = { form: {} };
+let EVENTS = [], athleteDB = [], compResDB = [], state = { form: {} };
 const formatRut = s => String(s || '');
 const esc = s => String(s == null ? '' : s);
 const COMPENDIO_CITA = 'cita', COMPENDIO_FUENTE = 'fuente';
-eval(['_evClaveIns', 'findAthleteByRut', 'bloqueoDetectado'].map(n => sacar(src, n)).join('\n'));
+eval(['_evClaveIns', 'findAthleteByRut', '_bloqueoDetectado', 'bloqueoDetectado', '_bloqueoAvisoHtml', 'bloqueoAvisoHtml'].map(n => sacar(src, n)).join('\n'));
 
 const ANIO = String(new Date().getFullYear());
 athleteDB = [
@@ -118,14 +118,17 @@ console.log('\nEl aviso NO frena la inscripción');
   // Es la decisión de fondo: los datos pueden estar incompletos, un RUT puede
   // venir mal tipeado y el compendio tiene excepciones (salvoconductos,
   // invitados, cambio de residencia) que resuelve la comisión.
-  const html = sacar(src, 'bloqueoAvisoHtml');
+  const html = sacar(src, '_bloqueoAvisoHtml');
   ok(/De igual forma podés continuar con la inscripción/.test(html),
      'se lo dice al atleta con todas las letras');
+  ok(/queda a revisión y aprobación\s*\n?\s*por parte de la Comisión Técnica/.test(html),
+     'y el texto dice "queda a revisión y aprobación", no que será rechazada');
+  ok(!/no será aceptada por la Comisión/.test(html), 'no queda rastro de la redacción anterior');
   ok(!/disabled|return false|preventDefault|state\.view=/.test(html),
      'y el aviso no toca el flujo: no deshabilita ni corta nada');
   const enviar = src.indexOf('const publicEntry = {');
   const bloque = src.slice(enviar, src.indexOf('};', enviar));
-  ok(/bloqueoAvisado: bloqueoDetectado\(\)/.test(bloque),
+  ok(/bloqueoAvisado: \(bloqueoDetectado\(\)\|\|\[\]\)/.test(bloque),
      'queda anotado en la inscripción que el atleta vio el aviso');
 }
 
@@ -135,8 +138,54 @@ console.log('\n  Con la cita del compendio, para que no sea la palabra del siste
      'va el texto del compendio');
   ok(/Normas Generales, "De los Atletas", punto F/.test(src),
      'y de dónde sale, para poder ir a verificarlo');
-  const html = sacar(src, 'bloqueoAvisoHtml');
+  const html = sacar(src, '_bloqueoAvisoHtml');
   ok(/COMPENDIO_CITA/.test(html) && /COMPENDIO_FUENTE/.test(html), 'las dos cosas se muestran');
+}
+
+console.log('\nNo puede romper la inscripción, pase lo que pase');
+{
+  // Es la condición de fondo: el sistema de inscripciones funciona y un aviso no
+  // puede tumbarlo. Las dos funciones corren en cada dibujado y otra vez al
+  // enviar; si tiraran una excepción, se caería el formulario entero.
+  ok(/function bloqueoDetectado\(\)\{\s*try\{ return _bloqueoDetectado\(\); \}/.test(src),
+     'la detección va envuelta en try');
+  ok(/function bloqueoAvisoHtml\(\)\{\s*try\{ return _bloqueoAvisoHtml\(\); \}/.test(src),
+     'y el dibujado también');
+  ok(/catch\(e\)\{ console\.warn\('\[aviso\] no se pudo revisar[\s\S]{0,40}return \[\]; \}/.test(src),
+     'si algo falla, devuelve vacío: no hay aviso y el formulario sigue igual');
+  // Y se comprueba de verdad, rompiendo a propósito lo que usa.
+  const guardado = EVENTS;
+  EVENTS = null;                       // como si los eventos no hubieran cargado
+  let reventó = false;
+  try { bloqueoDetectado(); bloqueoAvisoHtml(); } catch (e) { reventó = true; }
+  ok(!reventó, 'con los eventos rotos no revienta');
+  EVENTS = guardado;
+  state.form = null;                   // como si no hubiera formulario todavía
+  reventó = false;
+  try { bloqueoDetectado(); bloqueoAvisoHtml(); } catch (e) { reventó = true; }
+  ok(!reventó, 'y sin formulario tampoco');
+  state.form = { evento: 'sur_austral', rut: '19839518-9' };
+}
+
+console.log('\nMira las dos fuentes: data.json y lo cerrado hace poco');
+{
+  // El data.json que se sirve a los atletas no tenía a NADIE del Regional Centro
+  // Sur ni del Norte —143 personas, cerrados esa misma semana—. Con una sola
+  // fuente el aviso no le habría saltado a ninguno.
+  EVENTS = [SUR_AUSTRAL];
+  state.form = { evento: 'sur_austral', rut: '30.303.030-3' };
+  ok(bloqueoDetectado().length === 0, 'alguien que no está en data.json no da aviso…');
+  compResDB = [{ rut: '30303030-3', evento: 'Campeonato Regional Norte ' + ANIO, fecha: ANIO + '-08-17' }];
+  const ch = bloqueoDetectado();
+  ok(ch.length === 1, '…pero sí cuando aparece en los resultados recientes (' + ch.length + ')');
+  ok(/Norte/.test(ch[0].evento), 'y es el Regional Norte, cerrado ayer: ' + ch[0].evento);
+  compResDB = [];
+  ok(/async function cargarCompRes\(\)/.test(src), 'se cargan aparte, con su propia caché');
+  ok(/_ifsCache\('ins_compres', 10\*60\*1000\)/.test(src), 'cacheados 10 minutos, para no leer de más');
+  ok(/rut:x\.rut\|\|'',evento:x\.evento\|\|'',fecha:x\.fecha\|\|''/.test(src),
+     'y solo se trae RUT, campeonato y fecha: las marcas no tienen para qué venir a una página pública');
+  ok(/const escribiendo=document\.activeElement/.test(src),
+     'si llegan mientras el atleta escribe, no se le redibuja el campo encima');
 }
 
 console.log('\nLa comisión ve lo mismo al revisar');

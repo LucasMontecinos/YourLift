@@ -4082,12 +4082,23 @@ function _cupoSelectorHtml(){
   h+='</div></div>';
   return h;
 }
+// El Campeonato Nacional se distingue: quien viene de ahí entra en la lista de
+// priorización por los puntos 5 y 6 del Anexo 3 (último registro en el Nacional
+// hasta el segundo lugar, y campeones de categoría). No es lo mismo que haber
+// corrido un regional, y la comisión lo trata distinto.
+// El Nacional Universitario NO cuenta acá: es otra línea competitiva.
+function _esNacional(ev){
+  const s=String(ev||'');
+  return /nacional/i.test(s)&&!/universitari/i.test(s);
+}
 function _marcaCompitio(hist,id,cargando,abierto){
   if(cargando)return '<span style="color:var(--muted);font-size:11px">…</span>';
   if(!hist.length)return '<span title="Sin competencias registradas este año" style="color:var(--muted);font-family:Oswald;font-size:14px;font-weight:700">✗</span>';
-  return `<button onclick="apprToggleHist('${esc(id||'')}')" title="Ver en qué compitió"
-    style="cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:7px;
-    padding:3px 10px;color:var(--text);font-family:Oswald;font-size:14px;font-weight:700">
+  const nac=hist.some(x=>_esNacional(x.evento));
+  const col=nac?'var(--gold)':'var(--text)';
+  return `<button onclick="apprToggleHist('${esc(id||'')}')" title="${nac?'Compitió en el Campeonato Nacional — entra en la lista de priorización':'Ver en qué compitió'}"
+    style="cursor:pointer;background:transparent;border:1px solid ${nac?'var(--gold)':'var(--border)'};border-radius:7px;
+    padding:3px 10px;color:${col};font-family:Oswald;font-size:14px;font-weight:700">
     ✓ <span style="opacity:.5;font-size:9px">${abierto?'▴':'▾'}</span></button>`;
 }
 function _hCargando(){return !(ST.allCompResults||[]).length;}

@@ -373,15 +373,39 @@ function _evClaveIns(ev){
     .replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 }
 // Devuelve los campeonatos que chocan con el que se está inscribiendo.
+//
+// TODO va dentro de un try. Esta función se llama en cada dibujado del formulario
+// y otra vez al enviar: si llegara a tirar una excepción —un dato raro, un campo
+// que no vino— rompería la inscripción entera. El sistema de inscripciones
+// funciona y no se puede estropear por un aviso. Si algo sale mal, no hay aviso y
+// el formulario sigue exactamente como antes.
 function bloqueoDetectado(){
-  const f=state.form;
+  try{ return _bloqueoDetectado(); }
+  catch(e){ console.warn('[aviso] no se pudo revisar la participación previa',e); return []; }
+}
+function _bloqueoDetectado(){
+  const f=(state&&state.form)||{};
   const ev=EVENTS.find(e=>e.id===f.evento);
   const claves=(ev&&ev.bloqueaClaves)||[];
   if(!claves.length||!f.rut)return [];
+  const rutN=String(formatRut(f.rut)).replace(/[^0-9kK]/g,'').toUpperCase();
+  if(rutN.length<5)return [];
+
+  // Se miran las DOS fuentes. data.json se publica cada tanto: cuando se probó
+  // esto, el archivo que se sirve a los atletas no tenía a NADIE del Regional
+  // Centro Sur ni del Norte —143 personas entre los dos, cerrados esa misma
+  // semana— y el aviso no le habría saltado a ninguna. Lo recién cerrado está en
+  // competition_results, así que se lee de ahí también.
+  const previas=[];
   const a=findAthleteByRut(formatRut(f.rut));
-  if(!a)return [];
+  if(a)(a.competencias||[]).forEach(c=>previas.push({evento:c.evento,fecha:c.fecha}));
+  (compResDB||[]).forEach(r=>{
+    if(String(r.rut||'').replace(/[^0-9kK]/g,'').toUpperCase()===rutN)
+      previas.push({evento:r.evento,fecha:r.fecha});
+  });
+
   const vistos={},out=[];
-  (a.competencias||[]).forEach(c=>{
+  previas.forEach(c=>{
     const k=_evClaveIns(c.evento);
     if(claves.indexOf(k)<0||vistos[k])return;
     vistos[k]=1;
@@ -390,16 +414,20 @@ function bloqueoDetectado(){
   return out;
 }
 function bloqueoAvisoHtml(){
+  try{ return _bloqueoAvisoHtml(); }
+  catch(e){ console.warn('[aviso] no se pudo dibujar',e); return ''; }
+}
+function _bloqueoAvisoHtml(){
   const ch=bloqueoDetectado();
   if(!ch.length)return '';
-  const ev=EVENTS.find(e=>e.id===state.form.evento);
+  const ev=EVENTS.find(e=>e.id===((state&&state.form)||{}).evento);
   // display:block: la clase .alert es flex y pondría cada párrafo en su propia
   // columna. Acá el aviso es un texto largo que se lee de arriba a abajo.
   return `<div class="alert" style="display:block;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.45);color:var(--text);text-align:left;line-height:1.6">
     <div style="font-family:Oswald;font-size:14px;letter-spacing:1px;color:#ef4444;margin-bottom:8px">⚠️ YA REGISTRÁS UNA PARTICIPACIÓN ESTE AÑO</div>
     <div style="font-size:13px;margin-bottom:10px">
-      Según el Compendio ${new Date().getFullYear()}, tu inscripción a <b>${(ev&&ev.name)||'este campeonato'}</b> no será aceptada por la Comisión Técnica,
-      porque ya participaste en un campeonato clasificatorio de esta temporada:
+      Según el Compendio ${new Date().getFullYear()}, tu inscripción a <b>${(ev&&ev.name)||'este campeonato'}</b> queda a revisión y aprobación
+      por parte de la Comisión Técnica, porque ya participaste en un campeonato clasificatorio de esta temporada:
     </div>
     <ul style="margin:0 0 10px 18px;font-size:13px">
       ${ch.map(x=>`<li style="padding:2px 0"><b>${x.evento}</b>${x.fecha?` <span style="color:var(--muted);font-size:11px">· ${x.fecha}</span>`:''}</li>`).join('')}
@@ -566,6 +594,27 @@ let state = {
 function _ifsCache(k,ttl){try{const v=localStorage.getItem('_yfc_'+k);if(!v)return null;const o=JSON.parse(v);if(Date.now()-o.ts<ttl)return o.d;}catch(e){}return null;}
 function _ifsSetCache(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.now(),d}));}catch(e){}}
 
+// ── Resultados recientes (lo que aún no está en data.json) ───────────────────
+// Solo se guarda RUT, campeonato y fecha: es lo único que el aviso necesita, y no
+// hace falta traerse las marcas de nadie a una página pública.
+let compResDB = [];
+async function cargarCompRes(){
+  try{
+    const c=_ifsCache('ins_compres', 10*60*1000);
+    if(c){ compResDB=c; return; }
+    if(!firebaseReady||!window.FB)return;
+    const snap=await window.FB.getDocs(window.FB.collection(db,'competition_results'));
+    compResDB=snap.docs.map(d=>{const x=d.data();
+      return {rut:x.rut||'',evento:x.evento||'',fecha:x.fecha||''};});
+    _ifsSetCache('ins_compres', compResDB);
+    // Si el atleta ya había escrito su RUT antes de que esto llegara, se vuelve a
+    // dibujar para que vea el aviso. No se toca la pantalla si está escribiendo:
+    // un re-dibujado en medio de un campo le come lo tipeado.
+    const escribiendo=document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+    if(!escribiendo&&bloqueoDetectado().length)render();
+  }catch(e){ console.warn('[aviso] no se pudieron cargar los resultados recientes',e); }
+}
+
 // ── Firestore eventos ────────────────────────────────────────
 async function loadEventos() {
   if (!firebaseReady) {
@@ -584,6 +633,7 @@ async function loadEventos() {
       _ifsSetCache('ins_eventos', EVENTS);
       render();
     }
+    cargarCompRes();   // lo cerrado hace poco, que todavía no está en data.json
     // Fotos aprobadas: getDocs + caché 30min
     window.FOTOS_BY_RUT = window.FOTOS_BY_RUT || {};
     const cf = _ifsCache('ins_fotos', 30*60*1000);
@@ -1650,7 +1700,7 @@ async function submitForm() {
       // Si al inscribirse ya registraba una participación que choca con este
       // campeonato, queda anotado. El atleta vio el aviso y siguió igual; la
       // comisión tiene que ver lo mismo al revisar, sin depender de acordarse.
-      bloqueoAvisado: bloqueoDetectado().map(x=>x.evento),
+      bloqueoAvisado: (bloqueoDetectado()||[]).map(x=>x.evento),
     };
 
     // Datos PRIVADOS (inscripciones_private): solo admin.
