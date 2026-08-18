@@ -3854,21 +3854,51 @@ function _hNom(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[
 // una sola —compitió o no compitió— y en qué compitió se ve abriendo el ✓, que es
 // donde la comisión tiene el detalle para decidir.
 function _esRegional(ev){return /regional/i.test(String(ev||''));}
+// Clave para saber si dos líneas son el MISMO campeonato escrito distinto. En los
+// datos conviven "Regional Centro 2026" y "Campeonato Regional Centro FECHIPO
+// 2026": son el mismo torneo, y sin esto el atleta aparecería compitiendo dos
+// veces. Se sacan las palabras de relleno y las tarimas, y queda lo que identifica
+// al campeonato. "Regional Centro" y "Regional Centro Sur" siguen siendo distintos.
+function _evClave(ev){
+  return String(ev||'')
+    .replace(/\s*[-–]\s*Tarima\s*\d+\s*$/i,'')
+    .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/\b(campeonato|fechipo|torneo|de|del|cd)\b/g,' ')
+    .replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+}
 function _histAnio(){
   if(window._HIST_ANIO)return window._HIST_ANIO;
   const anio=String(new Date().getFullYear());
   const porRut={}, porNom={};
+  const meter=(rut,nombre,it)=>{
+    const k=_hRut(rut); if(k)(porRut[k]=porRut[k]||[]).push(it);
+    const n=_hNom(nombre); if(n)(porNom[n]=porNom[n]||[]).push(it);
+  };
+  const delAnio=(evento,fecha)=>{
+    // El año sale de la fecha; si no la trae, del nombre del campeonato. Los
+    // resultados viejos de data.json muchas veces vienen sin fecha.
+    const a=String(fecha||'').slice(0,4)||(String(evento||'').match(/\b(20\d\d)\b/)||[])[1]||'';
+    return a===anio;
+  };
+  const arma=(evento,fecha,categoria,division,modalidad,r)=>({
+    evento:evento||'',fecha:String(fecha||''),regional:_esRegional(evento),
+    categoria:categoria||'',division:division||'',modalidad:modalidad||'',
+    total:(r||{}).total||0,estado:(r||{}).status||''});
+
+  // 1) Lo cerrado desde el livecast.
   (ST.allCompResults||[]).forEach(d=>{
-    const fecha=String(d.fecha||'');
-    // El año sale de la fecha del resultado; si no la tiene, del nombre del evento.
-    const a=fecha.slice(0,4)||(String(d.evento||'').match(/\b(20\d\d)\b/)||[])[1]||'';
-    if(a!==anio)return;
-    const r=d.resultado||{};
-    const it={evento:d.evento||'',fecha:fecha,regional:_esRegional(d.evento),
-      categoria:d.categoria||'',division:d.division||'',modalidad:d.modalidad||'',
-      total:r.total||0,estado:r.status||''};
-    const k=_hRut(d.rut); if(k)(porRut[k]=porRut[k]||[]).push(it);
-    const n=_hNom(d.nombre); if(n)(porNom[n]=porNom[n]||[]).push(it);
+    if(!delAnio(d.evento,d.fecha))return;
+    meter(d.rut,d.nombre,arma(d.evento,d.fecha,d.categoria,d.division,d.modalidad,d.resultado));
+  });
+  // 2) Y el histórico publicado (data.json). Sin esto faltaba el Campeonato
+  //    Nacional 2026 de San Vicente, que nunca pasó por competition_results: los
+  //    214 atletas que compitieron ahí salían con una ✗ como si no hubieran
+  //    competido en todo el año.
+  (ST.data||[]).forEach(a=>{
+    (a.competencias||[]).forEach(c=>{
+      if(!delAnio(c.evento,c.fecha))return;
+      meter(a.rut,a.nombre,arma(c.evento,c.fecha,c.categoria,c.division,c.modalidad,c.resultado));
+    });
   });
   return (window._HIST_ANIO={anio,porRut,porNom});
 }
@@ -3880,13 +3910,23 @@ function _histDe(rut,nombre){
   let arr=H.porRut[_hRut(rut)];
   if(!arr||!arr.length)arr=H.porNom[_hNom(nombre)];
   if(!arr)return [];
-  const vistos={},out=[];
+  // Un campeonato por línea. Se junta el Debutantes, que vino partido en dos
+  // tarimas, y las dos escrituras del mismo torneo entre las dos fuentes. De cada
+  // grupo se muestra el nombre más completo y la fecha que exista.
+  const porClave={};
   arr.forEach(it=>{
     const base=it.evento.replace(/\s*[-–]\s*Tarima\s*\d+\s*$/i,'').trim();
-    if(vistos[base])return;
-    vistos[base]=1; out.push(Object.assign({},it,{evento:base}));
+    const k=_evClave(it.evento);
+    const y=porClave[k];
+    if(!y){porClave[k]=Object.assign({},it,{evento:base});return;}
+    if(base.length>y.evento.length)y.evento=base;
+    if(!y.fecha&&it.fecha)y.fecha=it.fecha;
+    if(!y.total&&it.total)y.total=it.total;
+    if(!y.categoria&&it.categoria)y.categoria=it.categoria;
+    if(!y.division&&it.division)y.division=it.division;
+    if(!y.modalidad&&it.modalidad)y.modalidad=it.modalidad;
   });
-  return out.sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  return Object.values(porClave).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
 }
 // ── Orden de prioridad cuando hay menos cupos que inscritos ──────────────────
 // Es el reglamento, no un cálculo: va como recordatorio para la comisión técnica

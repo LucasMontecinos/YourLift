@@ -36,9 +36,9 @@ function sacar(nombre) {
   }
   return src.slice(start, p);
 }
-const ST = { allCompResults: [] };
+const ST = { allCompResults: [], data: [] };
 const window_ = {};
-eval(['_hRut', '_hNom', '_esRegional', '_histAnio', '_histDe'].map(sacar).join('\n')
+eval(['_hRut', '_hNom', '_esRegional', '_evClave', '_histAnio', '_histDe'].map(sacar).join('\n')
   .replace(/window\._HIST_ANIO/g, 'window_._HIST_ANIO'));
 
 const ANIO = String(new Date().getFullYear());
@@ -127,26 +127,82 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
        'dos regionales en el mismo año — el caso que hay que cazar');
   }
 
+  console.log('\nEl Nacional también cuenta, aunque no haya pasado por el livecast');
+  {
+    // El Campeonato Nacional 2026 (San Vicente, febrero) nunca se cerró desde
+    // YourLift: no está en competition_results, está en data.json. Mirando una sola
+    // fuente, los 214 atletas que compitieron ahí salían con ✗, como si no
+    // hubieran competido en todo el año. Es el falso negativo más caro posible:
+    // justo el campeonato del que sale la gente que va al Mundial.
+    ST.allCompResults = [];
+    ST.data = [{ rut: '5.555.555-5', nombre: 'Del Nacional',
+      competencias: [{ evento: 'Campeonato Nacional FECHIPO ' + ANIO, fecha: '',
+        categoria: '93', division: 'Open', modalidad: 'Powerlifting Classic',
+        resultado: { total: 700, status: 'OK' } }] }];
+    window_._HIST_ANIO = null;
+    const h = _histDe('5.555.555-5', '');
+    ok(h.length === 1, 'aparece igual (' + h.length + ')');
+    ok(/Nacional/.test(h[0].evento), 'y es el Nacional: ' + h[0].evento);
+    ok(true, 'sin fecha, el año se saca del nombre del campeonato');
+  }
+
+  console.log('\n  El mismo campeonato escrito de dos formas es UNO solo');
+  {
+    // En los datos conviven "Regional Centro 2026" y "Campeonato Regional Centro
+    // FECHIPO 2026" — 29 personas figuran con los dos. Sin unificar, la comisión
+    // vería a alguien compitiendo dos veces donde compitió una.
+    ST.allCompResults = [R('6.666.666-6', 'Dos Nombres', 'Campeonato Regional Centro FECHIPO ' + ANIO, ANIO + '-05-11')];
+    ST.data = [{ rut: '6.666.666-6', nombre: 'Dos Nombres',
+      competencias: [{ evento: 'Regional Centro ' + ANIO, fecha: ANIO + '-05-11',
+        categoria: '93', division: 'Open', modalidad: 'Powerlifting Classic',
+        resultado: { total: 600, status: 'OK' } }] }];
+    window_._HIST_ANIO = null;
+    const h = _histDe('6.666.666-6', '');
+    ok(h.length === 1, 'se muestra una sola vez (' + h.length + ')');
+    ok(/FECHIPO/.test(h[0].evento), 'con el nombre más completo de los dos: ' + h[0].evento);
+
+    ok(_evClave('Regional Centro 2026') === _evClave('Campeonato Regional Centro FECHIPO 2026'),
+       'las dos escrituras dan la misma clave');
+    ok(_evClave('Campeonato Regional Centro FECHIPO 2026') !== _evClave('Campeonato Regional CENTRO SUR  FECHIPO 2026'),
+       'pero Centro y Centro Sur siguen siendo campeonatos distintos');
+    ok(_evClave('Campeonato Nacional FECHIPO 2026') !== _evClave('Primer Campeonato Nacional Universitario FECHIPO 2026'),
+       'y el Nacional no se confunde con el Nacional Universitario');
+    ok(_evClave('Campeonato Nacional FECHIPO 2026') !== _evClave('Campeonato Nacional FECHIPO 2025'),
+       'ni un año con el otro');
+  }
+
   console.log('\nContra los datos DE VERDAD de este año');
   {
     const reales = JSON.parse(fs.readFileSync(__dirname + '/cr_reales.json', 'utf8'));
+    const hist = JSON.parse(fs.readFileSync(__dirname + '/datajson_2026.json', 'utf8'));
     ST.allCompResults = reales;
+    ST.data = hist;
     window_._HIST_ANIO = null;
     const H = _histAnio();
     const ruts = Object.keys(H.porRut);
     ok(ruts.length > 250, ruts.length + ' personas con resultados en ' + ANIO);
+    // Con las dos fuentes tiene que aparecer el Nacional, que en la de Firestore no está.
+    const conNacional = ruts.filter(r => (H.porRut[r] || [])
+      .some(x => /nacional/i.test(x.evento) && !/universitario/i.test(x.evento)));
+    ok(conNacional.length > 150,
+       conNacional.length + ' compitieron en el Nacional — antes salían todos con ✗');
     const conRegional = ruts.filter(r => (H.porRut[r] || []).some(x => x.regional));
     ok(conRegional.length > 100, conRegional.length + ' ya corrieron un regional este año');
+    // Se cuenta con el MISMO unificador que usa la pantalla. Con los nombres
+    // crudos daban 53 personas "con dos regionales", que era falso: eran las que
+    // figuran con las dos escrituras del mismo Regional Centro.
     const dobles = ruts.filter(r => {
-      const evs = new Set((H.porRut[r] || []).filter(x => x.regional)
-        .map(x => x.evento.replace(/\s*[-–]\s*Tarima\s*\d+\s*$/i, '').trim()));
+      const evs = new Set((H.porRut[r] || []).filter(x => x.regional).map(x => _evClave(x.evento)));
       return evs.size > 1;
     });
     console.log('    · con DOS regionales distintos este año: ' + dobles.length);
-    ok(true, 'el cruce corre sobre los ' + reales.length + ' resultados reales sin romperse');
-    // Y ninguna ficha sale vacía o a medio armar.
-    const rotas = ruts.filter(r => (H.porRut[r] || []).some(x => !x.evento || !x.fecha));
-    ok(rotas.length === 0, 'todas las fichas traen campeonato y fecha' + (rotas.length ? ' — fallan ' + rotas.length : ''));
+    ok(true, 'el cruce corre sobre las dos fuentes reales sin romperse');
+    // El nombre del campeonato es lo que la comisión lee, y no puede faltar. La
+    // fecha sí falta a veces —el histórico viejo no la trae— y se muestra "—".
+    const rotas = ruts.filter(r => (H.porRut[r] || []).some(x => !x.evento));
+    ok(rotas.length === 0, 'ninguna ficha queda sin campeonato' + (rotas.length ? ' — fallan ' + rotas.length : ''));
+    const sinFecha = ruts.filter(r => (H.porRut[r] || []).some(x => !x.fecha)).length;
+    console.log('    · fichas sin fecha (se muestran con "—"): ' + sinFecha);
   }
 
   console.log('\nEl ✓ y la ✗ van sin colores ni etiquetas');
