@@ -457,7 +457,8 @@ async function loadAll(){
     try{
       window._allCompResListener=onSnapshot(collection(db,'competition_results'),(snap)=>{
         ST.allCompResults=snap.docs.map(d=>({id:d.id,...d.data()}));
-        if(ST.view==='athleteProfile')render();
+        window._HIST_ANIO=null;   // el índice del año se rehace con los datos nuevos
+        if(ST.view==='athleteProfile'||ST.view==='approvals')render();
       },(e)=>console.warn('[listener] competition_results:',e.message));
     }catch(e){console.warn('[loadAll] allCompRes listener:',e.message);}
   }
@@ -3816,6 +3817,64 @@ function renderNomSuda(allEvents){
   return h;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ¿YA COMPITIÓ ESTE AÑO?  —  columna de la revisión de inscripciones
+// ═══════════════════════════════════════════════════════════════
+// Un atleta puede correr UN SOLO regional por año. Hasta ahora eso se controlaba
+// de memoria, o abriendo el perfil de cada uno: con dos regionales abriendo
+// inscripciones al mismo tiempo, es cuestión de tiempo que se cuele alguien.
+//
+// El dato ya lo tenemos: cada campeonato cerrado desde el livecast deja sus
+// resultados en competition_results, con RUT. Así que la columna no inventa nada,
+// solo mira lo que ya está guardado.
+//
+// Se cruza por RUT. Si el RUT no calza —o la inscripción vino sin RUT— se prueba
+// por nombre normalizado, que es peor pero mejor que no avisar.
+function _hRut(s){return String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();}
+function _hNom(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();}
+// Lo que bloquea es un REGIONAL. Debutantes, Universitario o un internacional no
+// gastan el cupo, así que se distinguen: si no, la comisión tendría que abrir
+// todos los tickets para descubrir cuáles importan.
+function _esRegional(ev){return /regional/i.test(String(ev||''));}
+function _histAnio(){
+  if(window._HIST_ANIO)return window._HIST_ANIO;
+  const anio=String(new Date().getFullYear());
+  const porRut={}, porNom={};
+  (ST.allCompResults||[]).forEach(d=>{
+    const fecha=String(d.fecha||'');
+    // El año sale de la fecha del resultado; si no la tiene, del nombre del evento.
+    const a=fecha.slice(0,4)||(String(d.evento||'').match(/\b(20\d\d)\b/)||[])[1]||'';
+    if(a!==anio)return;
+    const r=d.resultado||{};
+    const it={evento:d.evento||'',fecha:fecha,regional:_esRegional(d.evento),
+      categoria:d.categoria||'',division:d.division||'',modalidad:d.modalidad||'',
+      total:r.total||0,estado:r.status||''};
+    const k=_hRut(d.rut); if(k)(porRut[k]=porRut[k]||[]).push(it);
+    const n=_hNom(d.nombre); if(n)(porNom[n]=porNom[n]||[]).push(it);
+  });
+  return (window._HIST_ANIO={anio,porRut,porNom});
+}
+// Devuelve los campeonatos de este año de una persona, sin repetir. El Debutantes
+// vino partido en "Tarima 1" y "Tarima 2": es un solo campeonato en dos tarimas,
+// así que se junta para no mostrarlo dos veces.
+function _histDe(rut,nombre){
+  const H=_histAnio();
+  let arr=H.porRut[_hRut(rut)];
+  if(!arr||!arr.length)arr=H.porNom[_hNom(nombre)];
+  if(!arr)return [];
+  const vistos={},out=[];
+  arr.forEach(it=>{
+    const base=it.evento.replace(/\s*[-–]\s*Tarima\s*\d+\s*$/i,'').trim();
+    if(vistos[base])return;
+    vistos[base]=1; out.push(Object.assign({},it,{evento:base}));
+  });
+  return out.sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+}
+window.apprToggleHist=function(id){
+  ST.apprHist=ST.apprHist||{};
+  ST.apprHist[id]=!ST.apprHist[id];
+  const el=document.getElementById('apprList'); if(el)el.innerHTML=apprListHtml();
+};
 function apprListHtml(){
   const tab=ST.apprTab||'pending';
   const q=(ST.apprSearch||'').toLowerCase().trim();
@@ -3830,20 +3889,56 @@ function apprListHtml(){
     if(s==='approved') return reviewBtn(sid)+rejectBtn(sid,'Cancelar');
     return acceptBtn(sid)+reviewBtn(sid); // rejected
   };
+  const H=_histAnio();
+  const cargando=!(ST.allCompResults||[]).length;
   const rows=list.map(i=>{
     const d=i.timestamp?new Date(i.timestamp.seconds?i.timestamp.seconds*1000:i.timestamp):null;
     const sid=encodeURIComponent(i.id||'');
-    return `<tr>
+    const hist=cargando?[]:_histDe(i.rut,i.nombre);
+    const reg=hist.filter(x=>x.regional);
+    const abierto=(ST.apprHist||{})[i.id];
+    // ✓ rojo: ya usó su regional del año — es lo que hay que frenar.
+    // ✓ gris:  compitió, pero en algo que no gasta el cupo (Debutantes, Universitario…).
+    // ✗ verde: sin competencias este año.
+    const marca=cargando
+      ? `<span style="color:var(--muted);font-size:11px">…</span>`
+      : hist.length
+        ? `<button onclick="apprToggleHist('${esc(i.id||'')}')" title="Ver en qué compitió"
+             style="cursor:pointer;background:${reg.length?'rgba(239,68,68,.14)':'rgba(160,160,160,.12)'};
+             border:1px solid ${reg.length?'var(--red)':'var(--border)'};border-radius:7px;padding:3px 9px;
+             color:${reg.length?'var(--red)':'var(--muted)'};font-family:Oswald;font-size:12px;font-weight:700">
+             ✓${reg.length?' REGIONAL':''} <span style="opacity:.7;font-size:9px">${abierto?'▴':'▾'}</span></button>`
+        : `<span title="Sin competencias registradas este año" style="color:var(--green);font-family:Oswald;font-size:13px;font-weight:700">✗</span>`;
+    let fila=`<tr>
       <td style="font-size:10px;color:var(--muted)">${d?d.toLocaleDateString('es-CL'):'—'}</td>
       <td>${esc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${esc(i.rut||'')} · ${esc(i.sexo||'')} · ${esc(i.division||'')}</span></td>
       <td style="font-size:10px">${esc(i.evento||'')}</td>
       <td><span class="badge b-y">${esc(i.categoria||'?')}</span></td>
       <td style="font-size:11px"><span style="display:inline-flex;align-items:center;gap:5px">${window.clubLogoImg?window.clubLogoImg(i.club,18,'background:var(--bg);padding:1px;'):''}${esc(i.club||'—')}</span></td>
+      <td style="text-align:center;white-space:nowrap">${marca}</td>
       <td style="white-space:nowrap">${acts(sid,tab)}</td>
     </tr>`;
+    if(abierto&&hist.length){
+      fila+=`<tr><td colspan="7" style="background:rgba(10,22,40,.55);padding:10px 14px">
+        <div style="font-family:Oswald;font-size:10px;letter-spacing:1.5px;color:var(--gold);margin-bottom:7px">
+          COMPITIÓ EN ${H.anio} — ${hist.length} campeonato${hist.length===1?'':'s'}${reg.length?` · ${reg.length} regional${reg.length===1?'':'es'}`:''}</div>
+        ${hist.map(x=>`<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;padding:3px 0;border-top:1px solid rgba(30,58,95,.35)">
+          <span style="font-size:10px;color:var(--muted);min-width:74px;font-family:Oswald">${esc(x.fecha||'—')}</span>
+          <span style="font-size:12px;color:${x.regional?'var(--red)':'var(--text)'};font-weight:${x.regional?'700':'400'}">${esc(x.evento)}</span>
+          ${x.regional?'<span style="font-size:9px;font-family:Oswald;letter-spacing:1px;background:rgba(239,68,68,.15);color:var(--red);padding:1px 6px;border-radius:8px">REGIONAL</span>':''}
+          <span style="font-size:10px;color:var(--muted)">${esc(x.categoria||'')}${x.division?' · '+esc(x.division):''}${x.modalidad?' · '+esc(x.modalidad):''}${x.total?' · '+x.total+' kg':''}${x.estado&&x.estado!=='OK'?' · '+esc(x.estado):''}</span>
+        </div>`).join('')}
+        <div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5">
+          Sale de los resultados ya cargados en YourLift. Un campeonato que no se cerró desde acá no aparece.</div>
+      </td></tr>`;
+    }
+    return fila;
   }).join('');
-  return `<table class="tbl">
-      <tr><th>Fecha</th><th>Nombre</th><th>Evento</th><th>Cat.</th><th>Club</th><th>Acción</th></tr>
+  const nReg=cargando?0:list.filter(i=>_histDe(i.rut,i.nombre).some(x=>x.regional)).length;
+  return `${nReg?`<div style="padding:9px 14px;background:rgba(239,68,68,.10);border-bottom:1px solid rgba(239,68,68,.3);font-size:12px;color:var(--red)">
+      <b>${nReg}</b> de estas inscripciones ${nReg===1?'es de un atleta que ya corrió':'son de atletas que ya corrieron'} un regional en ${H.anio}. Tocá el ✓ para ver cuál.</div>`:''}
+    <table class="tbl">
+      <tr><th>Fecha</th><th>Nombre</th><th>Evento</th><th>Cat.</th><th>Club</th><th title="Si ya compitió este año, según los resultados cargados en YourLift">Compitió ${H.anio}</th><th>Acción</th></tr>
       ${rows}
     </table>
     ${list.length===0?`<div class="empty">${q?'Sin resultados para la búsqueda':'No hay inscripciones en este estado'}</div>`:''}`;
