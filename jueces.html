@@ -409,9 +409,50 @@ function startAthleteListener(){
     if(d.athlete_lift)document.getElementById('athLiftLabel').textContent=(LIFT_LABEL[d.athlete_lift]||d.athlete_lift)+' · Intento '+(d.athlete_round!=null?d.athlete_round+1:'—');
     // Los motivos siguen al movimiento que está en la tarima.
     if(d.athlete_lift&&d.athlete_lift!==_liftActual){_liftActual=d.athlete_lift;pintarMotivos(_liftActual);}
+    // Y si ya votaron los tres, se programa el apagado.
+    _programarLimpieza(d);
   });
 }
 let _lastReset=0;
+
+// ══ Las luces se apagan solas ═══════════════════════════════
+// Cuando los tres jueces votaron, las luces quedaban puestas hasta que alguien
+// las cambiara: en la pantalla de tarima se veían las del intento anterior
+// mientras el siguiente atleta ya estaba en la barra.
+//
+// Nadie las limpiaba. resetJudgeLights() del control solo corre con el "modo
+// jueces" encendido, y ese modo no se usa —es el que da válido/nulo desde las
+// luces, que es justo lo que no se quiere—. Así que la limpieza la hace esta
+// página, que es la misma que puso los votos.
+//
+// Se limpia el documento, no la pantalla: la tarima es un espejo y no escribe
+// nada, así que si acá no se borra, allá no se apaga. De paso queda lista la
+// vuelta siguiente, con los tres teléfonos en blanco.
+const LUCES_SEGUNDOS=5;   // lo que quedan a la vista una vez completas
+let _limpiezaTimer=null,_completo=false;
+function _programarLimpieza(d){
+  const completo=!!(d.izq&&d.central&&d.der);
+  _completo=completo;
+  if(!completo){
+    if(_limpiezaTimer){clearTimeout(_limpiezaTimer);_limpiezaTimer=null;}
+    return;
+  }
+  if(_limpiezaTimer)return;   // ya está contando
+  // Los tres teléfonos programan la limpieza, no solo uno: si el juez central
+  // cerró la página o se quedó sin señal, las luces igual se apagan. Van
+  // escalonados para que normalmente escriba uno solo; si dos llegan a escribir,
+  // escriben lo mismo y no pasa nada.
+  const atraso={izq:0,central:250,der:500}[myPos]||0;
+  _limpiezaTimer=setTimeout(async()=>{
+    _limpiezaTimer=null;
+    if(!_completo)return;     // alguien ya las limpió mientras esperábamos
+    if(!fbReady||!fbSesion)return;
+    try{
+      await window._fb.updateDoc(window._fb.doc(fbDB,'judge_decisions','current'),
+        {izq:null,central:null,der:null,reset_ts:Date.now()});
+    }catch(e){console.warn('No se pudieron apagar las luces',e);}
+  },LUCES_SEGUNDOS*1000+atraso);
+}
 
 // ══ Vote ════════════════════════════════════════════════════
 window.castVote=async function(color){
