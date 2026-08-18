@@ -221,6 +221,30 @@ console.log('\nUn campeonato de 2025 NO dispara el aviso de 2026');
   ok(bloqueoAvisoHtml() === '', 'y no se le dibuja nada');
 }
 
+console.log('\nEl selector ofrece solo los campeonatos de la temporada del evento');
+{
+  // Mostrarlos todos era pedirle a alguien que no se equivocara entre "Regional
+  // Sur Austral 2025" y "Regional Sur Austral 2026", que se llaman igual salvo por
+  // el año. Y el año que viene esto tiene que acomodarse solo, sin tocar código.
+  ok(/const anioEv=_anioEvento\(editing\);/.test(adm), 'se calcula el año del campeonato');
+  ok(/let lista=H\.todos\.filter\(x=>x\.anio===anioEv\);/.test(adm), 'y se filtra por ese año');
+  ok(/Mostrando los campeonatos de <b>\$\{esc\(anioEv\)\}<\/b>/.test(adm), 'se dice cuál está mostrando');
+  ok(/const filtrado=lista\.length>0;\s*if\(!filtrado\)lista=H\.todos;/.test(adm.replace(/\r?\n/g, ' ')),
+     'y si de ese año no hay nada, muestra todo antes que una lista vacía');
+
+  // El año sale de la fecha del campeonato, no del calendario.
+  const f = sacar(adm, '_anioEvento');
+  ok(/editing\.date/.test(f) && /editing\.nominaCloseAt/.test(f),
+     'de la fecha del campeonato o del cierre de nómina');
+  ok(/editing\.name\|\|''\)\.match\(\/\\b\(20\\d\\d\)\\b\//.test(f), 'del nombre si no hay fechas');
+  ok(/String\(new Date\(\)\.getFullYear\(\)\)/.test(f), 'y recién ahí, el año en curso');
+  ok(/getElementById\('ef_date'\)/.test(f),
+     'mira la fecha que se está escribiendo, no solo la guardada');
+  ok(/onchange="refrescarBloqueo\(\)"/.test(adm), 'así que al cambiar la fecha, la lista se rehace');
+  ok(/ST\.eventoForm\.bloqueaClaves=Array\.from\(document\.querySelectorAll\('\.ef-bloq:checked'\)\)/.test(adm),
+     'sin borrar lo que el operador ya había marcado');
+}
+
 console.log('\n  El que no trae año en el nombre queda señalado');
 ok(/SIN AÑO<\/span>/.test(adm), 'el selector lo marca');
 ok(/const sinAnio=!\/\\b20\\d\\d\\b\/\.test\(x\.nombre\)/.test(adm),
