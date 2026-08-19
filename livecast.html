@@ -6030,7 +6030,7 @@ function _widgetHandleDirectObsEvent(d){
 // Lee comandos desde Firestore livecast_director/current.
 // Cada componente tiene {active, until?} independiente; el panel del
 // admin pushea cambios y este widget renderiza lo que esté activo.
-const TX_DIR_DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[],movement:'',style:{bgColor:'#0A1628',accentColor:'#C41E3A',videoX:0,videoY:5,videoW:40,videoH:80,textX:44,textY:10,titleSize:8,movSize:5,timerSize:12,showLogos:true,blurAmount:24,overlayOpacity:0.65}}};
+const TX_DIR_DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',tipo:'total',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[],movement:'',style:{bgColor:'#0A1628',accentColor:'#C41E3A',videoX:0,videoY:5,videoW:40,videoH:80,textX:44,textY:10,titleSize:8,movSize:5,timerSize:12,showLogos:true,blurAmount:24,overlayOpacity:0.65}}};
 let _txDirState=null;
 let _txDirUnsub=null;
 let _txDirPoll=null;
@@ -6248,7 +6248,7 @@ function renderTxDirector(container){
     +'|'+(cur?cur.id+'|'+(cur.att?.[DATA.lift]||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
     +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
     +'|'+(_txDirState.leaderboard?.cat||'')+'|'+(_txDirState.slam?.type||'')
-    +'|md-'+(md.mod||'')+'-'+(md.sex||'')+'-'+(md.div||'')+'-'+(md.cat||'')+'-'+(md.until||0)
+    +'|md-'+(md.mod||'')+'-'+(md.sex||'')+'-'+(md.div||'')+'-'+(md.cat||'')+'-'+(md.tipo||'')+'-'+(md.until||0)
     +'|'+(_txDirState.profile?.until||0)+'|'+(_txDirState.scoreboard?.until||0)+'|'+(_txDirState.leaderboard?.until||0)+'|'+(_txDirState.slam?.until||0)
     +'|bt-'+(bt.startedAt||0)+'-'+(bt.durationSec||0)+'-'+(bt.pausedAt||0)+'-'+(bt.label||'')+'-'+(bt.videos||[]).length+'-'+(bt.movement||'')+'-'+JSON.stringify(bt.style||{})
     +'|sc-'+(_txDirState.profile?.scale||1)+'-'+(_txDirState.scoreboard?.scale||1)+'-'+(_txDirState.leaderboard?.scale||1)+'-'+(_txDirState.timer?.scale||1)+'-'+(_txDirState.slam?.scale||1)+'-'+(_txDirState.breakTimer?.scale||1)
@@ -7471,11 +7471,38 @@ function renderTxTablaActual(cur,opts){
 // usa DATA.athletes, que YA está cargado localmente (sin lecturas nuevas
 // a Firestore — cero costo adicional).
 // ══════════════════════════════════════════════
+// ── Medallero: quiénes son el 1°, 2° y 3° ────────────────────────────────────
+// Los campeonatos ahora premian por movimiento, no solo por total: las tres
+// mejores sentadillas de la -83 Junior, las tres mejores bancas, los tres mejores
+// pesos muertos, y aparte los tres mejores totales. Por eso el tipo es un dato
+// más del medallero, igual que la categoría o la división.
+//
+// El orden es el de la IPF y estaba a medias: se ordenaba solo por el número, así
+// que dos atletas con 190 kg quedaban en el orden en que aparecían en la lista.
+// Ahora desempata como corresponde — a igual marca gana el más liviano, y si
+// también empatan en peso corporal, el de lote menor, que pesó antes.
+const MEDAL_TIPOS={total:'TOTAL',sq:'SENTADILLA',bp:'PRESS DE BANCA',dl:'PESO MUERTO'};
+function _medalValor(a,tipo){
+  return (tipo==='sq'||tipo==='bp'||tipo==='dl') ? bestOf(a,tipo) : totalOf(a);
+}
+function _medalTop3(md){
+  md=md||{};
+  if(!md.mod||!md.sex||!md.div||!md.cat)return [];
+  const tipo=md.tipo||'total';
+  const pool=DATA.athletes.filter(a=>a.mod===md.mod&&a.sex===md.sex&&a.div===md.div&&a.cat===md.cat&&!isDQ(a)&&!a.__is4);
+  return pool.map(a=>({a,valor:_medalValor(a,tipo)}))
+    .filter(x=>x.valor>0)
+    .sort((x,y)=>
+      (y.valor-x.valor) ||                                  // más kilos primero
+      ((x.a.bw||0)-(y.a.bw||0)) ||                          // a igual marca, el más liviano
+      ((x.a.lot||9999)-(y.a.lot||9999)))                    // y si también empatan, el lote menor
+    .slice(0,3);
+}
 function renderTxMedals(md){
   md=md||{};
   if(!md.mod||!md.sex||!md.div||!md.cat)return '';
-  const pool=DATA.athletes.filter(a=>a.mod===md.mod&&a.sex===md.sex&&a.div===md.div&&a.cat===md.cat&&!isDQ(a));
-  const ranked=pool.map(a=>({a,total:totalOf(a)})).filter(x=>x.total>0).sort((x,y)=>y.total-x.total).slice(0,3);
+  const tipo=md.tipo||'total';
+  const ranked=_medalTop3(md);
   if(!ranked.length)return '';
   const divS=txDivShort(md.div);
   const sexLabel=(md.sex==='Femenino'||md.sex==='Mujer'||md.sex==='F')?'♀':'♂';
@@ -7490,12 +7517,12 @@ function renderTxMedals(md){
       <div style="width:${big?'40px':'32px'};height:${big?'40px':'32px'};flex-shrink:0;border-radius:50%;background:${RANK_BG[r]};display:flex;align-items:center;justify-content:center;font-family:Oswald;font-weight:800;font-size:${big?'20px':'16px'};color:#0A1628">${r}</div>
       <div style="flex:1;font-family:Oswald;font-weight:700;font-size:${big?'24px':'18px'};color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.5)">${x.a.name||''}</div>
       ${flag}
-      <div style="font-family:Oswald;font-weight:800;font-size:${big?'24px':'18px'};color:${RANK_BG[r]}">${x.total.toFixed(1)}</div>
+      <div style="font-family:Oswald;font-weight:800;font-size:${big?'24px':'18px'};color:${RANK_BG[r]}">${x.valor.toFixed(1)}</div>
     </div>`;
   };
   return `
     <div style="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);width:min(760px,60vw);pointer-events:none">
-      <div style="text-align:center;margin-bottom:10px;font-family:Oswald;font-size:14px;letter-spacing:3px;color:${'#D4A843'};text-shadow:0 2px 6px rgba(0,0,0,.6)">MEDALLERO · ${divS} ${md.cat} KG ${sexLabel} · ${_txModLabel(md.mod)}</div>
+      <div style="text-align:center;margin-bottom:10px;font-family:Oswald;font-size:14px;letter-spacing:3px;color:${'#D4A843'};text-shadow:0 2px 6px rgba(0,0,0,.6)">MEDALLERO ${MEDAL_TIPOS[tipo]||'TOTAL'} · ${divS} ${md.cat} KG ${sexLabel} · ${_txModLabel(md.mod)}</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         ${row(1,ranked[0])}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -8704,7 +8731,7 @@ function _dirEnsureListener(){
   _dirUnsubDocId=docId;
   try{
     _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',docId),(snap)=>{
-      const DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[]}};
+      const DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',tipo:'total',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[]}};
       if(snap.exists()){
         const d=snap.data();
         _dirState=Object.assign({},DEFAULT,d.show||{});
@@ -8790,10 +8817,11 @@ window.dirShowLb=async function(cat,seconds){
 // Todo sale de DATA.athletes, ya cargado local en memoria — NO dispara ninguna
 // lectura nueva a Firestore. Selección local (_mdSel), se re-renderiza el panel
 // con R() igual que el resto del Control TX (sin listeners ni docs extra).
-window._mdSel={mod:'',sex:'',div:'',cat:''};
+window._mdSel={mod:'',sex:'',div:'',cat:'',tipo:'total'};
 window.dirMdSet=function(field,val){
   window._mdSel[field]=val;
-  if(field==='mod'){window._mdSel.sex='';window._mdSel.div='';window._mdSel.cat='';}
+  if(field==='tipo'){/* el tipo no toca la selección: es la misma categoría, otro premio */}
+  else if(field==='mod'){window._mdSel.sex='';window._mdSel.div='';window._mdSel.cat='';}
   else if(field==='sex'){window._mdSel.div='';window._mdSel.cat='';}
   else if(field==='div'){window._mdSel.cat='';}
   R();
@@ -8802,9 +8830,9 @@ window.dirToggleMedals=async function(){
   const c=_dirState&&_dirState.medals;
   const isOn=c&&c.active&&(!c.until||c.until>Date.now());
   if(isOn){await window.dirHide('medals');return;}
-  const{mod,sex,div,cat}=window._mdSel;
+  const{mod,sex,div,cat,tipo}=window._mdSel;
   if(!mod||!sex||!div||!cat){showToastLC('Elegí modalidad, sexo, división y categoría primero');return;}
-  await window.dirShow('medals',0,{mod,sex,div,cat});
+  await window.dirShow('medals',0,{mod,sex,div,cat,tipo:tipo||'total'});
 };
 window.dirShowSlam=async function(type){
   await window.dirShow('slam',2,{type});
@@ -9018,6 +9046,115 @@ window.dirBreakAdd=async function(secs){
 // ?remote=1 y controla el overlay de OBS (browser source ?tx=director) sin
 // puente, sin WebSocket, sin Stream Deck. Reusa las funciones dir* existentes.
 // ═══════════════════════════════════════════════════════════════════
+// ── Menús desplegables del Control Remoto ────────────────────────────────────
+// El remoto lo usa alguien con una mano, mirando la tarima. Dos botones pedían
+// datos que solo existían en el Control TX: el medallero necesita saber QUÉ podio
+// mostrar, y el descanso CUÁNTOS minutos. Sin eso, apretarlos no hacía nada útil.
+// Ahora abren su menú en el mismo teléfono.
+window._remoteMenu='';
+window.remoteMenu=function(cual){
+  window._remoteMenu = (window._remoteMenu===cual) ? '' : cual;
+  R();
+};
+function _remoteSelStyle(){
+  return 'width:100%;padding:12px;border-radius:10px;border:2px solid var(--border);background:#0a1628;color:var(--text);font-family:Oswald;font-size:15px;margin-top:8px';
+}
+function remoteMedalsPanel(){
+  if(window._remoteMenu!=='medals')return '';
+  const sel=window._mdSel||{mod:'',sex:'',div:'',cat:'',tipo:'total'};
+  const MOD_LABEL={classic:'Classic',equipped:'Equipado',oe_classic:'Olimpiadas Especiales',universitario:'Universitario',onlybench:'Only Bench',classic_bench:'Classic + Bench',equipped_bench:'Equipado + Bench'};
+  const vivos=DATA.athletes.filter(a=>!a.__is4);
+  const byMod=vivos.filter(a=>!sel.mod||a.mod===sel.mod);
+  const byModSex=byMod.filter(a=>!sel.sex||a.sex===sel.sex);
+  const byModSexDiv=byModSex.filter(a=>!sel.div||a.div===sel.div);
+  const uniq=(arr,f)=>[...new Set(arr.map(f))].filter(Boolean);
+  const listo=sel.mod&&sel.sex&&sel.div&&sel.cat;
+  const cuantos=listo?_medalTop3(sel).length:0;
+
+  let h='<div style="margin-top:10px;padding:14px;border-radius:14px;border:2px solid var(--gold);background:rgba(212,168,67,.06)">';
+  h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold)">QUÉ MEDALLERO MOSTRAR</div>';
+
+  // Qué se premia — botones grandes, que es lo que más se cambia en la ceremonia.
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">';
+  Object.keys(MEDAL_TIPOS).forEach(t=>{
+    const act=(sel.tipo||'total')===t;
+    h+='<button onclick="dirMdSet(\'tipo\',\''+t+'\')" style="min-height:52px;border-radius:10px;border:2px solid '
+      +(act?'var(--gold)':'var(--border)')+';background:'+(act?'rgba(212,168,67,.18)':'rgba(10,22,40,.55)')
+      +';color:'+(act?'var(--gold)':'var(--text)')+';font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer;-webkit-tap-highlight-color:transparent">'
+      +MEDAL_TIPOS[t]+'</button>';
+  });
+  h+='</div>';
+
+  const opt=(v,txt,cur)=>'<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(txt)+'</option>';
+  h+='<select style="'+_remoteSelStyle()+'" onchange="dirMdSet(\'mod\',this.value)"><option value="">Modalidad —</option>';
+  uniq(vivos,a=>a.mod).forEach(m=>{h+=opt(m,MOD_LABEL[m]||m,sel.mod)});
+  h+='</select>';
+  h+='<select style="'+_remoteSelStyle()+'" '+(sel.mod?'':'disabled')+' onchange="dirMdSet(\'sex\',this.value)"><option value="">Sexo —</option>';
+  uniq(byMod,a=>a.sex).sort().forEach(s=>{h+=opt(s,(s==='Mujer'||s==='Femenino'||s==='F')?'♀ Mujer':'♂ Hombre',sel.sex)});
+  h+='</select>';
+  h+='<select style="'+_remoteSelStyle()+'" '+(sel.sex?'':'disabled')+' onchange="dirMdSet(\'div\',this.value)"><option value="">División —</option>';
+  uniq(byModSex,a=>a.div).sort().forEach(d=>{h+=opt(d,d,sel.div)});
+  h+='</select>';
+  h+='<select style="'+_remoteSelStyle()+'" '+(sel.div?'':'disabled')+' onchange="dirMdSet(\'cat\',this.value)"><option value="">Categoría —</option>';
+  uniq(byModSexDiv,a=>a.cat).sort((a,b)=>(parseFloat(a)||999)-(parseFloat(b)||999)).forEach(c=>{h+=opt(c,c+' kg',sel.cat)});
+  h+='</select>';
+
+  h+='<div style="font-size:11px;color:'+(listo&&!cuantos?'var(--orange)':'var(--muted)')+';margin-top:10px;line-height:1.5">'
+    +(!listo?'Elegí los cuatro para poder mostrarlo.'
+      :(cuantos?('Listo: '+cuantos+' en el podio.')
+               :'Con esa combinación todavía no hay nadie con marca válida.'))
+    +'</div>';
+  h+='<button onclick="dirToggleMedals()" '+(listo&&cuantos?'':'disabled')
+    +' style="width:100%;margin-top:10px;min-height:58px;border-radius:12px;border:2px solid '
+    +(listo&&cuantos?'var(--green)':'var(--border)')+';background:'+(listo&&cuantos?'rgba(34,197,94,.16)':'transparent')
+    +';color:'+(listo&&cuantos?'#4ade80':'var(--muted)')+';font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:2px;cursor:'
+    +(listo&&cuantos?'pointer':'not-allowed')+';-webkit-tap-highlight-color:transparent">▶ MOSTRAR EN PANTALLA</button>';
+  h+='</div>';
+  return h;
+}
+function remoteBreakPanel(){
+  if(window._remoteMenu!=='break')return '';
+  const MIN=[5,10,15,20,30,45];
+  let h='<div style="margin-top:10px;padding:14px;border-radius:14px;border:2px solid var(--gold);background:rgba(212,168,67,.06)">';
+  h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold)">¿CUÁNTOS MINUTOS?</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px">';
+  MIN.forEach(m=>{
+    h+='<button onclick="remoteBreakStart('+m+')" style="min-height:64px;border-radius:12px;border:2px solid var(--border);background:rgba(10,22,40,.55);color:var(--text);font-family:Oswald;font-size:20px;font-weight:800;cursor:pointer;-webkit-tap-highlight-color:transparent">'
+      +m+'<span style="font-size:10px;font-weight:600;color:var(--muted);display:block">min</span></button>';
+  });
+  h+='</div>';
+  h+='<div style="display:flex;gap:8px;margin-top:10px;align-items:center">';
+  h+='<input id="remoteBreakMin" type="number" min="1" max="120" placeholder="otro" style="flex:1;padding:12px;border-radius:10px;border:2px solid var(--border);background:#0a1628;color:var(--text);font-family:Oswald;font-size:15px">';
+  h+='<button onclick="remoteBreakStart()" style="padding:12px 18px;border-radius:10px;border:2px solid var(--gold);background:rgba(212,168,67,.12);color:var(--gold);font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">USAR</button>';
+  h+='</div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5">El cartel de descanso sale en pantalla con la cuenta regresiva. Para sacarlo antes de tiempo, volvé a apretar YA VOLVEMOS.</div>';
+  h+='</div>';
+  return h;
+}
+// Arranca el descanso con los minutos del remoto, sin depender de los campos del
+// Control TX: en el teléfono esos inputs no existen.
+window.remoteBreakStart=async function(min){
+  let m=min;
+  if(!m){ m=parseInt((document.getElementById('remoteBreakMin')||{}).value||'0',10); }
+  if(!m||m<1){ showToastLC('Elegí cuántos minutos'); return; }
+  if(!_dirState)_dirState={};
+  const previo=_dirState.breakTimer||{};
+  // Se arma igual que en el Control TX, pero conservando lo que ya estaba
+  // configurado ahí —el estilo, los videos, el texto— para que el cartel se vea
+  // igual se dispare desde donde se dispare.
+  _dirState.breakTimer=Object.assign({},previo,{
+    active:true, startedAt:Date.now(), durationSec:m*60, pausedAt:0,
+  });
+  await _dirPush();
+  window._remoteMenu='';
+  R();
+  showToastLC('Descanso de '+m+' min en pantalla');
+};
+window.remoteToggleBreak=async function(){
+  const bt=_dirState&&_dirState.breakTimer;
+  if(bt&&bt.active){ await window.dirBreakHide(); window._remoteMenu=''; R(); return; }
+  window.remoteMenu('break');
+};
 function renderRemote(){
   _dirEnsureListener();
   if(!_dirState){_dirState={profile:{active:false,until:0},scoreboard:{active:false,until:0},leaderboard:{active:false,until:0,cat:''},tablaActual:{active:false,until:0},timer:{active:false,until:0},slam:{active:false,until:0,type:'g'}};}
@@ -9062,13 +9199,31 @@ function renderRemote(){
   h+=bigBtn('TABLA ACTUAL', on('tablaActual')?'EN PANTALLA':'ranking corner', on('tablaActual'), "dirToggle('tablaActual')");
   h+=bigBtn('CLASIFICACIÓN', on('leaderboard')?'EN PANTALLA':'ranking cat.', on('leaderboard'), "dirToggleLb()");
   h+=bigBtn('TIMER', on('timer')?'EN PANTALLA':'cronómetro', on('timer'), "dirToggle('timer')");
-  h+=bigBtn('MEDALLERO', on('medals')?'EN PANTALLA':'top 3', on('medals'), "dirToggle('medals')");
+  // MEDALLERO abre el menú en vez de disparar. Antes llamaba a dirToggle('medals')
+  // sin decir qué medallero: sin categoría elegida no hay podio que mostrar, así
+  // que se apretaba el botón, se ponía en verde y en pantalla no salía nada.
+  h+=bigBtn('MEDALLERO', on('medals')?'EN PANTALLA':(window._remoteMenu==='medals'?'elegí abajo ▾':'elegir podio'), on('medals'), "remoteMenu('medals')");
   h+='</div>';
+  h+=remoteMedalsPanel();
   // Slams (flash grande) — fila aparte, colores fuertes
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">';
   h+='<button onclick="dirShowSlam(\'g\')" style="min-height:76px;border-radius:14px;border:2px solid #22c55e;background:linear-gradient(180deg,rgba(34,197,94,.25),rgba(34,197,94,.08));color:#4ade80;font-family:Oswald;font-size:17px;font-weight:800;letter-spacing:1px;cursor:pointer;-webkit-tap-highlight-color:transparent">✓ GOOD LIFT</button>';
   h+='<button onclick="dirShowSlam(\'n\')" style="min-height:76px;border-radius:14px;border:2px solid #ef4444;background:linear-gradient(180deg,rgba(239,68,68,.25),rgba(239,68,68,.08));color:#f87171;font-family:Oswald;font-size:17px;font-weight:800;letter-spacing:1px;cursor:pointer;-webkit-tap-highlight-color:transparent">✗ NO LIFT</button>';
   h+='</div>';
+  // Descanso ("ya volvemos") — no estaba en el remoto y es de lo que más se usa
+  // entre movimientos. Abre el menú de minutos en vez de pedir que alguien vaya
+  // al computador del Control TX a escribirlos.
+  {
+    const bt=_dirState&&_dirState.breakTimer;
+    const activo=bt&&bt.active;
+    h+='<button onclick="remoteToggleBreak()" style="width:100%;margin-top:10px;min-height:76px;border-radius:14px;border:2px solid '
+      +(activo?'#22c55e':'var(--gold)')+';background:'+(activo?'rgba(34,197,94,.16)':'rgba(212,168,67,.08)')
+      +';color:'+(activo?'#4ade80':'var(--gold)')+';font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">'
+      +(activo?'⏹ QUITAR DESCANSO':'⏸ YA VOLVEMOS')
+      +'<span style="display:block;font-size:10px;font-weight:600;letter-spacing:1px;color:'+(activo?'#86efac':'var(--muted)')+';margin-top:3px">'
+      +(activo?'en pantalla':(window._remoteMenu==='break'?'elegí los minutos ▾':'cartel de descanso'))+'</span></button>';
+  }
+  h+=remoteBreakPanel();
   // Esconder todo — ancho completo
   h+='<button onclick="dirHideAll()" style="width:100%;margin-top:10px;min-height:64px;border-radius:14px;border:2px solid var(--red);background:rgba(239,68,68,.1);color:#f87171;font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">⨯ ESCONDER TODO</button>';
   // Ayuda / enlace del browser source para OBS
@@ -9251,7 +9406,7 @@ function renderDirector(){
   {
     const mdActive=_dirState.medals?.active&&(!_dirState.medals?.until||_dirState.medals.until>Date.now());
     const MOD_LABEL={classic:'Classic',equipped:'Equipado',oe_classic:'Olimpiadas Especiales',universitario:'Universitario',onlybench:'Only Bench',classic_bench:'Classic + Bench',equipped_bench:'Equipado + Bench'};
-    const sel=window._mdSel||{mod:'',sex:'',div:'',cat:''};
+    const sel=window._mdSel||{mod:'',sex:'',div:'',cat:'',tipo:'total'};
     const byMod=DATA.athletes.filter(a=>!sel.mod||a.mod===sel.mod);
     const modOpts=[...new Set(DATA.athletes.map(a=>a.mod))].filter(Boolean);
     const sexOpts=[...new Set(byMod.map(a=>a.sex))].filter(Boolean).sort();
@@ -9264,7 +9419,18 @@ function renderDirector(){
     h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">';
     h+='<div style="flex:1;min-width:280px">';
     h+='<div style="display:flex;align-items:center;gap:10px"><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">Medallero (Top 3)</div>'+kbd('M')+'</div>';
-    h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Podio de una categoría específica. Elegí en orden: modalidad → sexo → división → categoría.</div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Podio de una categoría específica. Elegí en orden: modalidad → sexo → división → categoría. Y qué premio: el total o cada movimiento por separado.</div>';
+    // Qué se premia. Cambiarlo no borra la categoría elegida: es el mismo grupo,
+    // otro premio, y en la ceremonia se pasan los cuatro seguidos.
+    h+='<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">';
+    Object.keys(MEDAL_TIPOS).forEach(t=>{
+      const act=(sel.tipo||'total')===t;
+      h+='<button onclick="dirMdSet(\''+'tipo'+'\',\''+t+'\')" style="padding:7px 14px;border-radius:8px;border:2px solid '
+        +(act?'var(--gold)':'var(--border)')+';background:'+(act?'rgba(212,168,67,.14)':'transparent')
+        +';color:'+(act?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'
+        +MEDAL_TIPOS[t]+'</button>';
+    });
+    h+='</div>';
     h+='<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">';
     h+='<select style="'+selStyle+'" onchange="dirMdSet(\'mod\',this.value)"><option value="">1° Modalidad —</option>';
     modOpts.forEach(m=>{h+='<option value="'+m+'"'+(m===sel.mod?' selected':'')+'>'+(MOD_LABEL[m]||m)+'</option>'});
