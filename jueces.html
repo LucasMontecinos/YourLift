@@ -147,6 +147,7 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
   <!-- Header -->
   <div class="panel-header">
     <div class="pos-badge" id="posBadge">—</div>
+    <div id="tarimaBadge" style="display:none;font-size:11px;font-weight:700;letter-spacing:2px;padding:6px 12px;border-radius:8px;border:2px solid var(--gold);color:var(--gold)"></div>
     <div style="text-align:center;font-size:11px;color:var(--muted)" id="liftBadge">—</div>
     <div onclick="abrirLogin()" style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted);cursor:pointer">
       <div class="fb-dot" id="fbDot"></div><span id="fbLabel">Conectando</span>
@@ -223,6 +224,14 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
 
 let fbDB=null,fbReady=false,fbSesion=false;
+
+// ── En qué tarima está este juez ────────────────────────────
+// En un campeonato de dos tarimas cada una tiene sus propios jueces y sus propias
+// luces. Sin esto, los tres jueces de la tarima 1 y los tres de la tarima 2
+// escribirían el mismo documento: se pisarían el voto y las luces saldrían
+// cruzadas en las dos pantallas. El link lo entrega el panel de Transmisión.
+const TARIMA=(()=>{try{return new URLSearchParams(location.search).get('tarima')||null}catch(e){return null}})();
+const JUEZ_DOC=TARIMA?'current_T'+TARIMA:'current';
 
 (async()=>{
   try{
@@ -381,6 +390,8 @@ window.toggleMotivos=function(){
 // ══ Position selection ═════════════════════════════════════
 window.selectPos=function(pos){
   myPos=pos;
+  const tb=document.getElementById('tarimaBadge');
+  if(tb&&TARIMA){tb.textContent='TARIMA '+TARIMA;tb.style.display='';}
   document.getElementById('posBadge').textContent=POS_LABEL[pos];
   document.getElementById('pick').classList.remove('active');
   document.getElementById('panel').classList.add('active');
@@ -393,7 +404,7 @@ window.selectPos=function(pos){
 function startAthleteListener(){
   if(!fbReady)return;
   // Listen to judge_decisions/current for athlete info
-  window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions','current'),(snap)=>{
+  window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',JUEZ_DOC),(snap)=>{
     if(!snap.exists())return;
     const d=snap.data();
     // If reset signal, clear local vote UI
@@ -448,7 +459,7 @@ function _programarLimpieza(d){
     if(!_completo)return;     // alguien ya las limpió mientras esperábamos
     if(!fbReady||!fbSesion)return;
     try{
-      await window._fb.updateDoc(window._fb.doc(fbDB,'judge_decisions','current'),
+      await window._fb.updateDoc(window._fb.doc(fbDB,'judge_decisions',JUEZ_DOC),
         {izq:null,central:null,der:null,reset_ts:Date.now()});
     }catch(e){console.warn('No se pudieron apagar las luces',e);}
   },LUCES_SEGUNDOS*1000+atraso);
@@ -462,12 +473,12 @@ window.castVote=async function(color){
   updateButtons();
   if(!fbReady){showPulse('Sin Firebase — voto solo local','#ef4444');return;}
   try{
-    await window._fb.updateDoc(window._fb.doc(fbDB,'judge_decisions','current'),{[myPos]:color});
+    await window._fb.updateDoc(window._fb.doc(fbDB,'judge_decisions',JUEZ_DOC),{[myPos]:color});
     showPulse('Voto enviado','#22c55e');
   }catch(e){
     // Doc might not exist yet, create it
     try{
-      await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions','current'),{izq:null,central:null,der:null,[myPos]:color,reset_ts:0,athlete_name:'',athlete_weight:0,athlete_lift:'',athlete_round:0});
+      await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions',JUEZ_DOC),{izq:null,central:null,der:null,[myPos]:color,reset_ts:0,athlete_name:'',athlete_weight:0,athlete_lift:'',athlete_round:0});
       showPulse('Voto enviado','#22c55e');
     }catch(e2){
       // Antes decía solo "Error al enviar" y el juez no tenía cómo saber por qué.
@@ -486,7 +497,7 @@ window.clearVote=async function(){
   updateButtons();
   if(!fbReady||!myPos)return;
   try{
-    await window._fb.updateDoc(window._fb.doc(fbDB,'judge_decisions','current'),{[myPos]:null});
+    await window._fb.updateDoc(window._fb.doc(fbDB,'judge_decisions',JUEZ_DOC),{[myPos]:null});
     showPulse('Voto limpiado','#7A8FA6');
   }catch(e){console.warn('Clear vote error',e);}
 };
@@ -495,7 +506,7 @@ window.clearVote=async function(){
 window.sendStartTimer=async function(){
   if(!fbReady){showPulse('Sin Firebase','#ef4444');return;}
   try{
-    await window._fb.setDoc(window._fb.doc(fbDB,'timer_control','current'),{action:'start',ts:Date.now(),by:myPos||'judge'});
+    await window._fb.setDoc(window._fb.doc(fbDB,'timer_control',JUEZ_DOC),{action:'start',ts:Date.now(),by:myPos||'judge'});
     showPulse('Timer iniciado','#22c55e');
   }catch(e){showPulse('Error','#ef4444');console.error(e);}
 };

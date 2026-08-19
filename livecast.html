@@ -520,6 +520,12 @@ function fbDocId(){
 // Sufijo para docs auxiliares (record alerts, director scene) cuando hay 2 tarimas
 // → cada tarima maneja sus widgets sin pisar a la otra.
 function txDocId(base){return TARIMA?`${base}_T${TARIMA}`:base;}
+// Las luces de los jueces y la señal del cronómetro viven en un documento de id
+// FIJO ('current'). Con una tarima está bien, pero en noviembre hay dos: sin esto,
+// el juez de la tarima 1 encendería también las luces de la tarima 2, y el
+// cronómetro de una arrancaría el de la otra. Cada tarima usa el suyo.
+// Sin ?tarima= sigue siendo 'current', para no romper lo que hay hoy.
+function juezDocId(){return TARIMA?'current_T'+TARIMA:'current';}
 // Id de los docs de ESTADO de transmisión (director, record) — separado POR EVENTO
 // (y por tarima si aplica). Así dos competencias DISTINTAS y simultáneas no se pisan:
 // cada evento tiene su propio director/record. Control y widget calculan el mismo id
@@ -2376,7 +2382,7 @@ function startJudgeListener(){
   if(judgeUnsub){judgeUnsub();judgeUnsub=null}
   // Also listen for timer-start signals from judge panel
   let _timerListenerFirst=true;
-  window._fb.onSnapshot(window._fb.doc(fbDB,'timer_control','current'),(snap)=>{
+  window._fb.onSnapshot(window._fb.doc(fbDB,'timer_control',juezDocId()),(snap)=>{
     if(!snap.exists())return;
     const d=snap.data();
     // First snapshot: just record current ts to ignore stale signals already in Firestore
@@ -2390,7 +2396,7 @@ function startJudgeListener(){
       if(!DATA.timerOn)startTimer();
     }
   });
-  judgeUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions','current'),(snap)=>{
+  judgeUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',juezDocId()),(snap)=>{
     if(!snap.exists())return;
     const d=snap.data();
     judgeLights={izq:d.izq||null,central:d.central||null,der:d.der||null};
@@ -2419,7 +2425,7 @@ async function resetJudgeLights(){
     // Send current athlete info + reset
     const queue=liftQueue();
     const cur=queue[0];
-    await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions','current'),{
+    await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions',juezDocId()),{
       izq:null,central:null,der:null,
       reset_ts:Date.now(),
       athlete_name:cur?cur.name:'',
@@ -5474,6 +5480,20 @@ function renderObsTx(){
     ? '<div style="margin-top:8px;font-size:11px;color:var(--green)">✓ Estás en TARIMA '+TARIMA+'. Los links de abajo ya incluyen <b>&tarima='+TARIMA+'</b> — cópialos directo a OBS.</div>'
     : '<div style="margin-top:8px;font-size:11px;color:var(--muted)">Modo "una sola tarima". Si van a transmitir 2 tarimas en paralelo, cada equipo debe elegir Tarima 1 o 2 aquí.</div>';
   h+='</div>';
+  {
+    const juezUrl=base+'jueces.html'+(TARIMA?'?tarima='+TARIMA:'');
+    const remoteUrl=base+'livecast.html?evento='+enc+'&remote=1'+(TARIMA?'&tarima='+TARIMA:'')+PRACTICE_Q;
+    const linkFila=(titulo,nota,url)=>'<div style="padding:10px 0;border-top:1px solid rgba(30,58,95,.35)">'
+      +'<div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px">'+titulo+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin:2px 0 6px;line-height:1.5">'+nota+'</div>'
+      +'<div style="display:flex;gap:6px;align-items:center"><input readonly value="'+esc(url)+'" onclick="this.select()" style="flex:1;min-width:0;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-family:monospace;font-size:11px">'
+      +'<button onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+url.replace(/'/g,"\\'")+'\');showToastLC(\'Link copiado\')" style="padding:8px 12px;border-radius:8px;border:1px solid var(--gold);background:rgba(212,168,67,.12);color:var(--gold);font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">COPIAR</button></div></div>';
+    h+='<div class="card" style="padding:14px 18px;margin-bottom:14px">';
+    h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold)">LINKS PARA LOS TELÉFONOS</div>';
+    h+=linkFila('Panel de jueces','Uno por cada juez.'+(TARIMA?' Ya lleva <b>tarima='+TARIMA+'</b>: con dos tarimas, el link equivocado manda las luces a la otra pantalla.':''),juezUrl);
+    h+=linkFila('Control remoto','Para manejar el overlay desde el teléfono.'+(TARIMA?' Con <b>tarima='+TARIMA+'</b>, así controla ESTA tarima y no la otra.':''),remoteUrl);
+    h+='</div>';
+  }
   h+='<div style="display:grid;gap:14px">';
   widgets.forEach(w=>{
     const url=base+'livecast.html?tx='+w.id+'&evento='+enc+(TARIMA?'&tarima='+TARIMA:'')+PRACTICE_Q;
@@ -6574,7 +6594,7 @@ function _txStartLightsListener(){
     return;
   }
   try{
-    _txLightsUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions','current'),(snap)=>{
+    _txLightsUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',juezDocId()),(snap)=>{
       if(!snap.exists())return;
       const d=snap.data();
       _txLights={izq:d.izq||null,central:d.central||null,der:d.der||null};
@@ -7110,7 +7130,10 @@ async function loadBirthYears(){
 }
 function _screenDocId(){
   if(!DATA.event)return null;
-  return (DATA.event.name||'comp').replace(/[^a-zA-Z0-9]/g,'_').substring(0,60);
+  // Con dos tarimas, cada una maneja SU pantalla: si compartieran el canal,
+  // cambiar el modo en una le cambiaría la pantalla a la otra en el acto.
+  const base=(DATA.event.name||'comp').replace(/[^a-zA-Z0-9]/g,'_').substring(0,55);
+  return TARIMA?base+'_T'+TARIMA:base;
 }
 let _screenUnsub=null, _screenFirstSnap=true;
 function subscribeScreenChannel(){
