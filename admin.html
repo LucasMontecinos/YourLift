@@ -5523,6 +5523,13 @@ function renderCampeonatos(){
             <div style="font-size:11px;color:var(--muted);margin-top:2px">Si está activo, al inscribirse el atleta indica su <b>modalidad</b> (Classic/Equipado/OE/Universitario) y <b>lugar</b> (1° a 5°) obtenido en el Nacional 2026. Útil para el proceso del Sudamericano.</div>
           </div>
         </label>
+        <label class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(212,168,67,.06);border:1px solid rgba(212,168,67,.35);border-radius:8px">
+          <input type="checkbox" id="ef_rankingCiclo" ${(editing.rankingCiclo===true)?'checked':''} style="width:18px;height:18px;cursor:pointer">
+          <div>
+            <div style="font-weight:600;color:var(--text)">🏆 Nacional — reinicia el ciclo del ranking</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Marca este campeonato como el que abre un ciclo nuevo. <b>Marcarlo acá no cambia nada todavía:</b> el ranking se reinicia recién cuando se aprieta <b>Cerrar competencia</b> en el control en vivo, y ahí se pregunta de nuevo antes de hacerlo. Desde ese momento el ranking muestra solo los resultados de este campeonato en adelante. <b>No se borra nada</b> — los resultados anteriores quedan guardados y se siguen viendo en el perfil de cada atleta.</div>
+          </div>
+        </label>
 
         <!-- Sección NUEVA: Documentos requeridos en inscripción ──────────────────── -->
         <div class="field" style="grid-column:span 2">
@@ -5847,6 +5854,9 @@ window.saveEvento = async function(){
   const requiereFoto = !!document.getElementById('ef_requiereFoto')?.checked;
   const livecastVisible = document.getElementById('ef_livecastVisible')?.checked !== false;
   const posNac2026 = !!document.getElementById('ef_posNac2026')?.checked;
+  // Marca el campeonato que abre un ciclo nuevo de ranking (el Nacional). Acá
+  // solo se guarda la marca; el corte lo hace "Cerrar competencia".
+  const rankingCiclo = !!document.getElementById('ef_rankingCiclo')?.checked;
   const youtubeUrl = (document.getElementById('ef_youtubeUrl')?.value||'').trim();
   const logoUrl = (document.getElementById('ef_logoUrl')?.value||'').trim();
   const instagram = organizers[0]?.instagram || '';   // compat: IG del primer organizador
@@ -5863,7 +5873,7 @@ window.saveEvento = async function(){
   const bloqueaClaves = Array.from(document.querySelectorAll('.ef-bloq:checked'))
     .map(cb=>cb.getAttribute('data-clave'));
   const data = {id, name, date, closeDate, preNominaCloseAt, nominaCloseAt, location, org, days, status, bloqueaClaves,
-    extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, posNac2026, youtubeUrl,
+    extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, posNac2026, rankingCiclo, youtubeUrl,
     organizers, logoUrl, instagram,    // organizadores (con IG) + logo del campeonato (se muestran en el home)
     streamLogoUrl, streamInstagram,    // logo de productora + IG para la tarjeta de Transmisiones
     requiredDocs,    // nuevo: array de docKeys requeridos

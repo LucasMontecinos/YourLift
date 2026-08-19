@@ -215,6 +215,15 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // El ciclo del ranking: un solo documento (ranking_config/ciclo) con la fecha
+    // desde la que cuentan los resultados. Lo escribe el control en vivo al
+    // cerrar el Nacional y lo lee la página pública del ranking, así que la
+    // lectura es abierta y la escritura sigue siendo solo de admin.
+    match /ranking_config/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /cert_config/{id} {
       allow read: if true;
       allow write: if isAdmin();

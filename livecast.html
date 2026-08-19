@@ -430,7 +430,7 @@ async function initFB(){
         const recordsEnabled=(typeof e.recordsEnabled==='boolean')
           ? e.recordsEnabled
           : !/universitar/i.test(e.name||'');
-        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0,logoUrl:e.logoUrl||''};
+        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0,logoUrl:e.logoUrl||'',rankingCiclo:e.rankingCiclo===true};
         if(DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
           DATA.event.recordsEnabled=recordsEnabled;
           DATA.event.logoUrl=e.logoUrl||'';
@@ -5301,9 +5301,32 @@ async function cerrarCompetenciaConfirm(){
   await cerrarCompetencia(evId, evName);
 }
 
+// Si el campeonato está marcado como el que reinicia el ciclo del ranking (el
+// Nacional), al cerrarlo el ranking pasa a mostrar solo lo que se corra desde
+// esa fecha. Se pregunta aparte, después de publicar: es una decisión distinta
+// de cerrar la competencia y no debería ir escondida en el mismo "aceptar".
+//
+// No borra nada. Los resultados anteriores quedan en Firestore y se siguen
+// viendo en el perfil de cada atleta; el ranking solo deja de contarlos.
+async function _abrirCicloRanking(evId, evName){
+  const meta = (window.LIVE_EVENT_META||{})[evId];
+  if(!meta || meta.rankingCiclo!==true) return;
+  const desde = new Date().toISOString().slice(0,10);
+  const msg = `REINICIAR EL RANKING\n\n"${evName}" está marcado como el campeonato que abre un ciclo nuevo.\n\nEl ranking pasará a mostrar solo los resultados desde el ${desde} — es decir, este campeonato en adelante. Lo anterior deja de aparecer en el ranking.\n\nNo se borra nada: los resultados quedan guardados y se siguen viendo en el perfil de cada atleta. Esto se puede deshacer.\n\n¿Abrir el ciclo nuevo ahora?`;
+  if(!confirm(msg)) return;
+  try{
+    await window._fb.setDoc(window._fb.doc(fbDB,'ranking_config','ciclo'),
+      {desde, evento:evName, evento_id:evId, ts:window._fb.serverTimestamp()});
+    alert(`Ciclo del ranking abierto.\n\nEl ranking parte desde "${evName}".`);
+  }catch(e){
+    console.error('[ciclo]', e);
+    alert('No se pudo abrir el ciclo del ranking: '+e.message+'\n\nLos resultados sí quedaron publicados.');
+  }
+}
+
 async function cerrarCompetencia(evId, evName){
   const fb = window._fb;
-  if(!fb || !fbDB){ alert('Firebase no está listo. Volvé a intentar en 5s.'); return; }
+  if(!fb || !fbDB){ alert('Firebase no está listo. Vuelve a intentar en 5 segundos.'); return; }
   const today = new Date().toISOString().slice(0,10);
   const ath = DATA.athletes || [];
 
@@ -5345,6 +5368,10 @@ async function cerrarCompetencia(evId, evName){
         club: a.club || '',
         sexo: a.sex || '',
         division: a.div || '',
+        // El año de nacimiento viaja con el resultado para que el ranking pueda
+        // recalcular la división de edad cada 1 de enero. La división de arriba
+        // es la del día de la competencia y no se toca: es la del acta.
+        anioNac: a.born || '',
         categoria: a.cat || '',
         modalidad: modLabel,
         view: view,
@@ -5373,9 +5400,10 @@ async function cerrarCompetencia(evId, evName){
   if(errors===0){
     showToastLC(`Competencia cerrada: ${written} resultados publicados`);
     alert(`Competencia "${evName}" cerrada.\n\n${written} resultados publicados.\n\nYa son visibles en yourlift.cl/atleta y en el ranking.`);
+    await _abrirCicloRanking(evId, evName);
   } else {
     showToastLC(`Publicados ${written}, errores ${errors}`);
-    alert(`Se publicaron ${written} resultados.\n${errors} fallaron — revisá la consola (F12).`);
+    alert(`Se publicaron ${written} resultados.\n${errors} fallaron — revisa la consola (F12).`);
   }
 }
 

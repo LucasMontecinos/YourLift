@@ -13,6 +13,8 @@
 <title>YourLift — Ranking 2026</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="bg-fechipo.css">
+<script src="yl-divisiones.js"></script>
+<script src="nacimientos.js"></script>
 <style>
 :root{--bg:#0a0a0f;--card:#12121a;--border:#1e1e2e;--text:#e8e6e3;--muted:#6b7280;--gold:#d4a843;--red:#c41e3a;--green:#22c55e;--f:#e879a0;--m:#60a5fa}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -147,7 +149,8 @@ html.embedded .tabs button,html.embedded .tab,html.embedded button.tab{font-weig
 </div>
 <div class="box">
   <div class="title">
-    <h2 class="os">RANKING <em>2026</em></h2>
+    <h2 class="os">RANKING <em id="rkAnio">2026</em></h2>
+    <p id="rkCiclo" style="display:none"></p>
   </div>
   <div class="tabs" id="tabs"></div>
   <div style="margin-bottom:12px">
@@ -183,6 +186,38 @@ var DO={'Sub Junior':0,'Junior':1,'Open':2,'Master I':3,'Master II':4,'Master II
 var CUR='cl_m';
 
 // ════════════════════════════════════════════════════════════════
+// EL CICLO DEL RANKING
+//
+// El ranking arranca de cero con cada Campeonato Nacional: lo que se corrió
+// antes deja de contar. Eso se marca en el campeonato (admin → "reinicia el
+// ciclo del ranking") y se activa solo cuando se cierra la competencia desde
+// el control en vivo, que es el momento en que los resultados quedan
+// publicados.
+//
+// No se borra nada: los resultados siguen enteros en Firestore y en este
+// archivo, y siguen viéndose en el perfil de cada atleta. El ciclo es un
+// filtro —una fecha de corte— y quitarlo devuelve el ranking completo.
+//
+// Mientras no haya ciclo definido, esto no hace absolutamente nada.
+// ════════════════════════════════════════════════════════════════
+var CICLO=null;
+function _enCiclo(e){
+  if(!CICLO||!CICLO.desde)return true;
+  // Con un ciclo abierto solo cuentan los resultados publicados desde esa
+  // fecha. Lo histórico de este archivo no trae fecha, así que queda fuera:
+  // es justamente lo que el ciclo deja atrás.
+  return !!e._live && String(e.fecha||'')>=String(CICLO.desde);
+}
+function _pintarCiclo(){
+  var el=document.getElementById('rkCiclo');
+  if(!el)return;
+  if(!CICLO||!CICLO.desde){el.style.display='none';return;}
+  el.style.display='';
+  el.textContent='Ciclo abierto por '+(CICLO.evento||'el último Nacional')+
+                 ' — cuentan los resultados desde el '+CICLO.desde;
+}
+
+// ════════════════════════════════════════════════════════════════
 // LOAD LIVE RESULTS FROM FIRESTORE (competition_results)
 // Cada competencia cerrada desde livecast aparece aca en tiempo real
 // sin necesidad de re-deploy.
@@ -212,6 +247,34 @@ function _normDiv(d){
   }
   return String(d||'').trim();
 }
+
+// ════════════════════════════════════════════════════════════════
+// LA DIVISIÓN DE EDAD SE CALCULA, NO SE GUARDA
+//
+// La división con la que un atleta compitió queda escrita en el resultado, y
+// esa es la correcta para el acta de ese campeonato. Pero el ranking es del
+// año en curso: el 1 de enero el que cumple 24 pasa a Open, el que cumple 19
+// pasa a Junior, y el ranking tiene que reflejarlo sin que nadie lo edite.
+//
+// Así que la división que se muestra sale del año de nacimiento contra el año
+// del ranking (ver yl-divisiones.js). Si el año de nacimiento no se conoce, se
+// respeta la división que trae el resultado: mejor el dato viejo que uno
+// inventado.
+//
+// Universitario queda fuera: no es una división de edad sino una categoría
+// aparte, y recalcularla la haría desaparecer.
+// ════════════════════════════════════════════════════════════════
+var ANIO_RANKING=new Date().getFullYear();
+function _divVigente(e){
+  var guardada=_normDiv(e&&e.d);
+  if(!e||guardada==='Universitario')return guardada;
+  if(typeof ylDivisionPorAnio!=='function')return guardada;   // si no cargó el script, todo sigue como antes
+  var an=e.an||0;
+  if(!an&&window.YL_NAC)an=window.YL_NAC[_normName(e.n)]||0;
+  if(!an)return guardada;
+  return ylDivisionPorAnio(an,ANIO_RANKING)||guardada;
+}
+
 function _getTab(sex,modalidad,view,divOrEvento){
   var isMale=(sex==='Hombre'||sex==='Masculino'||sex==='M');
   var s=isMale?'m':'f';
@@ -233,7 +296,7 @@ function _rebuildPositions(){
   // Recalcular posiciones dentro de cada (tab,cat,div) por tt desc
   var byKey={};
   D.forEach(function(e){
-    var k=e.tab+'|'+e.c+'|'+_normDiv(e.d);
+    var k=e.tab+'|'+e.c+'|'+_divVigente(e);
     if(!byKey[k])byKey[k]=[];
     byKey[k].push(e);
   });
@@ -281,7 +344,11 @@ function applyEdit(o){
         if(!cat||!data.sexo)return;
         var tab=_getTab(data.sexo,data.modalidad,data.view,(data.division||'')+' '+(data.evento||''));
         var isBench=tab.indexOf('bench')===0;
-        liveEntries.push(applyEdit({n:data.nombre||'',t:data.club||'',rut:data.rut||'',codigo:data.codigo||'',c:cat,d:data.division||'Open',bw:_bwC,sq:isBench?0:(r.sq||0),bp:r.bp||0,dl:isBench?0:(r.dl||0),tt:r.total||0,dt:glp,tab:tab,p:99,_live:true}));
+        // `fecha` la usa el ciclo del ranking; `an` es el año de nacimiento, que
+        // los resultados publicados desde el livecast ya traen. Si no viene, el
+        // ranking lo busca en la tabla de nacimientos por nombre.
+        var _an=(typeof ylAnioNac==='function')?ylAnioNac(data.anioNac||data.fechaNac||0):0;
+        liveEntries.push(applyEdit({n:data.nombre||'',t:data.club||'',rut:data.rut||'',codigo:data.codigo||'',c:cat,d:data.division||'Open',bw:_bwC,sq:isBench?0:(r.sq||0),bp:r.bp||0,dl:isBench?0:(r.dl||0),tt:r.total||0,dt:glp,tab:tab,p:99,fecha:data.fecha||'',an:_an,_live:true}));
       });
       liveEntries.forEach(function(le){
         var nName=_normName(le.n);
@@ -298,6 +365,12 @@ function applyEdit(o){
     // competition_results: caché 30min
     var _crOk=false;
     try{var _cc=localStorage.getItem('_rkCR');if(_cc){var _co=JSON.parse(_cc);if(Date.now()-_co.ts<1800000){_applyCompRes(_co.d);_crOk=true;}}}catch(e){}
+    // El ciclo del ranking. Es un solo documento y se lee siempre fresco: si el
+    // Nacional acaba de cerrarse, el corte tiene que verse enseguida.
+    fb.getDoc(fb.doc(db,'ranking_config','ciclo')).then(function(s){
+      var c=s.exists()?s.data():null;
+      if(c&&c.desde){CICLO=c;_pintarCiclo();if(typeof R==='function')R();}
+    }).catch(function(e){console.warn('ciclo',e);});
     if(!_crOk){fb.getDocs(fb.collection(db,'competition_results')).then(function(s){var a=s.docs.map(function(d){return d.data();});try{localStorage.setItem('_rkCR',JSON.stringify({ts:Date.now(),d:a}));}catch(e){}_applyCompRes(a);}).catch(function(e){console.warn('compres',e);});}
   }catch(e){console.warn('Firestore ranking load failed',e)}
 })();
@@ -305,10 +378,20 @@ function applyEdit(o){
 function cn(c){return parseFloat((c||'999').replace('+',''))}
 
 function R(){
-var E=D.filter(function(e){return e.tab===CUR&&e.tt>0&&e.p<99});
+var E=D.filter(function(e){return e.tab===CUR&&e.tt>0&&e.p<99&&_enCiclo(e)});
 var ib=CUR.indexOf('bench')>=0;
 var G={};
-E.forEach(function(e){var k=e.c+'|'+_normDiv(e.d);if(!G[k])G[k]=[];G[k].push(e)});
+E.forEach(function(e){var k=e.c+'|'+_divVigente(e);if(!G[k])G[k]=[];G[k].push(e)});
+// Un atleta, una fila por grupo. Antes esto no hacía falta: cada división
+// guardada separaba naturalmente los años. Ahora que la división se recalcula,
+// el que corrió dos temporadas seguidas cae en el mismo grupo dos veces —
+// queda su mejor marca, que es lo que el ranking muestra.
+Object.keys(G).forEach(function(k){
+  var vistos={},limpio=[];
+  G[k].slice().sort(function(a,b){return ((b.tt||0)-(a.tt||0))||((b.dt||0)-(a.dt||0));})
+    .forEach(function(e){var n=_normName(e.n);if(vistos[n])return;vistos[n]=1;limpio.push(e);});
+  G[k]=limpio;
+});
 var K=Object.keys(G).sort(function(a,b){
   var ca=a.split('|'),cb=b.split('|');
   if(cn(ca[0])!==cn(cb[0]))return cn(ca[0])-cn(cb[0]);
@@ -322,7 +405,13 @@ if(!K.length){document.getElementById('ct').innerHTML='<div class="empty">Sin re
 var h='';
 K.forEach(function(key){
   var p=key.split('|'),cat=p[0],div=p[1];
-  var arr=G[key].sort(function(a,b){return a.p-b.p});
+  // La posición se numera acá y no se lee la que viene guardada: al recalcular
+  // la división, un atleta puede caer en un grupo distinto del que tenía cuando
+  // se generó el archivo, y arrastraría un número que ya no significa nada.
+  var arr=G[key].slice().sort(function(a,b){
+    return ((b.tt||0)-(a.tt||0))||((b.dt||0)-(a.dt||0))||((a.bw||0)-(b.bw||0));
+  });
+  arr.forEach(function(e,i){e._pos=i+1});
 
   h+='<div class="cs"><div class="ch"><span>'+cat+' kg — '+div+'</span><span class="cn">'+arr.length+'</span></div>';
   h+='<table class="rt"><thead><tr><th class="c">#</th><th>Atleta</th><th class="n">BW</th>';
@@ -331,8 +420,9 @@ K.forEach(function(key){
   h+='<th class="n">Total</th><th class="n">GL Points</th></tr></thead><tbody>';
 
   arr.forEach(function(e){
-    var cl=e.p===1?'p1':e.p===2?'p2':e.p===3?'p3':'';
-    h+='<tr class="'+cl+'"><td class="c">'+e.p+'</td>';
+    var pos=e._pos||e.p;
+    var cl=pos===1?'p1':pos===2?'p2':pos===3?'p3':'';
+    h+='<tr class="'+cl+'"><td class="c">'+pos+'</td>';
     h+='<td><a href="atleta.html?q='+encodeURIComponent(e.n)+'" style="color:var(--text);text-decoration:none" onmouseenter="this.style.color=\'var(--gold)\'" onmouseleave="this.style.color=\'var(--text)\'"><strong>'+e.n+'</strong></a><span class="cl">'+e.t+'</span></td>';
     h+='<td class="n">'+e.bw+'</td>';
     if(!ib){h+='<td class="n">'+e.sq+'</td><td class="n">'+e.bp+'</td><td class="n">'+e.dl+'</td>'}
@@ -384,6 +474,13 @@ TABS.forEach(function(t){
   th+='<button class="tb '+t.s+(t.id===CUR?' act':'')+'" data-t="'+t.id+'" onclick="setTab(\''+t.id+'\')">'+t.lb+'</button>';
 });
 document.getElementById('tabs').innerHTML=th;
+// El año del título también se corre solo el 1 de enero, junto con las
+// divisiones. Antes estaba escrito a mano y había que acordarse de cambiarlo.
+(function(){
+  var el=document.getElementById('rkAnio');
+  if(el)el.textContent=ANIO_RANKING;
+  document.title='YourLift — Ranking '+ANIO_RANKING;
+})();
 R();
 </script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js').then(r=>console.log('[PWA] SW:',r.scope)).catch(e=>console.warn('[PWA]',e));});}</script>
