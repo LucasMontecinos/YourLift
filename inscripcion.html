@@ -933,6 +933,9 @@ function renderForm() {
     // Si el evento tiene requiredDocs definido → usar el nuevo sistema dinámico.
     // Si no → usar la lógica vieja (backward compat: IPF auto-detección, isMinor, requiereFoto).
     const _hasNewDocs = Array.isArray(_evObj?.requiredDocs) && _evObj.requiredDocs.length>0;
+    // Lo que le toca subir a ESTE atleta. Es la lista del evento menos el
+    // consentimiento del tutor cuando no es menor por año de nacimiento.
+    const _docsPedidos = docsRequeridos(_evObj, f.fechaNac);
     const _docTemplates = _evObj?.docTemplates || {};
     const isIPFWorld = !_hasNewDocs && (/IPF\s*World/i.test(_evName) || _evObj?.tipo==='ipf_world');
 
@@ -940,7 +943,7 @@ function renderForm() {
 
     // ─── SISTEMA NUEVO: requiredDocs explícito en el evento ───
     if (_hasNewDocs) {
-      _evObj.requiredDocs.forEach(docKey => {
+      _docsPedidos.forEach(docKey => {
         const meta = DOC_TYPES[docKey];
         if (!meta) return;
         const stName = state[meta.nameKey] || '';
@@ -963,13 +966,13 @@ function renderForm() {
         </div>`;
       });
       // Summary + botones + cierre card
-      const allDocsCheck = _evObj.requiredDocs.map(k=>{
+      const allDocsCheck = _docsPedidos.map(k=>{
         const m=DOC_TYPES[k]; if(!m) return '';
         const ok = !!state[m.nameKey];
         return `<div><span style="color:var(--muted)">${m.icon} ${m.label}:</span> ${ok?'✅':'❌ Falta'}</div>`;
       }).join('');
       const allDocsDisabled = (()=>{
-        for(const k of _evObj.requiredDocs){
+        for(const k of _docsPedidos){
           const m=DOC_TYPES[k]; if(!m) continue;
           if(!state[m.nameKey]) return 'disabled';
         }
@@ -1586,14 +1589,42 @@ function nextStep() {
 
 function prevStep() { state.step = Math.max(state.step - 1, 0); render(); window.scrollTo(0, 0); }
 
+// ¿Le corresponde el consentimiento del tutor?
+//
+// Se mira el AÑO de nacimiento, no la fecha exacta: es como cuenta la edad el
+// powerlifting —por año calendario— y es lo que pidió la federación. En 2026 le
+// toca a los nacidos desde 2008; en 2027, desde 2009. La cuenta se hace sola, no
+// hay que tocar nada cada enero.
+//
+// Antes esto calculaba la edad exacta, así que alguien nacido en enero de 2008 ya
+// tenía 18 en agosto y no se le pedía, cuando por año sí le corresponde.
 function isMinor(fechaNac) {
-  if (!fechaNac) return false;
-  const dob = new Date(fechaNac + 'T00:00:00');
-  const hoy = new Date();
-  let age = hoy.getFullYear() - dob.getFullYear();
-  const m = hoy.getMonth() - dob.getMonth();
-  if (m < 0 || (m === 0 && hoy.getDate() < dob.getDate())) age--;
-  return age < 18;
+  const anio = _anioNac(fechaNac);
+  if (!anio) return false;   // sin fecha no se puede saber; el campo es obligatorio antes de este paso
+  return anio >= (new Date().getFullYear() - 18);
+}
+// Acepta yyyy-mm-dd (el input de fecha) y dd/mm/yyyy (como viene de la base).
+function _anioNac(fechaNac) {
+  const s = String(fechaNac || '').trim();
+  if (!s) return 0;
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return parseInt(m[1], 10);
+  m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) return parseInt(m[3], 10);
+  m = s.match(/\b(19|20)(\d{2})\b/);
+  return m ? parseInt(m[0], 10) : 0;
+}
+// Los documentos que este atleta tiene que subir de verdad.
+//
+// El evento pide una lista fija, pero el consentimiento del tutor solo aplica a
+// quien es menor por año. Sin este filtro se le exigía a todo el mundo: un adulto
+// no podía enviar su inscripción porque le faltaba un papel que no le corresponde.
+// Se calcula en UN solo lugar y lo usan el formulario, el resumen, el botón de
+// enviar y la validación final — si se separaran, volvería a pasar lo mismo.
+function docsRequeridos(evObj, fechaNac) {
+  const lista = (evObj && Array.isArray(evObj.requiredDocs)) ? evObj.requiredDocs : [];
+  if (isMinor(fechaNac)) return lista.slice();
+  return lista.filter(k => k !== 'menorConsent');
 }
 
 function handleFile(input, type) {
@@ -1790,7 +1821,9 @@ async function submitForm() {
       // Validar URLs presentes ANTES de guardar inscripción
       if (_useNewSys) {
         // Nuevo sistema: validar que todos los docs requeridos del evento están subidos
-        const missing = _evObj2.requiredDocs.filter(dk => !_docsMap[dk]);
+        // Mismo criterio que el formulario: al adulto no se le exige el
+        // consentimiento del tutor, así que tampoco se le reclama acá.
+        const missing = docsRequeridos(_evObj2, f.fechaNac).filter(dk => !_docsMap[dk]);
         if (missing.length) {
           console.error('[upload] docs faltantes:', missing);
           throw new Error('No se pudieron guardar los documentos: ' + missing.join(', ') + '. Revisa tu conexión y vuelve a intentar.');
