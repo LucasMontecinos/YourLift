@@ -35,11 +35,18 @@ const LEER = () => ({
   await p.waitForFunction(() => typeof pintarMotivos === 'function', null, { timeout: 20000 });
   await p.evaluate(() => selectPos('central'));
 
-  console.log('\nAntes de que haya atleta no se inventa un movimiento');
+  console.log('\nAntes de que haya atleta se explica qué significa cada tarjeta');
   {
+    // Acá antes iban tres rayas. El juez abría el bloque y no encontraba nada,
+    // que es justo cuando más le sirve — y era lo que se veía siempre, porque el
+    // movimiento en tarima nunca llegaba a salir del control en vivo.
     const r = await p.evaluate(LEER);
-    ok(r.titulo === 'MOTIVOS DE NULO', 'el título no nombra ningún movimiento: ' + r.titulo);
-    ok(r.red === '—', 'y los motivos están en blanco');
+    ok(r.titulo === 'QUÉ SIGNIFICA CADA TARJETA',
+       'el título no nombra ningún movimiento: ' + r.titulo);
+    ok(r.red !== '—' && r.red.length > 15, 'la roja dice lo suyo: ' + r.red);
+    ok(r.blue !== '—' && r.blue.length > 15, 'la azul también: ' + r.blue);
+    ok(r.yellow !== '—' && r.yellow.length > 15, 'y la amarilla: ' + r.yellow);
+    ok(!/—/.test(r.red + r.blue + r.yellow), 'no queda ninguna raya suelta');
   }
 
   console.log('\nCada movimiento tiene los suyos');
@@ -81,6 +88,25 @@ const LEER = () => ({
   console.log('\nSigue al movimiento que está en la tarima');
   ok(/if\(d\.athlete_lift&&d\.athlete_lift!==_liftActual\)\{_liftActual=d\.athlete_lift;pintarMotivos\(_liftActual\);\}/.test(src),
      'se repinta cuando el livecast avisa que cambió el movimiento');
+  {
+    // Y el aviso tiene que SALIR del control en vivo. Antes ese dato viajaba solo
+    // dentro de resetJudgeLights(), que corre nada más si el modo jueces está
+    // encendido: como no se usa, el movimiento nunca llegaba y el bloque se veía
+    // siempre vacío. Es la causa de que la explicación "no estuviera".
+    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    ok(/async function _avisarAtletaAJueces\(\)\{/.test(lc),
+       'el control en vivo tiene su propio aviso, fuera del modo jueces');
+    ok(/if\(isAdmin&&DATA\.phase==='compete'\)\{ try\{_avisarAtletaAJueces\(\);\}catch\(e\)\{\} \}/.test(lc),
+       'y sale desde el puesto que opera, en la pantalla de competencia');
+    const f = lc.slice(lc.indexOf('async function _avisarAtletaAJueces'),
+                       lc.indexOf('async function resetJudgeLights'));
+    ok(/\{merge:true\}/.test(f),
+       'escribe con merge: no puede apagarle una luz a nadie a mitad de un intento');
+    ok(!/izq:|central:|der:|reset_ts/.test(f), 'y no toca los votos ni el reset');
+    ok(/if\(firma===_juezUltAtleta\)return;/.test(f),
+       'solo escribe cuando cambió el atleta, el movimiento o el intento');
+    ok(/athlete_lift:lift,/.test(f), 'y manda el movimiento, que es lo que faltaba');
+  }
 
   console.log('\nSe puede plegar y queda guardado en ese teléfono');
   {

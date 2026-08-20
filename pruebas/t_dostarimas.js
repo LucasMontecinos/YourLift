@@ -57,9 +57,13 @@ async function abrir(b, tarima) {
      'un documento de luces por tarima (' + t1.ids.jueces + ' / ' + t2.ids.jueces + ')');
   ok(/function juezDocId\(\)\{return TARIMA\?'current_T'\+TARIMA:'current';\}/.test(src),
      'sale de un solo lugar');
-  const usos = (src.match(/'judge_decisions',juezDocId\(\)/g) || []).length
-             + (src.match(/'timer_control',juezDocId\(\)/g) || []).length;
-  ok(usos === 4, 'y lo usan los cuatro accesos del livecast (' + usos + ')');
+  // Lo que importa no es cuántos accesos hay —eso cambia cada vez que se agrega
+  // uno— sino que TODOS pasen por juezDocId(). Antes esto era un número fijo y se
+  // rompía al sumar un acceso nuevo, aunque estuviera bien escrito.
+  const todos = (src.match(/'judge_decisions',|'timer_control',/g) || []).length;
+  const conId = (src.match(/'judge_decisions',juezDocId\(\)|'timer_control',juezDocId\(\)/g) || []).length;
+  ok(todos > 0 && todos === conId,
+     'y todos los accesos del livecast pasan por ahí (' + conId + ' de ' + todos + ')');
   ok(!/'judge_decisions','current'/.test(src) && !/'timer_control','current'/.test(src),
      'no quedó ningún acceso con el id fijo');
 

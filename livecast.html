@@ -2418,6 +2418,34 @@ function startJudgeListener(){
     R();
   });
 }
+// Le dice al teléfono de los jueces quién está en la barra y qué movimiento es.
+//
+// Antes esto viajaba SOLO dentro de resetJudgeLights(), que corre nada más si el
+// modo jueces está encendido. Como no se usa, el dato nunca salía: el panel del
+// juez mostraba el bloque de motivos de nulo vacío, que es justo lo que tiene que
+// leer antes de apretar rojo.
+//
+// Va con merge y solo escribe los datos del atleta: no toca los votos ni el
+// reset, así que no puede apagarle una luz a nadie a mitad de un intento. Y solo
+// escribe cuando de verdad cambió el atleta, el movimiento o el intento — si no,
+// sería una escritura por cada dibujado.
+let _juezUltAtleta='';
+async function _avisarAtletaAJueces(){
+  if(!fbReady||!fbDB||!window._fb)return;
+  try{
+    const cur=liftQueue()[0];
+    const lift=LIFT_S[DATA.lift]||'';
+    const firma=(cur?cur.name:'')+'|'+lift+'|'+DATA.round;
+    if(firma===_juezUltAtleta)return;
+    _juezUltAtleta=firma;
+    await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions',juezDocId()),{
+      athlete_name:cur?cur.name:'',
+      athlete_weight:cur?(cur.att[DATA.lift][DATA.round]||{}).w||0:0,
+      athlete_lift:lift,
+      athlete_round:DATA.round
+    },{merge:true});
+  }catch(e){console.warn('[jueces] no se pudo avisar el atleta en barra',e);}
+}
 async function resetJudgeLights(){
   judgeLights={izq:null,central:null,der:null};
   if(!fbReady)return;
@@ -8239,6 +8267,10 @@ function R(){
   // de OBS/pantalla, si falla se conserva lo anterior. Para el admin, se muestra un
   // panel de recuperación (los datos quedan intactos: reintentar / deshacer / recargar).
   if(TX_MODE){ try{renderTxWidget();}catch(e){console.error('[TX] render error',e);} return; }
+  // Quién está en la barra, para el panel de los jueces. Va acá porque es el
+  // único punto por el que pasan todos los cambios; adentro se corta solo si no
+  // cambió nada, así que no escribe de más. Solo desde el puesto que opera.
+  if(isAdmin&&DATA.phase==='compete'){ try{_avisarAtletaAJueces();}catch(e){} }
   try{
     const el=document.getElementById('R');if(!el)return;
     // El Scoreboard salió del menú: si alguien tenía esa pantalla guardada de antes,

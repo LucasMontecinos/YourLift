@@ -353,14 +353,23 @@ const MOTIVOS={
     yellow:'Se salta el comando · cambia la posición inicial · no termina el movimiento.'
   }
 };
+// Mientras no se sepa qué movimiento está en la tarima, se muestra qué significa
+// cada tarjeta en general. Antes acá iban tres rayas: el juez abría el bloque y
+// no encontraba nada, que es justo cuando más le sirve —el que recién empieza.
+const MOTIVOS_GENERAL={
+  red:'Profundidad o recorrido: no llega a la posición exigida.',
+  blue:'Movimiento de la barra: descenso, rebote o bloqueo incompleto.',
+  yellow:'Comandos y posición: se salta un comando, cambia la posición o no termina el movimiento.'
+};
 let _liftActual=null;
 function pintarMotivos(lift){
   const m=MOTIVOS[lift];
   const tit=document.getElementById('motTitulo');
   if(!m){
-    // Todavía no hay atleta en la tarima: no se inventa un movimiento.
-    tit.textContent='MOTIVOS DE NULO';
-    ['motRed','motBlue','motYellow'].forEach(id=>{document.getElementById(id).textContent='—';});
+    tit.textContent='QUÉ SIGNIFICA CADA TARJETA';
+    document.getElementById('motRed').textContent=MOTIVOS_GENERAL.red;
+    document.getElementById('motBlue').textContent=MOTIVOS_GENERAL.blue;
+    document.getElementById('motYellow').textContent=MOTIVOS_GENERAL.yellow;
     return;
   }
   tit.textContent='MOTIVOS DE NULO · '+m.nombre;
@@ -483,7 +492,7 @@ window.castVote=async function(color){
     }catch(e2){
       // Antes decía solo "Error al enviar" y el juez no tenía cómo saber por qué.
       const sinPermiso=e2&&(e2.code==='permission-denied'||/permission/i.test(e2.message||''));
-      showPulse(sinPermiso?'Sin permiso — iniciá sesión en este dispositivo':'Error al enviar','#ef4444');
+      showPulse(sinPermiso?'Sin permiso — inicia sesión en este dispositivo':'Error al enviar','#ef4444');
       // Y se abre el login en vez de dejar al juez leyendo un cartel sin salida.
       if(sinPermiso&&!fbSesion)abrirLogin();
       console.error(e2);
