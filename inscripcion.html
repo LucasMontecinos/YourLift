@@ -793,7 +793,16 @@ function renderForm() {
     h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Datos del Atleta</h3>
     <div class="field">
       <label>Nombre Completo <span class="req">*</span></label>
-      <input class="input ${f.nombre?'ok':''}" type="text" placeholder="Nombre Apellido Apellido" value="${f.nombre}" oninput="upd('nombre',this.value)" onblur="upd('nombre',formatName(this.value));autoFillCode();this.value=state.form.nombre">
+      ${/* La gente escribe un solo nombre y un solo apellido, y después hay que
+            perseguirla para completar la ficha. Diciéndole exactamente qué va en
+            cada lugar se corrige en el momento, que es cuando cuesta menos. */''}
+      <input class="input ${f.nombre?'ok':''}" type="text" placeholder="Nombre Nombre Apellido Apellido" value="${f.nombre}" oninput="upd('nombre',this.value)" onblur="upd('nombre',formatName(this.value));autoFillCode();this.value=state.form.nombre">
+      <div style="font-size:11px;color:var(--muted);margin-top:5px;line-height:1.6">
+        Nombre <span style="opacity:.75">(primer nombre)</span> ·
+        Nombre <span style="opacity:.75">(segundo nombre)</span> ·
+        Apellido <span style="opacity:.75">(primer apellido)</span> ·
+        Apellido <span style="opacity:.75">(segundo apellido)</span>
+      </div>
     </div>
     <div class="row">
       <div class="field">
