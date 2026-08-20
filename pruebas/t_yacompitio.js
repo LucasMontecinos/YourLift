@@ -311,7 +311,24 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
      'y el mismo detalle se abre ahí');
   ok(/if\(el&&ST\.view==='approvals'\)el\.innerHTML=apprListHtml\(\);\n\s*else render\(\);/.test(src),
      'abrir el ✓ funciona en las dos, cada una como le corresponde');
-  ok(/ST\.view==='nominas'\)render\(\)/.test(src), 'y Nóminas también se actualiza sola');
+  // Cuando llegan los resultados, Nóminas se redibuja sola. Antes esto buscaba el
+  // texto exacto del listener y se rompía al agregar cualquier otra vista a la
+  // misma línea; ahora se mira lo que importa: que 'nominas' esté entre las que
+  // se redibujan cuando cambian los resultados.
+  {
+    const i = src.indexOf("onSnapshot(collection(db,'competition_results')");
+    const listener = src.slice(i, src.indexOf('},(e)=>', i));
+    ok(i > 0 && /ST\.view==='nominas'/.test(listener) && /render\(\)/.test(listener),
+       'y Nóminas también se actualiza sola');
+  }
+  // Y lo mismo al aprobar o rechazar una inscripción: el índice del año se rehace,
+  // porque la columna ahora también mira las inscripciones vigentes.
+  {
+    const i = src.indexOf("onSnapshot(collection(db,'inscripciones')");
+    const listener = src.slice(i, src.indexOf('},(e)=>', i));
+    ok(i > 0 && /window\._HIST_ANIO=null;/.test(listener),
+       'y al aprobar o rechazar una inscripción la columna se mueve sin recargar');
+  }
 
   console.log('\nUna cuenta de juez no entra a ningún panel');
   {
