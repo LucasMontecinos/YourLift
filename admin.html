@@ -192,7 +192,7 @@ function _getPeerKey(a){
 }
 function _peerPerc(myTotal,key){const g=PEERS[key];if(!g)return null;const all=[...g.members.map(m=>m.total),myTotal].sort((a,b)=>b-a);const rank=all.indexOf(myTotal)+1;return{rank,n:all.length,pct:Math.round((1-rank/all.length)*100),g};}
 
-const ST={user:null,adminInfo:null,view:'athletes',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',filterClasif:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{},achievementsByCodigo:{},fotosByCodigo:{},pasadas:{},cpSel:'',
+const ST={user:null,adminInfo:null,view:'athletes',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',filterClasif:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{},achievementsByCodigo:{},fotosByCodigo:{},pasadas:{},cpSel:'',rankingCiclo:null,rankingCicloSel:'',
   // Filtros globales del dashboard de estadísticas (tipo Power BI)
   statsFilters:{ yearFrom:'', yearTo:'', sex:'', mod:'', div:'', club:'' }};
 window.ST=ST;
@@ -472,7 +472,7 @@ async function loadAll(){
       window._allCompResListener=onSnapshot(collection(db,'competition_results'),(snap)=>{
         ST.allCompResults=snap.docs.map(d=>({id:d.id,...d.data()}));
         window._HIST_ANIO=null;   // el índice del año se rehace con los datos nuevos
-        if(ST.view==='athleteProfile'||ST.view==='approvals'||ST.view==='nominas')render();
+        if(ST.view==='athleteProfile'||ST.view==='approvals'||ST.view==='nominas'||ST.view==='rankingCiclo')render();
       },(e)=>console.warn('[listener] competition_results:',e.message));
     }catch(e){console.warn('[loadAll] allCompRes listener:',e.message);}
   }
@@ -500,6 +500,16 @@ async function loadAll(){
         if(ST.view==='campeonatos'||ST.view==='dashboard'||ST.view==='athletes')render();
       },(e)=>console.warn('[listener] eventos:',e.message));
     }catch(e){console.warn('[loadAll] eventos listener:',e.message);}
+  }
+  // El corte del ranking. Es un solo documento y se escucha para que, si otra
+  // persona lo abre o lo quita, el panel lo muestre sin recargar.
+  if(!window._cicloListener){
+    try{
+      window._cicloListener=onSnapshot(doc(db,'ranking_config','ciclo'),(s)=>{
+        ST.rankingCiclo=s.exists()?s.data():null;
+        render();
+      },(e)=>console.warn('[listener] ranking_config:',e.message));
+    }catch(e){console.warn('[loadAll] ciclo listener:',e.message);}
   }
   // Actas de competencias pasadas (para saber cuáles ya tienen documento subido).
   if(!window._pasadasListener){
@@ -1676,6 +1686,7 @@ function render(){
       <button class="side-btn ${ST.view==='publico'?'active':''}" onclick="go('publico')">YourLift Público</button>
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='nomcards'?'active':''}" onclick="go('nomcards')">Tarjetas de Nóminas</button>`:''}
       <button class="side-btn ${ST.view==='pasadas'?'active':''}" onclick="go('pasadas')">Competencias pasadas</button>
+      ${_puedeCiclo()?`<button class="side-btn ${ST.view==='rankingCiclo'?'active':''}" onclick="go('rankingCiclo')">Reinicio ranking${ST.rankingCiclo?.desde?` <span style="background:var(--gold);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">activo</span>`:''}</button>`:''}
       <button class="side-btn ${ST.view==='exports'?'active':''}" onclick="go('exports')">Exports</button>
       <button class="side-btn ${ST.view==='audit'?'active':''}" onclick="go('audit')">Audit Log</button>
       ${ST.pendingResults?`<button class="side-btn ${ST.view==='mergeResults'?'active':''}" onclick="go('mergeResults')" style="border-color:var(--green);color:var(--green)">Resultados Pendientes <span style="background:var(--green);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.pendingResults}</span></button>`:''}
@@ -1709,6 +1720,7 @@ function render(){
   else if(ST.view==='campeonatos')content=renderCampeonatos();
   else if(ST.view==='publico')content=renderPublico();
   else if(ST.view==='pasadas')content=renderCompetenciasPasadas();
+  else if(ST.view==='rankingCiclo'){if(_puedeCiclo())content=renderRankingCiclo();else go('athletes');}
   else if(ST.view==='exports')content=renderExports();
   else if(ST.view==='audit')content=renderAudit();
   else if(ST.view==='admins'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderAdmins();else go('athletes');}
@@ -4636,6 +4648,122 @@ function cpPeso(b){
   return n<1024*1024 ? Math.max(1,Math.round(n/1024))+' KB' : (n/1024/1024).toFixed(1)+' MB';
 }
 
+// ════════════════════════════════════════════════════════════════
+// REINICIO DEL RANKING
+//
+// El ranking arranca de cero con cada Campeonato Nacional: lo que se corrió
+// antes deja de contar. Antes esto era editar el archivo del ranking a mano.
+//
+// Lo que se guarda es una FECHA DE CORTE en ranking_config/ciclo. El ranking
+// público muestra solo los resultados publicados desde esa fecha. No se borra
+// nada: los resultados siguen enteros en Firestore, se siguen viendo en el
+// perfil de cada atleta y en las actas, y quitando el corte vuelve el ranking
+// completo. Por eso la pantalla insiste en que es reversible: si alguien lo
+// aprieta por error un día de campeonato, se deshace en dos clics.
+//
+// Va acá y no dentro de la ficha del campeonato porque es una decisión de la
+// comisión técnica, no una propiedad del evento, y porque tiene que poder
+// deshacerse sin volver a abrir un campeonato ya cerrado.
+// ════════════════════════════════════════════════════════════════
+function _puedeCiclo(){
+  const r=ST.adminInfo?.role;
+  return r==='owner'||r==='superadmin'||r==='admin'||!!ST.adminInfo?.bootstrap;
+}
+
+// Los campeonatos que pueden abrir un ciclo: los que ya tienen resultados
+// publicados. No tiene sentido cortar el ranking en un campeonato que todavía
+// no corrió — dejaría el ranking vacío.
+function _cicloCandidatos(){
+  const porEvento={};
+  (ST.allCompResults||[]).forEach(r=>{
+    const nombre=r.evento||''; if(!nombre) return;
+    const f=r.fecha||'';
+    const k=r.evento_id||nombre;
+    if(!porEvento[k])porEvento[k]={id:r.evento_id||'',nombre,fecha:f,n:0};
+    porEvento[k].n++;
+    // Se usa la fecha más TEMPRANA del campeonato: si duró dos días, el corte
+    // tiene que dejar dentro también el primero.
+    if(f&&(!porEvento[k].fecha||f<porEvento[k].fecha))porEvento[k].fecha=f;
+  });
+  return Object.values(porEvento).filter(e=>e.fecha).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+}
+
+function renderRankingCiclo(){
+  const c=ST.rankingCiclo;
+  const cands=_cicloCandidatos();
+  const sel=ST.rankingCicloSel||'';
+  const elegido=cands.find(x=>(x.id||x.nombre)===sel)||null;
+  const activo=!!(c&&c.desde);
+  let h=`<div class="hdr"><h1>Reinicio ranking</h1></div>`;
+
+  h+=`<div class="card" style="border-color:${activo?'var(--gold)':'var(--border)'}">
+    <div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:${activo?'var(--gold)':'var(--muted)'};margin-bottom:8px">ESTADO ACTUAL</div>`;
+  if(activo){
+    h+=`<div style="font-size:15px;color:var(--text);margin-bottom:6px">El ranking parte desde <b>${esc(c.evento||'—')}</b></div>
+      <div style="font-size:12px;color:var(--muted)">Cuentan los resultados publicados desde el <b>${esc(c.desde)}</b>. Lo anterior no aparece en el ranking, pero sigue guardado y visible en el perfil de cada atleta.</div>
+      <button class="btn" style="margin-top:14px;background:transparent;border:1px solid var(--red);color:var(--red)" onclick="quitarCicloRanking()">Quitar el corte y volver al ranking completo</button>`;
+  }else{
+    h+=`<div style="font-size:15px;color:var(--text);margin-bottom:6px">El ranking muestra <b>todos</b> los resultados</div>
+      <div style="font-size:12px;color:var(--muted)">No hay ningún ciclo abierto. Es lo normal hasta que se corra el próximo Nacional.</div>`;
+  }
+  h+=`</div>`;
+
+  h+=`<div class="card">
+    <div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:var(--text);margin-bottom:4px">ABRIR UN CICLO NUEVO</div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px">
+      Se elige el campeonato que abre el ciclo —normalmente el Nacional recién cerrado— y desde ese momento el ranking cuenta solo ese campeonato en adelante.
+      <b style="color:var(--text)">No se borra ningún resultado:</b> quedan guardados en la base, se siguen viendo en el perfil de cada atleta y en las actas, y este mismo corte se puede quitar cuando se quiera.
+    </div>`;
+  if(!cands.length){
+    h+=`<div style="font-size:12px;color:var(--muted)">Todavía no hay campeonatos con resultados publicados. Un campeonato aparece acá después de cerrarlo desde el control en vivo.</div>`;
+  }else{
+    h+=`<label class="field" style="max-width:560px"><span>Campeonato que abre el ciclo</span>
+      <select class="inp" onchange="ST.rankingCicloSel=this.value;render()">
+        <option value="">— Elegir campeonato —</option>
+        ${cands.map(e=>`<option value="${esc(e.id||e.nombre)}" ${sel===(e.id||e.nombre)?'selected':''}>${esc(e.nombre)} · ${esc(e.fecha)} · ${e.n} resultados</option>`).join('')}
+      </select></label>`;
+    if(elegido){
+      const quedan=(ST.allCompResults||[]).filter(r=>(r.fecha||'')>=elegido.fecha).length;
+      const fuera=(ST.allCompResults||[]).length-quedan;
+      h+=`<div style="margin-top:12px;padding:12px 14px;background:rgba(212,168,67,.07);border:1px solid rgba(212,168,67,.3);border-radius:8px;font-size:12px;color:var(--text);line-height:1.7">
+        Si abres el ciclo en <b>${esc(elegido.nombre)}</b>:<br>
+        · el corte queda en el <b>${esc(elegido.fecha)}</b>;<br>
+        · el ranking pasa a contar <b>${quedan}</b> resultados;<br>
+        · dejan de aparecer <b>${fuera}</b> resultados anteriores, que <b>siguen guardados</b>.
+      </div>
+      <button class="btn btn-g" style="margin-top:14px" onclick="abrirCicloRanking()">Reiniciar el ranking desde ${esc(elegido.nombre)}</button>`;
+    }
+  }
+  h+=`</div>`;
+  return h;
+}
+
+window.abrirCicloRanking=async function(){
+  const sel=ST.rankingCicloSel||'';
+  const e=_cicloCandidatos().find(x=>(x.id||x.nombre)===sel);
+  if(!e){ showToast('Elige primero el campeonato', null, true); return; }
+  if(!confirm(`REINICIAR EL RANKING\n\nEl ranking pasará a mostrar solo los resultados desde el ${e.fecha} — "${e.nombre}" en adelante.\n\nNo se borra nada: los resultados anteriores quedan guardados y se siguen viendo en el perfil de cada atleta. Este corte se puede quitar cuando quieras.\n\n¿Confirmar?`)) return;
+  try{
+    await setDoc(doc(db,'ranking_config','ciclo'),
+      {desde:e.fecha, evento:e.nombre, evento_id:e.id||'', ts:serverTimestamp(), por:ST.user?.email||''});
+    await logAction('ranking_ciclo_abrir', e.id||e.nombre, null, e.fecha);
+    ST.rankingCiclo={desde:e.fecha,evento:e.nombre,evento_id:e.id||''};
+    showToast('Ranking reiniciado desde '+e.nombre);
+    render();
+  }catch(err){ showToast('Error: '+err.message, null, true); console.error(err); }
+};
+
+window.quitarCicloRanking=async function(){
+  if(!confirm('QUITAR EL CORTE\n\nEl ranking vuelve a mostrar todos los resultados, como antes del reinicio.\n\n¿Confirmar?')) return;
+  try{
+    await deleteDoc(doc(db,'ranking_config','ciclo'));
+    await logAction('ranking_ciclo_quitar', 'ciclo', null, '');
+    ST.rankingCiclo=null;
+    showToast('Corte quitado — el ranking vuelve a estar completo');
+    render();
+  }catch(err){ showToast('Error: '+err.message, null, true); console.error(err); }
+};
+
 function renderCompetenciasPasadas(){
   const evs=cpPasados();
   const sel=ST.cpSel&&evs.find(e=>e.id===ST.cpSel)?ST.cpSel:'';
@@ -5524,14 +5652,6 @@ function renderCampeonatos(){
             <div style="font-size:11px;color:var(--muted);margin-top:2px">Si está activo, al inscribirse el atleta indica su <b>modalidad</b> (Classic/Equipado/OE/Universitario) y <b>lugar</b> (1° a 5°) obtenido en el Nacional 2026. Útil para el proceso del Sudamericano.</div>
           </div>
         </label>
-        <label class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(212,168,67,.06);border:1px solid rgba(212,168,67,.35);border-radius:8px">
-          <input type="checkbox" id="ef_rankingCiclo" ${(editing.rankingCiclo===true)?'checked':''} style="width:18px;height:18px;cursor:pointer">
-          <div>
-            <div style="font-weight:600;color:var(--text)">🏆 Nacional — reinicia el ciclo del ranking</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">Marca este campeonato como el que abre un ciclo nuevo. <b>Marcarlo acá no cambia nada todavía:</b> el ranking se reinicia recién cuando se aprieta <b>Cerrar competencia</b> en el control en vivo, y ahí se pregunta de nuevo antes de hacerlo. Desde ese momento el ranking muestra solo los resultados de este campeonato en adelante. <b>No se borra nada</b> — los resultados anteriores quedan guardados y se siguen viendo en el perfil de cada atleta.</div>
-          </div>
-        </label>
-
         <!-- Sección NUEVA: Documentos requeridos en inscripción ──────────────────── -->
         <div class="field" style="grid-column:span 2">
           <div style="background:rgba(212,168,67,.06);border:1px solid rgba(212,168,67,.35);border-radius:10px;padding:14px 16px">
@@ -5855,9 +5975,6 @@ window.saveEvento = async function(){
   const requiereFoto = !!document.getElementById('ef_requiereFoto')?.checked;
   const livecastVisible = document.getElementById('ef_livecastVisible')?.checked !== false;
   const posNac2026 = !!document.getElementById('ef_posNac2026')?.checked;
-  // Marca el campeonato que abre un ciclo nuevo de ranking (el Nacional). Acá
-  // solo se guarda la marca; el corte lo hace "Cerrar competencia".
-  const rankingCiclo = !!document.getElementById('ef_rankingCiclo')?.checked;
   const youtubeUrl = (document.getElementById('ef_youtubeUrl')?.value||'').trim();
   const logoUrl = (document.getElementById('ef_logoUrl')?.value||'').trim();
   const instagram = organizers[0]?.instagram || '';   // compat: IG del primer organizador
@@ -5874,7 +5991,7 @@ window.saveEvento = async function(){
   const bloqueaClaves = Array.from(document.querySelectorAll('.ef-bloq:checked'))
     .map(cb=>cb.getAttribute('data-clave'));
   const data = {id, name, date, closeDate, preNominaCloseAt, nominaCloseAt, location, org, days, status, bloqueaClaves,
-    extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, posNac2026, rankingCiclo, youtubeUrl,
+    extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, posNac2026, youtubeUrl,
     organizers, logoUrl, instagram,    // organizadores (con IG) + logo del campeonato (se muestran en el home)
     streamLogoUrl, streamInstagram,    // logo de productora + IG para la tarjeta de Transmisiones
     requiredDocs,    // nuevo: array de docKeys requeridos

@@ -249,30 +249,127 @@ console.log('\nEn el ranking de verdad');
   ok(!/D\s*=\s*D\.filter|D\.splice|D\.length\s*=\s*0/.test(rk),
      'y en ningún caso se borran entradas del archivo: el ciclo solo filtra al dibujar');
 
-  console.log('\nDe punta a punta: dónde se marca y dónde se aplica');
+  console.log('\nEl reinicio es una sección del admin, no una casilla del campeonato');
   {
-    ok(/id="ef_rankingCiclo"/.test(adm), 'el campeonato se marca en el formulario de admin');
-    ok(/reinicia el ciclo del ranking/i.test(adm), 'con su explicación');
-    ok(/No se borra nada/.test(adm), 'y diciendo que no se borra nada');
-    ok(/const rankingCiclo = !!document\.getElementById\('ef_rankingCiclo'\)\?\.checked;/.test(adm),
-       'se guarda con la ficha del campeonato');
-    ok(/posNac2026, rankingCiclo, youtubeUrl/.test(adm), 'y viaja en el documento del evento');
+    // Antes iba marcado en la ficha del campeonato y se disparaba al cerrar la
+    // competencia. Es una decisión de la comisión técnica, no una propiedad del
+    // evento, y tenía que poder deshacerse sin reabrir un campeonato cerrado.
+    ok(/onclick="go\('rankingCiclo'\)">Reinicio ranking/.test(adm),
+       'hay un botón "Reinicio ranking" en el menú de la izquierda');
+    ok(/function renderRankingCiclo\(\)\{/.test(adm), 'con su propia pantalla');
+    ok(/ST\.view==='rankingCiclo'\)\{if\(_puedeCiclo\(\)\)content=renderRankingCiclo\(\);else go\('athletes'\);\}/.test(adm),
+       'y quien no tiene permiso no entra ni escribiendo la vista a mano');
 
-    ok(/rankingCiclo:e\.rankingCiclo===true/.test(lc), 'el control en vivo lee la marca');
-    ok(/async function _abrirCicloRanking\(evId, evName\)/.test(lc), 'y tiene su propio paso');
-    ok(/if\(!meta \|\| meta\.rankingCiclo!==true\) return;/.test(lc),
-       'que no hace nada si el campeonato no está marcado');
-    ok(/if\(!confirm\(msg\)\) return;/.test(lc.slice(lc.indexOf('_abrirCicloRanking'))),
-       'pregunta antes de reiniciar, aparte de la confirmación de cerrar');
-    ok(/'ranking_config','ciclo'/.test(lc) && /'ranking_config','ciclo'/.test(rk),
-       'el control en vivo escribe y el ranking lee el mismo documento');
-    ok(/await _abrirCicloRanking\(evId, evName\);/.test(lc),
-       'y se ofrece recién después de publicar los resultados');
+    const permiso = adm.slice(adm.indexOf('function _puedeCiclo()'), adm.indexOf('function _cicloCandidatos'));
+    ok(/r==='owner'/.test(permiso) && /r==='superadmin'/.test(permiso) && /r==='admin'/.test(permiso),
+       'lo ven owner, superadmin y admin — comisión técnica y contacto FECHIPO');
+    ok(!/transmision|streaming|juez/.test(permiso),
+       'y no transmisión, streaming ni jueces');
+
+    ok(!/ef_rankingCiclo/.test(adm), 'la casilla vieja del campeonato ya no está');
+    ok(!/rankingCiclo/.test(lc) && !/_abrirCicloRanking/.test(lc),
+       'ni el paso que se disparaba al cerrar la competencia: hay un solo lugar');
+
+    ok(/window\.abrirCicloRanking=async function\(\)/.test(adm), 'se puede abrir un ciclo');
+    ok(/window\.quitarCicloRanking=async function\(\)/.test(adm), 'y quitarlo: no es un camino de ida');
+    ok(/if\(!confirm\(/.test(adm.slice(adm.indexOf('window.abrirCicloRanking'))),
+       'preguntando antes, las dos veces');
+    ok(/await deleteDoc\(doc\(db,'ranking_config','ciclo'\)\);/.test(adm),
+       'quitarlo borra el corte, no los resultados');
+    ok(/logAction\('ranking_ciclo_abrir'/.test(adm) && /logAction\('ranking_ciclo_quitar'/.test(adm),
+       'y las dos cosas quedan en el Audit Log');
+    ok(/'ranking_config','ciclo'/.test(adm) && /'ranking_config','ciclo'/.test(rk),
+       'el admin escribe y el ranking lee el mismo documento');
+
+    // Solo se ofrecen campeonatos que ya tienen resultados: cortar en uno que no
+    // corrió dejaría el ranking vacío.
+    const cand = adm.slice(adm.indexOf('function _cicloCandidatos'), adm.indexOf('function renderRankingCiclo'));
+    ok(/ST\.allCompResults/.test(cand),
+       'la lista sale de los resultados publicados, no de la lista de campeonatos');
+    ok(/if\(f&&\(!porEvento\[k\]\.fecha\|\|f<porEvento\[k\]\.fecha\)\)/.test(cand),
+       'y toma la fecha más temprana: un campeonato de dos días entra entero');
 
     ok(/match \/ranking_config\/\{id\} \{/.test(rules), 'la colección tiene su regla');
     const bloque = rules.slice(rules.indexOf('match /ranking_config'), rules.indexOf('match /cert_config'));
     ok(/allow read: if true;/.test(bloque), 'lectura abierta: la página del ranking es pública');
     ok(/allow write: if isAdmin\(\);/.test(bloque), 'escritura solo de admin');
+  }
+
+  console.log('\n  La pantalla, dibujada de verdad');
+  {
+    // admin.html es un módulo ES y no se puede abrir sin Firebase, así que la
+    // pantalla se arma acá con datos de mentira y se mira el HTML que produce.
+    const trozo = (n) => {
+      const i = adm.search(new RegExp('(?:^|\\n)(?:function|window\\.) ?' + n + '\\b'));
+      if (i < 0) throw new Error('no encontré ' + n);
+      const start = adm.lastIndexOf('\n', i + 1) + 1;
+      let p = start, open = 0, abrio = false;
+      while (p < adm.length) {
+        const c = adm[p];
+        if (c === '{') { open++; abrio = true; }
+        else if (c === '}') { open--; if (abrio && open === 0) { p++; break; } }
+        p++;
+      }
+      return adm.slice(start, p);
+    };
+    const ST = { adminInfo: { role: 'admin' }, rankingCiclo: null, rankingCicloSel: '',
+      allCompResults: [
+        { evento: 'Campeonato Nacional FECHIPO 2027', evento_id: 'nac2027', fecha: '2027-09-11' },
+        { evento: 'Campeonato Nacional FECHIPO 2027', evento_id: 'nac2027', fecha: '2027-09-10' },
+        { evento: 'Regional Sur Austral 2026', evento_id: 'sur26', fecha: '2026-09-20' },
+        { evento: 'Regional Centro 2026', evento_id: 'cen26', fecha: '2026-05-10' },
+      ] };
+    const esc = s => String(s == null ? '' : s).replace(/[<>&"]/g, c =>
+      ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+    const pantalla = new Function('ST', 'esc',
+      ['_puedeCiclo', '_cicloCandidatos', 'renderRankingCiclo'].map(trozo).join('\n') +
+      '\nreturn {_puedeCiclo,_cicloCandidatos,renderRankingCiclo};')(ST, esc);
+
+    const cands = pantalla._cicloCandidatos();
+    ok(cands.length === 3, 'ofrece un campeonato por evento, no uno por resultado (' + cands.length + ')');
+    ok(cands[0].nombre === 'Campeonato Nacional FECHIPO 2027' && cands[0].fecha === '2027-09-10',
+       'el Nacional de dos días entra con su primer día: ' + cands[0].fecha);
+    ok(cands.map(c => c.fecha).join(' ') === '2027-09-10 2026-09-20 2026-05-10',
+       'y salen del más nuevo al más viejo');
+
+    let h = pantalla.renderRankingCiclo();
+    ok(/El ranking muestra <b>todos<\/b> los resultados/.test(h),
+       'sin ciclo abierto lo dice claro');
+    ok(!/quitarCicloRanking/.test(h), 'y no ofrece quitar nada');
+    ok(/Campeonato Nacional FECHIPO 2027 · 2027-09-10 · 2 resultados/.test(h),
+       'el selector muestra fecha y cuántos resultados trae cada campeonato');
+    ok(!/abrirCicloRanking/.test(h), 'sin elegir campeonato, no hay botón para reiniciar');
+
+    ST.rankingCicloSel = 'nac2027';
+    h = pantalla.renderRankingCiclo();
+    ok(/el corte queda en el <b>2027-09-10<\/b>/.test(h), 'al elegirlo, dice dónde queda el corte');
+    ok(/el ranking pasa a contar <b>2<\/b> resultados/.test(h), 'cuántos resultados quedan');
+    ok(/dejan de aparecer <b>2<\/b> resultados anteriores, que <b>siguen guardados<\/b>/.test(h),
+       'y cuántos dejan de verse, diciendo que siguen guardados');
+    ok(/onclick="abrirCicloRanking\(\)"/.test(h), 'ahí sí aparece el botón');
+
+    ST.rankingCiclo = { desde: '2027-09-10', evento: 'Campeonato Nacional FECHIPO 2027' };
+    h = pantalla.renderRankingCiclo();
+    ok(/El ranking parte desde <b>Campeonato Nacional FECHIPO 2027<\/b>/.test(h),
+       'con el ciclo abierto se ve de dónde parte');
+    ok(/onclick="quitarCicloRanking\(\)"/.test(h), 'y el botón para deshacerlo');
+    ok(/sigue guardado y visible en el perfil de cada atleta/.test(h),
+       'repitiendo que no se borró nada');
+
+    ST.allCompResults = [];
+    ST.rankingCicloSel = '';
+    h = pantalla.renderRankingCiclo();
+    ok(/Todav[íi]a no hay campeonatos con resultados publicados/.test(h),
+       'y sin resultados publicados no ofrece un selector vacío');
+
+    ST.adminInfo = { role: 'transmision' };
+    ok(pantalla._puedeCiclo() === false, 'transmisión no puede entrar');
+    ST.adminInfo = { role: 'streaming' };
+    ok(pantalla._puedeCiclo() === false, 'streaming tampoco');
+    ST.adminInfo = { role: 'superadmin' };
+    ok(pantalla._puedeCiclo() === true, 'superadmin sí');
+    ST.adminInfo = { role: 'owner' };
+    ok(pantalla._puedeCiclo() === true, 'y el owner también');
   }
 
   console.log('\nLos resultados nuevos ya se publican con el año de nacimiento');
