@@ -51,20 +51,61 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 .preview-label{font-size:11px;color:var(--muted);letter-spacing:2px;margin-top:2px}
 
 /* ── Motivos de nulo ──────────────────────────────── */
-/* El juez ve, al lado de cada combinación de luces, por qué se da ese nulo.
-   Cambia solo según el movimiento que está en la tarima. */
-.motivos{width:100%;max-width:360px;border:1px solid var(--border);border-radius:12px;background:rgba(15,30,53,.55);overflow:hidden}
-.motivos-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;cursor:pointer}
-.motivos-head span{font-size:10px;letter-spacing:2px;color:var(--gold);font-weight:700}
+/* Las tres guías —sentadilla, banca y peso muerto— van una al lado de la otra y
+   se pasan deslizando con el dedo. Antes se mostraba solo la del movimiento en
+   tarima: si el juez quería consultar otra, no la tenía.
+   Puestas así el bloque ocupa lo que ocupa UNA sola, y los botones de voto no se
+   mueven de su lugar ni se van fuera de la pantalla, que es lo último que puede
+   faltarle a un juez. */
+.motivos{width:100%;max-width:360px;border:1px solid var(--border);border-radius:12px;background:rgba(15,30,53,.55);overflow:hidden;flex-shrink:0}
+.motivos-head{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer}
+.motivos-head #motTitulo{font-size:10px;letter-spacing:2px;color:var(--gold);font-weight:700}
 .motivos-head .chev{font-size:11px;color:var(--muted)}
-.motivos-body{padding:0 12px 10px;display:flex;flex-direction:column;gap:8px}
+/* Los puntitos dicen en cuál de las tres está parado y que hay más al costado. */
+.mot-nav{display:flex;gap:5px;align-items:center;margin-left:auto}
+.mot-nav i{width:6px;height:6px;border-radius:50%;background:var(--border);display:block;transition:background .2s}
+.mot-nav i.on{background:var(--gold)}
+.motivos-body{display:flex;flex-direction:row;overflow-x:auto;overflow-y:hidden;
+  scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch}
+.motivos-body::-webkit-scrollbar{display:none}
 .motivos.closed .motivos-body{display:none}
+.mot-lift{flex:0 0 100%;scroll-snap-align:center;padding:0 12px 10px;box-sizing:border-box}
+.mot-lift h4{font-size:10px;letter-spacing:1.6px;color:var(--muted);font-weight:700;margin-bottom:7px}
 .mot-row{display:flex;align-items:flex-start;gap:9px}
+.mot-row+.mot-row{margin-top:6px}
 .mot-dots{display:flex;align-items:center;gap:3px;flex-shrink:0;padding-top:2px}
 .mot-dots i{display:block;border-radius:50%}
 .mot-dots i.big{width:13px;height:13px;background:#ef4444}
 .mot-dots i.small{width:9px;height:9px}
 .mot-txt{font-size:11px;line-height:1.4;color:var(--text);font-weight:400;letter-spacing:.2px}
+
+/* ── Pantallas bajas ──────────────────────────────── */
+/* Con la guía puesta, en un teléfono de pantalla corta los botones de voto se
+   iban abajo del borde y había que scrollear para votar. Eso no puede pasar: en
+   pantalla baja se achica todo lo que es informativo —el círculo de vista previa,
+   los datos del atleta, los márgenes— y se dejan intactos los botones y la guía,
+   que son lo que el juez usa y lee. */
+@media (max-height:800px){
+  #panel{padding:10px;gap:7px}
+  .athlete-info .ath-name{font-size:clamp(17px,4.4vw,24px)}
+  .athlete-info .ath-weight{font-size:clamp(32px,9vw,46px)}
+  .athlete-info .ath-meta,.athlete-info .ath-lift{font-size:11px}
+  .preview{gap:4px}
+  .preview-big{width:48px;height:48px;border-width:3px}
+  .preview-small{width:16px;height:16px;border-width:2px}
+  .preview-label{margin-top:0}
+  .vote-btn{padding:13px 10px;gap:4px}
+  .vote-btn .dot-big{width:28px;height:28px}
+  .vote-grid{gap:9px}
+  .mot-row+.mot-row{margin-top:4px}
+}
+/* Teléfonos muy antiguos: ni achicando todo entra la guía entera. Se le pone
+   tope y se lee deslizando hacia abajo dentro de ella. Sigue estando a la vista
+   y, sobre todo, los botones de voto no se van de la pantalla. */
+@media (max-height:700px){
+  .mot-lift{max-height:104px;overflow-y:auto;overscroll-behavior-y:contain}
+}
 
 /* ── Vote buttons ─────────────────────────────────── */
 .vote-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:360px}
@@ -169,17 +210,14 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
     <div class="preview-label" id="prevLabel">SIN VOTO</div>
   </div>
 
-  <!-- Motivos de nulo del movimiento en tarima -->
+  <!-- Las tres guías de motivos de nulo, siempre a la vista -->
   <div class="motivos" id="motivos">
     <div class="motivos-head" onclick="toggleMotivos()">
       <span id="motTitulo">MOTIVOS DE NULO</span>
+      <span class="mot-nav" id="motNav"></span>
       <span class="chev" id="motChev">▾</span>
     </div>
-    <div class="motivos-body">
-      <div class="mot-row"><div class="mot-dots"><i class="big"></i><i class="small" style="background:#ef4444"></i></div><div class="mot-txt" id="motRed">—</div></div>
-      <div class="mot-row"><div class="mot-dots"><i class="big"></i><i class="small" style="background:#3b82f6"></i></div><div class="mot-txt" id="motBlue">—</div></div>
-      <div class="mot-row"><div class="mot-dots"><i class="big"></i><i class="small" style="background:#f59e0b"></i></div><div class="mot-txt" id="motYellow">—</div></div>
-    </div>
+    <div class="motivos-body" id="motBody"></div>
   </div>
 
   <!-- Vote buttons -->
@@ -353,29 +391,70 @@ const MOTIVOS={
     yellow:'Se salta el comando · cambia la posición inicial · no termina el movimiento.'
   }
 };
-// Mientras no se sepa qué movimiento está en la tarima, se muestra qué significa
-// cada tarjeta en general. Antes acá iban tres rayas: el juez abría el bloque y
-// no encontraba nada, que es justo cuando más le sirve —el que recién empieza.
-const MOTIVOS_GENERAL={
-  red:'Profundidad o recorrido: no llega a la posición exigida.',
-  blue:'Movimiento de la barra: descenso, rebote o bloqueo incompleto.',
-  yellow:'Comandos y posición: se salta un comando, cambia la posición o no termina el movimiento.'
-};
+// Las tres guías se dibujan siempre, las tres completas. El juez que está en
+// banca puede querer mirar la de peso muerto un minuto antes de que empiece, y
+// antes no la tenía: se mostraba solo la del movimiento en tarima.
+//
+// La del movimiento que se está juzgando queda destacada y con la marca "EN
+// TARIMA", para que la vista vaya sola a la que corresponde sin que las otras
+// desaparezcan.
+const ORDEN_MOT=['sq','bp','dl'];
 let _liftActual=null;
+let _motMontado=false;
+
+// Se dibuja UNA vez: las tres guías quedan puestas una al lado de la otra y no se
+// vuelven a armar. Si se rearmaran en cada cambio, al juez que está leyendo la de
+// peso muerto se le movería la pantalla debajo del dedo.
+function _montarMotivos(){
+  const cont=document.getElementById('motBody');
+  if(!cont||_motMontado)return;
+  const fila=(color,id)=>
+    '<div class="mot-row"><div class="mot-dots"><i class="big"></i><i class="small" style="background:'+color+'"></i></div>'+
+    '<div class="mot-txt" id="'+id+'"></div></div>';
+  cont.innerHTML=ORDEN_MOT.map(k=>
+    '<div class="mot-lift" id="mot_'+k+'">'+
+      '<h4 id="mot_'+k+'_tit"></h4>'+
+      fila('#ef4444','mot_'+k+'_red')+
+      fila('#3b82f6','mot_'+k+'_blue')+
+      fila('#f59e0b','mot_'+k+'_yellow')+
+    '</div>').join('');
+  // El texto va por textContent y no dentro del HTML de arriba: así un motivo con
+  // un signo raro no puede romper el bloque entero.
+  ORDEN_MOT.forEach(k=>{
+    const m=MOTIVOS[k];
+    document.getElementById('mot_'+k+'_tit').textContent=m.nombre;
+    document.getElementById('mot_'+k+'_red').textContent=m.red;
+    document.getElementById('mot_'+k+'_blue').textContent=m.blue;
+    document.getElementById('mot_'+k+'_yellow').textContent=m.yellow;
+  });
+  document.getElementById('motNav').innerHTML=ORDEN_MOT.map(()=>'<i></i>').join('');
+  // Al deslizar se actualizan el título y los puntitos. Se mira dónde quedó el
+  // scroll en vez de escuchar gestos: así funciona igual con el dedo, con el
+  // mouse y con el teclado.
+  cont.addEventListener('scroll',()=>{
+    clearTimeout(cont._t);
+    cont._t=setTimeout(()=>_marcarMotivo(Math.round(cont.scrollLeft/Math.max(1,cont.clientWidth))),60);
+  },{passive:true});
+  _motMontado=true;
+  _marcarMotivo(0);
+}
+// El nombre del movimiento va en la propia tarjeta, no en el encabezado: así se
+// mueve junto con el dedo y no queda repetido dos veces en una pantalla chica.
+// Acá solo se marca en cuál de las tres está parado.
+function _marcarMotivo(i){
+  i=Math.max(0,Math.min(ORDEN_MOT.length-1,i||0));
+  const nav=document.getElementById('motNav');
+  if(nav)[...nav.children].forEach((d,j)=>d.classList.toggle('on',j===i));
+}
+// Cuando cambia el movimiento en la tarima, la guía que corresponde se trae sola
+// al frente. El juez igual puede deslizar a cualquiera de las otras.
 function pintarMotivos(lift){
-  const m=MOTIVOS[lift];
-  const tit=document.getElementById('motTitulo');
-  if(!m){
-    tit.textContent='QUÉ SIGNIFICA CADA TARJETA';
-    document.getElementById('motRed').textContent=MOTIVOS_GENERAL.red;
-    document.getElementById('motBlue').textContent=MOTIVOS_GENERAL.blue;
-    document.getElementById('motYellow').textContent=MOTIVOS_GENERAL.yellow;
-    return;
-  }
-  tit.textContent='MOTIVOS DE NULO · '+m.nombre;
-  document.getElementById('motRed').textContent=m.red;
-  document.getElementById('motBlue').textContent=m.blue;
-  document.getElementById('motYellow').textContent=m.yellow;
+  _montarMotivos();
+  const i=ORDEN_MOT.indexOf(lift);
+  if(i<0)return;
+  const cont=document.getElementById('motBody');
+  if(cont)cont.scrollTo({left:i*cont.clientWidth,behavior:'smooth'});
+  _marcarMotivo(i);
 }
 window.pintarMotivos=pintarMotivos;
 // Se puede plegar: el juez que ya se los sabe recupera la pantalla, y la

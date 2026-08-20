@@ -188,7 +188,7 @@ async function abrir(b, haySesion) {
     await p5.evaluate(() => { selectPos('central'); pintarMotivos('sq'); });
     const r = await p5.evaluate(() => ({
       pos: document.getElementById('posBadge').textContent,
-      mot: document.getElementById('motRed').textContent,
+      mot: document.getElementById('mot_sq_red').textContent,
       botones: document.querySelectorAll('.vote-btn').length,
     }));
     ok(/CENTRAL/.test(r.pos), 'se elige posición');

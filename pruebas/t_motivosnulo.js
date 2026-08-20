@@ -15,13 +15,24 @@ const src = fs.readFileSync(__dirname + '/../jueces.html', 'utf8');
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };
 
-const LEER = () => ({
-  titulo: document.getElementById('motTitulo').textContent,
-  red: document.getElementById('motRed').textContent,
-  blue: document.getElementById('motBlue').textContent,
-  yellow: document.getElementById('motYellow').textContent,
+// Las tres guías están siempre puestas; se lee la del movimiento que se pida.
+const LEER = (k) => ({
+  titulo: document.getElementById('mot_' + k + '_tit').textContent,
+  red: document.getElementById('mot_' + k + '_red').textContent,
+  blue: document.getElementById('mot_' + k + '_blue').textContent,
+  yellow: document.getElementById('mot_' + k + '_yellow').textContent,
   cerrado: document.getElementById('motivos').classList.contains('closed'),
 });
+// En cuál de las tres está parado el bloque deslizable.
+const DONDE = () => {
+  const c = document.getElementById('motBody');
+  return {
+    i: Math.round(c.scrollLeft / Math.max(1, c.clientWidth)),
+    punto: [...document.getElementById('motNav').children].findIndex(d => d.classList.contains('on')),
+    deslizable: c.scrollWidth > c.clientWidth + 2,
+    cerrado: document.getElementById('motivos').classList.contains('closed'),
+  };
+};
 
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -35,40 +46,41 @@ const LEER = () => ({
   await p.waitForFunction(() => typeof pintarMotivos === 'function', null, { timeout: 20000 });
   await p.evaluate(() => selectPos('central'));
 
-  console.log('\nAntes de que haya atleta se explica qué significa cada tarjeta');
+  console.log('\nLas tres guías están puestas desde el principio');
   {
-    // Acá antes iban tres rayas. El juez abría el bloque y no encontraba nada,
-    // que es justo cuando más le sirve — y era lo que se veía siempre, porque el
-    // movimiento en tarima nunca llegaba a salir del control en vivo.
-    const r = await p.evaluate(LEER);
-    ok(r.titulo === 'QUÉ SIGNIFICA CADA TARJETA',
-       'el título no nombra ningún movimiento: ' + r.titulo);
-    ok(r.red !== '—' && r.red.length > 15, 'la roja dice lo suyo: ' + r.red);
-    ok(r.blue !== '—' && r.blue.length > 15, 'la azul también: ' + r.blue);
-    ok(r.yellow !== '—' && r.yellow.length > 15, 'y la amarilla: ' + r.yellow);
-    ok(!/—/.test(r.red + r.blue + r.yellow), 'no queda ninguna raya suelta');
+    // Antes se mostraba solo la del movimiento en tarima, y como ese dato nunca
+    // salía del control en vivo, el bloque se veía vacío. Ahora están las tres y
+    // se pasan deslizando: el juez de banca puede mirar la de peso muerto un
+    // minuto antes de que empiece.
+    const r = await p.evaluate(DONDE);
+    ok(r.deslizable, 'el bloque se desliza de lado');
+    ok(r.i === 0 && r.punto === 0, 'arranca en la primera, y el puntito lo dice');
+    const n = await p.evaluate(() => document.querySelectorAll('.mot-lift').length);
+    ok(n === 3, 'hay tres guías, una por movimiento (' + n + ')');
+    const puntos = await p.evaluate(() => document.getElementById('motNav').children.length);
+    ok(puntos === 3, 'y tres puntitos para saber en cuál va');
+    const vacios = await p.evaluate(() =>
+      [...document.querySelectorAll('.mot-txt')].filter(e => !e.textContent.trim() || e.textContent === '—').length);
+    ok(vacios === 0, 'ninguna queda en blanco ni con una raya');
   }
 
   console.log('\nCada movimiento tiene los suyos');
   {
-    await p.evaluate(() => pintarMotivos('sq'));
-    const r = await p.evaluate(LEER);
+    const r = await p.evaluate(LEER, 'sq');
     ok(/SENTADILLA/.test(r.titulo), 'sentadilla: ' + r.titulo);
     ok(/[Pp]rofundidad/.test(r.red), 'rojo + rojo es la profundidad');
     ok(/rebote/.test(r.blue) && /rodillas/.test(r.blue), 'rojo + azul: descenso, doble rebote, rodillas');
     ok(/comando/.test(r.yellow) && /posición inicial/.test(r.yellow), 'rojo + amarillo: comandos y posición');
   }
   {
-    await p.evaluate(() => pintarMotivos('bp'));
-    const r = await p.evaluate(LEER);
+    const r = await p.evaluate(LEER, 'bp');
     ok(/BANCA/.test(r.titulo), 'banca: ' + r.titulo);
     ok(/pecho/.test(r.red) && /codos/.test(r.red), 'rojo + rojo: el pecho y la profundidad de codos');
     ok(/codos no bloqueados/.test(r.blue), 'rojo + azul: codos no bloqueados');
     ok(/glúteo/.test(r.yellow) && /pies/.test(r.yellow), 'rojo + amarillo: glúteo, cabeza, pies');
   }
   {
-    await p.evaluate(() => pintarMotivos('dl'));
-    const r = await p.evaluate(LEER);
+    const r = await p.evaluate(LEER, 'dl');
     ok(/PESO MUERTO/.test(r.titulo), 'peso muerto: ' + r.titulo);
     ok(/[Hh]ombros/.test(r.red), 'rojo + rojo: hombros no bloqueados');
     ok(/[Tt]irones/.test(r.blue) && /muslos/.test(r.blue), 'rojo + azul: tirones y apoyo en los muslos');
@@ -78,14 +90,39 @@ const LEER = () => ({
   console.log('\n  Y los tres textos son distintos entre movimientos');
   {
     const t = {};
-    for (const l of ['sq', 'bp', 'dl']) {
-      await p.evaluate(x => pintarMotivos(x), l);
-      t[l] = await p.evaluate(() => document.getElementById('motRed').textContent);
-    }
+    for (const l of ['sq', 'bp', 'dl']) t[l] = (await p.evaluate(LEER, l)).red;
     ok(new Set(Object.values(t)).size === 3, 'el rojo+rojo dice algo distinto en cada uno');
   }
 
-  console.log('\nSigue al movimiento que está en la tarima');
+  console.log('\n  Se puede deslizar a mano a cualquiera de las tres');
+  {
+    for (const [i, nombre] of [[2, 'peso muerto'], [1, 'banca'], [0, 'sentadilla']]) {
+      await p.evaluate(x => {
+        const c = document.getElementById('motBody');
+        c.scrollLeft = x * c.clientWidth;
+      }, i);
+      await p.waitForTimeout(150);
+      const r = await p.evaluate(DONDE);
+      ok(r.i === i && r.punto === i, 'deslizando llega a ' + nombre + ' y el puntito la sigue');
+    }
+  }
+
+  console.log('\nLa del movimiento en tarima se trae sola al frente');
+  {
+    for (const [l, i, nombre] of [['dl', 2, 'peso muerto'], ['bp', 1, 'banca'], ['sq', 0, 'sentadilla']]) {
+      await p.evaluate(x => pintarMotivos(x), l);
+      await p.waitForTimeout(450);   // el deslizado es suave
+      const r = await p.evaluate(DONDE);
+      ok(r.i === i && r.punto === i, 'con ' + nombre + ' en tarima queda esa a la vista');
+    }
+    // Y sin movimiento conocido no se mueve de donde esté: no le saca la guía de
+    // las manos al juez que estaba leyendo otra.
+    await p.evaluate(() => { const c = document.getElementById('motBody'); c.scrollLeft = 2 * c.clientWidth; });
+    await p.waitForTimeout(150);
+    await p.evaluate(() => pintarMotivos(null));
+    await p.waitForTimeout(200);
+    ok((await p.evaluate(DONDE)).i === 2, 'y sin atleta en tarima no se mueve sola');
+  }
   ok(/if\(d\.athlete_lift&&d\.athlete_lift!==_liftActual\)\{_liftActual=d\.athlete_lift;pintarMotivos\(_liftActual\);\}/.test(src),
      'se repinta cuando el livecast avisa que cambió el movimiento');
   {
@@ -111,7 +148,7 @@ const LEER = () => ({
   console.log('\nSe puede plegar y queda guardado en ese teléfono');
   {
     await p.evaluate(() => toggleMotivos());
-    let r = await p.evaluate(LEER);
+    let r = await p.evaluate(DONDE);
     ok(r.cerrado, 'se cierra');
     const vis = await p.evaluate(() => getComputedStyle(document.querySelector('.motivos-body')).display);
     ok(vis === 'none', 'y el texto deja de ocupar lugar');
@@ -119,10 +156,10 @@ const LEER = () => ({
     ok(guardado === '0', 'la elección queda guardada');
     await p.reload({ waitUntil: 'domcontentloaded' });
     await p.waitForFunction(() => typeof pintarMotivos === 'function', null, { timeout: 20000 });
-    r = await p.evaluate(LEER);
+    r = await p.evaluate(DONDE);
     ok(r.cerrado, 'y al volver a entrar sigue cerrado');
     await p.evaluate(() => toggleMotivos());
-    ok(!(await p.evaluate(LEER)).cerrado, 'se vuelve a abrir');
+    ok(!(await p.evaluate(DONDE)).cerrado, 'se vuelve a abrir');
   }
 
   console.log('\nEs un texto: no vota');
