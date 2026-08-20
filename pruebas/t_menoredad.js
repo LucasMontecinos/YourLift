@@ -1,4 +1,4 @@
-// El consentimiento del tutor es solo para los menores.
+// El consentimiento del tutor es solo para los que todavía no cumplen 18.
 //
 // En producción pasó esto: a los adultos les aparecía el "Consentimiento Menor"
 // como documento obligatorio y no podían enviar la inscripción. El botón quedaba
@@ -8,13 +8,20 @@
 // y exigía TODA la lista sin mirar quién se está inscribiendo. El sistema viejo sí
 // preguntaba por la edad; el nuevo se saltó ese paso.
 //
-// La regla que pidió la federación: el consentimiento le toca a los nacidos desde
-// 2008 en 2026, y desde 2009 en 2027. Es por AÑO de nacimiento, no por la edad
-// exacta al día de hoy, y la cuenta tiene que correrse sola cada enero.
+// La regla: cuenta la EDAD REAL al día en que se inscribe. Es un papel legal —lo
+// firma el tutor de quien todavía no cumplió 18—, así que el que ya los cumplió
+// firma por sí mismo aunque haya nacido el mismo año que un menor. Dos personas
+// de 2008 pueden estar en lados distintos según el día de su cumpleaños.
+//
+// No confundir con la división de edad, que sí va por año calendario (Sub Junior,
+// Junior, Open…, ver yl-divisiones.js). Son dos cuentas distintas a propósito:
+// alguien de 2008 puede ser Sub Junior todo 2026 y no necesitar el consentimiento
+// desde el día que cumple 18.
 //
 // Lo que se cuida acá:
 //   · que el adulto no vea el documento ni quede trabado por él;
 //   · que el menor lo siga viendo y siga sin poder enviar hasta subirlo;
+//   · que el corte sea el cumpleaños y no el 1 de enero;
 //   · que no se caiga NINGÚN otro documento del evento — hay gente ya inscrita y
 //     la inscripción funciona bien: esto no puede tocar nada más;
 //   · y que el formulario y la validación final usen el mismo criterio, porque si
@@ -41,53 +48,86 @@ function sacar(texto, nombre) {
   return texto.slice(start, p);
 }
 
-// Las tres funciones, montadas con un calendario falso: así se puede pararse en
-// 2026 y en 2027 sin esperar a que llegue enero.
-const CUERPO = ['isMinor', '_anioNac', 'docsRequeridos'].map(n => sacar(src, n)).join('\n');
-function enElAnio(anio) {
-  const FechaFalsa = function () { return { getFullYear: () => anio }; };
+// Las funciones, montadas con un calendario falso: así se puede pararse en
+// cualquier día y ver el corte moverse con el cumpleaños.
+const FUNCS = ['isMinor', '_edadHoy', '_partesFecha', '_anioNac', 'docsRequeridos'];
+const CUERPO = FUNCS.map(n => sacar(src, n)).join('\n');
+function elDia(iso) {
+  const t = iso.split('-').map(Number);
+  const FechaFalsa = function () {
+    return { getFullYear: () => t[0], getMonth: () => t[1] - 1, getDate: () => t[2] };
+  };
   FechaFalsa.prototype = Date.prototype;
-  return new Function('Date', CUERPO + '\nreturn {isMinor,_anioNac,docsRequeridos};')(FechaFalsa);
+  return new Function('Date', CUERPO + '\nreturn {' + FUNCS.join(',') + '};')(FechaFalsa);
 }
 
 const DOCS_EVENTO = ['carnetIdFront', 'wadaIntl', 'menorConsent', 'carnetIdReverso'];
 const EVENTO = { id: 'sur_austral', name: 'Regional Sur Austral', requiredDocs: DOCS_EVENTO };
 
-console.log('\nEn 2026 el consentimiento parte en los nacidos en 2008');
+console.log('\nCuenta la edad real, no el año de nacimiento');
 {
-  const A = enElAnio(2026);
-  ok(A.isMinor('2008-01-15'), 'nacido en enero de 2008 → sí (aunque ya cumplió 18)');
-  ok(A.isMinor('2008-12-31'), 'nacido en diciembre de 2008 → sí');
-  ok(A.isMinor('2012-06-01'), 'nacido en 2012 → sí');
-  ok(!A.isMinor('2007-12-31'), 'nacido en diciembre de 2007 → no');
-  ok(!A.isMinor('1995-03-20'), 'nacido en 1995 → no');
-  ok(!A.isMinor('1968-07-04'), 'un Master nacido en 1968 → no');
+  // El caso que llegó de producción: nacidos en 2008 que ya cumplieron 18 y a los
+  // que se les seguía pidiendo el consentimiento del tutor.
+  const A = elDia('2026-08-19');
+  ok(!A.isMinor('2008-01-15'), 'nacido el 15/01/2008 → ya cumplió 18, no se le pide');
+  ok(!A.isMinor('2008-08-19'), 'y el que los cumple justo hoy, tampoco');
+  ok(A.isMinor('2008-08-20'), 'pero el que los cumple mañana, sí — todavía es menor');
+  ok(A.isMinor('2008-12-31'), 'y el de diciembre de 2008, sí');
+  ok(A.isMinor('2010-05-01'), 'los más chicos, obviamente');
+  ok(!A.isMinor('1995-03-20'), 'y a un adulto no se le pide');
+  ok(!A.isMinor('1968-07-04'), 'ni a un Master');
 }
 
-console.log('\n  Y en 2027 se corre sola a los nacidos en 2009');
+console.log('\n  El corte se mueve con el cumpleaños, no con el 1 de enero');
 {
-  const A = enElAnio(2027);
-  ok(A.isMinor('2009-01-01'), '2009 → sí');
-  ok(!A.isMinor('2008-01-15'), '2008 → ya no, sin tocar una línea de código');
-  const B = enElAnio(2030);
-  ok(B.isMinor('2012-05-05') && !B.isMinor('2011-05-05'),
-     'en 2030 el corte queda en 2012: la cuenta es del calendario, no está escrita a mano');
+  const nacido = '2008-06-10';
+  ok(elDia('2026-06-09').isMinor(nacido), 'el 9 de junio de 2026 todavía es menor');
+  ok(!elDia('2026-06-10').isMinor(nacido), 'el 10, el día que cumple 18, ya no');
+  ok(!elDia('2026-06-11').isMinor(nacido), 'y al día siguiente tampoco');
+  // Dos personas del mismo año, en lados distintos el mismo día.
+  const hoy = elDia('2026-08-19');
+  ok(!hoy.isMinor('2008-02-02') && hoy.isMinor('2008-11-02'),
+     'dos de 2008 el mismo día: al de febrero no se le pide, al de noviembre sí');
 }
 
-console.log('\nLa fecha se entiende venga como venga');
+console.log('\n  Y esto es distinto de la división de edad, a propósito');
 {
-  const A = enElAnio(2026);
-  ok(A._anioNac('1995-03-20') === 1995, 'yyyy-mm-dd, que es lo que manda el campo de fecha');
-  ok(A._anioNac('20/03/1995') === 1995, 'dd/mm/yyyy, que es como está en la base de atletas');
-  ok(A._anioNac('') === 0 && A._anioNac(null) === 0 && A._anioNac(undefined) === 0,
-     'y si no hay fecha, no inventa un año');
+  // La división va por año calendario: el de 2008 es Sub Junior TODO 2026, incluso
+  // después de cumplir 18. El consentimiento no: se corta el día del cumpleaños.
+  const div = require(__dirname + '/../yl-divisiones.js');
+  ok(div.ylDivisionPorAnio(2008, 2026) === 'Sub Junior',
+     'un nacido en 2008 es Sub Junior durante todo 2026…');
+  ok(!elDia('2026-12-01').isMinor('2008-03-03'),
+     '…y aun así, en diciembre, ya no necesita el consentimiento del tutor');
+}
+
+console.log('\nLa edad se calcula bien');
+{
+  const A = elDia('2026-08-19');
+  ok(A._edadHoy('1995-03-20') === 31, 'cumpleaños ya pasado este año: 31');
+  ok(A._edadHoy('1995-12-20') === 30, 'cumpleaños que aún no llega: 30');
+  ok(A._edadHoy('2026-08-19') === 0, 'recién nacido hoy: 0');
+  ok(A._edadHoy('') === null && A._edadHoy(null) === null,
+     'y sin fecha devuelve null: no inventa una edad');
   ok(!A.isMinor('') && !A.isMinor(null),
-     'sin fecha no se le pide el consentimiento: el campo es obligatorio antes de este paso');
+     'sin fecha no se le pide el consentimiento — el campo es obligatorio antes de este paso');
+  ok(!A.isMinor('cualquier cosa'), 'ni con una fecha que no se entiende');
+}
+
+console.log('\n  La fecha se entiende venga como venga');
+{
+  const A = elDia('2026-08-19');
+  ok(A._edadHoy('20/03/1995') === 31, 'dd/mm/yyyy, que es como está en la base de atletas');
+  ok(A._edadHoy('1995-03-20') === 31, 'yyyy-mm-dd, que es lo que manda el campo de fecha');
+  ok(A._edadHoy('5/3/1995') === 31, 'y sin el cero adelante también');
+  ok(A._partesFecha('20/03/1995').mes === 3, 'no confunde el día con el mes: 20/03 es marzo');
+  ok(A._anioNac('20/03/1995') === 1995 && A._anioNac('1995-03-20') === 1995,
+     'y el año se saca igual de los dos formatos');
 }
 
 console.log('\nAl adulto se le piden los demás documentos, todos');
 {
-  const A = enElAnio(2026);
+  const A = elDia('2026-08-19');
   const pedidos = A.docsRequeridos(EVENTO, '1995-03-20');
   ok(pedidos.indexOf('menorConsent') < 0, 'el consentimiento del tutor no aparece');
   ok(pedidos.length === 3, 'quedan los otros tres (' + pedidos.length + ')');
@@ -99,7 +139,7 @@ console.log('\nAl adulto se le piden los demás documentos, todos');
 
 console.log('\n  Al menor se le piden los cuatro');
 {
-  const A = enElAnio(2026);
+  const A = elDia('2026-08-19');
   const pedidos = A.docsRequeridos(EVENTO, '2010-08-08');
   ok(pedidos.length === 4 && pedidos.indexOf('menorConsent') >= 0,
      'incluido el consentimiento: ' + pedidos.join(', '));
@@ -107,7 +147,7 @@ console.log('\n  Al menor se le piden los cuatro');
 
 console.log('\n  Y un evento sin la lista no rompe nada');
 {
-  const A = enElAnio(2026);
+  const A = elDia('2026-08-19');
   ok(A.docsRequeridos(null, '1995-03-20').length === 0, 'sin evento, lista vacía');
   ok(A.docsRequeridos({}, '1995-03-20').length === 0, 'evento viejo sin requiredDocs, lista vacía');
   ok(A.docsRequeridos({ requiredDocs: 'no es un arreglo' }, '1995-03-20').length === 0,
@@ -182,13 +222,27 @@ console.log('\nEn el formulario de verdad');
   ok(adulto.pideCarnet && adulto.pideWada, 'el carnet y la WADA siguen pidiéndose');
   ok(adulto.puedeEnviar, 'y puede enviar la inscripción — que era el problema');
 
-  const menor = await pasoDocumentos('2010-08-08');
+  const menor = await pasoDocumentos((new Date().getFullYear() - 16) + '-08-08');
   ok(menor.pideConsentimiento, 'al menor sí se le muestra');
   ok(menor.zonas === 3, 'con sus tres documentos (' + menor.zonas + ')');
   ok(!menor.puedeEnviar, 'y no puede enviar hasta subirlo');
 
-  const borde = await pasoDocumentos('2008-01-15');
-  ok(borde.pideConsentimiento, 'y al nacido en enero de 2008 también, aunque ya tenga 18 cumplidos');
+  // El caso que llegó de producción, calculado contra el día de hoy para que no
+  // se pudra con el calendario: alguien que cumplió 18 hace un mes.
+  const hoy = new Date();
+  const iso = d => d.toISOString().slice(0, 10);
+  const cumplio18 = new Date(hoy.getFullYear() - 18, hoy.getMonth() - 1, 15);
+  const cumple18Manana = new Date(hoy.getFullYear() - 18, hoy.getMonth(), hoy.getDate() + 1);
+
+  const recienAdulto = await pasoDocumentos(iso(cumplio18));
+  ok(!recienAdulto.pideConsentimiento,
+     'al que cumplió 18 hace poco (' + iso(cumplio18) + ') ya no se le pide — era el problema');
+  ok(recienAdulto.puedeEnviar, 'y puede enviar');
+
+  const casiAdulto = await pasoDocumentos(iso(cumple18Manana));
+  ok(casiAdulto.pideConsentimiento,
+     'y al que los cumple mañana (' + iso(cumple18Manana) + ') todavía sí');
+  ok(!casiAdulto.puedeEnviar, 'ese no puede enviar hasta subirlo');
 
   console.log('\n  Lo que ya funcionaba sigue igual');
   {
@@ -209,7 +263,7 @@ console.log('\nEn el formulario de verdad');
     ok(r.carnet, 'y el carnet se sigue pidiendo igual que siempre');
     ok(r.puedeEnviar, 'puede enviar');
     const r2 = await p.evaluate(() => {
-      state.form.fechaNac = '2010-08-08'; render();
+      state.form.fechaNac = (new Date().getFullYear() - 16) + '-08-08'; render();
       return /Consentimiento/i.test(document.getElementById('app').innerText);
     });
     ok(r2, 'y al menor se le sigue pidiendo, como antes');

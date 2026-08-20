@@ -1591,34 +1591,56 @@ function prevStep() { state.step = Math.max(state.step - 1, 0); render(); window
 
 // ¿Le corresponde el consentimiento del tutor?
 //
-// Se mira el AÑO de nacimiento, no la fecha exacta: es como cuenta la edad el
-// powerlifting —por año calendario— y es lo que pidió la federación. En 2026 le
-// toca a los nacidos desde 2008; en 2027, desde 2009. La cuenta se hace sola, no
-// hay que tocar nada cada enero.
+// Acá se mira la EDAD REAL al día en que se inscribe, no el año de nacimiento.
+// Es un papel legal: lo firma el tutor de quien todavía no cumple 18. El que ya
+// los cumplió firma por sí mismo, aunque haya nacido el mismo año que un menor.
 //
-// Antes esto calculaba la edad exacta, así que alguien nacido en enero de 2008 ya
-// tenía 18 en agosto y no se le pedía, cuando por año sí le corresponde.
+// Ojo con no confundirlo con la división de edad, que sí va por año calendario
+// (ver yl-divisiones.js): alguien nacido en 2008 puede ser Sub Junior durante
+// todo 2026 y, desde el día que cumple 18, ya no necesitar este consentimiento.
+// Son dos cuentas distintas a propósito.
+//
+// Se cuenta contra la fecha de hoy, así que un mismo atleta deja de verlo solo,
+// el día de su cumpleaños, sin que nadie toque nada.
 function isMinor(fechaNac) {
-  const anio = _anioNac(fechaNac);
-  if (!anio) return false;   // sin fecha no se puede saber; el campo es obligatorio antes de este paso
-  return anio >= (new Date().getFullYear() - 18);
+  const edad = _edadHoy(fechaNac);
+  if (edad === null) return false;   // sin fecha no se puede saber; el campo es obligatorio antes de este paso
+  return edad < 18;
 }
+// La edad cumplida hoy. Devuelve null si la fecha no se entiende.
 // Acepta yyyy-mm-dd (el input de fecha) y dd/mm/yyyy (como viene de la base).
-function _anioNac(fechaNac) {
+function _edadHoy(fechaNac) {
+  const p = _partesFecha(fechaNac);
+  if (!p) return null;
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - p.anio;
+  // Si todavía no llega su cumpleaños este año, le falta un año por cumplir.
+  const mesHoy = hoy.getMonth() + 1, diaHoy = hoy.getDate();
+  if (mesHoy < p.mes || (mesHoy === p.mes && diaHoy < p.dia)) edad--;
+  return edad;
+}
+function _partesFecha(fechaNac) {
   const s = String(fechaNac || '').trim();
-  if (!s) return 0;
-  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (m) return parseInt(m[1], 10);
-  m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (m) return parseInt(m[3], 10);
-  m = s.match(/\b(19|20)(\d{2})\b/);
+  if (!s) return null;
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return { anio: +m[1], mes: +m[2], dia: +m[3] };
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return { anio: +m[3], mes: +m[2], dia: +m[1] };
+  return null;
+}
+// Solo el año, para cuando basta con eso.
+function _anioNac(fechaNac) {
+  const p = _partesFecha(fechaNac);
+  if (p) return p.anio;
+  const m = String(fechaNac || '').match(/\b(19|20)(\d{2})\b/);
   return m ? parseInt(m[0], 10) : 0;
 }
 // Los documentos que este atleta tiene que subir de verdad.
 //
 // El evento pide una lista fija, pero el consentimiento del tutor solo aplica a
-// quien es menor por año. Sin este filtro se le exigía a todo el mundo: un adulto
-// no podía enviar su inscripción porque le faltaba un papel que no le corresponde.
+// quien todavía no cumple 18. Sin este filtro se le exigía a todo el mundo: un
+// adulto no podía enviar su inscripción porque le faltaba un papel que no le
+// corresponde.
 // Se calcula en UN solo lugar y lo usan el formulario, el resumen, el botón de
 // enviar y la validación final — si se separaran, volvería a pasar lo mismo.
 function docsRequeridos(evObj, fechaNac) {
