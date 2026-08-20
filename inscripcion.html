@@ -963,8 +963,16 @@ function renderForm() {
             ? `<div class="icon">✅</div><div class="fname">${stName}</div><div class="txt">Click para cambiar</div>`
             : `<div class="icon">${meta.icon}</div><div class="txt">${meta.desc}</div><div style="font-size:10px;color:var(--muted);margin-top:4px">Máx 10MB</div>`}
         </div>
+        ${docKey==='menorConsent' ? _declaraMayorHtml() : ''}
         </div>`;
       });
+      // Si ya declaró ser mayor, el consentimiento salió de la lista y con él se
+      // iría la casilla: hay que dejarla a la vista para poder desmarcarla.
+      if (_evObj.requiredDocs.indexOf('menorConsent')>=0
+          && _docsPedidos.indexOf('menorConsent')<0
+          && isMinor(f.fechaNac)) {
+        h += `<div class="field">${_declaraMayorHtml()}</div>`;
+      }
       // Summary + botones + cierre card
       const allDocsCheck = _docsPedidos.map(k=>{
         const m=DOC_TYPES[k]; if(!m) return '';
@@ -1054,8 +1062,11 @@ function renderForm() {
       </div>
     </div>
     ` : ''}
+    ${/* El bloque aparece por la FECHA, no por si ya declaró: si desapareciera al
+          marcar la casilla, no habría forma de desmarcarla y volver atrás. */''}
     ${!isIPFWorld && isMinor(f.fechaNac) ? `
     <div class="field">
+      ${requiereConsentimientoMenor(f.fechaNac) ? `
       <div style="background:rgba(212,168,67,.1);border:1px solid rgba(212,168,67,.35);border-radius:10px;padding:14px 16px;margin-bottom:12px">
         <div style="font-size:13px;font-weight:600;color:var(--gold);margin-bottom:4px">⚠️ Atleta menor de edad</div>
         <div style="font-size:12px;color:var(--muted);line-height:1.5">El padre, madre o tutor legal debe completar y firmar el formulario de consentimiento de responsabilidad.</div>
@@ -1069,7 +1080,8 @@ function renderForm() {
         ${state.consentimientoName
           ? `<div class="icon">✅</div><div class="fname">${state.consentimientoName}</div><div class="txt">Click para cambiar</div>`
           : `<div class="icon">📋</div><div class="txt">Sube el formulario completado y firmado</div><div style="font-size:10px;color:var(--muted);margin-top:4px">Foto o PDF del documento firmado · Máx 10MB</div>`}
-      </div>
+      </div>` : ''}
+      ${_declaraMayorHtml()}
     </div>` : ''}
     ${(()=>{
       // En IPF Worlds la foto blanca ya se pidió arriba, no duplicar
@@ -1121,7 +1133,7 @@ function renderForm() {
           <div><span style="color:var(--muted)">IPF Consentimiento:</span> ${state.ipfConsentName?'✅':'❌ Falta'}</div>
           <div><span style="color:var(--muted)">Concentración de notas:</span> ${state.notasName?'✅':'❌ Falta'}</div>
         `:''}
-        ${!isIPFWorld && isMinor(f.fechaNac)?`<div><span style="color:var(--muted)">Consentimiento:</span> ${state.consentimientoName?'✅':'❌ Falta'}</div>`:''}
+        ${!isIPFWorld && requiereConsentimientoMenor(f.fechaNac)?`<div><span style="color:var(--muted)">Consentimiento:</span> ${state.consentimientoName?'✅':'❌ Falta'}</div>`:''}
 
         ${(()=>{
           if(isIPFWorld) return ''; // ya cubierto arriba
@@ -1150,7 +1162,7 @@ function renderForm() {
           if(!state.ipfConsentName) return 'disabled';
           if(!state.notasName) return 'disabled';
         } else {
-          if(isMinor(f.fechaNac) && !state.consentimientoName) return 'disabled';
+          if(requiereConsentimientoMenor(f.fechaNac) && !state.consentimientoName) return 'disabled';
           const requiere = EVENTS.find(e=>e.id===f.evento)?.requiereFoto;
           if(requiere){
             const yaTiene = window.atletaTieneFoto && window.atletaTieneFoto(f.rut);
@@ -1607,6 +1619,45 @@ function isMinor(fechaNac) {
   if (edad === null) return false;   // sin fecha no se puede saber; el campo es obligatorio antes de este paso
   return edad < 18;
 }
+
+// ¿Hay que pedirle el consentimiento, de verdad?
+//
+// La cuenta de arriba depende de una fecha, y la fecha puede estar mal: se
+// autocompleta desde la base de atletas y ahí hay datos viejos, cargados a mano
+// y hasta fechas de relleno. Cuando eso pasa, a un adulto se le pide un papel
+// que no existe y su inscripción queda trabada un domingo a las once de la
+// noche, sin nadie a quien preguntarle.
+//
+// Por eso hay una salida: el atleta declara que ya es mayor de edad y sigue. La
+// declaración queda anotada en la inscripción y la Comisión Técnica la revisa
+// contra el carnet, que es quien tiene que decidirlo. Vale más eso que dejar a
+// alguien fuera por un dato mal escrito.
+function requiereConsentimientoMenor(fechaNac) {
+  if (typeof state !== 'undefined' && state && state.declaraMayor) return false;
+  return isMinor(fechaNac);
+}
+
+// El bloque con la salida. Se muestra pegado al documento, que es donde la
+// persona se está trabando.
+function _declaraMayorHtml() {
+  const f = (state && state.form) || {};
+  const p = _partesFecha(f.fechaNac);
+  const legible = p ? `${String(p.dia).padStart(2,'0')}/${String(p.mes).padStart(2,'0')}/${p.anio}` : '';
+  // Ojo con el estilo: dentro de .field, la hoja de estilos pone las etiquetas en
+  // mayúsculas y en Oswald chico. Sirve para "CARNET DE IDENTIDAD", pero acá hay
+  // un párrafo entero y quedaba ilegible, así que se vuelve al texto normal.
+  return `<label style="display:flex;align-items:flex-start;gap:10px;margin-top:10px;cursor:pointer;padding:12px 14px;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.3);border-radius:8px;text-transform:none;letter-spacing:0;font-family:'Source Sans 3',sans-serif;font-size:12px;margin-bottom:0">
+    <input type="checkbox" ${state.declaraMayor?'checked':''} onchange="state.declaraMayor=this.checked;render()" style="margin-top:2px;width:16px;height:16px;accent-color:#60a5fa;flex-shrink:0">
+    <span style="font-size:12px;color:rgba(180,200,230,.85);line-height:1.6">
+      <b style="color:#60a5fa">¿Ya eres mayor de edad?</b>
+      ${legible?`Nos figura que naciste el <b>${legible}</b>, y por eso te pedimos este documento.`:''}
+      Si esa fecha está equivocada, marca esta casilla y continúa sin subirlo:
+      declaras que ya cumpliste 18 años. Queda registrado en tu inscripción y la
+      Comisión Técnica lo revisa con tu carnet. Corrige igual tu fecha en el paso
+      de datos personales si puedes.
+    </span>
+  </label>`;
+}
 // La edad cumplida hoy. Devuelve null si la fecha no se entiende.
 // Acepta yyyy-mm-dd (el input de fecha) y dd/mm/yyyy (como viene de la base).
 function _edadHoy(fechaNac) {
@@ -1645,7 +1696,7 @@ function _anioNac(fechaNac) {
 // enviar y la validación final — si se separaran, volvería a pasar lo mismo.
 function docsRequeridos(evObj, fechaNac) {
   const lista = (evObj && Array.isArray(evObj.requiredDocs)) ? evObj.requiredDocs : [];
-  if (isMinor(fechaNac)) return lista.slice();
+  if (requiereConsentimientoMenor(fechaNac)) return lista.slice();
   return lista.filter(k => k !== 'menorConsent');
 }
 
@@ -1754,6 +1805,12 @@ async function submitForm() {
       // campeonato, queda anotado. El atleta vio el aviso y siguió igual; la
       // comisión tiene que ver lo mismo al revisar, sin depender de acordarse.
       bloqueoAvisado: (bloqueoDetectado()||[]).map(x=>x.evento),
+      // Si se saltó el consentimiento del tutor declarando ser mayor de edad,
+      // queda dicho acá con la fecha que el sistema tenía. La comisión lo
+      // contrasta con el carnet: es la única forma de que la salida no se use
+      // para colar a un menor sin autorización.
+      declaraMayorEdad: !!state.declaraMayor,
+      declaraMayorFecha: state.declaraMayor ? (f.fechaNac || '') : '',
     };
 
     // Datos PRIVADOS (inscripciones_private): solo admin.

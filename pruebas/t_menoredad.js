@@ -50,7 +50,8 @@ function sacar(texto, nombre) {
 
 // Las funciones, montadas con un calendario falso: así se puede pararse en
 // cualquier día y ver el corte moverse con el cumpleaños.
-const FUNCS = ['isMinor', '_edadHoy', '_partesFecha', '_anioNac', 'docsRequeridos'];
+const FUNCS = ['isMinor', 'requiereConsentimientoMenor', '_edadHoy', '_partesFecha',
+               '_anioNac', 'docsRequeridos'];
 const CUERPO = FUNCS.map(n => sacar(src, n)).join('\n');
 function elDia(iso) {
   const t = iso.split('-').map(Number);
@@ -243,6 +244,69 @@ console.log('\nEn el formulario de verdad');
   ok(casiAdulto.pideConsentimiento,
      'y al que los cumple mañana (' + iso(cumple18Manana) + ') todavía sí');
   ok(!casiAdulto.puedeEnviar, 'ese no puede enviar hasta subirlo');
+
+  console.log('\n  La salida para cuando la fecha está mal');
+  {
+    // La cuenta depende de una fecha que se autocompleta desde la base, y ahí hay
+    // datos viejos y hasta fechas de relleno. Si esa fecha miente, a un adulto se
+    // le pide un papel que no existe y su inscripción queda trabada sin nadie a
+    // quien preguntarle. La salida es declararlo y seguir; queda anotado.
+    const declarar = (v) => p.evaluate((val) => {
+      state.declaraMayor = val; render();
+      const txt = document.getElementById('app').innerText;
+      const enviar = [...document.querySelectorAll('button')]
+        .find(x => /Enviar Inscripci/.test(x.textContent));
+      const casilla = [...document.querySelectorAll('input[type=checkbox]')]
+        .find(c => (c.parentElement.innerText || '').indexOf('mayor de edad') >= 0);
+      return {
+        txt, puedeEnviar: !!enviar && !enviar.disabled,
+        zonas: document.querySelectorAll('.upload-zone').length,
+        hayCasilla: !!casilla, marcada: !!(casilla && casilla.checked),
+      };
+    }, v);
+
+    // Se parte de un menor de verdad, con el consentimiento pedido.
+    await pasoDocumentos((new Date().getFullYear() - 16) + '-08-08');
+    const antes = await declarar(false);
+    ok(!antes.puedeEnviar, 'de entrada no puede enviar: le falta el consentimiento');
+    ok(antes.hayCasilla && !antes.marcada, 'pero tiene la casilla a la vista, sin marcar');
+    ok(/ya eres mayor de edad/i.test(antes.txt), 'con el mensaje: "¿Ya eres mayor de edad?"');
+    ok(/Comisión Técnica/.test(antes.txt), 'y diciendo que la Comisión Técnica lo revisa');
+    ok(/\d{2}\/\d{2}\/\d{4}/.test(antes.txt),
+       'y mostrándole la fecha que el sistema tiene, para que vea si está mal');
+
+    const despues = await declarar(true);
+    ok(despues.puedeEnviar, 'al marcarla, puede enviar');
+    ok(despues.zonas === antes.zonas - 1, 'y el consentimiento deja de pedirse');
+    ok(despues.hayCasilla && despues.marcada,
+       'la casilla sigue a la vista y marcada — se puede volver atrás');
+
+    const vuelta = await declarar(false);
+    ok(!vuelta.puedeEnviar && vuelta.zonas === antes.zonas,
+       'y al desmarcarla vuelve a pedirse: no es un camino de ida');
+
+    await p.evaluate(() => { state.declaraMayor = false; });
+  }
+
+  console.log('\n  Al adulto normal no se le muestra la salida: no la necesita');
+  {
+    const r = await pasoDocumentos('1995-03-20');
+    const txt = await p.evaluate(() => document.getElementById('app').innerText);
+    ok(!/ya eres mayor de edad/i.test(txt), 'no aparece la casilla');
+    ok(r.puedeEnviar, 'y puede enviar igual');
+  }
+
+  console.log('\n  Queda anotado para la Comisión Técnica');
+  {
+    ok(/declaraMayorEdad: !!state\.declaraMayor,/.test(src),
+       'la declaración viaja en la inscripción');
+    ok(/declaraMayorFecha: state\.declaraMayor \? \(f\.fechaNac \|\| ''\) : '',/.test(src),
+       'junto con la fecha que el sistema tenía');
+    const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+    ok(/i\.declaraMayorEdad\?/.test(adm), 'y se muestra al revisar inscripciones');
+    ok(/Confirmar con el carnet/.test(adm),
+       'pidiendo que se contraste con el carnet: es lo que evita que sirva para colar a un menor');
+  }
 
   console.log('\n  Lo que ya funcionaba sigue igual');
   {
