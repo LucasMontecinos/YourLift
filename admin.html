@@ -438,6 +438,10 @@ async function loadAll(){
       window._inscListener=onSnapshot(collection(db,'inscripciones'),(snap)=>{
         ST.inscripciones=snap.docs.map(d=>({id:d.id,...d.data()}))
           .sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0));
+        // El índice de participación del año usa las inscripciones vigentes, así
+        // que se rehace cuando cambian: si no, aprobar o rechazar una no movía
+        // la columna hasta recargar la página.
+        window._HIST_ANIO=null;
         if(ST.view==='nominas'||ST.view==='dashboard'||ST.view==='approvals'||ST.view==='athletes')render();
       },(e)=>console.warn('[listener] inscripciones:',e.message));
     }catch(e){console.warn('[loadAll] insc listener:',e.message);}
@@ -3947,21 +3951,32 @@ function _histAnio(){
   const cuenta=(evento,fecha)=>{
     const a=anioDe(evento,fecha);
     const clave=_evClave(evento);
-    const c=catalogo[clave]||(catalogo[clave]={clave,nombre:evento||'',anio:a,n:0});
+    const c=catalogo[clave]||(catalogo[clave]={clave,nombre:evento||'',anio:a,n:0,conRes:false});
     c.n++;
     if((evento||'').length>c.nombre.length)c.nombre=evento;
     if(!c.anio&&a)c.anio=a;
     return _cuentaEvento(evento,a,anio);
   };
-  const arma=(evento,fecha,categoria,division,modalidad,r)=>({
+  // `compitio` separa al que estuvo en la tarima del que solo quedó anotado.
+  // Inscribirse y después bajarse deja un registro sin resultado, y eso no es
+  // haber competido: el cupo de la temporada no se gasta con la inscripción.
+  const compitioDe=(r)=>{
+    if(!r)return false;
+    if(String(r.status||'').toUpperCase()==='DQ')return true;
+    return (r.total||0)>0||(r.sq||0)>0||(r.bp||0)>0||(r.dl||0)>0;
+  };
+  const arma=(evento,fecha,categoria,division,modalidad,r,forzado)=>({
     evento:evento||'',fecha:String(fecha||''),regional:_esRegional(evento),
     categoria:categoria||'',division:division||'',modalidad:modalidad||'',
+    compitio:forzado===true||compitioDe(r),
     total:(r||{}).total||0,estado:(r||{}).status||''});
 
   // 1) Lo cerrado desde el livecast.
   (ST.allCompResults||[]).forEach(d=>{
     if(!cuenta(d.evento,d.fecha))return;
-    meter(d.rut,d.nombre,arma(d.evento,d.fecha,d.categoria,d.division,d.modalidad,d.resultado));
+    // Lo que sale del livecast al cerrar la competencia es, por definición, gente
+    // que estuvo en la tarima: solo se publica a quien tiene total o quedó DQ.
+    meter(d.rut,d.nombre,arma(d.evento,d.fecha,d.categoria,d.division,d.modalidad,d.resultado,true));
   });
   // 2) Y el histórico publicado (data.json). Sin esto faltaba el Campeonato
   //    Nacional 2026 de San Vicente, que nunca pasó por competition_results: los
@@ -3972,6 +3987,25 @@ function _histAnio(){
       if(!cuenta(c.evento,c.fecha))return;
       meter(a.rut,a.nombre,arma(c.evento,c.fecha,c.categoria,c.division,c.modalidad,c.resultado));
     });
+  });
+  // De qué campeonatos hay constancia de que alguien compitió. Sirve para saber
+  // si de un campeonato tenemos resultados o solo la nómina: si solo hay nómina,
+  // no se puede distinguir al que se bajó y no conviene dar a nadie por ausente.
+  Object.keys(porRut).forEach(k=>porRut[k].forEach(it=>{
+    const c=catalogo[_evClave(it.evento)];
+    if(c&&it.compitio)c.conRes=true;
+  }));
+  // 3) Las inscripciones que siguen en pie. Es lo que separa al que participó del
+  //    que se anotó y después se bajó: en data.json los dos quedan igual —una
+  //    línea del campeonato sin resultado— y solo el que participó conserva su
+  //    inscripción. Es lo que el perfil del atleta muestra como "inscripciones
+  //    activas". Una rechazada no cuenta.
+  (ST.inscripciones||[]).forEach(i=>{
+    if(i.status==='rejected')return;
+    const ev=(ST.eventos||[]).find(e=>e.id===i.evento);
+    const nombre=(ev&&ev.name)||i.evento||'';
+    if(!cuenta(nombre,''))return;
+    meter(i.rut,i.nombre,arma(nombre,'',i.categoria,i.division,i.modalidad,null,true));
   });
   const todos=Object.values(catalogo).sort((a,b)=>
     String(b.anio).localeCompare(String(a.anio))||a.nombre.localeCompare(b.nombre));
@@ -3995,12 +4029,20 @@ function _histDe(rut,nombre){
     const k=_evClave(it.evento);
     const y=porClave[k];
     if(!y){porClave[k]=Object.assign({},it,{evento:base});return;}
+    if(it.compitio)y.compitio=true;
     if(base.length>y.evento.length)y.evento=base;
     if(!y.fecha&&it.fecha)y.fecha=it.fecha;
     if(!y.total&&it.total)y.total=it.total;
     if(!y.categoria&&it.categoria)y.categoria=it.categoria;
     if(!y.division&&it.division)y.division=it.division;
     if(!y.modalidad&&it.modalidad)y.modalidad=it.modalidad;
+  });
+  // Si del campeonato solo tenemos la nómina, no hay con qué distinguir: se deja
+  // como participación, igual que antes. La duda se resuelve cuando se cargan sus
+  // resultados.
+  Object.keys(porClave).forEach(k=>{
+    const cat=(H.todos||[]).find(c=>c.clave===k);
+    if(cat&&!cat.conRes)porClave[k].compitio=true;
   });
   return Object.values(porClave).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
 }
@@ -4047,12 +4089,15 @@ function _prioridadHtml(){
 // recordatorio del orden de prioridad. Lo usan las dos pantallas —revisión de
 // inscripciones y nóminas— así que vive en un solo lugar.
 function _detalleHist(hist,anio){
+  const nComp=hist.filter(x=>x.compitio).length;
+  const nSolo=hist.length-nComp;
   return `<div style="font-family:Oswald;font-size:10px;letter-spacing:1.5px;color:var(--gold);margin-bottom:7px">
-      COMPITIÓ EN ${anio} — ${hist.length} campeonato${hist.length===1?'':'s'}</div>
+      COMPITIÓ EN ${anio} — ${nComp} campeonato${nComp===1?'':'s'}${nSolo?` <span style="color:var(--muted);letter-spacing:1px">· ${nSolo} inscripción${nSolo===1?'':'es'} sin competir</span>`:''}</div>
     ${hist.map(x=>`<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;padding:3px 0;border-top:1px solid rgba(30,58,95,.35)">
       <span style="font-size:10px;color:var(--muted);min-width:74px;font-family:Oswald">${esc(x.fecha||'—')}</span>
       <span style="font-size:12px;color:var(--text)">${esc(x.evento)}</span>
       <span style="font-size:10px;color:var(--muted)">${esc(x.categoria||'')}${x.division?' · '+esc(x.division):''}${x.modalidad?' · '+esc(x.modalidad):''}${x.total?' · '+x.total+' kg':''}${x.estado&&x.estado!=='OK'?' · '+esc(x.estado):''}</span>
+      ${x.compitio?'':'<span style="font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:1px 6px">solo inscrito — sin resultado</span>'}
     </div>`).join('')}
     <div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5">
       Sale de los resultados ya cargados en YourLift. Un campeonato que no se cerró desde acá no aparece.</div>
@@ -4105,7 +4150,15 @@ function _esNacional(ev){
 }
 function _marcaCompitio(hist,id,cargando,abierto){
   if(cargando)return '<span style="color:var(--muted);font-size:11px">…</span>';
-  if(!hist.length)return '<span title="Sin competencias registradas este año" style="color:var(--muted);font-family:Oswald;font-size:14px;font-weight:700">✗</span>';
+  // La ✓ es de haber COMPETIDO. El que se inscribió y después se bajó queda en la
+  // nómina sin resultado: eso no gasta el cupo de la temporada y no puede salir
+  // marcado como si hubiera competido.
+  const compitio=hist.filter(x=>x.compitio);
+  if(!compitio.length){
+    const soloInscrito=hist.length>0;
+    return `<span title="${soloInscrito?'Se inscribió pero no hay resultado suyo: no compitió':'Sin competencias registradas este año'}" style="color:var(--muted);font-family:Oswald;font-size:14px;font-weight:700">✗${soloInscrito?'<span style="font-size:9px;letter-spacing:.5px;opacity:.8"> solo inscrito</span>':''}</span>`;
+  }
+  hist=compitio;
   const nac=hist.some(x=>_esNacional(x.evento));
   const col=nac?'var(--gold)':'var(--text)';
   return `<button onclick="apprToggleHist('${esc(id||'')}')" title="${nac?'Compitió en el Campeonato Nacional — entra en la lista de priorización':'Ver en qué compitió'}"

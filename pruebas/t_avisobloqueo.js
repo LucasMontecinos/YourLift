@@ -36,11 +36,14 @@ function sacar(texto, nombre) {
 }
 
 // El entorno mínimo del formulario.
-let EVENTS = [], athleteDB = [], compResDB = [], state = { form: {} };
+let EVENTS = [], athleteDB = [], compResDB = [], insActDB = [], state = { form: {} };
+// La caché de _clavesConResultado() vive fuera de la función, así que acá se
+// declara a mano (sacar() solo trae el cuerpo de la función).
+let _cvesResCache = null, _cvesResRef = null, _cvesResN = -1;
 const formatRut = s => String(s || '');
 const esc = s => String(s == null ? '' : s);
 const COMPENDIO_CITA = 'cita', COMPENDIO_FUENTE = 'fuente';
-eval(['_evClaveIns', 'findAthleteByRut', '_bloqueoDetectado', 'bloqueoDetectado', '_bloqueoAvisoHtml', 'bloqueoAvisoHtml'].map(n => sacar(src, n)).join('\n'));
+eval(['_evClaveIns', 'findAthleteByRut', '_compitioEn', '_clavesConResultado', '_nombreDeEvento', '_bloqueoDetectado', 'bloqueoDetectado', '_bloqueoAvisoHtml', 'bloqueoAvisoHtml'].map(n => sacar(src, n)).join('\n'));
 
 const ANIO = String(new Date().getFullYear());
 athleteDB = [
@@ -264,6 +267,119 @@ console.log('\nQué bloquea a qué se elige por campeonato');
   const a = sacar(adm, '_evClave'), b = sacar(src, '_evClaveIns');
   const norm = s => s.replace(/_evClaveIns|_evClave/g, 'F').replace(/\s+/g, ' ').trim();
   ok(norm(a) === norm(b), 'y el admin y el formulario normalizan los nombres igual');
+}
+
+console.log('\nInscribirse no es competir');
+{
+  // Caso real: Vicente Galleguillos aparecía con el aviso por el Regional Centro
+  // 2026, donde se inscribió y después se bajó. En el archivo quedó su registro
+  // del campeonato, pero SIN resultado. Eran 38 personas de 67 en ese solo
+  // campeonato recibiendo un aviso que no les correspondía.
+  const CENTRO = 'Campeonato Regional Centro FECHIPO ' + ANIO;
+  const guardado = athleteDB;
+  athleteDB = [
+    { rut: '21799836-0', nombre: 'Vicente Galleguillos', competencias: [
+      { evento: 'Regional Centro ' + ANIO, fecha: ANIO + '-05-09' },      // solo nómina
+    ] },
+    { rut: '19839518-9', nombre: 'El Que Sí Compitió', competencias: [
+      { evento: CENTRO, fecha: ANIO + '-05-10',
+        resultado: { sq: 140, bp: 95, dl: 175, total: 410, bw: 72.6 } },
+    ] },
+    { rut: '33333333-3', nombre: 'El Que Se Fue En Cero', competencias: [
+      { evento: CENTRO, fecha: ANIO + '-05-10',
+        resultado: { sq: 0, bp: 0, dl: 0, total: 0, status: 'DQ' } },
+    ] },
+  ];
+  EVENTS = [SUR_AUSTRAL];
+
+  state.form = { evento: 'sur_austral', rut: '21799836-0' };
+  ok(bloqueoDetectado().length === 0,
+     'el que se inscribió y se bajó ya no recibe el aviso');
+  state.form = { evento: 'sur_austral', rut: '19839518-9' };
+  ok(bloqueoDetectado().length === 1,
+     'el que compitió lo sigue recibiendo');
+  state.form = { evento: 'sur_austral', rut: '33333333-3' };
+  ok(bloqueoDetectado().length === 1,
+     'y el que fue y quedó DQ también: estuvo en la tarima');
+
+  console.log('\n  Pero si del campeonato solo tenemos la nómina, no se deja de avisar');
+  {
+    // El Debutantes 2026 está en el archivo con 127 personas y ninguna con
+    // resultado: no hay con qué distinguir al que se bajó. Ahí se prefiere el
+    // aviso de más antes que dejar pasar a alguien en silencio.
+    athleteDB = [
+      { rut: '22222222-2', nombre: 'Solo Debutantes', competencias: [
+        { evento: 'Campeonato Debutantes All Power CD ' + ANIO + ' - Tarima 2', fecha: ANIO + '-05-10' },
+      ] },
+    ];
+    state.form = { evento: 'sur_austral', rut: '22222222-2' };
+    ok(bloqueoDetectado().length === 1,
+       'sigue avisando mientras no haya resultados de ese campeonato');
+  }
+
+  console.log('\n  Y lo cerrado en el livecast cuenta siempre');
+  {
+    // competition_results solo recibe a quien tuvo total o quedó DQ: el que no se
+    // presentó no llega ahí. Por eso no hace falta filtrarlo.
+    athleteDB = [];
+    compResDB = [{ rut: '44444444-4', evento: 'Campeonato Regional Norte ' + ANIO, fecha: ANIO + '-08-17' }];
+    state.form = { evento: 'sur_austral', rut: '44444444-4' };
+    ok(bloqueoDetectado().length === 1, 'entra sin pedirle nada más');
+    compResDB = [];
+  }
+
+  console.log('\n  El que sigue inscrito cuenta, aunque todavía no tenga marcas');
+  {
+    // Andrea Fábregas y Vicente Galleguillos quedan IDÉNTICOS en data.json: los
+    // dos con una línea del Regional Centro 2026 sin resultado. Lo que los separa
+    // es que ella conserva su inscripción al campeonato y él no — es lo mismo que
+    // el perfil del atleta muestra como "inscripciones activas".
+    athleteDB = [
+      { rut: '21031231-5', nombre: 'Andrea Fabregas', competencias: [
+        { evento: 'Regional Centro ' + ANIO, fecha: ANIO + '-05-09' } ] },
+      { rut: '21799836-0', nombre: 'Vicente Galleguillos', competencias: [
+        { evento: 'Regional Centro ' + ANIO, fecha: ANIO + '-05-09' } ] },
+      { rut: '19839518-9', nombre: 'El Que Sí Compitió', competencias: [
+        { evento: CENTRO, fecha: ANIO + '-05-10', resultado: { total: 410 } } ] },
+    ];
+    EVENTS = [SUR_AUSTRAL, { id: 'regional_centro', name: CENTRO }];
+    insActDB = [{ rut: '21031231-5', evento: 'regional_centro', status: 'approved' }];
+
+    state.form = { evento: 'sur_austral', rut: '21031231-5' };
+    const a = bloqueoDetectado();
+    ok(a.length === 1, 'Andrea recibe el aviso: sigue inscrita');
+    ok(a[0] && /Regional Centro/.test(a[0].evento), 'y dice cuál: ' + (a[0] || {}).evento);
+
+    state.form = { evento: 'sur_austral', rut: '21799836-0' };
+    ok(bloqueoDetectado().length === 0, 'Vicente no: su inscripción ya no está');
+
+    // Una inscripción rechazada no sostiene el aviso.
+    insActDB = [{ rut: '21799836-0', evento: 'regional_centro', status: 'rejected' }];
+    state.form = { evento: 'sur_austral', rut: '21799836-0' };
+    ok(bloqueoDetectado().length === 0, 'y una inscripción rechazada no cuenta');
+
+    // El campeonato viaja como id; hay que traducirlo para poder compararlo.
+    ok(_nombreDeEvento('regional_centro') === CENTRO,
+       'el id de la inscripción se traduce al nombre del campeonato');
+    ok(_nombreDeEvento('regional_centro_2026') === 'regional_centro_2026',
+       'y si el campeonato ya no está en la lista, se usa el id tal cual');
+    insActDB = [{ rut: '21031231-5', evento: 'regional_centro_2026', status: 'approved' }];
+    state.form = { evento: 'sur_austral', rut: '21031231-5' };
+    ok(bloqueoDetectado().length === 1,
+       'y aun así se detecta: el id normalizado da la misma clave que el nombre');
+    insActDB = [];
+  }
+
+  console.log('\n  Qué cuenta como haber competido');
+  {
+    const c = (r) => _compitioEn({ evento: 'x', resultado: r });
+    ok(!c(undefined), 'sin bloque de resultado → no compitió');
+    ok(!c({ total: 0, sq: 0, bp: 0, dl: 0 }), 'con todo en cero → tampoco');
+    ok(c({ total: 310 }), 'con total → sí');
+    ok(c({ total: 0, sq: 140 }), 'con una sola marca válida → sí');
+    ok(c({ total: 0, status: 'DQ' }), 'DQ → sí, estuvo y levantó');
+  }
+  athleteDB = guardado;
 }
 
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');

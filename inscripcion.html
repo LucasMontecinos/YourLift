@@ -383,6 +383,36 @@ function bloqueoDetectado(){
   try{ return _bloqueoDetectado(); }
   catch(e){ console.warn('[aviso] no se pudo revisar la participación previa',e); return []; }
 }
+// ¿Esta persona compitió de verdad en ese campeonato, o solo estaba anotada?
+// Un registro de competencia sin resultado es una nómina: se inscribió y no
+// levantó. Los que sí estuvieron traen marcas, o quedaron DQ habiéndolas
+// intentado — esos también compitieron.
+function _compitioEn(c){
+  const r=c&&c.resultado;
+  if(!r)return false;
+  if(String(r.status||'').toUpperCase()==='DQ')return true;
+  return (r.total||0)>0||(r.sq||0)>0||(r.bp||0)>0||(r.dl||0)>0;
+}
+// Los campeonatos de los que el archivo trae resultados, no solo la nómina. Se
+// rehace si cambió la base (llega después de dibujar la primera vez).
+let _cvesResCache=null,_cvesResRef=null,_cvesResN=-1;
+function _clavesConResultado(){
+  const db=athleteDB||[];
+  if(_cvesResCache&&_cvesResRef===db&&_cvesResN===db.length)return _cvesResCache;
+  const s={};
+  db.forEach(a=>(a.competencias||[]).forEach(c=>{
+    if(_compitioEn(c))s[_evClaveIns(c.evento)]=1;
+  }));
+  _cvesResRef=db; _cvesResN=db.length;
+  return (_cvesResCache=s);
+}
+// La inscripción guarda el id del campeonato; los registros del archivo guardan
+// el nombre. Se traduce para poder compararlos. Si el campeonato ya no está en
+// la lista, se devuelve el id: normalizado da la misma clave que el nombre.
+function _nombreDeEvento(ev){
+  const e=(EVENTS||[]).find(x=>x.id===ev);
+  return (e&&e.name)||ev||'';
+}
 function _bloqueoDetectado(){
   const f=(state&&state.form)||{};
   const ev=EVENTS.find(e=>e.id===f.evento);
@@ -398,10 +428,33 @@ function _bloqueoDetectado(){
   // competition_results, así que se lee de ahí también.
   const previas=[];
   const a=findAthleteByRut(formatRut(f.rut));
-  if(a)(a.competencias||[]).forEach(c=>previas.push({evento:c.evento,fecha:c.fecha}));
+  // Inscribirse no es competir. Quien se anotó y después se bajó queda en la
+  // nómina sin resultado, y el cupo de la temporada no se le gasta: el compendio
+  // habla de competir, no de inscribirse. Con el Regional Centro 2026 eran 38
+  // personas de 67 recibiendo un aviso que no les correspondía.
+  //
+  // La prueba es haber estado en la tarima: un resultado. Pero solo se puede
+  // exigir cuando de ese campeonato hay resultados cargados — si del campeonato
+  // solo tenemos la nómina, no hay con qué distinguir a los que compitieron, y
+  // ahí se prefiere el aviso de más antes que dejar de avisar.
+  const conRes=_clavesConResultado();
+  if(a)(a.competencias||[]).forEach(c=>{
+    if(conRes[_evClaveIns(c.evento)] && !_compitioEn(c))return;
+    previas.push({evento:c.evento,fecha:c.fecha});
+  });
   (compResDB||[]).forEach(r=>{
     if(String(r.rut||'').replace(/[^0-9kK]/g,'').toUpperCase()===rutN)
       previas.push({evento:r.evento,fecha:r.fecha});
+  });
+  // Y las inscripciones que siguen en pie. Acá está la diferencia entre los dos
+  // casos que en el archivo se ven idénticos: el que participó conserva su
+  // inscripción al campeonato; el que se bajó, no.
+  (insActDB||[]).forEach(i=>{
+    // Se filtra al cargar, pero se vuelve a mirar acá: la lista queda cacheada y
+    // no conviene que el criterio dependa de cuándo se guardó esa caché.
+    if(String(i.status||'')==='rejected')return;
+    if(String(i.rut||'').replace(/[^0-9kK]/g,'').toUpperCase()!==rutN)return;
+    previas.push({evento:_nombreDeEvento(i.evento),fecha:''});
   });
 
   const vistos={},out=[];
@@ -598,6 +651,7 @@ function _ifsSetCache(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts
 // Solo se guarda RUT, campeonato y fecha: es lo único que el aviso necesita, y no
 // hace falta traerse las marcas de nadie a una página pública.
 let compResDB = [];
+let insActDB = [];   // inscripciones vigentes (no rechazadas)
 async function cargarCompRes(){
   try{
     const c=_ifsCache('ins_compres', 10*60*1000);
@@ -607,12 +661,36 @@ async function cargarCompRes(){
     compResDB=snap.docs.map(d=>{const x=d.data();
       return {rut:x.rut||'',evento:x.evento||'',fecha:x.fecha||''};});
     _ifsSetCache('ins_compres', compResDB);
-    // Si el atleta ya había escrito su RUT antes de que esto llegara, se vuelve a
-    // dibujar para que vea el aviso. No se toca la pantalla si está escribiendo:
-    // un re-dibujado en medio de un campo le come lo tipeado.
-    const escribiendo=document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
-    if(!escribiendo&&bloqueoDetectado().length)render();
+    _redibujarPorAviso();
   }catch(e){ console.warn('[aviso] no se pudieron cargar los resultados recientes',e); }
+}
+
+// Las inscripciones que siguen en pie. Es lo que distingue al que participó del
+// que se anotó y después se bajó: en el archivo los dos quedan igual —una línea
+// del campeonato sin resultado— pero solo el que participó conserva su
+// inscripción. Es lo mismo que muestra el perfil del atleta como "inscripciones
+// activas". Una inscripción rechazada no cuenta.
+async function cargarInscripcionesActivas(){
+  try{
+    const c=_ifsCache('ins_activas', 10*60*1000);
+    if(c){ insActDB=c; return; }
+    if(!firebaseReady||!window.FB)return;
+    const snap=await window.FB.getDocs(window.FB.collection(db,'inscripciones'));
+    // Solo lo necesario para cruzar: esta es una página pública.
+    insActDB=snap.docs.map(d=>{const x=d.data();
+      return {rut:x.rut||'',evento:x.evento||'',status:x.status||''};})
+      .filter(x=>x.status!=='rejected');
+    _ifsSetCache('ins_activas', insActDB);
+    _redibujarPorAviso();
+  }catch(e){ console.warn('[aviso] no se pudieron cargar las inscripciones',e); }
+}
+
+// Si el atleta ya había escrito su RUT antes de que esto llegara, se vuelve a
+// dibujar para que vea el aviso. No se toca la pantalla si está escribiendo: un
+// re-dibujado en medio de un campo le come lo tipeado.
+function _redibujarPorAviso(){
+  const escribiendo=document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+  if(!escribiendo&&bloqueoDetectado().length)render();
 }
 
 // ── Firestore eventos ────────────────────────────────────────
@@ -634,6 +712,7 @@ async function loadEventos() {
       render();
     }
     cargarCompRes();   // lo cerrado hace poco, que todavía no está en data.json
+    cargarInscripcionesActivas();   // quién sigue inscrito de verdad
     // Fotos aprobadas: getDocs + caché 30min
     window.FOTOS_BY_RUT = window.FOTOS_BY_RUT || {};
     const cf = _ifsCache('ins_fotos', 30*60*1000);
