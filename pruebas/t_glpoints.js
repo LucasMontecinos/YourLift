@@ -36,11 +36,14 @@ function sacar(texto, nombre) {
 
 // El panel es un módulo ES y no se puede abrir sin Firebase, así que las
 // funciones se montan acá con los datos reales.
-const ST = { data: JSON.parse(fs.readFileSync(__dirname + '/../data.json', 'utf8')), statsFilters: {} };
+const ST = { data: JSON.parse(fs.readFileSync(__dirname + '/../data.json', 'utf8')), statsFilters: {},
+  corte: { modo: 'cantidad', valor: 10, agrupar: 'cat_div_mod' }, glMin: 0 };
+const GL_RANK_TOPE = 300;
 const esc = s => String(s == null ? '' : s);
 const GL_ORDEN_DIV = ['Sub-Junior', 'Junior', 'Open', 'Master I', 'Master II', 'Master III', 'Master IV', 'Universitario'];
-const FUNCS = ['buildStatsRows', 'applyStatsFilters', '_glRows', '_glProm', '_glCuartil',
-  '_glMediana', '_glResumen', '_glTablaHtml', '_glDispersionHtml', 'renderGL'];
+const FUNCS = ['_hNom', 'buildStatsRows', 'applyStatsFilters', '_glRows', '_glProm', '_glCuartil',
+  '_glMediana', '_glResumen', '_glTablaHtml', '_glDispersionHtml', '_glRankingAtletas',
+  'renderGLRanking', '_corteGrupos', '_corteDe', '_corteUnico', 'renderCorte', 'renderGL'];
 eval(FUNCS.map(n => sacar(adm, n)).join('\n'));
 
 const todas = applyStatsFilters(buildStatsRows());
@@ -293,6 +296,153 @@ console.log('\nLos números escritos, no solo el dibujo');
     .forEach(c => ok(new RegExp('>' + c.replace('.', '\\.') + '</th>').test(html), 'columna ' + c));
   ok(/Con menos de una decena de resultados, ninguno de los dos dice gran cosa/.test(html),
      'y advierte cuándo estos números no significan nada');
+}
+
+
+console.log('\nEl ranking sin repetir atleta');
+{
+  // "¿Cuántos hay en Open con 80 GL o más?" — el ranking corriente no sirve para
+  // eso: el que corrió tres veces aparece tres veces y el número sale inflado.
+  const guardado = ST.statsFilters;
+  ST.statsFilters = {};
+  const filas = _glRows().length;
+  const atletas = _glRankingAtletas();
+  ok(atletas.length < filas,
+     filas + ' resultados quedan en ' + atletas.length + ' atletas distintos');
+  const claves = atletas.map(r => r.codigo || _hNom(r.nombre));
+  ok(new Set(claves).size === claves.length, 'y ninguno aparece dos veces');
+  ok(atletas.every((r, i) => i === 0 || atletas[i-1].glp >= r.glp),
+     'salen ordenados de mayor a menor GL');
+
+  // Y se queda con la MEJOR marca, no con la primera ni con la última.
+  const conVarias = atletas.find(a => _glRows().filter(r => (r.codigo && r.codigo === a.codigo)).length > 2);
+  if (conVarias) {
+    const suyas = _glRows().filter(r => r.codigo === conVarias.codigo);
+    ok(conVarias.glp === Math.max(...suyas.map(r => r.glp)),
+       conVarias.nombre + ' tiene ' + suyas.length + ' resultados y se queda con el mejor (' + conVarias.glp.toFixed(1) + ')');
+  } else {
+    ok(true, 'no hay nadie con varias marcas en este conjunto');
+  }
+  ST.statsFilters = guardado;
+}
+
+console.log('\n  Se puede preguntar por un mínimo, y por división');
+{
+  const guardado = ST.statsFilters, guardadoMin = ST.glMin;
+  ST.statsFilters = { yearFrom: '2026', yearTo: '2026', div: 'Open' };
+  const open = _glRankingAtletas();
+  const con80 = open.filter(r => r.glp >= 80);
+  ok(open.length > 0 && con80.length > 0 && con80.length < open.length,
+     'en Open 2026 hay ' + con80.length + ' con 80 GL o más, de ' + open.length);
+  ok(con80.every(r => r.div === 'Open' && r.year === '2026'),
+     'y son todos de Open y del año pedido');
+
+  ST.glMin = 80;
+  const html = renderGLRanking();
+  ok(new RegExp('<b[^>]*>' + con80.length + '</b> atletas? con <b>80</b> GL o m[áa]s').test(html),
+     'la pantalla dice cuántos son');
+  ok(html.indexOf(esc(con80[0].nombre)) > 0, 'y los nombra: primero ' + con80[0].nombre);
+  ok(/Cada uno una sola vez, con su mejor marca/.test(html), 'diciendo que no se repiten');
+  ok(/RANKING SIN REPETIR ATLETA/.test(html), 'con su título');
+
+  ST.glMin = 999;
+  ok(/Ninguno llega a ese m[íi]nimo/.test(renderGLRanking()),
+     'y con un mínimo imposible lo dice en vez de mostrar una tabla vacía');
+  ST.glMin = guardadoMin; ST.statsFilters = guardado;
+}
+
+console.log('\n  El rango de años sale de los filtros de arriba');
+{
+  const guardado = ST.statsFilters;
+  ST.statsFilters = { yearFrom: '2026', yearTo: '2026' };
+  const soloUno = _glRankingAtletas();
+  ST.statsFilters = { yearFrom: '2025', yearTo: '2026' };
+  const dos = _glRankingAtletas();
+  ok(dos.length > soloUno.length,
+     '2025–2026 junta más gente que 2026 solo (' + dos.length + ' contra ' + soloUno.length + ')');
+  const claves = dos.map(r => r.codigo || _hNom(r.nombre));
+  ok(new Set(claves).size === claves.length,
+     'y juntando dos temporadas tampoco se repite nadie');
+  ok(_glRankingAtletas().every(r => r.year >= '2025' && r.year <= '2026'),
+     'todas las marcas son del rango pedido');
+  ST.statsFilters = guardado;
+}
+
+console.log('\nEl simulador del corte para el Nacional');
+{
+  const guardado = ST.statsFilters, guardadoCorte = ST.corte;
+  ST.statsFilters = { yearFrom: '2026', yearTo: '2026' };
+  ST.corte = { modo: 'cantidad', valor: 10, agrupar: 'cat' };
+  const grupos = _corteGrupos();
+  ok(grupos.length > 5, 'arma los grupos: ' + grupos.length + ' categorías');
+  grupos.forEach(g => {
+    const claves = g.atletas.map(r => r.codigo || _hNom(r.nombre));
+    if (new Set(claves).size !== claves.length) ok(false, 'se repite alguien en ' + g.label);
+  });
+  ok(true, 'y dentro de cada grupo nadie se repite');
+
+  const grande = grupos[0];
+  const x = _corteDe(grande);
+  ok(x.dentro >= 10, grande.label + ': con un objetivo de 10 clasifican ' + x.dentro);
+  ok(grande.atletas.filter(a => a.glp >= x.min).length === x.dentro,
+     'y el mínimo de ' + x.min.toFixed(1) + ' es exactamente el que deja pasar a esos');
+  ok(grande.atletas[x.dentro - 1].glp >= x.min, 'el último que entra llega al mínimo');
+  ok(x.dentro === grande.n || grande.atletas[x.dentro].glp < x.min,
+     'y el primero que queda fuera no lo alcanza');
+
+  // Si el grupo tiene menos gente que el objetivo, clasifican todos y no se
+  // inventa un corte imposible.
+  const chico = grupos[grupos.length - 1];
+  if (chico.n < 10) {
+    const y = _corteDe(chico);
+    ok(y.dentro === chico.n, chico.label + ' tiene ' + chico.n + ': clasifican todos, sin romperse');
+  } else { ok(true, 'no hay grupos por debajo del objetivo'); }
+
+  // Por porcentaje tiene que dar menos gente que por cantidad, con estos datos.
+  ST.corte = { modo: 'porcentaje', valor: 30, agrupar: 'cat' };
+  const porPct = _corteGrupos().reduce((s, g) => s + _corteDe(g).dentro, 0);
+  ST.corte = { modo: 'cantidad', valor: 10, agrupar: 'cat' };
+  const porCant = _corteGrupos().reduce((s, g) => s + _corteDe(g).dentro, 0);
+  ok(porPct !== porCant, 'el 30% deja ' + porPct + ' y los 10 mejores dejan ' + porCant);
+
+  // Un solo mínimo para todos: mismo total, reparto distinto.
+  const u = _corteUnico(grupos, porCant);
+  ok(u && u.total >= porCant - 2 && u.total <= porCant + 2,
+     'un mínimo único de ' + u.min.toFixed(1) + ' deja un total parecido (' + u.total + ')');
+  ok(u.maximo > u.minimo, 'pero reparte muy distinto: de ' + u.minimo + ' a ' + u.maximo + ' por grupo');
+
+  const html = renderCorte();
+  ok(/EL MÍNIMO DE CADA GRUPO/.test(html), 'la tabla está');
+  ok(/Calculado sobre <b>2026<\/b>/.test(html), 'y dice sobre qué período está calculando');
+  ok(/Cada atleta cuenta una vez/.test(html), 'y que no se cuentan resultados repetidos');
+  ok(/updCorte\('modo'/.test(html) && /updCorte\('valor'/.test(html) && /updCorte\('agrupar'/.test(html),
+     'los tres controles se pueden mover');
+  ok(!/setDoc|updateDoc|deleteDoc/.test(adm.slice(adm.indexOf('function renderCorte'), adm.indexOf('window.updCorte'))),
+     'y es solo un simulador: no escribe nada en ninguna parte');
+  ST.statsFilters = guardado; ST.corte = guardadoCorte;
+}
+
+console.log('\n  Y avisa cuando se está mirando más de una temporada');
+{
+  const guardado = ST.statsFilters, guardadoCorte = ST.corte;
+  ST.corte = { modo: 'cantidad', valor: 10, agrupar: 'cat' };
+  ST.statsFilters = {};
+  ok(/Estás mirando \d+ temporadas juntas/.test(renderCorte()),
+     'sin filtrar el año, lo advierte — un corte sobre todo el historial no sirve');
+  ST.statsFilters = { yearFrom: '2026', yearTo: '2026' };
+  ok(!/Estás mirando \d+ temporadas juntas/.test(renderCorte()),
+     'y filtrado a una temporada, no molesta');
+  ST.statsFilters = guardado; ST.corte = guardadoCorte;
+}
+
+console.log('\n  Cambiar un filtro no te saca de la pestaña en la que estás');
+{
+  // Antes updStatsFilter siempre redibujaba la de Deporte: si estabas en GL
+  // points y tocabas un filtro, te cambiaba de pantalla.
+  const f = adm.slice(adm.indexOf('window.updStatsFilter'), adm.indexOf('window.updCorte'));
+  ok(/const tab=ST\.statsTab\|\|'deporte';/.test(f), 'mira en qué pestaña estás');
+  ['gl', 'corte', 'demografia'].forEach(t =>
+    ok(new RegExp("tab==='" + t + "'").test(f), 'y respeta ' + t));
 }
 
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');

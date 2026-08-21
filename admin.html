@@ -194,7 +194,11 @@ function _peerPerc(myTotal,key){const g=PEERS[key];if(!g)return null;const all=[
 
 const ST={user:null,adminInfo:null,view:'athletes',data:null,nominas:null,inscripciones:[],auditLog:[],events:[],eventos:[],filterEv:'',filterClasif:'',search:'',filterLetter:'',eventoForm:null,eventoFormMode:'create',athleteProfile:null,pendingResults:0,competitionResults:[],editRequests:[],inscripcionesPrivate:{},achievementsByCodigo:{},fotosByCodigo:{},pasadas:{},cpSel:'',rankingCiclo:null,rankingCicloSel:'',
   // Filtros globales del dashboard de estadísticas (tipo Power BI)
-  statsFilters:{ yearFrom:'', yearTo:'', sex:'', mod:'', div:'', club:'' }};
+  statsFilters:{ yearFrom:'', yearTo:'', sex:'', mod:'', div:'', club:'' },
+  // Simulador del corte para el Nacional (Estadísticas → Corte Nacional)
+  corte:{ modo:'cantidad', valor:10, agrupar:'cat_div_mod' },
+  // Ranking de GL sin repetir atleta (Estadísticas → GL Points)
+  glMin:0};
 window.ST=ST;
 
 // HTML-escape helper — defensa contra XSS al inyectar datos en innerHTML
@@ -1738,6 +1742,7 @@ function render(){
     if(_st==='web') setTimeout(loadWebAnalytics,0);
     else if(_st==='demografia') setTimeout(initDemoCharts,0);
     else if(_st==='gl') setTimeout(initGLCharts,0);
+    else if(_st==='corte') {}   // es una tabla, no tiene gráficos que montar
     else setTimeout(initStatsCharts,0);
   }
   if(ST.view==='publisher')setTimeout(()=>{try{pubUpdatePreview()}catch(e){}},50);
@@ -1830,12 +1835,16 @@ function applyStatsFilters(rows){
 }
 window.updStatsFilter = function(key, value){
   ST.statsFilters[key] = value;
-  // Re-render solo los charts/KPIs (no toda la página, para no perder scroll)
+  // Re-render solo los charts/KPIs (no toda la página, para no perder scroll).
+  // Y se redibuja LA PESTAÑA EN LA QUE SE ESTÁ: antes siempre volvía a dibujar la
+  // de Deporte, así que tocar un filtro parado en otra pestaña te sacaba de ella.
   const container = document.getElementById('statsContent');
-  if(container){
-    container.innerHTML = renderStatsContent();
-    setTimeout(initStatsCharts, 0);
-  }
+  if(!container)return;
+  const tab=ST.statsTab||'deporte';
+  if(tab==='gl'){ container.innerHTML=renderGL(); setTimeout(initGLCharts,0); }
+  else if(tab==='corte'){ container.innerHTML=renderCorte(); }
+  else if(tab==='demografia'){ container.innerHTML=renderDemografia(); setTimeout(initDemoCharts,0); }
+  else { container.innerHTML=renderStatsContent(); setTimeout(initStatsCharts,0); }
 };
 window.clearStatsFilters = function(){
   ST.statsFilters = {yearFrom:'',yearTo:'',sex:'',mod:'',div:'',club:''};
@@ -2373,6 +2382,7 @@ function renderStats(){
     <div style="display:flex;gap:10px;margin:14px 0 20px">
       ${tabBtn('deporte','DEPORTE')}
       ${tabBtn('gl','GL POINTS')}
+      ${tabBtn('corte','CORTE NACIONAL')}
       ${tabBtn('demografia','DEMOGRAFÍA')}
       ${tabBtn('web','TRÁFICO WEB')}
     </div>
@@ -2380,6 +2390,8 @@ function renderStats(){
       ? `<div id="statsWebContent"><div style="padding:40px;text-align:center;color:var(--muted)">Cargando analytics…</div></div>`
       : tab==='gl'
       ? `<p class="subtitle">Los GL points son lo único que se puede comparar entre sexos, divisiones de edad y modalidades · usa los mismos filtros</p><div id="statsContent">${renderGL()}</div>`
+      : tab==='corte'
+      ? `<p class="subtitle">Simulador de mínimos para clasificar · se prueba un corte y se ve a cuántos deja dentro, antes de fijarlo</p><div id="statsContent">${renderCorte()}</div>`
       : tab==='demografia'
       ? `<p class="subtitle">Base completa de atletas · calculado en vivo desde data.json</p><div id="statsContent">${renderDemografia()}</div>`
       : `<p class="subtitle">Dashboard interactivo · Filtros globales · Export para Power BI</p><div id="statsContent">${renderStatsContent()}</div>`}`;
@@ -2865,6 +2877,8 @@ function renderGL(){
       `<div style="color:var(--muted);font-size:9px;margin-top:2px">${esc(mejor.nombre||mejor.codigo||'')} · ${esc(mejor.year)}</div>`)}
   </div>
 
+  <div id="glRankBox">${renderGLRanking()}</div>
+
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
     ${card('CAJA Y BIGOTE — POR DIVISIÓN DE EDAD','glCajaDiv','340px',
       'La caja es la mitad del medio (del cuartil 1 al 3); la raya blanca, la mediana. Los bigotes llegan al dato más lejano que siga siendo normal, y los puntos sueltos son las marcas que se salen de la norma — casi siempre, los mejores.')}
@@ -2951,6 +2965,297 @@ function _glTablaHtml(rows){
     })()}
   </div>`;
 }
+
+// ═══════════════════════════════════════════
+// RANKING DE GL SIN REPETIR ATLETA
+//
+// La pregunta de siempre: "¿cuántos hay en Open con 80 GL o más, y quiénes
+// son?". El ranking corriente no sirve para eso porque el que corrió tres veces
+// aparece tres veces, y contar filas da un número inflado.
+//
+// Acá cada atleta sale UNA vez, con su mejor marca del período elegido. El
+// período, la división, la modalidad y todo lo demás salen de los filtros de
+// arriba; el mínimo de GL se pone acá al lado.
+// ═══════════════════════════════════════════
+const GL_RANK_TOPE=300;   // lo que se dibuja; el CSV se lleva todos
+
+function _glRankingAtletas(){
+  const mejor={};
+  _glRows().forEach(r=>{
+    const quien=r.codigo||_hNom(r.nombre);
+    if(!quien)return;
+    if(!mejor[quien]||r.glp>mejor[quien].glp)mejor[quien]=r;
+  });
+  return Object.values(mejor).sort((a,b)=>b.glp-a.glp||(b.total||0)-(a.total||0));
+}
+
+function renderGLRanking(){
+  const min=+(ST.glMin||0);
+  const todos=_glRankingAtletas();
+  const lista=todos.filter(r=>r.glp>=min);
+  const f=ST.statsFilters||{};
+  const anios=[...new Set(_glRows().map(r=>r.year))].sort();
+  const periodo=anios.length?(anios.length===1?anios[0]:anios[0]+'–'+anios[anios.length-1]):'—';
+  const sel='background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;font-family:DM Sans';
+  const cel='padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px';
+  const th=(t,al='right')=>`<th style="${cel};text-align:${al};color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px">${t}</th>`;
+  const filtroTxt=[f.div?'división '+f.div:'',f.mod?'modalidad '+f.mod:'',
+    f.sex?(f.sex==='F'?'mujeres':'hombres'):'',f.club?'club '+f.club:''].filter(Boolean).join(' · ');
+
+  return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px">
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:6px">
+      <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--gold)">RANKING SIN REPETIR ATLETA</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+        <span style="font-size:12px;color:var(--muted)">GL mínimo</span>
+        <input type="number" min="0" max="150" step="0.5" value="${min}" style="${sel};width:90px"
+          oninput="updGlMin(this.value)" onchange="updGlMin(this.value)">
+        ${min>0?`<button onclick="updGlMin(0)" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer">Ver todos</button>`:''}
+        <button onclick="exportGlRankingCSV()" style="background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);padding:6px 12px;border-radius:6px;font-family:Oswald;font-size:11px;letter-spacing:1px;cursor:pointer;font-weight:700">CSV</button>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text);line-height:1.6;margin-bottom:12px">
+      ${min>0
+        ? `<b style="color:var(--gold);font-size:15px">${lista.length.toLocaleString()}</b> atleta${lista.length===1?'':'s'} con <b>${min}</b> GL o más`
+        : `<b style="color:var(--gold);font-size:15px">${lista.length.toLocaleString()}</b> atleta${lista.length===1?'':'s'}`}
+      en <b>${periodo}</b>${filtroTxt?' · '+esc(filtroTxt):''}.
+      <span style="color:var(--muted)">Cada uno una sola vez, con su mejor marca del período${min>0?` — de ${todos.length.toLocaleString()} en total`:''}.</span>
+    </div>
+    ${!lista.length?`<div style="color:var(--muted);font-size:12px;padding:20px 0">Ninguno llega a ese mínimo con los filtros puestos.</div>`:`
+    <div style="overflow-x:auto;max-height:520px;overflow-y:auto"><table style="width:100%;border-collapse:collapse">
+      <thead style="position:sticky;top:0;background:var(--card)"><tr>
+        ${th('#','left')}${th('ATLETA','left')}${th('CLUB','left')}${th('GL')}${th('TOTAL')}${th('CAT.')}${th('DIVISIÓN','left')}${th('MODALIDAD','left')}${th('AÑO')}
+      </tr></thead>
+      <tbody>${lista.slice(0,GL_RANK_TOPE).map((r,i)=>`<tr>
+        <td style="${cel};color:var(--muted);font-family:Oswald">${i+1}</td>
+        <td style="${cel};color:var(--text)">${esc(r.nombre||r.codigo||'—')}</td>
+        <td style="${cel};color:var(--muted);font-size:11px">${esc(r.club||'—')}</td>
+        <td style="${cel};text-align:right;color:var(--gold);font-family:Oswald;font-size:13px">${r.glp.toFixed(1)}</td>
+        <td style="${cel};text-align:right">${r.total?r.total+' kg':'—'}</td>
+        <td style="${cel};text-align:right">${esc(r.cat)}</td>
+        <td style="${cel};color:var(--muted);font-size:11px">${esc(r.div)}</td>
+        <td style="${cel};color:var(--muted);font-size:11px">${esc(r.mod)}</td>
+        <td style="${cel};text-align:right;color:var(--muted)">${esc(r.year)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    ${lista.length>GL_RANK_TOPE?`<div style="font-size:11px;color:var(--muted);margin-top:10px">
+      Se muestran los primeros ${GL_RANK_TOPE}. Los ${lista.length.toLocaleString()} van completos en el CSV.</div>`:''}`}
+  </div>`;
+}
+
+window.updGlMin=function(v){
+  ST.glMin=Math.max(0,parseFloat(v)||0);
+  const cont=document.getElementById('glRankBox');
+  if(cont)cont.innerHTML=renderGLRanking();
+};
+
+window.exportGlRankingCSV=function(){
+  const min=+(ST.glMin||0);
+  const lista=_glRankingAtletas().filter(r=>r.glp>=min);
+  if(!lista.length){showToast('No hay atletas para exportar',null,true);return;}
+  const q=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`;
+  const filas=['posicion,nombre,codigo,club,gl_points,total_kg,categoria,division,modalidad,anio'];
+  lista.forEach((r,i)=>filas.push([i+1,q(r.nombre),q(r.codigo),q(r.club),
+    r.glp.toFixed(2),r.total||'',q(r.cat),q(r.div),q(r.mod),r.year].join(',')));
+  const blob=new Blob([filas.join('\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;
+  a.download='yourlift_ranking_gl_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  showToast('Exportados '+lista.length+' atletas');
+};
+
+// ═══════════════════════════════════════════
+// CORTE PARA EL NACIONAL
+//
+// La pregunta es: ¿qué mínimo de GL points hay que pedir para que queden unos
+// diez por categoría? No tiene una sola respuesta —depende de cuántos se quieran
+// y de cómo se agrupe— así que esto es un simulador: se mueve el objetivo y se
+// ve al toque a cuántos deja dentro, categoría por categoría, antes de fijar
+// nada. No escribe en ninguna parte.
+//
+// Dos cosas que cambian el resultado y conviene tener claras:
+//
+// Se cuenta ATLETAS, no resultados. Alguien que corrió tres veces en el período
+// entra una vez, con su mejor GL: si no, el que compite más aparecería tres
+// veces y correría el corte hacia arriba sin haber levantado más.
+//
+// El período sale de los filtros de arriba. Sin filtrar, el corte se calcula
+// sobre todo el historial, que no es lo que se quiere para clasificar a una
+// temporada: por eso la pantalla dice siempre sobre qué años está trabajando.
+// ═══════════════════════════════════════════
+function _corteGrupos(){
+  const rows=_glRows();
+  const modo=(ST.corte&&ST.corte.agrupar)||'cat_div_mod';
+  const sexLbl=s=>s==='F'?'♀':s==='M'?'♂':'—';
+  const clave=r=>{
+    if(modo==='cat')return sexLbl(r.sexo)+' '+r.cat+' kg';
+    if(modo==='div')return sexLbl(r.sexo)+' '+r.div;
+    if(modo==='mod')return sexLbl(r.sexo)+' '+r.mod;
+    return sexLbl(r.sexo)+' '+r.cat+' kg · '+r.div+' · '+r.mod;
+  };
+  // Un atleta, una vez, con su mejor GL del período.
+  const g={};
+  rows.forEach(r=>{
+    const k=clave(r);
+    const quien=r.codigo||r.nombre;
+    if(!quien)return;
+    if(!g[k])g[k]={label:k,mejores:{}};
+    const ant=g[k].mejores[quien];
+    if(!ant||r.glp>ant.glp)g[k].mejores[quien]=r;
+  });
+  return Object.values(g).map(x=>{
+    const atl=Object.values(x.mejores).sort((a,b)=>b.glp-a.glp);
+    return {label:x.label,atletas:atl,n:atl.length};
+  }).sort((a,b)=>b.n-a.n);
+}
+
+// El corte de un grupo según lo que se pidió: o los N mejores, o el X% mejor.
+function _corteDe(grupo){
+  const c=ST.corte||{};
+  const n=grupo.n;
+  let cupo;
+  if(c.modo==='porcentaje') cupo=Math.max(1,Math.ceil(n*(+c.valor||10)/100));
+  else cupo=Math.max(1,Math.round(+c.valor||10));
+  cupo=Math.min(cupo,n);
+  const min=grupo.atletas[cupo-1].glp;
+  // Con empates en el GL exacto puede clasificar alguno más: el corte es un
+  // mínimo, no un cupo cerrado. Se muestra el número real.
+  const dentro=grupo.atletas.filter(a=>a.glp>=min).length;
+  return {min,dentro,pct:n?dentro/n*100:0,cupo};
+}
+
+// Y si en vez de un mínimo por categoría se quisiera UNO SOLO para todos, ¿cuál
+// sería y cómo repartiría? Sirve para ver el precio de simplificar: un número
+// único es más fácil de comunicar, pero deja categorías con veinte y otras con
+// ninguno.
+function _corteUnico(grupos,totalObjetivo){
+  const todos=[];
+  grupos.forEach(g=>g.atletas.forEach(a=>todos.push(a.glp)));
+  todos.sort((a,b)=>b-a);
+  if(!todos.length)return null;
+  const k=Math.min(todos.length,Math.max(1,totalObjetivo));
+  const min=todos[k-1];
+  const porGrupo=grupos.map(g=>({label:g.label,n:g.n,dentro:g.atletas.filter(a=>a.glp>=min).length}));
+  return {min,total:todos.filter(v=>v>=min).length,
+    vacios:porGrupo.filter(x=>x.dentro===0).length,
+    maximo:Math.max(...porGrupo.map(x=>x.dentro)),
+    minimo:Math.min(...porGrupo.map(x=>x.dentro)),porGrupo};
+}
+
+function renderCorte(){
+  const c=ST.corte||{modo:'cantidad',valor:10,agrupar:'cat_div_mod'};
+  const grupos=_corteGrupos();
+  const rows=_glRows();
+  const ks='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;text-align:center';
+  const sel='background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;font-family:DM Sans';
+  const anios=[...new Set(rows.map(r=>r.year))].sort();
+  const periodo=anios.length?(anios.length===1?anios[0]:anios[0]+'–'+anios[anios.length-1]):'—';
+
+  const controles=`<div style="background:rgba(8,16,30,.65);border:1px solid var(--border);border-radius:14px;padding:14px 18px;margin-bottom:18px;display:flex;flex-wrap:wrap;gap:14px;align-items:center">
+    <div style="font-family:Oswald;font-size:11px;letter-spacing:3px;color:var(--gold);font-weight:700">CORTE</div>
+    <select style="${sel}" onchange="updCorte('modo',this.value)">
+      <option value="cantidad" ${c.modo==='cantidad'?'selected':''}>Dejar los N mejores</option>
+      <option value="porcentaje" ${c.modo==='porcentaje'?'selected':''}>Dejar el mejor N%</option>
+    </select>
+    <input type="number" min="1" max="${c.modo==='porcentaje'?100:60}" value="${c.valor}"
+      style="${sel};width:80px" onchange="updCorte('valor',this.value)">
+    <span style="font-size:12px;color:var(--muted)">${c.modo==='porcentaje'?'% por grupo':'atletas por grupo'}</span>
+    <select style="${sel};min-width:230px" onchange="updCorte('agrupar',this.value)">
+      <option value="cat_div_mod" ${c.agrupar==='cat_div_mod'?'selected':''}>Agrupar por categoría + división + modalidad</option>
+      <option value="cat" ${c.agrupar==='cat'?'selected':''}>Agrupar solo por categoría de peso</option>
+      <option value="div" ${c.agrupar==='div'?'selected':''}>Agrupar solo por división de edad</option>
+      <option value="mod" ${c.agrupar==='mod'?'selected':''}>Agrupar solo por modalidad</option>
+    </select>
+    <div style="margin-left:auto"><button onclick="exportCorteCSV()" style="background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);padding:6px 12px;border-radius:6px;font-family:Oswald;font-size:11px;letter-spacing:1px;cursor:pointer;font-weight:700">CSV</button></div>
+  </div>`;
+
+  if(!grupos.length){
+    return controles+`<div style="${ks};padding:40px">No hay resultados con GL points en este filtro.</div>`;
+  }
+
+  const cortes=grupos.map(g=>({g,c:_corteDe(g)}));
+  const totalAtl=grupos.reduce((s,g)=>s+g.n,0);
+  const totalDentro=cortes.reduce((s,x)=>s+x.c.dentro,0);
+  const mins=cortes.map(x=>x.c.min);
+  const unico=_corteUnico(grupos,totalDentro);
+  const kpi=(v,l,col,extra='')=>`<div style="${ks}"><div style="font-family:Oswald;font-size:32px;font-weight:700;color:${col}">${v}</div>
+    <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">${l}</div>${extra}</div>`;
+
+  const cel='padding:7px 10px;border-bottom:1px solid var(--border);font-size:12px';
+  const th=(t,al='right')=>`<th style="${cel};text-align:${al};color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px">${t}</th>`;
+
+  return controles+`
+  <div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.3);border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:12px;color:var(--text);line-height:1.6">
+    Calculado sobre <b>${periodo}</b> · ${totalAtl.toLocaleString()} atletas distintos en ${grupos.length} grupos.
+    Cada atleta cuenta una vez, con su mejor GL del período.
+    ${anios.length>2?`<b style="color:#f59e0b">Estás mirando ${anios.length} temporadas juntas.</b> Para un corte de verdad, filtra arriba la temporada que corresponda.`:''}
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:20px">
+    ${kpi(totalDentro.toLocaleString(),'CLASIFICARÍAN','var(--gold)',
+      `<div style="color:var(--muted);font-size:9px;margin-top:2px">de ${totalAtl.toLocaleString()} · ${Math.round(totalDentro/totalAtl*100)}%</div>`)}
+    ${kpi(grupos.length,'GRUPOS','#a78bfa')}
+    ${kpi(Math.min(...mins).toFixed(1)+'–'+Math.max(...mins).toFixed(1),'RANGO DE MÍNIMOS','#06b6d4',
+      '<div style="color:var(--muted);font-size:9px;margin-top:2px">del grupo más flojo al más fuerte</div>')}
+    ${unico?kpi(unico.min.toFixed(1),'SI FUERA UNO SOLO','#f59e0b',
+      `<div style="color:var(--muted);font-size:9px;margin-top:2px">mismo total, pero ${unico.vacios} grupo${unico.vacios===1?'':'s'} sin nadie</div>`):''}
+  </div>
+
+  ${unico&&unico.vacios>0?`<div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.35);border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:12px;color:var(--text);line-height:1.6">
+    <b style="color:#f59e0b">Un solo mínimo para todos sería ${unico.min.toFixed(1)} GL.</b>
+    Deja pasar a los mismos ${unico.total} en total, pero repartidos muy distinto: el grupo más numeroso quedaría con ${unico.maximo}
+    y ${unico.vacios} grupo${unico.vacios===1?' quedaría':'s quedarían'} sin ningún clasificado.
+    Es el precio de tener un número único: más fácil de comunicar, más desparejo en la tarima.
+  </div>`:''}
+
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px">
+    <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted);margin-bottom:4px">EL MÍNIMO DE CADA GRUPO</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:12px;opacity:.8">
+      <b style="color:var(--text)">MÍNIMO GL</b> es lo que habría que pedir en ese grupo para llegar al objetivo.
+      <b style="color:var(--text)">CLASIFICAN</b> puede pasarse del objetivo si hay empate exacto de GL en el borde: un mínimo no es un cupo cerrado.
+      Los grupos con pocos atletas clasifican casi enteros — ahí el corte no filtra nada.
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+      <thead><tr>${th('GRUPO','left')}${th('ATLETAS')}${th('MÍNIMO GL')}${th('CLASIFICAN')}${th('% DEL GRUPO')}${th('MEJOR')}${th('PEOR QUE ENTRA')}</tr></thead>
+      <tbody>${cortes.map(({g,c:x})=>{
+        const flojo=g.n<=x.dentro;
+        return `<tr${flojo?' style="opacity:.6"':''}>
+        <td style="${cel};color:var(--text)">${esc(g.label)}</td>
+        <td style="${cel};text-align:right">${g.n}</td>
+        <td style="${cel};text-align:right;color:var(--gold);font-family:Oswald;font-size:13px">${x.min.toFixed(1)}</td>
+        <td style="${cel};text-align:right;color:#22c55e">${x.dentro}${flojo?'<span style="color:var(--muted);font-size:10px"> (todos)</span>':''}</td>
+        <td style="${cel};text-align:right;color:#06b6d4">${Math.round(x.pct)}%</td>
+        <td style="${cel};text-align:right;color:var(--muted)">${g.atletas[0].glp.toFixed(1)}</td>
+        <td style="${cel};text-align:right;color:var(--muted);font-size:11px">${esc(g.atletas[x.dentro-1].nombre||'')}</td>
+      </tr>`;}).join('')}</tbody>
+    </table></div>
+  </div>`;
+}
+
+window.updCorte=function(key,val){
+  ST.corte=ST.corte||{modo:'cantidad',valor:10,agrupar:'cat_div_mod'};
+  ST.corte[key]=key==='valor'?Math.max(1,parseInt(val)||1):val;
+  const cont=document.getElementById('statsContent');
+  if(cont)cont.innerHTML=renderCorte();
+};
+
+window.exportCorteCSV=function(){
+  const grupos=_corteGrupos();
+  if(!grupos.length){showToast('No hay datos para exportar',null,true);return;}
+  const filas=['grupo,atletas,minimo_gl,clasifican,pct_del_grupo,mejor_gl,ultimo_que_entra'];
+  grupos.forEach(g=>{
+    const x=_corteDe(g);
+    filas.push([`"${g.label.replace(/"/g,'""')}"`,g.n,x.min.toFixed(2),x.dentro,
+      Math.round(x.pct),g.atletas[0].glp.toFixed(2),
+      `"${String(g.atletas[x.dentro-1].nombre||'').replace(/"/g,'""')}"`].join(','));
+  });
+  const blob=new Blob([filas.join('\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;
+  a.download='yourlift_corte_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  showToast('Corte exportado: '+grupos.length+' grupos');
+};
 
 // Los números que hay detrás de cada caja, escritos. La caja se mira; esto se
 // copia a un informe.
