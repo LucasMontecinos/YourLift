@@ -39,7 +39,8 @@ function sacar(texto, nombre) {
 const ST = { data: JSON.parse(fs.readFileSync(__dirname + '/../data.json', 'utf8')), statsFilters: {} };
 const esc = s => String(s == null ? '' : s);
 const GL_ORDEN_DIV = ['Sub-Junior', 'Junior', 'Open', 'Master I', 'Master II', 'Master III', 'Master IV', 'Universitario'];
-const FUNCS = ['buildStatsRows', 'applyStatsFilters', '_glRows', '_glProm', '_glMediana', '_glTablaHtml', 'renderGL'];
+const FUNCS = ['buildStatsRows', 'applyStatsFilters', '_glRows', '_glProm', '_glCuartil',
+  '_glMediana', '_glResumen', '_glTablaHtml', '_glDispersionHtml', 'renderGL'];
 eval(FUNCS.map(n => sacar(adm, n)).join('\n'));
 
 const todas = applyStatsFilters(buildStatsRows());
@@ -126,8 +127,8 @@ console.log('\nLa pantalla se arma entera');
 {
   const html = renderGL();
   const canvas = (html.match(/<canvas id="(\w+)"/g) || []).map(s => s.match(/id="(\w+)"/)[1]);
-  ok(canvas.length === 7, 'siete gráficos (' + canvas.length + ')');
-  ['glAnioSexo', 'glDist', 'glDiv', 'glMod', 'glDivAnio', 'glModDiv', 'glTop']
+  ok(canvas.length === 9, 'nueve gráficos (' + canvas.length + ')');
+  ['glAnioSexo', 'glDist', 'glCajaDiv', 'glCajaMod', 'glDiv', 'glMod', 'glDivAnio', 'glModDiv', 'glTop']
     .forEach(id => ok(canvas.includes(id), id));
   // Y cada gráfico se inicializa: un canvas sin su mk() queda en blanco.
   const init = adm.slice(adm.indexOf('function initGLCharts'), adm.indexOf('let _sc={};'));
@@ -182,6 +183,116 @@ console.log('\nNo toca nada de lo que ya estaba');
   // cambiar de pestaña se destruirían entre ellos.
   ok(/let _glc=\{\};/.test(adm) && /let _sc=\{\};/.test(adm),
      'y cada pestaña guarda sus propios gráficos por separado');
+}
+
+
+console.log('\nLos cuartiles dan lo mismo que una planilla');
+{
+  // Si los números de acá no calzan con Excel, el primero que rehaga la cuenta
+  // por su cuenta va a pensar que el panel está mal.
+  const s = _glResumen([1,2,3,4,5,6,7,8,9,10].map(x => ({ glp: x })));
+  ok(s.q1 === 3.25, 'Q1 = 3,25 igual que QUARTILE.INC (' + s.q1 + ')');
+  ok(s.med === 5.5, 'mediana = 5,5 (' + s.med + ')');
+  ok(s.q3 === 7.75, 'Q3 = 7,75 (' + s.q3 + ')');
+  ok(s.ric === 4.5, 'y el rango intercuartil es Q3−Q1 = 4,5 (' + s.ric + ')');
+  ok(Math.abs(s.desv - 3.0276503) < 1e-6,
+     'la desviación es la muestral, con n−1: ' + s.desv.toFixed(4));
+  // Con n−1 y no con n: son una muestra de los que compiten, no todos.
+  const conN = Math.sqrt([1,2,3,4,5,6,7,8,9,10].reduce((a,x)=>a+(x-5.5)**2,0)/10);
+  ok(Math.abs(s.desv - conN) > 0.1, 'no es la poblacional (' + conN.toFixed(4) + ')');
+  ok(_glResumen([{ glp: 42 }]).desv === 0, 'con un solo dato no hay dispersión que medir');
+  ok(_glResumen([]) === null, 'y sin datos devuelve nada, no un cero engañoso');
+}
+
+console.log('\n  Los bigotes cortan donde corresponde, y lo de más allá no se pierde');
+{
+  // Criterio de Tukey: el bigote llega al dato más lejano que siga dentro de una
+  // vez y media el rango intercuartil. Lo que se pasa son marcas reales —casi
+  // siempre las mejores— y tienen que verse, no desaparecer.
+  const v = [10,11,12,13,14,15,16,17,18,19,20,90];
+  const s = _glResumen(v.map(x => ({ glp: x })));
+  ok(s.fuera.includes(90), 'el 90 queda marcado como atípico');
+  ok(s.max < 90, 'el bigote NO llega hasta él (' + s.max + ')');
+  ok(s.real.max === 90, 'pero el máximo real se conserva aparte');
+  ok(s.real.min === 10 && s.min === 10, 'y abajo, sin atípicos, el bigote llega al mínimo');
+  const limpio = _glResumen([10,11,12,13,14].map(x => ({ glp: x })));
+  ok(limpio.fuera.length === 0, 'sin nada raro, no inventa atípicos');
+  ok(limpio.min === 10 && limpio.max === 14, 'y los bigotes van de punta a punta');
+}
+
+console.log('\nLos diagramas de caja se dibujan con lo que ya está cargado');
+{
+  // Chart.js no trae caja y bigote. En vez de sumar otra librería de un CDN a un
+  // panel que se usa en competencia, la caja es una barra flotante de Q1 a Q3 y
+  // un complemento le dibuja encima los bigotes, la mediana y los atípicos.
+  ok(!/boxplot|@sgratzl/i.test(adm), 'no se agregó ninguna librería nueva');
+  // El panel ya cargaba tres librerías (Chart.js, html2canvas y xlsx). Lo que
+  // importa es que los diagramas de caja no sumaron una cuarta.
+  const scripts = (adm.match(/<script src="https:\/\/[^"]+"/g) || []);
+  ok(scripts.length === 3,
+     'sigue cargando las mismas tres librerías de siempre (' + scripts.length + ')');
+  ok(/const GL_CAJA_PLUGIN=\{/.test(adm), 'el complemento está escrito acá');
+  ok(/data:cajas\[i\]\.map\(r=>r\?\[r\.q1,r\.q3\]:null\)/.test(adm),
+     'la caja va de Q1 a Q3');
+
+  // Se ejecuta de verdad contra un lienzo de mentira: así se comprueba que dibuja
+  // los bigotes, la mediana y los atípicos, y que no revienta con un grupo vacío.
+  const plug = eval('(' + adm.slice(adm.indexOf('const GL_CAJA_PLUGIN={') + 'const GL_CAJA_PLUGIN='.length,
+                                    adm.indexOf('let _glc={};')).trim().replace(/;\s*$/, '') + ')');
+  const trazos = [];
+  const ctx = {
+    save(){}, restore(){}, beginPath(){ trazos.push({ tipo: 'path', pts: [] }); },
+    moveTo(x,y){ trazos[trazos.length-1].pts.push(['m',x,y]); },
+    lineTo(x,y){ trazos[trazos.length-1].pts.push(['l',x,y]); },
+    stroke(){ trazos[trazos.length-1].hecho = true; },
+    arc(x,y){ trazos.push({ tipo: 'punto', x, y }); }, fill(){},
+    set strokeStyle(v){}, set lineWidth(v){}, set fillStyle(v){},
+  };
+  const r = _glResumen([10,11,12,13,14,15,16,17,18,19,20,90].map(x => ({ glp: x })));
+  const chart = {
+    ctx, $cajas: [[r, null]],
+    scales: { y: { getPixelForValue: v => 400 - v * 2 } },
+    data: { datasets: [{ borderColor: '#fff' }] },
+    getDatasetMeta: () => ({ hidden: false, data: [{ x: 100, width: 30 }, { x: 200, width: 30 }] }),
+  };
+  let revento = false;
+  try { plug.afterDatasetsDraw(chart); } catch (e) { revento = true; console.log('    ' + e.message); }
+  ok(!revento, 'el complemento corre sin caerse');
+  const paths = trazos.filter(t => t.tipo === 'path' && t.hecho);
+  const puntos = trazos.filter(t => t.tipo === 'punto');
+  ok(paths.length === 2, 'dibuja los bigotes y la mediana (' + paths.length + ' trazos)');
+  const ys = paths[0].pts.map(p => p[2]);
+  ok(ys.includes(400 - r.max * 2) && ys.includes(400 - r.min * 2),
+     'los bigotes llegan hasta donde cortan los datos, no hasta el atípico');
+  ok(puntos.length === r.fuera.length && puntos.length === 1,
+     'y el atípico se dibuja como punto suelto');
+  ok(paths[1].pts.every(p => p[2] === 400 - r.med * 2), 'la mediana va a su altura');
+
+  // El segundo grupo del lienzo falso viene vacío: no puede tumbar el dibujo.
+  ok(!revento, 'un grupo sin datos no rompe nada');
+  chart.$cajas = null;
+  let revento2 = false;
+  try { plug.afterDatasetsDraw(chart); } catch (e) { revento2 = true; }
+  ok(!revento2, 'y si el gráfico no es de caja, el complemento se aparta');
+}
+
+console.log('\nLos números escritos, no solo el dibujo');
+{
+  const html = renderGL();
+  ok(/DESVIACIÓN ESTÁNDAR/.test(html), 'la desviación está arriba, entre los números gruesos');
+  ok(/RANGO INTERCUARTIL/.test(html), 'y el rango intercuartil también');
+  const R = _glResumen(_glRows());
+  ok(html.indexOf('±' + R.desv.toFixed(1)) > 0, 'con el valor real: ±' + R.desv.toFixed(1));
+  ok(html.indexOf(R.ric.toFixed(1)) > 0, 'y el RIC: ' + R.ric.toFixed(1));
+  ok(/dos de cada tres, entre/.test(html), 'y se explica qué significa la desviación');
+  ok(/la mitad del medio, de/.test(html), 'y qué significa el rango intercuartil');
+
+  ['LA DISPERSIÓN, POR DIVISIÓN DE EDAD', 'LA DISPERSIÓN, POR MODALIDAD', 'LA DISPERSIÓN, POR SEXO']
+    .forEach(t => ok(html.indexOf(t) > 0, 'hay tabla: ' + t));
+  ['N', 'PROMEDIO', 'DESV.', 'MÍN', 'Q1', 'MEDIANA', 'Q3', 'RIC', 'MÁX', 'ATÍPICOS']
+    .forEach(c => ok(new RegExp('>' + c.replace('.', '\\.') + '</th>').test(html), 'columna ' + c));
+  ok(/Con menos de una decena de resultados, ninguno de los dos dice gran cosa/.test(html),
+     'y advierte cuándo estos números no significan nada');
 }
 
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');

@@ -2787,10 +2787,47 @@ function renderStatsContent(){
 const GL_ORDEN_DIV=['Sub-Junior','Junior','Open','Master I','Master II','Master III','Master IV','Universitario'];
 function _glRows(){ return applyStatsFilters(buildStatsRows()).filter(r=>r.glp>0); }
 function _glProm(arr){ return arr.length ? arr.reduce((s,r)=>s+r.glp,0)/arr.length : 0; }
-function _glMediana(arr){
-  if(!arr.length)return 0;
-  const v=arr.map(r=>r.glp).sort((a,b)=>a-b), m=Math.floor(v.length/2);
-  return v.length%2 ? v[m] : (v[m-1]+v[m])/2;
+
+// El cuartil por interpolación lineal, que es el mismo criterio que usan Excel
+// (QUARTILE.INC) y las planillas: así los números de acá calzan con los de
+// cualquiera que los rehaga por su cuenta.
+function _glCuartil(ordenados,q){
+  const n=ordenados.length;
+  if(!n)return 0;
+  if(n===1)return ordenados[0];
+  const pos=(n-1)*q, base=Math.floor(pos), resto=pos-base;
+  return ordenados[base+1]!==undefined
+    ? ordenados[base]+resto*(ordenados[base+1]-ordenados[base])
+    : ordenados[base];
+}
+function _glMediana(arr){ return _glCuartil(arr.map(r=>r.glp).sort((a,b)=>a-b),.5); }
+
+// Todo lo que hace falta para describir un grupo, de una sola pasada.
+//
+// El promedio solo no alcanza: dos divisiones pueden promediar 76 y ser cosas
+// distintas, una con todos apretados ahí y otra con la mitad en 60 y la otra
+// mitad en 92. La desviación y el rango intercuartil son los que dicen eso.
+//
+// Los bigotes van hasta el dato más lejano que siga dentro de una vez y media el
+// rango intercuartil (el criterio de Tukey, el habitual). Lo que queda más allá
+// se dibuja como punto suelto: son marcas reales, no errores, y esconderlas sería
+// justamente perder a los mejores.
+function _glResumen(arr){
+  const v=arr.map(r=>r.glp).sort((a,b)=>a-b), n=v.length;
+  if(!n)return null;
+  const prom=v.reduce((s,x)=>s+x,0)/n;
+  // Desviación muestral (n-1): estos son una muestra de los que compiten, no
+  // todos los que existen. Con un solo dato no hay dispersión que medir.
+  const desv=n>1?Math.sqrt(v.reduce((s,x)=>s+(x-prom)*(x-prom),0)/(n-1)):0;
+  const q1=_glCuartil(v,.25), med=_glCuartil(v,.5), q3=_glCuartil(v,.75);
+  const ric=q3-q1;
+  const tope=q3+1.5*ric, piso=q1-1.5*ric;
+  const dentro=v.filter(x=>x>=piso&&x<=tope);
+  return {n,prom,desv,q1,med,q3,ric,
+    min:dentro.length?dentro[0]:v[0],
+    max:dentro.length?dentro[dentro.length-1]:v[n-1],
+    real:{min:v[0],max:v[n-1]},
+    fuera:v.filter(x=>x<piso||x>tope)};
 }
 
 function renderGL(){
@@ -2809,6 +2846,7 @@ function renderGL(){
   }
 
   const mejor=rows.reduce((a,b)=>b.glp>a.glp?b:a);
+  const R=_glResumen(rows);
   const kpi=(v,l,c,extra='')=>`<div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:${c}">${v}</div>
     <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">${l}</div>${extra}</div>`;
 
@@ -2816,11 +2854,22 @@ function renderGL(){
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:20px">
     ${kpi(rows.length.toLocaleString(),'RESULTADOS CON GL','var(--gold)',
       sinGl?`<div style="color:var(--muted);font-size:9px;margin-top:2px">${sinGl.toLocaleString()} sin GL cargado, quedan fuera</div>`:'')}
-    ${kpi(_glProm(rows).toFixed(1),'GL PROMEDIO','#3b82f6')}
-    ${kpi(_glMediana(rows).toFixed(1),'GL MEDIANA','#a78bfa',
+    ${kpi(R.prom.toFixed(1),'GL PROMEDIO','#3b82f6')}
+    ${kpi(R.med.toFixed(1),'GL MEDIANA','#a78bfa',
       '<div style="color:var(--muted);font-size:9px;margin-top:2px">la mitad está por encima</div>')}
+    ${kpi('±'+R.desv.toFixed(1),'DESVIACIÓN ESTÁNDAR','#f59e0b',
+      `<div style="color:var(--muted);font-size:9px;margin-top:2px">dos de cada tres, entre ${(R.prom-R.desv).toFixed(1)} y ${(R.prom+R.desv).toFixed(1)}</div>`)}
+    ${kpi(R.ric.toFixed(1),'RANGO INTERCUARTIL','#06b6d4',
+      `<div style="color:var(--muted);font-size:9px;margin-top:2px">la mitad del medio, de ${R.q1.toFixed(1)} a ${R.q3.toFixed(1)}</div>`)}
     ${kpi(mejor.glp.toFixed(1),'MEJOR GL','#22c55e',
       `<div style="color:var(--muted);font-size:9px;margin-top:2px">${esc(mejor.nombre||mejor.codigo||'')} · ${esc(mejor.year)}</div>`)}
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    ${card('CAJA Y BIGOTE — POR DIVISIÓN DE EDAD','glCajaDiv','340px',
+      'La caja es la mitad del medio (del cuartil 1 al 3); la raya blanca, la mediana. Los bigotes llegan al dato más lejano que siga siendo normal, y los puntos sueltos son las marcas que se salen de la norma — casi siempre, los mejores.')}
+    ${card('CAJA Y BIGOTE — POR MODALIDAD','glCajaMod','340px',
+      'Mismo dibujo, comparando Classic, Equipado y Only Bench.')}
   </div>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
@@ -2848,7 +2897,14 @@ function renderGL(){
     ${card('LOS 20 MEJORES GL DEL FILTRO','glTop','520px',
       'Cada atleta aparece una sola vez, con su mejor marca.')}
   </div>
-  ${_glTablaHtml(rows)}`;
+  ${_glTablaHtml(rows)}
+  ${_glDispersionHtml('LA DISPERSIÓN, POR DIVISIÓN DE EDAD',
+    GL_ORDEN_DIV.filter(d=>rows.some(r=>r.div===d)).map(d=>({label:d,arr:rows.filter(r=>r.div===d)})))}
+  ${_glDispersionHtml('LA DISPERSIÓN, POR MODALIDAD',
+    [...new Set(rows.map(r=>r.mod))].sort().map(m=>({label:m,arr:rows.filter(r=>r.mod===m)})))}
+  ${_glDispersionHtml('LA DISPERSIÓN, POR SEXO',
+    [['M','Hombres'],['F','Mujeres']].filter(([s])=>rows.some(r=>r.sexo===s))
+      .map(([s,l])=>({label:l,arr:rows.filter(r=>r.sexo===s)})))}`;
 }
 
 // La tabla con los números atrás de los gráficos: un gráfico se mira, pero para
@@ -2896,6 +2952,77 @@ function _glTablaHtml(rows){
   </div>`;
 }
 
+// Los números que hay detrás de cada caja, escritos. La caja se mira; esto se
+// copia a un informe.
+function _glDispersionHtml(titulo,grupos){
+  const con=grupos.filter(g=>g.arr.length);
+  if(!con.length)return '';
+  const cel='padding:7px 10px;border-bottom:1px solid var(--border);font-size:12px';
+  const th=t=>`<th style="${cel};text-align:right;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px">${t}</th>`;
+  const num=(v,c)=>`<td style="${cel};text-align:right${c?';color:'+c:''}">${v}</td>`;
+  return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px">
+    <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted);margin-bottom:4px">${titulo}</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:12px;opacity:.8">
+      <b style="color:var(--text)">DESV.</b> es cuánto se aleja del promedio la gente de ese grupo: mientras más chica, más parejo está el nivel.
+      <b style="color:var(--text)">RIC</b> es el rango intercuartil, lo que ocupa la mitad del medio (de Q1 a Q3) — no lo mueven las marcas sueltas, ni arriba ni abajo.
+      Con menos de una decena de resultados, ninguno de los dos dice gran cosa.
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="${cel};text-align:left;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px">GRUPO</th>
+        ${th('N')}${th('PROMEDIO')}${th('DESV.')}${th('MÍN')}${th('Q1')}${th('MEDIANA')}${th('Q3')}${th('RIC')}${th('MÁX')}${th('ATÍPICOS')}
+      </tr></thead>
+      <tbody>${con.map(g=>{
+        const s=_glResumen(g.arr);
+        return `<tr>
+          <td style="${cel};color:var(--text);font-family:Oswald;letter-spacing:1px">${esc(g.label)}</td>
+          ${num(s.n)}${num(s.prom.toFixed(1),'#3b82f6')}${num('±'+s.desv.toFixed(1),'#f59e0b')}
+          ${num(s.real.min.toFixed(1),'var(--muted)')}${num(s.q1.toFixed(1))}${num(s.med.toFixed(1),'#a78bfa')}${num(s.q3.toFixed(1))}
+          ${num(s.ric.toFixed(1),'#06b6d4')}${num(s.real.max.toFixed(1),'#22c55e')}${num(s.fuera.length||'—','var(--muted)')}
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>
+  </div>`;
+}
+
+// Chart.js no trae diagramas de caja. En vez de sumar otra librería de un CDN a
+// un panel que se usa en competencia, la caja se dibuja con una barra flotante
+// —de Q1 a Q3, que Chart.js sí hace— y este complemento le agrega encima los
+// bigotes, la mediana y los puntos atípicos.
+const GL_CAJA_PLUGIN={
+  id:'glCajaBigote',
+  afterDatasetsDraw(chart){
+    const cajas=chart.$cajas; if(!cajas)return;
+    const ctx=chart.ctx, yS=chart.scales.y;
+    chart.data.datasets.forEach((ds,di)=>{
+      const meta=chart.getDatasetMeta(di);
+      if(meta.hidden)return;
+      (meta.data||[]).forEach((el,i)=>{
+        const c=(cajas[di]||[])[i];
+        if(!c||!el)return;
+        const x=el.x, w=Math.max(6,(el.width||18));
+        const py=v=>yS.getPixelForValue(v);
+        ctx.save();
+        ctx.strokeStyle=ds.borderColor||'#D4E1F0';
+        ctx.lineWidth=1.5;
+        ctx.beginPath();
+        ctx.moveTo(x,py(c.q3)); ctx.lineTo(x,py(c.max));          // bigote de arriba
+        ctx.moveTo(x-w/4,py(c.max)); ctx.lineTo(x+w/4,py(c.max));
+        ctx.moveTo(x,py(c.q1)); ctx.lineTo(x,py(c.min));          // bigote de abajo
+        ctx.moveTo(x-w/4,py(c.min)); ctx.lineTo(x+w/4,py(c.min));
+        ctx.stroke();
+        ctx.lineWidth=2.5; ctx.strokeStyle='#fff';                // la mediana
+        ctx.beginPath();
+        ctx.moveTo(x-w/2,py(c.med)); ctx.lineTo(x+w/2,py(c.med));
+        ctx.stroke();
+        ctx.fillStyle='rgba(212,168,67,.95)';                     // los atípicos
+        (c.fuera||[]).forEach(v=>{ctx.beginPath();ctx.arc(x,py(v),2.4,0,Math.PI*2);ctx.fill();});
+        ctx.restore();
+      });
+    });
+  }
+};
+
 let _glc={};
 function initGLCharts(){
   Object.values(_glc).forEach(c=>{try{c.destroy()}catch(e){}});_glc={};
@@ -2905,11 +3032,40 @@ function initGLCharts(){
     plugins:{legend:{labels:{color:'#D4E1F0',font:{family:'Oswald',size:11}}}},
     scales:{x:{ticks:{color:'#7A8FA6',font:{family:'Oswald',size:10}},grid:{color:'rgba(30,58,95,.5)'}},
             y:{ticks:{color:'#7A8FA6',font:{family:'Oswald',size:10}},grid:{color:'rgba(30,58,95,.5)'}}}};
-  const mk=(id,type,data,extra={})=>{
-    const el=document.getElementById(id);if(!el)return;
-    _glc[id]=new Chart(el,{type,data,options:{responsive:true,maintainAspectRatio:false,...base,...extra,
+  const mk=(id,type,data,extra={},comple)=>{
+    const el=document.getElementById(id);if(!el)return null;
+    const c=new Chart(el,{type,data,plugins:comple||[],
+      options:{responsive:true,maintainAspectRatio:false,...base,...extra,
       plugins:{...base.plugins,...(extra.plugins||{})},scales:{...base.scales,...(extra.scales||{})}}});
+    _glc[id]=c;
+    return c;
   };
+
+  // Un diagrama de caja: la barra va de Q1 a Q3 y el complemento dibuja encima
+  // los bigotes, la mediana y los atípicos. Al pasar el mouse se leen los cinco
+  // números, que es lo que uno quiere saber cuando mira una caja.
+  const caja=(id,etiquetas,series)=>{
+    const cajas=series.map(s=>etiquetas.map(e=>s.resumen(e)));
+    const c=mk(id,'bar',{labels:etiquetas,datasets:series.map((s,i)=>({
+      label:s.label,
+      data:cajas[i].map(r=>r?[r.q1,r.q3]:null),
+      backgroundColor:s.color,borderColor:s.borde||s.color,borderWidth:1,borderRadius:2,
+      borderSkipped:false}))},
+      {plugins:{...base.plugins,tooltip:{callbacks:{label(ctx){
+        const r=(cajas[ctx.datasetIndex]||[])[ctx.dataIndex];
+        if(!r)return ctx.dataset.label+': sin datos';
+        return [ctx.dataset.label+' — '+r.n+' resultado'+(r.n===1?'':'s'),
+          'mediana '+r.med.toFixed(1)+'  ·  Q1 '+r.q1.toFixed(1)+'  ·  Q3 '+r.q3.toFixed(1),
+          'RIC '+r.ric.toFixed(1)+'  ·  desv. ±'+r.desv.toFixed(1),
+          'del '+r.real.min.toFixed(1)+' al '+r.real.max.toFixed(1)+
+            (r.fuera.length?'  ('+r.fuera.length+' atípico'+(r.fuera.length===1?'':'s')+')':'')];
+      }}}},
+      scales:{...base.scales,y:{...base.scales.y,title:{display:true,text:'GL points',color:'#7A8FA6',font:{family:'Oswald',size:10}}}}},
+      [GL_CAJA_PLUGIN]);
+    if(c){c.$cajas=cajas;c.update('none');}
+  };
+
+  const resumenDe=f=>e=>{const a=rows.filter(r=>f(r,e));return a.length?_glResumen(a):null;};
   const AZUL='#3b82f6', ROSA='#ec4899';
   const years=[...new Set(rows.map(r=>r.year))].sort();
 
@@ -2952,6 +3108,18 @@ function initGLCharts(){
   mk('glModDiv','bar',{labels:divs,datasets:mods.map((m,i)=>({
     label:m,data:divs.map(d=>promDe(r=>r.div===d&&r.mod===m)),
     backgroundColor:COL[i%COL.length],borderRadius:4}))});
+
+  // 8) Caja y bigote por división, hombres y mujeres por separado.
+  caja('glCajaDiv',divs,[
+    {label:'Hombres',color:'rgba(59,130,246,.45)',borde:'#3b82f6',
+     resumen:resumenDe((r,d)=>r.div===d&&r.sexo==='M')},
+    {label:'Mujeres',color:'rgba(236,72,153,.45)',borde:'#ec4899',
+     resumen:resumenDe((r,d)=>r.div===d&&r.sexo==='F')}]);
+
+  // 9) Y por modalidad.
+  caja('glCajaMod',mods,[
+    {label:'GL points',color:'rgba(212,168,67,.35)',borde:'#D4A843',
+     resumen:resumenDe((r,m)=>r.mod===m)}]);
 
   // 7) Los 20 mejores, un atleta una vez.
   const porAtleta={};
