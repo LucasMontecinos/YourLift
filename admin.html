@@ -197,6 +197,8 @@ const ST={user:null,adminInfo:null,view:'athletes',data:null,nominas:null,inscri
   statsFilters:{ yearFrom:'', yearTo:'', sex:'', mod:'', div:'', club:'' },
   // Simulador del corte para el Nacional (Estadísticas → Corte Nacional)
   corte:{ modo:'cantidad', valor:10, agrupar:'cat_div_mod' },
+  // Rango de años propio del ranking sin repetir (manda sobre el filtro global)
+  glRankAnios:{ desde:'', hasta:'' },
   // Ranking de GL sin repetir atleta (Estadísticas → GL Points)
   glMin:0};
 window.ST=ST;
@@ -2979,9 +2981,26 @@ function _glTablaHtml(rows){
 // ═══════════════════════════════════════════
 const GL_RANK_TOPE=300;   // lo que se dibuja; el CSV se lleva todos
 
+// El ranking tiene su PROPIO rango de años, y manda por sobre el de los filtros
+// de arriba. Así se puede mirar una temporada acá sin mover el resto del panel:
+// los gráficos siguen mostrando lo que estaban mostrando.
+// El resto de los filtros —división, modalidad, sexo, club— sí se respetan.
+function _glRowsRank(){
+  const f=ST.statsFilters||{};
+  const r=ST.glRankAnios||{};
+  if(!r.desde&&!r.hasta)return _glRows();
+  const antes={desde:f.yearFrom,hasta:f.yearTo};
+  try{
+    f.yearFrom=r.desde||''; f.yearTo=r.hasta||'';
+    return _glRows();
+  } finally {
+    f.yearFrom=antes.desde; f.yearTo=antes.hasta;
+  }
+}
+
 function _glRankingAtletas(){
   const mejor={};
-  _glRows().forEach(r=>{
+  _glRowsRank().forEach(r=>{
     const quien=r.codigo||_hNom(r.nombre);
     if(!quien)return;
     if(!mejor[quien]||r.glp>mejor[quien].glp)mejor[quien]=r;
@@ -2994,9 +3013,14 @@ function renderGLRanking(){
   const todos=_glRankingAtletas();
   const lista=todos.filter(r=>r.glp>=min);
   const f=ST.statsFilters||{};
-  const anios=[...new Set(_glRows().map(r=>r.year))].sort();
+  const ra=ST.glRankAnios||{};
+  const anios=[...new Set(_glRowsRank().map(r=>r.year))].sort();
   const periodo=anios.length?(anios.length===1?anios[0]:anios[0]+'–'+anios[anios.length-1]):'—';
+  // Todos los años que existen, no solo los del filtro actual: si no, al elegir
+  // 2026 desaparecerían del selector los demás y no habría cómo volver.
+  const todosAnios=[...new Set(buildStatsRows().map(r=>r.year))].filter(Boolean).sort();
   const sel='background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;font-family:DM Sans';
+  const opt=(v,l,cur)=>`<option value="${v}" ${String(cur||'')===String(v)?'selected':''}>${l}</option>`;
   const cel='padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px';
   const th=(t,al='right')=>`<th style="${cel};text-align:${al};color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px">${t}</th>`;
   const filtroTxt=[f.div?'división '+f.div:'',f.mod?'modalidad '+f.mod:'',
@@ -3005,8 +3029,16 @@ function renderGLRanking(){
   return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px">
     <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:6px">
       <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--gold)">RANKING SIN REPETIR ATLETA</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
-        <span style="font-size:12px;color:var(--muted)">GL mínimo</span>
+      <div style="display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted)">Años</span>
+        <select style="${sel}" onchange="updGlRankAnio('desde',this.value)">
+          ${opt('','Desde…',ra.desde)}${todosAnios.map(y=>opt(y,y,ra.desde)).join('')}
+        </select>
+        <select style="${sel}" onchange="updGlRankAnio('hasta',this.value)">
+          ${opt('','Hasta…',ra.hasta)}${todosAnios.map(y=>opt(y,y,ra.hasta)).join('')}
+        </select>
+        ${(ra.desde||ra.hasta)?`<button onclick="updGlRankAnio('limpiar','')" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer">Todos los años</button>`:''}
+        <span style="font-size:12px;color:var(--muted);margin-left:6px">GL mínimo</span>
         <input type="number" min="0" max="150" step="0.5" value="${min}" style="${sel};width:90px"
           oninput="updGlMin(this.value)" onchange="updGlMin(this.value)">
         ${min>0?`<button onclick="updGlMin(0)" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer">Ver todos</button>`:''}
@@ -3041,6 +3073,19 @@ function renderGLRanking(){
       Se muestran los primeros ${GL_RANK_TOPE}. Los ${lista.length.toLocaleString()} van completos en el CSV.</div>`:''}`}
   </div>`;
 }
+
+window.updGlRankAnio=function(cual,val){
+  ST.glRankAnios=ST.glRankAnios||{desde:'',hasta:''};
+  if(cual==='limpiar'){ST.glRankAnios={desde:'',hasta:''};}
+  else{
+    ST.glRankAnios[cual]=val||'';
+    // Si quedan al revés, se acomodan solos en vez de mostrar una lista vacía.
+    const d=ST.glRankAnios.desde,h=ST.glRankAnios.hasta;
+    if(d&&h&&d>h){ if(cual==='desde')ST.glRankAnios.hasta=d; else ST.glRankAnios.desde=h; }
+  }
+  const cont=document.getElementById('glRankBox');
+  if(cont)cont.innerHTML=renderGLRanking();
+};
 
 window.updGlMin=function(v){
   ST.glMin=Math.max(0,parseFloat(v)||0);

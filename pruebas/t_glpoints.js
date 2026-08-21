@@ -37,12 +37,13 @@ function sacar(texto, nombre) {
 // El panel es un módulo ES y no se puede abrir sin Firebase, así que las
 // funciones se montan acá con los datos reales.
 const ST = { data: JSON.parse(fs.readFileSync(__dirname + '/../data.json', 'utf8')), statsFilters: {},
-  corte: { modo: 'cantidad', valor: 10, agrupar: 'cat_div_mod' }, glMin: 0 };
+  corte: { modo: 'cantidad', valor: 10, agrupar: 'cat_div_mod' }, glMin: 0,
+  glRankAnios: { desde: '', hasta: '' } };
 const GL_RANK_TOPE = 300;
 const esc = s => String(s == null ? '' : s);
 const GL_ORDEN_DIV = ['Sub-Junior', 'Junior', 'Open', 'Master I', 'Master II', 'Master III', 'Master IV', 'Universitario'];
 const FUNCS = ['_hNom', 'buildStatsRows', 'applyStatsFilters', '_glRows', '_glProm', '_glCuartil',
-  '_glMediana', '_glResumen', '_glTablaHtml', '_glDispersionHtml', '_glRankingAtletas',
+  '_glMediana', '_glResumen', '_glTablaHtml', '_glDispersionHtml', '_glRowsRank', '_glRankingAtletas',
   'renderGLRanking', '_corteTemporada', '_corteFilas', '_corteGrupos', '_corteDe',
   '_corteUnico', 'renderCorte', 'renderGL'];
 eval(FUNCS.map(n => sacar(adm, n)).join('\n'));
@@ -352,21 +353,68 @@ console.log('\n  Se puede preguntar por un mínimo, y por división');
   ST.glMin = guardadoMin; ST.statsFilters = guardado;
 }
 
-console.log('\n  El rango de años sale de los filtros de arriba');
+console.log('\n  El ranking tiene su propio rango de años');
 {
-  const guardado = ST.statsFilters;
-  ST.statsFilters = { yearFrom: '2026', yearTo: '2026' };
-  const soloUno = _glRankingAtletas();
-  ST.statsFilters = { yearFrom: '2025', yearTo: '2026' };
-  const dos = _glRankingAtletas();
-  ok(dos.length > soloUno.length,
-     '2025–2026 junta más gente que 2026 solo (' + dos.length + ' contra ' + soloUno.length + ')');
-  const claves = dos.map(r => r.codigo || _hNom(r.nombre));
-  ok(new Set(claves).size === claves.length,
-     'y juntando dos temporadas tampoco se repite nadie');
-  ok(_glRankingAtletas().every(r => r.year >= '2025' && r.year <= '2026'),
-     'todas las marcas son del rango pedido');
-  ST.statsFilters = guardado;
+  // Para poder mirar una temporada acá sin mover el resto del panel: los
+  // gráficos siguen mostrando lo que estaban mostrando.
+  const guardado = ST.statsFilters, guardadoRa = ST.glRankAnios;
+  ST.statsFilters = {}; ST.glRankAnios = { desde: '', hasta: '' };
+  const todos = _glRankingAtletas().length;
+
+  ST.glRankAnios = { desde: '2026', hasta: '2026' };
+  const uno = _glRankingAtletas();
+  ok(uno.length < todos, 'eligiendo 2026 quedan ' + uno.length + ' de ' + todos);
+  ok(uno.every(r => r.year === '2026'), 'y todas las marcas son de ese año');
+
+  ST.glRankAnios = { desde: '2024', hasta: '2026' };
+  const tres = _glRankingAtletas();
+  ok(tres.length > uno.length, '2024–2026 junta más: ' + tres.length);
+  const claves = tres.map(r => r.codigo || _hNom(r.nombre));
+  ok(new Set(claves).size === claves.length, 'y juntando tres temporadas nadie se repite');
+  ok(tres.every(r => r.year >= '2024' && r.year <= '2026'), 'ninguna marca se sale del rango');
+
+  ST.glRankAnios = { desde: '2026', hasta: '' };
+  ok(_glRankingAtletas().every(r => r.year >= '2026'), 'con solo "desde", corta por abajo');
+  ST.glRankAnios = { desde: '', hasta: '2020' };
+  ok(_glRankingAtletas().every(r => r.year <= '2020'), 'y con solo "hasta", por arriba');
+
+  console.log('\n    Y manda por sobre el filtro de años de arriba');
+  ST.statsFilters = { yearFrom: '2022', yearTo: '2022' };
+  ST.glRankAnios = { desde: '2026', hasta: '2026' };
+  const r = _glRankingAtletas();
+  ok(r.length > 0 && r.every(x => x.year === '2026'),
+     'con el filtro global en 2022 y el del ranking en 2026, manda el del ranking');
+  ok(ST.statsFilters.yearFrom === '2022' && ST.statsFilters.yearTo === '2022',
+     'y el filtro global queda intacto: no se le mueve al resto del panel');
+
+  console.log('\n    Pero los demás filtros sí se respetan');
+  ST.statsFilters = { div: 'Open', sex: 'F' };
+  ST.glRankAnios = { desde: '2026', hasta: '2026' };
+  const of = _glRankingAtletas();
+  ok(of.length > 0 && of.every(x => x.div === 'Open' && x.sexo === 'F' && x.year === '2026'),
+     'Open + mujeres + 2026: ' + of.length + ' atletas');
+
+  console.log('\n    Y un rango al revés no rompe nada');
+  ST.statsFilters = {};
+  ST.glRankAnios = { desde: '2026', hasta: '2020' };
+  let revento = false;
+  try { _glRankingAtletas(); renderGLRanking(); } catch (e) { revento = true; }
+  ok(!revento, 'no se cae');
+  ok(/Ninguno llega|0<\/b> atletas/.test(renderGLRanking()) || _glRankingAtletas().length === 0,
+     'simplemente no hay nadie en ese rango');
+
+  ST.glRankAnios = { desde: '2026', hasta: '2026' };
+  const html = renderGLRanking();
+  ok(/updGlRankAnio\('desde'/.test(html) && /updGlRankAnio\('hasta'/.test(html),
+     'los dos selectores están en la pantalla');
+  ok(/Todos los años/.test(html), 'con un botón para volver atrás');
+  // El selector ofrece TODOS los años, no solo los del filtro puesto: si no, al
+  // elegir 2026 desaparecerían los demás y no habría cómo volver.
+  const anios = [...new Set(buildStatsRows().map(x => x.year))].filter(Boolean);
+  ok(anios.every(y => html.indexOf('value="' + y + '"') > 0),
+     'y ofrece los ' + anios.length + ' años que existen, no solo el elegido');
+
+  ST.statsFilters = guardado; ST.glRankAnios = guardadoRa;
 }
 
 console.log('\nEl simulador del corte para el Nacional');
