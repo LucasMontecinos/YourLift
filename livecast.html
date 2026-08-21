@@ -434,6 +434,8 @@ async function initFB(){
         if(DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
           DATA.event.recordsEnabled=recordsEnabled;
           DATA.event.logoUrl=e.logoUrl||'';
+          // Qué logo va en el barrido de transición. Por defecto, el de YourLift.
+          DATA.event.barridoLogo=e.barridoLogo==='campeonato'?'campeonato':'yourlift';
         }
       });
       if(Object.keys(evs).length)LIVE_EVENTS=evs;
@@ -6181,12 +6183,10 @@ function _btVideoTeardown(){
 }
 // El logo que aparece en el barrido de transición.
 //
-// Si el campeonato subió el suyo, va el suyo: es el que la gente asocia con el
-// evento que está mirando, y el mismo que ya sale en el scoreboard y en la tabla
-// actual. Si no subió ninguno, queda el de YourLift.
-//
-// El logo del campeonato se sube en Admin → Campeonatos, o desde el propio
-// control en vivo; borrarlo de ahí devuelve el de YourLift sin tocar nada más.
+// Por defecto va el de YourLift. El del campeonato se usa solo si alguien lo
+// pidió a propósito, con el interruptor que está junto al logo en Control TX:
+// así un campeonato que subió su logo para el scoreboard no se lleva por delante
+// la marca del barrido sin que nadie lo haya decidido.
 //
 // Se usa el archivo grande de YourLift porque este barrido es a pantalla
 // completa y en OBS se escala todavía más: el chico se veía con los bordes rotos.
@@ -6194,7 +6194,8 @@ function _btVideoTeardown(){
 // transmisión— cae al de YourLift en vez de dejar el barrido pelado.
 function _barridoLogoImg(){
   const sombra='filter:drop-shadow(0 8px 24px rgba(0,0,0,.6))';
-  const propio=(DATA.event&&DATA.event.logoUrl)||'';
+  const ev=DATA.event||{};
+  const propio=(ev.barridoLogo==='campeonato'&&ev.logoUrl)?ev.logoUrl:'';
   if(propio){
     // Se deja más ancho que alto: los logos de campeonato suelen ser apaisados,
     // y encajonarlos en un cuadrado los dejaba diminutos.
@@ -8738,10 +8739,31 @@ window.dirUploadChampionshipLogo=async function(){
     const f=inp.files&&inp.files[0];if(!f)return;
     const btn=document.getElementById('dirChampLogoBtn');if(btn)btn.textContent='Subiendo...';
     try{
+      // Si el logo trae un fondo liso alrededor —el caso normal cuando llega como
+      // JPG— se ofrece sacarlo. Sobre el barrido o el scoreboard, ese cuadrado se
+      // ve encima de todo.
+      let subir=f, nombre=f.name, tipo=f.type;
+      if(!/svg/i.test(f.type)){
+        try{
+          if(btn)btn.textContent='Revisando…';
+          const sin=await _logoSinFondo(f);
+          if(sin){
+            const pct=Math.round(sin.quitados/sin.total*100);
+            const col='rgb('+sin.fondo.r+', '+sin.fondo.g+', '+sin.fondo.b+')';
+            if(confirm('Este logo tiene un fondo liso ('+col+') que ocupa el '+pct+'% de la imagen.\n\n'
+              +'¿Quitarlo y dejarlo transparente?\n\nSe recomienda: sobre el barrido y el scoreboard, '
+              +'ese fondo se ve como un cuadrado encima de la transmisión.')){
+              subir=sin.blob; tipo='image/png';
+              nombre=f.name.replace(/\.[^.]+$/,'')+'_sinfondo.png';
+            }
+          }
+        }catch(e){ console.warn('[logo] no se pudo revisar el fondo',e); }
+      }
+      if(btn)btn.textContent='Subiendo...';
       const {ref,uploadBytes,getDownloadURL}=window._fbSt;
       const safeId=evId.replace(/[^a-zA-Z0-9_]/g,'_');
-      const r=ref(window._fbStInst,'logos/event/'+safeId+'_'+f.name);
-      await uploadBytes(r,f,{contentType:f.type});
+      const r=ref(window._fbStInst,'logos/event/'+safeId+'_'+nombre);
+      await uploadBytes(r,subir,{contentType:tipo});
       const url=await getDownloadURL(r);
       // Guardar en el doc del evento
       await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{logoUrl:url});
@@ -8755,6 +8777,79 @@ window.dirUploadChampionshipLogo=async function(){
   };
   inp.click();
 };
+// Qué logo va en el barrido. Se guarda con el campeonato, así que queda elegido
+// para la próxima vez sin tener que acordarse.
+window.dirSetBarridoLogo=async function(cual){
+  if(!DATA.event){alert('Primero elige un evento');return;}
+  const val=cual==='campeonato'?'campeonato':'yourlift';
+  DATA.event.barridoLogo=val;
+  R();
+  try{
+    const evId=DATA.event.id||DATA.event.name;
+    await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{barridoLogo:val});
+    if(typeof syncToFB==='function')await syncToFB();   // que los widgets de OBS lo vean ya
+  }catch(e){ console.warn('[barrido] no se pudo guardar la elección',e); }
+};
+
+// ── Quitar el fondo de un logo ─────────────────────────────
+//
+// Los logos de campeonato llegan casi siempre como un JPG con fondo liso —negro
+// o blanco— alrededor del dibujo. Puesto sobre el barrido o sobre el scoreboard,
+// ese cuadrado se ve encima de todo y arruina la transmisión.
+//
+// Se rellena desde los bordes hacia adentro mientras el color se parezca al del
+// fondo, y esos pixeles quedan transparentes. Es a propósito un relleno desde el
+// borde y no "borrar todo lo que sea negro": así los contornos negros de adentro
+// del dibujo —que en estos logos son casi todos— no se tocan.
+function _fondoUniforme(datos,w,h){
+  const px=(x,y)=>{const i=(y*w+x)*4;return [datos[i],datos[i+1],datos[i+2],datos[i+3]];};
+  const esquinas=[px(0,0),px(w-1,0),px(0,h-1),px(w-1,h-1)];
+  if(esquinas.some(c=>c[3]<250))return null;          // ya tiene transparencia
+  const [r,g,b]=esquinas[0];
+  const parecidas=esquinas.every(c=>Math.abs(c[0]-r)+Math.abs(c[1]-g)+Math.abs(c[2]-b)<40);
+  return parecidas?{r,g,b}:null;
+}
+function _quitarFondo(datos,w,h,fondo,tol){
+  const dentro=new Uint8Array(w*h);
+  const pila=[];
+  const cerca=i=>Math.abs(datos[i]-fondo.r)+Math.abs(datos[i+1]-fondo.g)+Math.abs(datos[i+2]-fondo.b)<=tol;
+  const meter=(x,y)=>{
+    if(x<0||y<0||x>=w||y>=h)return;
+    const p=y*w+x;
+    if(dentro[p])return;
+    if(!cerca(p*4))return;
+    dentro[p]=1;pila.push(p);
+  };
+  for(let x=0;x<w;x++){meter(x,0);meter(x,h-1);}
+  for(let y=0;y<h;y++){meter(0,y);meter(w-1,y);}
+  while(pila.length){
+    const p=pila.pop(), x=p%w, y=(p-x)/w;
+    meter(x+1,y);meter(x-1,y);meter(x,y+1);meter(x,y-1);
+  }
+  let quitados=0;
+  for(let p=0;p<w*h;p++)if(dentro[p]){datos[p*4+3]=0;quitados++;}
+  return quitados;
+}
+// Devuelve un PNG sin el fondo, o null si no había un fondo liso que quitar.
+async function _logoSinFondo(file){
+  const bmp=await createImageBitmap(file);
+  const c=document.createElement('canvas');
+  c.width=bmp.width;c.height=bmp.height;
+  const ctx=c.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(bmp,0,0);
+  const img=ctx.getImageData(0,0,c.width,c.height);
+  const fondo=_fondoUniforme(img.data,c.width,c.height);
+  if(!fondo)return null;
+  const quitados=_quitarFondo(img.data,c.width,c.height,fondo,60);
+  // Si casi no sacó nada, no era un fondo; y si se llevó casi todo, algo salió
+  // mal y es mejor dejar el original que subir una imagen en blanco.
+  const total=c.width*c.height;
+  if(quitados<total*0.02||quitados>total*0.97)return null;
+  ctx.putImageData(img,0,0);
+  const blob=await new Promise(res=>c.toBlob(res,'image/png'));
+  return blob?{blob,fondo,quitados,total}:null;
+}
+
 window.dirClearChampionshipLogo=async function(){
   if(!DATA.event)return;
   if(!confirm('¿Quitar el logo del campeonato?'))return;
@@ -9442,12 +9537,35 @@ function renderDirector(){
       +(champLogo?'<img src="'+champLogo+'" style="max-width:100%;max-height:100%;object-fit:contain">':'<span style="font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:1px;text-align:center;line-height:1.2">SIN<br>LOGO</span>')
       +'</div>';
     h+='<div><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">Logo del campeonato</div>';
-    h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Aparece en el Perfil, el Scoreboard, la Tabla Actual y en el <b>barrido de transición</b>. Si no hay ninguno, en el barrido va el de YourLift. Recomendado: PNG transparente, 512×512 o más — en el barrido se ve a pantalla completa.</div></div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Aparece en el Perfil, el Scoreboard y la Tabla Actual. Recomendado: PNG con fondo transparente, 512×512 o más.</div></div>';
     h+='</div>';
     h+='<div style="display:flex;gap:6px">';
     h+='<button id="dirChampLogoBtn" class="btn btn-o" onclick="dirUploadChampionshipLogo()" style="padding:10px 16px;font-size:12px;font-family:Oswald;letter-spacing:1.5px">⬆ '+(champLogo?'Cambiar logo':'Subir logo')+'</button>';
     if(champLogo) h+='<button class="btn" onclick="dirClearChampionshipLogo()" style="padding:10px 14px;font-size:12px;background:transparent;border:1px solid var(--red);color:var(--red);font-family:Oswald;letter-spacing:1.5px">✕ Quitar</button>';
-    h+='</div></div></div>';
+    h+='</div></div>';
+    // Qué logo va en el barrido de transición. Por defecto el de YourLift: que un
+    // campeonato haya subido su logo para el scoreboard no significa que quiera
+    // reemplazar la marca del barrido, así que se pide a propósito.
+    {
+      const usaCamp=(DATA.event&&DATA.event.barridoLogo==='campeonato');
+      h+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(212,168,67,.25)">';
+      h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:1px;color:var(--muted);margin-bottom:8px">LOGO EN EL BARRIDO DE TRANSICIÓN</div>';
+      h+='<div style="display:flex;gap:8px;flex-wrap:wrap">';
+      const bot=(val,txt,activo)=>'<button onclick="dirSetBarridoLogo(\''+val+'\')" style="padding:8px 16px;border-radius:8px;border:2px solid '
+        +(activo?'var(--gold)':'var(--border)')+';background:'+(activo?'rgba(212,168,67,.15)':'transparent')+';color:'
+        +(activo?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">'+txt+'</button>';
+      h+=bot('yourlift','YOURLIFT',!usaCamp);
+      h+=bot('campeonato','ESTE CAMPEONATO',usaCamp);
+      h+='</div>';
+      h+='<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">'
+        +(usaCamp
+          ? (champLogo?'En el barrido va el logo de este campeonato. Si no cargara, sale el de YourLift.'
+                      :'<b style="color:var(--red)">Está elegido el del campeonato pero no hay ninguno subido</b>, así que en el barrido sigue saliendo el de YourLift.')
+          : 'En el barrido va el logo de YourLift. Es lo que viene por defecto.')
+        +' En el barrido se ve a pantalla completa: conviene un archivo grande.</div>';
+      h+='</div>';
+    }
+    h+='</div>';
   }
   // Componentes — TOGGLES (1 botón / 1 tecla por componente, listo para Stream Deck)
   h+='<div style="display:grid;gap:12px">';
