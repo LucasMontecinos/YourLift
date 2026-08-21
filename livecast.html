@@ -6179,6 +6179,32 @@ function _btVideoTeardown(){
   _btVideoBgEl=null;_btVideoFgEl=null;
   _btVideoIdx=0;_btVideoSrcsKey='';
 }
+// El logo que aparece en el barrido de transición.
+//
+// Si el campeonato subió el suyo, va el suyo: es el que la gente asocia con el
+// evento que está mirando, y el mismo que ya sale en el scoreboard y en la tabla
+// actual. Si no subió ninguno, queda el de YourLift.
+//
+// El logo del campeonato se sube en Admin → Campeonatos, o desde el propio
+// control en vivo; borrarlo de ahí devuelve el de YourLift sin tocar nada más.
+//
+// Se usa el archivo grande de YourLift porque este barrido es a pantalla
+// completa y en OBS se escala todavía más: el chico se veía con los bordes rotos.
+// Y si el logo del campeonato no carga —un enlace vencido en medio de la
+// transmisión— cae al de YourLift en vez de dejar el barrido pelado.
+function _barridoLogoImg(){
+  const sombra='filter:drop-shadow(0 8px 24px rgba(0,0,0,.6))';
+  const propio=(DATA.event&&DATA.event.logoUrl)||'';
+  if(propio){
+    // Se deja más ancho que alto: los logos de campeonato suelen ser apaisados,
+    // y encajonarlos en un cuadrado los dejaba diminutos.
+    return '<img src="'+propio+'" alt="" style="max-width:min(46vw,520px);max-height:min(34vh,260px);object-fit:contain;'+sombra+'"'
+      +' onerror="this.onerror=null;this.src=\'yourlift_logo_hd.png\'">';
+  }
+  return '<img src="yourlift_logo_hd.png" alt="" style="max-width:240px;max-height:240px;'+sombra+'"'
+    +' onerror="this.onerror=null;this.src=\'YourLift_logo.png\'">';
+}
+
 function _startBarrido(dir){
   if(_txBarridoEl&&_txBarridoEl.parentNode)_txBarridoEl.parentNode.removeChild(_txBarridoEl);
   _txBarridoEl=document.createElement('div');
@@ -6191,9 +6217,7 @@ function _startBarrido(dir){
     +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#ffffff;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .08s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
     +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#0a1f44;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .16s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
     +'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;animation:txLogoBeat '+dur+'s ease-out forwards;opacity:0">'
-      // Va el archivo grande: este barrido es a pantalla completa y en OBS se
-      // escala todavía más, así que el logo chico se veía con los bordes rotos.
-      +'<img src="yourlift_logo_hd.png" style="max-width:240px;max-height:240px;filter:drop-shadow(0 8px 24px rgba(0,0,0,.6))" onerror="this.onerror=null;this.src=\'YourLift_logo.png\'">'
+      +_barridoLogoImg()
     +'</div>';
   document.body.appendChild(_txBarridoEl);
   setTimeout(()=>{if(_txBarridoEl&&_txBarridoEl.parentNode){_txBarridoEl.parentNode.removeChild(_txBarridoEl);_txBarridoEl=null;}},TX_ANIM_MS.fullscreen+200);
@@ -8704,10 +8728,10 @@ window.dirBtUploadVideo=async function(){
   inp.click();
 };
 // Logo DEL CAMPEONATO (no del break timer): persiste en Firestore eventos/{evId}.logoUrl
-// y se muestra en scoreboard, perfil y tabla actual.
+// y se muestra en scoreboard, perfil, tabla actual y en el barrido de transición.
 window.dirUploadChampionshipLogo=async function(){
   if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía');return;}
-  if(!DATA.event){alert('Primero elegí un evento');return;}
+  if(!DATA.event){alert('Primero elige un evento');return;}
   const evId = DATA.event.id || DATA.event.name;
   const inp=document.createElement('input');inp.type='file';inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
   inp.onchange=async()=>{
@@ -9418,7 +9442,7 @@ function renderDirector(){
       +(champLogo?'<img src="'+champLogo+'" style="max-width:100%;max-height:100%;object-fit:contain">':'<span style="font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:1px;text-align:center;line-height:1.2">SIN<br>LOGO</span>')
       +'</div>';
     h+='<div><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">Logo del campeonato</div>';
-    h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Aparece en el Perfil, Scoreboard y Tabla Actual. Recomendado: PNG transparente, 256×256+.</div></div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Aparece en el Perfil, el Scoreboard, la Tabla Actual y en el <b>barrido de transición</b>. Si no hay ninguno, en el barrido va el de YourLift. Recomendado: PNG transparente, 512×512 o más — en el barrido se ve a pantalla completa.</div></div>';
     h+='</div>';
     h+='<div style="display:flex;gap:6px">';
     h+='<button id="dirChampLogoBtn" class="btn btn-o" onclick="dirUploadChampionshipLogo()" style="padding:10px 16px;font-size:12px;font-family:Oswald;letter-spacing:1.5px">⬆ '+(champLogo?'Cambiar logo':'Subir logo')+'</button>';
