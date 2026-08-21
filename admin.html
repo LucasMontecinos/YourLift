@@ -3083,8 +3083,32 @@ window.exportGlRankingCSV=function(){
 // sobre todo el historial, que no es lo que se quiere para clasificar a una
 // temporada: por eso la pantalla dice siempre sobre qué años está trabajando.
 // ═══════════════════════════════════════════
-function _corteGrupos(){
+// Qué temporada se está cortando.
+//
+// Por defecto, la del año en curso: un mínimo para clasificar al Nacional se
+// saca de lo que se corrió ESTE año, no de todo el historial. Si el operador
+// eligió un rango arriba, manda lo que eligió.
+//
+// Si de la temporada en curso todavía no hay nada cargado —en enero, por
+// ejemplo— se usa la última que sí tenga, y la pantalla lo dice: es mejor eso
+// que una tabla vacía sin explicación.
+function _corteTemporada(){
+  const f=ST.statsFilters||{};
+  if(f.yearFrom||f.yearTo)return {anio:null,fuente:'filtro'};
+  const enCurso=String(new Date().getFullYear());
+  const anios=[...new Set(_glRows().map(r=>r.year))].sort();
+  if(anios.indexOf(enCurso)>=0)return {anio:enCurso,fuente:'curso'};
+  const ultima=anios[anios.length-1]||null;
+  return {anio:ultima,fuente:ultima?'ultima':'vacio'};
+}
+function _corteFilas(){
+  const t=_corteTemporada();
   const rows=_glRows();
+  return t.anio ? rows.filter(r=>r.year===t.anio) : rows;
+}
+
+function _corteGrupos(){
+  const rows=_corteFilas();
   const modo=(ST.corte&&ST.corte.agrupar)||'cat_div_mod';
   const sexLbl=s=>s==='F'?'♀':s==='M'?'♂':'—';
   const clave=r=>{
@@ -3145,7 +3169,8 @@ function _corteUnico(grupos,totalObjetivo){
 function renderCorte(){
   const c=ST.corte||{modo:'cantidad',valor:10,agrupar:'cat_div_mod'};
   const grupos=_corteGrupos();
-  const rows=_glRows();
+  const rows=_corteFilas();
+  const temp=_corteTemporada();
   const ks='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;text-align:center';
   const sel='background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;font-family:DM Sans';
   const anios=[...new Set(rows.map(r=>r.year))].sort();
@@ -3186,9 +3211,11 @@ function renderCorte(){
 
   return controles+`
   <div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.3);border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:12px;color:var(--text);line-height:1.6">
-    Calculado sobre <b>${periodo}</b> · ${totalAtl.toLocaleString()} atletas distintos en ${grupos.length} grupos.
-    Cada atleta cuenta una vez, con su mejor GL del período.
-    ${anios.length>2?`<b style="color:#f59e0b">Estás mirando ${anios.length} temporadas juntas.</b> Para un corte de verdad, filtra arriba la temporada que corresponda.`:''}
+    Calculado sobre la temporada <b>${periodo}</b>${temp.fuente==='curso'?' <span style="color:var(--muted)">(el año en curso)</span>':''}
+    · ${totalAtl.toLocaleString()} atletas distintos en ${grupos.length} grupos.
+    Cada atleta cuenta una vez, con su mejor GL de la temporada.
+    ${temp.fuente==='ultima'?`<br><b style="color:#f59e0b">De ${new Date().getFullYear()} todavía no hay resultados cargados</b>, así que se está usando ${temp.anio}, la última temporada con datos.`:''}
+    ${temp.fuente==='filtro'?`<br><b style="color:#f59e0b">Estás usando el filtro de años de arriba.</b> Por defecto el corte es de la temporada en curso; para volver a eso, deja los años en blanco.${anios.length>1?` Ahora hay ${anios.length} temporadas juntas, y un corte así no sirve para clasificar.`:''}`:''}
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:20px">
@@ -3252,7 +3279,8 @@ window.exportCorteCSV=function(){
   const blob=new Blob([filas.join('\n')],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;
-  a.download='yourlift_corte_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  const t=_corteTemporada();
+  a.download='yourlift_corte_'+(t.anio||'filtro')+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
   showToast('Corte exportado: '+grupos.length+' grupos');
 };

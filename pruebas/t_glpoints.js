@@ -43,7 +43,8 @@ const esc = s => String(s == null ? '' : s);
 const GL_ORDEN_DIV = ['Sub-Junior', 'Junior', 'Open', 'Master I', 'Master II', 'Master III', 'Master IV', 'Universitario'];
 const FUNCS = ['_hNom', 'buildStatsRows', 'applyStatsFilters', '_glRows', '_glProm', '_glCuartil',
   '_glMediana', '_glResumen', '_glTablaHtml', '_glDispersionHtml', '_glRankingAtletas',
-  'renderGLRanking', '_corteGrupos', '_corteDe', '_corteUnico', 'renderCorte', 'renderGL'];
+  'renderGLRanking', '_corteTemporada', '_corteFilas', '_corteGrupos', '_corteDe',
+  '_corteUnico', 'renderCorte', 'renderGL'];
 eval(FUNCS.map(n => sacar(adm, n)).join('\n'));
 
 const todas = applyStatsFilters(buildStatsRows());
@@ -371,7 +372,7 @@ console.log('\n  El rango de años sale de los filtros de arriba');
 console.log('\nEl simulador del corte para el Nacional');
 {
   const guardado = ST.statsFilters, guardadoCorte = ST.corte;
-  ST.statsFilters = { yearFrom: '2026', yearTo: '2026' };
+  ST.statsFilters = {};              // así se abre: sin tocar nada
   ST.corte = { modo: 'cantidad', valor: 10, agrupar: 'cat' };
   const grupos = _corteGrupos();
   ok(grupos.length > 5, 'arma los grupos: ' + grupos.length + ' categorías');
@@ -413,7 +414,7 @@ console.log('\nEl simulador del corte para el Nacional');
 
   const html = renderCorte();
   ok(/EL MÍNIMO DE CADA GRUPO/.test(html), 'la tabla está');
-  ok(/Calculado sobre <b>2026<\/b>/.test(html), 'y dice sobre qué período está calculando');
+  ok(/Calculado sobre la temporada <b>\d{4}<\/b>/.test(html), 'y dice sobre qué temporada está calculando');
   ok(/Cada atleta cuenta una vez/.test(html), 'y que no se cuentan resultados repetidos');
   ok(/updCorte\('modo'/.test(html) && /updCorte\('valor'/.test(html) && /updCorte\('agrupar'/.test(html),
      'los tres controles se pueden mover');
@@ -422,16 +423,34 @@ console.log('\nEl simulador del corte para el Nacional');
   ST.statsFilters = guardado; ST.corte = guardadoCorte;
 }
 
-console.log('\n  Y avisa cuando se está mirando más de una temporada');
+console.log('\n  El corte es de la temporada en curso, no de todo el historial');
 {
+  // Un mínimo para clasificar al Nacional se saca de lo que se corrió ESTE año.
+  // Antes, al abrir la pestaña sin tocar nada, calculaba sobre todo el historial
+  // —diez temporadas juntas— y los mínimos no querían decir nada.
   const guardado = ST.statsFilters, guardadoCorte = ST.corte;
   ST.corte = { modo: 'cantidad', valor: 10, agrupar: 'cat' };
   ST.statsFilters = {};
-  ok(/Estás mirando \d+ temporadas juntas/.test(renderCorte()),
-     'sin filtrar el año, lo advierte — un corte sobre todo el historial no sirve');
-  ST.statsFilters = { yearFrom: '2026', yearTo: '2026' };
-  ok(!/Estás mirando \d+ temporadas juntas/.test(renderCorte()),
-     'y filtrado a una temporada, no molesta');
+  const t = _corteTemporada();
+  const enCurso = String(new Date().getFullYear());
+  ok(t.anio === enCurso || t.fuente === 'ultima',
+     'al abrirla toma ' + t.anio + (t.fuente === 'curso' ? ', el año en curso' : ', la última con datos'));
+  const anios = [...new Set(_corteFilas().map(r => r.year))];
+  ok(anios.length === 1 && anios[0] === t.anio,
+     'y solo entran resultados de esa temporada (' + anios.join(', ') + ')');
+  ok(_corteFilas().length < _glRows().length,
+     'no todo el historial: ' + _corteFilas().length + ' de ' + _glRows().length + ' resultados');
+  const html = renderCorte();
+  ok(!/temporadas juntas/.test(html), 'así que ya no hace falta advertir nada');
+  if (t.fuente === 'curso') ok(/\(el año en curso\)/.test(html), 'y lo dice en pantalla');
+  else ok(/todavía no hay resultados cargados/.test(html), 'o avisa que usó la última con datos');
+
+  // Si el operador pone un rango a mano, manda él — pero se le avisa.
+  ST.statsFilters = { yearFrom: '2025', yearTo: '2026' };
+  ok(_corteTemporada().fuente === 'filtro', 'con el filtro puesto, manda el filtro');
+  ok([...new Set(_corteFilas().map(r => r.year))].length === 2, 'y entran las dos temporadas');
+  ok(/Estás usando el filtro de años/.test(renderCorte()),
+     'avisando que se salió de la temporada en curso');
   ST.statsFilters = guardado; ST.corte = guardadoCorte;
 }
 
