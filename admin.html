@@ -1737,6 +1737,7 @@ function render(){
     const _st=ST.statsTab||'deporte';
     if(_st==='web') setTimeout(loadWebAnalytics,0);
     else if(_st==='demografia') setTimeout(initDemoCharts,0);
+    else if(_st==='gl') setTimeout(initGLCharts,0);
     else setTimeout(initStatsCharts,0);
   }
   if(ST.view==='publisher')setTimeout(()=>{try{pubUpdatePreview()}catch(e){}},50);
@@ -1801,9 +1802,13 @@ function buildStatsRows(){
       if(!year||yn<2016||yn>2030)return;
       const sr=(c.sexo||'').toLowerCase();
       const sexo=sr.includes('mujer')||sr.includes('f')?'F':sr.includes('hombre')||sr.includes('m')?'M':'';
-      const base={codigo:a.codigo,club:a.club||'',year,yn,sexo,
+      // Los GL points vienen del resultado. Se guardan aparte del total porque
+      // son la única medida que permite comparar entre sexos, divisiones de edad y
+      // modalidades: los kilos crudos no se pueden comparar entre categorías.
+      const base={codigo:a.codigo,nombre:a.nombre||'',club:a.club||'',year,yn,sexo,
         cat:normCat(c.categoria),div:normDiv(c.division),
-        age:by>0?yn-by:null,total:parseFloat(c.resultado?.total)||0};
+        age:by>0?yn-by:null,total:parseFloat(c.resultado?.total)||0,
+        glp:parseFloat(c.resultado?.glp)||0};
       normMods(c.modalidad).forEach(mod=>rows.push({...base,mod}));
     });
   });
@@ -1843,12 +1848,12 @@ window.clearStatsFilters = function(){
 
 window.exportStatsCSV = function(){
   const rows = applyStatsFilters(buildStatsRows());
-  const headers = ['codigo','club','year','sexo','categoria','division','modalidad','edad','total_kg'];
+  const headers = ['codigo','nombre','club','year','sexo','categoria','division','modalidad','edad','total_kg','gl_points'];
   const csv = [headers.join(',')];
   rows.forEach(r=>{
     csv.push([
-      r.codigo, `"${(r.club||'').replace(/"/g,'""')}"`, r.year, r.sexo,
-      r.cat, r.div, r.mod, r.age||'', r.total||''
+      r.codigo, `"${(r.nombre||'').replace(/"/g,'""')}"`, `"${(r.club||'').replace(/"/g,'""')}"`, r.year, r.sexo,
+      r.cat, r.div, r.mod, r.age||'', r.total||'', r.glp||''
     ].join(','));
   });
   const blob = new Blob([csv.join('\n')], {type:'text/csv;charset=utf-8'});
@@ -2367,11 +2372,14 @@ function renderStats(){
   return `<div class="h1">Estadísticas</div>
     <div style="display:flex;gap:10px;margin:14px 0 20px">
       ${tabBtn('deporte','DEPORTE')}
+      ${tabBtn('gl','GL POINTS')}
       ${tabBtn('demografia','DEMOGRAFÍA')}
       ${tabBtn('web','TRÁFICO WEB')}
     </div>
     ${tab==='web'
       ? `<div id="statsWebContent"><div style="padding:40px;text-align:center;color:var(--muted)">Cargando analytics…</div></div>`
+      : tab==='gl'
+      ? `<p class="subtitle">Los GL points son lo único que se puede comparar entre sexos, divisiones de edad y modalidades · usa los mismos filtros</p><div id="statsContent">${renderGL()}</div>`
       : tab==='demografia'
       ? `<p class="subtitle">Base completa de atletas · calculado en vivo desde data.json</p><div id="statsContent">${renderDemografia()}</div>`
       : `<p class="subtitle">Dashboard interactivo · Filtros globales · Export para Power BI</p><div id="statsContent">${renderStatsContent()}</div>`}`;
@@ -2763,6 +2771,200 @@ function renderStatsContent(){
     ${card('EDAD PROMEDIO POR AÑO','chartEdad')}
     ${card('MODALIDAD POR AÑO','chartMod')}
   </div>`;
+}
+
+// ═══════════════════════════════════════════
+// GL POINTS
+//
+// Los kilos crudos no se pueden comparar entre una mujer de -52 y un hombre de
+// -120, ni entre un Sub-Junior y un Master. Los GL points sí: es el coeficiente
+// que la IPF usa justo para eso. Por eso todas las comparativas de acá van en GL
+// y no en kilos.
+//
+// Solo entran los resultados que traen GL. Un resultado sin GL no es un cero: es
+// un dato que no tenemos, y meterlo como cero hundiría los promedios.
+// ═══════════════════════════════════════════
+const GL_ORDEN_DIV=['Sub-Junior','Junior','Open','Master I','Master II','Master III','Master IV','Universitario'];
+function _glRows(){ return applyStatsFilters(buildStatsRows()).filter(r=>r.glp>0); }
+function _glProm(arr){ return arr.length ? arr.reduce((s,r)=>s+r.glp,0)/arr.length : 0; }
+function _glMediana(arr){
+  if(!arr.length)return 0;
+  const v=arr.map(r=>r.glp).sort((a,b)=>a-b), m=Math.floor(v.length/2);
+  return v.length%2 ? v[m] : (v[m-1]+v[m])/2;
+}
+
+function renderGL(){
+  const rows=_glRows();
+  const todas=applyStatsFilters(buildStatsRows());
+  const sinGl=todas.length-rows.length;
+  const ks='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;text-align:center';
+  const card=(t,id,h='300px',sub='')=>`<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted);margin-bottom:${sub?'4':'14'}px">${t}</div>
+    ${sub?`<div style="font-size:10px;color:var(--muted);margin-bottom:12px;opacity:.8">${sub}</div>`:''}
+    <div style="position:relative;height:${h}"><canvas id="${id}"></canvas></div></div>`;
+
+  if(!rows.length){
+    return `<div style="${ks};padding:40px">Ningún resultado con GL points en este filtro.
+      ${sinGl?`<div style="font-size:12px;color:var(--muted);margin-top:8px">Hay ${sinGl.toLocaleString()} participaciones, pero ninguna trae GL cargado.</div>`:''}</div>`;
+  }
+
+  const mejor=rows.reduce((a,b)=>b.glp>a.glp?b:a);
+  const kpi=(v,l,c,extra='')=>`<div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:${c}">${v}</div>
+    <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">${l}</div>${extra}</div>`;
+
+  return `
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:20px">
+    ${kpi(rows.length.toLocaleString(),'RESULTADOS CON GL','var(--gold)',
+      sinGl?`<div style="color:var(--muted);font-size:9px;margin-top:2px">${sinGl.toLocaleString()} sin GL cargado, quedan fuera</div>`:'')}
+    ${kpi(_glProm(rows).toFixed(1),'GL PROMEDIO','#3b82f6')}
+    ${kpi(_glMediana(rows).toFixed(1),'GL MEDIANA','#a78bfa',
+      '<div style="color:var(--muted);font-size:9px;margin-top:2px">la mitad está por encima</div>')}
+    ${kpi(mejor.glp.toFixed(1),'MEJOR GL','#22c55e',
+      `<div style="color:var(--muted);font-size:9px;margin-top:2px">${esc(mejor.nombre||mejor.codigo||'')} · ${esc(mejor.year)}</div>`)}
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    ${card('GL PROMEDIO POR AÑO — HOMBRES vs MUJERES','glAnioSexo','300px',
+      'Los kilos no se pueden comparar entre sexos; el GL sí. Acá se ve si la brecha se abre o se cierra.')}
+    ${card('CÓMO SE REPARTEN LOS GL','glDist','300px',
+      'Cuánta gente hay en cada tramo de 10 puntos, apilando hombres y mujeres.')}
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    ${card('GL PROMEDIO POR DIVISIÓN DE EDAD','glDiv','320px',
+      'Sub-Junior, Junior, Open y los Master, cada uno con hombres y mujeres por separado.')}
+    ${card('GL PROMEDIO POR MODALIDAD','glMod','320px',
+      'Classic, Equipado y Only Bench. Ojo con los promedios de modalidades con pocos resultados: la tabla de más abajo dice cuántos hay detrás de cada uno.')}
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    ${card('LAS DIVISIONES, AÑO A AÑO','glDivAnio','320px',
+      'Sirve para ver si una división está subiendo de nivel o si fue un año suelto.')}
+    ${card('MODALIDAD POR DIVISIÓN','glModDiv','320px',
+      'Cruce de las dos: en qué división se nota más la diferencia entre modalidades.')}
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:24px">
+    ${card('LOS 20 MEJORES GL DEL FILTRO','glTop','520px',
+      'Cada atleta aparece una sola vez, con su mejor marca.')}
+  </div>
+  ${_glTablaHtml(rows)}`;
+}
+
+// La tabla con los números atrás de los gráficos: un gráfico se mira, pero para
+// llevar un dato a una reunión hace falta el número escrito.
+function _glTablaHtml(rows){
+  const divs=GL_ORDEN_DIV.filter(d=>rows.some(r=>r.div===d));
+  const cel='padding:7px 10px;border-bottom:1px solid var(--border);font-size:12px';
+  const fila=(d)=>{
+    const enDiv=rows.filter(r=>r.div===d);
+    const m=enDiv.filter(r=>r.sexo==='M'), f=enDiv.filter(r=>r.sexo==='F');
+    const dif=(m.length&&f.length)?(_glProm(m)-_glProm(f)):null;
+    return `<tr>
+      <td style="${cel};color:var(--text);font-family:Oswald;letter-spacing:1px">${esc(d)}</td>
+      <td style="${cel};text-align:right">${enDiv.length}</td>
+      <td style="${cel};text-align:right;color:#3b82f6">${m.length?_glProm(m).toFixed(1):'—'}<span style="color:var(--muted);font-size:10px"> (${m.length})</span></td>
+      <td style="${cel};text-align:right;color:#ec4899">${f.length?_glProm(f).toFixed(1):'—'}<span style="color:var(--muted);font-size:10px"> (${f.length})</span></td>
+      <td style="${cel};text-align:right;color:var(--muted)">${dif===null?'—':(dif>0?'+':'')+dif.toFixed(1)}</td>
+      <td style="${cel};text-align:right;color:#22c55e">${enDiv.length?Math.max(...enDiv.map(r=>r.glp)).toFixed(1):'—'}</td>
+    </tr>`;
+  };
+  return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px">
+    <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted);margin-bottom:4px">LOS NÚMEROS, POR DIVISIÓN</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:12px;opacity:.8">Entre paréntesis, cuántos resultados hay detrás de cada promedio: con tres o cuatro, el promedio no dice mucho.</div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="${cel};text-align:left;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px">DIVISIÓN</th>
+        <th style="${cel};text-align:right;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px">RESULTADOS</th>
+        <th style="${cel};text-align:right;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px">GL ♂</th>
+        <th style="${cel};text-align:right;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px">GL ♀</th>
+        <th style="${cel};text-align:right;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px">DIFERENCIA</th>
+        <th style="${cel};text-align:right;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px">MEJOR</th>
+      </tr></thead>
+      <tbody>${divs.map(fila).join('')}</tbody>
+    </table></div>
+    ${(()=>{
+      // Hay resultados sin el sexo cargado. Entran en la columna de resultados
+      // pero no pueden entrar en las de hombres y mujeres, así que las tres no
+      // suman igual. Mejor decirlo que dejar al que lee sacando la cuenta.
+      const sinSexo=rows.filter(r=>r.sexo!=='M'&&r.sexo!=='F').length;
+      return sinSexo?`<div style="font-size:10px;color:var(--muted);margin-top:10px;line-height:1.5">
+        <b style="color:var(--text)">${sinSexo.toLocaleString()} resultados no tienen el sexo cargado.</b>
+        Cuentan en la columna de resultados y en el GL general, pero quedan fuera de las columnas de hombres y mujeres
+        y de todas las comparativas por sexo — por eso las dos columnas no suman el total.</div>`:'';
+    })()}
+  </div>`;
+}
+
+let _glc={};
+function initGLCharts(){
+  Object.values(_glc).forEach(c=>{try{c.destroy()}catch(e){}});_glc={};
+  const rows=_glRows();
+  if(!rows.length)return;
+  const base={color:'#D4E1F0',
+    plugins:{legend:{labels:{color:'#D4E1F0',font:{family:'Oswald',size:11}}}},
+    scales:{x:{ticks:{color:'#7A8FA6',font:{family:'Oswald',size:10}},grid:{color:'rgba(30,58,95,.5)'}},
+            y:{ticks:{color:'#7A8FA6',font:{family:'Oswald',size:10}},grid:{color:'rgba(30,58,95,.5)'}}}};
+  const mk=(id,type,data,extra={})=>{
+    const el=document.getElementById(id);if(!el)return;
+    _glc[id]=new Chart(el,{type,data,options:{responsive:true,maintainAspectRatio:false,...base,...extra,
+      plugins:{...base.plugins,...(extra.plugins||{})},scales:{...base.scales,...(extra.scales||{})}}});
+  };
+  const AZUL='#3b82f6', ROSA='#ec4899';
+  const years=[...new Set(rows.map(r=>r.year))].sort();
+
+  // 1) GL promedio por año, hombres contra mujeres.
+  const promSexo=(y,s)=>{const a=rows.filter(r=>r.year===y&&r.sexo===s);return a.length?+_glProm(a).toFixed(1):null;};
+  mk('glAnioSexo','line',{labels:years,datasets:[
+    {label:'Hombres',data:years.map(y=>promSexo(y,'M')),borderColor:AZUL,backgroundColor:'rgba(59,130,246,.15)',tension:.3,fill:true,spanGaps:true,pointBackgroundColor:AZUL},
+    {label:'Mujeres',data:years.map(y=>promSexo(y,'F')),borderColor:ROSA,backgroundColor:'rgba(236,72,153,.15)',tension:.3,fill:true,spanGaps:true,pointBackgroundColor:ROSA}]});
+
+  // 2) Cómo se reparten, en tramos de 10 puntos.
+  const tramo=g=>Math.floor(g/10)*10;
+  const tramos=[...new Set(rows.map(r=>tramo(r.glp)))].sort((a,b)=>a-b);
+  const et=tramos.map(t=>t+'–'+(t+9));
+  mk('glDist','bar',{labels:et,datasets:[
+    {label:'Hombres',data:tramos.map(t=>rows.filter(r=>r.sexo==='M'&&tramo(r.glp)===t).length),backgroundColor:'rgba(59,130,246,.8)',borderRadius:3},
+    {label:'Mujeres',data:tramos.map(t=>rows.filter(r=>r.sexo==='F'&&tramo(r.glp)===t).length),backgroundColor:'rgba(236,72,153,.8)',borderRadius:3}]},
+    {scales:{...base.scales,x:{...base.scales.x,stacked:true},y:{...base.scales.y,stacked:true}}});
+
+  // 3) Por división de edad. Es la comparativa Junior contra Sub-Junior que se pidió.
+  const divs=GL_ORDEN_DIV.filter(d=>rows.some(r=>r.div===d));
+  const promDe=(f)=>{const a=rows.filter(f);return a.length?+_glProm(a).toFixed(1):null;};
+  mk('glDiv','bar',{labels:divs,datasets:[
+    {label:'Hombres',data:divs.map(d=>promDe(r=>r.div===d&&r.sexo==='M')),backgroundColor:'rgba(59,130,246,.8)',borderRadius:4},
+    {label:'Mujeres',data:divs.map(d=>promDe(r=>r.div===d&&r.sexo==='F')),backgroundColor:'rgba(236,72,153,.8)',borderRadius:4}]});
+
+  // 4) Por modalidad.
+  const mods=[...new Set(rows.map(r=>r.mod))].sort();
+  mk('glMod','bar',{labels:mods,datasets:[
+    {label:'Hombres',data:mods.map(m=>promDe(r=>r.mod===m&&r.sexo==='M')),backgroundColor:'rgba(59,130,246,.8)',borderRadius:4},
+    {label:'Mujeres',data:mods.map(m=>promDe(r=>r.mod===m&&r.sexo==='F')),backgroundColor:'rgba(236,72,153,.8)',borderRadius:4}]});
+
+  // 5) Cada división a lo largo de los años.
+  const COL=['#ec4899','#f59e0b','#3b82f6','#22c55e','#a78bfa','#06b6d4','#f43f5e','#84cc16'];
+  mk('glDivAnio','line',{labels:years,datasets:divs.map((d,i)=>({
+    label:d,data:years.map(y=>promDe(r=>r.div===d&&r.year===y)),
+    borderColor:COL[i%COL.length],backgroundColor:'transparent',tension:.3,spanGaps:true,
+    pointBackgroundColor:COL[i%COL.length]}))});
+
+  // 6) Modalidad cruzada con división.
+  mk('glModDiv','bar',{labels:divs,datasets:mods.map((m,i)=>({
+    label:m,data:divs.map(d=>promDe(r=>r.div===d&&r.mod===m)),
+    backgroundColor:COL[i%COL.length],borderRadius:4}))});
+
+  // 7) Los 20 mejores, un atleta una vez.
+  const porAtleta={};
+  rows.forEach(r=>{
+    const k=r.codigo||r.nombre;
+    if(!k)return;
+    if(!porAtleta[k]||r.glp>porAtleta[k].glp)porAtleta[k]=r;
+  });
+  const top=Object.values(porAtleta).sort((a,b)=>b.glp-a.glp).slice(0,20);
+  mk('glTop','bar',{labels:top.map(r=>(r.nombre||r.codigo)+' · '+r.year),
+    datasets:[{label:'GL points',data:top.map(r=>+r.glp.toFixed(1)),
+      backgroundColor:top.map(r=>r.sexo==='F'?'rgba(236,72,153,.85)':'rgba(59,130,246,.85)'),borderRadius:4}]},
+    {indexAxis:'y',plugins:{legend:{display:false}}});
 }
 
 let _sc={};
