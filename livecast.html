@@ -6430,7 +6430,7 @@ function renderTxDirector(container){
     +'|md-'+(md.mod||'')+'-'+(md.sex||'')+'-'+(md.div||'')+'-'+(md.cat||'')+'-'+(md.tipo||'')+'-'+(md.until||0)
     +'|'+(_txDirState.profile?.until||0)+'|'+(_txDirState.scoreboard?.until||0)+'|'+(_txDirState.leaderboard?.until||0)+'|'+(_txDirState.slam?.until||0)
     +'|bt-'+(bt.startedAt||0)+'-'+(bt.durationSec||0)+'-'+(bt.pausedAt||0)+'-'+(bt.label||'')+'-'+(bt.videos||[]).length+'-'+(bt.movement||'')+'-'+JSON.stringify(bt.style||{})
-    +'|sc-'+(_txDirState.profile?.scale||1)+'-'+(_txDirState.scoreboard?.scale||1)+'-'+(_txDirState.leaderboard?.scale||1)+'-'+(_txDirState.timer?.scale||1)+'-'+(_txDirState.slam?.scale||1)+'-'+(_txDirState.breakTimer?.scale||1)
+    +'|sc-'+(_txDirState.profile?.scale||1)+'-'+(_txDirState.scoreboard?.scale||1)+'-'+(_txDirState.leaderboard?.scale||1)+'-'+(_txDirState.timer?.scale||1)+'-'+(_txDirState.slam?.scale||1)+'-'+(_txDirState.breakTimer?.scale||1)+'-'+(_txDirState.tablaActual?.scale||1)+'-'+(_txDirState.medals?.scale||1)+'-'+(_txDirState.luces?.scale||1)
     +'|col-'+JSON.stringify(_txDirState.colors||{});
   if(sig===_txDirLastSig){
     // Updates in-place sin re-render para evitar flicker
@@ -6558,7 +6558,13 @@ function renderTxDirector(container){
     }
     const taScale=_txDirState.tablaActual?.scale||1;
     const taHtml=renderTxTablaActual(cur);
-    const wrap='<div class="'+wrapClass+'" style="position:fixed;inset:0;pointer-events:none;'+(taScale!==1?'transform:scale('+taScale+');transform-origin:bottom right;':'')+taAnim+'">'+taHtml+'</div>';
+    // La escala va en una capa APARTE de la animación. Iban las dos en el mismo
+    // elemento, y como los fotogramas animan transform y terminan con
+    // "forwards", el último fotograma pisaba la escala: cambiar el tamaño no
+    // hacía nada. Separadas, cada transform es de una capa distinta.
+    const wrap='<div class="'+wrapClass+'" style="position:fixed;inset:0;pointer-events:none;'+taAnim+'">'
+      +(taScale!==1?'<div style="position:absolute;inset:0;transform:scale('+taScale+');transform-origin:bottom right">'+taHtml+'</div>':taHtml)
+      +'</div>';
     html+=wrap;
   }
   // Luces de jueces — banda inferior-centro, entra/sale deslizando desde abajo.
@@ -6574,13 +6580,18 @@ function renderTxDirector(container){
     const animLuces=_txAnimActive('luces');
     if(showLuces||(animLuces&&animLuces.dir==='out')){
       _txStartLightsListener();
-      const lzHtml=renderTxLucesBanda(_txDirState.luces?.scale||1);
+      const lzHtml=renderTxLucesBanda();
       if(lzHtml){
         const lzAnim=animLuces
           ?(animLuces.dir==='in'?'animation:txSlideInBottom .75s cubic-bezier(.2,.85,.3,1.05) forwards;'
                                 :'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;')
           :'';
-        html+='<div style="position:fixed;inset:0;pointer-events:none;'+lzAnim+'">'+lzHtml+'</div>';
+        // La escala, en su propia capa: si va en el mismo elemento que la
+        // animación, el transform de los fotogramas la pisa y no cambia nada.
+        const lzScale=_txDirState.luces?.scale||1;
+        html+='<div style="position:fixed;inset:0;pointer-events:none;'+lzAnim+'">'
+          +(lzScale!==1?'<div style="position:absolute;inset:0;transform:scale('+lzScale+');transform-origin:bottom left">'+lzHtml+'</div>':lzHtml)
+          +'</div>';
       }
     }
   }
@@ -6590,7 +6601,11 @@ function renderTxDirector(container){
     const mdAnim=animMedals?(animMedals.dir==='in'?'animation:txSlideInBottom .75s cubic-bezier(.2,.85,.3,1.05) forwards;':'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;'):'';
     const mdScale=md.scale||1;
     const mdHtml=renderTxMedals(md);
-    if(mdHtml)html+='<div style="position:fixed;inset:0;pointer-events:none;'+(mdScale!==1?'transform:scale('+mdScale+');transform-origin:bottom center;':'')+mdAnim+'">'+mdHtml+'</div>';
+    // Misma separación que en la Tabla Actual: la animación en una capa, la
+    // escala en otra, si no el transform de los fotogramas pisa el de la escala.
+    if(mdHtml)html+='<div style="position:fixed;inset:0;pointer-events:none;'+mdAnim+'">'
+      +(mdScale!==1?'<div style="position:absolute;inset:0;transform:scale('+mdScale+');transform-origin:bottom center">'+mdHtml+'</div>':mdHtml)
+      +'</div>';
   }
   if(showSlam){
     // Slam armado: cuando el operador marca ✓/✗ en Control en Vivo,
@@ -6810,11 +6825,10 @@ function _luzEstilo(v){
 // Devuelve '' mientras no haya ninguna luz marcada. Es a propósito: el
 // componente se deja prendido toda la competencia y aparece solo cuando los
 // jueces deciden, sin que nadie tenga que apretar nada en el momento.
-function renderTxLucesBanda(scale){
+function renderTxLucesBanda(){
   const L=_txLights||{};
   if(!L.izq&&!L.central&&!L.der)return '';
   const cur=liftQueue()[0]||null;
-  const sc=scale||1;
   const orden=['izq','central','der'];
   const luz=(j,i)=>{
     const v=L[j];
@@ -6833,7 +6847,11 @@ function renderTxLucesBanda(scale){
         +(LIFT_S[DATA.lift]||'')+' '+(DATA.round+1)
         +((cur.att?.[DATA.lift]?.[DATA.round]?.w)?' · '+cur.att[DATA.lift][DATA.round].w+' KG':'')+'</div></div>'
     :'';
-  return '<div style="position:fixed;left:50%;bottom:48px;transform:translateX(-50%)'+(sc!==1?' scale('+sc+')':'')+';transform-origin:bottom center;'
+  // Abajo a la IZQUIERDA: es la esquina que queda libre — el scoreboard ocupa el
+  // ancho de abajo, la tabla actual va a la derecha y el medallero al centro.
+  // La escala NO se pone acá: va en una capa aparte, porque si comparte elemento
+  // con la animación de entrada, el transform de los fotogramas la pisa.
+  return '<div style="position:fixed;left:34px;bottom:48px;transform-origin:bottom left;'
     +'background:linear-gradient(180deg,rgba(10,22,40,.93),rgba(6,13,26,.96));border:1px solid rgba(212,168,67,.4);border-top:3px solid #D4A843;'
     +'border-radius:14px;padding:18px 42px 20px;box-shadow:0 12px 40px rgba(0,0,0,.55)">'
     +cab
@@ -9808,7 +9826,7 @@ function renderDirector(){
   h+='</div>';
   h+='<button class="btn '+(lbActive?'btn-r':'btn-g')+'" onclick="dirToggleLb()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(lbActive?'⏸ DESACTIVAR':'▶ ACTIVAR')+'</button>';
   h+='</div>'+scaleSlider('leaderboard')+'</div>';
-  h+=compToggle('luces','','Luces de jueces','Los tres círculos abajo al centro, con el nombre del atleta y el intento. Se deja prendido toda la competencia: mientras no hay decisión no se ve nada, y aparece solo cuando los jueces marcan. Es un espejo — el válido o el nulo se sigue dando en Control en Vivo o en la planilla.','U','dirToggle(\'luces\')');
+  h+=compToggle('luces','','Luces de jueces','Los tres círculos abajo a la izquierda, con el nombre del atleta y el intento. El tamaño se ajusta acá abajo. Se deja prendido toda la competencia: mientras no hay decisión no se ve nada, y aparece solo cuando los jueces marcan. Es un espejo — el válido o el nulo se sigue dando en Control en Vivo o en la planilla.','U','dirToggle(\'luces\')');
   h+=compToggle('tablaActual','','Tabla actual (corner)','Ranking de la categoría del lifter actual, esquina inferior derecha. Entra desde abajo, queda fijo. El levantador en pantalla se resalta y muestra la flecha de proyección (pos actual → pos si lo levanta).','A','dirToggle(\'tablaActual\')');
   // Medallero (Top 3) — selects en cascada: modalidad → sexo → división → categoría.
   // Todo se calcula desde DATA.athletes (ya cargado local): cero lecturas nuevas a Firestore.

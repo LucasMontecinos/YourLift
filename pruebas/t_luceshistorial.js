@@ -113,11 +113,11 @@ console.log('\n  Se anotan en el atleta que estaba en la barra');
     const r = await p.evaluate(() => {
       const out = {};
       _txLights = { izq: null, central: null, der: null };
-      out.apagado = renderTxLucesBanda(1);
+      out.apagado = renderTxLucesBanda();
       _txLights = { izq: 'white', central: 'white', der: 'white' };
-      out.blancas = renderTxLucesBanda(1);
+      out.blancas = renderTxLucesBanda();
       _txLights = { izq: 'red', central: 'blue', der: 'yellow' };
-      out.nulo = renderTxLucesBanda(1);
+      out.nulo = renderTxLucesBanda();
       return out;
     });
     ok(r.apagado === '',
@@ -159,6 +159,56 @@ console.log('\n  Se anotan en el atleta que estaba en la barra');
        'las luces entran en la firma del redibujado');
     ok(/_txDirActive\('luces'\)\]\.join\('\|'\)/.test(lc), 'y también si el componente está prendido');
   }
+
+
+console.log('\nEl tamaño se puede cambiar de verdad');
+{
+  // Esto falló en competencia: mover el tamaño de la Tabla Actual o del
+  // Medallero no hacía nada. Eran dos cosas apiladas.
+  //
+  // Una: la escala de esos dos no entraba en la firma que decide si hay que
+  // redibujar, así que el widget se saltaba el redibujado y no pasaba nada.
+  const sig = lc.slice(lc.indexOf("+'|sc-'+"), lc.indexOf("+'|col-'"));
+  ['profile', 'scoreboard', 'leaderboard', 'timer', 'slam', 'breakTimer',
+   'tablaActual', 'medals', 'luces'].forEach(k =>
+    ok(sig.indexOf('_txDirState.' + k + '?.scale') > 0,
+       'la escala de ' + k + ' entra en la firma del redibujado'));
+
+  // Y otra: la escala iba en el MISMO elemento que la animación de entrada. Los
+  // fotogramas animan transform y terminan con "forwards", así que el último
+  // fotograma pisaba la escala para siempre.
+  const capas = (bloque) => {
+    const anim = /animation:txSlide/.test(bloque);
+    const escalaEnLaMisma = /transform:scale\([^)]*\);transform-origin:[^;]*;'\+\w*Anim/.test(bloque);
+    return { anim, escalaEnLaMisma };
+  };
+  const ta = lc.slice(lc.indexOf('const taScale=_txDirState.tablaActual'), lc.indexOf('// Medallero (Top 3)'));
+  ok(capas(ta).anim, 'la Tabla Actual entra con animación');
+  ok(!capas(ta).escalaEnLaMisma, 'y su escala ya NO comparte elemento con ella');
+  ok(/transform:scale\('\+taScale\+'\);transform-origin:bottom right/.test(ta),
+     'va en una capa propia');
+
+  const mdI = lc.indexOf('const mdScale=md.scale||1;');
+  const md = lc.slice(mdI, mdI + 800);
+  ok(!capas(md).escalaEnLaMisma, 'el Medallero, lo mismo');
+  ok(/transform:scale\('\+mdScale\+'\);transform-origin:bottom center/.test(md),
+     'con su capa propia');
+
+  const lzI = lc.indexOf('const lzScale=_txDirState.luces');
+  const lz = lc.slice(lzI, lzI + 700);
+  ok(/transform:scale\('\+lzScale\+'\);transform-origin:bottom left/.test(lz),
+     'y las luces nacen ya con la escala en su capa');
+}
+
+console.log('\n  Las luces van abajo a la izquierda');
+{
+  ok(/position:fixed;left:34px;bottom:48px;transform-origin:bottom left/.test(lc),
+     'la banda se ancla en la esquina de abajo a la izquierda');
+  ok(!/left:50%;bottom:48px;transform:translateX\(-50%\)/.test(lc),
+     'ya no queda centrada, donde chocaba con el scoreboard');
+  ok(/abajo a la izquierda/.test(lc), 'y el panel dice dónde va');
+  ok(/El tamaño se ajusta acá abajo/.test(lc), 'y que el tamaño se ajusta ahí mismo');
+}
 
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.join(' | ') : ''));
   console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');
