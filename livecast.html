@@ -86,6 +86,18 @@ let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,fligh
 const TX_URL=new URLSearchParams(location.search);
 const TX_MODE=TX_URL.get('tx')||null; // 'profile' | 'scoreboard' | 'leaderboard' | 'lbauto' | 'slam' | 'timer' | 'lights' | 'ceremony' | null
 const TARIMA=TX_URL.get('tarima')||null; // '1' o '2' para modo 2 tarimas; null = todas
+// Pantalla de tarima CLAVADA en un modo (?tx=screen&modo=intentos).
+//
+// Sin esto, todas las pantallas de tarima comparten el mismo canal: si hay dos
+// televisores con el mismo link y el operador cambia lo que muestra uno, se le
+// cambia también el otro. Con el modo en el link, cada televisor muestra lo suyo
+// y no lo mueve nadie — pero sigue recibiendo el resto del canal (fondo,
+// difuminado, tandas, tamaño del nombre), que es lo que el operador sí quiere
+// poder ajustar desde el panel.
+const SCREEN_FIJO=(()=>{
+  const m=(TX_URL.get('modo')||'').toLowerCase();
+  return ['profile','barra','intentos','jornada','luces','off'].indexOf(m)>=0?m:null;
+})();
 // ¿Estamos adentro de una fuente de navegador de OBS? OBS inyecta window.obsstudio
 // en cada browser source, y además se anuncia en el user agent. Importa porque su
 // navegador interno (CEF) no es Chrome: el canal en tiempo real de Firestore se
@@ -114,7 +126,7 @@ const PRACTICE_MODE=TX_URL.get('practica')==='1';
 // quiere ir mirando mientras los jueces practican. Ver _initPracticeMode().
 const PRACTICE_VIEWER=PRACTICE_MODE && TX_URL.get('espectador')==='1';
 // ?practica=1&real=1 → PRÁCTICA CON NÓMINA REAL: mismas condiciones que un evento
-// real (elegís un campeonato y carga sus atletas reales desde Firestore), pero en
+// real (eliges un campeonato y carga sus atletas reales desde Firestore), pero en
 // modo práctica: Firebase queda de SOLO LECTURA (un candado bloquea toda escritura,
 // ver initFB) y NO se sincroniza el estado en vivo (ver startFBSync), así nunca
 // toca la competencia real. La data vive en el localStorage de práctica.
@@ -568,7 +580,7 @@ function _syncWriteAlert(e){
     document.body.appendChild(el);
   }
   el.innerHTML='\u26A0 LOS CAMBIOS NO SE ESTÁN GUARDANDO — el espectador y OBS no ven lo que cargás.'
-    +(perm?' <b>Iniciá sesión con tu cuenta de administrador.</b>':' Revisá la conexión a internet.')
+    +(perm?' <b>Inicia sesión con tu cuenta de administrador.</b>':' Revisa la conexión a internet.')
     +' <span style="opacity:.85;font-size:11px">(se reintenta solo)</span>';
 }
 function _syncWriteOk(){ const el=document.getElementById('syncErrBanner'); if(el)el.remove(); window._syncFallo=0; }
@@ -2646,7 +2658,7 @@ function openAthleteMedia(id){
 async function uploadAthleteMedia(id,kind,file){
   if(!file)return;
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía, esperá un momento');return;}
+  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía, espera un momento');return;}
   if(!isAdmin){alert('Solo admin puede subir fotos');return;}
   const st=document.getElementById('amStatus');if(st)st.textContent='Subiendo…';
   try{
@@ -3153,7 +3165,7 @@ function _mergeFirebaseAthletes(fbAthletes){
     // Aviso sobre los que tienen datos — el operador decide manualmente
     if(withData.length){
       console.warn('[LC] Atletas con datos pero borrados del admin:',withData.map(a=>a.name));
-      showToastLC(''+withData.length+' atleta'+(withData.length>1?'s':'')+' borrado'+(withData.length>1?'s':'')+' del admin pero con datos cargados acá. Revisá Atletas & Pesaje y borralo'+(withData.length>1?'s':'')+' a mano si corresponde.');
+      showToastLC(''+withData.length+' atleta'+(withData.length>1?'s':'')+' borrado'+(withData.length>1?'s':'')+' del admin pero con datos cargados acá. Revisa Atletas y Pesaje y bórralo'+(withData.length>1?'s':'')+' a mano si corresponde.');
     }
   }
   if(changed){save();R();}
@@ -3306,7 +3318,7 @@ function resetLiveData(){
   // local dejaba el equipo desincronizado: vacío acá y con todo cargado en el
   // servidor y en el público. Mejor no tocar nada y explicar por qué.
   if(!fbReady){
-    alert('\u26A0 Sin conexión con el servidor.\n\nNo se reinició nada: si borrara solo en esta pantalla, quedaría distinta del resto. Revisá tu conexión y reintentá.');
+    alert('\u26A0 Sin conexión con el servidor.\n\nNo se reinició nada: si borrara solo en esta pantalla, quedaría distinta del resto. Revisa tu conexión y vuelve a intentar.');
     return;
   }
   if(!isAdmin){
@@ -3348,7 +3360,7 @@ function resetLiveData(){
     if(_fbLastOk===_okAntes){   // no hubo ninguna escritura exitosa después del reinicio
       alert('\u26A0 El reinicio se aplicó en ESTA pantalla pero NO se pudo guardar en el servidor'
         +(window.IS_CONTROLLER?'.':' porque está en modo ESPECTADOR.')
-        +'\n\nEl público sigue viendo los datos anteriores. Revisá el indicador SYNC y volvé a intentar.');
+        +'\n\nEl público sigue viendo los datos anteriores. Revisa el indicador SYNC y vuelve a intentar.');
     }else{
       alert('\u2713 Datos en vivo reiniciados y propagados a todos los dispositivos y widgets.');
     }
@@ -3596,6 +3608,32 @@ function advanceLift(){
 // automático de la cola — para corregir cuando se pasó por alto a un atleta. Cambia
 // también DATA.flight/lift/round para que la tarjeta, Control TX y las luces de jueces
 // sigan a este atleta. Se limpia solo apenas se marca GOOD/NO LIFT (ver overrideResult).
+// Corregir el nombre de un atleta con la competencia andando.
+//
+// Llegan mal escritos desde la inscripción —falta un apellido, una letra
+// cambiada, todo en mayúsculas— y ese nombre se ve en la tarima, en la
+// transmisión y queda en el acta. Hasta ahora había que salir a Admin a
+// arreglarlo mientras la competencia seguía.
+//
+// Corrige el nombre para ESTA competencia: la tarima, el acta, los widgets y el
+// público lo ven al toque. No reescribe la inscripción ni la base de atletas —
+// eso se sigue haciendo en Admin, con calma, después.
+window.renameAthlete=function(id){
+  const a=DATA.athletes.find(x=>x.id===id);
+  if(!a)return;
+  if(!isAdmin){showToastLC('Solo el que opera puede corregir el nombre');return;}
+  const v=prompt('Nombre del atleta\n\nSe corrige en la tarima, el acta y la transmisión.\n(La inscripción en Admin no cambia.)',a.name||'');
+  if(v===null)return;                       // canceló
+  const nuevo=String(v).trim().replace(/\s+/g,' ');
+  if(!nuevo){showToastLC('El nombre no puede quedar vacío');return;}
+  if(nuevo===a.name)return;
+  const antes=a.name;
+  a.name=nuevo;
+  if('nombre' in a)a.nombre=nuevo;          // el campo con el que vino de la inscripción
+  saveNow();R();
+  showToastLC('Nombre corregido: '+antes+' → '+nuevo);
+};
+
 window.forceCurrentAttempt=function(id,l,r){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   DATA.flight=a.flight;DATA.lift=l;DATA.round=r;DATA.forcedCurrent=id;
@@ -3732,13 +3770,13 @@ window.limpiarAtletasAjenos=async function(){
   const map=window._cronoFlightMap;
   if(!map||!Object.keys(map).length){
     alert('No hay Cronograma cargado para este campeonato, así que no tengo con qué comparar.\n\n'
-      +'Cargalo en Admin → Cronograma y volvé a entrar.');
+      +'Cárgalo en Admin → Cronograma y vuelve a entrar.');
     return;
   }
   const fuera=DATA.athletes.filter(a=>!_cronoLookup(map,a.name));
   if(!fuera.length){ alert('Todo en orden: los '+DATA.athletes.length+' atletas cargados están en el Cronograma.'); return; }
   if(!window.IS_CONTROLLER){
-    alert('Esta pantalla está en modo LECTURA, no puede guardar.\n\nCambiá a CONTROLADOR desde el menú y volvé a intentar.');
+    alert('Esta pantalla está en modo LECTURA, no puede guardar.\n\nCambia a CONTROLADOR desde el menú y vuelve a intentar.');
     return;
   }
   const det=fuera.slice(0,30).map(a=>'• '+a.name+'  ('+(a.div||'')+' '+(a.cat||'')+', tanda '+(a.flight||'')+')').join('\n')
@@ -3764,7 +3802,7 @@ window.limpiarAtletasAjenos=async function(){
       ok=rem.length===DATA.athletes.length&&rem.every(a=>!!_cronoLookup(map,a.name));
     }catch(e){ console.warn('[limpiar] verificación',e); break; }
   }
-  alert((ok?'Listo y verificado en el servidor.':'Se aplicó en esta pantalla, pero el servidor no confirmó. Revisá la conexión y volvé a intentar.')
+  alert((ok?'Listo y verificado en el servidor.':'Se aplicó en esta pantalla, pero el servidor no confirmó. Revisa la conexión y vuelve a intentar.')
     +'\n\n'+fuera.length+' eliminado(s)\n'+DATA.athletes.length+' atletas quedan cargados.');
 };
 window.remove4thAttempt=function(id,l){
@@ -5483,7 +5521,7 @@ function renderObsTx(){
     {id:'leaderboard',icon:'',title:'Tabla de clasificación (FIJO)',desc:'Ranking completo de la categoría actual. Cascada fila por fila. SIEMPRE visible mientras la escena esté activa — úsalo para escenas de pausa entre rondas que manejas tú manualmente.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
     {id:'tablaactual',icon:'',title:'Tabla actual (corner)',desc:'Ranking de la categoría del lifter en pantalla, esquina inferior derecha. Entra deslizando desde abajo, queda fijo. El levantador actual se resalta y muestra una flecha de proyección: posición actual → posición que tendría si el intento es válido (ej. 2→1 si se mueve al primer lugar). Activá/desactivá con el botón "Tabla actual" en Control TX o tecla A.',obsBg:'Transparente (overlay sobre cámara). Solo ocupa el cuadrante inferior derecho.',size:'1920×1080 (overlay)'},
     {id:'lbauto',icon:'',title:'Tabla de clasificación (AUTO)',desc:'Igual al leaderboard fijo, pero APARECE SOLO al detectar fin de ronda (cuando cambia lift/round/flight). Queda 10s en pantalla y se va. Ideal como overlay siempre activo en una escena de cámara.',obsBg:'Transparente (overlay sobre cámara).',size:'1920×1080 (overlay fullscreen)'},
-    {id:'slam',icon:'',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activá una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcás ✓/✗ en Control en Vivo. Volvé a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
+    {id:'slam',icon:'',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activá una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcas ✓/✗ en Control en Vivo. Vuelve a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
     {id:'lights',icon:'',title:'Luces de jueces',desc:'3 círculos para izq / central / der. Se prenden blanco (good) o rojo (no lift) cuando los jueces votan en su panel. Ideal arriba de la cámara o en pantalla aparte.',obsBg:'Transparente. Funciona solo si activás "Modo Jueces" en Control en Vivo.',size:'1920×1080 (autoescala)'},
     {id:'ceremony',icon:'',title:'Ceremonia (TODO-EN-UNO automático)',desc:'Widget orquestador. Detecta nuevo levantador → PROFILE fullscreen 5s → SCOREBOARD bottom-left (30s) → SLAM top-left flash al marcar resultado → IDLE hasta el próximo. Sin tabla de clasificación: ese ciclo lo manejás aparte con el widget Leaderboard fijo. (El tiempo para dar el intento ya no se muestra acá — es privado, solo lo ve el juez en Control en Vivo.)',obsBg:'Mixto: fullscreen opaco durante PROFILE, transparente sobre cámara durante SCOREBOARD/IDLE. Una sola escena con cámara de fondo + este browser source encima.',size:'1920×1080'},
     {id:'director',icon:'',title:'Director (control 100% MANUAL)',desc:'NO se activa solo. Lee comandos desde Firestore (livecast_director/current) que envías tú desde la barra lateral "Control TX". Cada componente (perfil, marcador, tabla, timer, slam) se muestra/esconde con un botón. Ideal si quieres controlar todo a mano sin tocar OBS.',obsBg:'Mixto. Una sola escena con cámara de fondo + este browser source encima. Tú eliges qué se ve y por cuánto tiempo desde el panel Control TX.',size:'1920×1080'},
@@ -5491,7 +5529,7 @@ function renderObsTx(){
   let h='<div class="fade"><h2 class="os" style="font-size:22px;letter-spacing:1px;margin-bottom:6px">WIDGETS PARA OBS</h2>';
   h+='<p style="color:var(--muted);font-size:12px;margin-bottom:18px">Cada widget es una URL que se agrega como Browser Source en OBS. Actualiza en tiempo real desde Firestore — no necesita login.</p>';
   if(!evId){
-    h+='<div class="card" style="background:rgba(239,68,68,.1);border-color:var(--red);color:var(--red);padding:16px">Primero elegí un campeonato. Los widgets necesitan saber qué evento mostrar.</div></div>';
+    h+='<div class="card" style="background:rgba(239,68,68,.1);border-color:var(--red);color:var(--red);padding:16px">Primero elige un campeonato. Los widgets necesitan saber qué evento mostrar.</div></div>';
     return h;
   }
   h+='<div class="card" style="margin-bottom:14px;padding:12px 16px;background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.3);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
@@ -5561,7 +5599,7 @@ function renderObsTx(){
   h+='<li>Tampoco marqués <b style="color:var(--text)">"Shutdown source when not visible"</b> — mantené el browser source siempre cargado en memoria para que el replay sea instantáneo.</li>';
   h+='<li>Creá <b style="color:var(--text)">escenas separadas</b>: "Cámara + Scoreboard" (cámara de fondo + browser source scoreboard encima), "Profile fullscreen", "Leaderboard fullscreen".</li>';
   h+='<li>Transiciones de OBS (Stinger/Fade/Cut) entre escenas — la animación de entrada la maneja la página al activarse la escena.</li>';
-  h+='<li>Los widgets leen el estado en vivo: lifter actual, intento, peso, timer. Cuando marcás ✓/✗ en "Control en Vivo", todos los widgets se actualizan en tiempo real.</li>';
+  h+='<li>Los widgets leen el estado en vivo: lifter actual, intento, peso, timer. Cuando marcas ✓/✗ en "Control en Vivo", todos los widgets se actualizan en tiempo real.</li>';
   h+='<li>Si una escena no se anima al activarse (versiones viejas de OBS), recargá manualmente el browser source con click derecho → "Refresh".</li>';
   h+='</ol></div>';
   h+='</div>';
@@ -7062,18 +7100,48 @@ function renderScreenControl(){
   const jornadaUrl=base+'livecast.html?tx=jornada&evento='+enc+PRACTICE_Q;
   let h='<div style="max-width:920px">';
   h+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px">';
-  h+='<div><h2 class="os" style="font-size:22px;letter-spacing:1px">PANTALLA DE TARIMA</h2><p style="color:var(--muted);font-size:12px">Control independiente del Control TX. Alterná entre el perfil del atleta, la barra con discos (estilo LiftingCast) y la tabla de la jornada. Se actualiza en vivo en la pantalla. Pensada para un monitor en el lugar de la competencia — no se transmite al stream online.</p></div>';
+  h+='<div><h2 class="os" style="font-size:22px;letter-spacing:1px">PANTALLA DE TARIMA</h2><p style="color:var(--muted);font-size:12px">Control independiente del Control TX. Alterna entre el perfil del atleta, la barra con discos (estilo LiftingCast) y la tabla de la jornada. Se actualiza en vivo en la pantalla. Pensada para un monitor en el lugar de la competencia — no se transmite al stream online.</p></div>';
   h+='</div>';
 
   // URL de la pantalla
-  h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">URL PARA LA PANTALLA (abrila en el navegador de la pantalla / OBS)</div>';
+  h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">URL PARA LA PANTALLA (ábrela en el navegador de la pantalla / OBS)</div>';
   h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
   h+='<input readonly value="'+screenUrl+'" onclick="this.select()" style="flex:1;min-width:280px;padding:10px 12px;background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:monospace">';
   h+='<button onclick="navigator.clipboard.writeText(\''+screenUrl+'\');showToastLC(\'✓ Copiado\')" style="padding:10px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">COPIAR</button>';
   h+='<a href="'+screenUrl+'" target="_blank" style="padding:10px 16px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;text-decoration:none">ABRIR ↗</a>';
   h+='</div>';
-  h+='<div style="font-size:11px;color:var(--muted);margin-top:8px">Esta pantalla obedece los botones de abajo en tiempo real. También podés usar la URL fija de solo-tabla: <span style="color:var(--gold);font-family:monospace;font-size:11px;cursor:pointer" onclick="navigator.clipboard.writeText(\''+jornadaUrl+'\');showToastLC(\'✓ Copiado\')">…?tx=jornada</span></div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-top:8px">Esta pantalla obedece los botones de abajo en tiempo real: sirve para el televisor que va cambiando durante la competencia. Si tienes más de una pantalla y cada una tiene que mostrar algo distinto, usa los links de abajo.</div>';
   h+='</div>';
+
+  // ── UN LINK POR PANTALLA ──────────────────────────────────
+  //
+  // El link de arriba obedece al panel, y ese es el problema cuando hay dos
+  // televisores: al cambiar lo que muestra uno se le cambia también el otro.
+  // Estos links llevan el modo adentro, así que cada pantalla queda clavada en
+  // lo suyo y no la mueve nadie. El fondo, el difuminado y el resto se siguen
+  // ajustando desde el panel para todas.
+  {
+    const fijo=(m)=>screenUrl+'&modo='+m;
+    const fila=(m,lbl,col,nota)=>{
+      const u=fijo(m);
+      return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 0;border-top:1px solid rgba(30,58,95,.4)">'
+        +'<div style="min-width:190px;flex:0 0 auto"><div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;color:'+col+'">'+lbl+'</div>'
+        +'<div style="font-size:10px;color:var(--muted);line-height:1.4">'+nota+'</div></div>'
+        +'<input readonly value="'+u+'" onclick="this.select()" style="flex:1;min-width:220px;padding:7px 10px;background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:11px;font-family:monospace">'
+        +'<button onclick="navigator.clipboard.writeText(\''+u+'\');showToastLC(\'✓ Copiado\')" style="padding:7px 13px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">COPIAR</button>'
+        +'<a href="'+u+'" target="_blank" style="padding:7px 13px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:7px;font-family:Oswald;font-size:11px;font-weight:700;text-decoration:none">ABRIR ↗</a>'
+        +'</div>';
+    };
+    h+='<div class="card" style="margin-bottom:16px">';
+    h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:4px">UN LINK POR PANTALLA</div>';
+    h+='<div style="font-size:11px;color:var(--muted);line-height:1.55;margin-bottom:6px">Cada uno abre SOLO lo que dice y no cambia aunque se toquen los botones de abajo. Son para los televisores que muestran siempre lo mismo: uno con los intentos, otro con las luces, otro con el perfil.</div>';
+    h+=fila('intentos','PANTALLA DE INTENTOS','#22c55e','La tabla de intentos del atleta en barra');
+    h+=fila('luces','LUCES JUECES','#f0f0f0','Las tres luces a pantalla completa');
+    h+=fila('barra','ATLETA EN BARRA','#a855f7','Nombre, peso y discos');
+    h+=fila('profile','PERFIL ATLETA','#3b82f6','Foto y datos del atleta');
+    h+=fila('jornada','TABLA JORNADA','#D4A843','La tabla de toda la jornada');
+    h+='</div>';
+  }
 
   // Modo
   const mb=(m,lbl,ic,col)=>'<button onclick="screenSetMode(\''+m+'\')" style="flex:1;min-width:160px;padding:18px;border-radius:12px;border:2px solid '+(mode===m?col:'var(--border)')+';background:'+(mode===m?col+'22':'transparent')+';color:'+(mode===m?col:'var(--text)')+';font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(ic?ic+' ':'')+lbl+(mode===m?' ●':'')+'</button>';
@@ -7153,7 +7221,7 @@ function renderScreenControl(){
 
   // Selector de tandas
   h+='<div class="card"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">TANDAS EN LA TABLA (la "jornada")</div>';
-  h+='<p style="font-size:11px;color:var(--muted);margin-bottom:12px">Elegí qué tandas entran en la tabla. Marcá las de la sesión AM o PM. Si no marcás ninguna, muestra la tanda activa actual.</p>';
+  h+='<p style="font-size:11px;color:var(--muted);margin-bottom:12px">Elige qué tandas entran en la tabla. Marca las de la sesión AM o PM. Si no marcas ninguna, muestra la tanda activa actual.</p>';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
   flights.forEach(f=>{
     const on=sel.includes(f);
@@ -7226,7 +7294,10 @@ function subscribeScreenChannel(){
 }
 // El widget screen: alterna perfil / jornada según el canal de control
 function renderTxScreen(c){
-  const st=window._SCREEN_STATE||{mode:'jornada'};
+  const canal=window._SCREEN_STATE||{mode:'jornada'};
+  // Si el link trae el modo, manda el link: esta pantalla muestra siempre lo
+  // mismo y no la mueve el panel. Todo lo demás del canal se sigue obedeciendo.
+  const st=SCREEN_FIJO?Object.assign({},canal,{mode:SCREEN_FIJO}):canal;
   window._JORNADA_FLIGHTS=st.flights;
   window._JORNADA_NAMESCALE=typeof st.nameScale==='number'?st.nameScale:1;
   if(st.mode==='off'){c.innerHTML='';return;}
@@ -8408,7 +8479,7 @@ function renderSetup(){
     const nD=DATA.events.filter(_verEv).length;
     h+='<div class="card" style="margin-bottom:18px;padding:14px 18px;border:1px solid rgba(212,168,67,.45);background:rgba(212,168,67,.07);display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
       +'<div style="flex:1;min-width:200px"><div class="os" style="font-size:15px;letter-spacing:1px;color:var(--gold)">'+esc(_flt.name)+'</div>'
-      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">Elegí el día que querés '+(_adminReal?'operar':'seguir')+' — son '+nD+' jornadas.</div></div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">Elige el día que quieres '+(_adminReal?'operar':'seguir')+' — son '+nD+' jornadas.</div></div>'
       // Salir del campeonato es una acción de operador: al espectador no se le
       // ofrece, porque no tiene por qué ver el resto de lo que hay cargado.
       +(_adminReal?'<button onclick="window._EV_FILTER=null;R()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">Cambiar de competencia</button>':'')
@@ -8553,7 +8624,7 @@ function generateLots(){
 // desde Firestore y reconcilia: agrega nuevos, elimina los que ya no están (sin datos)
 // y avisa de los borrados que tienen pesos/intentos cargados.
 window.resyncFromAdmin=async function(){
-  if(!fbReady||!window._fb){alert('Firebase no listo todavía. Esperá unos segundos y reintentá.');return}
+  if(!fbReady||!window._fb){alert('Firebase no listo todavía. Espera unos segundos y vuelve a intentar.');return}
   if(!DATA.event){alert('No hay competencia activa');return}
   if(!confirm('Re-sincronizar la nómina con el admin?\n\n• Trae atletas nuevos\n• Borra los que ya no están en admin (si NO tienen pesos/intentos cargados acá)\n• Avisa de los borrados que sí tienen datos para revisarlos a mano\n• Toma tanda, división, categoría y modalidad de la pestaña Cronograma\n\nLotes y pesaje se conservan. La categoría de los que ya están pesados no se toca.'))return;
   const evId=Object.keys(LIVE_EVENTS).find(k=>LIVE_EVENTS[k]===DATA.event.name)||DATA.event.id||DATA.event.name;
@@ -8696,7 +8767,7 @@ let _dirBtDrag=null; // drag state para el editor visual del break timer
 let _dirBtVideoList=null; // null=no cargado aún, []=cargado vacío, [{name,url},...]=ok
 let _dirBtVideoUploading=false;
 async function _dirLoadBtVideos(){
-  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía, esperá un momento');return;}
+  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía, espera un momento');return;}
   try{
     const {ref,listAll,getDownloadURL}=window._fbSt;
     const r=ref(window._fbStInst,'videos/break');
@@ -8922,9 +8993,9 @@ function _dirEnsureListener(){
 }
 async function _dirPush(){
   // Feedback claro en vez de no-op silencioso (era la causa de "aprieto y no pasa nada").
-  if(!fbReady||!window._fb){showToastLC('⏳ Conectando a Firebase… esperá unos segundos y reintentá');return;}
+  if(!fbReady||!window._fb){showToastLC('⏳ Conectando a Firebase… espera unos segundos y vuelve a intentar');return;}
   if(!isAdmin){showToastLC('Solo un admin logueado puede controlar la transmisión');return;}
-  if(!fbDocId()){showToastLC('⏳ Cargando el evento… esperá a que el campeonato aparezca arriba y reintentá');if(DATA.phase==='remote'||DATA.phase==='director')R();return;}
+  if(!fbDocId()){showToastLC('⏳ Cargando el evento… espera a que el campeonato aparezca arriba y vuelve a intentar');if(DATA.phase==='remote'||DATA.phase==='director')R();return;}
   try{
     await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director',evStateDocId('current')),{show:_dirState,ts:Date.now()});
   }catch(e){showToastLC('Error al enviar comando: '+(e.message||e))}
@@ -9092,7 +9163,7 @@ window.dirToggleBreak=async function(){
 window._dirKeyHandler=function(e){
   // Atajos del director (Stream Deck): funcionan desde CUALQUIER vista admin del
   // LiveCast (Control en Vivo, Control TX, etc.) — no solo en la vista Director.
-  // Así podés prender/apagar la Tabla Actual del stream con el Stream Deck mientras
+  // Así puedes prender/apagar la Tabla Actual del stream con el Stream Deck mientras
   // operás la competencia. Requiere ser admin y NO tener foco en un input.
   if(!isAdmin)return;
   // Ignorar si hay foco en un input/textarea/select (no pisar la edición de pesos)
@@ -9305,7 +9376,7 @@ function remoteBreakPanel(){
   h+='<input id="remoteBreakMin" type="number" min="1" max="120" placeholder="otro" style="flex:1;padding:12px;border-radius:10px;border:2px solid var(--border);background:#0a1628;color:var(--text);font-family:Oswald;font-size:15px">';
   h+='<button onclick="remoteBreakStart()" style="padding:12px 18px;border-radius:10px;border:2px solid var(--gold);background:rgba(212,168,67,.12);color:var(--gold);font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">USAR</button>';
   h+='</div>';
-  h+='<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5">El cartel de descanso sale en pantalla con la cuenta regresiva. Para sacarlo antes de tiempo, volvé a apretar YA VOLVEMOS.</div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5">El cartel de descanso sale en pantalla con la cuenta regresiva. Para sacarlo antes de tiempo, vuelve a apretar YA VOLVEMOS.</div>';
   h+='</div>';
   return h;
 }
@@ -9380,7 +9451,7 @@ function renderRemote(){
   // MEDALLERO abre el menú en vez de disparar. Antes llamaba a dirToggle('medals')
   // sin decir qué medallero: sin categoría elegida no hay podio que mostrar, así
   // que se apretaba el botón, se ponía en verde y en pantalla no salía nada.
-  h+=bigBtn('MEDALLERO', on('medals')?'EN PANTALLA':(window._remoteMenu==='medals'?'elegí abajo ▾':'elegir podio'), on('medals'), "remoteMenu('medals')");
+  h+=bigBtn('MEDALLERO', on('medals')?'EN PANTALLA':(window._remoteMenu==='medals'?'elige abajo ▾':'elegir podio'), on('medals'), "remoteMenu('medals')");
   h+='</div>';
   h+=remoteMedalsPanel();
   // Slams (flash grande) — fila aparte, colores fuertes
@@ -9399,7 +9470,7 @@ function renderRemote(){
       +';color:'+(activo?'#4ade80':'var(--gold)')+';font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">'
       +(activo?'⏹ QUITAR DESCANSO':'⏸ YA VOLVEMOS')
       +'<span style="display:block;font-size:10px;font-weight:600;letter-spacing:1px;color:'+(activo?'#86efac':'var(--muted)')+';margin-top:3px">'
-      +(activo?'en pantalla':(window._remoteMenu==='break'?'elegí los minutos ▾':'cartel de descanso'))+'</span></button>';
+      +(activo?'en pantalla':(window._remoteMenu==='break'?'elige los minutos ▾':'cartel de descanso'))+'</span></button>';
   }
   h+=remoteBreakPanel();
   // Esconder todo — ancho completo
@@ -9407,7 +9478,7 @@ function renderRemote(){
   // Ayuda / enlace del browser source para OBS
   const widgetUrl=location.origin+location.pathname.replace(/[^/]+$/,'')+'livecast.html?tx=director&evento='+encodeURIComponent(DATA.event?.id||DATA.event?.name||'')+(TARIMA?'&tarima='+TARIMA:'');
   h+='<div style="margin-top:18px;padding:12px 14px;background:rgba(10,22,40,.4);border:1px solid var(--border);border-radius:10px">'
-    +'<div style="font-size:11px;color:var(--muted);line-height:1.6">En OBS agregá <b style="color:var(--text)">un solo Browser Source</b> con esta URL (cámara de fondo + este overlay encima). No hace falta OBS WebSocket ni Stream Deck — este control empuja todo por internet.</div>'
+    +'<div style="font-size:11px;color:var(--muted);line-height:1.6">En OBS agrega <b style="color:var(--text)">un solo Browser Source</b> con esta URL (cámara de fondo + este overlay encima). No hace falta OBS WebSocket ni Stream Deck — este control empuja todo por internet.</div>'
     +'<div style="display:flex;gap:6px;align-items:center;margin-top:8px"><input readonly value="'+esc(widgetUrl)+'" onclick="this.select()" style="flex:1;min-width:0;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-family:monospace;font-size:11px"><button onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+widgetUrl.replace(/'/g,"\\'")+'\');showToastLC(\'URL del overlay copiada\')" style="padding:8px 12px;border-radius:8px;border:1px solid var(--gold);background:rgba(212,168,67,.12);color:var(--gold);font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">COPIAR</button></div>'
     +'</div>';
   h+='</div>';
@@ -9491,9 +9562,9 @@ function renderDirector(){
   h+='<b style="color:var(--text)">1. Habilitar WebSocket en OBS</b> (una sola vez):<br>OBS → menú <code>Tools → WebSocket Server Settings</code> → ✓ Enable WebSocket Server → poné un password → Apply.<br><br>';
   h+='<b style="color:var(--text)">2. Pegá host (<code>localhost</code> si OBS corre en la misma PC), puerto y password arriba</b> → click "Guardar y conectar". Debería ponerse CONECTADO.<br><br>';
   h+='<b style="color:var(--text)">3. Configurar Stream Deck</b> (Elgato Stream Deck app):<br>';
-  h+='• Si tenés el plugin <i>"OBS Studio"</i> instalado: agregá un botón con acción <code>OBS Studio → Send Custom Event</code>.<br>';
+  h+='• Si tienes el plugin <i>"OBS Studio"</i> instalado: agrega un botón con acción <code>OBS Studio → Send Custom Event</code>.<br>';
   h+='• Event name: <code>tx</code> (cualquiera, lo importante es el JSON del payload).<br>';
-  h+='• Event data (JSON): según qué quieras hacer, mirá la tabla abajo.<br><br>';
+  h+='• Event data (JSON): según qué quieras hacer, mira la tabla abajo.<br><br>';
   h+='<b style="color:var(--text)">Payloads JSON aceptados:</b>';
   h+='<div style="margin-top:6px;background:rgba(10,22,40,.6);padding:10px;border-radius:6px;font-family:monospace;font-size:10px;color:rgba(200,215,240,.85)">';
   h+='<div>{"action":"toggle","component":"profile"}</div>';
@@ -9964,7 +10035,7 @@ h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%
   _visibles.forEach(a=>{
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3);'+(a.bombed?'opacity:.4':'')+'">';
     h+='<td style="padding:3px 2px;text-align:center"><input type="number" min="1" value="'+a.lot+'" onchange="setLot('+a.id+',this.value)" title="Edita el número de lote — si ya existe se hace swap" style="width:42px;padding:3px 2px;font-family:Oswald;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:13px"></td>';
-    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+_flagImg(_ctry(a),13)+a.name+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+_ctry(a)+' \u00b7 '+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
+    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+_flagImg(_ctry(a),13)+'<span onclick="renameAthlete('+a.id+')" title="Click para corregir el nombre — se cambia en la tarima, el acta y la transmisión" style="cursor:text;border-bottom:1px dashed rgba(212,168,67,.45)">'+esc(a.name)+'</span>'+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+_ctry(a)+' \u00b7 '+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
     {
       // Opciones del dropdown de vuelo: si hay tarima, suffix con 1/2; si no, letras simples.
       const _flOpts = TARIMA ? FL_LETTERS.map(L=>L+TARIMA) : FL_LETTERS.slice();
@@ -10242,7 +10313,7 @@ function renderCompete(){
     if(!ctrl){col='var(--red)';txt='NO GUARDA';tip='Esta pantalla está en modo ESPECTADOR: no escribe nada.';}
     else if(!fbReady||!fbUnsub){col='var(--red)';txt='SIN CONEXIÓN';tip='No hay conexión con el servidor. Se reintenta solo — revisá internet.';}
     else if(window._syncFallo){col='var(--red)';txt='NO SE GUARDA';tip='La última escritura falló. Se sigue reintentando solo. '+ultimo;}
-    else if(pendiente&&esperando>=12){col='var(--red)';txt='NO SE GUARDA';tip='Hace '+esperando+'s que hay cambios sin confirmar. Revisá conexión y sesión.';}
+    else if(pendiente&&esperando>=12){col='var(--red)';txt='NO SE GUARDA';tip='Hace '+esperando+'s que hay cambios sin confirmar. Revisa la conexión y la sesión.';}
     else if(pendiente){col='var(--orange)';txt='GUARDANDO…';tip='Mandando los últimos cambios al servidor.';}
     else {col='var(--green)';txt='EN LÍNEA';tip='Todo guardado — '+ultimo+'.';}
     h+='<span id="syncPill" title="'+tip+'" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;border:1px solid '+col+';color:'+col+';font-family:Oswald;font-size:10px;font-weight:700;letter-spacing:.5px"><span style="width:7px;height:7px;border-radius:50%;background:'+col+'"></span>SYNC '+txt+'</span>';
@@ -10306,7 +10377,7 @@ function renderCompete(){
      const cc=ci.neg?'var(--red)':ci.remaining<=15?'var(--orange)':'#60a5fa';
      h+='<div class="card" style="margin-bottom:10px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border:2px solid #60a5fa;background:rgba(96,165,250,.08)">'
        +'<div><span style="font-size:12px;font-weight:700;color:#60a5fa">🕒 TIEMPO COMPENSATORIO</span>'
-         +'<div style="font-size:10px;color:var(--muted);margin-top:2px">'+esc(ci.a.name)+' · '+LIFT_S[ci.lift]+'4 · '+ci.min+' min · <span style="opacity:.8">no bloquea: podés dar válido/nulo cuando quieras</span></div></div>'
+         +'<div style="font-size:10px;color:var(--muted);margin-top:2px">'+esc(ci.a.name)+' · '+LIFT_S[ci.lift]+'4 · '+ci.min+' min · <span style="opacity:.8">no bloquea: puedes dar válido/nulo cuando quieras</span></div></div>'
        +'<div style="display:flex;align-items:center;gap:8px">'
          +'<span id="compTimerBox" class="os" style="font-size:26px;font-weight:800;color:'+cc+'">'+ci.mmss+'</span>'
          +'<button onclick="clearCompTimer()" title="Cerrar el tiempo compensatorio" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:10px;cursor:pointer">✕</button>'
