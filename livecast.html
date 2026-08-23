@@ -2432,6 +2432,69 @@ function startJudgeListener(){
     R();
   });
 }
+// ── Las luces quedan anotadas en el intento ────────────────
+//
+// Las luces de los jueces son de paso: el documento guarda solo las de ahora y a
+// los cinco segundos se borra. Para poder mostrar después qué luces recibió el
+// primer intento cuando el atleta ya va por el segundo, hay que anotarlas en el
+// propio intento en el momento en que llegan.
+//
+// Esto NO da válido ni nulo. El resultado lo sigue dando el operador en Control
+// en Vivo o en la planilla: acá solo se guarda lo que marcaron los jueces, igual
+// que queda guardado el peso.
+//
+// El atleta al que se le anotan se fija con la PRIMERA luz, no con la tercera.
+// Si no, alcanzaba con que el operador marcara el resultado antes de que votara
+// el tercer juez para que las luces terminaran anotadas en el atleta siguiente.
+let _lucesHistUnsub=null,_lucesHistDestino=null,_lucesHistUlt='';
+function _escucharLucesHistorial(){
+  if(_lucesHistUnsub||!fbReady||!window._fb||!fbDB)return;
+  try{
+    _lucesHistUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',juezDocId()),(snap)=>{
+      if(!snap.exists())return;
+      const d=snap.data();
+      const L={izq:d.izq||null,central:d.central||null,der:d.der||null};
+      const cuantas=[L.izq,L.central,L.der].filter(Boolean).length;
+      if(cuantas===0){_lucesHistDestino=null;return;}      // se apagaron: listo para el próximo
+      if(!_lucesHistDestino){
+        const cur=liftQueue()[0];
+        if(!cur)return;
+        _lucesHistDestino={id:cur.id,lift:DATA.lift,round:DATA.round};
+      }
+      if(cuantas<3)return;                                  // todavía falta algún juez
+      const dst=_lucesHistDestino;
+      const firma=dst.id+'|'+dst.lift+'|'+dst.round+'|'+L.izq+L.central+L.der;
+      if(firma===_lucesHistUlt)return;
+      _lucesHistUlt=firma;
+      const a=DATA.athletes.find(x=>x.id===dst.id);
+      const at=a&&a.att[dst.lift]&&a.att[dst.lift][dst.round];
+      if(!at)return;
+      at.luces=L;
+      saveNow();R();
+    },(e)=>console.warn('[luces] no se pudieron anotar:',e.message));
+  }catch(e){console.warn('[luces] no se pudo escuchar',e);}
+}
+
+// Los tres circulitos de un intento ya juzgado. Devuelve '' si de ese intento no
+// hay luces: en un campeonato sin luces, o en el que se cargó a mano, no tiene
+// que aparecer nada.
+function _lucesDeIntento(at,px){
+  const L=at&&at.luces;
+  if(!L||!L.izq||!L.central||!L.der)return '';
+  const d=px||9;
+  const pt=(v)=>{
+    const e=_luzEstilo(v);
+    return '<span style="display:inline-flex;flex-direction:column;align-items:center;gap:1px">'
+      +'<span style="width:'+d+'px;height:'+d+'px;border-radius:50%;background:'+e.bg+';border:1px solid '+e.bd+';display:block"></span>'
+      +(e.chip&&v!=='red'
+        ? '<span style="width:'+Math.max(3,Math.round(d*.42))+'px;height:'+Math.max(3,Math.round(d*.42))+'px;border-radius:50%;background:'+e.chip+';display:block"></span>'
+        : '<span style="height:'+Math.max(3,Math.round(d*.42))+'px;display:block"></span>')
+      +'</span>';
+  };
+  return '<span style="display:inline-flex;gap:'+Math.max(2,Math.round(d*.34))+'px;align-items:flex-start;justify-content:center;line-height:1">'
+    +pt(L.izq)+pt(L.central)+pt(L.der)+'</span>';
+}
+
 // Le dice al teléfono de los jueces quién está en la barra y qué movimiento es.
 //
 // Antes esto viajaba SOLO dentro de resetJudgeLights(), que corre nada más si el
@@ -6262,7 +6325,7 @@ function _startBarrido(dir){
   setTimeout(()=>{if(_txBarridoEl&&_txBarridoEl.parentNode){_txBarridoEl.parentNode.removeChild(_txBarridoEl);_txBarridoEl=null;}},TX_ANIM_MS.fullscreen+200);
 }
 function _txDetectTransitions(){
-  const comps=['profile','scoreboard','leaderboard','timer','breakTimer','tablaActual','medals'];
+  const comps=['profile','scoreboard','leaderboard','timer','breakTimer','tablaActual','medals','luces'];
   const fullscreen=new Set(['profile','leaderboard','breakTimer']);
   const fsJustActivated=[...fullscreen].some(c=>!_txDirPrevActive[c]&&_txDirActive(c));
   const fsCurrentlyExiting=Object.keys(_txDirAnims).some(c=>fullscreen.has(c)&&_txDirAnims[c].dir==='out');
@@ -6359,7 +6422,8 @@ function renderTxDirector(container){
   _txDetectTransitions();
   // Signature p/ evitar flicker por timer cada 1s
   const md=_txDirState.medals||{};
-  const sig=[showProf,showSb,showLb,showTm,showSlam,showBreak,_txDirActive('tablaActual'),showMedals].join('|')
+  const sig=[showProf,showSb,showLb,showTm,showSlam,showBreak,_txDirActive('tablaActual'),showMedals,_txDirActive('luces')].join('|')
+    +'|luz-'+(_txLights.izq||'')+(_txLights.central||'')+(_txLights.der||'')
     +'|'+(cur?cur.id+'|'+(cur.att?.[DATA.lift]||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
     +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
     +'|'+(_txDirState.leaderboard?.cat||'')+'|'+(_txDirState.slam?.type||'')
@@ -6496,6 +6560,29 @@ function renderTxDirector(container){
     const taHtml=renderTxTablaActual(cur);
     const wrap='<div class="'+wrapClass+'" style="position:fixed;inset:0;pointer-events:none;'+(taScale!==1?'transform:scale('+taScale+');transform-origin:bottom right;':'')+taAnim+'">'+taHtml+'</div>';
     html+=wrap;
+  }
+  // Luces de jueces — banda inferior-centro, entra/sale deslizando desde abajo.
+  //
+  // Se deja prendido toda la competencia: mientras no hay decisión no dibuja
+  // nada, y aparece solo cuando los jueces marcan. Al apagarse las luces en el
+  // panel de jueces, desaparece de la misma forma.
+  //
+  // Es un espejo. El válido o el nulo se sigue dando en Control en Vivo o en la
+  // planilla; esto no decide nada.
+  {
+    const showLuces=_txDirActive('luces');
+    const animLuces=_txAnimActive('luces');
+    if(showLuces||(animLuces&&animLuces.dir==='out')){
+      _txStartLightsListener();
+      const lzHtml=renderTxLucesBanda(_txDirState.luces?.scale||1);
+      if(lzHtml){
+        const lzAnim=animLuces
+          ?(animLuces.dir==='in'?'animation:txSlideInBottom .75s cubic-bezier(.2,.85,.3,1.05) forwards;'
+                                :'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;')
+          :'';
+        html+='<div style="position:fixed;inset:0;pointer-events:none;'+lzAnim+'">'+lzHtml+'</div>';
+      }
+    }
   }
   // Medallero (Top 3) — banda inferior-centro, entra/sale deslizando desde abajo
   const animMedals=_txAnimActive('medals');
@@ -6717,6 +6804,43 @@ function _luzEstilo(v){
     chip:nulo?CHIP[v]:'',   // el color de la tarjeta; vacío en blanco y sin voto
   };
 }
+// La banda de luces del control remoto: los tres círculos abajo al centro, con
+// el nombre del atleta y el intento.
+//
+// Devuelve '' mientras no haya ninguna luz marcada. Es a propósito: el
+// componente se deja prendido toda la competencia y aparece solo cuando los
+// jueces deciden, sin que nadie tenga que apretar nada en el momento.
+function renderTxLucesBanda(scale){
+  const L=_txLights||{};
+  if(!L.izq&&!L.central&&!L.der)return '';
+  const cur=liftQueue()[0]||null;
+  const sc=scale||1;
+  const orden=['izq','central','der'];
+  const luz=(j,i)=>{
+    const v=L[j];
+    const e=_luzEstilo(v);
+    const glow=v==='white'?'0 0 34px rgba(255,255,255,.75)':(e.chip?'0 0 34px rgba(239,68,68,.75)':'none');
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:7px">'
+      +'<div style="width:76px;height:76px;border-radius:50%;background:'+e.bg+';border:5px solid '+e.bd+';box-shadow:'+glow+',inset 0 0 18px rgba(0,0,0,'+(e.on?'.15':'.5')+');'
+      +(e.on?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards;animation-delay:'+(i*0.08)+'s':'')+'"></div>'
+      +'<div style="width:20px;height:20px;border-radius:50%;background:'+(e.chip||'rgba(255,255,255,.08)')+';border:2px solid rgba(255,255,255,.25)"></div>'
+      +'</div>';
+  };
+  const cab=cur
+    ?'<div style="text-align:center;margin-bottom:12px;font-family:Oswald;color:#fff">'
+      +'<div style="font-size:22px;font-weight:800;letter-spacing:.04em;line-height:1.1">'+esc(cur.name||'')+'</div>'
+      +'<div style="font-size:14px;font-weight:600;letter-spacing:.12em;color:#D4A843;margin-top:3px">'
+        +(LIFT_S[DATA.lift]||'')+' '+(DATA.round+1)
+        +((cur.att?.[DATA.lift]?.[DATA.round]?.w)?' · '+cur.att[DATA.lift][DATA.round].w+' KG':'')+'</div></div>'
+    :'';
+  return '<div style="position:fixed;left:50%;bottom:48px;transform:translateX(-50%)'+(sc!==1?' scale('+sc+')':'')+';transform-origin:bottom center;'
+    +'background:linear-gradient(180deg,rgba(10,22,40,.93),rgba(6,13,26,.96));border:1px solid rgba(212,168,67,.4);border-top:3px solid #D4A843;'
+    +'border-radius:14px;padding:18px 42px 20px;box-shadow:0 12px 40px rgba(0,0,0,.55)">'
+    +cab
+    +'<div style="display:flex;gap:34px;align-items:flex-start;justify-content:center">'+orden.map(luz).join('')+'</div>'
+    +'</div>';
+}
+
 function renderTxLights(){
   if(TX_MODE==='lights')_txStartLightsListener();
   const order=['izq','central','der'];
@@ -7001,7 +7125,11 @@ function renderTxScoreboard(cur,lifterChanged){
             else if(at.r==='n'){clr=RED;td='line-through'}
             else if(j===ci&&at.w>0){clr=WHITE;boxSh='box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';'}
             else{clr=WHITE_DIM}
-            return '<div style="padding:8px 6px;text-align:center;border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:22px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+boxSh+'"'+(is4?' title="Intento extra / 4º"':'')+'>'+(at.w||'—')+(is4?'<sup style="font-size:10px;color:'+YL_GOLD+'">'+x4lbl+'</sup>':'')+'</div>';
+            // Debajo del peso, las luces que le dieron a ESE intento. Si de ese
+            // intento no hay luces guardadas, no va nada: en un campeonato sin
+            // luces el scoreboard queda igual que siempre.
+            const lucesAt=_lucesDeIntento(at,9);
+            return '<div style="padding:'+(lucesAt?'6px 6px 4px':'8px 6px')+';text-align:center;border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:22px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+boxSh+'"'+(is4?' title="Intento extra / 4º"':'')+'>'+(at.w||'—')+(is4?'<sup style="font-size:10px;color:'+YL_GOLD+'">'+x4lbl+'</sup>':'')+(lucesAt?'<div style="margin-top:3px;text-decoration:none">'+lucesAt+'</div>':'')+'</div>';
           }).join('')}
           ${_liftCell('sq','SQUAT',sqB)}
           ${_liftCell('bp','BENCH PRESS',bpB)}
@@ -8366,7 +8494,11 @@ function R(){
   // Quién está en la barra, para el panel de los jueces. Va acá porque es el
   // único punto por el que pasan todos los cambios; adentro se corta solo si no
   // cambió nada, así que no escribe de más. Solo desde el puesto que opera.
-  if(isAdmin&&DATA.phase==='compete'){ try{_avisarAtletaAJueces();}catch(e){} }
+  if(isAdmin&&DATA.phase==='compete'){
+    try{_avisarAtletaAJueces();}catch(e){}
+    // Y se anotan las luces en cada intento, para poder mostrarlas después.
+    try{_escucharLucesHistorial();}catch(e){}
+  }
   try{
     const el=document.getElementById('R');if(!el)return;
     // El Scoreboard salió del menú: si alguien tenía esa pantalla guardada de antes,
@@ -9056,7 +9188,7 @@ window.dirHide=async function(comp){
   await _dirPush();R();
 };
 window.dirHideAll=async function(){
-  ['profile','scoreboard','leaderboard','timer','slam','tablaActual','medals'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
+  ['profile','scoreboard','leaderboard','timer','slam','tablaActual','medals','luces'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
   await _dirPush();R();
 };
 window.dirShowLb=async function(cat,seconds){
@@ -9176,6 +9308,7 @@ window._dirKeyHandler=function(e){
   if(map[k]){e.preventDefault();window.dirToggle(map[k]);return}
   if(k==='l'){e.preventDefault();window.dirToggleLb();return}
   if(k==='a'){e.preventDefault();window.dirToggle('tablaActual');return}
+  if(k==='u'){e.preventDefault();window.dirToggle('luces');return}
   if(k==='m'){e.preventDefault();window.dirToggleMedals();return}
   if(k==='g'){e.preventDefault();window.dirShowSlam('g');return}
   if(k==='n'){e.preventDefault();window.dirShowSlam('n');return}
@@ -9446,6 +9579,9 @@ function renderRemote(){
   h+=bigBtn('PERFIL', on('profile')?'EN PANTALLA':'atleta actual', on('profile'), "dirToggle('profile')");
   h+=bigBtn('MARCADOR', on('scoreboard')?'EN PANTALLA':'lower-third', on('scoreboard'), "dirToggle('scoreboard')");
   h+=bigBtn('TABLA ACTUAL', on('tablaActual')?'EN PANTALLA':'ranking corner', on('tablaActual'), "dirToggle('tablaActual')");
+  // Las luces se dejan prendidas toda la competencia: mientras no hay decisión
+  // no se ve nada, y aparecen solas cuando los jueces marcan.
+  h+=bigBtn('LUCES', on('luces')?'ARMADO · aparece al decidir':'luces de jueces', on('luces'), "dirToggle('luces')");
   h+=bigBtn('CLASIFICACIÓN', on('leaderboard')?'EN PANTALLA':'ranking cat.', on('leaderboard'), "dirToggleLb()");
   h+=bigBtn('TIMER', on('timer')?'EN PANTALLA':'cronómetro', on('timer'), "dirToggle('timer')");
   // MEDALLERO abre el menú en vez de disparar. Antes llamaba a dirToggle('medals')
@@ -9672,6 +9808,7 @@ function renderDirector(){
   h+='</div>';
   h+='<button class="btn '+(lbActive?'btn-r':'btn-g')+'" onclick="dirToggleLb()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(lbActive?'⏸ DESACTIVAR':'▶ ACTIVAR')+'</button>';
   h+='</div>'+scaleSlider('leaderboard')+'</div>';
+  h+=compToggle('luces','','Luces de jueces','Los tres círculos abajo al centro, con el nombre del atleta y el intento. Se deja prendido toda la competencia: mientras no hay decisión no se ve nada, y aparece solo cuando los jueces marcan. Es un espejo — el válido o el nulo se sigue dando en Control en Vivo o en la planilla.','U','dirToggle(\'luces\')');
   h+=compToggle('tablaActual','','Tabla actual (corner)','Ranking de la categoría del lifter actual, esquina inferior derecha. Entra desde abajo, queda fijo. El levantador en pantalla se resalta y muestra la flecha de proyección (pos actual → pos si lo levanta).','A','dirToggle(\'tablaActual\')');
   // Medallero (Top 3) — selects en cascada: modalidad → sexo → división → categoría.
   // Todo se calcula desde DATA.athletes (ya cargado local): cero lecturas nuevas a Firestore.

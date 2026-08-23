@@ -133,7 +133,12 @@ const DONDE = () => {
     const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
     ok(/async function _avisarAtletaAJueces\(\)\{/.test(lc),
        'el control en vivo tiene su propio aviso, fuera del modo jueces');
-    ok(/if\(isAdmin&&DATA\.phase==='compete'\)\{ try\{_avisarAtletaAJueces\(\);\}catch\(e\)\{\} \}/.test(lc),
+    // Se mira el bloque, no la línea exacta: ahí adentro se fue sumando más de
+    // una cosa (también se anotan las luces de cada intento) y una comprobación
+    // pegada al texto se rompía sola.
+    const bloque = lc.slice(lc.indexOf("if(isAdmin&&DATA.phase==='compete')"),
+                            lc.indexOf("if(isAdmin&&DATA.phase==='compete')") + 320);
+    ok(/isAdmin&&DATA\.phase==='compete'/.test(bloque) && /_avisarAtletaAJueces\(\)/.test(bloque),
        'y sale desde el puesto que opera, en la pantalla de competencia');
     const f = lc.slice(lc.indexOf('async function _avisarAtletaAJueces'),
                        lc.indexOf('async function resetJudgeLights'));
