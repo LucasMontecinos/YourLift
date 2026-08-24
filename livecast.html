@@ -5809,10 +5809,18 @@ let _txCerRecordData=null;
 let _txCerRecordUnsub=null;
 let _txCerRecordSeenTs=0;
 let _txCerLastSig=null;            // signature p/ saltarse re-renders innecesarios
+// Mismo cuidado que el listener del director: el id del doc depende del evento,
+// que se resuelve después de Firebase. Si se suscribe antes, queda escuchando el
+// id viejo y los avisos de récord no llegan nunca.
+let _txCerRecordUnsubDocId=null;
 function _txCerStartRecordListener(){
-  if(_txCerRecordUnsub||!fbReady||!window._fb)return;
+  if(!fbReady||!window._fb)return;
+  const docId=evStateDocId('current');
+  if(_txCerRecordUnsub&&_txCerRecordUnsubDocId===docId)return;
+  if(_txCerRecordUnsub){try{_txCerRecordUnsub()}catch(e){}_txCerRecordUnsub=null;}
+  _txCerRecordUnsubDocId=docId;
   try{
-    _txCerRecordUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_record',evStateDocId('current')),(snap)=>{
+    _txCerRecordUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_record',docId),(snap)=>{
       if(!snap.exists())return;
       const d=snap.data();if(!d||!d.ts)return;
       if(d.ts===_txCerRecordSeenTs)return;
@@ -6188,17 +6196,46 @@ function _widgetHandleDirectObsEvent(d){
 const TX_DIR_DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',tipo:'total',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[],movement:'',style:{bgColor:'#0A1628',accentColor:'#C41E3A',videoX:0,videoY:5,videoW:40,videoH:80,textX:44,textY:10,titleSize:8,movSize:5,timerSize:12,showLogos:true,blurAmount:24,overlayOpacity:0.65}}};
 let _txDirState=null;
 let _txDirUnsub=null;
+let _txDirUnsubDocId=null;
 let _txDirPoll=null;
 let _txDirLastSig=null;
+// El widget escucha el doc del director. Ese doc se llama 'current__<Evento>',
+// así que su nombre depende de que el evento YA esté resuelto — y el evento se
+// resuelve DESPUÉS de que Firebase queda listo, con nominas.json de por medio.
+//
+// Antes esta función se suscribía a lo primero que hubiera y no volvía a mirar
+// ('if(_txDirUnsub)return'). Si Firebase ganaba la carrera, el widget quedaba
+// escuchando 'current' —el id viejo de compatibilidad— para siempre, mientras
+// el Control TX y el control remoto escribían en 'current__<Evento>'. El
+// resultado en competencia: se aprieta perfil, marcador o medallero, el panel
+// lo marca en verde, Firestore recibe el comando, y en pantalla no pasa nada.
+// Nunca. Ni recargando el navegador, porque la carrera se vuelve a perder igual.
+//
+// Pasa más seguido dentro de OBS: el browser source arranca en frío, sin caché,
+// y cada cambio de escena que reinicia la fuente vuelve a tirar los dados.
+//
+// Ahora se compara el id contra el que ya se está escuchando y, si cambió, se
+// re-suscribe. Es el mismo arreglo que ya tenía el lado del control (_dirListen).
 function _txStartDirectorListener(){
   if(!_txDirState)_txDirState={...TX_DIR_DEFAULT};
-  if(_txDirUnsub)return;
   if(!fbReady||!window._fb){
-    if(!_txDirPoll)_txDirPoll=setInterval(()=>{if(fbReady&&window._fb){clearInterval(_txDirPoll);_txDirPoll=null;_txStartDirectorListener()}},300);
+    if(!_txDirPoll)_txDirPoll=setInterval(_txStartDirectorListener,300);
     return;
   }
+  const docId=evStateDocId('current');
+  if(_txDirUnsub&&_txDirUnsubDocId===docId){
+    // Ya está escuchando el doc correcto. Pero si el evento todavía no se
+    // resuelve, este id puede seguir cambiando: hay que seguir vigilando.
+    if(!fbDocId()&&!_txDirPoll)_txDirPoll=setInterval(_txStartDirectorListener,300);
+    return;
+  }
+  if(_txDirUnsub){try{_txDirUnsub()}catch(e){}_txDirUnsub=null;}
+  _txDirUnsubDocId=docId;
+  // Con el evento ya resuelto el id no cambia más: se puede soltar la vigilancia.
+  if(fbDocId()&&_txDirPoll){clearInterval(_txDirPoll);_txDirPoll=null;}
+  console.log('[TX] director escuchando '+docId);
   try{
-    _txDirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',evStateDocId('current')),(snap)=>{
+    _txDirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',docId),(snap)=>{
       if(snap.exists()){
         const d=snap.data();
         _txDirState=Object.assign({},TX_DIR_DEFAULT,d.show||{});
@@ -8830,7 +8867,7 @@ let _obsWs=null, _obsWsConnected=false, _obsWsError='';
 let _obsWsSettings=(()=>{try{return JSON.parse(localStorage.getItem('obs_ws_settings')||'')}catch(e){}return{host:'localhost',port:4455,password:'',autoConnect:false}})();
 let _obsWsLog=[]; // últimos eventos recibidos para debug (max 10)
 async function obsWsConnect(){
-  if(!window.OBSWebSocket){_obsWsError='Librería obs-websocket-js no cargó (revisá conexión a internet)';if(DATA.phase==='director')R();return}
+  if(!window.OBSWebSocket){_obsWsError='Librería obs-websocket-js no cargó (revisa la conexión a internet)';if(DATA.phase==='director')R();return}
   if(_obsWs){try{await _obsWs.disconnect()}catch(e){}_obsWs=null}
   _obsWsError='';
   _obsWs=new window.OBSWebSocket();
@@ -8897,7 +8934,7 @@ window.obsWsToggleConnection=function(){
 // Envía un CustomEvent a través de OBS para verificar el roundtrip.
 // OBS lo broadcastea, nuestro listener lo recibe → toggle profile.
 window.obsWsTestEvent=async function(){
-  if(!_obsWs||!_obsWsConnected){alert('Conectá primero a OBS WebSocket');return}
+  if(!_obsWs||!_obsWsConnected){alert('Conecta primero a OBS WebSocket');return}
   try{
     await _obsWs.call('BroadcastCustomEvent',{eventData:{action:'toggle',component:'profile',_test:true}});
     alert('✓ Evento enviado a OBS. Si la conexión está bien, el perfil debería togglearse en pantalla en 1-2s. Mirá el log abajo "Últimos eventos recibidos".');
@@ -9587,7 +9624,7 @@ function renderRemote(){
   h+='</div>';
   if(!(fbReady&&_evtReady)){
     h+='<div style="margin:0 0 12px;padding:10px 14px;border-radius:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);color:#f59e0b;font-size:12px;line-height:1.5">'
-      +(fbReady?'Esperando que cargue el evento. Asegurate de abrir el link con <b>?evento=TU_EVENTO&remote=1</b> y estar logueado como admin.':'Conectando a Firebase… Si no conecta, revisá tu internet y que estés logueado como admin.')
+      +(fbReady?'Esperando que cargue el evento. Asegurate de abrir el link con <b>?evento=TU_EVENTO&remote=1</b> y estar logueado como admin.':'Conectando a Firebase… Si no conecta, revisa tu internet y que estés logueado como admin.')
       +'</div>';
     // Re-chequear en 1s hasta que esté listo (evita quedar en "conectando" para siempre).
     if(!window._remotePoll){window._remotePoll=setTimeout(()=>{window._remotePoll=null;if(DATA.phase==='remote'){_dirEnsureListener();R();}},1000);}
@@ -10466,7 +10503,7 @@ function renderCompete(){
     const esperando=window._desincDesde?Math.round((Date.now()-window._desincDesde)/1000):0;
     let col,txt,tip;
     if(!ctrl){col='var(--red)';txt='NO GUARDA';tip='Esta pantalla está en modo ESPECTADOR: no escribe nada.';}
-    else if(!fbReady||!fbUnsub){col='var(--red)';txt='SIN CONEXIÓN';tip='No hay conexión con el servidor. Se reintenta solo — revisá internet.';}
+    else if(!fbReady||!fbUnsub){col='var(--red)';txt='SIN CONEXIÓN';tip='No hay conexión con el servidor. Se reintenta solo — revisa internet.';}
     else if(window._syncFallo){col='var(--red)';txt='NO SE GUARDA';tip='La última escritura falló. Se sigue reintentando solo. '+ultimo;}
     else if(pendiente&&esperando>=12){col='var(--red)';txt='NO SE GUARDA';tip='Hace '+esperando+'s que hay cambios sin confirmar. Revisa la conexión y la sesión.';}
     else if(pendiente){col='var(--orange)';txt='GUARDANDO…';tip='Mandando los últimos cambios al servidor.';}
