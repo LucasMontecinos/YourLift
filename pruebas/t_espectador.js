@@ -15,7 +15,13 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
 const MONTAR = `(()=>{
   const nueve=()=>({sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]});
   DATA.phase='compete'; DATA.lift='sq'; DATA.round=0; DATA.flight='A';
-  DATA.event={id:'x',name:'Regional Norte FECHIPO 2026'};
+  // El id tiene que ser el mismo que va en el ?evento= de la URL. Cuando termina
+  // de bajar nominas.json, el livecast vuelve a resolver ese parámetro; si para
+  // entonces la competencia montada dice ser de OTRO evento, la borra entera y
+  // deja la pantalla en el selector. Con el id correcto reconoce que ya está
+  // adentro y no toca nada. (Antes decía 'x' y la prueba se quedaba sin .main,
+  // sin ningún error de JavaScript que lo explicara.)
+  DATA.event={id:'suda2026_fesupo_full',name:'Regional Norte FECHIPO 2026'};
   const N=[
    ['Juan Perez Soto','Hombre','83','Junior','Black Bars','A',82.1,180],
    ['Pedro Diaz Rojas','Hombre','83','Junior','Los Toros','A',82.8,190],
