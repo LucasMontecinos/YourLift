@@ -148,16 +148,16 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 <body>
 
 <!-- ══ LOGIN ════════════════════════════════════════════════
-     Cada dispositivo que juzgue entra una vez. La sesión queda guardada en ese
-     navegador, así que esto se ve una sola vez por teléfono o tablet. -->
-<div id="login" class="screen">
+     Es lo PRIMERO que se ve, siempre. No hay forma de llegar a juzgar sin entrar
+     con una cuenta: quién marcó cada luz tiene que quedar claro. La sesión dura
+     lo que dure la jornada y se cierra sola — ver SESION_MAX_MS más abajo. -->
+<div id="login" class="screen active">
   <div>
     <div class="logo">YOUR<span>LIFT</span></div>
     <div class="subtitle">Panel de Jueces</div>
   </div>
-  <p style="font-size:13px;color:var(--muted);text-align:center;max-width:320px;line-height:1.6">
-    Este dispositivo todavía no tiene sesión. Entra con la cuenta del campeonato
-    para que tus luces lleguen a la tarima.
+  <p id="logMsg" style="font-size:13px;color:var(--muted);text-align:center;max-width:320px;line-height:1.6">
+    Entra con tu cuenta de juez para que tus luces lleguen a la tarima.
   </p>
   <input id="logEmail" class="log-in" type="email" inputmode="email" autocomplete="username"
          placeholder="Correo" autocapitalize="off" spellcheck="false">
@@ -165,13 +165,13 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
          placeholder="Clave" onkeydown="if(event.key==='Enter')entrar()">
   <div id="logErr" style="font-size:12px;color:#ef4444;min-height:16px;text-align:center"></div>
   <button id="logBtn" class="pick-btn cen" onclick="entrar()" style="font-size:18px">ENTRAR</button>
-  <button onclick="saltarLogin()" style="background:none;border:none;color:var(--muted);font-family:Oswald;font-size:12px;letter-spacing:1px;text-decoration:underline;cursor:pointer;padding:8px">
-    Seguir sin entrar (solo para mirar)
-  </button>
+  <p style="font-size:11px;color:var(--muted);text-align:center;max-width:320px;line-height:1.5;opacity:.8">
+    La sesión se cierra al cerrar esta página, y también sola a las 4 horas.
+  </p>
 </div>
 
 <!-- ══ PICK SCREEN ══════════════════════════════════════════ -->
-<div id="pick" class="screen active">
+<div id="pick" class="screen">
   <div>
     <div class="logo">YOUR<span>LIFT</span></div>
     <div class="subtitle">Panel de Jueces</div>
@@ -293,10 +293,20 @@ const JUEZ_DOC=TARIMA?'current_T'+TARIMA:'current';
     // decía "sin permiso" y no había en la página dónde arreglarlo.
     fbAuth=fa.getAuth(app);
     _fa=fa;
+    // La sesión NO se guarda entre visitas: se borra al cerrar la página. Por
+    // defecto Firebase la deja en el navegador para siempre, y en el teléfono de
+    // un juez prestado eso significa que el que lo tome después entra sin que
+    // nadie le pregunte nada. Acá la sesión vive lo que vive la pestaña.
+    try{ await fa.setPersistence(fbAuth,fa.browserSessionPersistence); }
+    catch(e){ console.warn('persistencia de sesión',e); }
     fa.onAuthStateChanged(fbAuth,u=>{
+      // Puede llegar una sesión que no se abrió acá: la del panel o la del
+      // livecast en ese mismo navegador. No sirve — hay que ver a la persona
+      // entrar. Sin la marca de esta pestaña, se cierra y se vuelve a pedir.
+      if(u&&!_sesionVigente()){ _vencerSesion(false); return; }
       fbSesion=!!u;
       setFBStatus(true);
-      if(u)cerrarLogin(); else if(!_loginDescartado)abrirLogin();
+      if(u){ _armarVigilancia(); cerrarLogin(); } else abrirLogin();
     });
   }catch(e){
     console.error('Firebase error',e);
@@ -313,26 +323,83 @@ function setFBStatus(ok){
 // La sesión de Firebase vive en el navegador, no en la cuenta: entrar en la
 // tablet no sirve para el teléfono, y Chrome no comparte con el navegador de
 // Samsung ni con una pestaña de incógnito. Por eso cada dispositivo que vaya a
-// juzgar necesita entrar una vez — y ahora se hace desde acá.
-let fbAuth=null,_fa=null,_loginDescartado=false;
-window.abrirLogin=function(){
+// juzgar necesita entrar — y se hace acá, sin pasar por el panel.
+//
+// Cuánto dura. Un juez marca luces a nombre de una cuenta, así que la sesión no
+// puede quedar abierta después de la jornada: el teléfono se presta, se deja en
+// la mesa, se lo lleva otro. Se cierra sola de dos formas:
+//   · al cerrar la página (la marca vive en sessionStorage, que muere con la
+//     pestaña — y la sesión de Firebase está en browserSessionPersistence);
+//   · y a las 4 horas de haber entrado, aunque la página siga abierta.
+// Se avisa 10 minutos antes para que nadie se quede sin luces en medio de un
+// intento, y al volver a entrar se regresa a la misma posición que tenía.
+const SESION_MAX_MS=4*60*60*1000;
+const SESION_AVISO_MS=10*60*1000;
+const SESION_KEY='yl_juez_desde';
+let fbAuth=null,_fa=null,_vigilancia=null,_avisado=false;
+function _sesionDesde(){
+  try{ return parseInt(sessionStorage.getItem(SESION_KEY)||'0',10)||0; }catch(e){ return 0; }
+}
+function _sesionVigente(){
+  const d=_sesionDesde();
+  return d>0 && (Date.now()-d)<SESION_MAX_MS;
+}
+function _marcarSesion(){
+  try{ sessionStorage.setItem(SESION_KEY,String(Date.now())); }catch(e){}
+  _avisado=false;
+}
+function _borrarMarca(){
+  try{ sessionStorage.removeItem(SESION_KEY); }catch(e){}
+}
+// Cierra la sesión y vuelve a pedir la cuenta. `porTiempo` distingue las 4 horas
+// cumplidas de una sesión que simplemente no se abrió en esta pestaña.
+async function _vencerSesion(porTiempo){
+  _borrarMarca();
+  if(_vigilancia){clearInterval(_vigilancia);_vigilancia=null;}
+  try{ if(_fa&&fbAuth)await _fa.signOut(fbAuth); }catch(e){ console.warn(e); }
+  fbSesion=false; myVote=null;
+  try{ updatePreview(); updateButtons(); }catch(e){}
+  setFBStatus(true);
+  abrirLogin(porTiempo
+    ? 'Pasaron 4 horas desde que entraste. Vuelve a entrar con tu cuenta para seguir juzgando.'
+    : 'Entra con tu cuenta de juez para que tus luces lleguen a la tarima.');
+}
+// Expuesta a propósito: la batería de pruebas necesita adelantar el reloj para
+// ver qué pasa a las 4 horas sin esperarlas.
+window._vencerSesion=_vencerSesion;
+function _armarVigilancia(){
+  if(_vigilancia)return;
+  _vigilancia=setInterval(()=>{
+    const d=_sesionDesde();
+    if(!d)return;
+    const queda=SESION_MAX_MS-(Date.now()-d);
+    if(queda<=0){ _vencerSesion(true); return; }
+    if(queda<=SESION_AVISO_MS&&!_avisado){
+      _avisado=true;
+      try{ showPulse('Tu sesión vence en '+Math.max(1,Math.round(queda/60000))+' min','#f59e0b'); }catch(e){}
+    }
+  },30000);
+}
+window.abrirLogin=function(msg){
   if(fbSesion)return;
-  _loginDescartado=false;
+  const m=document.getElementById('logMsg');
+  if(m&&typeof msg==='string')m.textContent=msg;
+  const pw=document.getElementById('logPass'); if(pw)pw.value='';
   document.getElementById('login').classList.add('active');
-  document.getElementById('panel').style.display='none';
-  document.getElementById('pick').style.display='none';
+  document.getElementById('panel').classList.remove('active');
+  document.getElementById('pick').classList.remove('active');
 };
 function cerrarLogin(){
   document.getElementById('login').classList.remove('active');
-  document.getElementById('panel').style.display='';
-  document.getElementById('pick').style.display='';
+  // Si ya había elegido posición antes de que se venciera la sesión, vuelve
+  // directo a juzgar. Hacerlo elegir de nuevo en medio de una tanda es perder
+  // tiempo de tarima por nada.
+  document.getElementById(myPos?'panel':'pick').classList.add('active');
 }
-window.saltarLogin=function(){ _loginDescartado=true; cerrarLogin(); };
 window.salir=async function(){
   if(!confirm('¿Cerrar la sesión en este teléfono?\nTus luces dejan de llegar a la tarima hasta que vuelvas a entrar.'))return;
-  try{ if(_fa&&fbAuth)await _fa.signOut(fbAuth); }catch(e){ console.warn(e); }
-  fbSesion=false; myVote=null; updatePreview(); updateButtons();
-  setFBStatus(true); abrirLogin();
+  myPos=null;
+  await _vencerSesion(false);
 };
 window.entrar=async function(){
   const em=document.getElementById('logEmail').value.trim();
@@ -340,11 +407,15 @@ window.entrar=async function(){
   const err=document.getElementById('logErr');
   err.textContent='';
   if(!em||!pw){err.textContent='Falta el correo o la clave';return;}
-  if(!fbAuth||!_fa){err.textContent='Conectando con el servidor… probá de nuevo en unos segundos';return;}
+  if(!fbAuth||!_fa){err.textContent='Conectando con el servidor… prueba de nuevo en unos segundos';return;}
   const btn=document.getElementById('logBtn');
   btn.disabled=true; btn.textContent='ENTRANDO…';
   try{
     await _fa.signInWithEmailAndPassword(fbAuth,em,pw);
+    // La marca va ANTES de mostrar el panel: el observador de sesión la busca, y
+    // sin ella daría por buena una sesión que no se abrió acá y cerraría todo.
+    _marcarSesion();
+    _armarVigilancia();
     // Se cierra acá, sin esperar a onAuthStateChanged. El observador igual va a
     // avisar, pero si por lo que sea no llega, el juez quedaría mirando el login
     // con la sesión ya iniciada y sin entender qué le falta.

@@ -61,6 +61,10 @@ async function abrir(b, pos) {
   // El reloj se adelanta a mano: esperar cinco segundos de verdad en cada caso
   // haría que la prueba tardara más de lo que aporta.
   await ctx.addInitScript(() => {
+    // El juez ya entró con su cuenta en esta pestaña. Sin esta marca la página
+    // da la sesión por ajena, la cierra y muestra el login — que es justo lo que
+    // tiene que hacer, pero acá lo que se prueba son las luces, no el ingreso.
+    try { sessionStorage.setItem('yl_juez_desde', String(Date.now())); } catch (e) {}
     // Los ids arrancan bien arriba para no chocar con los del navegador: si
     // clearTimeout de un id real cayera en esta tabla, se cancelaría el timer
     // equivocado y la prueba mediría cualquier cosa.

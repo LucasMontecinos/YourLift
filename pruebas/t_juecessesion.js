@@ -38,7 +38,10 @@ export async function signInWithEmailAndPassword(a,em,pw){
   window.__entro=em;
   return {user:a._u};
 }
-export async function signOut(a){ a._u=null; window.__salio=true; }`;
+export async function signOut(a){ a._u=null; window.__salio=true; }
+export const browserSessionPersistence={tipo:'sesion'};
+export const browserLocalPersistence={tipo:'local'};
+export async function setPersistence(a,p){ window.__persistencia=p&&p.tipo; }`;
 }
 const STUB_APP = `export function initializeApp(){return{};}`;
 const STUB_FS = `
@@ -66,6 +69,14 @@ async function abrir(b, haySesion) {
   return { p, ctx, errs };
 }
 
+// Entrar con la cuenta, que ahora es el único camino para llegar a juzgar.
+async function entrarComo(p, mail) {
+  await p.fill('#logEmail', mail || 'juez@fechipo.cl');
+  await p.fill('#logPass', 'buena');
+  await p.click('#logBtn');
+  await p.waitForTimeout(400);
+}
+
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
@@ -75,8 +86,18 @@ async function abrir(b, haySesion) {
     ok(await p.evaluate(VISIBLE, 'login'), 'se ve la pantalla de entrar');
     ok(!(await p.evaluate(VISIBLE, 'pick')), 'y no se pasa directo a elegir posición');
     const txt = await p.evaluate(() => document.getElementById('login').innerText);
-    ok(/no tiene sesión/i.test(txt), 'dice por qué: ' + txt.split('\n').find(l => /sesión/i.test(l)));
+    ok(/cuenta de juez/i.test(txt), 'pide la cuenta: ' + txt.split('\n').find(l => /cuenta/i.test(l)));
     ok(/lleguen a la tarima/i.test(txt), 'y para qué sirve entrar');
+    ok(/4 horas/.test(txt), 'y avisa desde el principio cuánto dura la sesión');
+    ok(await p.evaluate(() => window.__persistencia) === 'sesion',
+       'la sesión se guarda solo mientras la página esté abierta');
+  }
+
+  console.log('\n  Y no hay forma de saltárselo');
+  {
+    const txt = await p.evaluate(() => document.getElementById('login').innerText);
+    ok(!/sin entrar|solo para mirar/i.test(txt), 'no queda ningún "seguir sin entrar"');
+    ok(!/saltarLogin/.test(src), 'ni la función que lo hacía');
   }
 
   console.log('\n  Se entra desde ahí mismo');
@@ -99,46 +120,69 @@ async function abrir(b, haySesion) {
     ok(label === 'En vivo', 'el indicador pasa a "En vivo" (' + label + ')');
   }
 
-  console.log('\n  Y se puede mirar sin entrar, si alguien solo quiere ver');
+  console.log('\nUna sesión que no se abrió acá no sirve');
   {
-    const { p: p2, errs: e2 } = await abrir(b, false);
-    await p2.click('text=Seguir sin entrar');
-    ok(!(await p2.evaluate(VISIBLE, 'login')), 'se sale del login');
-    ok(await p2.evaluate(VISIBLE, 'pick'), 'y se puede usar la página');
-    const label = await p2.evaluate(() => document.getElementById('fbLabel').textContent);
-    ok(/Sin sesión/.test(label), 'pero el aviso queda arriba: "' + label + '"');
-    errs.push(...e2);
-  }
-
-  console.log('\nTablet que ya tenía sesión: no molesta');
-  {
+    // El navegador puede traer la sesión del panel o del livecast. Antes eso
+    // dejaba pasar directo. Pero quien marca una luz tiene que haberse
+    // identificado en esta página: si no, cualquiera que tome el teléfono ya
+    // está adentro, juzgando a nombre de otro.
     const { p: p3, errs: e3 } = await abrir(b, true);
-    ok(!(await p3.evaluate(VISIBLE, 'login')), 'no aparece el login');
-    ok(await p3.evaluate(VISIBLE, 'pick'), 'entra directo a elegir posición');
-    ok(await p3.evaluate(() => document.getElementById('fbLabel').textContent) === 'En vivo',
-       'y dice "En vivo"');
+    ok(await p3.evaluate(VISIBLE, 'login'), 'igual pide la cuenta');
+    ok(!(await p3.evaluate(VISIBLE, 'pick')), 'y no deja pasar a elegir posición');
+    ok(await p3.evaluate(() => window.__salio) === true, 'y esa sesión ajena se cierra');
     errs.push(...e3);
   }
 
-  console.log('\nSe puede volver a abrir desde el aviso de arriba');
+  console.log('\nAl cerrar la página hay que volver a entrar');
   {
-    const { p: p4, errs: e4 } = await abrir(b, false);
-    await p4.click('text=Seguir sin entrar');
-    await p4.evaluate(() => selectPos('central'));
-    await p4.click('#fbLabel');
-    ok(await p4.evaluate(VISIBLE, 'login'), 'tocando "Sin sesión" vuelve el login');
-    errs.push(...e4);
+    // Cada pestaña nueva arranca con sessionStorage vacío, que es exactamente lo
+    // que pasa cuando el juez cierra la página y la vuelve a abrir.
+    const { p: p7, errs: e7 } = await abrir(b, true);
+    ok(await p7.evaluate(VISIBLE, 'login'), 'pide la cuenta de nuevo');
+    await entrarComo(p7);
+    ok(await p7.evaluate(VISIBLE, 'pick'), 'y entrando se llega a juzgar');
+    errs.push(...e7);
+  }
+
+  console.log('\nA las 4 horas se vuelve a pedir, aunque la página siga abierta');
+  {
+    const { p: p8, errs: e8 } = await abrir(b, false);
+    await entrarComo(p8);
+    await p8.evaluate(() => selectPos('central'));
+    ok(await p8.evaluate(VISIBLE, 'panel'), 'está juzgando desde la posición central');
+
+    await p8.evaluate(() => window._vencerSesion(true));
+    await p8.waitForTimeout(300);
+    ok(await p8.evaluate(VISIBLE, 'login'), 'cumplido el plazo, vuelve a pedir la cuenta');
+    ok(await p8.evaluate(() => window.__salio) === true, 'y cierra la sesión de verdad');
+    const txt = await p8.evaluate(() => document.getElementById('logMsg').textContent);
+    ok(/4 horas/.test(txt), 'diciendo por qué: "' + txt.trim() + '"');
+    ok(await p8.evaluate(() => document.getElementById('logPass').value) === '',
+       'y sin dejar la clave escrita en pantalla');
+
+    await entrarComo(p8);
+    ok(await p8.evaluate(VISIBLE, 'panel'), 'al volver a entrar sigue en su misma posición');
+    ok(!(await p8.evaluate(VISIBLE, 'pick')), 'sin hacerlo elegir de nuevo en medio de la tanda');
+    errs.push(...e8);
+  }
+
+  console.log('\n  El plazo está en un solo lugar, para poder cambiarlo');
+  {
+    ok(/const SESION_MAX_MS=4\*60\*60\*1000;/.test(src), 'las 4 horas son una constante');
+    ok(/const SESION_AVISO_MS=/.test(src), 'y el aviso previo también');
   }
 
   console.log('\nSe puede cerrar la sesión al terminar');
   {
-    const { p: p6, errs: e6 } = await abrir(b, true);
+    const { p: p6, errs: e6 } = await abrir(b, false);
+    await entrarComo(p6);
     await p6.evaluate(() => selectPos('der'));
     p6.on('dialog', d => d.accept());
     await p6.click('text=Cerrar sesión en este dispositivo');
     await p6.waitForTimeout(400);
     ok(await p6.evaluate(() => window.__salio) === true, 'la sesión se cierra de verdad');
     ok(await p6.evaluate(VISIBLE, 'login'), 'y vuelve a pedir entrar');
+    ok(!(await p6.evaluate(VISIBLE, 'panel')), 'sin dejar el panel de juzgar abierto detrás');
     errs.push(...e6);
   }
 
@@ -184,7 +228,8 @@ async function abrir(b, haySesion) {
 
   console.log('\nSigue funcionando lo de antes');
   {
-    const { p: p5, errs: e5 } = await abrir(b, true);
+    const { p: p5, errs: e5 } = await abrir(b, false);
+    await entrarComo(p5);
     await p5.evaluate(() => { selectPos('central'); pintarMotivos('sq'); });
     const r = await p5.evaluate(() => ({
       pos: document.getElementById('posBadge').textContent,
