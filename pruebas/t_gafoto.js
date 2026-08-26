@@ -97,6 +97,26 @@ console.log('\n  Se ve aunque el contador propio esté vacío');
      'y también cuando sí hay datos');
 }
 
+console.log('\n  La geografía va período a período, no de un mes suelto');
+{
+  ok(GA_FOTO.regiones.length === 4, 'están las cuatro ventanas medidas');
+  const h = renderGAFoto();
+  ok(/SANTIAGO vs REGIONES/.test(h), 'se muestra el reparto Santiago / regiones');
+  GA_FOTO.regiones.forEach(x => {
+    const stgo = (x.r.find(y => y[0] === 'Santiago') || ['', 0])[1];
+    ok(stgo > 0 && stgo < x.cl, x.p + ': Santiago (' + stgo + ') es parte de Chile (' + x.cl + '), no el total');
+  });
+  // El reparto tiene que ser parejo: si un período se dispara, la afirmación de
+  // "un tercio fuera de Santiago" deja de ser cierta y hay que reescribirla.
+  const pcts = GA_FOTO.regiones.map(x => {
+    const stgo = (x.r.find(y => y[0] === 'Santiago') || ['', 0])[1];
+    return Math.round((x.cl - stgo) / x.cl * 100);
+  });
+  ok(Math.min(...pcts) >= 25 && Math.max(...pcts) <= 45,
+     'fuera de Santiago se mantiene entre 25 % y 45 % en los cuatro (' + pcts.join(', ') + ')');
+  ok(!/REGIONES DE CHILE · MAYO/.test(h), 'ya no se muestra un solo mes como si fuera todo');
+}
+
 console.log('\n  Es solo del admin');
 {
   ok(!/GA_FOTO/.test(idx), 'el sitio público no la trae');

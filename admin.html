@@ -1935,7 +1935,16 @@ const GA_FOTO={
   // Sesiones por canal, sumadas de los cuatro períodos.
   canales:[['Directo',8994],['Google y Bing',7589],['Instagram',3479],['YouTube',105]],
   paisesUltimoMes:[['Chile',1984],['Brasil',67],['Ecuador',64],['Colombia',44]],
-  regionesMayo:[['Santiago',683],['Biobío',116],['Valparaíso',91],['Antofagasta',89]],
+  // Usuarios activos de Chile por región, período a período. No se suman: un
+  // mismo usuario que vuelve al mes siguiente cuenta en los dos. Lo que importa
+  // acá es el reparto, que se mantiene parejo en los cuatro.
+  regiones:[
+    {p:'28 abr – 27 may', cl:1009, r:[['Santiago',683],['Biobío',116],['Valparaíso',91],['Antofagasta',89]]},
+    {p:'28 may – 26 jun', cl:2149, r:[['Santiago',1306],['Biobío',409],['Antofagasta',224],['Valparaíso',198]]},
+    {p:'27 jun – 26 jul', cl:667,  r:[['Santiago',467],['Biobío',122],['Antofagasta',79],['Valparaíso',71]]},
+    {p:'27 jul – 25 ago', cl:1984, r:[['Santiago',1320],['Biobío',340],['Antofagasta',274],['Valparaíso',203]]},
+  ],
+  ciudadesUltimoMes:[['Santiago',1284],['Concepción',294],['Antofagasta',257],['Viña del Mar',144]],
   peak:{ses:722, dia:'9 de agosto', evento:'Regional Centro Sur', prevMin:57, prevMax:670},
   igPagado:750,
 };
@@ -1993,7 +2002,23 @@ function renderGAFoto(){
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px">
       <div><div style="font-family:Oswald;font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:10px">DE DÓNDE LLEGA (TOTAL)</div>${barra(G.canales,'var(--gold)')}</div>
       <div><div style="font-family:Oswald;font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:10px">PAÍSES · ÚLTIMO MES</div>${barra(G.paisesUltimoMes,'#3b82f6')}</div>
-      <div><div style="font-family:Oswald;font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:10px">REGIONES DE CHILE · MAYO</div>${barra(G.regionesMayo,'#22c55e')}</div>
+      <div><div style="font-family:Oswald;font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:10px">CIUDADES · ÚLTIMO MES</div>${barra(G.ciudadesUltimoMes,'#22c55e')}</div>
+    </div>
+    <div style="margin-top:22px">
+      <div style="font-family:Oswald;font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:10px">SANTIAGO vs REGIONES · PERÍODO A PERÍODO</div>
+      ${G.regiones.map(x=>{
+        const stgo=(x.r.find(y=>y[0]==='Santiago')||['',0])[1];
+        const reg=x.cl-stgo, pct=Math.round(reg/x.cl*100);
+        return `<div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+            <span>${esc(x.p)}</span>
+            <span style="color:var(--muted)">Santiago <b style="color:var(--text);font-family:Oswald">${stgo.toLocaleString('es-CL')}</b> · regiones <b style="color:var(--gold);font-family:Oswald">${reg.toLocaleString('es-CL')}</b> (${pct} %)</span>
+          </div>
+          <div style="height:7px;display:flex;border-radius:4px;overflow:hidden;background:rgba(255,255,255,.06)">
+            <div style="width:${100-pct}%;background:#3b82f6"></div><div style="width:${pct}%;background:var(--gold)"></div>
+          </div></div>`;
+      }).join('')}
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Un tercio del público está fuera de Santiago, y el reparto se mantiene parejo en los cuatro períodos.</div>
     </div>
     <div style="font-size:11px;color:var(--muted);margin-top:16px;line-height:1.6">
       Las vistas de junio y julio no están: falta sacar esa tarjeta de los informes.
