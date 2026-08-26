@@ -17,7 +17,9 @@ def nrm(s):
     return ''.join(c for c in s if unicodedata.category(c) != 'Mn').lower().strip()
 
 NOM = json.load(open('nomina_sudamericano.json', encoding='utf-8'))
-COR = json.load(open('nomina_suda_correcciones.json', encoding='utf-8'))['correcciones']
+_C = json.load(open('nomina_suda_correcciones.json', encoding='utf-8'))
+COR = _C['correcciones']
+EXC = _C.get('exclusiones', [])
 
 cambios, sin_match = [], []
 for c in COR:
@@ -28,23 +30,59 @@ for c in COR:
     if not objetivo:
         sin_match.append(c); continue
     for a in objetivo:
-        for campo in ('cat', 'div', 'mod', 'sexo', 'pais'):
+        # 'n' sirve para emparejar tildes y ñ, que es donde el archivo de FESUPO se
+        # contradice a sí mismo y deja al mismo atleta escrito de dos formas. Sirve
+        # para eso y no para renombrar: el emparejado ignora los acentos, así que un
+        # cambio de nombre de verdad dejaría de encontrar a nadie la segunda vez.
+        for campo in ('n', 'cat', 'div', 'mod', 'sexo', 'pais'):
             if campo in c and a.get(campo) != c[campo]:
                 cambios.append((a['n'], a['lista'], campo, a.get(campo), c[campo]))
                 if not DRY: a[campo] = c[campo]
+
+# Los que quedaron fuera del team se sacan enteros: todas sus listas. Van acá y
+# no borrados a mano para que no reaparezcan cuando la nómina se regenere desde
+# el Excel de FESUPO, que los sigue trayendo.
+sacados, exc_sin_match = [], []
+for e in EXC:
+    filas = [a for a in NOM['atletas'] if nrm(a['n']) == nrm(e['n'])]
+    if not filas:
+        exc_sin_match.append(e); continue
+    for a in filas:
+        sacados.append((a['n'], a['lista'], e.get('_motivo', '')))
+if sacados and not DRY:
+    fuera = {nrm(e['n']) for e in EXC}
+    NOM['atletas'] = [a for a in NOM['atletas'] if nrm(a['n']) not in fuera]
 
 if cambios:
     print(f'{"atleta":34} {"lista":30} campo  antes → después')
     for n, l, campo, antes, desp in cambios:
         print(f'{n[:33]:34} {l[:29]:30} {campo:5}  {antes} → {desp}')
 else:
-    print('Sin cambios: la nómina ya está corregida.')
+    print('Sin cambios de categoría: la nómina ya está corregida.')
+# Una corrección de alguien que además está excluido no es un error: quedó vieja
+# cuando esa persona salió del team. Se separa para que el aviso de "revisar el
+# nombre" siga significando lo que dice.
+_fuera = {nrm(e['n']) for e in EXC}
+viejas = [c for c in sin_match if nrm(c['n']) in _fuera]
+sin_match = [c for c in sin_match if nrm(c['n']) not in _fuera]
 if sin_match:
     print('\nCorrecciones que no encontraron a nadie (revisar el nombre):')
     for c in sin_match: print('  ', c.get('n'), '·', c.get('lista', ''))
+if viejas:
+    print('\nCorrecciones que quedaron sin efecto porque el atleta salió del team:')
+    for c in viejas: print('  ', c.get('n'), '·', c.get('lista', ''))
 
-if cambios and not DRY:
+if sacados:
+    print(f'\nFuera del team ({len(sacados)} inscripción/es):')
+    for n, l, motivo in sacados:
+        print(f'  {n[:33]:34} {l[:29]:30} {motivo}')
+if exc_sin_match:
+    # No es un aviso: si ya no están en la nómina, la exclusión hizo su trabajo.
+    # Solo importa si el nombre nunca calzó, y eso se ve la primera vez que se corre.
+    print(f'\n{len(exc_sin_match)} exclusión(es) ya estaban aplicadas.')
+
+if (cambios or sacados) and not DRY:
     json.dump(NOM, open('nomina_sudamericano.json', 'w', encoding='utf-8'),
               ensure_ascii=False, indent=1)
-    print(f'\n✓ {len(cambios)} cambio(s) aplicados a nomina_sudamericano.json')
-    print('  Acordate de correr build_suda_dias.py para rehacer los días del livecast.')
+    print(f'\n✓ {len(cambios)} corrección(es) y {len(sacados)} baja(s) aplicadas a nomina_sudamericano.json')
+    print('  Acuérdate de correr build_suda_dias.py para rehacer los días del livecast.')
