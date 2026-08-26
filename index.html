@@ -415,7 +415,6 @@ const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechi
 let NOM_EVENTS=[
   {id:"regional_centro_2026",name:"Campeonato Regional Centro FECHIPO 2026",date:"2026-05-09",closeDate:"2026-04-09",location:"Santiago, RM",org:"Athor Powerlifting",days:"09 y 10 de Mayo",extraCols:["modalidad"]},
   {id:"universitario_2026",name:"Primer Campeonato Nacional Universitario FECHIPO 2026",date:"2026-05-23",closeDate:"2026-04-23",location:"Talca",org:"Club Bushido Lifting",days:"23 de Mayo",extraCols:["universidad"]},
-  {id:"Campeonato_de_debutantes",name:"Campeonato de Debutantes",date:"2026-XX-XX",closeDate:"2026-XX-XX",location:"Santiago, Ñuñoa",org:"All Power",days:"Por definir",extraCols:["modalidad"]},
 ];
 let fbDB=null,fbReady=false;
 // ── Cache localStorage para reducir lecturas Firestore ──────────────────
@@ -1880,16 +1879,61 @@ function _igPill(handle,small){
   const pad=small?'7px 13px':'9px 16px', fs=small?'11px':'13px', ic=small?15:17;
   return `<a href="${url}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;color:rgba(235,242,250,.9);text-decoration:none;font-family:Oswald;font-size:${fs};letter-spacing:1px;padding:${pad};border:1px solid rgba(255,255,255,.22);border-radius:30px;background:rgba(255,255,255,.06);backdrop-filter:blur(6px);transition:all .15s;white-space:nowrap" onmouseover="this.style.borderColor='#E1306C';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(255,255,255,.22)';this.style.color='rgba(235,242,250,.9)'"><svg width="${ic}" height="${ic}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>@${h}</a>`;
 }
+// Los campeonatos de la portada salen de DOS lados: los que el panel guarda en
+// Firestore (window.ALL_EVENTS) y los que viajan en nominas.json (window.NM).
+//
+// Que estén los dos importa por dos razones. La primera es la velocidad:
+// nominas.json es un archivo estático que llega junto con la página, mientras
+// que Firestore necesita bajar el SDK antes de poder preguntar nada. Antes la
+// portada se pintaba con una lista de tres campeonatos escrita a mano en el
+// código —de mayo, ya corridos— y recién después se corregía sola. Ese era el
+// parpadeo. La segunda es que hay campeonatos, como los nueve días del
+// Sudamericano, que viven solo en nominas.json y por eso no aparecían nunca.
+function _homeEvs(){
+  // NM._static es la lista tal como vino en nominas.json. Hay que usar esa y no
+  // NM.events, porque a NM.events se le pisa el contenido con los eventos de
+  // Firestore apenas llegan (y más adelante se filtra a los que vienen de ahí),
+  // así que los campeonatos que solo existen en el archivo desaparecerían.
+  const nm=(typeof NM!=='undefined'&&NM&&(NM._static||NM.events))||[];
+  const fs=(window.ALL_EVENTS||[]);
+  const esEnsayo=e=>!!(e&&(e.ensayo||/^\s*ensayo\b/i.test(String(e.name||''))));
+  const crudos=[...fs,...nm].filter(e=>
+    e && e.date && e.status!=='archived' && !esEnsayo(e)
+    && !isNaN(new Date(e.date+'T00:00:00')));
+
+  // Un campeonato de varios días viaja como un evento por jornada, cada uno con
+  // parent=<id del campeonato>. En la portada es UN campeonato, no nueve: se
+  // juntan en una sola entrada con la fecha del primer día.
+  const porParent={}, sueltos=[];
+  crudos.forEach(e=>{
+    if(!e.parent){sueltos.push(e);return}
+    const p=porParent[e.parent];
+    if(!p||String(e.date)<String(p.date))porParent[e.parent]={...e,id:e.parent,
+      name:String(e.name||'').replace(/\s*[—–-]\s*d[ií]a\s*\d+\s*$/i,'').trim()};
+  });
+
+  // Si el mismo campeonato está en los dos lados, manda el de Firestore: es el
+  // que se edita desde el panel y por lo tanto el que está al día.
+  const vistos={}, fuera=[];
+  const clave=e=>String(e.id||'')||String(e.name||'').toLowerCase().replace(/[^a-z0-9]+/g,'')+'|'+e.date;
+  [...sueltos,...Object.values(porParent)].forEach(e=>{
+    const k=clave(e); if(vistos[k])return; vistos[k]=1; fuera.push(e);
+  });
+  return fuera.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+}
 function home(){
   const months=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
   const baseName=n=>String(n||'').replace(/\s*[-–]\s*tarima\s*\d+/i,'').trim();
-  const evs=(window.ALL_EVENTS||NOM_EVENTS||[])
-    .filter(e=>e.status!=='archived'&&e.date)
-    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const evs=_homeEvs();
   const now=new Date();
   const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   const proximos=evs.filter(e=>{const d=new Date(e.date+'T00:00:00');return !isNaN(d)&&d>=today;});
-  let next=(proximos.length?proximos[0]:(evs.length?evs[evs.length-1]:null));
+  // Solo campeonatos que TODAVÍA no ocurren. Antes, si no había ninguno futuro,
+  // se mostraba el último de la lista: o sea un campeonato ya corrido anunciado
+  // como "Próximo campeonato". Con la semilla vieja eso era el de Debutantes, con
+  // fecha "2026-XX-XX", y por eso salía con la fecha en "--" hasta que Firebase
+  // terminaba de cargar y lo reemplazaba. Mejor no mostrar ninguno.
+  let next=(proximos.length?proximos[0]:null);
   if(next) next={...next, name: baseName(next.name)};
   const insOpen=[];const seenBase={};
   evs.forEach(e=>{

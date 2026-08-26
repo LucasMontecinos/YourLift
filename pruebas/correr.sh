@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.." || exit 1
 # colgado. Pasó: media batería dando timeouts sin motivo aparente.
 if python3 -c "import socket,sys; s=socket.socket(); sys.exit(0 if s.connect_ex(('127.0.0.1',8972))==0 else 1)" 2>/dev/null; then
   echo "✗ El puerto 8972 ya está ocupado — hay otro servidor dando vueltas."
-  echo "  Cerralo antes de correr la batería:  kill \$(ps -eo pid,args | grep '[h]ttp.server' | awk '{print \$1}')"
+  echo "  Ciérralo antes de correr la batería:  kill \$(ps -eo pid,args | grep '[h]ttp.server' | awk '{print \$1}')"
   exit 1
 fi
 python3 -m http.server 8972 >/dev/null 2>&1 &
