@@ -1914,6 +1914,94 @@ window.exportStatsJSON = function(){
 // TRÁFICO WEB (analytics propio) — lee analytics_daily de Firestore
 // ════════════════════════════════════════════════════════════════
 let _webCharts={};
+// ── Google Analytics: foto del histórico ──────────────────────────────────
+// El contador propio (analytics_daily) empezó a correr después que el sitio, así
+// que no tiene los primeros meses. Esto es lo que midió Google Analytics desde
+// que yourlift.cl se abrió al público, tomado a mano de los informes.
+//
+// NO se actualiza solo: no hay conexión con la API de Analytics. Es una foto con
+// fecha, y por eso se muestra diciendo hasta cuándo llega. Para refrescarla hay
+// que editar esta tabla con los informes nuevos.
+const GA_FOTO={
+  desde:'6 de mayo de 2026',
+  hasta:'25 de agosto de 2026',
+  tomada:'26 de agosto de 2026',
+  periodos:[
+    {p:'28 abr – 27 may', ses:2592, us:1053, nue:1058, vis:6870,  nota:''},
+    {p:'28 may – 26 jun', ses:7051, us:2193, nue:1938, vis:null,  nota:''},
+    {p:'27 jun – 26 jul', ses:2577, us:729,  nue:453,  vis:null,  nota:'sin campeonatos'},
+    {p:'27 jul – 25 ago', ses:8306, us:2289, nue:1905, vis:24373, nota:'dos regionales'},
+  ],
+  // Sesiones por canal, sumadas de los cuatro períodos.
+  canales:[['Directo',8994],['Google y Bing',7589],['Instagram',3479],['YouTube',105]],
+  paisesUltimoMes:[['Chile',1984],['Brasil',67],['Ecuador',64],['Colombia',44]],
+  regionesMayo:[['Santiago',683],['Biobío',116],['Valparaíso',91],['Antofagasta',89]],
+  peak:{ses:722, dia:'9 de agosto', evento:'Regional Centro Sur', prevMin:57, prevMax:670},
+  igPagado:750,
+};
+function renderGAFoto(){
+  const G=GA_FOTO;
+  const ses=G.periodos.reduce((s,x)=>s+x.ses,0);
+  const nue=G.periodos.reduce((s,x)=>s+x.nue,0);
+  const ks='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;text-align:center';
+  const kpi=(v,l,c)=>`<div style="${ks}"><div style="font-family:Oswald;font-size:30px;font-weight:700;color:${c}">${v.toLocaleString('es-CL')}</div><div style="color:var(--muted);font-size:10px;margin-top:4px;font-family:Oswald;letter-spacing:1px">${l}</div></div>`;
+  const barra=(filas,color)=>{
+    const max=Math.max(...filas.map(f=>f[1]))||1;
+    return filas.map(([k,v])=>`<div style="margin-bottom:9px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${esc(k)}</span><span style="font-family:Oswald;color:var(--muted)">${v.toLocaleString('es-CL')}</span></div>
+      <div style="height:5px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(v/max*100)}%;background:${color};border-radius:3px"></div></div></div>`).join('');
+  };
+  return `
+  <div style="margin-top:34px;border-top:1px solid var(--border);padding-top:26px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+      <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--muted)">GOOGLE ANALYTICS · HISTÓRICO</div>
+      <div style="font-size:11px;color:var(--muted)">Desde ${G.desde} hasta ${G.hasta}</div>
+    </div>
+    <div style="font-size:11px;color:var(--gold);margin-bottom:16px">
+      Foto tomada el ${G.tomada}. No se actualiza sola — el contador de arriba sí.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px">
+      ${kpi(ses,'SESIONES','var(--gold)')}
+      ${kpi(nue,'PERSONAS DISTINTAS','#22c55e')}
+      ${kpi(G.peak.ses,'PEAK EN UN DÍA','#ef4444')}
+    </div>
+    <div style="overflow-x:auto;margin-bottom:20px">
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+        <thead><tr style="color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1.5px">
+          <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">PERÍODO</th>
+          <th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border)">SESIONES</th>
+          <th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border)">USUARIOS</th>
+          <th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border)">NUEVOS</th>
+          <th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border)">VISTAS</th>
+        </tr></thead>
+        <tbody>${G.periodos.map(x=>`<tr>
+          <td style="padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05)">${esc(x.p)}${x.nota?` <span style="color:var(--muted);font-size:11px">· ${esc(x.nota)}</span>`:''}</td>
+          <td style="text-align:right;padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05);font-family:Oswald">${x.ses.toLocaleString('es-CL')}</td>
+          <td style="text-align:right;padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05);font-family:Oswald">${x.us.toLocaleString('es-CL')}</td>
+          <td style="text-align:right;padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05);font-family:Oswald">${x.nue.toLocaleString('es-CL')}</td>
+          <td style="text-align:right;padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05);font-family:Oswald;color:${x.vis?'var(--text)':'var(--muted)'}">${x.vis?x.vis.toLocaleString('es-CL'):'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <div style="background:rgba(212,168,67,.08);border:1px solid rgba(212,168,67,.35);border-radius:10px;padding:14px 18px;margin-bottom:20px;font-size:12.5px;line-height:1.6">
+      <b style="color:var(--gold)">El tráfico lo mueven las competencias.</b>
+      Julio, sin ninguna fecha en el calendario, cerró con ${G.periodos[2].nue} usuarios nuevos.
+      Agosto, con dos regionales, subió a ${G.periodos[3].nue.toLocaleString('es-CL')}.
+      El ${G.peak.dia}, día del ${G.peak.evento}, el sitio hizo <b>${G.peak.ses} sesiones en una sola jornada</b> —
+      Google lo marcó como anomalía porque su previsión era de entre ${G.peak.prevMin} y ${G.peak.prevMax}.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px">
+      <div><div style="font-family:Oswald;font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:10px">DE DÓNDE LLEGA (TOTAL)</div>${barra(G.canales,'var(--gold)')}</div>
+      <div><div style="font-family:Oswald;font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:10px">PAÍSES · ÚLTIMO MES</div>${barra(G.paisesUltimoMes,'#3b82f6')}</div>
+      <div><div style="font-family:Oswald;font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:10px">REGIONES DE CHILE · MAYO</div>${barra(G.regionesMayo,'#22c55e')}</div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:16px;line-height:1.6">
+      Las vistas de junio y julio no están: falta sacar esa tarjeta de los informes.
+      Entre mayo y junio hubo publicidad pagada en Instagram, ${G.igPagado} sesiones (un
+      ${(G.igPagado/ses*100).toFixed(1)} % del total); el resto es orgánico.
+    </div>
+  </div>`;
+}
 async function loadWebAnalytics(){
   const cont=document.getElementById('statsWebContent');
   if(!cont)return;
@@ -1936,7 +2024,9 @@ function _sumRange(days,fromDate){
   return {t,u};
 }
 function renderWebAnalytics(days){
-  if(!days.length) return '<div style="padding:40px;text-align:center;color:var(--muted)">Aún no hay datos de visitas. Se registrarán a medida que la gente entre a yourlift.cl.</div>';
+  // La foto de Google Analytics se muestra igual aunque el contador propio esté
+  // vacío: es justamente el período que el contador no alcanzó a medir.
+  if(!days.length) return '<div style="padding:40px;text-align:center;color:var(--muted)">El contador propio todavía no tiene datos. Se registran a medida que la gente entra a yourlift.cl.</div>'+renderGAFoto();
   const today=new Date();
   const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   const todayStr=ymd(today);
@@ -1976,7 +2066,8 @@ function renderWebAnalytics(days){
     ${card('PÁGINAS MÁS VISITADAS','webPages','320px')}
     ${card('ORIGEN DEL TRÁFICO','webRefs','320px')}
   </div>
-  <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:16px">Datos propios de YourLift · Actualizado en tiempo real · Visitante único = 1 por persona por día</div>`;
+  <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:16px">Datos propios de YourLift · Actualizado en tiempo real · Visitante único = 1 por persona por día</div>
+  ${renderGAFoto()}`;
 }
 
 function initWebCharts(days){

@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
-"""Rehace los eventos de livecast del Sudamericano a partir del CRONOGRAMA OFICIAL
-de FESUPO (Schedule 2026, 19–27 sep = 9 días) y de nomina_sudamericano.json.
+"""Rehace el livecast del Sudamericano a partir del CRONOGRAMA OFICIAL de FESUPO
+(Schedule 2026, 19–27 sep = 9 días) y de nomina_sudamericano.json.
+
+El campeonato se corre en UN SOLO livecast con todos los atletas, no en nueve
+eventos separados: un link, una nómina, un acta. El cronograma no desaparece —
+cada día es una TANDA (A = día 1 … I = día 9) y cada atleta lleva anotada su
+sesión con fecha y hora, así que el operador cambia de tanda para cambiar de día
+y el acta por jornada sigue saliendo. La nómina pública también conserva el día
+de cada inscripción: eso vive en las reglas que se escriben más abajo.
 
 Cada sesión del cronograma se resuelve por REGLA (sexo + categoría + modalidad +
 división), no por los números de la planilla: así los cambios de la nómina entran
@@ -132,7 +139,7 @@ FL = 'ABCDEFGHIJKL'
 MAXFL = 14        # tanda IPF típica; el desglose fino se hace en el pesaje
 # Las tandas todavía no están definidas (dependen del pesaje y del cupo de cada
 # sesión), así que TODOS arrancan en la tanda A: es lo más cómodo para la logística
-# del pesaje, donde se reparten de verdad. Poné TANDA_UNICA = None para volver a
+# del pesaje, donde se reparten de verdad. Pon TANDA_UNICA = None para volver a
 # repartirlos automáticamente en A, B, C…
 TANDA_UNICA = 'A'
 
@@ -152,9 +159,11 @@ falta = [a for a in A if (a['n'], a['lista']) not in asignado]
 assert not dup, f'inscripciones en 2 sesiones: {list(dup.items())[:5]}'
 assert not falta, f'inscripciones sin sesión: {falta[:5]}'
 
-events = []
+# Cada día es una tanda del evento único: A el día 1, B el día 2, y así.
+DIA_FL = 'ABCDEFGHIJKL'
+ath, lot = [], 0
+sesiones_todas = []
 for d, info in dias.items():
-    ath, lot = [], 0
     for s in info['sesiones']:
         # Orden de tanda: por categoría, después división, después nombre. Las dos
         # inscripciones de un mismo atleta (PL + Only Bench) quedan juntas para que
@@ -189,28 +198,37 @@ for d, info in dias.items():
         if cur: tandas.append(cur)
         base = len(set(x['flight'] for x in ath))
         for ti, t in enumerate(tandas):
-            fl = TANDA_UNICA or FL[base + ti]
-            jor = f"{s['hora']} · {s['nombre']}"
+            fl = DIA_FL[d - 1]
+            jor = f"D{d} {info['fecha'][8:10]}/{info['fecha'][5:7]} · {s['hora']} · {s['nombre']}"
             for a in t:
                 lot += 1
                 ath.append(to_ath(a, fl, lot, jor))
-    nom_ses = ' · '.join(s['nombre'] for s in info['sesiones'])
-    events.append({
-        'id': f'suda2026_d{d}', 'name': f'Sudamericano 2026 — Día {d}',
-        'short': f'SUDA D{d}', 'date': info['fecha'], 'closeDate': info['fecha'],
-        'location': 'Estadio Nacional, Ñuñoa, Chile', 'organizer': 'FESUPO / FECHIPO',
-        'days': 1, 'pin': '', 'extraCols': [],
-        'records': 'suda',            # habilita los récords sudamericanos de FESUPO
-        'parent': 'Sudamericano_2026',  # abrir el campeonato lleva al selector de días
-        'sesiones': [{'pesaje': s['pesaje'], 'inicio': s['hora'], 'nombre': s['nombre'],
-                      'atletas': len(s['atletas'])} for s in info['sesiones']],
-        'resumen': nom_ses,
-        'athletes': ath,
-    })
+    sesiones_todas += [{'dia': d, 'fecha': info['fecha'], 'pesaje': s['pesaje'],
+                        'inicio': s['hora'], 'nombre': s['nombre'],
+                        'atletas': len(s['atletas']), 'tanda': DIA_FL[d - 1]}
+                       for s in info['sesiones']]
 
-# ── Reemplazar los días en nominas.json (se conserva el ensayo y el resto) ──
-otros = [e for e in OLD['events'] if not str(e.get('id', '')).startswith('suda2026_d')]
-ins = min([i for i, e in enumerate(OLD['events']) if str(e.get('id', '')).startswith('suda2026_d')] or [len(otros)])
+primer = min(i['fecha'] for i in dias.values())
+ultimo = max(i['fecha'] for i in dias.values())
+events = [{
+    'id': 'suda2026', 'name': 'Sudamericano 2026',
+    'short': 'SUDA 2026', 'date': primer, 'closeDate': primer,
+    'location': 'Estadio Nacional, Ñuñoa, Chile', 'organizer': 'FESUPO / FECHIPO',
+    'days': len(dias), 'pin': '', 'extraCols': [],
+    'records': 'suda',            # habilita los récords sudamericanos de FESUPO
+    'sesiones': sesiones_todas,
+    'resumen': f"{len(dias)} días · {primer[8:10]}/{primer[5:7]} al {ultimo[8:10]}/{ultimo[5:7]}",
+    'athletes': ath,
+}]
+
+# ── Reemplazar en nominas.json (se conservan los ensayos y el resto) ──
+# Se sacan tanto los nueve días viejos (suda2026_d1…d9) como el evento único de
+# una corrida anterior, para que correr esto dos veces no deje duplicados.
+def _reemplazable(e):
+    i = str(e.get('id', ''))
+    return i.startswith('suda2026_d') or i == 'suda2026'
+otros = [e for e in OLD['events'] if not _reemplazable(e)]
+ins = min([i for i, e in enumerate(OLD['events']) if _reemplazable(e)] or [len(otros)])
 OLD['events'] = otros[:ins] + events + otros[ins:]
 json.dump(OLD, open('nominas.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 
@@ -218,6 +236,10 @@ json.dump(OLD, open('nominas.json', 'w', encoding='utf-8'), ensure_ascii=False, 
 # En la nómina de yourlift.cl cada cabecera de categoría dice qué día compite. Se
 # guarda la REGLA de cada sesión, no el día pegado a cada inscripción: si desde el
 # panel le corrigen la categoría o la división a alguien, el día se recalcula solo.
+# La tarjeta de la nómina en yourlift.cl enlaza al livecast con este id. Antes
+# apuntaba al campeonato padre, que existía solo como agrupador de los nueve días;
+# ahora apunta derecho al evento único.
+NOM['eventoId'] = events[0]['id']
 NOM['jornadas'] = [{'dia': d, 'fecha': fecha, 'pesaje': pesaje, 'inicio': hora,
                     'nombre': nombre, 'regla': filt.regla}
                    for fecha, d, pesaje, hora, nombre, filt, esp in SES]
@@ -231,7 +253,10 @@ for fecha, d, nombre, m, esp in filas:
     tot += len(m)
     print(f"{fecha:11}{d:>2}  {nombre:44} {len(m):>5} {len(m)-ob:>4} {ob:>4} {esp:>7} {len(m)-ob-esp:>+4}")
 print(f"\nasignados {tot} / {len(A)} inscripciones · 0 duplicados · 0 sin sesión")
-for e in events:
-    fl = collections.Counter(a['flight'] for a in e['athletes'])
-    print(f"  {e['id']}  {e['date']}  {len(e['athletes']):>3} atletas  tandas: "
-          + ' '.join(f'{k}={v}' for k, v in sorted(fl.items())))
+e = events[0]
+fl = collections.Counter(a['flight'] for a in e['athletes'])
+print(f"  {e['id']} · {e['name']} · {e['date']} · {len(e['athletes'])} atletas en un solo livecast")
+for k, v in sorted(fl.items()):
+    dia = [s for s in sesiones_todas if s['tanda'] == k]
+    print(f"    tanda {k} = día {dia[0]['dia']} ({dia[0]['fecha']}) · {v} atletas · "
+          + ', '.join(s['nombre'] for s in dia))
