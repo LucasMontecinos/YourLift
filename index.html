@@ -878,6 +878,12 @@ function _nsudaSlug(s){
   return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'')
     .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,'-').slice(0,80);
 }
+// El nombre que se MUESTRA. La nómina de FESUPO viene "Apellidos Nombres"; la
+// gente se llama al revés, así que cuando se conoce el nombre real viaja en
+// `nDisp` y es el que se ve. `n` se queda como está y sigue siendo la llave:
+// las fotos de la nómina y las correcciones del admin están guardadas en
+// Firestore con el slug de `n`, y darlo vuelta las dejaría a todas huérfanas.
+function _nsudaNombre(a){ return (a&&a.nDisp)||(a&&a.n)||''; }
 function _nsudaCatKey(c){const plus=(c||'').includes('+');return (parseFloat(String(c).replace(/[^0-9.]/g,''))||999)+(plus?0.5:0)}
 // ── Día en que compite cada inscripción del Sudamericano ──────────
 // Sale de las reglas del cronograma oficial de FESUPO que viaja en la nómina
@@ -918,12 +924,12 @@ function nsudaFicha(slug){
   const ex=document.getElementById('nsudaFichaModal'); if(ex)ex.remove();
   const m=document.createElement('div'); m.id='nsudaFichaModal';
   m.style.cssText='position:fixed;inset:0;background:rgba(4,10,20,.82);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px;backdrop-filter:blur(3px)';
-  const ini=a.n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  const ini=_nsudaNombre(a).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   let h=`<div style="background:linear-gradient(160deg,#0D1F38,#0a1628);border:2px solid rgba(212,168,67,.5);border-radius:16px;width:min(420px,94vw);max-height:90vh;overflow-y:auto;position:relative">`;
   h+=`<button onclick="document.getElementById('nsudaFichaModal').remove()" style="position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:rgba(10,22,40,.8);color:var(--muted);font-size:15px;cursor:pointer;z-index:2">✕</button>`;
   h+=`<div style="display:flex;flex-direction:column;align-items:center;padding:26px 22px 10px">`;
   h+=`<div style="width:110px;height:110px;border-radius:50%;overflow:hidden;border:3px solid var(--gold);background:rgba(30,58,95,.5);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(0,0,0,.5)">${foto?`<img src="${foto}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-family:Oswald;font-size:34px;color:var(--muted)">${ini}</span>`}</div>`;
-  h+=`<div style="font-family:Oswald;font-size:19px;font-weight:700;letter-spacing:.5px;margin-top:12px;text-align:center">${a.n}</div>`;
+  h+=`<div style="font-family:Oswald;font-size:19px;font-weight:700;letter-spacing:.5px;margin-top:12px;text-align:center">${_nsudaNombre(a)}</div>`;
   h+=`<div style="font-size:12px;color:var(--muted);margin-top:3px">${a.pais}${a.born?' · '+a.born:''}${a.uni?'<div style="margin-top:2px">'+a.uni+'</div>':''}</div>`;
   if(a.cod)h+=`<a href="atleta.html?codigo=${encodeURIComponent(a.cod)}" style="margin-top:8px;font-size:11px;color:var(--gold);border:1px solid rgba(212,168,67,.45);padding:4px 12px;border-radius:12px;text-decoration:none;font-family:Oswald;letter-spacing:.5px">VER PERFIL YOURLIFT →</a>`;
   h+=`</div>`;
@@ -1106,10 +1112,10 @@ function _nomSudaRows(){
   return (j.atletas||[]).map(a=>{
     const slug=_nsudaSlug(a.n);
     const foto=_nsudaFoto(a,slug);
-    const av=`<span onclick="event.stopPropagation();nsudaFicha('${slug}')" title="Ver ficha" style="display:inline-flex;width:24px;height:24px;border-radius:50%;overflow:hidden;background:rgba(30,58,95,.5);border:1px solid ${foto?'rgba(212,168,67,.5)':'var(--border)'};cursor:pointer;vertical-align:middle;margin-right:7px;align-items:center;justify-content:center;flex-shrink:0">${foto?`<img src="${foto}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:9px;color:var(--muted);font-family:Oswald">${a.n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</span>`}</span>`;
+    const av=`<span onclick="event.stopPropagation();nsudaFicha('${slug}')" title="Ver ficha" style="display:inline-flex;width:24px;height:24px;border-radius:50%;overflow:hidden;background:rgba(30,58,95,.5);border:1px solid ${foto?'rgba(212,168,67,.5)':'var(--border)'};cursor:pointer;vertical-align:middle;margin-right:7px;align-items:center;justify-content:center;flex-shrink:0">${foto?`<img src="${foto}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:9px;color:var(--muted);font-family:Oswald">${_nsudaNombre(a).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</span>`}</span>`;
     const nm=a.cod
-      ?`<a href="atleta.html?codigo=${encodeURIComponent(a.cod)}" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(212,168,67,.5);font-weight:600" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${a.n}</a>`
-      :`<span onclick="nsudaFicha('${slug}')" style="cursor:pointer">${a.n}</span>`;
+      ?`<a href="atleta.html?codigo=${encodeURIComponent(a.cod)}" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(212,168,67,.5);font-weight:600" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${_nsudaNombre(a)}</a>`
+      :`<span onclick="nsudaFicha('${slug}')" style="cursor:pointer">${_nsudaNombre(a)}</span>`;
     const jo=_nsudaJornada(a);
     return {n:a.n,year:a.born||'',sexo:a.sexo,cat:_nomCatN(a.cat),div:a.div,mod:a.mod,
       team:a.pais,teamHtml:_nomFlag(a.pais)+a.pais,uni:a.uni||'',res:!!a.res,

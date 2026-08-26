@@ -20,6 +20,7 @@ NOM = json.load(open('nomina_sudamericano.json', encoding='utf-8'))
 _C = json.load(open('nomina_suda_correcciones.json', encoding='utf-8'))
 COR = _C['correcciones']
 EXC = _C.get('exclusiones', [])
+VIS = _C.get('nombres_visibles', {})
 
 cambios, sin_match = [], []
 for c in COR:
@@ -53,6 +54,17 @@ if sacados and not DRY:
     fuera = {nrm(e['n']) for e in EXC}
     NOM['atletas'] = [a for a in NOM['atletas'] if nrm(a['n']) not in fuera]
 
+# Cómo se lee cada nombre. Va en un campo aparte (`nDisp`) y no encima de `n`
+# porque `n` es la llave con la que están guardadas las fotos de la nómina y las
+# correcciones del admin en Firestore.
+_vis = {nrm(k): v for k, v in VIS.items()}
+visibles = 0
+for a in NOM['atletas']:
+    v = _vis.get(nrm(a['n']))
+    if v and a.get('nDisp') != v:
+        visibles += 1
+        if not DRY: a['nDisp'] = v
+
 if cambios:
     print(f'{"atleta":34} {"lista":30} campo  antes → después')
     for n, l, campo, antes, desp in cambios:
@@ -81,8 +93,11 @@ if exc_sin_match:
     # Solo importa si el nombre nunca calzó, y eso se ve la primera vez que se corre.
     print(f'\n{len(exc_sin_match)} exclusión(es) ya estaban aplicadas.')
 
-if (cambios or sacados) and not DRY:
+if visibles:
+    print(f'\n{visibles} nombre(s) con su forma de mostrarse actualizada.')
+
+if (cambios or sacados or visibles) and not DRY:
     json.dump(NOM, open('nomina_sudamericano.json', 'w', encoding='utf-8'),
               ensure_ascii=False, indent=1)
-    print(f'\n✓ {len(cambios)} corrección(es) y {len(sacados)} baja(s) aplicadas a nomina_sudamericano.json')
+    print(f'\n✓ {len(cambios)} corrección(es), {len(sacados)} baja(s) y {visibles} nombre(s) aplicados a nomina_sudamericano.json')
     print('  Acuérdate de correr build_suda_dias.py para rehacer los días del livecast.')
