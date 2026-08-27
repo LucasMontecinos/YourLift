@@ -5296,7 +5296,9 @@ window.cronoAutoDistribute=async function(){
   // una sola vez y por eso no ocupa lugar en el cupo de 14.
   const isBench=m=>{m=(m||'').toLowerCase();return (/bench|banca/.test(m))&&!/powerlifting/.test(m);};
   const nPL=g=>g.filter(r=>!isBench(r.modalidad)).length;
-  const srank={H:0,M:1,'?':2};
+  // Las mujeres abren. Así salió el Regional Centro Sur —tanda A de mujeres,
+  // B a E de hombres— y así se levanta en IPF. El código las dejaba al final.
+  const srank={M:0,H:1,'?':2};
 
   // ── Grupos indivisibles ────────────────────────────────────────────────
   // Misma categoría de peso + misma división de edad = un grupo, y un grupo NO
@@ -5305,22 +5307,155 @@ window.cronoAutoDistribute=async function(){
   // hubo que deshacer a mano en el Regional Norte.
   const groups={};
   rows.forEach(r=>{const k=sexOf(r)+'|'+(r.division||'?')+'|'+(r.categoria||'?');(groups[k]=groups[k]||[]).push(r);});
-  const keys=Object.keys(groups).sort((a,b)=>{const A=a.split('|'),B=b.split('|');return (srank[A[0]]-srank[B[0]])||((parseFloat(A[2])||999)-(parseFloat(B[2])||999))||A[1].localeCompare(B[1]);});
+  // De la más liviana a la más pesada, y dentro de cada peso de la más joven a
+  // la más vieja: así están armados los cronogramas de la federación. El orden
+  // salía al revés porque se comparaba parseFloat('-83 kg'), que da −83: las
+  // categorías quedaban de mayor a menor y la competencia arrancaba por los
+  // +120. El signo se saca antes de comparar, y el '+120' va después del '-120'.
+  const kilos=c=>{const n=parseFloat(String(c||'').replace(/[^0-9.]/g,''));return isNaN(n)?999:(/\+/.test(c)?n+0.5:n);};
+  const DIVS=['sub-junior','junior','open','master i','master ii','master iii','master iv'];
+  const drank=d=>{const i=DIVS.indexOf(String(d||'').trim().toLowerCase());return i<0?9:i;};
+  const keys=Object.keys(groups).sort((a,b)=>{const A=a.split('|'),B=b.split('|');
+    return (srank[A[0]]-srank[B[0]])||(kilos(A[2])-kilos(B[2]))||(drank(A[1])-drank(B[1]))||A[1].localeCompare(B[1]);});
 
   // ── Armado ─────────────────────────────────────────────────────────────
-  const fl=[];   // {sex, rows, grandes:[claves que solas pasan de 14]}
-  let cur=null;
-  for(const k of keys){
-    const sex=k.split('|')[0], g=groups[k], pl=nPL(g);
-    const cabe = cur && cur.sex===sex && (nPL(cur.rows)+pl<=MAX_PL) && (cur.rows.length+g.length<=MAX_TOT);
-    if(!cabe){ if(cur)fl.push(cur); cur={sex,rows:[],grandes:[]}; }
-    cur.rows=cur.rows.concat(g);
-    // Un grupo que POR SÍ SOLO pasa de 14 no se puede partir sin romper la
-    // regla, así que queda entero y se avisa: es decisión de la comisión
-    // técnica dividir la categoría o correr una tanda más grande.
-    if(pl>MAX_PL)cur.grandes.push(k.split('|')[2]+' '+k.split('|')[1]);
+  // Se arma sexo por sexo, y son dos decisiones: CUÁNTAS tandas y CÓMO se
+  // reparten. Las dos salen del mismo cálculo, y las dos importan: una tanda de
+  // más es cerca de una hora más de competencia, y tandas desparejas hacen
+  // jornadas desparejas.
+  //
+  // Lo que se puede mover y lo que no. El orden de PESO no se toca: la
+  // competencia va de la categoría más liviana a la más pesada. Pero dentro de
+  // un mismo peso, las divisiones de edad sí se pueden reordenar, y ese permiso
+  // es el que hace la diferencia. En el Regional Centro Sur la federación dejó
+  // los -93 Open en la tanda D y los -93 Junior en la E; si hubiera respetado
+  // el orden de edad, D quedaba en 15 —pasada del tope— y había que abrir una
+  // quinta tanda de hombres. Con el movimiento, cuatro tandas de 12·12·13·13.
+  //
+  // El reparto se busca entero, no tanda a tanda. Cerrar cada tanda al llegar
+  // al promedio deja un resto en cada una, y los restos se acumulan al final:
+  // así salían tandas de 14 al lado de una de 2. Acá se arma un grafo de
+  // CORTES —un corte es "ya están puestos los pesos anteriores y estas
+  // divisiones del peso actual"—, de cada corte salen las tandas posibles hacia
+  // el siguiente, y se recorre guardando el mejor reparto para cada cantidad de
+  // tandas. Después se toma la menor cantidad que alcanza y, entre los repartos
+  // de esa cantidad, el más parejo.
+  //
+  // "Parejo" se mide sumando el cuadrado de cada tanda. Con el total y la
+  // cantidad de tandas ya fijos, minimizar esa suma es lo mismo que minimizar
+  // lo que cada tanda se aleja del promedio, y tiene la ventaja de no depender
+  // de cuántas tandas sean: se calcula una sola vez y sirve para todas.
+  const fl=[];   // {sex, rows, grandes:[categorías que solas pasan de 14]}
+  const porSexo={};
+  keys.forEach(k=>{(porSexo[k.split('|')[0]]=porSexo[k.split('|')[0]]||[]).push(k)});
+  for(const sex of Object.keys(porSexo).sort((a,b)=>srank[a]-srank[b])){
+    const gs=porSexo[sex];
+    // Los grupos, juntados por categoría de peso. Vienen ya ordenados, así que
+    // los de un mismo peso quedan seguidos. El tope de 10 divisiones por peso
+    // es para que las combinaciones de más abajo no se disparen; con las
+    // divisiones que existen (Sub-Junior a Master IV) nunca se llega.
+    const pesos=[];
+    gs.forEach(k=>{
+      const cat=k.split('|')[2], u=pesos[pesos.length-1];
+      if(u&&u.cat===cat&&u.ks.length<10)u.ks.push(k); else pesos.push({cat,ks:[k]});
+    });
+    const W=pesos.length;
+    // Cuánta gente suma cada combinación de divisiones dentro de un peso.
+    const plM=[],totM=[],cntM=[];
+    pesos.forEach(p=>{
+      const d=p.ks.length,P=[],T=[],C=[];
+      for(let m=0;m<(1<<d);m++){
+        let a=0,b=0,c=0;
+        for(let i=0;i<d;i++)if(m&(1<<i)){a+=nPL(groups[p.ks[i]]);b+=groups[p.ks[i]].length;c++;}
+        P.push(a);T.push(b);C.push(c);
+      }
+      plM.push(P);totM.push(T);cntM.push(C);
+    });
+    // Los cortes. Uno por cada (peso, combinación de divisiones ya puestas),
+    // más el corte final. La combinación completa de un peso no es un corte
+    // propio: es el corte de arranque del peso siguiente.
+    const base=[],bw=[],bm=[];
+    let nb=0;
+    for(let w=0;w<W;w++){
+      base.push(nb);
+      const lleno=(1<<pesos[w].ks.length)-1;
+      for(let m=0;m<lleno;m++){bw.push(w);bm.push(m);}
+      nb+=lleno;
+    }
+    base.push(nb); bw.push(W); bm.push(0); nb++;
+    const idC=(w,m)=>{
+      while(w<W&&m===(1<<pesos[w].ks.length)-1){w++;m=0;}
+      return w>=W?base[W]:base[w]+m;
+    };
+    // Qué grupos quedan entre dos cortes.
+    const entre=(w1,m1,w2,m2)=>{
+      const out=[];
+      if(w2===w1){const s=m2&~m1;pesos[w1].ks.forEach((k,i)=>{if(s&(1<<i))out.push(k);});return out;}
+      pesos[w1].ks.forEach((k,i)=>{if(!(m1&(1<<i)))out.push(k);});
+      for(let w=w1+1;w<w2;w++)pesos[w].ks.forEach(k=>out.push(k));
+      if(w2<W)pesos[w2].ks.forEach((k,i)=>{if(m2&(1<<i))out.push(k);});
+      return out;
+    };
+    const KMAX=gs.length;
+    const costo=[],deW=[],deM=[];
+    for(let b=0;b<nb;b++){costo.push(new Array(KMAX+1).fill(Infinity));deW.push(new Array(KMAX+1).fill(-1));deM.push(new Array(KMAX+1).fill(0));}
+    costo[idC(0,0)][0]=0;
+    for(let b=0;b<nb-1;b++){
+      const w=bw[b],mask=bm[b],resto=((1<<pesos[w].ks.length)-1)&~mask;
+      for(let k=0;k<KMAX;k++){
+        const c0=costo[b][k]; if(c0===Infinity)continue;
+        const poner=(b2,p,q,c)=>{
+          // Un grupo solo SIEMPRE puede formar tanda: si por sí mismo pasa de
+          // 14 no hay dónde partirlo. Los topes rigen de dos grupos en adelante.
+          if(c>1&&(p>MAX_PL||q>MAX_TOT))return;
+          // Quedar bajo el mínimo de 8 se castiga fuerte: se prefiere cualquier
+          // reparto legal antes que ese.
+          const cc=c0+p*p+(p>0&&p<MIN_PL?100:0);
+          if(cc<costo[b2][k+1]){costo[b2][k+1]=cc;deW[b2][k+1]=w;deM[b2][k+1]=mask;}
+        };
+        // La tanda se cierra dentro del mismo peso.
+        for(let S=resto;S;S=(S-1)&resto)poner(idC(w,mask|S),plM[w][S],totM[w][S],cntM[w][S]);
+        // O sigue hacia pesos más altos, llevándose lo que queda de este.
+        let aP=plM[w][resto],aQ=totM[w][resto],aC=cntM[w][resto];
+        for(let w2=w+1;w2<W;w2++){
+          const F=(1<<pesos[w2].ks.length)-1;
+          for(let S=F;;S=(S-1)&F){
+            poner(idC(w2,S),aP+plM[w2][S],aQ+totM[w2][S],aC+cntM[w2][S]);
+            if(!S)break;
+          }
+          aP+=plM[w2][F];aQ+=totM[w2][F];aC+=cntM[w2][F];
+          if(aP>MAX_PL||aQ>MAX_TOT)break;   // más allá ya no cabe nada
+        }
+      }
+    }
+    // La menor cantidad de tandas que alcanza, y de esas la más pareja.
+    let tandasMinimas=-1;
+    for(let k=1;k<=KMAX;k++)if(costo[nb-1][k]<Infinity){tandasMinimas=k;break;}
+    const tandas=[];
+    if(tandasMinimas>0){
+      let b=nb-1,k=tandasMinimas;
+      while(k>0){
+        const w1=deW[b][k],m1=deM[b][k];
+        tandas.unshift(entre(w1,m1,bw[b],bm[b]));
+        b=idC(w1,m1); k--;
+      }
+    }else{
+      // No debería pasar: cada grupo suelto es una tanda válida, así que
+      // siempre hay reparto. Si igual pasara, mejor eso que un cronograma vacío.
+      gs.forEach(k=>tandas.push([k]));
+    }
+    tandas.forEach(ks=>{
+      const f={sex,rows:[],grandes:[]};
+      ks.forEach(k=>{
+        f.rows=f.rows.concat(groups[k]);
+        // Un grupo que POR SÍ SOLO pasa de 14 no se puede partir sin romper la
+        // regla, así que queda entero y se avisa: es decisión de la comisión
+        // técnica dividir la categoría o correr una tanda más grande.
+        if(nPL(groups[k])>MAX_PL)f.grandes.push(k.split('|')[2]+' '+k.split('|')[1]);
+      });
+      fl.push(f);
+    });
   }
-  if(cur)fl.push(cur);
 
   // ── Mínimo de 8 ────────────────────────────────────────────────────────
   // Una tanda de dos personas no se corre. Si quedó corta, se junta con la
