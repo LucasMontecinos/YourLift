@@ -104,7 +104,13 @@ def to_ath(a, flight, lot, jornada):
     uni = UNIV.get(nrm(a['n']), '')
     pais = PAIS_COD.get(nrm(a['pais']), (a['pais'] or '')[:3].upper())
     return {
-        'nombre': a['n'], 'rut': '', 'sexo': SEXO.get(a['sexo'], ''), 'dob': '',
+        # En pantalla va el nombre como se lee, "Joaquín Alfonso Tapia Inda", y no
+        # como viene en la planilla de FESUPO, "Tapia Inda Joaquín Alfonso". Es lo
+        # que se pidió, y además es el formato de data.json, así que el livecast
+        # cruza mejor con la ficha del atleta. El nombre de planilla sigue siendo
+        # la clave interna —agrupar, fusionar, buscar la universidad—; lo único
+        # que cambia es lo que ve la gente.
+        'nombre': a.get('nDisp') or a['n'], 'rut': '', 'sexo': SEXO.get(a['sexo'], ''), 'dob': '',
         'born': str(a['born']) if a.get('born') else '',
         'division': DIV.get(a['div'], a['div']),
         'categoria': f"{a['cat']} kg ({SEXO.get(a['sexo'],'')})",
