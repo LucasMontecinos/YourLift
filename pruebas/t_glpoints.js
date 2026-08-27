@@ -132,8 +132,8 @@ console.log('\nLa pantalla se arma entera');
 {
   const html = renderGL();
   const canvas = (html.match(/<canvas id="(\w+)"/g) || []).map(s => s.match(/id="(\w+)"/)[1]);
-  ok(canvas.length === 9, 'nueve gráficos (' + canvas.length + ')');
-  ['glAnioSexo', 'glDist', 'glCajaDiv', 'glCajaMod', 'glDiv', 'glMod', 'glDivAnio', 'glModDiv', 'glTop']
+  ok(canvas.length === 7, 'siete gráficos (' + canvas.length + ')');
+  ['glAnioSexo', 'glDist', 'glDiv', 'glMod', 'glDivAnio', 'glModDiv', 'glTop']
     .forEach(id => ok(canvas.includes(id), id));
   // Y cada gráfico se inicializa: un canvas sin su mk() queda en blanco.
   const init = adm.slice(adm.indexOf('function initGLCharts'), adm.indexOf('let _sc={};'));
@@ -177,13 +177,17 @@ console.log('\nNo toca nada de lo que ya estaba');
   ok(/total:parseFloat\(c\.resultado\?\.total\)\|\|0,/.test(adm),
      'y el total sigue igual');
   ok(/'gl_points'\]/.test(adm), 'el export a CSV ahora también lo lleva');
-  ok(/tabBtn\('gl','GL POINTS'\)/.test(adm), 'la pestaña está en su lugar');
-  ok(/else if\(_st==='gl'\) setTimeout\(initGLCharts,0\);/.test(adm),
-     'y sus gráficos se dibujan al entrar');
+  // Los GL points dejaron de ser una pestaña aparte: van dentro de Deporte, que
+  // es lo que se pidió. Así que se dibujan junto con el resto, no al entrar a
+  // una pestaña propia.
+  ok(!/tabBtn\('gl','GL POINTS'\)/.test(adm), 'ya no hay una pestaña propia de GL points');
+  ok(/\$\{renderGL\(\)\}`;/.test(adm), 'el contenido cuelga de la pantalla de Deporte');
+  ok(/else setTimeout\(\(\)=>\{initStatsCharts\(\);initGLCharts\(\);\},0\);/.test(adm),
+     'y sus gráficos se montan junto con los de Deporte');
   // Las tres pestañas que ya existían siguen enganchadas.
   ok(/if\(_st==='web'\) setTimeout\(loadWebAnalytics,0\);/.test(adm), 'tráfico web sigue');
   ok(/else if\(_st==='demografia'\) setTimeout\(initDemoCharts,0\);/.test(adm), 'demografía sigue');
-  ok(/else setTimeout\(initStatsCharts,0\);/.test(adm), 'y deporte sigue siendo la de por defecto');
+  ok(/const tab=ST\.statsTab\|\|'deporte';/.test(adm), 'y deporte sigue siendo la de por defecto');
   // Cada set de gráficos guarda los suyos: si compartieran el mismo objeto, al
   // cambiar de pestaña se destruirían entre ellos.
   ok(/let _glc=\{\};/.test(adm) && /let _sc=\{\};/.test(adm),
@@ -209,76 +213,41 @@ console.log('\nLos cuartiles dan lo mismo que una planilla');
   ok(_glResumen([]) === null, 'y sin datos devuelve nada, no un cero engañoso');
 }
 
-console.log('\n  Los bigotes cortan donde corresponde, y lo de más allá no se pierde');
+console.log('\n  El recorte de Tukey sigue separando lo normal de lo excepcional');
 {
-  // Criterio de Tukey: el bigote llega al dato más lejano que siga dentro de una
-  // vez y media el rango intercuartil. Lo que se pasa son marcas reales —casi
-  // siempre las mejores— y tienen que verse, no desaparecer.
+  // El diagrama de caja se sacó del panel, pero el recorte sigue: el resumen da
+  // el mínimo y el máximo DOS veces —el del grupo entero y el del grupo sin las
+  // marcas que se salen de la norma— y esa distinción es la que hace que un
+  // promedio se pueda leer. Lo que se pasa son marcas reales, casi siempre las
+  // mejores, y se cuentan aparte en vez de desaparecer.
   const v = [10,11,12,13,14,15,16,17,18,19,20,90];
   const s = _glResumen(v.map(x => ({ glp: x })));
   ok(s.fuera.includes(90), 'el 90 queda marcado como atípico');
-  ok(s.max < 90, 'el bigote NO llega hasta él (' + s.max + ')');
+  ok(s.max < 90, 'el máximo del grupo NO llega hasta él (' + s.max + ')');
   ok(s.real.max === 90, 'pero el máximo real se conserva aparte');
-  ok(s.real.min === 10 && s.min === 10, 'y abajo, sin atípicos, el bigote llega al mínimo');
+  ok(s.real.min === 10 && s.min === 10, 'y abajo, sin atípicos, los dos coinciden');
   const limpio = _glResumen([10,11,12,13,14].map(x => ({ glp: x })));
   ok(limpio.fuera.length === 0, 'sin nada raro, no inventa atípicos');
-  ok(limpio.min === 10 && limpio.max === 14, 'y los bigotes van de punta a punta');
+  ok(limpio.min === 10 && limpio.max === 14, 'y va de punta a punta');
 }
 
-console.log('\nLos diagramas de caja se dibujan con lo que ya está cargado');
+console.log('\nEl diagrama de caja y bigote ya no está');
 {
-  // Chart.js no trae caja y bigote. En vez de sumar otra librería de un CDN a un
-  // panel que se usa en competencia, la caja es una barra flotante de Q1 a Q3 y
-  // un complemento le dibuja encima los bigotes, la mediana y los atípicos.
-  ok(!/boxplot|@sgratzl/i.test(adm), 'no se agregó ninguna librería nueva');
-  // El panel ya cargaba tres librerías (Chart.js, html2canvas y xlsx). Lo que
-  // importa es que los diagramas de caja no sumaron una cuarta.
+  // Se sacó a pedido: la caja se leía mal y los mismos números están escritos en
+  // las tablas de dispersión, que es de donde se copian a un informe.
+  ok(!/GL_CAJA_PLUGIN/.test(adm), 'no queda el complemento que lo dibujaba');
+  ok(!/CAJA Y BIGOTE/.test(adm), 'ni las tarjetas que lo mostraban');
+  ok(!/glCajaDiv|glCajaMod/.test(adm), 'ni los lienzos donde se dibujaba');
+  ok(!/boxplot|@sgratzl/i.test(adm), 'y nunca se agregó una librería para esto');
+  // El panel carga tres librerías (Chart.js, html2canvas y xlsx). Sacar el
+  // diagrama no tenía que dejar ninguna colgando sin uso.
   const scripts = (adm.match(/<script src="https:\/\/[^"]+"/g) || []);
   ok(scripts.length === 3,
      'sigue cargando las mismas tres librerías de siempre (' + scripts.length + ')');
-  ok(/const GL_CAJA_PLUGIN=\{/.test(adm), 'el complemento está escrito acá');
-  ok(/data:cajas\[i\]\.map\(r=>r\?\[r\.q1,r\.q3\]:null\)/.test(adm),
-     'la caja va de Q1 a Q3');
-
-  // Se ejecuta de verdad contra un lienzo de mentira: así se comprueba que dibuja
-  // los bigotes, la mediana y los atípicos, y que no revienta con un grupo vacío.
-  const plug = eval('(' + adm.slice(adm.indexOf('const GL_CAJA_PLUGIN={') + 'const GL_CAJA_PLUGIN='.length,
-                                    adm.indexOf('let _glc={};')).trim().replace(/;\s*$/, '') + ')');
-  const trazos = [];
-  const ctx = {
-    save(){}, restore(){}, beginPath(){ trazos.push({ tipo: 'path', pts: [] }); },
-    moveTo(x,y){ trazos[trazos.length-1].pts.push(['m',x,y]); },
-    lineTo(x,y){ trazos[trazos.length-1].pts.push(['l',x,y]); },
-    stroke(){ trazos[trazos.length-1].hecho = true; },
-    arc(x,y){ trazos.push({ tipo: 'punto', x, y }); }, fill(){},
-    set strokeStyle(v){}, set lineWidth(v){}, set fillStyle(v){},
-  };
-  const r = _glResumen([10,11,12,13,14,15,16,17,18,19,20,90].map(x => ({ glp: x })));
-  const chart = {
-    ctx, $cajas: [[r, null]],
-    scales: { y: { getPixelForValue: v => 400 - v * 2 } },
-    data: { datasets: [{ borderColor: '#fff' }] },
-    getDatasetMeta: () => ({ hidden: false, data: [{ x: 100, width: 30 }, { x: 200, width: 30 }] }),
-  };
-  let revento = false;
-  try { plug.afterDatasetsDraw(chart); } catch (e) { revento = true; console.log('    ' + e.message); }
-  ok(!revento, 'el complemento corre sin caerse');
-  const paths = trazos.filter(t => t.tipo === 'path' && t.hecho);
-  const puntos = trazos.filter(t => t.tipo === 'punto');
-  ok(paths.length === 2, 'dibuja los bigotes y la mediana (' + paths.length + ' trazos)');
-  const ys = paths[0].pts.map(p => p[2]);
-  ok(ys.includes(400 - r.max * 2) && ys.includes(400 - r.min * 2),
-     'los bigotes llegan hasta donde cortan los datos, no hasta el atípico');
-  ok(puntos.length === r.fuera.length && puntos.length === 1,
-     'y el atípico se dibuja como punto suelto');
-  ok(paths[1].pts.every(p => p[2] === 400 - r.med * 2), 'la mediana va a su altura');
-
-  // El segundo grupo del lienzo falso viene vacío: no puede tumbar el dibujo.
-  ok(!revento, 'un grupo sin datos no rompe nada');
-  chart.$cajas = null;
-  let revento2 = false;
-  try { plug.afterDatasetsDraw(chart); } catch (e) { revento2 = true; }
-  ok(!revento2, 'y si el gráfico no es de caja, el complemento se aparta');
+  // Las tablas con los mismos números siguen ahí: no se perdió información.
+  const html = renderGL();
+  ok(/LA DISPERSIÓN, POR DIVISIÓN DE EDAD/.test(html),
+     'y los números que acompañaban al dibujo siguen escritos');
 }
 
 console.log('\nLos números escritos, no solo el dibujo');
@@ -504,12 +473,14 @@ console.log('\n  El corte es de la temporada en curso, no de todo el historial')
 
 console.log('\n  Cambiar un filtro no te saca de la pestaña en la que estás');
 {
-  // Antes updStatsFilter siempre redibujaba la de Deporte: si estabas en GL
-  // points y tocabas un filtro, te cambiaba de pantalla.
+  // Antes updStatsFilter siempre redibujaba la de Deporte: si estabas en otra
+  // pestaña y tocabas un filtro, te cambiaba de pantalla.
   const f = adm.slice(adm.indexOf('window.updStatsFilter'), adm.indexOf('window.updCorte'));
   ok(/const tab=ST\.statsTab\|\|'deporte';/.test(f), 'mira en qué pestaña estás');
-  ['gl', 'corte', 'demografia'].forEach(t =>
+  ['corte', 'demografia'].forEach(t =>
     ok(new RegExp("tab==='" + t + "'").test(f), 'y respeta ' + t));
+  ok(/initStatsCharts\(\);initGLCharts\(\);/.test(f),
+     'y al volver a dibujar Deporte redibuja también sus GL points');
 }
 
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');

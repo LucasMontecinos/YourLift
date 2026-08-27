@@ -1770,9 +1770,9 @@ function render(){
     const _st=ST.statsTab||'deporte';
     if(_st==='web') setTimeout(loadWebAnalytics,0);
     else if(_st==='demografia') setTimeout(initDemoCharts,0);
-    else if(_st==='gl') setTimeout(initGLCharts,0);
     else if(_st==='corte') {}   // es una tabla, no tiene gráficos que montar
-    else setTimeout(initStatsCharts,0);
+    // Deporte lleva los GL points adentro, así que monta los dos juegos.
+    else setTimeout(()=>{initStatsCharts();initGLCharts();},0);
   }
   if(ST.view==='publisher')setTimeout(()=>{try{pubUpdatePreview()}catch(e){}},50);
   if(ST.view==='publisher')setTimeout(pubUpdatePreview,0);
@@ -1849,6 +1849,56 @@ function buildStatsRows(){
   return rows;
 }
 
+// ── Cuántos atletas hay DE VERDAD ─────────────────────────────────────────
+//
+// El panel decía "1.051 atletas" y ese número no es el de la federación: es
+// todo el que alguna vez compitió, desde 2016. Adentro están los que compitieron
+// una sola vez en 2019 y no volvieron nunca.
+//
+// Así que la base se parte en dos, y las dos se muestran:
+//   · la HISTÓRICA, todos los que alguna vez pisaron una tarima;
+//   · la ACTUAL, los que compitieron en la temporada en curso o en la anterior.
+//     Esa es la gente que hoy compite, la que sirve para proyectar un campeonato
+//     o para decirle a un auspiciador a cuánta gente se llega.
+//
+// El corte va por temporada y no por fecha fija. Lo correcto sería de Nacional a
+// Nacional —así se cuenta el circuito deportivo—, pero el Nacional que viene
+// todavía no tiene fecha cargada, así que por ahora la temporada es el año
+// calendario. Cuando esa fecha exista, se cambia acá y nada más.
+//
+// No mira los filtros de arriba a propósito: es el tamaño de la base, no del
+// recorte que uno esté mirando.
+function buildBaseAtletas(){
+  const porAnio={};
+  buildStatsRows().forEach(r=>{
+    if(!r.codigo)return;
+    (porAnio[r.yn]=porAnio[r.yn]||new Set()).add(r.codigo);
+  });
+  const anios=Object.keys(porAnio).map(Number).sort((a,b)=>a-b);
+  const actual=anios[anios.length-1], previo=anios[anios.length-2];
+  const hoy=porAnio[actual]||new Set(), ayer=porAnio[previo]||new Set();
+  const historica=new Set();
+  anios.forEach(y=>porAnio[y].forEach(c=>historica.add(c)));
+  const siguen=[...ayer].filter(c=>hoy.has(c));
+  // Y todavía hay un tercer número. En el archivo hay fichas con código asignado
+  // y CERO competencias: gente inscrita que nunca llegó a subir a una tarima.
+  // Esas fichas inflaban el "atletas totales" del panel sin haber competido
+  // nunca. Se cuentan aparte, que es lo único honesto.
+  const registrados=(ST.data||[]).length;
+  return {
+    anios, anioActual:actual, anioPrevio:previo,
+    historica:historica.size,
+    registrados, sinCompetir:Math.max(0,registrados-historica.size),
+    activos:new Set([...ayer,...hoy]).size,   // la base actual
+    hoy:hoy.size, ayer:ayer.size,
+    siguen:siguen.length,
+    seFueron:ayer.size-siguen.length,
+    nuevos:hoy.size-siguen.length,
+    retencion:ayer.size?Math.round(siguen.length/ayer.size*100):0,
+    porAnio:anios.map(y=>({anio:y,n:porAnio[y].size})),
+  };
+}
+
 // Aplica filtros globales a las filas de stats
 function applyStatsFilters(rows){
   const f = ST.statsFilters || {};
@@ -1870,10 +1920,9 @@ window.updStatsFilter = function(key, value){
   const container = document.getElementById('statsContent');
   if(!container)return;
   const tab=ST.statsTab||'deporte';
-  if(tab==='gl'){ container.innerHTML=renderGL(); setTimeout(initGLCharts,0); }
-  else if(tab==='corte'){ container.innerHTML=renderCorte(); }
+  if(tab==='corte'){ container.innerHTML=renderCorte(); }
   else if(tab==='demografia'){ container.innerHTML=renderDemografia(); setTimeout(initDemoCharts,0); }
-  else { container.innerHTML=renderStatsContent(); setTimeout(initStatsCharts,0); }
+  else { container.innerHTML=renderStatsContent(); setTimeout(()=>{initStatsCharts();initGLCharts();},0); }
 };
 window.clearStatsFilters = function(){
   ST.statsFilters = {yearFrom:'',yearTo:'',sex:'',mod:'',div:'',club:''};
@@ -2526,15 +2575,12 @@ function renderStats(){
   return `<div class="h1">Estadísticas</div>
     <div style="display:flex;gap:10px;margin:14px 0 20px">
       ${tabBtn('deporte','DEPORTE')}
-      ${tabBtn('gl','GL POINTS')}
       ${tabBtn('corte','CORTE NACIONAL')}
       ${tabBtn('demografia','DEMOGRAFÍA')}
       ${tabBtn('web','TRÁFICO WEB')}
     </div>
     ${tab==='web'
       ? `<div id="statsWebContent"><div style="padding:40px;text-align:center;color:var(--muted)">Cargando analytics…</div></div>`
-      : tab==='gl'
-      ? `<p class="subtitle">Los GL points son lo único que se puede comparar entre sexos, divisiones de edad y modalidades · usa los mismos filtros</p><div id="statsContent">${renderGL()}</div>`
       : tab==='corte'
       ? `<p class="subtitle">Simulador de mínimos para clasificar · se prueba un corte y se ve a cuántos deja dentro, antes de fijarlo</p><div id="statsContent">${renderCorte()}</div>`
       : tab==='demografia'
@@ -2798,6 +2844,53 @@ window.exportDemoCSV=function(){
   if(typeof showToast==='function')showToast('Demografía exportada — '+D.total+' atletas');
 };
 
+// El tamaño real de la base, y qué pasó entre la temporada pasada y esta.
+function _baseAtletasHtml(){
+  const B=buildBaseAtletas();
+  if(!B.anios.length)return '';
+  const caja='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px';
+  const dato=(v,l,c,sub='')=>`<div style="${caja};text-align:center">
+    <div style="font-family:Oswald;font-size:34px;font-weight:700;color:${c}">${v}</div>
+    <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">${l}</div>
+    ${sub?`<div style="color:var(--muted);font-size:9px;margin-top:3px;line-height:1.4">${sub}</div>`:''}</div>`;
+  const pct=B.historica?Math.round(B.activos/B.historica*100):0;
+  return `
+  <div style="background:rgba(212,168,67,.06);border:1px solid rgba(212,168,67,.35);border-radius:14px;padding:16px 18px;margin-bottom:20px">
+    <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--gold);margin-bottom:4px">LA BASE DE ATLETAS</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5">
+      Estos números <b style="color:var(--text)">no dependen de los filtros</b>: son el tamaño de la base, no del recorte.
+      La <b style="color:var(--text)">base actual</b> son los que compitieron en ${B.anioPrevio||B.anioActual} o en ${B.anioActual} — la gente que hoy compite.
+      La <b style="color:var(--text)">histórica</b> es todo el que alguna vez pisó una tarima, desde ${B.anios[0]}.
+      ${B.sinCompetir?`Y hay <b style="color:var(--text)">${B.sinCompetir.toLocaleString()} fichas con código y ninguna competencia</b>: inscritos que nunca subieron a tarima. No son atletas activos y no se cuentan como tales.`:''}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
+      ${dato(B.activos.toLocaleString(),'BASE ACTUAL','var(--gold)',
+        `compitieron en ${B.anioPrevio||B.anioActual} o ${B.anioActual} · ${pct}% de la histórica`)}
+      ${dato(B.historica.toLocaleString(),'BASE HISTÓRICA','#7A8FA6',
+        `desde ${B.anios[0]} · incluye a los que no volvieron`)}
+      ${dato(B.hoy.toLocaleString(),'ACTIVOS EN '+B.anioActual,'#22c55e',
+        'lo que va de la temporada')}
+      ${dato(B.ayer.toLocaleString(),'COMPITIERON EN '+(B.anioPrevio||'—'),'#3b82f6')}
+      ${B.sinCompetir?dato(B.sinCompetir.toLocaleString(),'INSCRITOS SIN COMPETIR','#7A8FA6',
+        `de ${B.registrados.toLocaleString()} fichas en el archivo`):''}
+    </div>
+    ${B.anioPrevio?`
+    <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--muted);margin:18px 0 10px">DE ${B.anioPrevio} A ${B.anioActual}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
+      ${dato(B.siguen.toLocaleString(),'SIGUEN COMPITIENDO','#22c55e',
+        `${B.retencion}% de los de ${B.anioPrevio} volvió`)}
+      ${dato(B.seFueron.toLocaleString(),'NO HAN VUELTO','#ef4444',
+        `compitieron en ${B.anioPrevio} y todavía no en ${B.anioActual}`)}
+      ${dato(B.nuevos.toLocaleString(),'CARAS NUEVAS','#a78bfa',
+        `compiten en ${B.anioActual} y no lo hicieron en ${B.anioPrevio}`)}
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-top:12px;line-height:1.5">
+      La temporada ${B.anioActual} está en curso: los que "no han vuelto" pueden volver, y las cifras suben con cada campeonato que se carga.
+      El corte va por año calendario; lo correcto sería de Nacional a Nacional, y se cambia en cuanto el próximo Nacional tenga fecha.
+    </div>`:''}
+  </div>`;
+}
+
 function renderStatsContent(){
   const rowsAll = buildStatsRows();
   const rows = applyStatsFilters(rowsAll);
@@ -2886,9 +2979,11 @@ function renderStatsContent(){
     </div>
   </div>
 
+  ${_baseAtletasHtml()}
+
   <!-- ═══ KPIs ═══ -->
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px">
-    <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:var(--gold)">${totalAtletas.toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">ATLETAS ${filterActive?'(filtro)':'ÚNICOS'}</div>${filterActive?`<div style="color:var(--muted);font-size:9px;margin-top:2px">${totalAtletasDb.toLocaleString()} totales en DB</div>`:''}</div>
+    <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:var(--gold)">${totalAtletas.toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">ATLETAS ${filterActive?'(filtro)':'ÚNICOS'}</div>${filterActive?`<div style="color:var(--muted);font-size:9px;margin-top:2px">de ${totalAtletasDb.toLocaleString()} en la base histórica</div>`:''}</div>
     <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:#3b82f6">${totalPartic.toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">PARTICIPACIONES</div></div>
     <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:#ec4899">${pctF}%</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">PARTICIPACIÓN ♀</div></div>
     <div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:#a78bfa">${clubsActivos}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">CLUBES ACTIVOS</div></div>
@@ -2927,7 +3022,12 @@ function renderStatsContent(){
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
     ${card('EDAD PROMEDIO POR AÑO','chartEdad')}
     ${card('MODALIDAD POR AÑO','chartMod')}
-  </div>`;
+  </div>
+
+  <div style="border-top:1px solid var(--border);margin:8px 0 20px"></div>
+  <div style="margin-bottom:4px;font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:3px;color:var(--gold);padding-left:4px">GL POINTS</div>
+  <p class="subtitle" style="margin:0 0 16px;padding-left:4px">Lo único que se puede comparar entre sexos, divisiones de edad y modalidades · usa los mismos filtros de arriba</p>
+  ${renderGL()}`;
 }
 
 // ═══════════════════════════════════════════
@@ -2965,10 +3065,12 @@ function _glMediana(arr){ return _glCuartil(arr.map(r=>r.glp).sort((a,b)=>a-b),.
 // distintas, una con todos apretados ahí y otra con la mitad en 60 y la otra
 // mitad en 92. La desviación y el rango intercuartil son los que dicen eso.
 //
-// Los bigotes van hasta el dato más lejano que siga dentro de una vez y media el
-// rango intercuartil (el criterio de Tukey, el habitual). Lo que queda más allá
-// se dibuja como punto suelto: son marcas reales, no errores, y esconderlas sería
-// justamente perder a los mejores.
+// El mínimo y el máximo se dan dos veces: el del grupo entero, y el del grupo
+// sin las marcas que se salen de la norma —las que quedan más allá de una vez y
+// media el rango intercuartil, el criterio de Tukey—. Las dos cifras importan:
+// una dice hasta dónde llegó alguien, la otra hasta dónde llega el grupo. Las
+// que se salen se cuentan aparte y no se descartan: son marcas reales, y casi
+// siempre son las de los mejores.
 function _glResumen(arr){
   const v=arr.map(r=>r.glp).sort((a,b)=>a-b), n=v.length;
   if(!n)return null;
@@ -3023,13 +3125,6 @@ function renderGL(){
   </div>
 
   <div id="glRankBox">${renderGLRanking()}</div>
-
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-    ${card('CAJA Y BIGOTE — POR DIVISIÓN DE EDAD','glCajaDiv','340px',
-      'La caja es la mitad del medio (del cuartil 1 al 3); la raya blanca, la mediana. Los bigotes llegan al dato más lejano que siga siendo normal, y los puntos sueltos son las marcas que se salen de la norma — casi siempre, los mejores.')}
-    ${card('CAJA Y BIGOTE — POR MODALIDAD','glCajaMod','340px',
-      'Mismo dibujo, comparando Classic, Equipado y Only Bench.')}
-  </div>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
     ${card('GL PROMEDIO POR AÑO — HOMBRES vs MUJERES','glAnioSexo','300px',
@@ -3473,8 +3568,9 @@ window.exportCorteCSV=function(){
   showToast('Corte exportado: '+grupos.length+' grupos');
 };
 
-// Los números que hay detrás de cada caja, escritos. La caja se mira; esto se
-// copia a un informe.
+// La dispersión de un grupo, escrita. Antes esto acompañaba a un diagrama de
+// caja y bigote; el diagrama se sacó y quedaron los números, que son los que
+// se copian a un informe.
 function _glDispersionHtml(titulo,grupos){
   const con=grupos.filter(g=>g.arr.length);
   if(!con.length)return '';
@@ -3506,44 +3602,6 @@ function _glDispersionHtml(titulo,grupos){
   </div>`;
 }
 
-// Chart.js no trae diagramas de caja. En vez de sumar otra librería de un CDN a
-// un panel que se usa en competencia, la caja se dibuja con una barra flotante
-// —de Q1 a Q3, que Chart.js sí hace— y este complemento le agrega encima los
-// bigotes, la mediana y los puntos atípicos.
-const GL_CAJA_PLUGIN={
-  id:'glCajaBigote',
-  afterDatasetsDraw(chart){
-    const cajas=chart.$cajas; if(!cajas)return;
-    const ctx=chart.ctx, yS=chart.scales.y;
-    chart.data.datasets.forEach((ds,di)=>{
-      const meta=chart.getDatasetMeta(di);
-      if(meta.hidden)return;
-      (meta.data||[]).forEach((el,i)=>{
-        const c=(cajas[di]||[])[i];
-        if(!c||!el)return;
-        const x=el.x, w=Math.max(6,(el.width||18));
-        const py=v=>yS.getPixelForValue(v);
-        ctx.save();
-        ctx.strokeStyle=ds.borderColor||'#D4E1F0';
-        ctx.lineWidth=1.5;
-        ctx.beginPath();
-        ctx.moveTo(x,py(c.q3)); ctx.lineTo(x,py(c.max));          // bigote de arriba
-        ctx.moveTo(x-w/4,py(c.max)); ctx.lineTo(x+w/4,py(c.max));
-        ctx.moveTo(x,py(c.q1)); ctx.lineTo(x,py(c.min));          // bigote de abajo
-        ctx.moveTo(x-w/4,py(c.min)); ctx.lineTo(x+w/4,py(c.min));
-        ctx.stroke();
-        ctx.lineWidth=2.5; ctx.strokeStyle='#fff';                // la mediana
-        ctx.beginPath();
-        ctx.moveTo(x-w/2,py(c.med)); ctx.lineTo(x+w/2,py(c.med));
-        ctx.stroke();
-        ctx.fillStyle='rgba(212,168,67,.95)';                     // los atípicos
-        (c.fuera||[]).forEach(v=>{ctx.beginPath();ctx.arc(x,py(v),2.4,0,Math.PI*2);ctx.fill();});
-        ctx.restore();
-      });
-    });
-  }
-};
-
 let _glc={};
 function initGLCharts(){
   Object.values(_glc).forEach(c=>{try{c.destroy()}catch(e){}});_glc={};
@@ -3560,30 +3618,6 @@ function initGLCharts(){
       plugins:{...base.plugins,...(extra.plugins||{})},scales:{...base.scales,...(extra.scales||{})}}});
     _glc[id]=c;
     return c;
-  };
-
-  // Un diagrama de caja: la barra va de Q1 a Q3 y el complemento dibuja encima
-  // los bigotes, la mediana y los atípicos. Al pasar el mouse se leen los cinco
-  // números, que es lo que uno quiere saber cuando mira una caja.
-  const caja=(id,etiquetas,series)=>{
-    const cajas=series.map(s=>etiquetas.map(e=>s.resumen(e)));
-    const c=mk(id,'bar',{labels:etiquetas,datasets:series.map((s,i)=>({
-      label:s.label,
-      data:cajas[i].map(r=>r?[r.q1,r.q3]:null),
-      backgroundColor:s.color,borderColor:s.borde||s.color,borderWidth:1,borderRadius:2,
-      borderSkipped:false}))},
-      {plugins:{...base.plugins,tooltip:{callbacks:{label(ctx){
-        const r=(cajas[ctx.datasetIndex]||[])[ctx.dataIndex];
-        if(!r)return ctx.dataset.label+': sin datos';
-        return [ctx.dataset.label+' — '+r.n+' resultado'+(r.n===1?'':'s'),
-          'mediana '+r.med.toFixed(1)+'  ·  Q1 '+r.q1.toFixed(1)+'  ·  Q3 '+r.q3.toFixed(1),
-          'RIC '+r.ric.toFixed(1)+'  ·  desv. ±'+r.desv.toFixed(1),
-          'del '+r.real.min.toFixed(1)+' al '+r.real.max.toFixed(1)+
-            (r.fuera.length?'  ('+r.fuera.length+' atípico'+(r.fuera.length===1?'':'s')+')':'')];
-      }}}},
-      scales:{...base.scales,y:{...base.scales.y,title:{display:true,text:'GL points',color:'#7A8FA6',font:{family:'Oswald',size:10}}}}},
-      [GL_CAJA_PLUGIN]);
-    if(c){c.$cajas=cajas;c.update('none');}
   };
 
   const resumenDe=f=>e=>{const a=rows.filter(r=>f(r,e));return a.length?_glResumen(a):null;};
@@ -3629,18 +3663,6 @@ function initGLCharts(){
   mk('glModDiv','bar',{labels:divs,datasets:mods.map((m,i)=>({
     label:m,data:divs.map(d=>promDe(r=>r.div===d&&r.mod===m)),
     backgroundColor:COL[i%COL.length],borderRadius:4}))});
-
-  // 8) Caja y bigote por división, hombres y mujeres por separado.
-  caja('glCajaDiv',divs,[
-    {label:'Hombres',color:'rgba(59,130,246,.45)',borde:'#3b82f6',
-     resumen:resumenDe((r,d)=>r.div===d&&r.sexo==='M')},
-    {label:'Mujeres',color:'rgba(236,72,153,.45)',borde:'#ec4899',
-     resumen:resumenDe((r,d)=>r.div===d&&r.sexo==='F')}]);
-
-  // 9) Y por modalidad.
-  caja('glCajaMod',mods,[
-    {label:'GL points',color:'rgba(212,168,67,.35)',borde:'#D4A843',
-     resumen:resumenDe((r,m)=>r.mod===m)}]);
 
   // 7) Los 20 mejores, un atleta una vez.
   const porAtleta={};

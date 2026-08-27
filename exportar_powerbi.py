@@ -53,10 +53,18 @@ def escribir(nombre, columnas, filas):
     print(f'  {nombre:26} {len(filas):>6} filas')
     return len(filas)
 
-def anio_de(fecha, anio):
+def anio_de(fecha, anio, evento=''):
+    """El año del resultado, con la misma regla que usa el panel.
+
+    Muchos resultados no traen fecha, pero el año está en el nombre del
+    campeonato ('IX Campeonato Nacional 2025'). Tomando solo la fecha se caían
+    de la cuenta más de la mitad de los atletas de cada temporada, y Power BI
+    mostraba números que no cuadraban con el panel."""
     if anio: return anio
     m = re.match(r'^(\d{4})', str(fecha or ''))
-    return int(m.group(1)) if m else None
+    if m: return int(m.group(1))
+    m = re.search(r'20\d{2}', str(evento or ''))
+    return int(m.group(0)) if m else None
 
 def nac_de(f):
     """'14/09/2004' o '2004-09-14' → 2004. Los 31/12/1900 son relleno: se descartan."""
@@ -98,7 +106,7 @@ for a in D:
         ev = c.get('evento') or ''
         eid = slug(ev)
         fecha = c.get('fecha') or ''
-        anio = anio_de(fecha, c.get('año'))
+        anio = anio_de(fecha, c.get('año'), ev)
         # Hay resultados con la fecha a medias ('2024-05', sin día). Se guarda el
         # año, que sí se sabe, y la fecha se deja vacía: si se dejara así, Power BI
         # no la encontraría en el calendario y esa fila se caería de todo gráfico
