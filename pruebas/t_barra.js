@@ -133,8 +133,18 @@ const MONTAR = `(pais,logo,fondo)=>{
       out.etiquetaNacional = _recordEtiqueta();
       DATA.event.records = 'suda';
       out.etiquetaSuda = _srOn() ? _recordEtiqueta() : '(sin tabla suda cargada acá)';
-      DATA.event.records = '';
+      // "Sin tabla de récords" es sin records Y sin ser un evento del
+      // Sudamericano: la tabla suda también se enciende por el id del evento.
+      // La prueba monta el meet con id 'x', pero la página se abre con
+      // ?evento=suda2026_fesupo_full y la carga asíncrona devuelve el evento
+      // real cuando termina. Si esa carga llegaba antes que esta línea, el
+      // cartel salía sudamericano y la prueba fallaba sin motivo aparente: era
+      // la falla que aparecía de a ratos. Se apaga a mano lo que enciende la
+      // tabla, que es justo lo que la comprobación quiere decir.
+      const idAntes = DATA.event.id;
+      DATA.event.records = ''; DATA.event.id = 'x';
       out.etiquetaVacia = _recordEtiqueta();
+      DATA.event.id = idAntes;
       return out;
     });
     ok(!r.sinRecords, 'sin récord a la vista, no hay cartel');
