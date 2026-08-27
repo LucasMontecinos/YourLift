@@ -5277,8 +5277,12 @@ window.cronoClear=async function(){
 // Reglas: cada categoría+división JUNTA en un flight · máx 14 por flight · una sola tarima
 window.cronoAutoDistribute=async function(){
   const rows=ST.cronoRows||[]; if(!rows.length){showToast('No hay atletas',null,true);return;}
-  if(!confirm('Auto-distribuir '+rows.length+' atletas?\nReglas: mujeres y hombres en flights separados · cada categoría+división junta · 8 a 14 por flight · Only Bench puro va aparte y puede pasar de 14. Una sola tarima, flights A, B, C... la primera mitad queda en sesión AM y la segunda en PM.'))return;
-  const MAXP=14, LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  if(!confirm('Auto-distribuir '+rows.length+' atletas?\n\nReglas del reglamento:\n· Hombres y mujeres nunca en la misma tanda\n· Una categoría de peso + división de edad NO se parte: va entera en una tanda\n· 8 mínimo, 14 máximo de powerlifting por tanda\n· Only Bench no cuenta para el 14 y puede llevar la tanda hasta 17\n\nUna sola tarima, tandas A, B, C… la primera mitad en AM y la segunda en PM.'))return;
+  // Los tres números del reglamento, juntos y con nombre.
+  const MIN_PL=8;      // mínimo de powerlifting por tanda
+  const MAX_PL=14;     // máximo de powerlifting por tanda
+  const MAX_TOT=17;    // tope con los Only Bench encima
+  const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   // H=hombre, M=mujer (como en la nómina). Si no hay sexo, se infiere de la categoría (IPF).
   const sexOf=r=>{
     const s=String(r.sexo||'').trim().toLowerCase();
@@ -5288,31 +5292,73 @@ window.cronoAutoDistribute=async function(){
     const MUJ=[43,47,52,57,63,69,76,84], HOM=[53,59,66,74,83,93,105,120];
     if(MUJ.includes(c))return'M'; if(HOM.includes(c))return'H'; return '?';
   };
-  // Only Bench puro = menciona bench/banca y NO es powerlifting. No cuenta para el 14 (va con su categoría).
+  // Only Bench puro = menciona bench/banca y NO es powerlifting. Sube a tarima
+  // una sola vez y por eso no ocupa lugar en el cupo de 14.
   const isBench=m=>{m=(m||'').toLowerCase();return (/bench|banca/.test(m))&&!/powerlifting/.test(m);};
-  const fullN=g=>g.filter(r=>!isBench(r.modalidad)).length;
+  const nPL=g=>g.filter(r=>!isBench(r.modalidad)).length;
   const srank={H:0,M:1,'?':2};
+
+  // ── Grupos indivisibles ────────────────────────────────────────────────
+  // Misma categoría de peso + misma división de edad = un grupo, y un grupo NO
+  // se parte. Antes, un grupo de más de 14 se cortaba en pedazos de 14: eso
+  // reparte una misma premiación en dos tandas distintas, que es justo lo que
+  // hubo que deshacer a mano en el Regional Norte.
   const groups={};
   rows.forEach(r=>{const k=sexOf(r)+'|'+(r.division||'?')+'|'+(r.categoria||'?');(groups[k]=groups[k]||[]).push(r);});
   const keys=Object.keys(groups).sort((a,b)=>{const A=a.split('|'),B=b.split('|');return (srank[A[0]]-srank[B[0]])||((parseFloat(A[2])||999)-(parseFloat(B[2])||999))||A[1].localeCompare(B[1]);});
-  const flights=[]; let cur=[], curFull=0, curSex=null;
+
+  // ── Armado ─────────────────────────────────────────────────────────────
+  const fl=[];   // {sex, rows, grandes:[claves que solas pasan de 14]}
+  let cur=null;
   for(const k of keys){
-    const sex=k.split('|')[0]; const g=groups[k]; const gf=fullN(g);
-    if(gf>MAXP){ if(cur.length){flights.push(cur);cur=[];curFull=0;curSex=null;} for(let i=0;i<g.length;i+=MAXP)flights.push(g.slice(i,i+MAXP)); continue; }
-    if(cur.length && (curSex!==sex || curFull+gf>MAXP)){ flights.push(cur); cur=[]; curFull=0; }
-    if(!cur.length)curSex=sex;
-    cur=cur.concat(g); curFull+=gf;
+    const sex=k.split('|')[0], g=groups[k], pl=nPL(g);
+    const cabe = cur && cur.sex===sex && (nPL(cur.rows)+pl<=MAX_PL) && (cur.rows.length+g.length<=MAX_TOT);
+    if(!cabe){ if(cur)fl.push(cur); cur={sex,rows:[],grandes:[]}; }
+    cur.rows=cur.rows.concat(g);
+    // Un grupo que POR SÍ SOLO pasa de 14 no se puede partir sin romper la
+    // regla, así que queda entero y se avisa: es decisión de la comisión
+    // técnica dividir la categoría o correr una tanda más grande.
+    if(pl>MAX_PL)cur.grandes.push(k.split('|')[2]+' '+k.split('|')[1]);
   }
-  if(cur.length)flights.push(cur);
-  // Asignar: una sola tarima, flights con letra secuencial (sin repetir entre AM/PM).
-  // Primera mitad de los flights → sesión AM, segunda mitad → PM.
-  const half=Math.ceil(flights.length/2);
-  flights.forEach((fl,idx)=>{
-    const jor=idx<half?'AM':'PM'; const let_=LETTERS[idx%LETTERS.length];
-    fl.forEach(r=>{r.tarima='1';r.flight=let_;r.jornada=jor;});
+  if(cur)fl.push(cur);
+
+  // ── Mínimo de 8 ────────────────────────────────────────────────────────
+  // Una tanda de dos personas no se corre. Si quedó corta, se junta con la
+  // vecina del MISMO sexo mientras el resultado siga cabiendo en los topes.
+  for(let i=0;i<fl.length;i++){
+    if(nPL(fl[i].rows)>=MIN_PL)continue;
+    // Una tanda de puro Only Bench no se mide contra el mínimo de powerlifting:
+    // son los que compiten solo en banca y no ocupan ese cupo.
+    if(nPL(fl[i].rows)===0)continue;
+    for(const j of [i+1,i-1]){
+      const o=fl[j]; if(!o||o.sex!==fl[i].sex)continue;
+      if(nPL(fl[i].rows)+nPL(o.rows)>MAX_PL)continue;
+      if(fl[i].rows.length+o.rows.length>MAX_TOT)continue;
+      o.rows=(j>i?fl[i].rows.concat(o.rows):o.rows.concat(fl[i].rows));
+      o.grandes=o.grandes.concat(fl[i].grandes);
+      fl.splice(i,1); i--; break;
+    }
+  }
+
+  // ── Asignar tarima, letra y jornada ────────────────────────────────────
+  const half=Math.ceil(fl.length/2);
+  fl.forEach((f,idx)=>{
+    const jor=idx<half?'AM':'PM', let_=LETTERS[idx%LETTERS.length];
+    f.rows.forEach(r=>{r.tarima='1';r.flight=let_;r.jornada=jor;});
   });
+  ST.cronoRows=fl.reduce((a,f)=>a.concat(f.rows),[]);
   await cronoSaveDoc();
-  showToast(flights.length+' flights · '+half+' AM / '+(flights.length-half)+' PM'); render();
+
+  // ── Qué salió, y qué hay que mirar ─────────────────────────────────────
+  const cortas=fl.filter(f=>nPL(f.rows)>0&&nPL(f.rows)<MIN_PL);
+  const largas=fl.filter(f=>nPL(f.rows)>MAX_PL);
+  let msg=fl.length+' tandas · '+half+' AM / '+(fl.length-half)+' PM';
+  const avisos=[];
+  if(largas.length)avisos.push(largas.length+' pasan de '+MAX_PL+' ('+largas.map(f=>LETTERS[fl.indexOf(f)]+': '+nPL(f.rows)).join(', ')+') porque una categoría no se puede partir');
+  if(cortas.length)avisos.push(cortas.length+' quedan bajo '+MIN_PL+' ('+cortas.map(f=>LETTERS[fl.indexOf(f)]+': '+nPL(f.rows)).join(', ')+') y no se pudieron juntar sin pasarse del tope');
+  showToast(msg+(avisos.length?' — revisar: '+avisos.join(' · '):''), null, avisos.length>0);
+  if(avisos.length)console.warn('[crono] '+avisos.join('\n'));
+  render();
 };
 window.cronoLoadFromNomina=async function(){
   if(!ST.cronoEv){showToast('Elige un campeonato primero',null,true);return;}
