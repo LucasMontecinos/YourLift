@@ -43,7 +43,9 @@ export function where(){return{};}
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
   async function abrir() {
-    const ctx = await b.newContext();
+    // Sin service worker: el de atleta.html toma el control de la página a
+    // medio cargar y deja la carga colgada contra el servidor local.
+    const ctx = await b.newContext({ serviceWorkers: 'block' });
     // Caché caliente: es la situación en la que fallaba.
     await ctx.addInitScript(r => {
       localStorage.setItem('_yfc_atl_res', JSON.stringify({ ts: Date.now(), d: [r] }));

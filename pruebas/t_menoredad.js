@@ -174,7 +174,9 @@ console.log('\nUn solo criterio: el formulario y la validación final preguntan 
 console.log('\nEn el formulario de verdad');
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
-  const ctx = await b.newContext({ viewport: { width: 1100, height: 900 } });
+  // Sin service worker: esta página registra /sw.js y el worker toma el
+  // control a medio cargar, dejando la carga colgada contra el servidor local.
+  const ctx = await b.newContext({ viewport: { width: 1100, height: 900 }, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));

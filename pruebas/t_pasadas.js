@@ -24,7 +24,9 @@ const FICHAS = [
 
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
-  const p = await (await b.newContext()).newPage();
+  // Sin service worker: esta página registra /sw.js y el worker toma el
+  // control a medio cargar, dejando la carga colgada contra el servidor local.
+  const p = await (await b.newContext({ serviceWorkers: 'block' })).newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));
   await p.goto('http://localhost:8972/index.html', { waitUntil: 'domcontentloaded' });

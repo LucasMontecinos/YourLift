@@ -66,7 +66,15 @@ const R_BENCH = { ...BASE, id: 'r2', view: 'bench', modalidad: 'Only Bench Class
     // vivos a la vez las cargas se encolan y da timeout, así que se cierra el
     // anterior antes de abrir el siguiente.
     while (abiertos.length) { try { await abiertos.pop().close(); } catch (e) {} }
-    const ctx = await b.newContext({ viewport: { width: 900, height: 1400 } });
+    // Sin service worker. atleta.html registra /sw.js, que precarga catorce
+    // archivos y hace skipWaiting() + clients.claim(): toma el control de la
+    // página a medio cargar y manda las peticiones que faltan por su caché,
+    // mientras todavía está bajando el resto contra el mismo servidor local.
+    // Ahí la carga se queda colgada y la prueba muere en un timeout, sin nada
+    // que ver con lo que prueba. Era la intermitencia que aparecía de a ratos y
+    // empeoraba dentro de la batería. El service worker es de producción; acá
+    // solo estorba.
+    const ctx = await b.newContext({ viewport: { width: 900, height: 1400 }, serviceWorkers: 'block' });
     abiertos.push(ctx);
     await ctx.addInitScript(rs => {
       localStorage.setItem('_yfc_atl_res', JSON.stringify({ ts: Date.now(), d: rs }));
