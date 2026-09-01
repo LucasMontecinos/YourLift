@@ -408,6 +408,7 @@ function setBgForSection(section){
 </script>
 </div>
 <script src="clubs.js"></script>
+<script src="yl-ediciones.js"></script>
 <script>
 // Firebase config (same as inscripcion.html)
 const FB_CFG={apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app",messagingSenderId:"551573388751",appId:"1:551573388751:web:5fcc377a8d595378ab26ba"};
@@ -597,8 +598,14 @@ const _rutNormE=s=>String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();
 window.EDITS_BY_RUT={};
 window.EDITS_BY_COD={};
 function _indexEdit(ed){
-  if(ed.rut){const k=_rutNormE(ed.rut);if(k)window.EDITS_BY_RUT[k]=ed;}
-  if(ed.codigo)window.EDITS_BY_COD[ed.codigo]=ed;
+  // El marcador de versión no es una edición, y una baja tampoco: la baja saca al
+  // atleta del padrón, pero no tiene por qué reescribirle el nombre a una fila de
+  // inscripción que ya está hecha.
+  if(!ed||ed.id===(window.YLEdiciones&&window.YLEdiciones.MARCA)||ed.deleted)return;
+  // Si hay dos documentos para la misma persona, manda el más nuevo.
+  const gana=(vieja)=>!vieja||(ed.ts||0)>=(vieja.ts||0);
+  if(ed.rut){const k=_rutNormE(ed.rut);if(k&&gana(window.EDITS_BY_RUT[k]))window.EDITS_BY_RUT[k]=ed;}
+  if(ed.codigo&&gana(window.EDITS_BY_COD[ed.codigo]))window.EDITS_BY_COD[ed.codigo]=ed;
 }
 // Aplica el overlay de edits a un objeto cualquiera que tenga rut y/o codigo.
 // Devuelve el objeto modificado (muta in-place). Campos: nombre, club, etc.
@@ -639,20 +646,21 @@ function _applyEditFields(a,ed){
 }
 async function loadEdits(){
   if(!fbReady)return;
-  const TTL=20*60*1000; // 20 min cache
-  const cached=_fsCache('edits',TTL);
-  let eds=cached;
-  if(!cached){
-    try{
+  let eds;
+  try{
+    eds=await window.YLEdiciones.cargar(async()=>{
       const snap=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'athlete_edits'));
-      eds=[];snap.forEach(d=>eds.push(d.data()));
-      _fsSetCache('edits',eds);
-    }catch(e){console.warn('Error loading edits',e);return;}
-  }
+      const out=[];snap.forEach(d=>out.push({...d.data(),id:d.id}));
+      return out;
+    });
+  }catch(e){console.warn('Error loading edits',e);return;}
   if(!eds)return;
-  let count=0;
-  eds.forEach(ed=>{_indexEdit(ed);const a=_findByEdit(ed);if(a&&_applyEditFields(a,ed))count++;});
-  if(count>0)console.log('[FB] Applied',count,'athlete edits');
+  // El padrón: ediciones y BAJAS. El buscador seguía mostrando fichas repetidas
+  // que ya se habían borrado desde el panel, porque acá no se miraba `deleted`.
+  const r=window.YLEdiciones.aplicar(D,eds);
+  // Y el índice por RUT/código, que usan las filas de inscripción.
+  eds.forEach(_indexEdit);
+  if(r.editados||r.borrados)console.log('[FB] '+r.editados+' ediciones, '+r.borrados+' bajas');
   if(window._lastNominasRaw)_applyNominas(window._lastNominasRaw); else render();
 }
 function startEditsListener(){ /* eliminado: onSnapshot reemplazado por getDocs+caché */ }

@@ -91,6 +91,7 @@ body.nav-open .nav-backdrop{opacity:1;pointer-events:auto}
 <body>
 <div id="bgGrid"></div>
 <script src="clubs.js"></script>
+<script src="yl-ediciones.js"></script>
 <div id="app"><div class="login"><div class="login-c"><div class="spinner"></div><p style="text-align:center" id="loadingMsg">Cargando...</p><p id="loadingBtn" style="text-align:center;margin-top:12px;display:none"><button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #C41E3A;background:transparent;color:#C41E3A;cursor:pointer;font-size:13px">↻ Reintentar</button></p></div></div></div>
 
 <script>
@@ -363,28 +364,18 @@ async function loadAll(){
     });
   }catch(e){console.warn('[loadAll] atletas_pending:',e.message);}
 
-  // Apply athlete_edits non-blocking. Matchea por RUT (estable), fallback a código.
+  // Ediciones y BAJAS del panel, con el mismo criterio que el sitio (yl-ediciones.js).
+  // El panel tenía su propia copia de esta lógica y se le había quedado sin la
+  // parte de las bajas: una ficha repetida se borraba, desaparecía de la pantalla
+  // y al recargar el panel volvía a estar. Así se creía haber limpiado
+  // duplicados que seguían ahí.
   try{
-    const rutNormE=s=>String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();
-    const editsSnap=await getDocs(collection(db,'athlete_edits'));
-    editsSnap.forEach(d=>{
-      const ed=d.data();
-      // Buscar por RUT primero (no cambia nunca), luego por código (compat docs viejos)
-      let a=null;
-      if(ed.rut) a=(ST.data||[]).find(x=>rutNormE(x.rut)===rutNormE(ed.rut));
-      if(!a && ed.codigo) a=(ST.data||[]).find(x=>x.codigo===ed.codigo);
-      if(a){
-        if(ed.nombre)a.nombre=ed.nombre;
-        if(ed.club!==undefined)a.club=ed.club;
-        if(ed.debut!==undefined)a.debut=ed.debut;
-        if(ed.rut)a.rut=ed.rut;
-        if(ed.codigo)a.codigo=ed.codigo;   // ← clave: aplicar el código editado
-        if(ed.sexo)a.sexo=ed.sexo;
-        if(ed.fechaNac)a.fechaNac=ed.fechaNac;
-        if(ed.zona)a.zona=ed.zona;
-        if(ed.comuna)a.comuna=ed.comuna;
-      }
+    const docs=await window.YLEdiciones.cargar(async()=>{
+      const snap=await getDocs(collection(db,'athlete_edits'));
+      return snap.docs.map(d=>({...d.data(),id:d.id}));
     });
+    const r=window.YLEdiciones.aplicar(ST.data,docs);
+    if(r.editados||r.borrados)console.log('[edits] '+r.editados+' editados, '+r.borrados+' dados de baja');
   }catch(e){console.warn('[loadAll] athlete_edits:',e.message);}
 
   // Load inscripciones — no orderBy to avoid index requirement
@@ -777,6 +768,18 @@ function _editDocId(a){
   // fallback: si no hay rut, usar código (atletas viejos sin rut)
   return 'cod_'+String(a.codigo||'').replace(/[^a-zA-Z0-9_-]/g,'_');
 }
+// La hora del último cambio, en un documento aparte de la misma colección.
+// Las páginas piden SOLO ese documento —una petición chica— y recién se bajan
+// las ediciones enteras si cambió. Sin esto cada página se guardaba su copia con
+// un vencimiento propio (20 minutos el inicio, dos horas el ranking) y una
+// corrección tardaba entre veinte minutos y dos horas en verse. Ahora se ve en
+// la carga siguiente.
+async function _marcarEdicion(){
+  try{
+    await setDoc(doc(db,'athlete_edits','__version'),{ts:Date.now()});
+    if(window.YLEdiciones)window.YLEdiciones.olvidarCopia();
+  }catch(e){console.warn('[edits] no se pudo marcar la versión:',e.message);}
+}
 // Guarda el overlay completo del atleta en athlete_edits (snapshot de campos editables)
 async function _saveEdit(a){
   const docId=_editDocId(a);
@@ -784,8 +787,10 @@ async function _saveEdit(a){
     rut:a.rut||'', codigo:a.codigo||'', nombre:a.nombre||'',
     club:a.club||'', debut:a.debut||'', sexo:a.sexo||'',
     fechaNac:a.fechaNac||a.fecha_nac||'', zona:a.zona||'', comuna:a.comuna||'',
+    deleted:false,
     ts:Date.now()
   },{merge:true});
+  await _marcarEdicion();
 }
 window.editAthlete=async function(cod,field){
   const a=ST.data.find(x=>x.codigo===cod);if(!a)return;
@@ -795,6 +800,9 @@ window.editAthlete=async function(cod,field){
     const old=cur;
     a[field]=nv;
     try{
+      // El código también se puede corregir a mano desde acá, no solo con el
+      // botón de arreglar código. La foto tiene que irse con él igual.
+      if(field==='codigo')await _mudarFoto(old,nv);
       await _saveEdit(a);   // guarda snapshot completo indexado por RUT
       await logAction('edit_athlete',`${a.codigo}.${field}`,old,nv,{nombre:a.nombre});
       render();
@@ -822,6 +830,21 @@ function generarCodigo(a){
   return `${digits}${ini0}${ini1}${ini2}-${debut}`;
 }
 
+// La foto de perfil se guarda en atleta_fotos con el CÓDIGO como identificador
+// del documento. Si al atleta se le corrige el código, la foto se queda apuntando
+// al viejo y no la encuentra nadie nunca más: hay 35 fotos así, subidas y
+// perdidas. Acá la foto se muda junto con el código.
+async function _mudarFoto(oldCod,newCod){
+  if(!oldCod||!newCod||oldCod===newCod)return;
+  try{
+    const vieja=await getDoc(doc(db,'atleta_fotos',oldCod));
+    if(!vieja.exists())return;
+    const d=vieja.data();
+    await setDoc(doc(db,'atleta_fotos',newCod),{...d,codigo:newCod},{merge:true});
+    await deleteDoc(doc(db,'atleta_fotos',oldCod));
+    await logAction('mover_foto',oldCod,oldCod,newCod);
+  }catch(e){console.warn('[foto] no se pudo mudar:',e.message);}
+}
 async function _applyCodigoFix(a,oldCod,newCod,newRut){
   try{
     // Si el RUT cambia, el docId (basado en RUT) también cambia → borrar el viejo
@@ -830,6 +853,7 @@ async function _applyCodigoFix(a,oldCod,newCod,newRut){
     if(newRut)a.rut=newRut;
     const newDocId=_editDocId(a);
     if(oldDocId!==newDocId){try{await deleteDoc(doc(db,'athlete_edits',oldDocId))}catch(_){}}
+    await _mudarFoto(oldCod,newCod);
     await _saveEdit(a);   // snapshot completo indexado por RUT
     await logAction('fix_codigo',oldCod,oldCod,newCod,{nombre:a.nombre,rut:a.rut||''});
     render();
@@ -858,20 +882,27 @@ window.fixCodigoAuto=async function(cod){
 
 window.deleteAthlete=async function(cod){
   const a=ST.data.find(x=>x.codigo===cod);if(!a)return;
-  if(!confirm(`¿Eliminar a ${a.nombre} (${cod})?\n\nEsto lo quita de data.json en memoria.\nPara hacerlo permanente, exporta data.json después.`))return;
+  // La baja se guarda en Firestore y el sitio la respeta solo. No hay que
+  // exportar ni volver a publicar data.json — el cartel decía lo contrario y era
+  // mentira: quien exportaba y subía el archivo estaba haciendo trabajo de más.
+  if(!confirm(`¿Eliminar a ${a.nombre} (${cod})?\n\nSe da de baja en el sitio: deja de aparecer en el buscador, el ranking, las inscripciones y la ficha de atleta.\nSe puede deshacer.`))return;
   const idx=ST.data.indexOf(a);
   ST.data.splice(idx,1);
   try{
-    const docId=cod.replace(/[^a-zA-Z0-9_-]/g,'_');
-    await setDoc(doc(db,'athlete_edits',docId),{codigo:cod,deleted:true,nombre:a.nombre,ts:Date.now()});
+    // El MISMO identificador que usan las ediciones. Antes la baja iba al
+    // código pelado y la edición al RUT, así que la misma persona terminaba con
+    // dos documentos que se contradecían y ninguno mandaba sobre el otro.
+    const docId=_editDocId(a);
+    await setDoc(doc(db,'athlete_edits',docId),
+      {rut:a.rut||'',codigo:cod,deleted:true,nombre:a.nombre,ts:Date.now()},{merge:true});
+    await _marcarEdicion();
     await logAction('delete_athlete',cod,a.nombre,'deleted',{club:a.club||''});
   }catch(e){console.warn('Delete log failed',e)}
   render();
-  showToast(`${a.nombre} eliminado`,async()=>{
+  showToast(`${a.nombre} dado de baja`,async()=>{
     ST.data.splice(idx,0,a);
     try{
-      const docId=cod.replace(/[^a-zA-Z0-9_-]/g,'_');
-      await setDoc(doc(db,'athlete_edits',docId),{codigo:cod,nombre:a.nombre,club:a.club||'',debut:a.debut||'',ts:Date.now()});
+      await _saveEdit(a);   // vuelve con fecha más nueva: el sitio lo restituye
       await logAction('undo_delete_athlete',cod,'deleted',a.nombre);
     }catch(e){}
     render();showToast('Restaurado');

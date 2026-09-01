@@ -74,6 +74,7 @@ body.nav-open .nav-backdrop{opacity:1;pointer-events:auto}
 <body>
 <div id="R"></div>
 <script src="clubs.js"></script>
+<script src="yl-ediciones.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/obs-websocket-js@5/dist/obs-ws.min.js" integrity="sha384-Vce9u7FN5Pbapc8dhpMdg2EjTels5H1cGOVLAe7THp3fEtfb89nD6YOIaf8781ay" crossorigin="anonymous"></script>
 <script>
 
@@ -412,6 +413,7 @@ async function initFB(){
     window._fbAuth=authMod;fbReady=true;
     window._fbStInst=storageMod.getStorage(app);
     _setupFotoListener(); // in case data.json already loaded before Firebase was ready
+    if(typeof _aplicarEdicionesDB==='function')_aplicarEdicionesDB();  // ediciones del panel sobre el padrón
     if(typeof _setupLcMediaListener==='function')_setupLcMediaListener(); // foto/gif persistente por atleta (livecast)
     if(typeof _cargarFotosSuda==='function')_cargarFotosSuda();               // fotos de la nómina del Sudamericano
     // Keep LIVE_EVENTS in sync with Firestore eventos
@@ -11978,7 +11980,32 @@ const _STOR='https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.fireba
 fetch(_STOR+'public%2Fdata.json?alt=media',{cache:'no-cache'})
   .then(r=>r.ok?r.json():fetch('data.json').then(r=>r.json()))
   .catch(()=>fetch('data.json').then(r=>r.json()))
-  .then(d=>{DB_FULL=d;_setupFotoListener();}).catch(()=>{});
+  .then(d=>{DB_FULL=d;_aplicarEdicionesDB();_setupFotoListener();}).catch(()=>{});
+
+// El padrón que usa el livecast para buscar a un atleta por RUT o por nombre
+// —su historial, su foto, su ficha— es data.json, y data.json no se entera de
+// las correcciones que se hacen en el panel. Era la única pantalla que no las
+// aplicaba: se le corregía el nombre a alguien y en competencia seguía saliendo
+// el viejo, o se borraba una ficha repetida y el livecast la seguía encontrando.
+// Las ediciones no tocan a los atletas del meet —esos vienen de la nómina—, solo
+// al padrón contra el que se los busca.
+function _aplicarEdicionesDB(){
+  // Se llama dos veces —cuando llega el padrón y cuando Firebase queda listo—
+  // porque no se sabe cuál de las dos gana la carrera. Se hace una sola vez.
+  // La marca vive en window y no en un `let` de acá abajo: la función se llama
+  // desde el arranque de Firebase, mucho antes en el archivo, y un `let` todavía
+  // sin inicializar habría reventado la carga entera del livecast.
+  if(window._lcEdicionesHechas||!window.YLEdiciones||!DB_FULL||!DB_FULL.length)return;
+  if(!fbReady||!window._fb||!fbDB)return;
+  window._lcEdicionesHechas=true;
+  window.YLEdiciones.cargar(()=>
+    window._fb.getDocs(window._fb.collection(fbDB,'athlete_edits'))
+      .then(s=>s.docs.map(d=>Object.assign({},d.data(),{id:d.id})))
+  ).then(eds=>{
+    const r=window.YLEdiciones.aplicar(DB_FULL,eds);
+    if(r.editados||r.borrados)console.log('[LC] padrón: '+r.editados+' ediciones, '+r.borrados+' bajas');
+  }).catch(e=>console.warn('[LC] athlete_edits:',e&&e.message));
+}
 fetch(_STOR+'public%2Frecords.json?alt=media',{cache:'no-cache'})
   .then(r=>r.ok?r.json():fetch('records.json').then(r=>r.json()))
   .catch(()=>fetch('records.json').then(r=>r.json()))

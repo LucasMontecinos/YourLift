@@ -80,6 +80,7 @@ html.embedded{scrollbar-width:none;-ms-overflow-style:none}
   }catch(e){}
 })();
 </script>
+<script src="yl-ediciones.js"></script>
 </head>
 <body>
 <div id="bgGrid"></div>
@@ -350,7 +351,17 @@ const _STOR='https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.fireba
 fetch(_STOR+'public%2Fdata.json?alt=media',{cache:'no-cache'})
   .then(r=>r.ok?r.json():fetch('data.json?v='+Date.now()).then(r=>r.json()))
   .catch(()=>fetch('data.json?v='+Date.now()).then(r=>r.json()))
-  .then(d=>{athleteDB=d;}).catch(()=>{});
+  .then(d=>{athleteDB=d;_insAplicarEdits();}).catch(()=>{});
+
+// El padrón y las ediciones llegan por su cuenta y no se sabe cuál gana la
+// carrera, así que las ediciones se guardan y se pegan cuando ya están las dos.
+// Sin esto, si las ediciones llegaban primero se aplicaban sobre un arreglo
+// vacío y se perdían: seguía ofreciéndose para inscribir una ficha dada de baja.
+window._INS_EDITS_DOCS=null;
+function _insAplicarEdits(){
+  if(!window._INS_EDITS_DOCS||!athleteDB.length||!window.YLEdiciones)return;
+  window.YLEdiciones.aplicar(athleteDB,window._INS_EDITS_DOCS);
+}
 
 // ══ Aviso de participación previa ══════════════════════════════════════════
 // El compendio no deja correr más de un regional clasificatorio por temporada.
@@ -733,23 +744,25 @@ async function loadEventos() {
     // Edits de atletas: getDocs una vez para pre-llenar club actualizado
     window._INS_EDITS_RUT = window._INS_EDITS_RUT || {};
     window._INS_EDITS_COD = window._INS_EDITS_COD || {};
-    const ce2 = _ifsCache('ins_edits', 20*60*1000);
-    if (ce2) {
-      ce2.forEach(e => {
-        if (e.rut) window._INS_EDITS_RUT[String(e.rut).replace(/[^0-9kK]/g,'').toLowerCase()] = e;
-        if (e.codigo) window._INS_EDITS_COD[e.codigo] = e;
+    // Copia compartida e invalidada por versión (yl-ediciones.js): una corrección
+    // hecha en el panel se ve en la carga siguiente, no veinte minutos después.
+    window.YLEdiciones.cargar(() =>
+      window.FB.getDocs(window.FB.collection(db, 'athlete_edits'))
+        .then(snap => snap.docs.map(d => ({ ...d.data(), id: d.id })))
+    ).then(eds => {
+      // De la misma persona puede haber más de un documento: manda el más nuevo.
+      const gana = (vieja, e) => (!vieja || (e.ts || 0) >= (vieja.ts || 0)) ? e : vieja;
+      eds.forEach(e => {
+        if (!e || e.id === window.YLEdiciones.MARCA) return;
+        if (e.rut) { const k = String(e.rut).replace(/[^0-9kK]/g,'').toLowerCase();
+          window._INS_EDITS_RUT[k] = gana(window._INS_EDITS_RUT[k], e); }
+        if (e.codigo) window._INS_EDITS_COD[e.codigo] = gana(window._INS_EDITS_COD[e.codigo], e);
       });
-    } else {
-      window.FB.getDocs(window.FB.collection(db, 'athlete_edits')).then(snap => {
-        const eds = [];
-        snap.docs.forEach(d => {
-          const e = d.data(); eds.push(e);
-          if (e.rut) window._INS_EDITS_RUT[String(e.rut).replace(/[^0-9kK]/g,'').toLowerCase()] = e;
-          if (e.codigo) window._INS_EDITS_COD[e.codigo] = e;
-        });
-        _ifsSetCache('ins_edits', eds);
-      });
-    }
+      // Y el padrón que usa el buscador de inscripción: si una ficha se dio de
+      // baja, no puede seguir ofreciéndose para inscribir.
+      window._INS_EDITS_DOCS = eds;
+      _insAplicarEdits();
+    }).catch(e => console.warn('edits', e));
   } catch(e) {
     console.warn('Eventos load error', e);
     EVENTS = [];

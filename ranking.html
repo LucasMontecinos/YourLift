@@ -14,6 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="bg-fechipo.css">
 <script src="yl-divisiones.js"></script>
+<script src="yl-ediciones.js"></script>
 <script src="nacimientos.js"></script>
 <style>
 :root{--bg:#0a0a0f;--card:#12121a;--border:#1e1e2e;--text:#e8e6e3;--muted:#6b7280;--gold:#d4a843;--red:#c41e3a;--green:#22c55e;--f:#e879a0;--m:#60a5fa}
@@ -296,6 +297,7 @@ function _rebuildPositions(){
   // Recalcular posiciones dentro de cada (tab,cat,div) por tt desc
   var byKey={};
   D.forEach(function(e){
+    if(e._baja)return;   // una ficha dada de baja no ocupa un puesto
     var k=e.tab+'|'+e.c+'|'+_divVigente(e);
     if(!byKey[k])byKey[k]=[];
     byKey[k].push(e);
@@ -327,8 +329,34 @@ function applyEdit(o){
     var app=fbApp.initializeApp(FB_CFG);
     var db=fb.getFirestore(app);
     function _applyEdits(docs){
-      docs.forEach(function(ed){if(ed.rut)EDITS_BY_RUT[_rutN(ed.rut)]=ed;if(ed.codigo)EDITS_BY_COD[ed.codigo]=ed;});
-      D.forEach(function(e){var ed=(e.rut&&EDITS_BY_RUT[_rutN(e.rut)])||(e.codigo&&EDITS_BY_COD[e.codigo]);if(ed){if(ed.nombre)e.n=ed.nombre;if(ed.club!==undefined&&ed.club!=='')e.t=ed.club;}});
+      var MARCA=(window.YLEdiciones&&window.YLEdiciones.MARCA)||'__version';
+      // Si la misma persona tiene varios documentos —pasa: las bajas viejas se
+      // guardaron con el código y las ediciones con el RUT— manda el más nuevo.
+      // Antes ganaba el último que saliera de Firestore, que es cualquiera.
+      var mejor=function(vieja,ed){return (!vieja||(ed.ts||0)>=(vieja.ts||0))?ed:vieja;};
+      docs.forEach(function(ed){
+        if(!ed||ed.id===MARCA)return;
+        if(ed.rut)EDITS_BY_RUT[_rutN(ed.rut)]=mejor(EDITS_BY_RUT[_rutN(ed.rut)],ed);
+        if(ed.codigo)EDITS_BY_COD[ed.codigo]=mejor(EDITS_BY_COD[ed.codigo],ed);
+      });
+      var busca=function(e){return (e.rut&&EDITS_BY_RUT[_rutN(e.rut)])||(e.codigo&&EDITS_BY_COD[e.codigo]);};
+      // Las BAJAS también valen acá. El ranking seguía listando a los repetidos
+      // que ya se habían borrado desde el panel: se miraba el nombre y el club de
+      // la edición, pero no si la ficha estaba dada de baja.
+      //
+      // Se MARCAN, no se borran. Es la misma regla del ciclo: acá no se saca nada
+      // del arreglo, se filtra al dibujar. Borrar de verdad es irreversible, y si
+      // mañana se deshace la baja desde el panel el ranking tiene que volver
+      // entero sin recargar nada.
+      D.forEach(function(e){
+        var ed=busca(e);
+        if(!ed)return;
+        e._baja=!!ed.deleted;
+        if(ed.deleted)return;
+        if(ed.nombre)e.n=ed.nombre;
+        if(ed.club!==undefined&&ed.club!=='')e.t=ed.club;
+      });
+      _rebuildPositions();
       if(typeof R==='function')R();
     }
     function _applyCompRes(docs){
@@ -358,10 +386,14 @@ function applyEdit(o){
       _rebuildPositions();
       if(typeof R==='function')R();
     }
-    // athlete_edits: caché 2h
-    var _edOk=false;
-    try{var _ec=localStorage.getItem('_rkEd');if(_ec){var _eo=JSON.parse(_ec);if(Date.now()-_eo.ts<7200000){_applyEdits(_eo.d);_edOk=true;}}}catch(e){}
-    if(!_edOk){fb.getDocs(fb.collection(db,'athlete_edits')).then(function(s){var a=s.docs.map(function(d){return d.data();});try{localStorage.setItem('_rkEd',JSON.stringify({ts:Date.now(),d:a}));}catch(e){}_applyEdits(a);}).catch(function(e){console.warn('edits',e);});}
+    // athlete_edits: copia compartida, invalidada por versión (yl-ediciones.js).
+    // Antes eran dos horas de caché propia: una corrección hecha en el panel no
+    // se veía en el ranking hasta la tarde.
+    window.YLEdiciones.cargar(function(){
+      return fb.getDocs(fb.collection(db,'athlete_edits')).then(function(s){
+        return s.docs.map(function(d){var o=d.data();o.id=d.id;return o;});
+      });
+    }).then(_applyEdits).catch(function(e){console.warn('edits',e);});
     // competition_results: caché 30min
     var _crOk=false;
     try{var _cc=localStorage.getItem('_rkCR');if(_cc){var _co=JSON.parse(_cc);if(Date.now()-_co.ts<1800000){_applyCompRes(_co.d);_crOk=true;}}}catch(e){}
@@ -378,7 +410,10 @@ function applyEdit(o){
 function cn(c){return parseFloat((c||'999').replace('+',''))}
 
 function R(){
-var E=D.filter(function(e){return e.tab===CUR&&e.tt>0&&e.p<99&&_enCiclo(e)});
+// `_baja` son las fichas dadas de baja desde el panel —repetidas, casi siempre—.
+// Se filtran acá, junto al ciclo, y por el mismo motivo: nada se borra del
+// arreglo, así que deshacer la baja las devuelve sin recargar.
+var E=D.filter(function(e){return e.tab===CUR&&e.tt>0&&e.p<99&&!e._baja&&_enCiclo(e)});
 var ib=CUR.indexOf('bench')>=0;
 var G={};
 E.forEach(function(e){var k=e.c+'|'+_divVigente(e);if(!G[k])G[k]=[];G[k].push(e)});

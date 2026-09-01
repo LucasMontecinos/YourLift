@@ -94,6 +94,7 @@ html.embedded{scrollbar-width:none;-ms-overflow-style:none}
   <a href="ranking.html" class="rank">🏆 Ranking</a>
 </div>
 <script src="clubs.js"></script>
+<script src="yl-ediciones.js"></script>
 
 <div class="wrap">
   <div id="searchSection">
@@ -319,28 +320,15 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
         });
       }catch(ep){console.warn('[atletas_pending]',ep.message);}
 
-      // Overlay de ediciones del admin (athlete_edits): getDocs + caché 20min (shared key con index.html)
+      // Ediciones y bajas del panel (yl-ediciones.js). La copia y el criterio son
+      // los mismos para todas las páginas: antes cada una tenía su versión y no
+      // decían lo mismo.
       try{
-        const rutNormE=s=>String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();
-        let edDocs=_aC('edits',20*60*1000);
-        if(!edDocs){const editsSnap=await _fbMod.getDocs(_fbMod.collection(_fbDB,'athlete_edits'));edDocs=editsSnap.docs.map(d=>({...d.data(),id:d.id}));_aSC('edits',edDocs);}
-        edDocs.forEach(ed=>{
-          let idx=-1;
-          if(ed.rut) idx=DB.findIndex(x=>rutNormE(x.rut)===rutNormE(ed.rut));
-          if(idx<0 && ed.codigo) idx=DB.findIndex(x=>x.codigo===ed.codigo);
-          if(idx<0) return;
-          if(ed.deleted){ DB.splice(idx,1); return; }
-          const a=DB[idx];
-          if(ed.nombre)a.nombre=ed.nombre;
-          if(ed.club!==undefined)a.club=ed.club;
-          if(ed.debut!==undefined)a.debut=ed.debut;
-          if(ed.rut)a.rut=ed.rut;
-          if(ed.codigo)a.codigo=ed.codigo;
-          if(ed.sexo)a.sexo=ed.sexo;
-          if(ed.fechaNac)a.fechaNac=ed.fechaNac;
-          if(ed.zona)a.zona=ed.zona;
-          if(ed.comuna)a.comuna=ed.comuna;
+        const edDocs=await window.YLEdiciones.cargar(async()=>{
+          const snap=await _fbMod.getDocs(_fbMod.collection(_fbDB,'athlete_edits'));
+          return snap.docs.map(d=>({...d.data(),id:d.id}));
         });
+        window.YLEdiciones.aplicar(DB,edDocs);
       }catch(ee){console.warn('[athlete_edits]',ee.message);}
     }
 
