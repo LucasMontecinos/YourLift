@@ -14,25 +14,33 @@ figura en una nómina pública gente que no va a levantar.
 Sale con código 1 si hay diferencias, para poder colgarlo de la batería.
 
 Cómo se compara: por nombre (sin tildes, sin orden —la planilla escribe
-"Apellidos Nombres" y GoodLift a veces al revés—), por categoría y por FAMILIA de
-competencia. La familia importa porque el mismo atleta puede estar nominado en
-Classic y en Only Bench a la vez, y son dos listas distintas en GoodLift:
+"Apellidos Nombres" y GoodLift a veces al revés—), por categoría y por MODALIDAD.
 
-    PL   powerlifting clásico  (incluye Universitario y Special Olympics)
+La modalidad importa porque el mismo atleta puede estar nominado en dos
+campeonatos a la vez y son dos inscripciones distintas: sube dos veces a la
+tarima y compite por dos medallas. Pasa harto —Núñez Rodríguez y Briones están en
+equipado y en banca equipada— y si se juntaran en una sola familia, la segunda
+inscripción se perdería sin que nadie lo note.
+
+    PL   powerlifting clásico
+    UNI  universitario
+    SO   Special Olympics
     EQ   powerlifting equipado
-    OB   banca clásica         (Only Bench Classic)
-    OBEQ banca equipada        (Only Bench Equipado)
+    OB   banca clásica    (Only Bench Classic)
+    OBEQ banca equipada   (Only Bench Equipado)
 
-El Sudamericano 2026 son DOCE nominaciones en goodlift.info —esas cuatro familias
-repartidas en hombres y mujeres, más las dos de Special Olympics, que van como
-Pan-American Open y acá cuentan como PL—. Las doce están en
-nomina_suda_goodlift.json y hay que tenerlas todas: un atleta puede estar en dos
-listas a la vez (Classic y Only Bench, o Equipado y banca equipada), y son
-inscripciones distintas.
+UNIVERSITARIO Y SPECIAL OLYMPICS NO SON CLÁSICO. Se levanta con el mismo
+reglamento, sí, pero son campeonatos aparte: nominación propia en GoodLift
+—"South American Men's University Powerlifting 2026", "Pan-American Open Men's
+2026 - Special Olympics"— y medallas propias. Contarlos como clásico esconde
+inscripciones y arma podios que no existen.
+
+Son DOCE nominaciones en total: esas seis modalidades repartidas en hombres y
+mujeres. Las doce tienen que estar en nomina_suda_goodlift.json.
 """
 import json, re, sys, unicodedata
 
-FAM = {'Clásico': 'PL', 'Universitario': 'PL', 'Olimpiadas Especiales': 'PL',
+MOD = {'Clásico': 'PL', 'Universitario': 'UNI', 'Olimpiadas Especiales': 'SO',
        'Equipado': 'EQ', 'Only Bench Clásico': 'OB', 'Only Bench Equipado': 'OBEQ'}
 
 
@@ -53,7 +61,7 @@ def main():
 
     idx = {}
     for a in nuestra:
-        idx.setdefault((clave(a['n']), FAM[a['mod']]), []).append(a)
+        idx.setdefault((clave(a['n']), MOD[a['mod']]), []).append(a)
 
     print(f"NOMINACIÓN OFICIAL de Chile (GoodLift): {len(oficial)}")
     print(f"Team Chile en nuestra nómina:           {len(nuestra)}\n")
@@ -72,7 +80,7 @@ def main():
             calzan += 1
     sobran = [a for k, v in idx.items() if k not in usadas for a in v]
 
-    print(f"✔ calzan nombre + categoría + familia: {calzan} de {len(oficial)}")
+    print(f"✔ calzan nombre + categoría + modalidad: {calzan} de {len(oficial)}")
     if otracat:
         print(f"\n⚠ MISMA PERSONA, OTRA CATEGORÍA ({len(otracat)}):")
         for o, a in otracat:
