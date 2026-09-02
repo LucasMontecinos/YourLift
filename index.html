@@ -421,12 +421,41 @@ let fbDB=null,fbReady=false;
 // ── Cache localStorage para reducir lecturas Firestore ──────────────────
 function _fsCache(k,ttl){try{const v=localStorage.getItem('_yfc_'+k);if(!v)return null;const o=JSON.parse(v);if(Date.now()-o.ts<ttl)return o.d;}catch(e){}return null;}
 function _fsSetCache(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.now(),d}));}catch(e){}}
+// ── Dibujar sin pisarle la mano al que está usando la página ──────────────
+//
+// Al abrir el sitio salen a buscarse una docena de cosas a Firestore, y cada una,
+// al llegar, llamaba a render(), que rehace la pantalla entera. Como llegan
+// escalonadas durante los primeros segundos, la página se redibujaba una docena
+// de veces seguidas: eso es el pestañeo. Y si en el intermedio uno había elegido
+// algo en un desplegable o escrito en un campo —inscripción, sobre todo—, el
+// redibujado lo borraba. De ahí lo de "a la tercera funciona": había que
+// apurarse a hacer clic entre dos redibujados.
+//
+// Un dibujado que NACE de una carga de fondo no puede pisar lo que la persona
+// está haciendo. Si hay un campo enfocado, se anota que quedó pendiente y se
+// hace apenas lo suelta. Los dibujados que nacen de un clic siguen siendo
+// inmediatos: ahí el que manda es el usuario.
+window._renderPendiente=false;
+function _usandoAlgo(){
+  const f=document.activeElement;
+  return !!(f&&(f.tagName==='INPUT'||f.tagName==='SELECT'||f.tagName==='TEXTAREA'));
+}
+function renderFondo(){
+  if(_usandoAlgo()){window._renderPendiente=true;return;}
+  render();
+}
+document.addEventListener('focusout',()=>setTimeout(()=>{
+  if(!window._renderPendiente||_usandoAlgo())return;
+  window._renderPendiente=false;
+  render();
+},0),true);
+
 function _applyEventos(docs){
   const allEvs=docs.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   window.ALL_EVENTS=allEvs;
   const evs=allEvs.filter(e=>e.status!=='archived');
   if(evs.length){NOM_EVENTS=evs;loadFBNominas();}
-  if(ST.v==='trans')render();
+  if(ST.v==='trans')renderFondo();
 }
 async function initFB(){
   try{
@@ -437,106 +466,137 @@ async function initFB(){
     fbReady=true;
     // ── Analytics propio ──
     try{ trackVisit(fb); }catch(e){}
-    // ── Récords: getDocs + caché 1h ──
-    try{
-      const cr=_fsCache('records',60*60*1000);
-      if(cr){if(cr.classic||cr.equipped){R=cr;if(ST.v==='records')render();}}
-      else{const rs=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'records','data'));if(rs.exists()){const r=rs.data();if(r&&(r.classic||r.equipped)){R=r;_fsSetCache('records',r);if(ST.v==='records')render();}}}
-    }catch(e){console.warn('[records]',e);}
-    // ── Tarjetas de nóminas (foto/fecha/organizador por campeonato, editable en admin): caché 10min ──
-    try{
-      const cn=_fsCache('nomcards',10*60*1000);
-      if(cn){window.NOMCARDS=cn;if(ST.v==='nominas')render();}
-      else{
-        const ns=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'nomina_cards'));
-        const map={};ns.docs.forEach(d=>{map[d.id]=d.data();});
-        window.NOMCARDS=map;_fsSetCache('nomcards',map);if(ST.v==='nominas')render();
-      }
-    }catch(e){console.warn('[nomcards]',e);}
-    // ── Fotos de la nómina Sudamericano (para las fichas): caché 1h ──
-    try{
-      const cf=_fsCache('nsudafotos',60*60*1000);
-      if(cf){window.NSUDA_FOTOS=cf;if(ST.v==='nominas')render();}
-      else{
-        const fs=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'nomina_suda_fotos'));
-        const map={};fs.docs.forEach(d=>{const x=d.data();if(x.foto_url)map[d.id]=x.foto_url;});
-        window.NSUDA_FOTOS=map;_fsSetCache('nsudafotos',map);if(ST.v==='nominas')render();
-      }
-    }catch(e){console.warn('[nsudafotos]',e);}
-    // ── Correcciones de la nómina Sudamericano hechas desde el admin: 1 solo
-    // doc, caché 10min (hay que ver los arreglos rápido, pero sin leer en cada carga) ──
-    try{
-      const ce=_fsCache('nsudaedits',10*60*1000);
-      if(ce!==null&&ce!==undefined){window.NSUDA_EDITS=ce;}
-      else{
-        const es=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'nomina_suda_edits','main'));
-        window.NSUDA_EDITS=(es.exists()&&es.data().items)||{};
-        _fsSetCache('nsudaedits',window.NSUDA_EDITS);
-      }
-      _nsudaApplyEdits(); if(ST.v==='nominas')render();
-    }catch(e){console.warn('[nsudaedits]',e);}
-    // ── Fotos de PERFIL por código (atleta_fotos) — para que los chilenos que ya
-    // tienen foto se vean en la nómina sin volver a subirlas ──
-    try{
-      const cp=_fsCache('atlfotos',60*60*1000);
-      if(cp){window.ATL_FOTOS=cp;if(ST.v==='nominas')render();}
-      else{
-        const ps=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'atleta_fotos'));
-        const map={};ps.docs.forEach(d=>{const x=d.data();if(x.foto_url&&x.status!=='rejected')map[d.id]=x.foto_url;});
-        window.ATL_FOTOS=map;_fsSetCache('atlfotos',map);if(ST.v==='nominas')render();
-      }
-    }catch(e){console.warn('[atlfotos]',e);}
-    // ── Cert config: getDocs + caché 1h ──
-    try{
-      const cc=_fsCache('certcfg',60*60*1000);
-      if(cc){CERTCFG=cc;if(ST.v==='cert')render();}
-      else{const cs=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'cert_config','main'));CERTCFG=cs.exists()?cs.data():{champs:[]};_fsSetCache('certcfg',CERTCFG);if(ST.v==='cert')render();}
-    }catch(e){console.warn('[cert]',e);}
-    // ── Eventos: getDocs + caché 10min ──
-    try{
-      const ce=_fsCache('eventos',10*60*1000);
-      if(ce){_applyEventos(ce);}
-      else{const es=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'eventos'));const docs=es.docs.map(d=>({...d.data(),id:d.id}));_fsSetCache('eventos',docs);_applyEventos(docs);}
-      // Logos de evento (subidos desde admin → Campeonatos) para las tarjetas de nómina
-      try{const _ev=_fsCache('eventos',10*60*1000)||[];const lg={};_ev.forEach(e=>{if(e&&e.id&&e.logoUrl)lg[e.id]=e.logoUrl;});window.NOMEVENT_LOGOS=lg;if(ST.v==='nominas')render();}catch(_){}
-      // Competencias habilitadas para el PÚBLICO (admin → YourLift Público).
-      // Solo las marcadas con publicoVisible salen en "Competencia en Vivo".
+    // ── Todo esto se pide A LA VEZ ──────────────────────────────────────
+    //
+    // Antes iba en fila india: cada `await` esperaba a que terminara el anterior,
+    // así que la espera era la SUMA de todas. Son cerca de 1.350 documentos y
+    // 1,7 MB, y ninguna de estas consultas necesita el resultado de la de al
+    // lado. Pidiéndolas juntas, la espera pasa a ser la de la más lenta.
+    //
+    // Lo único que sí lleva orden es lo de abajo: las nóminas se arman con los
+    // eventos y con las ediciones de atletas, así que esas tres van encadenadas
+    // entre sí —pero en paralelo con el resto.
+    const _sueltas=[
+      (async()=>{
+      // ── Récords: getDocs + caché 1h ──
       try{
-        const _ev=_fsCache('eventos',10*60*1000)||[];
-        window.EVENTOS_PUB=_ev.filter(e=>e&&e.publicoVisible===true)
-          .map(e=>({id:e.id,name:e.name||e.id,logoUrl:e.logoUrl||'',fecha:e.fecha||e.fechas||'',lugar:e.lugar||e.location||''}));
-        if(ST.v==='envivo')render();
-      }catch(_){ window.EVENTOS_PUB=window.EVENTOS_PUB||[]; }
-      // Actas de competencias pasadas (admin → Competencias pasadas). Solo las
-      // que el admin marcó como visibles.
+        const cr=_fsCache('records',60*60*1000);
+        if(cr){if(cr.classic||cr.equipped){R=cr;if(ST.v==='records')renderFondo();}}
+        else{const rs=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'records','data'));if(rs.exists()){const r=rs.data();if(r&&(r.classic||r.equipped)){R=r;_fsSetCache('records',r);if(ST.v==='records')renderFondo();}}}
+      }catch(e){console.warn('[records]',e);}
+      })(),
+      (async()=>{
+      // ── Tarjetas de nóminas (foto/fecha/organizador por campeonato, editable en admin): caché 10min ──
       try{
-        const cp=_fsCache('pasadas',10*60*1000);
-        if(cp){window.COMPES_PASADAS=cp;if(ST.v==='pasadas')render();}
+        const cn=_fsCache('nomcards',10*60*1000);
+        if(cn){window.NOMCARDS=cn;if(ST.v==='nominas')renderFondo();}
         else{
-          const ps=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'competencias_pasadas'));
-          const list=ps.docs.map(d=>({...d.data(),id:d.id}))
-            .filter(e=>e.publicado&&(e.docs||[]).length);
-          _fsSetCache('pasadas',list);
-          window.COMPES_PASADAS=list;
-          if(ST.v==='pasadas')render();
+          const ns=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'nomina_cards'));
+          const map={};ns.docs.forEach(d=>{map[d.id]=d.data();});
+          window.NOMCARDS=map;_fsSetCache('nomcards',map);if(ST.v==='nominas')renderFondo();
         }
-      }catch(e){ console.warn('[pasadas]',e); window.COMPES_PASADAS=window.COMPES_PASADAS||[]; }
-    }catch(e){console.warn('[eventos]',e);}
-    // ── Edits de atletas ──
-    await loadEdits();
-    await loadFBNominas();
-    // ── Clubes: getDocs + caché 24h ──
-    try{
-      const cl=_fsCache('clubs',24*60*60*1000);
-      const docs=cl||(await window.FBQ.getDocs(window.FBQ.collection(fbDB,'clubs'))).docs.map(d=>d.data());
-      if(!cl)_fsSetCache('clubs',docs);
-      window._CLUBS_FS={};docs.forEach(v=>{if(v.slug&&v.logoUrl)window._CLUBS_FS[v.slug]=v;});
-    }catch(e){}
+      }catch(e){console.warn('[nomcards]',e);}
+      })(),
+      (async()=>{
+      // ── Fotos de la nómina Sudamericano (para las fichas): caché 1h ──
+      try{
+        const cf=_fsCache('nsudafotos',60*60*1000);
+        if(cf){window.NSUDA_FOTOS=cf;if(ST.v==='nominas')renderFondo();}
+        else{
+          const fs=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'nomina_suda_fotos'));
+          const map={};fs.docs.forEach(d=>{const x=d.data();if(x.foto_url)map[d.id]=x.foto_url;});
+          window.NSUDA_FOTOS=map;_fsSetCache('nsudafotos',map);if(ST.v==='nominas')renderFondo();
+        }
+      }catch(e){console.warn('[nsudafotos]',e);}
+      })(),
+      (async()=>{
+      // ── Correcciones de la nómina Sudamericano hechas desde el admin: 1 solo
+      // doc, caché 10min (hay que ver los arreglos rápido, pero sin leer en cada carga) ──
+      try{
+        const ce=_fsCache('nsudaedits',10*60*1000);
+        if(ce!==null&&ce!==undefined){window.NSUDA_EDITS=ce;}
+        else{
+          const es=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'nomina_suda_edits','main'));
+          window.NSUDA_EDITS=(es.exists()&&es.data().items)||{};
+          _fsSetCache('nsudaedits',window.NSUDA_EDITS);
+        }
+        _nsudaApplyEdits(); if(ST.v==='nominas')renderFondo();
+      }catch(e){console.warn('[nsudaedits]',e);}
+      })(),
+      (async()=>{
+      // ── Fotos de PERFIL por código (atleta_fotos) — para que los chilenos que ya
+      // tienen foto se vean en la nómina sin volver a subirlas ──
+      try{
+        const cp=_fsCache('atlfotos',60*60*1000);
+        if(cp){window.ATL_FOTOS=cp;if(ST.v==='nominas')renderFondo();}
+        else{
+          const ps=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'atleta_fotos'));
+          const map={};ps.docs.forEach(d=>{const x=d.data();if(x.foto_url&&x.status!=='rejected')map[d.id]=x.foto_url;});
+          window.ATL_FOTOS=map;_fsSetCache('atlfotos',map);if(ST.v==='nominas')renderFondo();
+        }
+      }catch(e){console.warn('[atlfotos]',e);}
+      })(),
+      (async()=>{
+      // ── Cert config: getDocs + caché 1h ──
+      try{
+        const cc=_fsCache('certcfg',60*60*1000);
+        if(cc){CERTCFG=cc;if(ST.v==='cert')renderFondo();}
+        else{const cs=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'cert_config','main'));CERTCFG=cs.exists()?cs.data():{champs:[]};_fsSetCache('certcfg',CERTCFG);if(ST.v==='cert')renderFondo();}
+      }catch(e){console.warn('[cert]',e);}
+      })(),
+      (async()=>{
+      // ── Clubes: getDocs + caché 24h ──
+      try{
+        const cl=_fsCache('clubs',24*60*60*1000);
+        const docs=cl||(await window.FBQ.getDocs(window.FBQ.collection(fbDB,'clubs'))).docs.map(d=>d.data());
+        if(!cl)_fsSetCache('clubs',docs);
+        window._CLUBS_FS={};docs.forEach(v=>{if(v.slug&&v.logoUrl)window._CLUBS_FS[v.slug]=v;});
+      }catch(e){}
+      })()
+    ];
+    const _encadenadas=(async()=>{
+      // ── Eventos: getDocs + caché 10min ──
+      try{
+        const ce=_fsCache('eventos',10*60*1000);
+        if(ce){_applyEventos(ce);}
+        else{const es=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'eventos'));const docs=es.docs.map(d=>({...d.data(),id:d.id}));_fsSetCache('eventos',docs);_applyEventos(docs);}
+        // Logos de evento (subidos desde admin → Campeonatos) para las tarjetas de nómina
+        try{const _ev=_fsCache('eventos',10*60*1000)||[];const lg={};_ev.forEach(e=>{if(e&&e.id&&e.logoUrl)lg[e.id]=e.logoUrl;});window.NOMEVENT_LOGOS=lg;if(ST.v==='nominas')renderFondo();}catch(_){}
+        // Competencias habilitadas para el PÚBLICO (admin → YourLift Público).
+        // Solo las marcadas con publicoVisible salen en "Competencia en Vivo".
+        try{
+          const _ev=_fsCache('eventos',10*60*1000)||[];
+          window.EVENTOS_PUB=_ev.filter(e=>e&&e.publicoVisible===true)
+            .map(e=>({id:e.id,name:e.name||e.id,logoUrl:e.logoUrl||'',fecha:e.fecha||e.fechas||'',lugar:e.lugar||e.location||''}));
+          if(ST.v==='envivo')renderFondo();
+        }catch(_){ window.EVENTOS_PUB=window.EVENTOS_PUB||[]; }
+        // Actas de competencias pasadas (admin → Competencias pasadas). Solo las
+        // que el admin marcó como visibles.
+        try{
+          const cp=_fsCache('pasadas',10*60*1000);
+          if(cp){window.COMPES_PASADAS=cp;if(ST.v==='pasadas')renderFondo();}
+          else{
+            const ps=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'competencias_pasadas'));
+            const list=ps.docs.map(d=>({...d.data(),id:d.id}))
+              .filter(e=>e.publicado&&(e.docs||[]).length);
+            _fsSetCache('pasadas',list);
+            window.COMPES_PASADAS=list;
+            if(ST.v==='pasadas')renderFondo();
+          }
+        }catch(e){ console.warn('[pasadas]',e); window.COMPES_PASADAS=window.COMPES_PASADAS||[]; }
+      }catch(e){console.warn('[eventos]',e);}
+      // Las ediciones tienen que estar antes que las nóminas: la nómina muestra
+      // el nombre corregido de cada atleta, no el que venía en la inscripción.
+      await loadEdits();
+      await loadFBNominas();
+    })();
+    // Si una falla, que no se lleve a las demás por delante.
+    await Promise.allSettled([..._sueltas,_encadenadas]);
     // ── Entrenadores: getDocs + caché 2h ──
     try{
       const et=_fsCache('entrenadores',2*60*60*1000);
-      if(et){window._ENTRENADORES_PUB=et;if(ST.v==='entrenadores')render();}
-      else{const es=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'entrenadores'));const list=es.docs.map(d=>d.data()).filter(e=>e.nombre).sort((a,b)=>(a.club||'').localeCompare(b.club||'')||(a.nombre||'').localeCompare(b.nombre||''));_fsSetCache('entrenadores',list);window._ENTRENADORES_PUB=list;if(ST.v==='entrenadores')render();}
+      if(et){window._ENTRENADORES_PUB=et;if(ST.v==='entrenadores')renderFondo();}
+      else{const es=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'entrenadores'));const list=es.docs.map(d=>d.data()).filter(e=>e.nombre).sort((a,b)=>(a.club||'').localeCompare(b.club||'')||(a.nombre||'').localeCompare(b.nombre||''));_fsSetCache('entrenadores',list);window._ENTRENADORES_PUB=list;if(ST.v==='entrenadores')renderFondo();}
     }catch(e){}
   }catch(e){console.warn('Firebase not available, using nominas.json',e)}
 }
@@ -661,7 +721,7 @@ async function loadEdits(){
   // Y el índice por RUT/código, que usan las filas de inscripción.
   eds.forEach(_indexEdit);
   if(r.editados||r.borrados)console.log('[FB] '+r.editados+' ediciones, '+r.borrados+' bajas');
-  if(window._lastNominasRaw)_applyNominas(window._lastNominasRaw); else render();
+  if(window._lastNominasRaw)_applyNominas(window._lastNominasRaw); else renderFondo();
 }
 function startEditsListener(){ /* eliminado: onSnapshot reemplazado por getDocs+caché */ }
 function _applyNominas(all){
@@ -704,7 +764,7 @@ function _applyNominas(all){
       return{...ev,athletes,fromFirebase:true,liveCount:{total:athletes.length,approved,pending}};
     });
   NM.events=fbEvents;
-  render();
+  renderFondo();
 }
 async function loadFBNominas(force){
   if(!fbReady)return;
@@ -783,11 +843,11 @@ function loadGallery(){
   if(GALLERY._loading)return;
   GALLERY._loading=true;
   const cached=_fsCache('gallery',30*60*1000); // 30 min
-  if(cached){GALLERY=cached;if(ST.v==='gall')render();return;}
+  if(cached){GALLERY=cached;if(ST.v==='gall')renderFondo();return;}
   window.FBQ.getDocs(window.FBQ.collection(fbDB,'gallery_photos')).then(snap=>{
     GALLERY=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.ts?.seconds||0)-(a.ts?.seconds||0));
     _fsSetCache('gallery',GALLERY);
-    if(ST.v==='gall')render();
+    if(ST.v==='gall')renderFondo();
   });
 }
 function gall(){
@@ -2436,7 +2496,7 @@ function sr(t,l){if(t)ST.rt=t;if(l)ST.rl=l;render()}
 // tener que regenerar el archivo por cada arreglo.
 fetch('nomina_sudamericano.json').then(r=>r.ok?r.json():null).then(j=>{
   if(j)j._raw=(j.atletas||[]).slice();
-  window.NOMSUDA=j; _nsudaApplyEdits(); if(ST.v==='nominas')render();
+  window.NOMSUDA=j; _nsudaApplyEdits(); if(ST.v==='nominas')renderFondo();
 }).catch(()=>{});
 Promise.all([fetch("data.json").then(r=>r.json()),fetch("records.json").then(r=>r.json()).catch(()=>({})),fetch("nominas.json").then(r=>r.json()).catch(()=>({events:[]}))]).then(([d,r,n])=>{D=d;R=r;NM=n;NM._static=[...(n.events||[])];render();initFB();
   // Refresco de Nóminas: cada 3min, SOLO si la pestaña está visible y el visitante
