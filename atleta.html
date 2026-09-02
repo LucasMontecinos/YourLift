@@ -236,6 +236,30 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
     if(ca){_conDB(()=>_applyAch(ca));}
     else{fb.getDocs(fb.collection(db,'atleta_achievements')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_ach',docs);_conDB(()=>_applyAch(docs));});}
 
+    // Entrenadores: getDocs + caché 30min.
+    //
+    // Setenta y seis de los ciento un entrenadores son además atletas, así que su
+    // ficha es la de un competidor cualquiera y no dice en ninguna parte que
+    // además entrena. Se les marca la categoría vigente igual que los logros: una
+    // insignia al lado del nombre.
+    //
+    // Se cruza por RUT y no por nombre: el nombre de un entrenador está escrito a
+    // mano en su ficha y el del atleta viene de la inscripción, y no siempre
+    // coinciden en tildes ni en el orden de los apellidos.
+    const cEnt=_aC('atl_entren',30*60*1000);
+    const _applyEntren=docs=>{
+      const soloNum=r=>String(r||'').replace(/[^0-9kK]/g,'').toUpperCase();
+      const porRut={};
+      docs.forEach(e=>{ if(e&&e.rut) porRut[soloNum(e.rut)]=e; });
+      (DB||[]).forEach(a=>{
+        const e=a.rut?porRut[soloNum(a.rut)]:null;
+        if(e) a.entrenadorCat=e.categoria||'';
+      });
+      if(window._curCodigo)showProfile(window._curCodigo);
+    };
+    if(cEnt){_conDB(()=>_applyEntren(cEnt));}
+    else{fb.getDocs(fb.collection(db,'entrenadores')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_entren',docs);_conDB(()=>_applyEntren(docs));});}
+
     // Resultados de competencias cerradas en livecast (en vivo, sin redeploy).
     // Mergea cada doc en el atleta correspondiente como nueva competencia.
     const _applyResults=docs=>{
@@ -570,6 +594,19 @@ window.showProfile=function(codigo){
     +'</div>';
   }).join('');
 
+  // Insignia de entrenador. La categoría viene como 'Cat. 1' o 'Cat. 2' y se
+  // muestra en números romanos, que es como se nombran: CAT I y CAT II.
+  const _catRomana=c=>{
+    const n=parseInt(String(c||'').replace(/[^0-9]/g,''),10);
+    return n>0?'I'.repeat(Math.min(n,4)):'';
+  };
+  const _cr=_catRomana(a.entrenadorCat);
+  const entrenadorBadge=_cr
+    ? '<span class="badge" title="Entrenador acreditado por FECHIPO, categoría '+_cr+'"'
+      +' style="background:rgba(30,91,168,.16);color:#7FB2F0;border:1px solid rgba(30,91,168,.5)">'
+      +'ENTRENADOR CAT '+_cr+'</span>'
+    : '';
+
   h+='<div class="card card-accent"><div style="display:flex;gap:14px;align-items:flex-start">'
     +'<div style="position:relative;flex-shrink:0"><div style="width:68px;height:68px;border-radius:12px;background:var(--bg);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden">'
       +fotoHtml
@@ -579,6 +616,7 @@ window.showProfile=function(codigo){
       +'<div style="font-family:Oswald;font-size:12px;color:var(--gold);margin-top:2px">'+a.codigo+'</div>'
       +'<div style="font-size:12px;color:var(--muted);margin-top:3px">'+clubInline+(a.club||'—')+(a.debut?' · Debut '+a.debut:'')+'</div>'
       +'<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">'
+        +entrenadorBadge
         +(sexRaw?'<span class="badge '+sexBadge+'">'+sexLabel+'</span>':'')
         +'<span class="badge b-y">'+allComps.length+' competencia'+(allComps.length!==1?'s':'')+'</span>'
         +(compsWithResults.length?'<span class="badge b-g">'+compsWithResults.length+' resultado'+(compsWithResults.length!==1?'s':'')+'</span>':'')
