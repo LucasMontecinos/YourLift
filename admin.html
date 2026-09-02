@@ -404,8 +404,13 @@ async function loadAll(){
       const data=d.data();
       const codigo=data.codigo||d.id;
       ST.fotosByCodigo[codigo] = data;
-      const ath=(ST.data||[]).find(a=>a.codigo===codigo);
+      // Por RUT primero: el código cambia cuando se corrige un nombre o un RUT, y
+      // la foto quedaba colgando del viejo sin que la encontrara nadie.
+      const ath=window.YLEdiciones.buscarAtleta(ST.data,Object.assign({id:d.id},data));
       if(ath && data.foto_url && data.status!=='rejected') ath.foto_url = data.foto_url;
+      // Y se deja anotada bajo el código VIGENTE del atleta, para que el panel la
+      // muestre como cargada y no ofrezca subirla de nuevo.
+      if(ath && ath.codigo && ath.codigo!==codigo) ST.fotosByCodigo[ath.codigo] = data;
     });
   }catch(e){console.warn('[loadAll] atleta_fotos:',e.message);}
 
@@ -823,10 +828,17 @@ function generarCodigo(a){
   if(!rut||!nombre||!debut)return null;
   const digits=rut.slice(0,4).padEnd(4,'0');
   const partes=nombre.split(/\s+/).filter(Boolean);
-  const ini0=(partes[0]||'')[0]?.toUpperCase()||'X';
+  // La inicial va SIN tilde. Camila Fernanda Álvarez Carrasco daba "2095CÁC-2024",
+  // con la Á adentro: un código con tilde no calza con el que se vuelve a generar
+  // en otro momento, no se puede escribir a mano y rompe el formato que el resto
+  // del panel valida. Su foto de perfil quedó colgando de ese código y no la
+  // encontraba nadie. Pasa con Álvarez, Ávila, Óscar, Íñiguez, Ñuñez.
+  const sinTilde=c=>String(c||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+  const inicial=p=>sinTilde((p||'')[0])||'X';
+  const ini0=inicial(partes[0]);
   // Apellidos = últimas 2 palabras
-  const ini1=(partes.length>=2?partes[partes.length-2]:partes[0]||'')[0]?.toUpperCase()||'X';
-  const ini2=(partes.length>=3?partes[partes.length-1]:partes[partes.length-1]||'')[0]?.toUpperCase()||'X';
+  const ini1=inicial(partes.length>=2?partes[partes.length-2]:partes[0]);
+  const ini2=inicial(partes[partes.length-1]);
   return `${digits}${ini0}${ini1}${ini2}-${debut}`;
 }
 

@@ -222,7 +222,11 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
 
     // Fotos de perfil: getDocs + caché 30min
     const cf=_aC('atl_fotos',30*60*1000);
-    const _applyFotos=docs=>{docs.forEach(data=>{const codigo=data.codigo||data.id;const ath=(DB||[]).find(a=>a.codigo===codigo);if(ath&&data.foto_url)ath.foto_url=data.foto_url;});if(window._curCodigo)showProfile(window._curCodigo);};
+    // Se busca por RUT y recién después por código: el código cambia cuando se
+    // le corrige el nombre o el RUT a alguien, y la foto quedaba colgando del
+    // viejo. Con el RUT —que el propio documento de foto trae adentro— se
+    // encuentran solas.
+    const _applyFotos=docs=>{docs.forEach(data=>{const ath=window.YLEdiciones.buscarAtleta(DB,data);if(ath&&data.foto_url)ath.foto_url=data.foto_url;});if(window._curCodigo)showProfile(window._curCodigo);};
     if(cf){_conDB(()=>_applyFotos(cf));}
     else{fb.getDocs(fb.collection(db,'atleta_fotos')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_fotos',docs);_conDB(()=>_applyFotos(docs));});}
 

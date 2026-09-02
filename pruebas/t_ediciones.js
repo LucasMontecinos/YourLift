@@ -173,6 +173,59 @@ console.log('\n  Sin red, la copia vieja es mejor que nada');
   fallaVersion = false;
 }
 
+console.log('\nLa foto se encuentra por RUT, no por código');
+{
+  // El CÓDIGO CAMBIA. Se calcula con el RUT, las iniciales y el año de debut, así
+  // que corregir cualquiera de esas tres cosas lo cambia — y todo lo que colgaba
+  // del código viejo queda huérfano. Así se perdieron cuatro fotos de perfil.
+  // Los documentos de foto guardan el RUT adentro, así que buscando por ahí se
+  // encuentran solas, sin migrar nada.
+  const DB = base();
+
+  // Bastián Arévalo: el código se armó con el RUT con puntos y quedó "20.5BAP-2023"
+  // en vez de "2056BAP-2023". La foto quedó ahí.
+  DB.push({ codigo: '2056BAP-2023', rut: '20.562.405-8', nombre: 'Bastian Arevalo Peña' });
+  const foto1 = { id: '20.5BAP-2023', codigo: '20.5BAP-2023', rut: '20.562.405-8',
+                  foto_url: 'https://ejemplo.cl/bastian.jpg' };
+  const a1 = YL.buscarAtleta(DB, foto1);
+  ok(!!a1 && a1.codigo === '2056BAP-2023',
+     'la foto guardada en "20.5BAP-2023" llega a ' + (a1 ? a1.nombre : 'nadie'));
+
+  // Camila Álvarez: la inicial llevaba tilde, "2095CÁC-2024" en vez de "2095CAC-2024".
+  DB.push({ codigo: '2095CAC-2024', rut: '20953951-9', nombre: 'Camila Fernanda Alvarez Carrasco' });
+  const a2 = YL.buscarAtleta(DB, { id: '2095CÁC-2024', codigo: '2095CÁC-2024', rut: '20953951-9' });
+  ok(!!a2 && a2.codigo === '2095CAC-2024', 'y la del código con tilde también llega');
+
+  // El RUT manda sobre el código: si los dos apuntan a personas distintas, gana
+  // el RUT, porque el código es el que se mueve.
+  const a3 = YL.buscarAtleta(DB, { codigo: '2215FNP-2024', rut: '20953951-9' });
+  ok(a3 && a3.codigo === '2095CAC-2024', 'con RUT y código en desacuerdo, manda el RUT');
+
+  // Sin RUT se cae al código, que es lo que tienen los documentos viejos.
+  const a4 = YL.buscarAtleta(DB, { codigo: '2215FNP-2024' });
+  ok(a4 && a4.codigo === '2215FNP-2024', 'y sin RUT, el código sigue sirviendo');
+  ok(YL.buscarAtleta(DB, { codigo: 'NO_EXISTE-2020' }) === null, 'lo que no está, no está');
+  ok(YL.buscarAtleta([], { rut: '1-9' }) === null, 'y sin padrón no revienta');
+}
+
+console.log('\n  El código que se genera no lleva tildes');
+{
+  // "2095CÁC-2024" no calza con el que se vuelve a generar más tarde, no se puede
+  // escribir a mano y rompe el formato que el resto del panel valida.
+  const adm = R('admin.html');
+  const gen = adm.slice(adm.indexOf('function generarCodigo(a)'),
+                        adm.indexOf('function generarCodigo(a)') + 1400);
+  ok(/normalize\('NFD'\)/.test(gen), 'se le sacan las tildes a la inicial');
+  ok(!/\(partes\[0\]\|\|''\)\[0\]\?\.toUpperCase\(\)/.test(gen),
+     'ya no se toma la primera letra tal cual');
+}
+
+console.log('\n  Y las páginas buscan la foto así');
+{
+  ['atleta.html', 'livecast.html', 'admin.html'].forEach(p =>
+    ok(/YLEdiciones\.buscarAtleta\(/.test(R(p)), p + ' busca por RUT antes que por código'));
+}
+
 console.log('\nTodas las páginas usan el mismo módulo');
 {
   const paginas = ['index.html', 'atleta.html', 'ranking.html', 'inscripcion.html', 'livecast.html', 'admin.html'];

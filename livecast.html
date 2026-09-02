@@ -11958,8 +11958,10 @@ function _setupFotoListener(){
     _fotoUnsubLC=window._fb.onSnapshot(window._fb.collection(fbDB,'atleta_fotos'),snap=>{
       snap.docs.forEach(doc=>{
         const d2=doc.data();
-        const codigo=d2.codigo||doc.id;
-        const ath=DB_FULL.find(a=>a.codigo===codigo);
+        // Por RUT primero: el código cambia al corregir un nombre o un RUT y la
+        // foto quedaba apuntando al viejo.
+        const ath=(window.YLEdiciones&&window.YLEdiciones.buscarAtleta(DB_FULL,Object.assign({id:doc.id},d2)))
+                  ||DB_FULL.find(a=>a.codigo===(d2.codigo||doc.id));
         if(ath){
           if(d2.foto_url)ath.foto_url=d2.foto_url;
           if(d2.gif_url!==undefined)ath.gif_url=d2.gif_url||null;

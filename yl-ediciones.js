@@ -171,8 +171,30 @@
     return { editados: editados, borrados: borrar.length };
   }
 
+  // Encuentra al atleta al que pertenece un documento que trae `codigo` y/o
+  // `rut`: primero por RUT, que no cambia nunca, y recién después por código.
+  //
+  // Existe porque el CÓDIGO SÍ CAMBIA. Se calcula con el RUT, las iniciales y el
+  // año de debut, así que corregir cualquiera de esas tres cosas lo cambia — y
+  // todo lo que colgaba del código viejo queda huérfano. Así se perdieron cuatro
+  // fotos de perfil: la de Bastián Arévalo quedó en "20.5BAP-2023" porque el
+  // código se armó con el RUT con puntos, y la de Camila Álvarez en
+  // "2095CÁC-2024" porque la inicial llevaba tilde.
+  //
+  // Los documentos de foto guardan el RUT adentro, así que buscando por ahí se
+  // encuentran solas, sin migrar nada.
+  function buscarAtleta(DB, doc) {
+    if (!DB || !DB.length || !doc) return null;
+    var r = rutNorm(doc.rut);
+    if (r) { for (var i = 0; i < DB.length; i++) if (rutNorm(DB[i].rut) === r) return DB[i]; }
+    var c = doc.codigo || doc.id;
+    if (c) { for (var j = 0; j < DB.length; j++) if (DB[j].codigo === c) return DB[j]; }
+    return null;
+  }
+
   window.YLEdiciones = {
     MARCA: MARCA,
+    buscarAtleta: buscarAtleta,
     cargar: cargar,
     aplicar: aplicar,
     rutNorm: rutNorm,
