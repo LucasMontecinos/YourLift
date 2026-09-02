@@ -61,6 +61,12 @@ def sel(sexo=None, cats=None, fam=None, divs=None):
 #   sesión (ese día termina a las 15.00, el más temprano de los ocho). Cuando
 #   FESUPO mande el cronograma nuevo hay que corregir fecha y hora acá: es la
 #   única línea de este archivo que no sale de un documento oficial.
+#
+#   Y son 7, no 22: los demás países se bajaron y quedó solo el equipo de Chile.
+#   El número de la planilla (22) es de antes de esas bajas. Se deja el 7 para que
+#   el reporte no muestre un −15 que parece una falla nuestra y no lo es.
+#   Siendo 7 en una sola tanda, la sesión dura cerca de una hora, así que cabe
+#   holgada donde FESUPO la quiera poner.
 SES = [
  ('2026-09-20',1,'07.00–08.30','09.00','Mujeres -43/-47/-52 Classic',               sel('F',{'-43','-47','-52'},CL), 27),
  ('2026-09-20',1,'11.00–12.30','13.00','Mujeres -57 Classic',                       sel('F',{'-57'},CL), 22),
@@ -82,7 +88,7 @@ SES = [
  ('2026-09-26',7,'13.00–14.30','15.00','Hombres -105 Classic',                      sel('M',{'-105'},CL), 34),
  ('2026-09-27',8,'08.00–09.30','10.00','Hombres -120 Classic',                      sel('M',{'-120'},CL), 21),
  ('2026-09-27',8,'13.00–14.30','15.00','Hombres +120 Classic',                      sel('M',{'+120'},CL), 16),
- ('2026-09-27',8,'17.00–18.30','19.00','Special Olympics (por confirmar)',          sel(fam=SO), 22),
+ ('2026-09-27',8,'17.00–18.30','19.00','Special Olympics (por confirmar)',          sel(fam=SO), 7),
 ]
 
 # ── Conversión nómina → atleta del livecast (mismas convenciones que ya usaban
