@@ -60,6 +60,10 @@ ok(rangos.every((r, i) => i === 0 || r[0] > rangos[i-1][1]), 'ninguna centena pi
 
 console.log('\nUn atleta que se muda a una tanda nueva toma lote de ahí');
 global.DATA = { lotsGenerated: true, athletes: [] };
+// _reubicarLote se apoya en _baseTanda, que traduce la tanda a número: A→100,
+// Z→2600, AA→2700. Se saca también, porque acá la función corre suelta y no
+// tiene alrededor el resto del livecast.
+eval(sacar('_baseTanda'));
 eval(sacar('_reubicarLote'));
 let id = 0;
 'ABCDEFG'.split('').forEach(L => { for (let i = 0; i < 10; i++)
