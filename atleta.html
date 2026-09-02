@@ -473,6 +473,29 @@ window.onSearch=function(val){
 }
 window.doSearch=function(){onSearch(document.getElementById('sInput').value)}
 
+// ── Con qué fecha se ordena una competencia ──────────────────────────────────
+// Más de la mitad de las competencias del padrón no traen `fecha`. Los ordenes
+// que había hacían `x.fecha || x.evento`, o sea: cuando faltaba la fecha
+// comparaban contra el NOMBRE del campeonato. Eso no es un orden, es un sorteo:
+// "2026-06-13" queda antes que "Campeonato Nacional…" y ese antes que
+// "Regional…", porque los dígitos van antes que las letras.
+//
+// Se veía en la evolución de GL Points: a Sergio Mardones Meza el Nacional —que
+// fue su peor marca y su segunda competencia— le salía al final, y el gráfico
+// parecía decir que venía en bajada cuando en realidad después hizo su mejor
+// marca en el Mundial.
+//
+// Ahora nunca se compara una fecha con un nombre. Si no hay fecha se usa el año
+// —del campo `año` o del que venga en el nombre del campeonato— y se ordena al
+// medio de ese año; y si tampoco hay año, va al final, que es lo único honesto
+// cuando no se sabe cuándo fue.
+function fechaOrden(c){
+  if(!c) return '9999';
+  if(c.fecha) return String(c.fecha);
+  const anio = c['año'] || c.anio || (String(c.evento||'').match(/20\d{2}/)||[])[0];
+  return anio ? anio+'-06-30' : '9999';
+}
+
 // ── Profile ──────────────────────────────────────────────
 window.showProfile=function(codigo){
   window._curCodigo=codigo;
@@ -505,10 +528,10 @@ window.showProfile=function(codigo){
     if(g>bl.glp)bl.glp=g;
   });
   const compsWithResults=allComps.filter(c=>c.resultado&&(c.resultado.total>0||c.resultado.status==='DQ'));
-  const sorted=[...compsWithResults].sort((x,y)=>(y.fecha||y.evento||'').localeCompare(x.fecha||x.evento||''));
+  const sorted=[...compsWithResults].sort((x,y)=>fechaOrden(y).localeCompare(fechaOrden(x)));
 
   // Sex from most recent comp
-  const sexRaw=[...allComps].sort((x,y)=>(y.fecha||'').localeCompare(x.fecha||'')).find(c=>c.sexo)?.sexo||'';
+  const sexRaw=[...allComps].sort((x,y)=>fechaOrden(y).localeCompare(fechaOrden(x))).find(c=>c.sexo)?.sexo||'';
   const isFem=sexRaw.match(/mujer|fem/i);
   const sexLabel=isFem?'♀ Mujer':'♂ Hombre';
   const sexBadge=isFem?'b-r':'b-b';
@@ -532,7 +555,7 @@ window.showProfile=function(codigo){
     (glByModal[k]=glByModal[k]||[]).push(c);
   });
   Object.keys(glByModal).forEach(k=>{
-    glByModal[k].sort((x,y)=>(x.fecha||x.evento||'').localeCompare(y.fecha||y.evento||''));
+    glByModal[k].sort((x,y)=>fechaOrden(x).localeCompare(fechaOrden(y)));
   });
 
   // Peer comparison. Una tarjeta por cada modalidad en la que compite dentro de su
