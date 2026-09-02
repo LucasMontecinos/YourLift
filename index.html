@@ -498,18 +498,6 @@ async function initFB(){
       }catch(e){console.warn('[nomcards]',e);}
       })(),
       (async()=>{
-      // ── Fotos de la nómina Sudamericano (para las fichas): caché 1h ──
-      try{
-        const cf=_fsCache('nsudafotos',60*60*1000);
-        if(cf){window.NSUDA_FOTOS=cf;if(ST.v==='nominas')renderFondo();}
-        else{
-          const fs=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'nomina_suda_fotos'));
-          const map={};fs.docs.forEach(d=>{const x=d.data();if(x.foto_url)map[d.id]=x.foto_url;});
-          window.NSUDA_FOTOS=map;_fsSetCache('nsudafotos',map);if(ST.v==='nominas')renderFondo();
-        }
-      }catch(e){console.warn('[nsudafotos]',e);}
-      })(),
-      (async()=>{
       // ── Correcciones de la nómina Sudamericano hechas desde el admin: 1 solo
       // doc, caché 10min (hay que ver los arreglos rápido, pero sin leer en cada carga) ──
       try{
@@ -522,19 +510,6 @@ async function initFB(){
         }
         _nsudaApplyEdits(); if(ST.v==='nominas')renderFondo();
       }catch(e){console.warn('[nsudaedits]',e);}
-      })(),
-      (async()=>{
-      // ── Fotos de PERFIL por código (atleta_fotos) — para que los chilenos que ya
-      // tienen foto se vean en la nómina sin volver a subirlas ──
-      try{
-        const cp=_fsCache('atlfotos',60*60*1000);
-        if(cp){window.ATL_FOTOS=cp;if(ST.v==='nominas')renderFondo();}
-        else{
-          const ps=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'atleta_fotos'));
-          const map={};ps.docs.forEach(d=>{const x=d.data();if(x.foto_url&&x.status!=='rejected')map[d.id]=x.foto_url;});
-          window.ATL_FOTOS=map;_fsSetCache('atlfotos',map);if(ST.v==='nominas')renderFondo();
-        }
-      }catch(e){console.warn('[atlfotos]',e);}
       })(),
       (async()=>{
       // ── Cert config: getDocs + caché 1h ──
@@ -592,12 +567,10 @@ async function initFB(){
     })();
     // Si una falla, que no se lleve a las demás por delante.
     await Promise.allSettled([..._sueltas,_encadenadas]);
-    // ── Entrenadores: getDocs + caché 2h ──
-    try{
-      const et=_fsCache('entrenadores',2*60*60*1000);
-      if(et){window._ENTRENADORES_PUB=et;if(ST.v==='entrenadores')renderFondo();}
-      else{const es=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'entrenadores'));const list=es.docs.map(d=>d.data()).filter(e=>e.nombre).sort((a,b)=>(a.club||'').localeCompare(b.club||'')||(a.nombre||'').localeCompare(b.nombre||''));_fsSetCache('entrenadores',list);window._ENTRENADORES_PUB=list;if(ST.v==='entrenadores')renderFondo();}
-    }catch(e){}
+    // Y lo que necesite la pestaña en la que se entró. Si alguien abre el
+    // sitio directo en Nóminas, nadie pasó por sv() y sin esto se quedaría
+    // sin las fotos para siempre.
+    try{ await cargarParaVista(ST.v); }catch(e){}
   }catch(e){console.warn('Firebase not available, using nominas.json',e)}
 }
 
@@ -2473,7 +2446,71 @@ async function enviarSugerencia(){
   }catch(e){if(st)st.textContent='Error al enviar: '+e.message;}
 }
 
-function sv(v){ST.v=v;ST.sel=null;ST.p=0;render();scrollTo(0,0);if(typeof setBgForSection==='function')setBgForSection(v);if(typeof trackPage==='function')trackPage(v)}
+
+// ── Lo que solo hace falta cuando abres esa pestaña ───────────────────────
+//
+// Las fotos de la nómina (329 documentos) y los entrenadores (101) no se usan en
+// ninguna otra parte del sitio, y sin embargo se bajaban en CADA carga, incluso
+// para alguien que entra al inicio, mira el próximo campeonato y se va. Eso es
+// casi la mitad de las lecturas de Firestore de una visita típica, pagadas sin
+// que nadie las mire.
+//
+// Ahora se piden la primera vez que se abre la pestaña que las necesita. Se
+// piden una sola vez por sesión: `_yaPedido` evita que volver a la pestaña las
+// vuelva a bajar.
+// La marca vive en window y no en un const de acá: esta función se llama
+// desde el arranque de Firebase, mucho antes en el archivo, y un const
+// todavía sin inicializar reventaría la carga entera.
+window._yaPedido=window._yaPedido||{};
+async function cargarParaVista(v){
+  if(!fbReady)return;
+  const una=(k,fn)=>{ if(window._yaPedido[k])return null; window._yaPedido[k]=true; return fn(); };
+  const tareas=[];
+  if(v==='nominas'){
+    tareas.push(una('nsudafotos',async()=>{
+
+  // ── Fotos de la nómina Sudamericano (para las fichas): caché 1h ──
+  try{
+    const cf=_fsCache('nsudafotos',60*60*1000);
+    if(cf){window.NSUDA_FOTOS=cf;if(ST.v==='nominas')renderFondo();}
+    else{
+      const fs=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'nomina_suda_fotos'));
+      const map={};fs.docs.forEach(d=>{const x=d.data();if(x.foto_url)map[d.id]=x.foto_url;});
+      window.NSUDA_FOTOS=map;_fsSetCache('nsudafotos',map);if(ST.v==='nominas')renderFondo();
+    }
+  }catch(e){console.warn('[nsudafotos]',e);}
+  
+    }));
+    tareas.push(una('atlfotos',async()=>{
+
+  // ── Fotos de PERFIL por código (atleta_fotos) — para que los chilenos que ya
+  // tienen foto se vean en la nómina sin volver a subirlas ──
+  try{
+    const cp=_fsCache('atlfotos',60*60*1000);
+    if(cp){window.ATL_FOTOS=cp;if(ST.v==='nominas')renderFondo();}
+    else{
+      const ps=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'atleta_fotos'));
+      const map={};ps.docs.forEach(d=>{const x=d.data();if(x.foto_url&&x.status!=='rejected')map[d.id]=x.foto_url;});
+      window.ATL_FOTOS=map;_fsSetCache('atlfotos',map);if(ST.v==='nominas')renderFondo();
+    }
+  }catch(e){console.warn('[atlfotos]',e);}
+  
+    }));
+  }
+  if(v==='entrenadores'){
+    tareas.push(una('entrenadores',async()=>{
+// ── Entrenadores: getDocs + caché 2h ──
+  try{
+    const et=_fsCache('entrenadores',2*60*60*1000);
+    if(et){window._ENTRENADORES_PUB=et;if(ST.v==='entrenadores')renderFondo();}
+    else{const es=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'entrenadores'));const list=es.docs.map(d=>d.data()).filter(e=>e.nombre).sort((a,b)=>(a.club||'').localeCompare(b.club||'')||(a.nombre||'').localeCompare(b.nombre||''));_fsSetCache('entrenadores',list);window._ENTRENADORES_PUB=list;if(ST.v==='entrenadores')renderFondo();}
+  }catch(e){}
+    }));
+  }
+  await Promise.allSettled(tareas.filter(Boolean));
+}
+
+function sv(v){ST.v=v;ST.sel=null;ST.p=0;render();scrollTo(0,0);cargarParaVista(v);if(typeof setBgForSection==='function')setBgForSection(v);if(typeof trackPage==='function')trackPage(v)}
 let _ssTimer=null;
 // Solo la lista, nunca el campo. Antes esto llamaba a render() y devolvía el
 // foco por programa: el campo moría y volvía a nacer en cada letra, y en el

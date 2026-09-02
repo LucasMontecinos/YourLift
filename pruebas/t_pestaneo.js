@@ -136,6 +136,30 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     ok(/addEventListener\('focusout'/.test(idx), 'y se engancha a cuando suelta el campo');
   }
 
+console.log('\n  Y lo que la pestaña abierta no necesita, no se baja');
+{
+  // Las fotos de la nómina (329 documentos) y los entrenadores (101) no se usan
+  // en ninguna otra parte del sitio, y se bajaban en CADA carga: casi la mitad
+  // de las lecturas de una visita que entra al inicio y se va.
+  ok(/async function cargarParaVista\(v\)/.test(idx), 'hay una carga por pestaña');
+  const fn = idx.slice(idx.indexOf('async function cargarParaVista'), idx.indexOf('function sv(v){'));
+  ok(/v==='nominas'/.test(fn) && /atlfotos/.test(fn) && /nsudafotos/.test(fn),
+     'las fotos de la nómina se piden al abrir Nóminas');
+  ok(/v==='entrenadores'/.test(fn) && /entrenadores/.test(fn),
+     'y los entrenadores al abrir Entrenadores');
+  ok(/window\._yaPedido/.test(fn), 'una sola vez por sesión, no cada vez que se vuelve');
+  // Y ya no están en el arranque.
+  const arranque = idx.slice(idx.indexOf('const _sueltas=['), idx.indexOf('await Promise.allSettled('));
+  ok(!/atleta_fotos/.test(arranque), 'atleta_fotos ya no se baja al abrir el sitio');
+  ok(!/nomina_suda_fotos/.test(arranque), 'ni las fotos del Sudamericano');
+  ok(!/'entrenadores'\)/.test(arranque), 'ni los entrenadores');
+  // Red de seguridad: quien entra directo a una pestaña no pasa por sv().
+  ok(/await cargarParaVista\(ST\.v\)/.test(idx),
+     'y al terminar el arranque se pide lo de la pestaña en la que se entró');
+  ok(/function sv\(v\)\{[^}]*cargarParaVista\(v\)/.test(idx),
+     'además de al cambiar de pestaña');
+}
+
   console.log(fallas ? `\n${fallas} FALLA(S)` : '\nTodo OK');
   process.exit(fallas ? 1 : 0);
 })();
