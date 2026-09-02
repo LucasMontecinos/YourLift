@@ -1613,20 +1613,42 @@ async function saveEdit() {
     }
     // Solo campos editables por el atleta. NO evento, status, flight,
     // sortOrder, rut, carnetURL, wadeURL, pin.
-    const changes = {
-      nombre: sanitizeInput(f.nombre.trim()),
-      codigo: sanitizeInput(f.codigo.trim()),
-      sexo: f.sexo,
-      fechaNac: f.fechaNac,
-      division: f.division,
-      categoria: f.categoria,
-      modalidad: f.modalidad,
-      club: sanitizeInput(f.club),
-      clubOtro: sanitizeInput(f.clubOtro),
-      zona: f.zona,
-      comuna: sanitizeInput(f.comuna),
-      universidad: sanitizeInput(f.universidad || ''),
+    //
+    // Y SOLO LOS QUE DE VERDAD CAMBIARON. Antes se mandaban los doce campos
+    // siempre, así que entrar a mirar la inscripción y apretar guardar le dejaba
+    // al organizador una solicitud que no pedía nada. Con un campeonato grande eso
+    // es una bandeja llena de avisos vacíos, y entre medio se pierde el que sí
+    // importa. Ahora, si no cambió nada, no se manda nada.
+    //
+    // Cada campo se compara con la MISMA limpieza que se le aplica al enviarlo: si
+    // no, un club que quedó guardado con un espacio de más se vería como un cambio
+    // cada vez que alguien abre el formulario.
+    const LIMPIEZA = {
+      nombre: v => sanitizeInput(String(v || '').trim()),
+      codigo: v => sanitizeInput(String(v || '').trim()),
+      club: v => sanitizeInput(String(v || '')),
+      clubOtro: v => sanitizeInput(String(v || '')),
+      comuna: v => sanitizeInput(String(v || '')),
+      universidad: v => sanitizeInput(String(v || '')),
     };
+    const CAMPOS = ['nombre','codigo','sexo','fechaNac','division','categoria',
+                    'modalidad','club','clubOtro','zona','comuna','universidad'];
+    const limpiar = (k, v) => LIMPIEZA[k] ? LIMPIEZA[k](v) : String(v == null ? '' : v);
+
+    const antes = state.editDoc || {};
+    const changes = {};
+    for (const k of CAMPOS) {
+      const nuevo = limpiar(k, f[k]);
+      if (nuevo !== limpiar(k, antes[k])) changes[k] = nuevo;
+    }
+
+    if (!Object.keys(changes).length) {
+      state.submitting = false;
+      state.error = 'No hay nada que cambiar: tu inscripción quedó igual, '
+                  + 'así que no se envió ninguna solicitud.';
+      render();
+      return;
+    }
 
     if (firebaseReady) {
       // Crea una solicitud de edición. El admin la revisa y aplica.
@@ -1643,7 +1665,10 @@ async function saveEdit() {
     }
 
     state.submitting = false;
-    state.success = 'Tu solicitud de edición fue enviada. El organizador la revisará y se aplicarán los cambios si el PIN es correcto.';
+    const n = Object.keys(changes).length;
+    state.success = 'Tu solicitud de edición fue enviada con '
+      + (n === 1 ? '1 cambio' : n + ' cambios')
+      + '. El organizador la revisará y se aplicarán si el PIN es correcto.';
     render();
   } catch(e) {
     state.error = 'Error al enviar solicitud: ' + e.message;
