@@ -260,6 +260,26 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
     if(cEnt){_conDB(()=>_applyEntren(cEnt));}
     else{fb.getDocs(fb.collection(db,'entrenadores')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_entren',docs);_conDB(()=>_applyEntren(docs));});}
 
+    // Jueces: getDocs + caché 30min.
+    //
+    // Muchos jueces compiten, así que su ficha es la de un atleta cualquiera. Se
+    // les marca la categoría igual que a los entrenadores, y con la corbata que
+    // los distingue en la tarima. Se cruza por RUT, por lo mismo de siempre: los
+    // nombres no coinciden entre una base y otra.
+    const cRef=_aC('atl_ref',30*60*1000);
+    const _applyRef=docs=>{
+      const soloNum=r=>String(r||'').replace(/[^0-9kK]/g,'').toUpperCase();
+      const porRut={};
+      docs.forEach(r=>{ if(r&&r.rut) porRut[soloNum(r.rut)]=r; });
+      (DB||[]).forEach(a=>{
+        const j=a.rut?porRut[soloNum(a.rut)]:null;
+        if(j) a.juez={categoria:j.categoria||'',ambito:j.ambito||'nacional'};
+      });
+      if(window._curCodigo)showProfile(window._curCodigo);
+    };
+    if(cRef){_conDB(()=>_applyRef(cRef));}
+    else{fb.getDocs(fb.collection(db,'referees')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_ref',docs);_conDB(()=>_applyRef(docs));}).catch(()=>{});}
+
     // Resultados de competencias cerradas en livecast (en vivo, sin redeploy).
     // Mergea cada doc en el atleta correspondiente como nueva competencia.
     const _applyResults=docs=>{
@@ -624,6 +644,24 @@ window.showProfile=function(codigo){
     return n>0?'I'.repeat(Math.min(n,4)):'';
   };
   const _cr=_catRomana(a.entrenadorCat);
+  // Insignia de juez. La corbata dice la categoría, que es como se distinguen en
+  // la tarima: gris la Cat. 2 de FECHIPO, negra la Cat. 1, y roja o azul los
+  // internacionales según el rango.
+  const _JUEZ={
+    'nacional|2':{col:'#9AA5B1',txt:'JUEZ NACIONAL CAT II'},
+    'nacional|1':{col:'#2B303B',txt:'JUEZ NACIONAL CAT I'},
+    'internacional|2':{col:'#1E5BA8',txt:'JUEZ INTERNACIONAL CAT II'},
+    'internacional|1':{col:'#C41E3A',txt:'JUEZ INTERNACIONAL CAT I'},
+  };
+  const _j=a.juez;
+  const _jk=_j?((/interna/i.test(_j.ambito||'')?'internacional':'nacional')+'|'+(/1/.test(_j.categoria||'')?'1':'2')):'';
+  const _ji=_JUEZ[_jk];
+  const juezBadge=_ji
+    ? '<span class="badge" title="Juez acreditado · '+_ji.txt+'"'
+      +' style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);color:var(--text);border:1px solid var(--border)">'
+      +'<span style="width:8px;height:14px;background:'+_ji.col+';clip-path:polygon(50% 0,100% 22%,72% 100%,28% 100%,0 22%);border:1px solid rgba(255,255,255,.6)"></span>'
+      +_ji.txt+'</span>'
+    : '';
   const entrenadorBadge=_cr
     ? '<span class="badge" title="Entrenador acreditado por FECHIPO, categoría '+_cr+'"'
       +' style="background:rgba(30,91,168,.16);color:#7FB2F0;border:1px solid rgba(30,91,168,.5)">'
@@ -640,6 +678,7 @@ window.showProfile=function(codigo){
       +'<div style="font-size:12px;color:var(--muted);margin-top:3px">'+clubInline+(a.club||'—')+(a.debut?' · Debut '+a.debut:'')+'</div>'
       +'<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">'
         +entrenadorBadge
+        +juezBadge
         +(sexRaw?'<span class="badge '+sexBadge+'">'+sexLabel+'</span>':'')
         +'<span class="badge b-y">'+allComps.length+' competencia'+(allComps.length!==1?'s':'')+'</span>'
         +(compsWithResults.length?'<span class="badge b-g">'+compsWithResults.length+' resultado'+(compsWithResults.length!==1?'s':'')+'</span>':'')
