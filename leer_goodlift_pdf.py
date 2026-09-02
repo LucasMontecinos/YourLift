@@ -2,10 +2,10 @@
 """Lee las nominaciones oficiales de goodlift.info en PDF y arma
 nomina_suda_goodlift.json.
 
-    python3 leer_goodlift_pdf.py carpeta/con/los/pdf
+    python3 leer_goodlift_pdf.py goodlift_pdf
 
 Son doce PDF, uno por campeonato, los que salen del botón de PDF en la página de
-cada nominación. Se leen los doce y de ahí sale el archivo contra el que se cruza
+cada nominación. Están guardados en goodlift_pdf/, con el nombre del campeonato. Se leen los doce y de ahí sale el archivo contra el que se cruza
 nuestra nómina (verificar_goodlift.py).
 
 Por qué esto y no las capturas: el PDF trae el texto, no una foto del texto. Las
@@ -204,9 +204,9 @@ def leer(pdf):
 
 def main():
     carpeta = Path(sys.argv[1] if len(sys.argv) > 1 else '.')
-    pdfs = sorted(carpeta.glob('*generatepdfnom*.pdf'))
+    pdfs = sorted(carpeta.glob('*.pdf'))
     if not pdfs:
-        raise SystemExit(f'no hay PDF de nominación en {carpeta}')
+        raise SystemExit(f'no hay ningún PDF en {carpeta}')
 
     todo, listas, malas = [], [], 0
     for p in pdfs:
