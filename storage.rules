@@ -8,15 +8,25 @@ rules_version = '2';
 //   o pegar este archivo en Firebase Console → Storage → Rules.
 //
 // Uso esperado de Storage:
-//   - athlete_files/{rut}/{type}.{ext}  → carnet, certificado WADA, etc.
-//     (subido al inscribirse, leído solo por admin para validación)
-//   - logos/{club}.png                  → logos de clubes (público lectura)
-//   - public/*                          → cualquier asset público
+//   - athlete_files/{rut}/…   → carnet, certificado WADA (privado, lo lee admin)
+//   - athlete_photos/…        → foto del atleta (ficha, nómina, Control TX)
+//   - athlete_gifs/…          → clip corto del atleta para la transmisión
+//   - logos/…                 → clubes, eventos, transmisión, auspiciadores
+//   - nomina_cards/…          → la foto de la tarjeta de cada campeonato
+//   - videos/sections/…       → videos de fondo de las secciones del sitio
+//   - actas/…                 → actas de campeonatos ya disputados
+//   - public/…                → cualquier asset público
+//   - backups/…               → exports del panel (solo admin)
 //
 // Modelo:
 //   - admins (definidos en Firestore /admins/{uid}) leen y escriben todo
 //   - usuarios autenticados pueden subir a athlete_files/{su rut}
-//   - lectura pública solo para /logos/* y /public/*
+//   - lo que se muestra en el sitio se lee sin sesión; lo privado, no
+//
+// IMPORTANTE: acá tiene que estar TODA ruta que el código toque. Lo que no calce
+// con ningún match cae en el deny del final y falla con "User does not have
+// permission", que se lee como un problema de la cuenta y no lo es. Así estaban
+// nomina_cards y todo lo que colgaba de logos/ en un subdirectorio.
 // ═══════════════════════════════════════════════════════════════
 
 service firebase.storage {
@@ -28,10 +38,44 @@ service firebase.storage {
           && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
     }
 
-    // ── Logos públicos (clubes, federación, etc.) ─────────────────
-    match /logos/{file} {
+    // ── Logos públicos (clubes, federación, auspiciadores, etc.) ──
+    // OJO con {allPaths=**} en vez de {file}: {file} calza UN solo segmento, así
+    // que logos/clubs/x.webp, logos/event/…, logos/stream/… y logos/sponsors/…
+    // no calzaban con nada y caían en el deny del final. Se veía como "no tienes
+    // permiso" al subir el logo de un club, que es justo lo que sí corresponde.
+    match /logos/{allPaths=**} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write, delete: if isAdmin();
+    }
+
+    // ── Tarjetas de la pestaña Nóminas ───────────────────────────
+    // La foto que sale en la tarjeta de cada campeonato en yourlift.cl. La sube
+    // el admin desde Tarjetas de nóminas, ya convertida a WebP.
+    match /nomina_cards/{file} {
+      allow read: if true;
+      allow write, delete: if isAdmin()
+                    && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // ── Fotos y clips de atletas ─────────────────────────────────
+    // Se ven en la ficha del atleta, en la nómina y en Control TX, así que la
+    // lectura es abierta. Las sube el admin desde el panel o desde el livecast.
+    match /athlete_photos/{file} {
+      allow read: if true;
+      allow write, delete: if isAdmin()
+                    && request.resource.size < 10 * 1024 * 1024;
+    }
+    match /athlete_gifs/{file} {
+      allow read: if true;
+      allow write, delete: if isAdmin()
+                    && request.resource.size < 30 * 1024 * 1024;
+    }
+
+    // ── Videos de fondo de las secciones del sitio ───────────────
+    match /videos/{allPaths=**} {
+      allow read: if true;
+      allow write, delete: if isAdmin()
+                    && request.resource.size < 60 * 1024 * 1024;
     }
 
     // ── Public bucket (assets generales como YourLift_logo.png) ──

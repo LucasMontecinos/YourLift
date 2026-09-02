@@ -4579,16 +4579,16 @@ window.ncLoad=async function(){
 };
 window.ncSet=function(id,k,v){ST.ncData[id]=ST.ncData[id]||{};ST.ncData[id][k]=v;};
 window.ncSave=async function(id){
-  const st=document.getElementById('nc_st_'+id);if(st)st.textContent='Guardando…';
+  const st=document.getElementById('nc_st_'+id);ncEstado(st,'Guardando…');
   try{
     await setDoc(doc(db,'nomina_cards',id),{...(ST.ncData[id]||{}),updatedAt:Date.now()},{merge:true});
-    if(st)st.textContent='✓ Guardado';
-    setTimeout(()=>{if(st)st.textContent='';},2500);
-  }catch(e){if(st)st.textContent='Error: '+e.message;}
+    ncEstado(st,'✓ Guardado','ok');
+    setTimeout(()=>ncEstado(st,''),2500);
+  }catch(e){ncEstado(st,'Error: '+e.message,'error');}
 };
 window.ncFoto=async function(id,inp){
   const f=inp.files&&inp.files[0];if(!f)return;
-  const st=document.getElementById('nc_st_'+id);if(st)st.textContent='Convirtiendo a WebP y subiendo…';
+  const st=document.getElementById('nc_st_'+id);ncEstado(st,'Convirtiendo a WebP y subiendo…');
   try{
     const storage=getStorage(app);
     const webp=await compressImg(f,1400,0.82);
@@ -4598,8 +4598,17 @@ window.ncFoto=async function(id,inp){
     ncSet(id,'fotoUrl',url);
     await ncSave(id);
     render();
-  }catch(e){if(st)st.textContent='Error: '+e.message;}
+  }catch(e){ncEstado(st,'Error: '+e.message,'error');}
 };
+// El aviso estaba pintado de verde siempre, así que un error de permisos se leía
+// como si hubiera guardado bien. Ahora el color dice qué pasó.
+function ncEstado(el,txt,tipo){
+  if(!el)return;
+  el.textContent=txt;
+  el.style.color = tipo==='error' ? 'var(--red)'
+                 : tipo==='ok'    ? 'var(--green)'
+                 : 'var(--muted)';
+}
 function renderNomCards(){
   if(!ST.ncList){ncLoad();return `<div style="padding:30px;text-align:center;color:var(--muted)">Cargando nóminas…</div>`;}
   let h=`<div style="font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:2px;margin-bottom:18px">TARJETAS DE NÓMINAS</div>`;
@@ -4620,7 +4629,7 @@ function renderNomCards(){
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
         <button class="btn" onclick="ncSave('${ev.id}')" style="padding:6px 16px;font-size:12px">Guardar</button>
-        <span id="nc_st_${ev.id}" style="font-size:11px;color:var(--green)"></span>
+        <span id="nc_st_${ev.id}" style="font-size:11px;color:var(--muted)"></span>
       </div>
     </div></div>`;
   });
