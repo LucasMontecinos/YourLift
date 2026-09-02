@@ -57,19 +57,39 @@ for c in COR:
                 cambios.append((a['n'], a['lista'], campo, a.get(campo), c[campo]))
                 if not DRY: a[campo] = c[campo]
 
-# Los que quedaron fuera del team se sacan enteros: todas sus listas. Van acá y
-# no borrados a mano para que no reaparezcan cuando la nómina se regenere desde
-# el Excel de FESUPO, que los sigue trayendo.
+# Los que quedaron fuera van acá y no borrados a mano, para que no reaparezcan
+# cuando la nómina se regenere desde el Excel de FESUPO, que los sigue trayendo.
+#
+# Sin 'lista' se saca la persona entera, con todas sus inscripciones: se bajó del
+# campeonato. Con 'lista' se saca SOLO esa inscripción, y las demás siguen en pie.
+# Esa distinción importa: hay veinte atletas nominados en una modalidad y no en
+# otra —Borbor Juan está en la clásica de Ecuador pero no en la equipada, Obando
+# Diego al revés—, y sacarlos enteros les borraría la inscripción que sí vale.
+def _palabras(n):
+    """El nombre como conjunto de palabras. El Excel de FESUPO trae a la misma
+    persona con los apellidos y los nombres en los dos órdenes —"Ortiz Portugal
+    Neto Clotario" y "Neto Clotario Ortiz Portugal" son la misma fila duplicada—,
+    y comparando la cadena exacta se sacaba una y quedaba la otra."""
+    import re as _re
+    t = unicodedata.normalize('NFD', str(n or ''))
+    t = ''.join(ch for ch in t if unicodedata.category(ch) != 'Mn')
+    return frozenset(_re.sub(r'[^a-z ]', '', t.lower()).split())
+
+
+def _toca(a, e):
+    return _palabras(a['n']) == _palabras(e['n']) and (not e.get('lista')
+                                                       or nrm(a['lista']) == nrm(e['lista']))
+
 sacados, exc_sin_match = [], []
 for e in EXC:
-    filas = [a for a in NOM['atletas'] if nrm(a['n']) == nrm(e['n'])]
+    filas = [a for a in NOM['atletas'] if _toca(a, e)]
     if not filas:
         exc_sin_match.append(e); continue
     for a in filas:
         sacados.append((a['n'], a['lista'], e.get('_motivo', '')))
 if sacados and not DRY:
-    fuera = {nrm(e['n']) for e in EXC}
-    NOM['atletas'] = [a for a in NOM['atletas'] if nrm(a['n']) not in fuera]
+    NOM['atletas'] = [a for a in NOM['atletas']
+                      if not any(_toca(a, e) for e in EXC)]
 
 # Cómo se lee cada nombre. Va en un campo aparte (`nDisp`) y no encima de `n`
 # porque `n` es la llave con la que están guardadas las fotos de la nómina y las
@@ -91,9 +111,12 @@ else:
 # Una corrección de alguien que además está excluido no es un error: quedó vieja
 # cuando esa persona salió del team. Se separa para que el aviso de "revisar el
 # nombre" siga significando lo que dice.
-_fuera = {nrm(e['n']) for e in EXC}
-viejas = [c for c in sin_match if nrm(c['n']) in _fuera]
-sin_match = [c for c in sin_match if nrm(c['n']) not in _fuera]
+def _excluida(c):
+    return any(nrm(c['n']) == nrm(e['n'])
+               and (not e.get('lista') or not c.get('lista')
+                    or nrm(c['lista']) == nrm(e['lista'])) for e in EXC)
+viejas = [c for c in sin_match if _excluida(c)]
+sin_match = [c for c in sin_match if not _excluida(c)]
 if sin_match:
     print('\nCorrecciones que no encontraron a nadie (revisar el nombre):')
     for c in sin_match: print('  ', c.get('n'), '·', c.get('lista', ''))

@@ -109,7 +109,11 @@ def main():
             if k2 is None:
                 faltan.append(o)
                 continue
-            erratas.append((o, idx[k2][0]))
+            # Si el nombre visible ya trae la ortografía de GoodLift, está
+            # resuelto: la llave interna se deja mal a propósito, porque con ella
+            # están guardadas las fotos y las ediciones del panel.
+            if clave(idx[k2][0].get('nDisp') or '') != clave(o['n']):
+                erratas.append((o, idx[k2][0]))
             k = k2
         usadas.add(k)
         a = idx[k][0]
@@ -124,6 +128,8 @@ def main():
         print(f"\n✎ MISMA PERSONA, NOMBRE MAL ESCRITO ({len(erratas)}):")
         for o, a in erratas:
             print(f"   {a['n']:38} {o['pais']:10} GoodLift dice: {o['n']}")
+        print("   (se arreglan en nombres_visibles de nomina_suda_correcciones.json,")
+        print("    que cambia cómo se muestra sin tocar la llave interna)")
     if otracat:
         print(f"\n⚠ MISMA PERSONA, OTRA CATEGORÍA ({len(otracat)}):")
         for o, a in otracat:
