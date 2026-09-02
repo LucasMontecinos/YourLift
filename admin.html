@@ -428,8 +428,15 @@ async function loadAll(){
   // - status:'approved' (default si tiene foto_url) → mergea en ST.data para verse
   // - status:'rejected' → no aparece como pendiente, no se muestra
   ST.fotosByCodigo = {};
+  ST.fotosDesdeCache = false;
   try{
     const fotosSnap=await getDocs(collection(db,'atleta_fotos'));
+    // Firestore guarda una copia en el navegador y, si no logra hablar con el
+    // servidor, la devuelve SIN avisar: ni error ni nada. La pantalla queda
+    // mostrando lo de la última vez, así que una foto ya confirmada vuelve a
+    // aparecer como pendiente y uno la confirma de nuevo sobre lo mismo. Pasó
+    // el 1 y el 2 de septiembre con ocho atletas. Si vino de la copia, se dice.
+    ST.fotosDesdeCache = !!fotosSnap.metadata?.fromCache;
     fotosSnap.forEach(d=>{
       const data=d.data();
       const codigo=data.codigo||d.id;
@@ -9061,26 +9068,17 @@ function renderFotos(){
 
   // Atletas con foto pendiente de inscripción (sin foto_url todavía)
   // Match: cada atleta con RUT que tenga carnetPhotoURL en alguna inscripción privada
-  const norm = (s)=>String(s||'').replace(/[^0-9kK]/g,'').toLowerCase();
-  const photosByRut = {};
-  Object.entries(ST.inscripcionesPrivate||{}).forEach(([docId, priv])=>{
-    if(!priv?.carnetPhotoURL) return;
-    const rutKey = priv.rut || (docId.includes('_') ? docId.split('_').slice(1).join('_') : '');
-    const k = norm(rutKey);
-    if(!k) return;
-    const ts = priv.ts?.seconds || priv.ts?.toMillis?.() || 0;
-    if(!photosByRut[k] || ts > photosByRut[k].ts){
-      photosByRut[k] = {url: priv.carnetPhotoURL, ts};
-    }
-  });
-  const pendientes = all.filter(a=>{
-    if(a.foto_url) return false;  // ya aceptada y publicada
-    // Si fue rechazada → no aparece como pendiente
-    const fotoDoc = (ST.fotosByCodigo||{})[a.codigo];
-    if(fotoDoc && fotoDoc.status === 'rejected') return false;
-    const k = norm(a.rut);
-    return k && photosByRut[k];
-  });
+  const {lista: pendientes, url: urlPend} = _fotosPendientes();
+
+  if(ST.fotosDesdeCache){
+    h += '<div class="card" style="margin-bottom:14px;background:rgba(196,30,58,.08);border-color:var(--accent)">'
+      + '<div style="font-size:13px;font-weight:700;color:var(--accent)">Esta lista puede estar desactualizada</div>'
+      + '<div style="font-size:11px;color:var(--muted);margin-top:4px">Las fotos se leyeron de la copia guardada en este navegador, no del servidor: '
+      + 'puede aparecer como pendiente alguna que ya confirmaste. Recarga la página antes de confirmar.</div>'
+      + '<button onclick="location.reload()" style="margin-top:8px;padding:7px 14px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">Recargar</button>'
+      + '</div>';
+  }
+
   if(pendientes.length>0){
     const bulkCount = Object.keys(F.bulkSel||{}).filter(k=>F.bulkSel[k] && pendientes.some(a=>a.codigo===k)).length;
     const allSelected = pendientes.length>0 && pendientes.every(a=>F.bulkSel && F.bulkSel[a.codigo]);
@@ -9096,8 +9094,7 @@ function renderFotos(){
     h += '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">La confirmación masiva publica la foto tal cual la mandó el atleta (sin quitar el fondo). Para procesar con fondo blanco IPF, hazlo una por una haciendo click en la tarjeta.</div>';
     h += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;max-height:400px;overflow-y:auto">';
     pendientes.forEach(a=>{
-      const k = norm(a.rut);
-      const photoUrl = photosByRut[k].url;
+      const photoUrl = urlPend[a.codigo];
       const checked = !!(F.bulkSel && F.bulkSel[a.codigo]);
       h += '<div style="background:var(--bg);padding:8px;border-radius:6px;border:1px solid '+(checked?'var(--green)':'var(--border)')+';display:flex;gap:8px;align-items:center;position:relative">';
       h += '<input type="checkbox" '+(checked?'checked':'')+' onclick="event.stopPropagation();toggleFotoBulkSel(\''+escapeJsAttr(a.codigo)+'\')" style="flex-shrink:0;width:16px;height:16px;cursor:pointer">';
@@ -9381,32 +9378,75 @@ function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&
 function escapeJsAttr(s){return (s||'').replace(/['"\\]/g,'\\$&')}
 
 // Helper: busca foto pendiente de la inscripcion (carnetPhotoURL) matcheada por RUT
-function _findInscriptionPhotoByRut(rut){
-  if(!rut) return null;
-  // Normalizar el RUT: solo digitos+K, lowercase
-  const norm = (s)=>String(s||'').replace(/[^0-9kK]/g,'').toLowerCase();
-  const target = norm(rut);
-  if(!target) return null;
-  // Iterar todas las inscripciones privadas y matchear
-  // El docId es {evento}_{rutClean} y el doc tiene rut + carnetPhotoURL
-  let bestMatch = null;
-  let bestTs = 0;
+const _rutFoto = (s)=>String(s||'').replace(/[^0-9kK]/g,'').toLowerCase();
+
+// El instante en que el atleta subió la foto. Viene en el propio nombre del
+// archivo (carnetPhoto_1787878495703.webp), que lo pone el formulario al subir.
+function _fotoSubidaMs(url){
+  const m = String(url||'').match(/carnetPhoto_(\d{10,})/);
+  return m ? +m[1] : 0;
+}
+
+// La foto que mandó el atleta al inscribirse. UNA sola forma de encontrarla.
+//
+// Antes había dos: la tarjeta armaba su propio índice y el botón de confirmar
+// buscaba por su cuenta, y desempataban al revés —una se quedaba con la primera
+// que encontraba y la otra con la última—. Con más de una inscripción con foto y
+// las dos sin `ts`, se veía una foto en la tarjeta y se publicaba la otra.
+//
+// El desempate ya no depende del orden en que Firestore devuelva los documentos:
+// primero el instante de la subida, que está en el nombre del archivo, y recién
+// después el `ts` de la inscripción.
+function _fotosInscripcionIndex(){
+  const idx = {};
   Object.entries(ST.inscripcionesPrivate||{}).forEach(([docId, priv])=>{
     if(!priv || !priv.carnetPhotoURL) return;
-    // Matchear por RUT del docId (despues del primer "_")
+    // El docId es {evento}_{rutClean}; el doc además trae el rut adentro. Se
+    // indexa por los dos, porque no siempre coinciden.
     const docRut = docId.includes('_') ? docId.split('_').slice(1).join('_') : '';
-    const docRutNorm = norm(docRut);
-    const privRutNorm = norm(priv.rut);
-    if(docRutNorm===target || privRutNorm===target){
-      // Quedarnos con la mas reciente
-      const ts = priv.ts?.seconds || priv.ts?.toMillis?.() || 0;
-      if(ts >= bestTs){
-        bestTs = ts;
-        bestMatch = priv.carnetPhotoURL;
-      }
-    }
+    const cand = {
+      url: priv.carnetPhotoURL,
+      subida: _fotoSubidaMs(priv.carnetPhotoURL),
+      ts: priv.ts?.seconds || priv.ts?.toMillis?.() || 0,
+    };
+    [...new Set([_rutFoto(priv.rut), _rutFoto(docRut)].filter(Boolean))].forEach(k=>{
+      const ant = idx[k];
+      if(!ant || cand.subida>ant.subida || (cand.subida===ant.subida && cand.ts>ant.ts)) idx[k]=cand;
+    });
   });
-  return bestMatch;
+  return idx;
+}
+function _findInscriptionPhotoByRut(rut, idx){
+  const k = _rutFoto(rut);
+  if(!k) return null;
+  const e = (idx || _fotosInscripcionIndex())[k];
+  return e ? e.url : null;
+}
+
+// Quiénes tienen foto de inscripción esperando revisión. Una sola vez, porque
+// esto se preguntaba en TRES lugares —la tarjeta, "seleccionar todas" y el
+// contador— cada uno con su propia copia de la regla, y bastaba que una se
+// quedara atrás para que el botón dijera una cosa y la lista mostrara otra.
+// Devuelve la lista y, para cada uno, la foto exacta que se va a publicar.
+function _fotosPendientes(){
+  const idx = _fotosInscripcionIndex();
+  const url = {};
+  const lista = (ST.data||[]).filter(a=>{
+    if(a.foto_url) return false;  // ya aceptada y publicada
+    const u = _findInscriptionPhotoByRut(a.rut, idx);
+    if(!u) return false;
+    // RECHAZADA: no vuelve a aparecer… salvo que el atleta haya mandado OTRA.
+    //
+    // Al rechazar se le dice al atleta que puede subir otra foto, pero el panel
+    // la escondía igual: bastaba el status 'rejected' para no mostrarlo nunca
+    // más, aunque la foto que hubiera ahora fuera distinta de la rechazada. La
+    // foto nueva no la veía nadie y el atleta quedaba sin foto para siempre.
+    const fotoDoc = (ST.fotosByCodigo||{})[a.codigo];
+    if(fotoDoc && fotoDoc.status === 'rejected' && u === fotoDoc.rejected_url) return false;
+    url[a.codigo] = u;
+    return true;
+  });
+  return {lista, url};
 }
 
 // Manejo del input de búsqueda: actualiza estado, re-renderiza, y
@@ -9468,21 +9508,7 @@ window.toggleFotoBulkSel = function(codigo){
 };
 window.toggleFotoBulkSelAll = function(checkAll){
   const F = window._fotosState;
-  const all = ST.data || [];
-  const norm = (s)=>String(s||'').replace(/[^0-9kK]/g,'').toLowerCase();
-  const photosByRut = {};
-  Object.entries(ST.inscripcionesPrivate||{}).forEach(([docId, priv])=>{
-    if(!priv?.carnetPhotoURL) return;
-    const rutKey = priv.rut || (docId.includes('_') ? docId.split('_').slice(1).join('_') : '');
-    const k = norm(rutKey);
-    if(k) photosByRut[k] = true;
-  });
-  const pendientes = all.filter(a=>{
-    if(a.foto_url) return false;
-    const fotoDoc = (ST.fotosByCodigo||{})[a.codigo];
-    if(fotoDoc && fotoDoc.status === 'rejected') return false;
-    return norm(a.rut) && photosByRut[norm(a.rut)];
-  });
+  const {lista: pendientes} = _fotosPendientes();
   F.bulkSel = {};
   if(checkAll) pendientes.forEach(a=>{ F.bulkSel[a.codigo] = true; });
   render();
@@ -9494,14 +9520,19 @@ window.confirmarFotosBulk = async function(){
   if(!confirm('¿Confirmar '+codigos.length+' foto(s) tal cual las mandaron los atletas (sin quitar fondo)?\n\nSe publican al instante en sus perfiles.')) return;
   F.bulkProcessing = true;
   let done=0, errors=0;
+  // Los que fallan se guardan CON NOMBRE Y MOTIVO. Antes solo se contaban, así
+  // que el aviso decía "3 con error" sin decir quiénes: quedaban seleccionados
+  // entre los demás y no había forma de saber a cuáles volver.
+  const fallaron = [];
+  const idx = _fotosInscripcionIndex();
   render();
   for(const codigo of codigos){
     F.bulkProgress = 'Confirmando '+(done+errors+1)+'/'+codigos.length+'...';
     render();
     const a = (ST.data||[]).find(x=>x.codigo===codigo);
-    if(!a){ errors++; continue; }
-    const url = _findInscriptionPhotoByRut(a.rut);
-    if(!url){ errors++; continue; }
+    if(!a){ errors++; fallaron.push(codigo+': no está en el padrón'); continue; }
+    const url = _findInscriptionPhotoByRut(a.rut, idx);
+    if(!url){ errors++; fallaron.push((a.nombre||codigo)+': no se encontró la foto de su inscripción'); continue; }
     try{
       const docRef = doc(db, 'atleta_fotos', codigo);
       await setDoc(docRef, {
@@ -9519,13 +9550,16 @@ window.confirmarFotosBulk = async function(){
     }catch(e){
       console.error('[Fotos] bulk confirm error:', codigo, e);
       errors++;
+      fallaron.push((a.nombre||codigo)+': '+(e.message||'error al guardar'));
     }
   }
   F.bulkProcessing = false;
   F.bulkProgress = '';
+  F.bulkFallaron = fallaron;
   try{ await logAction('bulk_confirm_fotos','atleta_fotos',null,done+' confirmadas, '+errors+' errores'); }catch(_){}
   showToast(errors>0 ? ('✓ '+done+' confirmadas — '+errors+' con error') : ('✓ '+done+' fotos confirmadas'));
   render();
+  if(errors>0) alert('No se pudieron confirmar '+errors+':\n\n'+fallaron.join('\n'));
 };
 
 // Cancela el procesamiento actual sin guardar nada (descartar preview)
