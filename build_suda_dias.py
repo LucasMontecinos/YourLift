@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """Rehace el livecast del Sudamericano a partir del CRONOGRAMA OFICIAL de FESUPO
-(Schedule 2026, 19–27 sep = 9 días) y de nomina_sudamericano.json.
+(Schedule 2026) y de nomina_sudamericano.json.
+
+El campeonato se corre del 20 al 27 de septiembre: son 8 días, no 9. El 19 es el
+Technical Meeting, que no es jornada de competencia. Lo dice la cabecera de las
+nueve nominaciones de goodlift.info —«20 – 27 September, 2026» y «The Technical
+Meeting Day: 19.09.2026»— y lo confirmó la comisión técnica. La planilla de FESUPO
+que teníamos ponía Special Olympics el 19 a las 16.00, o sea el mismo día del
+Technical Meeting; esa sesión se movió al cierre del 27 y va marcada como
+PROVISORIA hasta que FESUPO mande el cronograma nuevo (ver SES más abajo).
 
 El campeonato se corre en UN SOLO livecast con todos los atletas, no en nueve
 eventos separados: un link, una nómina, un acta. El cronograma no desaparece —
@@ -46,28 +54,35 @@ def sel(sexo=None, cats=None, fam=None, divs=None):
     return f
 
 # (fecha, día, hora pesaje, hora comp, nombre de la sesión, filtro, lifters según FESUPO)
+#
+# ⚠ La sesión de Special Olympics es PROVISORIA. La planilla de FESUPO la ponía el
+#   19 a las 16.00, pero el 19 es el Technical Meeting y el campeonato parte el 20.
+#   Se movió al cierre del 27, que es el único hueco que no pisa ninguna otra
+#   sesión (ese día termina a las 15.00, el más temprano de los ocho). Cuando
+#   FESUPO mande el cronograma nuevo hay que corregir fecha y hora acá: es la
+#   única línea de este archivo que no sale de un documento oficial.
 SES = [
- ('2026-09-19',1,'14.00–15.30','16.00','Special Olympics',                          sel(fam=SO), 22),
- ('2026-09-20',2,'07.00–08.30','09.00','Mujeres -43/-47/-52 Classic',               sel('F',{'-43','-47','-52'},CL), 27),
- ('2026-09-20',2,'11.00–12.30','13.00','Mujeres -57 Classic',                       sel('F',{'-57'},CL), 22),
- ('2026-09-20',2,'14.30–16.00','16.30','Hombres -59/-66/-74 Equipado',              sel('M',{'-59','-66','-74'},EQ), 19),
- ('2026-09-21',3,'07.00–08.30','09.00','Mujeres -63 Classic',                       sel('F',{'-63'},CL), 25),
- ('2026-09-21',3,'11.00–12.30','13.00','Mujeres -76 Classic',                       sel('F',{'-76'},CL), 23),
- ('2026-09-21',3,'14.30–16.00','16.30','Hombres -83 a +120 Equipado',               sel('M',{'-83','-93','-105','-120','+120'},EQ), 24),
- ('2026-09-22',4,'08.00–09.30','10.00','Mujeres -69 Classic',                       sel('F',{'-69'},CL), 26),
- ('2026-09-22',4,'12.30–14.00','14.30','Mujeres -84/+84 Classic',                   sel('F',{'-84','+84'},CL), 28),
- ('2026-09-23',5,'07.00–08.30','09.00','Hombres -53/-59 Classic',                   sel('M',{'-53','-59'},CL), 23),
- ('2026-09-23',5,'11.00–12.30','13.00','Hombres -74 Classic (Open + Master)',       sel('M',{'-74'},CL,{'Open'}|MAS), 21),
- ('2026-09-23',5,'14.30–16.00','16.30','Hombres -74 Classic (Sjr + Jr + Univ)',     sel('M',{'-74'},CL,JOV), 27),
- ('2026-09-24',6,'08.00–09.30','10.00','Hombres -66 Classic',                       sel('M',{'-66'},CL), 28),
- ('2026-09-24',6,'12.30–14.00','14.30','Hombres -83 Classic (Sjr + Jr + Univ)',     sel('M',{'-83'},CL,JOV), 29),
- ('2026-09-25',7,'07.00–08.30','09.00','Mujeres Equipado',                          sel('F',fam=EQ), 29),
- ('2026-09-25',7,'11.00–12.30','13.00','Hombres -83 Classic (Open + Master)',       sel('M',{'-83'},CL,{'Open'}|MAS), 23),
- ('2026-09-25',7,'14.30–16.00','16.30','Hombres -93 Classic (Jr + Univ)',           sel('M',{'-93'},CL,{'Junior','Universitario'}), 19),
- ('2026-09-26',8,'08.00–09.30','10.00','Hombres -93 Classic (Sjr + Master + Open)', sel('M',{'-93'},CL,{'Sub-Junior','Open'}|MAS), 33),
- ('2026-09-26',8,'13.00–14.30','15.00','Hombres -105 Classic',                      sel('M',{'-105'},CL), 34),
- ('2026-09-27',9,'08.00–09.30','10.00','Hombres -120 Classic',                      sel('M',{'-120'},CL), 21),
- ('2026-09-27',9,'13.00–14.30','15.00','Hombres +120 Classic',                      sel('M',{'+120'},CL), 16),
+ ('2026-09-20',1,'07.00–08.30','09.00','Mujeres -43/-47/-52 Classic',               sel('F',{'-43','-47','-52'},CL), 27),
+ ('2026-09-20',1,'11.00–12.30','13.00','Mujeres -57 Classic',                       sel('F',{'-57'},CL), 22),
+ ('2026-09-20',1,'14.30–16.00','16.30','Hombres -59/-66/-74 Equipado',              sel('M',{'-59','-66','-74'},EQ), 19),
+ ('2026-09-21',2,'07.00–08.30','09.00','Mujeres -63 Classic',                       sel('F',{'-63'},CL), 25),
+ ('2026-09-21',2,'11.00–12.30','13.00','Mujeres -76 Classic',                       sel('F',{'-76'},CL), 23),
+ ('2026-09-21',2,'14.30–16.00','16.30','Hombres -83 a +120 Equipado',               sel('M',{'-83','-93','-105','-120','+120'},EQ), 24),
+ ('2026-09-22',3,'08.00–09.30','10.00','Mujeres -69 Classic',                       sel('F',{'-69'},CL), 26),
+ ('2026-09-22',3,'12.30–14.00','14.30','Mujeres -84/+84 Classic',                   sel('F',{'-84','+84'},CL), 28),
+ ('2026-09-23',4,'07.00–08.30','09.00','Hombres -53/-59 Classic',                   sel('M',{'-53','-59'},CL), 23),
+ ('2026-09-23',4,'11.00–12.30','13.00','Hombres -74 Classic (Open + Master)',       sel('M',{'-74'},CL,{'Open'}|MAS), 21),
+ ('2026-09-23',4,'14.30–16.00','16.30','Hombres -74 Classic (Sjr + Jr + Univ)',     sel('M',{'-74'},CL,JOV), 27),
+ ('2026-09-24',5,'08.00–09.30','10.00','Hombres -66 Classic',                       sel('M',{'-66'},CL), 28),
+ ('2026-09-24',5,'12.30–14.00','14.30','Hombres -83 Classic (Sjr + Jr + Univ)',     sel('M',{'-83'},CL,JOV), 29),
+ ('2026-09-25',6,'07.00–08.30','09.00','Mujeres Equipado',                          sel('F',fam=EQ), 29),
+ ('2026-09-25',6,'11.00–12.30','13.00','Hombres -83 Classic (Open + Master)',       sel('M',{'-83'},CL,{'Open'}|MAS), 23),
+ ('2026-09-25',6,'14.30–16.00','16.30','Hombres -93 Classic (Jr + Univ)',           sel('M',{'-93'},CL,{'Junior','Universitario'}), 19),
+ ('2026-09-26',7,'08.00–09.30','10.00','Hombres -93 Classic (Sjr + Master + Open)', sel('M',{'-93'},CL,{'Sub-Junior','Open'}|MAS), 33),
+ ('2026-09-26',7,'13.00–14.30','15.00','Hombres -105 Classic',                      sel('M',{'-105'},CL), 34),
+ ('2026-09-27',8,'08.00–09.30','10.00','Hombres -120 Classic',                      sel('M',{'-120'},CL), 21),
+ ('2026-09-27',8,'13.00–14.30','15.00','Hombres +120 Classic',                      sel('M',{'+120'},CL), 16),
+ ('2026-09-27',8,'17.00–18.30','19.00','Special Olympics (por confirmar)',          sel(fam=SO), 22),
 ]
 
 # ── Conversión nómina → atleta del livecast (mismas convenciones que ya usaban
@@ -246,6 +261,17 @@ json.dump(OLD, open('nominas.json', 'w', encoding='utf-8'), ensure_ascii=False, 
 # apuntaba al campeonato padre, que existía solo como agrupador de los nueve días;
 # ahora apunta derecho al evento único.
 NOM['eventoId'] = events[0]['id']
+# Las fechas que se leen en la tarjeta de la nómina salen del cronograma, no de un
+# texto escrito a mano: cuando se corrige una sesión, la fecha se corrige sola. Así
+# se arrastraba el «19 al 27» de la planilla vieja después de que el 19 pasara a ser
+# el Technical Meeting.
+MESES = ('enero febrero marzo abril mayo junio julio agosto septiembre octubre '
+         'noviembre diciembre').split()
+_m = MESES[int(ultimo[5:7]) - 1]
+NOM['fechas'] = (f"{int(primer[8:10])} al {int(ultimo[8:10])} de {_m} de {ultimo[:4]}"
+                 if primer[5:7] == ultimo[5:7] else
+                 f"{int(primer[8:10])} de {MESES[int(primer[5:7])-1]} al "
+                 f"{int(ultimo[8:10])} de {_m} de {ultimo[:4]}")
 NOM['jornadas'] = [{'dia': d, 'fecha': fecha, 'pesaje': pesaje, 'inicio': hora,
                     'nombre': nombre, 'regla': filt.regla}
                    for fecha, d, pesaje, hora, nombre, filt, esp in SES]
