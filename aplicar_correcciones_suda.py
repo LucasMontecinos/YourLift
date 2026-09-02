@@ -21,6 +21,23 @@ _C = json.load(open('nomina_suda_correcciones.json', encoding='utf-8'))
 COR = _C['correcciones']
 EXC = _C.get('exclusiones', [])
 VIS = _C.get('nombres_visibles', {})
+ALT = _C.get('altas', [])
+
+# ── ALTAS ────────────────────────────────────────────────────────────────
+# Gente que está en la nominación oficial de GoodLift y no venía en el Excel de
+# FESUPO. Se agregan acá y no a mano en la nómina para que no desaparezcan la
+# próxima vez que la nómina se regenere desde el Excel: es el mismo motivo por el
+# que las exclusiones viven en este archivo y no se borran a mano.
+altas = []
+for al in ALT:
+    ya = [a for a in NOM['atletas']
+          if nrm(a['n']) == nrm(al['n'])
+          and (not al.get('lista') or nrm(a['lista']) == nrm(al['lista']))]
+    if ya:
+        continue
+    fila = {k: v for k, v in al.items() if not k.startswith('_')}
+    NOM['atletas'].append(fila)
+    altas.append(fila)
 
 cambios, sin_match = [], []
 for c in COR:
@@ -96,8 +113,13 @@ if exc_sin_match:
 if visibles:
     print(f'\n{visibles} nombre(s) con su forma de mostrarse actualizada.')
 
-if (cambios or sacados or visibles) and not DRY:
+if altas:
+    print(f'\nAltas desde la nominación oficial ({len(altas)}):')
+    for a in altas:
+        print(f"  {a['n'][:33]:34} {a.get('lista','')[:24]:25} {a.get('div','')} {a.get('cat','')}")
+
+if (cambios or sacados or visibles or altas) and not DRY:
     json.dump(NOM, open('nomina_sudamericano.json', 'w', encoding='utf-8'),
               ensure_ascii=False, indent=1)
-    print(f'\n✓ {len(cambios)} corrección(es), {len(sacados)} baja(s) y {visibles} nombre(s) aplicados a nomina_sudamericano.json')
+    print(f'\n✓ {len(cambios)} corrección(es), {len(sacados)} baja(s), {len(altas)} alta(s) y {visibles} nombre(s) aplicados a nomina_sudamericano.json')
     print('  Acuérdate de correr build_suda_dias.py para rehacer los días del livecast.')
