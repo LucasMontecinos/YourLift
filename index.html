@@ -290,6 +290,12 @@ window._BG_VIDEOS={};
     setBgForSection(typeof ST!=='undefined'?ST.v:'nominas');
   }catch(e){console.warn('[bgVideo]',e.message);}
 })();
+// Cada clic a un logo de auspiciador queda anotado en Google Analytics, con el
+// nombre de la marca y desde qué pantalla se hizo. No cuesta lecturas de
+// Firestore y se puede sacar por marca y por mes cuando toque renovar.
+function clicAuspiciador(marca){
+  try{ if(typeof gtag==='function')gtag('event','clic_auspiciador',{marca:marca,pantalla:(typeof ST!=='undefined'?ST.v:'')}); }catch(e){}
+}
 function sponsorStrip(){
   const cfg=(window._BG_SETTINGS||{}).sponsors||{};
   const items=(cfg.items||[]).filter(s=>s&&s.activo!==false&&s.logoUrl);
@@ -299,7 +305,12 @@ function sponsorStrip(){
     if(ig) return /^https?:\/\//i.test(ig)?ig:('https://instagram.com/'+ig.replace(/^@/,''));
     return s.link||'#';
   };
-  const cell=s=>`<a href="${hrefOf(s)}" target="_blank" rel="noopener" title="${String(s.nombre||'').replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;justify-content:center;padding:0 clamp(18px,4vw,34px);flex-shrink:0"><img src="${s.logoUrl}" alt="${String(s.nombre||'')}" style="max-height:clamp(34px,7vw,50px);max-width:clamp(108px,26vw,160px);object-fit:contain;opacity:.92"></a>`;
+  const cell=s=>{
+    const n=String(s.nombre||'').replace(/"/g,'&quot;').replace(/'/g,"\\'");
+    // El clic se anota en Analytics. Un auspiciador que paga tiene derecho a
+    // saber cuánta gente le mandamos, y sin medirlo el precio es una promesa.
+    return `<a href="${hrefOf(s)}" target="_blank" rel="noopener" title="${n}" onclick="clicAuspiciador('${n}')" style="display:inline-flex;align-items:center;justify-content:center;padding:0 clamp(18px,4vw,34px);flex-shrink:0"><img src="${s.logoUrl}" alt="${String(s.nombre||'')}" style="max-height:clamp(34px,7vw,50px);max-width:clamp(108px,26vw,160px);object-fit:contain;opacity:.92"></a>`;
+  };
   // Repetir los logos hasta superar el ancho de pantalla, si no queda vacío a la derecha.
   const reps=Math.max(2, Math.ceil(12/items.length));
   let group=''; for(let k=0;k<reps;k++) group+=items.map(cell).join('');
@@ -1418,6 +1429,12 @@ function render(){const app=document.getElementById("app");
     else if(ST.v==="envivo")h+=renderEnVivoPub();
     else if(ST.v==="pasadas")h+=renderPasadasPub();
     else h+=nom();
+    // La franja de auspiciadores va en las pantallas que se venden: inicio,
+    // ranking, inscripción, ficha del atleta y cronograma. En el inicio ya se
+    // dibuja dentro de home(), en su lugar del medio. En las otras cuatro va
+    // arriba del todo, fuera del recuadro embebido —esas pantallas son otra
+    // página metida adentro y la franja no entraría.
+    if(['rank','insc','atletas','crono'].includes(ST.v))h=sponsorStrip()+h;
     if(typeof buildMenu==='function')buildMenu();
   }
 // ── COMPETENCIA EN VIVO (público) ─────────────────────────────────
