@@ -1786,7 +1786,6 @@ function render(){
       <button class="side-btn ${ST.view==='entrenadoresDB'?'active':''}" onclick="go('entrenadoresDB')">Base Entrenadores</button>
       <button class="side-btn ${ST.view==='clubs'?'active':''}" onclick="go('clubs')">Clubes</button>
       <button class="side-btn ${ST.view==='fotos'?'active':''}" onclick="go('fotos')">Fotos Atletas</button>
-      <button class="side-btn ${ST.view==='sudaFotos'?'active':''}" onclick="go('sudaFotos')">Fotos Sudamericano</button>
       <button class="side-btn ${ST.view==='records'?'active':''}" onclick="go('records')">Récords</button>
       <button class="side-btn ${ST.view==='cronograma'?'active':''}" onclick="go('cronograma')">Cronograma</button>
       <div class="side-label">Sistema</div>
@@ -1822,6 +1821,10 @@ function render(){
   else if(ST.view==='entrenadoresDB')content=renderEntrenadoresDB();
   else if(ST.view==='clubs')content=renderClubs();
   else if(ST.view==='fotos')content=renderFotos();
+  // Fotos Sudamericano ya no está en el menú: se sacó a pedido. La pantalla se
+  // deja porque sirve para subir en lote —convierte a WebP en el navegador y las
+  // empareja con la nómina por el nombre del archivo— y reponer el botón es una
+  // línea. Mientras tanto se llega poniendo ST.view='sudaFotos' en la consola.
   else if(ST.view==='sudaFotos')content=renderSudaFotos();
   else if(ST.view==='records')content=renderRecordsEditor();
   else if(ST.view==='importar')content=renderImportar();
@@ -10734,6 +10737,22 @@ window.pubFlagHtml = function(code){
 // EDITOR DE RÉCORDS NACIONALES (Firestore: records/data) — cualquier admin
 // El sitio público lee records/data de Firestore si existe; si no, records.json.
 // ═══════════════════════════════════════════
+// Categorías retiradas: se sacan al cargar, así la primera vez que se guarde
+// desde esta pantalla quedan borradas también en Firestore. La -72 era la
+// categoría femenina antigua de la IPF y se pidió sacarla.
+const CATS_RETIRADAS=['72'];
+function recSinRetiradas(rec){
+  if(!rec||typeof rec!=='object')return rec;
+  const fuera=c=>CATS_RETIRADAS.includes(String(c==null?'':c).replace('+',''));
+  const out={};
+  for(const t in rec){
+    const mv=rec[t];
+    if(!mv||typeof mv!=='object'){out[t]=mv;continue;}
+    out[t]={};
+    for(const m in mv) out[t][m]=Array.isArray(mv[m])?mv[m].filter(x=>!fuera(x&&x.categoria)):mv[m];
+  }
+  return out;
+}
 const REC_EMPTY={classic:{sq:[],bp:[],dl:[],total:[]},equipped:{sq:[],bp:[],dl:[],total:[]},universitario:{sq:[],bp:[],dl:[],total:[]}};
 async function recEnsureLoaded(){
   if(ST._recLoaded) return;
@@ -10741,9 +10760,9 @@ async function recEnsureLoaded(){
   try{
     const snap=await getDoc(doc(db,'records','data'));
     if(snap.exists() && (snap.data().classic||snap.data().equipped)){
-      ST.recR=snap.data();
+      ST.recR=recSinRetiradas(snap.data());
     }else{
-      ST.recR=await fetch('records.json',{cache:'no-store'}).then(x=>x.json()).catch(()=>JSON.parse(JSON.stringify(REC_EMPTY)));
+      ST.recR=recSinRetiradas(await fetch('records.json',{cache:'no-store'}).then(x=>x.json()).catch(()=>JSON.parse(JSON.stringify(REC_EMPTY))));
     }
   }catch(e){ console.warn('[records] load',e); ST.recR=ST.recR||JSON.parse(JSON.stringify(REC_EMPTY)); }
   ST._recLoaded=true; render();

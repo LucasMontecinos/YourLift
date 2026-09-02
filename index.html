@@ -495,8 +495,8 @@ async function initFB(){
       // ── Récords: getDocs + caché 1h ──
       try{
         const cr=_fsCache('records',60*60*1000);
-        if(cr){if(cr.classic||cr.equipped){R=cr;if(ST.v==='records')renderFondo();}}
-        else{const rs=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'records','data'));if(rs.exists()){const r=rs.data();if(r&&(r.classic||r.equipped)){R=r;_fsSetCache('records',r);if(ST.v==='records')renderFondo();}}}
+        if(cr){if(cr.classic||cr.equipped){R=sinRetiradas(cr);if(ST.v==='records')renderFondo();}}
+        else{const rs=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'records','data'));if(rs.exists()){const r=rs.data();if(r&&(r.classic||r.equipped)){R=sinRetiradas(r);_fsSetCache('records',r);if(ST.v==='records')renderFondo();}}}
       }catch(e){console.warn('[records]',e);}
       })(),
       (async()=>{
@@ -772,6 +772,29 @@ async function loadFBNominas(force){
   }catch(e){console.warn('Error loading Firebase nominas',e)}
 }
 const CC={"Campeonato Nacional FECHIPO 2026":{bg:"#fef3c7",b:"#f59e0b",t:"#92400e",n:"Nacional 2026"},"Campeonato Nacional FECHIPO 2025":{bg:"#dbeafe",b:"#3b82f6",t:"#1e40af",n:"Nacional 2025"},"Regional Centro Norte 2025":{bg:"#dcfce7",b:"#22c55e",t:"#166534",n:"Reg. Centro Norte 2025"},"Regional Sur Austral 2025":{bg:"#f3e8ff",b:"#a855f7",t:"#6b21a8",n:"Reg. Sur Austral 2025"},"Zonal Centro Clausura 2024":{bg:"#ffe4e6",b:"#f43f5e",t:"#9f1239",n:"Zonal Centro 2024"},"Campeonato Nacional 2025":{bg:"#fef9c3",b:"#eab308",t:"#713f12",n:"Nacional 2025 "},"Campeonato Nacional 2023":{bg:"#e0f2fe",b:"#0ea5e9",t:"#0c4a6e",n:"Nacional 2023 "},"Zonal Sur Los Toros 2025":{bg:"#ecfdf5",b:"#10b981",t:"#064e3b",n:"Zonal Sur 2025 "},"Regional Centro 2025":{bg:"#fdf4ff",b:"#c084fc",t:"#581c87",n:"Reg. Centro 2025 "}};
+// Categorías retiradas: no se muestran aunque vengan en los datos.
+//
+// La -72 era la categoría femenina antigua de la IPF y se pidió sacarla. Se borró
+// de records.json, pero los récords que se ven salen de Firestore cuando existen
+// —el panel los guarda ahí— y esa copia todavía los trae. Filtrando al cargar
+// desaparecen al tiro para todo el mundo, venga de donde venga el dato; y como el
+// panel filtra igual, la primera vez que alguien guarde desde Récords quedan
+// borrados también allá.
+const CATS_RETIRADAS = ['72'];
+function sinRetiradas(rec){
+  if(!rec || typeof rec!=='object') return rec;
+  const fuera = c => CATS_RETIRADAS.includes(String(c==null?'':c).replace('+',''));
+  const out = {};
+  for(const tipo in rec){
+    const mov = rec[tipo];
+    if(!mov || typeof mov!=='object'){ out[tipo]=mov; continue; }
+    out[tipo] = {};
+    for(const m in mov){
+      out[tipo][m] = Array.isArray(mov[m]) ? mov[m].filter(x=>!fuera(x&&x.categoria)) : mov[m];
+    }
+  }
+  return out;
+}
 let D=[],R={},NM={events:[]},ST={v:"home",s:"",fc:"",fk:"",fl:"",sel:null,p:0,rt:"classic",rl:"sq",ne:0,ns:""};
 let CERTCFG=null,CERTF={q:'',athlete:null,champId:'',motivo:'fines',destinoId:'',marcas:{sq:'',bp:'',dl:'',total:''},lugar:'',categoria:'',division:'',modalidad:'',ciudad:'',fechas:'',contacto:'',sent:false,err:''};
 function I(n){return n.split(" ").map(w=>w[0]).filter(Boolean).slice(0,2).join("").toUpperCase()}
@@ -2563,7 +2586,7 @@ fetch('nomina_sudamericano.json').then(r=>r.ok?r.json():null).then(j=>{
   if(j)j._raw=(j.atletas||[]).slice();
   window.NOMSUDA=j; _nsudaApplyEdits(); if(ST.v==='nominas')renderFondo();
 }).catch(()=>{});
-Promise.all([fetch("data.json").then(r=>r.json()),fetch("records.json").then(r=>r.json()).catch(()=>({})),fetch("nominas.json").then(r=>r.json()).catch(()=>({events:[]}))]).then(([d,r,n])=>{D=d;R=r;NM=n;NM._static=[...(n.events||[])];render();initFB();
+Promise.all([fetch("data.json").then(r=>r.json()),fetch("records.json").then(r=>r.json()).catch(()=>({})),fetch("nominas.json").then(r=>r.json()).catch(()=>({events:[]}))]).then(([d,r,n])=>{D=d;R=sinRetiradas(r);NM=n;NM._static=[...(n.events||[])];render();initFB();
   // Refresco de Nóminas: cada 3min, SOLO si la pestaña está visible y el visitante
   // sigue en esa vista. Antes era cada 30s sin importar visibilidad — leía la
   // colección completa de inscripciones muy seguido en pestañas dejadas abiertas.
