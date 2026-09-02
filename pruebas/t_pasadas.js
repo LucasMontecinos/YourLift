@@ -114,7 +114,11 @@ const FICHAS = [
   const sr = fs.readFileSync(__dirname + '/../storage.rules', 'utf8');
   ok(/match \/competencias_pasadas\/\{id\} \{\s*allow read: if true;\s*allow write: if isAdmin\(\);/.test(fr),
      'Firestore: lectura pública, escritura de admin');
-  ok(/match \/actas\/\{allPaths=\*\*\} \{[\s\S]*?allow read: if true;[\s\S]*?allow write: if isAdmin\(\)/.test(sr),
+  // El bloque ya no dice `allow write`: en Storage `write` incluye BORRAR, y al
+  // borrar no entra ningún archivo, así que la condición del tope de tamaño
+  // —request.resource.size— rechazaba siempre el borrado. El tope quedó en
+  // create/update y el borrado se permite aparte, pero sigue siendo solo admin.
+  ok(/match \/actas\/\{allPaths=\*\*\} \{[\s\S]*?allow read: if true;[\s\S]*?allow create, update: if isAdmin\(\)[\s\S]*?allow delete: if isAdmin\(\);/.test(sr),
      'Storage: lo mismo para los archivos');
 
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.join(' | ') : ''));
