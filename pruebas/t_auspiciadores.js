@@ -4,15 +4,17 @@
 // franja que se desplaza. El logo ya era un enlace al Instagram o al sitio de la
 // marca, pero faltaban dos cosas para poder cobrar por esto:
 //
-//   · La franja salía SOLO en el inicio. La propuesta ofrece cinco pantallas
-//     —inicio, ranking, inscripción, ficha del atleta y cronograma— y los logos
-//     aparecían en una. Se estaba vendiendo algo que no ocurría.
 //   · Los clics no se contaban. Un auspiciador que paga tiene derecho a saber
 //     cuánta gente se le mandó; sin medirlo, el precio es una promesa.
+//   · El logo no llevaba a ninguna parte.
 //
-// Cuatro de esas cinco pantallas son otra página metida en un recuadro
-// (ranking.html, inscripcion.html, atleta.html), así que la franja no puede ir
-// adentro: va arriba del todo, en la página que las contiene.
+// La franja va SOLO en el inicio. Estuvo un tiempo también en ranking,
+// inscripción, ficha del atleta y cronograma, y se sacó de esas cuatro. Esta
+// prueba fija eso: que salga en el inicio y en ninguna otra, para que no se
+// vuelva a colar sin querer.
+//
+// Vale la pena tenerlo presente al vender: la propuesta de auspicio habla de
+// cinco pantallas, y hoy es una.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_auspiciadores.js
 const fs = require('fs');
 const { chromium } = require('playwright');
@@ -99,7 +101,7 @@ const MARCAS = [
     ok(!revento, 'y si Analytics no cargó, el clic igual funciona');
   }
 
-  console.log('\n  Sale en las cinco pantallas que se venden');
+  console.log('\n  Sale en el inicio y en ninguna otra');
   {
     const r = await p.evaluate(() => {
       const out = {};
@@ -112,11 +114,12 @@ const MARCAS = [
       ST.v = antes; ST.sel = antesSel; render();
       return out;
     });
-    ['home', 'rank', 'insc', 'atletas', 'crono'].forEach(v =>
-      ok(r[v], 'sale en ' + v));
-    // Y no en las que no se venden: la propuesta dice cinco, no todas.
-    ok(!r.records && !r.entrenadores,
-       'y no aparece donde no se vendió (records, entrenadores)');
+    ok(r.home, 'sale en el inicio');
+    const otras = ['rank', 'insc', 'atletas', 'crono', 'records', 'entrenadores']
+      .filter(v => r[v]);
+    ok(otras.length === 0, otras.length
+      ? 'quedó colada en: ' + otras.join(', ')
+      : 'y en ninguna otra pantalla');
   }
 
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs[0] : ''));
@@ -143,8 +146,10 @@ const MARCAS = [
   {
     ok(/function clicAuspiciador\(marca\)/.test(idx), 'la función que cuenta el clic existe');
     ok(/'clic_auspiciador'/.test(idx), 'con un nombre de evento propio, buscable en Analytics');
-    ok(/\['rank','insc','atletas','crono'\]\.includes\(ST\.v\)\)h=sponsorStrip\(\)\+h/.test(idx),
-       'la franja se antepone en las cuatro pantallas embebidas');
+    ok(!/includes\(ST\.v\)\)h=sponsorStrip\(\)\+h/.test(idx),
+       'ya no se antepone en las pantallas embebidas');
+    ok((idx.match(/sponsorStrip\(\)/g) || []).length === 2,
+       'y solo queda donde se define y donde se dibuja: el inicio');
   }
 
   console.log(fallas ? `\n${fallas} FALLA(S)` : '\nTodo OK');
