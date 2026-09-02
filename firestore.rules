@@ -89,25 +89,62 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Lo que tiene que cumplir una inscripción enviada desde el formulario público.
+    // Se saca aparte porque ahora se usa en dos lugares: al inscribirse por primera
+    // vez y al volver a inscribirse después de un rechazo.
+    function inscripcionValida() {
+      return request.resource.data.status == 'pending'
+          && request.resource.data.nombre is string
+          && request.resource.data.nombre.size() > 2
+          && request.resource.data.rut is string
+          && request.resource.data.evento is string
+          && !request.resource.data.keys().hasAny(['pin','carnetURL','wadeURL','carnetPhotoURL']);
+    }
+
     match /inscripciones/{id} {
       allow read: if true;
-      allow create: if isAdmin() || (
-                       request.resource.data.status == 'pending'
-                    && request.resource.data.nombre is string
-                    && request.resource.data.nombre.size() > 2
-                    && request.resource.data.rut is string
-                    && request.resource.data.evento is string
-                    && !request.resource.data.keys().hasAny(['pin','carnetURL','wadeURL','carnetPhotoURL'])
-                  );
-      allow update, delete: if isAdmin();
+      allow create: if isAdmin() || inscripcionValida();
+
+      // VOLVER A INSCRIBIRSE DESPUÉS DE UN RECHAZO.
+      //
+      // El id del documento es `${evento}_${rut}`, así que cuando alguien se
+      // inscribe de nuevo escribe SOBRE el documento que ya existe. Para la
+      // persona es inscribirse otra vez; para las reglas es un update, y el update
+      // era solo de admin. Resultado: "Missing or insufficient permissions" justo
+      // al enviar, y solo le pasaba a quien había sido rechazado antes —por eso
+      // parecía que el formulario funcionaba bien, porque a los que se inscriben
+      // por primera vez sí les funcionaba.
+      //
+      // Se permite solo si lo que había estaba RECHAZADO y lo nuevo es una
+      // inscripción válida. Una inscripción pendiente o aprobada sigue sin poder
+      // tocarse desde afuera: para eso está "Editar mi inscripción", que pasa por
+      // el admin con el PIN.
+      allow update: if isAdmin()
+                    || (resource.data.status == 'rejected' && inscripcionValida());
+      allow delete: if isAdmin();
+    }
+
+    function datosPrivadosValidos() {
+      return request.resource.data.keys().hasOnly(['pin','rut','correo','carnetURL','carnetBackURL','wadeURL','carnetPhotoURL','consentimientoURL','passportURL','ipfConsentURL','notasURL','docs','ts'])
+          && request.resource.data.pin is string
+          && request.resource.data.pin.size() == 4;
     }
 
     match /inscripciones_private/{id} {
       allow read: if isAdmin();
-      allow create: if request.resource.data.keys().hasOnly(['pin','rut','correo','carnetURL','carnetBackURL','wadeURL','carnetPhotoURL','consentimientoURL','passportURL','ipfConsentURL','notasURL','docs','ts'])
-                    && request.resource.data.pin is string
-                    && request.resource.data.pin.size() == 4;
-      allow update, delete: if isAdmin();
+      allow create: if datosPrivadosValidos();
+
+      // La otra mitad de volver a inscribirse: los dos documentos se escriben en
+      // la misma transacción, así que si uno se permite y el otro no, no se
+      // guarda ninguno.
+      //
+      // Acá se mira el estado del documento PÚBLICO, que es donde vive el
+      // 'rejected'. Sin esa condición, cualquiera podría pisarle el PIN a otro:
+      // el id se arma con el RUT y adivinarlo es trivial.
+      allow update: if isAdmin()
+                    || (get(/databases/$(database)/documents/inscripciones/$(id)).data.status == 'rejected'
+                        && datosPrivadosValidos());
+      allow delete: if isAdmin();
     }
 
     match /edit_requests/{id} {
