@@ -7647,6 +7647,24 @@ window.deleteCompResult=async function(id){
   try{ await deleteDoc(doc(db,'competition_results',id)); await logAction('delete_comp_result',id,null,'deleted'); showToast('Competencia eliminada'); }
   catch(e){showToast('Error: '+e.message,null,true);}
 };
+// Corrige la categoría o la división de un resultado ya guardado.
+//
+// Antes solo se podía editar la posición: si la categoría se escribía mal al
+// cargar la competencia, la única salida era volver a agregarla entera —con los
+// nueve intentos— o entrar a Firestore a mano. Pasó con el Mundial de Josefa Soto
+// Arcos, que quedó en 67 siendo 57.
+//
+// No toca los GL Points: dependen del peso corporal y del total, no de la
+// categoría, así que corregirla no invalida nada de lo que ya está calculado.
+window.setCompCampo=async function(id,campo,val){
+  if(campo!=='categoria'&&campo!=='division')return;
+  const v=String(val||'').trim();
+  try{
+    await updateDoc(doc(db,'competition_results',id), {[campo]:v, updatedAt:serverTimestamp()});
+    await logAction('set_comp_'+campo,id,null,campo+'='+v);
+    showToast((campo==='categoria'?'Categoría':'División')+' corregida: '+(v||'(vacía)'));
+  }catch(e){showToast('Error: '+e.message,null,true);}
+};
 // Fija/edita la posición de una competencia ya agregada. Vacío = se borra y vuelve a calcularse sola.
 window.setCompPos=async function(id,val){
   const p=parseInt(val,10);
@@ -7755,7 +7773,10 @@ function renderAthleteProfile(){
       ${mine.length?`<table class="tbl"><tr><th>Campeonato</th><th>Cat/Div</th><th>Total</th><th>GL</th><th title="Posición obtenida — déjalo vacío para que se calcule sola">Pos</th><th></th></tr>
         ${mine.map(r=>`<tr>
           <td>${esc(r.evento||'')}<br><span style="font-size:9px;color:var(--muted)">${esc(r.fecha||'')} · ${esc(r.modalidad||'')}${r.source==='manual'?' · manual':''}</span></td>
-          <td style="font-size:11px">${esc(r.categoria||'')} ${esc(r.division||'')}</td>
+          <td style="font-size:11px;white-space:nowrap">
+            <input value="${esc(r.categoria||'')}" onchange="setCompCampo('${(r.id||'').replace(/'/g,"\\'")}','categoria',this.value)" title="Categoría de peso" style="width:46px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px;text-align:center">
+            <input value="${esc(r.division||'')}" onchange="setCompCampo('${(r.id||'').replace(/'/g,"\\'")}','division',this.value)" title="División" style="width:78px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px">
+          </td>
           <td style="font-weight:700">${r.resultado?.total||'-'}</td>
           <td>${r.resultado?.glp||r.resultado?.gl||'-'}</td>
           <td><input type="number" min="1" value="${r.posicion!=null?r.posicion:''}" placeholder="auto" onchange="setCompPos('${(r.id||'').replace(/'/g,"\\'")}',this.value)" title="Posición obtenida (1°, 2°...). Vacío = calculada automáticamente." style="width:52px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:3px 5px;font-size:11px;text-align:center"></td>
