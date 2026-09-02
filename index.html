@@ -1072,14 +1072,23 @@ function _nsudaSlug(s){
 function _nsudaNombre(a){ return (a&&a.nDisp)||(a&&a.n)||''; }
 function _nsudaCatKey(c){const plus=(c||'').includes('+');return (parseFloat(String(c).replace(/[^0-9.]/g,''))||999)+(plus?0.5:0)}
 // ── Día en que compite cada inscripción del Sudamericano ──────────
-// Sale de las reglas del cronograma oficial de FESUPO que viaja en la nómina
-// (jornadas: sexo + categoría + modalidad + división). Se resuelve al vuelo y no
-// pegado a cada atleta: así, si desde el panel le corrigen la categoría o la
-// división a alguien, cambia de día solo, sin regenerar el archivo.
+// Con la nómina FINAL de FESUPO cada inscripción trae anotada su sesión, así que
+// el día ya no se deduce: se lee. Antes se resolvía por regla (sexo + categoría +
+// modalidad + división) porque solo teníamos las nominaciones, y las reglas
+// acertaban el grupo pero no siempre la sesión: Special Olympics, por ejemplo,
+// quedaba al cierre del 27 y en el cronograma real va el 20.
+//
+// La regla se conserva de respaldo para una inscripción que se cargue después a
+// mano y todavía no tenga jornada.
 function _nsudaJornada(a){
   const js=(window.NOMSUDA&&window.NOMSUDA.jornadas)||[];
+  if(a&&a.jornada!=null){
+    const j=js.find(x=>x.id===a.jornada);
+    if(j)return j;
+  }
   return js.find(j=>{
     const r=j.regla||{};
+    if(!j.regla)return false;
     if(r.sexo&&a.sexo!==r.sexo)return false;
     if(r.cats&&!r.cats.includes(a.cat))return false;
     if(r.mods&&!r.mods.includes(a.mod))return false;
@@ -1799,19 +1808,126 @@ function certForm(){
 // ── Cronograma público (lee colección cronograma + overlay de handlers) ──
 function _escH(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 window.cronoSel=function(ev){ST.cronoEv=ev;render();};
+// El Sudamericano no vive en la colección `cronograma` como los demás: su
+// cronograma sale de la propia nómina, que ya trae la sesión de cada inscripción.
+// Se le da una opción propia en el selector.
+// El id del Sudamericano en el selector va como literal y no como constante.
+// Esta parte del archivo no corre en el ámbito global —las funciones de acá no
+// quedan colgando de window—, así que una constante declarada al lado se queda
+// sin asignar y vale undefined cuando se la lee. Con eso, la comparación de
+// abajo daba siempre distinto y la sección se reseteaba sola a "sin campeonato".
+function _cronoHaySuda(){
+  const j=window.NOMSUDA;
+  return !!(j&&j.publicada!==false&&j.cronogramaPublico&&(j.jornadas||[]).length);
+}
+window.cronoDia=function(f){ST.cronoDia=f;render();};
 function crono(){
   const evs=(window.ALL_EVENTS||[]).filter(e=>e.status!=='archived' && e.cronogramaPublic!==false).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const opts=evs.map(e=>`<option value="${_escH(e.id)}" ${ST.cronoEv===e.id?'selected':''}>${_escH(e.name||e.id)}</option>`).join('');
-  if(ST.cronoEv && !evs.some(e=>e.id===ST.cronoEv)) ST.cronoEv='';
-  if(ST.cronoEv) setTimeout(()=>loadCronoSection(ST.cronoEv),30);
+  const suda=_cronoHaySuda();
+  let opts=evs.map(e=>`<option value="${_escH(e.id)}" ${ST.cronoEv===e.id?'selected':''}>${_escH(e.name||e.id)}</option>`).join('');
+  if(suda)opts=`<option value="__suda" ${ST.cronoEv==='__suda'?'selected':''}>${_escH(window.NOMSUDA.eventoCorto||'Sudamericano 2026')}</option>`+opts;
+  if(ST.cronoEv && ST.cronoEv!=='__suda' && !evs.some(e=>e.id===ST.cronoEv)) ST.cronoEv='';
+  if(ST.cronoEv && ST.cronoEv!=='__suda') setTimeout(()=>loadCronoSection(ST.cronoEv),30);
+  const cuerpo=ST.cronoEv==='__suda'
+    ? cronoSuda()
+    : (ST.cronoEv?'<div style="color:var(--muted);padding:14px">Cargando…</div>':'<div style="color:var(--muted);padding:14px">Selecciona un campeonato.</div>');
   return `<div class="cd2"><div class="ct"><h2 style="color:var(--gold)">📋 Cronograma</h2></div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Start list por tarima y flight · entrenador y handlers</p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px">${ST.cronoEv==='__suda'
+      ? 'Días, sesiones y rondas · hora de pesaje, hora de competencia y número de lote'
+      : 'Start list por tarima y flight · entrenador y handlers'}</p>
     <select onchange="cronoSel(this.value)" style="width:100%;max-width:420px;box-sizing:border-box;background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:8px">
       <option value="">Selecciona campeonato</option>${opts}
     </select>
-    ${evs.length?'':'<div style="color:var(--muted);padding:6px 0;font-size:13px">No hay cronogramas publicados por el momento.</div>'}
-    <div id="cronoMount">${ST.cronoEv?'<div style="color:var(--muted);padding:14px">Cargando…</div>':'<div style="color:var(--muted);padding:14px">Selecciona un campeonato.</div>'}</div>
+    ${(evs.length||suda)?'':'<div style="color:var(--muted);padding:6px 0;font-size:13px">No hay cronogramas publicados por el momento.</div>'}
+    <div id="cronoMount">${cuerpo}</div>
   </div>`;
+}
+
+// ── Cronograma del Sudamericano: día → sesión → ronda → categoría ──
+// Es una VISTA de la nómina, no una copia: los atletas salen de NOMSUDA.atletas y
+// la sesión de NOMSUDA.jornadas, los dos del Excel final de FESUPO. Si mañana se
+// corrige una inscripción, el cronograma cambia con ella y no hay dos listas que
+// puedan terminar diciendo cosas distintas.
+function _cronoFechaLarga(f){
+  // Los nombres van adentro y no en una constante al lado: las declaraciones de
+  // esta zona del archivo no llegan a ejecutarse, así que una constante de acá
+  // vale undefined al leerla y la sección se cae entera.
+  const DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'],
+        MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(f||''); if(!m)return f||'';
+  const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]));
+  return `${DIAS[d.getUTCDay()]} ${+m[3]} de ${MESES[+m[2]-1]}`;
+}
+function cronoSuda(){
+  const J=window.NOMSUDA||{}, jor=(J.jornadas||[]).slice(), ats=J.atletas||[];
+  if(!jor.length)return '<div style="color:var(--muted);padding:14px">Todavía no hay cronograma publicado.</div>';
+  const fechas=[...new Set(jor.map(j=>j.fecha))].sort();
+  if(!ST.cronoDia||!fechas.includes(ST.cronoDia))ST.cronoDia=fechas[0];
+  // Los días, como botones: es lo que se pidió — apretar el 20 y ver el 20.
+  const chips=fechas.map((f,i)=>{
+    const on=f===ST.cronoDia;
+    return `<button onclick="cronoDia('${f}')" style="padding:8px 13px;border-radius:9px;cursor:pointer;font-family:Oswald;font-size:13px;letter-spacing:1px;border:1px solid ${on?'var(--gold)':'var(--border)'};background:${on?'rgba(212,168,67,.18)':'rgba(10,22,40,.6)'};color:${on?'var(--gold)':'var(--muted)'}">
+      DÍA ${i+1}<span style="display:block;font-size:10px;letter-spacing:0;opacity:.8">${+f.slice(8,10)} sep</span></button>`;
+  }).join('');
+
+  const delDia=jor.filter(j=>j.fecha===ST.cronoDia)
+                  .sort((a,b)=>String(a.inicio).localeCompare(String(b.inicio)));
+  let h=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 16px">${chips}</div>`;
+  h+=`<h3 style="font-family:Oswald;font-size:15px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:0 0 12px">${_escH(_cronoFechaLarga(ST.cronoDia))}</h3>`;
+
+  delDia.forEach((j,si)=>{
+    const mios=ats.filter(a=>a.jornada===j.id);
+    const rondas=[...new Set(mios.map(a=>a.ronda||1))].sort((a,b)=>a-b);
+    const azul=si%2===0, bd=azul?'#3b82f6':'#c41e3a', bg=azul?'rgba(59,130,246,.08)':'rgba(196,30,58,.08)', hd=azul?'rgba(59,130,246,.20)':'rgba(196,30,58,.20)';
+    h+=`<div style="background:${bg};border:1px solid ${bd}55;border-left:5px solid ${bd};border-radius:12px;margin-bottom:16px;overflow:hidden">`;
+    h+=`<div style="background:${hd};padding:11px 14px">
+      <div style="font-family:Oswald;font-weight:700;letter-spacing:1px;font-size:14px">${_escH(j.nombre||j.campeonato||'')}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px">Pesaje ${_escH(j.pesaje||'—')} · Competencia ${_escH(j.inicio||'—')} · ${mios.length} inscripción(es)</div></div>`;
+    if(!mios.length){
+      h+=`<div style="padding:12px 14px;color:var(--muted);font-size:13px">Sin inscripciones.</div></div>`; return;
+    }
+    rondas.forEach(r=>{
+      const enR=mios.filter(a=>(a.ronda||1)===r);
+      // La TANDA es la letra que corre por todo el campeonato: la primera ronda
+      // del 20 es la A y la última del 27 la AJ. Es lo que se canta en el pesaje
+      // y lo que el operador selecciona en el control en vivo, así que va acá
+      // arriba y no en una columna: dentro de una ronda es siempre la misma.
+      const tanda=(enR.find(a=>a.tanda)||{}).tanda||'';
+      h+=`<div style="padding:9px 14px 3px;font-family:Oswald;font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase">Ronda ${r}${tanda?' · Tanda '+_escH(tanda):''} · ${enR.length} inscripción(es)</div>`;
+      const cats=[...new Set(enR.map(a=>a.cat))].sort((x,y)=>_nsudaCatKey(x)-_nsudaCatKey(y));
+      cats.forEach(c=>{
+        // Quien compite en Clásico y además en Only Bench tiene DOS inscripciones,
+        // pero sube a la tarima una sola vez y con el mismo número de lote. En el
+        // cronograma va en una fila, con las dos modalidades juntas: verlo dos
+        // veces seguidas se lee como un duplicado de la lista.
+        const uno={}, enC=[];
+        enR.filter(a=>a.cat===c).forEach(a=>{
+          const k=_nsudaNombre(a)+'|'+(a.lote||'');
+          if(uno[k]){ if(!uno[k].mods.includes(a.mod))uno[k].mods.push(a.mod); return; }
+          uno[k]={...a, mods:[a.mod]}; enC.push(uno[k]);
+        });
+        enC.sort((x,y)=>(+x.lote||999)-(+y.lote||999)||String(x.n).localeCompare(String(y.n)));
+        h+=`<div style="padding:8px 14px 2px;font-family:Oswald;font-size:12px;letter-spacing:1px;color:var(--text)">${_escH(c)} kg</div>`;
+        // Ancho fijo: cada categoría es su propia tabla y, sin esto, las columnas
+        // se corren de un bloque al siguiente según lo largo que sea un nombre.
+        h+=`<div style="overflow-x:auto"><table style="width:100%;min-width:600px;table-layout:fixed;border-collapse:collapse;font-size:13px">
+          <colgroup><col style="width:56px"><col style="width:30%"><col style="width:16%"><col style="width:18%"><col></colgroup>
+          <tr style="text-align:left;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;text-transform:uppercase">
+            <th style="padding:5px 10px">Lote</th><th style="padding:5px 10px">Atleta</th>
+            <th style="padding:5px 10px">País</th><th style="padding:5px 10px">División</th><th style="padding:5px 10px">Modalidad</th></tr>`;
+        h+=enC.map(a=>`<tr style="border-top:1px solid ${bd}22">
+          <td style="padding:5px 10px;font-family:Oswald;color:var(--gold)">${_escH(a.lote||'—')}</td>
+          <td style="padding:5px 10px;font-weight:600">${_escH(_nsudaNombre(a))}</td>
+          <td style="padding:5px 10px;color:var(--muted)">${_escH(a.pais||'')}</td>
+          <td style="padding:5px 10px;color:var(--muted)">${_escH(a.div||'')}</td>
+          <td style="padding:5px 10px;color:var(--muted)">${_escH((a.mods||[a.mod]).join(' + '))}</td></tr>`).join('');
+        h+='</table></div>';
+      });
+    });
+    h+='</div>';
+  });
+  h+=`<p style="font-size:11px;color:var(--muted);margin-top:4px">Días, horarios, tandas y números de lote según la nominación final de FESUPO. El pesaje abre a la hora indicada y cierra 90 minutos después. El número de lote se sortea por sesión: se repite entre sesiones distintas, nunca dentro de la misma.</p>`;
+  return h;
 }
 async function loadCronoSection(ev){
   const mount=document.getElementById('cronoMount'); if(!mount)return;
@@ -2694,7 +2810,10 @@ function mp(){ST.p++;_pintarLista()}
 // tener que regenerar el archivo por cada arreglo.
 fetch('nomina_sudamericano.json').then(r=>r.ok?r.json():null).then(j=>{
   if(j)j._raw=(j.atletas||[]).slice();
-  window.NOMSUDA=j; _nsudaApplyEdits(); if(ST.v==='nominas')renderFondo();
+  // El cronograma del Sudamericano también sale de acá, así que hay que
+  // redibujarlo cuando llega: si no, quien entró directo a Cronograma se queda
+  // con el selector sin la opción, porque se dibujó antes que el archivo.
+  window.NOMSUDA=j; _nsudaApplyEdits(); if(ST.v==='nominas'||ST.v==='crono')renderFondo();
 }).catch(()=>{});
 Promise.all([fetch("data.json").then(r=>r.json()),fetch("records.json").then(r=>r.json()).catch(()=>({})),fetch("nominas.json").then(r=>r.json()).catch(()=>({events:[]}))]).then(([d,r,n])=>{D=d;R=sinRetiradas(r);NM=n;NM._static=[...(n.events||[])];render();initFB();
   // Refresco de Nóminas: cada 3min, SOLO si la pestaña está visible y el visitante

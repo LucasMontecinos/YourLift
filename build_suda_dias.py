@@ -7,8 +7,11 @@ Technical Meeting, que no es jornada de competencia. Lo dice la cabecera de las
 nueve nominaciones de goodlift.info —«20 – 27 September, 2026» y «The Technical
 Meeting Day: 19.09.2026»— y lo confirmó la comisión técnica. La planilla de FESUPO
 que teníamos ponía Special Olympics el 19 a las 16.00, o sea el mismo día del
-Technical Meeting; esa sesión se movió al cierre del 27 y va marcada como
-PROVISORIA hasta que FESUPO mande el cronograma nuevo (ver SES más abajo).
+Technical Meeting.
+
+Ya no hay nada provisorio: FESUPO mandó la nómina final (Nominaciones_final_2026)
+y de ahí salen las sesiones, con su día, su hora de pesaje, su hora de inicio y
+el NÚMERO DE LOTE de cada atleta. Special Olympics va el 20 a las 16.30.
 
 El campeonato se corre en UN SOLO livecast con todos los atletas, no en nueve
 eventos separados: un link, una nómina, un acta. El cronograma no desaparece —
@@ -17,10 +20,13 @@ sesión con fecha y hora, así que el operador cambia de tanda para cambiar de d
 y el acta por jornada sigue saliendo. La nómina pública también conserva el día
 de cada inscripción: eso vive en las reglas que se escriben más abajo.
 
-Cada sesión del cronograma se resuelve por REGLA (sexo + categoría + modalidad +
-división), no por los números de la planilla: así los cambios de la nómina entran
-solos. Los Only Bench van a la sesión de su misma categoría — el cronograma no
-les da sesión propia (hay que confirmarlo con FESUPO).
+Cada inscripción trae anotada su sesión (`jornada`), que viene del Excel oficial
+y la escribe aplicar_nomina_oficial.py. Los Only Bench levantan en la sesión de su
+compañero de categoría: el cronograma no les da una aparte.
+
+    python3 leer_nomina_fesupo.py Nominaciones_final_2026.xlsx
+    python3 aplicar_nomina_oficial.py
+    python3 build_suda_dias.py
 """
 import json, collections, unicodedata, re
 
@@ -53,43 +59,47 @@ def sel(sexo=None, cats=None, fam=None, divs=None):
     ) if v}
     return f
 
-# (fecha, día, hora pesaje, hora comp, nombre de la sesión, filtro, lifters según FESUPO)
+# ── Las sesiones, del cronograma FINAL de FESUPO ─────────────────────────────
 #
-# ⚠ La sesión de Special Olympics es PROVISORIA. La planilla de FESUPO la ponía el
-#   19 a las 16.00, pero el 19 es el Technical Meeting y el campeonato parte el 20.
-#   Se movió al cierre del 27, que es el único hueco que no pisa ninguna otra
-#   sesión (ese día termina a las 15.00, el más temprano de los ocho). Cuando
-#   FESUPO mande el cronograma nuevo hay que corregir fecha y hora acá: es la
-#   única línea de este archivo que no sale de un documento oficial.
+# Antes esta era una tabla escrita a mano, y cada sesión se resolvía por REGLA
+# (sexo + categoría + modalidad + división) porque no teníamos el detalle. Con la
+# nómina final ya no hace falta adivinar: el Excel dice, atleta por atleta, en qué
+# sesión levanta. `aplicar_nomina_oficial.py` deja eso anotado en cada inscripción
+# como `jornada`, y acá se arma la sesión juntando a los que la comparten.
 #
-#   Y son 7, no 22: los demás países se bajaron y quedó solo el equipo de Chile.
-#   El número de la planilla (22) es de antes de esas bajas. Se deja el 7 para que
-#   el reporte no muestre un −15 que parece una falla nuestra y no lo es.
-#   Siendo 7 en una sola tanda, la sesión dura cerca de una hora, así que cabe
-#   holgada donde FESUPO la quiera poner.
-SES = [
- ('2026-09-20',1,'07.00–08.30','09.00','Mujeres -43/-47/-52 Classic',               sel('F',{'-43','-47','-52'},CL), 27),
- ('2026-09-20',1,'11.00–12.30','13.00','Mujeres -57 Classic',                       sel('F',{'-57'},CL), 22),
- ('2026-09-20',1,'14.30–16.00','16.30','Hombres -59/-66/-74 Equipado',              sel('M',{'-59','-66','-74'},EQ), 19),
- ('2026-09-21',2,'07.00–08.30','09.00','Mujeres -63 Classic',                       sel('F',{'-63'},CL), 25),
- ('2026-09-21',2,'11.00–12.30','13.00','Mujeres -76 Classic',                       sel('F',{'-76'},CL), 23),
- ('2026-09-21',2,'14.30–16.00','16.30','Hombres -83 a +120 Equipado',               sel('M',{'-83','-93','-105','-120','+120'},EQ), 24),
- ('2026-09-22',3,'08.00–09.30','10.00','Mujeres -69 Classic',                       sel('F',{'-69'},CL), 26),
- ('2026-09-22',3,'12.30–14.00','14.30','Mujeres -84/+84 Classic',                   sel('F',{'-84','+84'},CL), 28),
- ('2026-09-23',4,'07.00–08.30','09.00','Hombres -53/-59 Classic',                   sel('M',{'-53','-59'},CL), 23),
- ('2026-09-23',4,'11.00–12.30','13.00','Hombres -74 Classic (Open + Master)',       sel('M',{'-74'},CL,{'Open'}|MAS), 21),
- ('2026-09-23',4,'14.30–16.00','16.30','Hombres -74 Classic (Sjr + Jr + Univ)',     sel('M',{'-74'},CL,JOV), 27),
- ('2026-09-24',5,'08.00–09.30','10.00','Hombres -66 Classic',                       sel('M',{'-66'},CL), 28),
- ('2026-09-24',5,'12.30–14.00','14.30','Hombres -83 Classic (Sjr + Jr + Univ)',     sel('M',{'-83'},CL,JOV), 29),
- ('2026-09-25',6,'07.00–08.30','09.00','Mujeres Equipado',                          sel('F',fam=EQ), 29),
- ('2026-09-25',6,'11.00–12.30','13.00','Hombres -83 Classic (Open + Master)',       sel('M',{'-83'},CL,{'Open'}|MAS), 23),
- ('2026-09-25',6,'14.30–16.00','16.30','Hombres -93 Classic (Jr + Univ)',           sel('M',{'-93'},CL,{'Junior','Universitario'}), 19),
- ('2026-09-26',7,'08.00–09.30','10.00','Hombres -93 Classic (Sjr + Master + Open)', sel('M',{'-93'},CL,{'Sub-Junior','Open'}|MAS), 33),
- ('2026-09-26',7,'13.00–14.30','15.00','Hombres -105 Classic',                      sel('M',{'-105'},CL), 34),
- ('2026-09-27',8,'08.00–09.30','10.00','Hombres -120 Classic',                      sel('M',{'-120'},CL), 21),
- ('2026-09-27',8,'13.00–14.30','15.00','Hombres +120 Classic',                      sel('M',{'+120'},CL), 16),
- ('2026-09-27',8,'17.00–18.30','19.00','Special Olympics (por confirmar)',          sel(fam=SO), 7),
-]
+# Se nota la diferencia: por regla, Special Olympics quedaba al cierre del 27 —era
+# lo único que no pisaba otra sesión— y en el cronograma real va el 20 a las 16.30.
+# Los -120 y +120 de hombres eran dos sesiones el 27 y son una sola.
+#
+# `sel()` sigue existiendo más arriba porque el filtro por regla se usa para
+# repartir a quien no tenga jornada anotada, que hoy no es nadie.
+if not NOM.get('jornadas') or 'id' not in NOM['jornadas'][0]:
+    raise SystemExit('Falta el cronograma oficial: corre antes aplicar_nomina_oficial.py')
+
+CATN0 = lambda c: (float(re.sub(r'[^0-9.]', '', c) or 999)) + (0.5 if c.startswith('+') else 0)
+
+
+def _nombre_sesion(j, atletas):
+    """Cómo se lee la sesión: «Mujeres -43/-47/-52 Classic». Sale de quién está
+    adentro, así que no puede contradecir a la lista que muestra abajo."""
+    sexo = {'F': 'Mujeres', 'M': 'Hombres'}.get(j.get('sexo'), '')
+    if j['campeonato'] == 'Special Olympics':
+        return 'Special Olympics'
+    cats = sorted({a['cat'] for a in atletas}, key=CATN0)
+    fam = 'Classic' if j['campeonato'] == 'Clásico' else j['campeonato']
+    # Con muchas categorías el nombre se vuelve ilegible («-47/-52/-57/-63/-69/
+    # -76/-84/+84»); ahí conviene decir de dónde a dónde va.
+    txt = '/'.join(cats) if len(cats) <= 3 else f'{cats[0]} a {cats[-1]}'
+    return ' '.join(x for x in (sexo, txt, fam) if x)
+
+
+_dia_de = {f: i + 1 for i, f in enumerate(sorted({j['fecha'] for j in NOM['jornadas']}))}
+SES = []
+for j in sorted(NOM['jornadas'], key=lambda x: (x['fecha'], x['inicio'])):
+    m = [a for a in A if a.get('jornada') == j['id']]
+    SES.append((j['fecha'], _dia_de[j['fecha']], j['pesaje'], j['inicio'],
+                _nombre_sesion(j, m), (lambda i: lambda a: a.get('jornada') == i)(j['id']),
+                len(m)))
 
 # ── Conversión nómina → atleta del livecast (mismas convenciones que ya usaban
 # los eventos por día: 'Powerlifting Classic', 'Subjunior', club = país…) ──
@@ -138,7 +148,12 @@ def to_ath(a, flight, lot, jornada):
         'modalidad': (MOD[a['mod'].replace(' + Only Bench', '')] + ' + Only Bench'
                       if a['mod'].endswith(' + Only Bench') else MOD.get(a['mod'], a['mod'])),
         'club': uni or a['pais'], 'universidad': uni, 'pais': pais,
-        'flight': flight, 'lot': lot, 'jornada': jornada,
+        # EL LOTE ES EL DE FESUPO. Antes era un contador nuestro, 1, 2, 3… por
+        # orden de armado, que no coincidía con el número que el atleta ve en su
+        # tarjeta ni con el que se canta en el pesaje. La nómina final lo trae en
+        # la columna «OR.» y es el que manda; el contador queda solo por si a
+        # alguien le faltara.
+        'flight': flight, 'lot': a.get('lote') or lot, 'jornada': jornada,
     }
 
 FAM = lambda m: 'eq' if 'Equipado' in m else 'cl'
@@ -178,7 +193,7 @@ for fecha, d, pesaje, hora, nombre, filt, esp in SES:
     dias.setdefault(d, {'fecha': fecha, 'sesiones': []})
     dias[d]['sesiones'].append({'pesaje': pesaje, 'hora': hora, 'nombre': nombre,
                                 'atletas': m, 'fesupo': esp})
-    filas.append((fecha, d, nombre, m, esp))
+    filas.append((fecha, d, nombre, m, (pesaje, hora)))
 
 # ── Chequeos antes de escribir nada ──
 dup = {k: v for k, v in asignado.items() if len(v) > 1}
@@ -225,14 +240,20 @@ for d, info in dias.items():
         if cur: tandas.append(cur)
         base = len(set(x['flight'] for x in ath))
         for ti, t in enumerate(tandas):
+            # LA TANDA ES LA DE FESUPO: una letra por ronda, corridas de la A a
+            # la AJ de principio a fin del campeonato. Antes era una letra por
+            # DÍA, que juntaba en una sola tanda las tres sesiones de una jornada
+            # —sesenta y pico de atletas— y el operador no tenía cómo separarlas.
             fl = DIA_FL[d - 1]
             jor = f"D{d} {info['fecha'][8:10]}/{info['fecha'][5:7]} · {s['hora']} · {s['nombre']}"
             for a in t:
                 lot += 1
-                ath.append(to_ath(a, fl, lot, jor))
+                ath.append(to_ath(a, a.get('tanda') or fl, lot, jor))
     sesiones_todas += [{'dia': d, 'fecha': info['fecha'], 'pesaje': s['pesaje'],
                         'inicio': s['hora'], 'nombre': s['nombre'],
-                        'atletas': len(s['atletas']), 'tanda': DIA_FL[d - 1]}
+                        'atletas': len(s['atletas']),
+                        'tanda': '/'.join(sorted({x.get('tanda') or DIA_FL[d - 1]
+                                                  for x in s['atletas']}))}
                        for s in info['sesiones']]
 
 primer = min(i['fecha'] for i in dias.values())
@@ -278,23 +299,34 @@ NOM['fechas'] = (f"{int(primer[8:10])} al {int(ultimo[8:10])} de {_m} de {ultimo
                  if primer[5:7] == ultimo[5:7] else
                  f"{int(primer[8:10])} de {MESES[int(primer[5:7])-1]} al "
                  f"{int(ultimo[8:10])} de {_m} de {ultimo[:4]}")
-NOM['jornadas'] = [{'dia': d, 'fecha': fecha, 'pesaje': pesaje, 'inicio': hora,
-                    'nombre': nombre, 'regla': filt.regla}
-                   for fecha, d, pesaje, hora, nombre, filt, esp in SES]
+# Las jornadas ya vienen del cronograma oficial (aplicar_nomina_oficial.py). Acá
+# solo se les pega el nombre legible, que se arma con quién está adentro.
+_nom_ses = {(f, h): n for f, d, p, h, n, filt, esp in SES}
+for j in NOM['jornadas']:
+    j['dia'] = _dia_de[j['fecha']]
+    j['nombre'] = _nom_ses.get((j['fecha'], j['inicio']), j['campeonato'])
 json.dump(NOM, open('nomina_sudamericano.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 
 # ── Reporte ──
-print(f"{'fecha':11}{'D':>2}  {'sesión':44} {'total':>5} {'PL':>4} {'OB':>4} {'FESUPO':>7} {'Δ':>4}")
+# Ya no hay columna «FESUPO» ni diferencia contra ella: la sesión SE ARMA con lo
+# que dice el cronograma oficial, así que compararse consigo misma no dice nada.
+print(f"{'fecha':11}{'D':>2}  {'pesaje':>7}{'inicio':>7}  {'sesión':42} {'total':>5} {'PL':>4} {'OB':>4}")
 tot = 0
 for fecha, d, nombre, m, esp in filas:
     ob = len([a for a in m if a['mod'].startswith('Only Bench')])
     tot += len(m)
-    print(f"{fecha:11}{d:>2}  {nombre:44} {len(m):>5} {len(m)-ob:>4} {ob:>4} {esp:>7} {len(m)-ob-esp:>+4}")
+    print(f"{fecha:11}{d:>2}  {esp[0]:>7}{esp[1]:>7}  {nombre:42} {len(m):>5} {len(m)-ob:>4} {ob:>4}")
 print(f"\nasignados {tot} / {len(A)} inscripciones · 0 duplicados · 0 sin sesión")
 e = events[0]
 fl = collections.Counter(a['flight'] for a in e['athletes'])
 print(f"  {e['id']} · {e['name']} · {e['date']} · {len(e['athletes'])} atletas en un solo livecast")
-for k, v in sorted(fl.items()):
-    dia = [s for s in sesiones_todas if s['tanda'] == k]
-    print(f"    tanda {k} = día {dia[0]['dia']} ({dia[0]['fecha']}) · {v} atletas · "
-          + ', '.join(s['nombre'] for s in dia))
+# Una tanda por RONDA, así que hay varias por día. Se listan en el orden en que
+# se corren, que es el orden de las letras.
+_ses_de = {}
+for s in sesiones_todas:
+    for t in str(s['tanda']).split('/'):
+        _ses_de.setdefault(t, s)
+for k, v in sorted(fl.items(), key=lambda x: (len(x[0]), x[0])):
+    s = _ses_de.get(k)
+    donde = f"día {s['dia']} ({s['fecha']}) · {s['inicio']} · {s['nombre']}" if s else '—'
+    print(f"    tanda {k:>2} = {donde} · {v} atletas")
