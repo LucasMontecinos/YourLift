@@ -10741,6 +10741,9 @@ window.pubFlagHtml = function(code){
 // desde esta pantalla quedan borradas también en Firestore. La -72 era la
 // categoría femenina antigua de la IPF y se pidió sacarla.
 const CATS_RETIRADAS=['72'];
+// Saca las categorías retiradas y deja UN SOLO récord por casillero —división y
+// categoría—, que es la definición de un récord. Se queda el de marca más alta
+// y, a igual marca, el primero: es de quien lo puso antes.
 function recSinRetiradas(rec){
   if(!rec||typeof rec!=='object')return rec;
   const fuera=c=>CATS_RETIRADAS.includes(String(c==null?'':c).replace('+',''));
@@ -10749,7 +10752,17 @@ function recSinRetiradas(rec){
     const mv=rec[t];
     if(!mv||typeof mv!=='object'){out[t]=mv;continue;}
     out[t]={};
-    for(const m in mv) out[t][m]=Array.isArray(mv[m])?mv[m].filter(x=>!fuera(x&&x.categoria)):mv[m];
+    for(const m in mv){
+      if(!Array.isArray(mv[m])){out[t][m]=mv[m];continue;}
+      const mejor=new Map();
+      mv[m].forEach(x=>{
+        if(!x||fuera(x.categoria))return;
+        const k=String(x.division||'')+'|'+String(x.categoria||'');
+        const y=mejor.get(k);
+        if(!y||(parseFloat(x.marca)||0)>(parseFloat(y.marca)||0))mejor.set(k,x);
+      });
+      out[t][m]=[...mejor.values()];
+    }
   }
   return out;
 }
