@@ -1731,7 +1731,7 @@ function render(){
       <div class="side-label">Datos</div>
       <button class="side-btn ${ST.view==='athletes'?'active':''}" onclick="go('athletes')">Atletas (DB)</button>
       <button class="side-btn ${ST.view==='nominas'?'active':''}" onclick="go('nominas')">Nóminas</button>
-      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='stats'?'active':''}" onclick="go('stats')">Estadísticas</button>`:''}
+      ${_statsPuede()?`<button class="side-btn ${ST.view==='stats'?'active':''}" onclick="go('stats')">Estadísticas</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='publisher'?'active':''}" onclick="go('publisher')">Editor publicaciones</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='bgvideos'?'active':''}" onclick="go('bgvideos')">Videos de Fondo</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='sponsors'?'active':''}" onclick="go('sponsors')">Auspiciadores</button>`:''}
@@ -2110,6 +2110,8 @@ function renderGAFoto(){
 async function loadWebAnalytics(){
   const cont=document.getElementById('statsWebContent');
   if(!cont)return;
+  // El tráfico del sitio es del negocio, no del deporte: solo el owner.
+  if(!_statsOwner()){cont.innerHTML='<div class="h1">Sin acceso</div><p class="subtitle">El tráfico web es solo para el owner.</p>';return;}
   try{
     const snap=await getDocs(collection(db,'analytics_daily'));
     const days=[];
@@ -2598,17 +2600,31 @@ window.saveBgVideo=async function(section){
     showToast('Guardado: '+section+' (se aplica en el sitio al recargar)');
   }catch(e){showToast('Error: '+e.message,null,true);}
 };
+// Quién ve qué dentro de Estadísticas.
+//
+// Lo deportivo —atletas, GL points, corte para el Nacional— lo puede ver la
+// comisión técnica y el directorio: es información del deporte y les sirve para
+// trabajar. La DEMOGRAFÍA y el TRÁFICO WEB no: la demografía son las edades, las
+// comunas y los clubes de todo el padrón, y el tráfico web es del negocio del
+// sitio. Esas dos quedan solo para el owner.
+//
+// Los jueces y las cuentas de streaming no entran acá: tienen su propia pantalla.
+const _statsOwner=()=>ST.adminInfo?.role==='owner'||!!ST.adminInfo?.bootstrap;
+const _statsPuede=()=>_statsOwner()||['superadmin','admin'].includes(ST.adminInfo?.role);
 function renderStats(){
-  if(!(ST.adminInfo?.role==='superadmin'||ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap))
-    return '<div class="h1">Sin acceso</div><p class="subtitle">Solo el owner puede ver las estadísticas.</p>';
+  if(!_statsPuede())
+    return '<div class="h1">Sin acceso</div><p class="subtitle">Las estadísticas son para el owner, los superadmin y la comisión técnica.</p>';
+  // La pestaña vive en el navegador, así que se vuelve a comprobar acá: que no
+  // se dibuje el botón no basta para dar por cerrada una puerta.
+  if((ST.statsTab==='demografia'||ST.statsTab==='web')&&!_statsOwner())ST.statsTab='deporte';
   const tab=ST.statsTab||'deporte';
   const tabBtn=(id,label)=>`<button onclick="ST.statsTab='${id}';render()" style="padding:10px 20px;border-radius:9px;border:1px solid ${tab===id?'var(--gold)':'var(--border)'};background:${tab===id?'rgba(212,168,67,.12)':'transparent'};color:${tab===id?'var(--gold)':'var(--muted)'};font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">${label}</button>`;
   return `<div class="h1">Estadísticas</div>
     <div style="display:flex;gap:10px;margin:14px 0 20px">
       ${tabBtn('deporte','DEPORTE')}
       ${tabBtn('corte','CORTE NACIONAL')}
-      ${tabBtn('demografia','DEMOGRAFÍA')}
-      ${tabBtn('web','TRÁFICO WEB')}
+      ${_statsOwner()?tabBtn('demografia','DEMOGRAFÍA'):''}
+      ${_statsOwner()?tabBtn('web','TRÁFICO WEB'):''}
     </div>
     ${tab==='web'
       ? `<div id="statsWebContent"><div style="padding:40px;text-align:center;color:var(--muted)">Cargando analytics…</div></div>`
@@ -2673,6 +2689,7 @@ function buildDemoStats(){
 }
 
 function renderDemografia(){
+  if(!_statsOwner())return '<div class="h1">Sin acceso</div><p class="subtitle">La demografía del padrón es solo para el owner.</p>';
   const D=buildDemoStats();
   const N=D.total||1;
   const card='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px';
@@ -2905,6 +2922,31 @@ function _baseAtletasHtml(){
       ${B.sinCompetir?dato(B.sinCompetir.toLocaleString(),'INSCRITOS SIN COMPETIR','#7A8FA6',
         `de ${B.registrados.toLocaleString()} fichas en el archivo`):''}
     </div>
+    <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--muted);margin:18px 0 10px">ATLETAS ÚNICOS POR AÑO</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+      Cada persona cuenta <b style="color:var(--text)">una sola vez por año</b>, compita una o cinco veces. Es el número de gente distinta que pisó una tarima ese año — no el de participaciones.
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr>
+        ${['AÑO','ATLETAS','CAMBIO','vs. AÑO ANTERIOR'].map((t,i)=>`<th style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:${i?'right':'left'};color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px">${t}</th>`).join('')}
+      </tr></thead>
+      <tbody>${B.porAnio.map((p,i)=>{
+        const ant=i?B.porAnio[i-1].n:null;
+        const d=ant!=null?p.n-ant:null;
+        const pc=(ant)?Math.round(d/ant*100):null;
+        const col=d==null?'var(--muted)':(d>0?'#22c55e':(d<0?'#ef4444':'var(--muted)'));
+        return `<tr>
+          <td style="padding:6px 10px;border-bottom:1px solid var(--border);font-family:Oswald;letter-spacing:1px;color:var(--text)">${p.anio}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;font-weight:700;color:var(--gold)">${p.n.toLocaleString()}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;color:${col}">${d==null?'—':(d>0?'+':'')+d}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;color:${col}">${pc==null?'—':(pc>0?'+':'')+pc+'%'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>
+    <div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5">
+      ${B.anioActual} está en curso, así que su cifra todavía va a subir: compararla con el año cerrado anterior recién tiene sentido en diciembre.
+    </div>
+
     ${B.anioPrevio?`
     <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--muted);margin:18px 0 10px">DE ${B.anioPrevio} A ${B.anioActual}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
@@ -4352,9 +4394,18 @@ function renderDashboard(){
 }
 
 
-function renderAthletes(){
-  // Búsqueda normalizada (ignora tildes) + por palabras: "lucas montecinos"
-  // matchea "Lucas Andrés Montecinos Alarcón".
+// La tabla de atletas, aparte del resto de la pantalla.
+//
+// Está separada a propósito. Escribiendo en el buscador se redibujaba la
+// pantalla ENTERA en cada letra, y eso destruye y vuelve a crear el campo de
+// texto: en el teléfono el teclado se cierra y se abre a cada letra, y escribir
+// un nombre se hace imposible. Se devolvía el foco por programa, pero eso no
+// evita el parpadeo — el campo ya murió.
+//
+// Ahora el buscador se dibuja una sola vez y lo único que se rehace es esta
+// tabla. El campo de texto no se toca nunca, así que el cursor y el teclado se
+// quedan donde están.
+function _atletasTablaHtml(){
   const sRaw=(ST.search||'').trim();
   const sNorm=nrmName(sRaw);
   const words=sNorm.split(' ').filter(Boolean);
@@ -4379,25 +4430,11 @@ function renderAthletes(){
     return true;
   }).slice(0,100);
   const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-  const _isOwner=ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap;
-  // Banner de debutantes pendientes eliminado: los debutantes se integran
-  // automáticamente al inscribirse (viven en atletas_pending y ya son visibles).
-  // Ya no requieren "publicar data.json" manualmente.
-  let bannerPend='';
   return `
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-      <div class="h1" style="margin:0">Atletas (Base de Datos)</div>
-      ${(['owner','superadmin'].includes(ST.adminInfo?.role)||ST.adminInfo?.bootstrap)?`<button onclick="openCompModal('')" class="btn btn-g" style="padding:8px 14px;font-size:12px">+ Agregar competencia</button>`:''}
-    </div>
-    <p class="subtitle">${ST.data.length} atletas · Ordenados A-Z · Click en cualquier campo para editar</p>
-    ${bannerPend}
-    <div class="search-box">
-      <input class="inp" placeholder="Buscar nombre, club, código o RUT..." value="${ST.search}" oninput="searchDebounced(this.value)">
-    </div>
     <div style="display:flex;gap:12px">
       <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
-        <button onclick="ST.filterLetter='';render()" style="padding:4px 8px;border-radius:4px;border:1px solid ${!fl?'var(--accent)':'var(--border)'};background:${!fl?'var(--accent)':'transparent'};color:${!fl?'#fff':'var(--muted)'};font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">ALL</button>
-        ${letters.map(l=>`<button onclick="ST.filterLetter='${l}';render()" style="padding:3px 8px;border-radius:4px;border:1px solid ${fl===l?'var(--accent)':'var(--border)'};background:${fl===l?'var(--accent)':'transparent'};color:${fl===l?'#fff':'var(--muted)'};font-family:Oswald;font-size:10px;font-weight:700;cursor:pointer;min-width:30px">${l}</button>`).join('')}
+        <button onclick="atlLetra('')" style="padding:4px 8px;border-radius:4px;border:1px solid ${!fl?'var(--accent)':'var(--border)'};background:${!fl?'var(--accent)':'transparent'};color:${!fl?'#fff':'var(--muted)'};font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">ALL</button>
+        ${letters.map(l=>`<button onclick="atlLetra('${l}')" style="padding:3px 8px;border-radius:4px;border:1px solid ${fl===l?'var(--accent)':'var(--border)'};background:${fl===l?'var(--accent)':'transparent'};color:${fl===l?'#fff':'var(--muted)'};font-family:Oswald;font-size:10px;font-weight:700;cursor:pointer;min-width:30px">${l}</button>`).join('')}
       </div>
       <div class="card" style="padding:0;overflow-x:auto;flex:1">
         <table class="tbl">
@@ -4422,6 +4459,19 @@ function renderAthletes(){
       </div>
     </div>
     ${list.length===100?'<p style="text-align:center;color:var(--muted);font-size:12px;padding:14px">Mostrando primeros 100 — refina tu búsqueda</p>':''}`;
+}
+
+function renderAthletes(){
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div class="h1" style="margin:0">Atletas (Base de Datos)</div>
+      ${(['owner','superadmin'].includes(ST.adminInfo?.role)||ST.adminInfo?.bootstrap)?`<button onclick="openCompModal('')" class="btn btn-g" style="padding:8px 14px;font-size:12px">+ Agregar competencia</button>`:''}
+    </div>
+    <p class="subtitle">${ST.data.length} atletas · Ordenados A-Z · Click en cualquier campo para editar</p>
+    <div class="search-box">
+      <input id="atlBuscar" class="inp" placeholder="Buscar nombre, club, código o RUT..." value="${esc(ST.search||'')}" oninput="searchDebounced(this.value)" autocomplete="off">
+    </div>
+    <div id="atlTabla">${_atletasTablaHtml()}</div>`;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -6178,13 +6228,22 @@ window.searchDebounced=function(val){
   ST.search=val;
   if(_searchTimer)clearTimeout(_searchTimer);
   _searchTimer=setTimeout(()=>{
-    render();
-    // Restore focus to search input
-    setTimeout(()=>{
-      const inp=document.querySelector('input[placeholder*="Buscar"]');
-      if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length)}
-    },10);
-  },300);
+    // SOLO la tabla. Antes acá se llamaba a render(), que rehace la pantalla
+    // entera —el buscador incluido—: en el teléfono el teclado se cerraba y se
+    // abría con cada letra. Devolver el foco por programa no alcanzaba, porque
+    // el campo ya había sido destruido. No tocando el campo, no hay nada que
+    // devolver.
+    const cont=document.getElementById('atlTabla');
+    if(cont)cont.innerHTML=_atletasTablaHtml();
+    else render();   // por si se llama desde otra pantalla
+  },250);
+}
+// Las letras del costado filtran la misma tabla, así que tampoco necesitan
+// redibujar la pantalla entera.
+window.atlLetra=function(l){
+  ST.filterLetter=l;
+  const cont=document.getElementById('atlTabla');
+  if(cont)cont.innerHTML=_atletasTablaHtml(); else render();
 }
 
 // ── Exportar Nómina del evento seleccionado como Excel filtrable y con estilo ──

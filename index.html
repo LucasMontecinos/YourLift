@@ -988,7 +988,15 @@ function nomToggle(id){ST.nomOpen=(ST.nomOpen===id)?'':id;ST.nomF={};ST.nomQ='';
 function nomFSet(k,v){ST.nomF=ST.nomF||{};ST.nomF[k]=v;render();}
 function nomFClear(){ST.nomF={};ST.nomQ='';render();}
 let _nomQT=null;
-function nomQ(v){ST.nomQ=v;if(_nomQT)clearTimeout(_nomQT);_nomQT=setTimeout(()=>{render();setTimeout(()=>{document.querySelectorAll('.nomq input').forEach(i=>{if(i.value===v){i.focus();i.setSelectionRange(v.length,v.length)}})},10)},300);}
+function nomQ(v){ST.nomQ=v;if(_nomQT)clearTimeout(_nomQT);_nomQT=setTimeout(()=>{
+  // Solo la lista. El campo de texto vive en #nomFiltros, que no se toca: el
+  // cursor se queda donde está y el teclado no se cierra.
+  const c=document.getElementById('nomLista');
+  if(c&&window._nomInner){
+    const todo=window._nomInner(), k=todo.indexOf(NOM_CORTE);
+    c.innerHTML=k<0?todo:todo.slice(k+NOM_CORTE.length);
+  } else render();
+},250);}
 
 // ── Fila normalizada para el renderer goodlift ──
 //  {n, year, teamHtml, sexo:'F'|'M', cat:'59'|'120+', div, mod, sq,bp,dl,total,
@@ -1059,6 +1067,7 @@ function _nomGLTable(rows,opts){
 }
 
 // ── Barra de filtros (común a todas las nóminas) ──
+const NOM_CORTE='<!--LISTA-->';
 function _nomFilters(rows,opts){
   const F=ST.nomF||{};
   const uniq=(fn,cmp)=>[...new Set(rows.map(fn).filter(Boolean))].sort(cmp);
@@ -1075,7 +1084,11 @@ function _nomFilters(rows,opts){
   if(opts.mod)h+=sel('mod','Modalidad',F.mod||'',uniq(r=>r.mod,(a,b)=>a.localeCompare(b)));
   if(F.sex||F.cat||F.div||F.team||F.mod||ST.nomQ)h+=`<button onclick="nomFClear()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--accent);background:rgba(196,30,58,.12);color:var(--accent);font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">✕ Limpiar</button>`;
   h+=`</div>`;
-  h+=`<div class="fl nomq" style="margin-bottom:4px"><input type="text" placeholder="Buscar atleta, equipo o universidad..." value="${ST.nomQ||''}" oninput="nomQ(this.value)"></div>`;
+  h+=`<div class="fl nomq" style="margin-bottom:4px"><input type="text" placeholder="Buscar atleta, equipo o universidad..." value="${ST.nomQ||''}" oninput="nomQ(this.value)" autocomplete="off"></div>`;
+  // Marca de corte: de acá para abajo va la lista, que es lo único que se
+  // repinta al escribir. El buscador queda de este lado y no se toca nunca —si
+  // se redibujara, en el teléfono el teclado se cerraría con cada letra.
+  h+=NOM_CORTE;
   return h;
 }
 
@@ -1108,7 +1121,15 @@ function _nomCardShell(id,info,innerFn){
   h+=`<span class="bg" style="background:var(--accent);color:#fff;font-size:13px;padding:5px 12px;white-space:nowrap">${info.countLabel||(info.count+' inscritos')}</span>`;
   h+=`<span style="font-family:Oswald;font-size:11px;color:${open?'var(--gold)':'var(--muted)'};letter-spacing:.5px;white-space:nowrap">${open?'▲ CERRAR':'▼ VER NÓMINA'}</span>`;
   h+=`</div></div>`;
-  if(open)h+=`<div style="padding:14px 16px 20px">${innerFn()}</div>`;
+  // El contenido de la tarjeta abierta va en su propio contenedor para poder
+  // repintarlo solo a él cuando se escribe en el buscador: redibujar la página
+  // entera destruye el campo de texto y en el teléfono cierra el teclado.
+  if(open){
+    window._nomInner=innerFn;
+    const todo=innerFn(), k=todo.indexOf(NOM_CORTE);
+    const arriba=k<0?'':todo.slice(0,k), lista=k<0?todo:todo.slice(k+NOM_CORTE.length);
+    h+=`<div style="padding:14px 16px 20px"><div id="nomFiltros">${arriba}</div><div id="nomLista">${lista}</div></div>`;
+  }
   h+=`</div>`;
   return h;
 }
@@ -1330,15 +1351,21 @@ function nom(){
 
 let _nssTimer=null;
 function nss(ei,v){ST.ne=ei;ST.ns=v;if(_nssTimer)clearTimeout(_nssTimer);_nssTimer=setTimeout(()=>{render();setTimeout(()=>{const inputs=document.querySelectorAll('.fl input');inputs.forEach(i=>{if(i.value===v){i.focus();i.setSelectionRange(i.value.length,i.value.length)}})},10)},300)}
-function sfl(l){ST.fl=l;ST.p=0;render()}
-function lst(){const f=flt(),P=50,sh=f.slice(0,(ST.p+1)*P);
+function sfl(l){ST.fl=l;ST.p=0;_pintarLista()}
+// La lista de atletas, aparte del buscador. Está separada a propósito: escribir
+// en el buscador redibujaba la pantalla entera —el campo de texto incluido—, y
+// en el teléfono eso cierra y abre el teclado con cada letra. Ahora el campo se
+// dibuja una vez y solo se rehace la lista, así que el cursor no se mueve.
+function lstResultados(){const f=flt(),P=50,sh=f.slice(0,(ST.p+1)*P);
   const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-  let h=`<div class="fl"><input type="text" placeholder="Buscar por nombre o código..." value="${ST.s}" oninput="ss(this.value)"><select onchange="sfc(this.value)"><option value="">Todos los clubes</option>${cls().map(c=>`<option value="${c}" ${ST.fc===c?'selected':''}>${c}</option>`).join('')}</select><select onchange="sfk(this.value)"><option value="">Todas las competencias</option>${cps().map(c=>`<option value="${c}" ${ST.fk===c?'selected':''}>${c}</option>`).join('')}</select></div><div class="cnt">${f.length} atletas encontrados</div>`;
+  let h=`<div class="cnt">${f.length} atletas encontrados</div>`;
   h+=`<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap"><button onclick="sfl('')" style="padding:3px 8px;border-radius:6px;border:1px solid ${!ST.fl?'var(--accent)':'var(--border)'};background:${!ST.fl?'var(--accent)':'transparent'};color:${!ST.fl?'#fff':'var(--muted)'};font-family:Oswald;font-size:10px;font-weight:700;cursor:pointer">TODOS</button>${letters.map(l=>`<button onclick="sfl('${l}')" style="padding:3px 7px;border-radius:6px;border:1px solid ${ST.fl===l?'var(--accent)':'var(--border)'};background:${ST.fl===l?'var(--accent)':'transparent'};color:${ST.fl===l?'#fff':'var(--muted)'};font-family:Oswald;font-size:10px;font-weight:700;cursor:pointer;min-width:24px">${l}</button>`).join('')}</div>`;
   sh.forEach(a=>{const lg=window.clubLogoImg?window.clubLogoImg(a.club,18,'background:rgba(10,22,40,.4);padding:1px;vertical-align:middle;margin-right:4px;'):'';h+=`<div class="ar" onclick="sl('${a.codigo.replace(/'/g,"\\'")}')"><div style="display:flex;align-items:center;gap:12px;overflow:hidden"><div class="av ${a.competencias.length?'ac':'in'}">${I(a.nombre)}</div><div style="overflow:hidden"><div class="an">${a.nombre}</div><div class="am"><span class="cd">${a.codigo}</span>${a.club?' · '+lg+a.club:''}</div></div></div><div style="display:flex;align-items:center;gap:8px;flex-shrink:0">${a.bestLifts&&a.bestLifts.total?`<span style="font-size:11px;color:var(--gold);font-weight:600">${a.bestLifts.total}kg</span>`:''} ${a.competencias.length?`<span class="cc">${a.competencias.length}</span>`:''}<span style="color:#3a5577;font-size:18px">›</span></div></div>`});
   if(f.length>sh.length)h+=`<div style="text-align:center;padding:20px"><button class="tab" onclick="mp()" style="border-color:var(--accent);color:var(--accent)">Cargar más (${f.length-sh.length})</button></div>`;
   return h}
-
+function lst(){
+  let h=`<div class="fl"><input id="atlQ" type="text" placeholder="Buscar por nombre o código..." value="${ST.s}" oninput="ss(this.value)" autocomplete="off"><select onchange="sfc(this.value)"><option value="">Todos los clubes</option>${cls().map(c=>`<option value="${c}" ${ST.fc===c?'selected':''}>${c}</option>`).join('')}</select><select onchange="sfk(this.value)"><option value="">Todas las competencias</option>${cps().map(c=>`<option value="${c}" ${ST.fk===c?'selected':''}>${c}</option>`).join('')}</select></div><div id="atlLista">${lstResultados()}</div>`;
+  return h}
 function render(){const app=document.getElementById("app");
   let h='';
   if(ST.sel)h+=prof(ST.sel);
@@ -2388,12 +2415,16 @@ async function enviarSugerencia(){
 
 function sv(v){ST.v=v;ST.sel=null;ST.p=0;render();scrollTo(0,0);if(typeof setBgForSection==='function')setBgForSection(v);if(typeof trackPage==='function')trackPage(v)}
 let _ssTimer=null;
-function ss(v){ST.s=v;ST.p=0;if(_ssTimer)clearTimeout(_ssTimer);_ssTimer=setTimeout(()=>{render();setTimeout(()=>{const i=document.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},10)},300)}
+// Solo la lista, nunca el campo. Antes esto llamaba a render() y devolvía el
+// foco por programa: el campo moría y volvía a nacer en cada letra, y en el
+// teléfono eso cierra el teclado. Sin tocar el campo no hay foco que devolver.
+function _pintarLista(){const c=document.getElementById('atlLista');if(c)c.innerHTML=lstResultados();else render();}
+function ss(v){ST.s=v;ST.p=0;if(_ssTimer)clearTimeout(_ssTimer);_ssTimer=setTimeout(_pintarLista,250)}
 function sfc(v){ST.fc=v;ST.p=0;render()}
 function sfk(v){ST.fk=v;ST.p=0;render()}
 function sl(c){ST.sel=D.find(a=>a.codigo===c);render();scrollTo(0,0)}
 function bk(){ST.sel=null;render()}
-function mp(){ST.p++;render()}
+function mp(){ST.p++;_pintarLista()}
 function sr(t,l){if(t)ST.rt=t;if(l)ST.rl=l;render()}
 
 // Nómina oficial del Sudamericano 2026 (goodlift) — archivo estático versionado.
