@@ -78,6 +78,19 @@ body.nav-open .nav-backdrop{opacity:1;pointer-events:auto}
 <script src="https://cdn.jsdelivr.net/npm/obs-websocket-js@5/dist/obs-ws.min.js" integrity="sha384-Vce9u7FN5Pbapc8dhpMdg2EjTels5H1cGOVLAe7THp3fEtfb89nD6YOIaf8781ay" crossorigin="anonymous"></script>
 <script>
 
+// ── Orden de las tandas ──────────────────────────────────────────────────
+// Ordenar tandas como texto pone «AA» ANTES de «B», porque compara letra por
+// letra. Con las tandas de una sola letra nunca se notó; el Sudamericano tiene
+// 36 rondas y llega hasta la AJ, y ahí el orden de salida quedaba A, AA, AB…
+// AJ, B, C. La tanda es un número escrito en letras: primero cuántas letras
+// tiene y después el alfabeto, que es como se cuenta A…Z, AA, AB.
+//
+// Vale para cualquier tanda: también para las que llevan el número de tarima
+// pegado ('A1', 'B2'), donde el largo es el mismo y decide el alfabeto.
+function _cmpFl(a,b){
+  const x=String(a==null?'':a), y=String(b==null?'':b);
+  return x.length-y.length || x.localeCompare(y);
+}
 let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,flight:'A',timer:60,timerOn:false,changeTimers:{},lotsGenerated:false,forcedCurrent:null,compTimer:null};
 
 // ══════════════════════════════════════════════
@@ -1720,12 +1733,12 @@ function pickEvent(i){
   try{const saved=localStorage.getItem(cronoKey);if(saved){const d=JSON.parse(saved);if(d.map)flightMap=d.map}}catch(e){}
   
   DATA.athletes=ev.athletes.map((a,j)=>_evAthlete(a,j,flightMap));
-  const allFlights=flightMap?[...new Set(Object.values(flightMap))].filter(_inTarima).sort():[];
+  const allFlights=flightMap?[...new Set(Object.values(flightMap))].filter(_inTarima).sort(_cmpFl):[];
   // La tanda activa arranca en la PRIMERA QUE EXISTE entre los atletas. Antes caía
   // siempre en 'A' aunque nadie estuviera en la A (los días del Sudamericano
   // arrancan todos sin tanda, con un guion), y el control quedaba apuntando a una
   // tanda vacía.
-  const _flAth=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort();
+  const _flAth=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort(_cmpFl);
   const firstFlight=allFlights[0]||_flAth[0]||(TARIMA?'A'+TARIMA:'A');
   // Un evento puede decir en qué movimiento/ronda arranca (los ENSAYOS vienen a
   // mitad de competencia, así que abrir en sentadilla-1 mostraría todo terminado
@@ -3090,9 +3103,20 @@ function _subscribeCronoFlightMap(evId){
 // de la tanda vieja: aparece un 104 en la tanda E y el orden de salida se desordena.
 // Acá se le da el primer lote libre de su tanda nueva. NO se toca el de nadie más:
 // re-sortear todo cambiaría el orden de salida de los 62.
+// La base sale del NÚMERO de la tanda contando en letras (A=1 … Z=26, AA=27),
+// no del primer carácter: con `charCodeAt(0)` la tanda AA daba la misma base que
+// la A y los lotes de las dos se pisaban. Las tandas del Sudamericano llegan
+// hasta la AJ.
+function _baseTanda(fl){
+  const t=String(fl||'').toUpperCase().replace(/[^A-Z]/g,'');
+  if(!t)return 0;
+  let n=0;
+  for(const c of t)n=n*26+(c.charCodeAt(0)-64);
+  return n*100;
+}
 function _reubicarLote(a){
   if(!DATA.lotsGenerated||!a||!a.flight)return false;
-  const base=(String(a.flight).charCodeAt(0)-64)*100;
+  const base=_baseTanda(a.flight);
   if(!(base>0))return false;
   if(a.lot>=base&&a.lot<base+100)return false;      // ya está en el rango de su tanda
   const usados=new Set(DATA.athletes.filter(x=>x!==a).map(x=>x.lot));
@@ -3271,7 +3295,7 @@ async function loadLiveAthletes(ev){
     if(DATA.phase==='setup'){
       // Full replace: Firestore is source of truth during setup
       DATA.athletes=fbAthletes.map((a,j)=>({...a,id:j,lot:a.lot||j+1}));
-      const firstFlight=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort()[0]||(TARIMA?'A'+TARIMA:'A');
+      const firstFlight=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort(_cmpFl)[0]||(TARIMA?'A'+TARIMA:'A');
       DATA.flight=firstFlight;
       save();R();
       showToastLC('\uD83D\uDD34 Nómina en vivo: '+fbAthletes.length+' atletas desde Firestore');
@@ -3563,7 +3587,7 @@ function pauseTimer(){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncT
 window.toggleMainTimer=function(){ if(DATA.timerOn)pauseTimer(); else startTimer(); R(); };
 function resetTimer(){DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);mainTI=null;const el=document.getElementById('mainTimer');if(el){el.style.color='var(--green)';el.textContent='1:00';el.style.animation='none'}syncToFB()}
 // Tandas existentes (con atletas activos), orden alfabético — A, B, C...
-function _allFlightsSorted(){return [...new Set(DATA.athletes.filter(a=>!a.bombed).map(a=>a.flight))].sort();}
+function _allFlightsSorted(){return [...new Set(DATA.athletes.filter(a=>!a.bombed).map(a=>a.flight))].sort(_cmpFl);}
 // Orden de tandas ARRANCANDO POR LA ACTIVA y siguiendo en círculo: si están A B C D
 // y en tarima está la C, se ven C D A B. Así la tanda que está levantando queda
 // siempre arriba (y con ella sus récords), en vez de quedar enterrada abajo.
@@ -3974,7 +3998,7 @@ async function generateHojaRack(){
 
     // Sort by flight then lot
     const athletes=[...DATA.athletes].sort((a,b)=>{
-      if(a.flight!==b.flight)return a.flight.localeCompare(b.flight);
+      if(a.flight!==b.flight)return _cmpFl(a.flight,b.flight);
       return a.lot-b.lot;
     });
 
@@ -4135,7 +4159,7 @@ async function generateHojaEquipo(){
 
     // Sort: by flight then by category weight then by name
     const athletes=[...DATA.athletes].sort((a,b)=>{
-      if(a.flight!==b.flight)return a.flight.localeCompare(b.flight);
+      if(a.flight!==b.flight)return _cmpFl(a.flight,b.flight);
       const na=parseFloat((a.cat||'').replace(/[^0-9.]/g,''))||999;
       const nb=parseFloat((b.cat||'').replace(/[^0-9.]/g,''))||999;
       return na!==nb?na-nb:a.name.localeCompare(b.name);
@@ -4492,7 +4516,7 @@ async function generateHojaPesaje(){
     const startX=(PW-totalW)/2;
 
     // Group athletes by flight, preserving lot order within each flight
-    const flightKeys=[...new Set(athletes.map(a=>a.flight||'').filter(Boolean))].sort();
+    const flightKeys=[...new Set(athletes.map(a=>a.flight||'').filter(Boolean))].sort(_cmpFl);
     const byFlight=flightKeys.map(fl=>({fl,list:athletes.filter(a=>a.flight===fl)}));
     // Athletes with no flight go to their own group at the end
     const noFlight=athletes.filter(a=>!a.flight);
@@ -4821,7 +4845,7 @@ function _diaDeAtleta(a){
 function _diasDelEvento(){
   const out=[];
   DATA.athletes.filter(a=>!a.__is4).slice()
-    .sort((x,y)=>String(x.flight||'').localeCompare(String(y.flight||'')))
+    .sort((x,y)=>_cmpFl(x.flight,y.flight))
     .forEach(a=>{const d=_diaDeAtleta(a);if(d&&out.indexOf(d)<0)out.push(d);});
   return out;
 }
@@ -7271,12 +7295,12 @@ window.screenToggleFlight=function(f){
   _screenPush();R();
 };
 window.screenAllFlights=function(){
-  const all=[...new Set(DATA.athletes.map(a=>a.flight))].sort();
+  const all=[...new Set(DATA.athletes.map(a=>a.flight))].sort(_cmpFl);
   window._SCREEN_LOCAL.flights=all;_screenPush();R();
 };
 function renderScreenControl(){
   if(fbReady&&!_screenUnsub)subscribeScreenChannel(); // cargar estado guardado (modo/tandas/tamaño)
-  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].sort();
+  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].sort(_cmpFl);
   const sel=window._SCREEN_LOCAL.flights;
   const mode=window._SCREEN_LOCAL.mode;
   const base=location.origin+location.pathname.replace(/[^/]*$/,'');
@@ -8691,7 +8715,7 @@ function renderSetup(){
 }
 
 function renderShell(){
-  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort();
+  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort(_cmpFl);
   // Si el rol no puede abrir esta página (el juez en Control TX, la cuenta de
   // streaming en Atletas & Pesaje…) se lo manda a la primera que sí tenga. Va
   // ANTES de dibujar el menú para que quede marcada la que realmente se abre.
@@ -8786,7 +8810,7 @@ function renderShell(){
 }
 
 function sortByCat(){DATA.athletes.sort((a,b)=>{const na=parseFloat(a.cat.replace(/[^0-9.]/g,''))||999;const nb=parseFloat(b.cat.replace(/[^0-9.]/g,''))||999;return na-nb});save();R()}
-function sortByFlight(){DATA.athletes.sort((a,b)=>{if(a.flight!==b.flight)return a.flight.localeCompare(b.flight);const na=parseFloat(a.cat.replace(/[^0-9.]/g,''))||999;const nb=parseFloat(b.cat.replace(/[^0-9.]/g,''))||999;return na-nb});save();R()}
+function sortByFlight(){DATA.athletes.sort((a,b)=>{if(a.flight!==b.flight)return _cmpFl(a.flight,b.flight);const na=parseFloat(a.cat.replace(/[^0-9.]/g,''))||999;const nb=parseFloat(b.cat.replace(/[^0-9.]/g,''))||999;return na-nb});save();R()}
 function sortByLot(){DATA.athletes.sort((a,b)=>a.lot-b.lot);save();R()}
 function generateLots(){
   const msg=DATA.lotsGenerated
@@ -8794,7 +8818,7 @@ function generateLots(){
     : '¿Generar números de lote aleatorios?\n\nTanda A → 100, 101, 102…\nTanda B → 200, 201, 202…\netc.';
   if(!confirm(msg))return;
   // Shuffle within each flight, assign lot = flightIndex*100 + position (Tanda A: 100-1XX, B: 200-2XX...)
-  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort();
+  const flights=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort(_cmpFl);
   flights.forEach((fl,fi)=>{
     const flightNum=fl.charCodeAt(0)-64; // A=1, B=2, C=3…
     const base=flightNum*100;
@@ -10193,7 +10217,7 @@ function renderManage(){
     // ── Barra de búsqueda y tandas ────────────────────────────────────────────
   {
     const _mf0=window._MAN_F||{q:'',flight:''};
-    const _tandas=[...new Set(ath.map(a=>a.flight))].filter(Boolean).sort();
+    const _tandas=[...new Set(ath.map(a=>a.flight))].filter(Boolean).sort(_cmpFl);
     const _vis=ath.filter(a=>(!_mf0.flight||a.flight===_mf0.flight)&&_manCoincide(a,_mf0.q)).length;
     const _activo=!!(_mf0.q||_mf0.flight);
     h+='<div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">';
@@ -10632,7 +10656,7 @@ function renderCompete(){
   // TODAS LAS TANDAS \u2014 SQ/BP/DL en la misma fila por atleta, todas las tandas apiladas.
   // Permite editar openers de cualquier tanda/lift sin cambiar de pesta\u00f1a. Los botones grandes
   // GOOD/NO LIFT solo aparecen en la celda que coincide con tanda+lift+intento activos arriba.
-  const allFlights = _flightsFromCurrent([...new Set(DATA.athletes.map(a=>a.flight))].sort());
+  const allFlights = _flightsFromCurrent([...new Set(DATA.athletes.map(a=>a.flight))].sort(_cmpFl));
   h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:4px"><h3 class="os" style="font-size:13px;letter-spacing:1px;color:var(--gold);margin:0">TODAS LAS TANDAS</h3>';
   // Toggle de auto-scroll al atleta en tarima (estilo LiftingCast).
   {const on=window._ctAutoScroll!==false;
@@ -12268,7 +12292,7 @@ function applyEventURLParam(){
       // blanco. Cuando llega el estado real por sync, lo reemplaza.
       if(!(DATA.athletes||[]).length&&Array.isArray(wanted.athletes)&&wanted.athletes.length){
         try{ DATA.athletes=wanted.athletes.map(_evAthlete);
-             DATA.flight=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort()[0]||DATA.flight;
+             DATA.flight=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort(_cmpFl)[0]||DATA.flight;
              if(wanted.startLift==='bp'||wanted.startLift==='dl')DATA.lift=wanted.startLift;
              if([0,1,2].includes(+wanted.startRound))DATA.round=+wanted.startRound;
         }catch(e){console.warn('[TX] no pude sembrar la nómina',e);}
@@ -12379,7 +12403,7 @@ function renderLiveView(){
   // se queda ahí: cargar un peso en la tanda que está compitiendo ya no lo devuelve
   // de un salto. Es la misma vista libre que usa el operador, expuesta acá.
   {
-    const tandas=[...new Set(DATA.athletes.map(a=>a.flight).filter(Boolean))].sort();
+    const tandas=[...new Set(DATA.athletes.map(a=>a.flight).filter(Boolean))].sort(_cmpFl);
     if(tandas.length>1){
       h += '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:12px">';
       h += '<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-right:2px">VER TANDA</span>';
@@ -12425,7 +12449,7 @@ function renderLiveView(){
     // Las tandas que no están en tarima siguen el mismo círculo que el control:
     // después de la actual va la siguiente, y al llegar al final vuelve a la primera.
     ...(function(){
-      const orden=_flightsFromCurrent([...new Set(DATA.athletes.map(a=>a.flight))].sort());
+      const orden=_flightsFromCurrent([...new Set(DATA.athletes.map(a=>a.flight))].sort(_cmpFl));
       const pos=f=>{const i=orden.indexOf(f);return i<0?999:i;};
       return otherAthletes.sort((a,b)=>pos(a.flight)-pos(b.flight)||a.lot-b.lot);
     })(),

@@ -181,6 +181,36 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
        'la AJ cierra el 27');
   }
 
+  console.log('\n  El livecast ordena bien las tandas de dos letras');
+  {
+    // Ordenar tandas como texto pone «AA» ANTES de «B». Con tandas de una letra
+    // nunca se notó; el Sudamericano llega hasta la AJ y ahí el orden de salida
+    // quedaba A, AA, AB… AJ, B, C — o sea, el operador pasaba de la primera
+    // ronda del 20 a la primera del 25.
+    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const src = (lc.match(/function _cmpFl\(a,b\)\{[\s\S]*?\n\}/) || [])[0];
+    ok(!!src, 'hay un solo criterio para ordenar tandas');
+    if (src) {
+      const _cmpFl = eval('(' + src.replace('function _cmpFl', 'function') + ')');
+      const orden = ['AJ', 'B', 'AA', 'A', 'Z', 'AB', 'C'].sort(_cmpFl).join(' ');
+      ok(orden === 'A B C Z AA AB AJ', 'A B C Z AA AB AJ, y no A AA AB AJ B C: ' + orden);
+      // Las tandas con número de tarima ('A1', 'B2') tienen el mismo largo y se
+      // siguen ordenando por alfabeto.
+      ok(['B1', 'A2', 'A1'].sort(_cmpFl).join(' ') === 'A1 A2 B1', 'y sirve con tarima');
+    }
+    // Ningún lugar puede haber quedado ordenando tandas a la antigua.
+    const crudos = (lc.match(/map\(a=>a\.flight[^)]*\)\)\]\.[^;]*\.sort\(\)/g) || []);
+    ok(crudos.length === 0, 'ningún listado de tandas quedó con el orden de texto');
+    // El lote se arma con la base de la tanda: AA no puede dar la misma que A.
+    const bs = (lc.match(/function _baseTanda\(fl\)\{[\s\S]*?\n\}/) || [])[0];
+    ok(!!bs, 'la base del lote sabe contar tandas de más de una letra');
+    if (bs) {
+      const _baseTanda = eval('(' + bs.replace('function _baseTanda', 'function') + ')');
+      ok(_baseTanda('A') === 100 && _baseTanda('Z') === 2600 && _baseTanda('AA') === 2700,
+         'A→100, Z→2600, AA→2700 (antes AA daba 100, igual que la A)');
+    }
+  }
+
   console.log('\n  Queda escrito en el código');
   {
     const ix = fs.readFileSync(__dirname + '/../index.html', 'utf8');

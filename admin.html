@@ -5345,6 +5345,91 @@ function apprListHtml(){
     ${list.length===0?`<div class="empty">${q?'Sin resultados para la búsqueda':'No hay inscripciones en este estado'}</div>`:''}`;
 }
 window.apprFilter=function(v){ST.apprSearch=v;const el=document.getElementById('apprList');if(el)el.innerHTML=apprListHtml();};
+
+// ── Dejar las inscripciones del Sudamericano como la nómina final ─────────
+//
+// Se inscribieron 103 y viajan 81: FESUPO mandó la nominación final y ahí quedó
+// definido quién va. Hacerlo a mano son 103 clics y basta equivocarse en uno para
+// que alguien viaje sin estar aceptado o al revés.
+//
+// La lista buena es la nómina publicada (nomina_sudamericano.json), que ya salió
+// del Excel oficial. Quien está ahí queda ACEPTADO; quien no, queda rechazado —
+// no se borra: rechazado se puede volver atrás con un clic y borrado no, y si
+// alguien vuelve a entrar a la selección hay que poder devolverlo.
+//
+// El cruce es por RUT y nunca por nombre: en la nómina de FESUPO los nombres
+// vienen acortados ("Olave Vega Sofia" por "Sofía Monserrat Olave Vega") y con
+// los apellidos primero, así que comparar nombres deja fuera a gente que sí va.
+// El RUT sale del código YourLift que la nómina ya trae para cada chileno.
+const SUDA_EV='Sudamericano_2026';
+function _sudaRutsNomina(){
+  const j=ST.sudaNom;
+  if(!j||!Array.isArray(j.atletas))return null;
+  const rut=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
+  const porCod={};
+  (ST.data||[]).forEach(a=>{ if(a.codigo&&a.rut)porCod[a.codigo]=rut(a.rut); });
+  const out=new Map();
+  j.atletas.forEach(a=>{
+    const r=a.cod?porCod[a.cod]:null;
+    if(r)out.set(r,a);
+  });
+  return out;
+}
+// El botón solo aparece si hay inscripciones del Sudamericano: en cualquier otro
+// campeonato no significa nada y sería una puerta abierta a apretarla sin querer.
+function _sudaBotonHtml(){
+  const n=(ST.inscripciones||[]).filter(i=>i.evento===SUDA_EV).length;
+  if(!n)return '';
+  return `<div class="card" style="margin-bottom:12px;background:rgba(212,168,67,.06);border-color:rgba(212,168,67,.4);display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <div style="flex:1;min-width:240px">
+      <div style="font-family:Oswald;font-size:13px;font-weight:700;color:var(--gold);letter-spacing:1px">SUDAMERICANO 2026 · ${n} INSCRIPCIONES</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">Deja aceptadas solo a las que están en la nómina final de FESUPO y rechaza el resto. Cruza por RUT, muestra el detalle antes de aplicar y no borra nada.</div>
+    </div>
+    <button class="btn btn-g" onclick="sudaAplicarNomina()" style="white-space:nowrap">Aplicar nómina final</button>
+  </div>`;
+}
+window.sudaAplicarNomina=async function(){
+  if(!ST.sudaNom){
+    try{ ST.sudaNom=await (await fetch('nomina_sudamericano.json?'+Date.now())).json(); }
+    catch(e){ showToast('No se pudo leer la nómina publicada',null,true); return; }
+  }
+  const nom=_sudaRutsNomina();
+  if(!nom||!nom.size){ showToast('La nómina publicada no trae atletas con código',null,true); return; }
+  const rut=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
+  const ins=(ST.inscripciones||[]).filter(i=>i.evento===SUDA_EV);
+  if(!ins.length){ showToast('No hay inscripciones del Sudamericano',null,true); return; }
+
+  const van=ins.filter(i=>nom.has(rut(i.rut)));
+  const noVan=ins.filter(i=>!nom.has(rut(i.rut)));
+  const aAceptar=van.filter(i=>(i.status||'approved')!=='approved');
+  const aRechazar=noVan.filter(i=>(i.status||'approved')!=='rejected');
+  // Quien está en la nómina y nunca se inscribió: no se puede aceptar lo que no
+  // existe, pero hay que decirlo — es alguien que viaja sin ficha en el sitio.
+  const inscRuts=new Set(ins.map(i=>rut(i.rut)));
+  const sinInsc=[...nom.entries()].filter(([r])=>!inscRuts.has(r)).map(([,a])=>a.n);
+
+  let msg='Nómina final de FESUPO — '+SUDA_EV+'\n\n'
+        + van.length+' inscripciones están en la nómina ('+aAceptar.length+' cambian a ACEPTADA)\n'
+        + noVan.length+' no están ('+aRechazar.length+' cambian a RECHAZADA)\n';
+  if(sinInsc.length) msg+='\n'+sinInsc.length+' están en la nómina y NO tienen inscripción en el sitio:\n  · '+sinInsc.join('\n  · ')+'\n';
+  if(aRechazar.length) msg+='\nSe van a rechazar:\n  · '+aRechazar.map(i=>i.nombre).join('\n  · ')+'\n';
+  msg+='\nNadie se borra: rechazar se puede deshacer.\n¿Aplicar?';
+  if(!confirm(msg))return;
+
+  let ok=0,err=0;
+  for(const [lista,estado] of [[aAceptar,'approved'],[aRechazar,'rejected']]){
+    for(const i of lista){
+      try{
+        await updateDoc(doc(db,'inscripciones',i.id),{status:estado});
+        i.status=estado; ok++;
+      }catch(e){ console.error('[suda] '+i.nombre,e); err++; }
+    }
+  }
+  try{ await logAction('suda_aplicar_nomina',SUDA_EV,null,
+        ok+' cambiadas ('+aAceptar.length+' aceptadas, '+aRechazar.length+' rechazadas), '+err+' errores'); }catch(_){}
+  showToast(err?('✓ '+ok+' actualizadas — '+err+' con error'):('✓ '+ok+' inscripciones actualizadas'));
+  render();
+};
 function renderApprovals(){
   const tab=ST.apprTab||'pending';
   const c=s=>ST.inscripciones.filter(i=>((i.status||'approved')===s)).length;
@@ -5357,6 +5442,7 @@ function renderApprovals(){
       ${tabBtn('approved','Aceptadas',c('approved'))}
       ${tabBtn('rejected','Rechazadas',c('rejected'))}
     </div>
+    ${_sudaBotonHtml()}
     <input type="text" value="${esc(ST.apprSearch||'')}" oninput="apprFilter(this.value)" placeholder="Buscar por nombre, RUT, club o evento…" style="width:100%;max-width:380px;margin-bottom:12px;background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;font-family:DM Sans">
     <div class="card" style="padding:0;overflow-x:auto" id="apprList">${apprListHtml()}</div>`;
 }
