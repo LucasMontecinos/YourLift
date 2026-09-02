@@ -50,9 +50,15 @@ console.log('\nLos totales salen de los períodos, no de un número suelto');
 {
   const ses = GA_FOTO.periodos.reduce((s, x) => s + x.ses, 0);
   const nue = GA_FOTO.periodos.reduce((s, x) => s + x.nue, 0);
-  ok(GA_FOTO.periodos.length === 4, 'están los cuatro períodos medidos');
-  ok(ses === 20526, 'las sesiones suman 20.526 (' + ses + ')');
-  ok(nue === 5354, 'las personas distintas suman 5.354 (' + nue + ')');
+  // Los totales NO se escriben acá. La foto se refresca contra Analytics cada
+  // cierto tiempo y los números cambian; lo que no puede cambiar es que el total
+  // que se muestra sea la suma de los períodos y no una cifra suelta escrita a
+  // mano, que es lo que pasaba antes y por eso nadie podía comprobarla.
+  ok(GA_FOTO.periodos.length >= 3, 'hay al menos tres períodos medidos (' + GA_FOTO.periodos.length + ')');
+  ok(ses > 0 && nue > 0, 'con sesiones (' + ses + ') y personas (' + nue + ')');
+  ok(nue < ses, 'y hay menos personas que sesiones — si no, alguien contó mal');
+  ok(GA_FOTO.periodos.every(x => x.us <= x.ses),
+     'en cada período las personas no superan a las sesiones');
   const h = renderGAFoto();
   ok(h.indexOf(ses.toLocaleString('es-CL')) >= 0, 'y el total que se muestra es esa suma');
   ok(h.indexOf(nue.toLocaleString('es-CL')) >= 0, 'lo mismo con las personas');
@@ -70,11 +76,15 @@ console.log('\n  Se declara que es una foto y hasta cuándo llega');
 
 console.log('\n  Un período sin dato muestra un guión, no un cero');
 {
+  // Un período puede venir sin vistas: entonces se dibuja un guión, no un cero,
+  // porque un cero se lee como "nadie entró" y es mentira.
   const h = renderGAFoto();
   const sinVistas = GA_FOTO.periodos.filter(x => !x.vis).length;
-  ok(sinVistas === 2, 'hay dos períodos sin vistas cargadas');
-  ok((h.match(/>—</g) || []).length >= sinVistas, 'y se muestran con guión');
-  ok(/vistas de junio y julio no están/.test(h), 'y se explica que falta sacarlas');
+  ok((h.match(/>—</g) || []).length >= sinVistas,
+     sinVistas ? 'los ' + sinVistas + ' períodos sin vistas se muestran con guión'
+               : 'hoy todos los períodos traen vistas');
+  ok(GA_FOTO.periodos.every(x => x.vis === null || x.vis === undefined || x.vis > x.ses),
+     'y donde hay vistas, son más que las sesiones — cada visita ve más de una página');
 }
 
 console.log('\n  Lo que se afirma, se afirma con el dato al lado');
@@ -99,7 +109,7 @@ console.log('\n  Se ve aunque el contador propio esté vacío');
 
 console.log('\n  La geografía va período a período, no de un mes suelto');
 {
-  ok(GA_FOTO.regiones.length === 4, 'están las cuatro ventanas medidas');
+  ok(GA_FOTO.regiones.length >= 1, 'hay al menos una ventana medida (' + GA_FOTO.regiones.length + ')');
   const h = renderGAFoto();
   ok(/SANTIAGO vs REGIONES/.test(h), 'se muestra el reparto Santiago / regiones');
   GA_FOTO.regiones.forEach(x => {

@@ -2002,31 +2002,48 @@ let _webCharts={};
 // NO se actualiza solo: no hay conexión con la API de Analytics. Es una foto con
 // fecha, y por eso se muestra diciendo hasta cuándo llega. Para refrescarla hay
 // que editar esta tabla con los informes nuevos.
+// Foto del tráfico web, sacada de Google Analytics (propiedad fechipo-db).
+//
+// Antes estos números se copiaban a mano de las capturas del teléfono, con lo
+// que eso tiene de frágil. Ahora salen de la API de Analytics; se actualizan
+// pidiéndolo y quedan escritos acá porque el sitio no puede consultar Analytics
+// por su cuenta: la clave que haría falta no puede viajar en una página pública.
+//
+// Los meses son meses calendario, no los períodos de treinta días que mostraba
+// la aplicación del teléfono. Por eso los números no calzan uno a uno con los de
+// antes: son la misma realidad, cortada distinto.
 const GA_FOTO={
-  desde:'6 de mayo de 2026',
-  hasta:'25 de agosto de 2026',
-  tomada:'26 de agosto de 2026',
+  desde:'1 de mayo de 2026',
+  hasta:'2 de septiembre de 2026',
+  tomada:'2 de septiembre de 2026',
+  fuente:'Google Analytics · propiedad fechipo-db',
   periodos:[
-    {p:'28 abr – 27 may', ses:2592, us:1053, nue:1058, vis:6870,  nota:''},
-    {p:'28 may – 26 jun', ses:7051, us:2193, nue:1938, vis:null,  nota:''},
-    {p:'27 jun – 26 jul', ses:2577, us:729,  nue:453,  vis:null,  nota:'sin campeonatos'},
-    {p:'27 jul – 25 ago', ses:8306, us:2289, nue:1905, vis:24373, nota:'dos regionales'},
+    {p:'mayo 2026',      ses:3107, us:1150, nue:1157, vis:7880,  nota:''},
+    {p:'junio 2026',     ses:7232, us:2244, nue:1949, vis:16745, nota:''},
+    {p:'julio 2026',     ses:2219, us:699,  nue:397,  vis:5553,  nota:'sin campeonatos'},
+    {p:'agosto 2026',    ses:9336, us:2449, nue:2038, vis:27293, nota:'dos regionales'},
   ],
-  // Sesiones por canal, sumadas de los cuatro períodos.
-  canales:[['Directo',8994],['Google y Bing',7589],['Instagram',3479],['YouTube',105]],
-  paisesUltimoMes:[['Chile',1984],['Brasil',67],['Ecuador',64],['Colombia',44]],
-  // Usuarios activos de Chile por región, período a período. No se suman: un
-  // mismo usuario que vuelve al mes siguiente cuenta en los dos. Lo que importa
-  // acá es el reparto, que se mantiene parejo en los cuatro.
+  // Sesiones por canal, marzo a septiembre de 2026. "Directo" es quien llega
+  // escribiendo la dirección o desde un link guardado; búsqueda es Google y Bing.
+  canales:[['Directo',9540],['Búsqueda (Google/Bing)',8394],['Instagram y redes',2887],
+           ['Instagram pagado',751],['Sin clasificar',200],['YouTube',108],['Otros',30]],
+  paisesUltimoMes:[['Chile',2125],['Brasil',71],['Ecuador',64],['Colombia',50],['Estados Unidos',34]],
+  // Usuarios de Chile por ciudad. No se suman entre meses: alguien que vuelve al
+  // mes siguiente cuenta en los dos.
   regiones:[
-    {p:'28 abr – 27 may', cl:1009, r:[['Santiago',683],['Biobío',116],['Valparaíso',91],['Antofagasta',89]]},
-    {p:'28 may – 26 jun', cl:2149, r:[['Santiago',1306],['Biobío',409],['Antofagasta',224],['Valparaíso',198]]},
-    {p:'27 jun – 26 jul', cl:667,  r:[['Santiago',467],['Biobío',122],['Antofagasta',79],['Valparaíso',71]]},
-    {p:'27 jul – 25 ago', cl:1984, r:[['Santiago',1320],['Biobío',340],['Antofagasta',274],['Valparaíso',203]]},
+    {p:'agosto 2026', cl:2125, r:[['Santiago',1390],['Concepción',321],['Antofagasta',278],['Temuco',168],['Viña del Mar',158]]},
   ],
-  ciudadesUltimoMes:[['Santiago',1284],['Concepción',294],['Antofagasta',257],['Viña del Mar',144]],
-  peak:{ses:722, dia:'9 de agosto', evento:'Regional Centro Sur', prevMin:57, prevMax:670},
-  igPagado:750,
+  ciudadesUltimoMes:[['Santiago',1390],['Concepción',321],['Antofagasta',278],['Temuco',168],['Viña del Mar',158]],
+  // El día más alto de agosto y con qué coincidió. Los días sin campeonato se
+  // mueven entre 100 y 260 sesiones: la diferencia la hace la competencia, no la
+  // publicidad.
+  peak:{ses:1177, dia:'8 de agosto', evento:'Regional Centro Sur', prevMin:57, prevMax:383},
+  igPagado:751,
+  // Las páginas más vistas, marzo a septiembre. Sirve para saber qué se usa de
+  // verdad antes de rediseñar nada.
+  paginas:[['Inicio',20509],['Ranking',7337],['Inscripción',4874],
+           ['Competencia en vivo — Regional Norte',2518],['Ficha de atleta',2514],
+           ['Competencia en vivo — Centro Sur',1846],['Cronograma',232]],
 };
 function renderGAFoto(){
   const G=GA_FOTO;
@@ -2098,12 +2115,14 @@ function renderGAFoto(){
             <div style="width:${100-pct}%;background:#3b82f6"></div><div style="width:${pct}%;background:var(--gold)"></div>
           </div></div>`;
       }).join('')}
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">Un tercio del público está fuera de Santiago, y el reparto se mantiene parejo en los cuatro períodos.</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Un tercio del público está fuera de Santiago: Concepción, Antofagasta, Temuco y Viña son las que más pesan.</div>
     </div>
     <div style="font-size:11px;color:var(--muted);margin-top:16px;line-height:1.6">
-      Las vistas de junio y julio no están: falta sacar esa tarjeta de los informes.
-      Entre mayo y junio hubo publicidad pagada en Instagram, ${G.igPagado} sesiones (un
-      ${(G.igPagado/ses*100).toFixed(1)} % del total); el resto es orgánico.
+      ${G.fuente}. La publicidad pagada en Instagram trajo ${G.igPagado} sesiones, un
+      ${(G.igPagado/ses*100).toFixed(1)} % del total: el resto llega solo.
+      El día más alto del período fueron ${G.peak.ses.toLocaleString('es-CL')} sesiones (${G.peak.dia}, ${G.peak.evento});
+      un día cualquiera sin campeonato se mueve entre ${G.peak.prevMin} y ${G.peak.prevMax}.
+      Los campeonatos son los que mueven la aguja.
     </div>
   </div>`;
 }
