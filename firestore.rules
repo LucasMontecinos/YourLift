@@ -27,6 +27,13 @@ service cloud.firestore {
              exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
+    // El OWNER es el admin cuyo documento dice role:'owner'. Es una condición más
+    // estricta que isAdmin(): un superadmin es admin pero no es owner.
+    function isOwner() {
+      return isAdmin() &&
+             get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'owner';
+    }
+
     function isCoach() {
       return isSignedIn() &&
              exists(/databases/$(database)/documents/coaches/$(request.auth.uid));
@@ -146,6 +153,17 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
+    }
+
+    // Los AUSPICIADORES son un compromiso comercial: quién sale en el sitio y a
+    // dónde lleva su logo. Eso lo decide el owner, no cualquier admin.
+    //
+    // El panel ya escondía el botón, pero esconder un botón no cierra una puerta:
+    // cualquiera con una cuenta de admin podía escribir este documento por fuera.
+    // La regla es lo único que de verdad lo impide.
+    match /site_backgrounds/sponsors {
+      allow read: if true;
+      allow write: if isOwner();
     }
 
     match /site_backgrounds/{section} {

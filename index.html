@@ -465,7 +465,11 @@ function _applyEventos(docs){
   const allEvs=docs.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   window.ALL_EVENTS=allEvs;
   const evs=allEvs.filter(e=>e.status!=='archived');
-  if(evs.length){NOM_EVENTS=evs;loadFBNominas();}
+  // Antes acá se llamaba a loadFBNominas(), que se baja las 533 inscripciones.
+  // Eso pasaba en CADA carga del sitio, aunque nadie abriera Nóminas: la portada
+  // no las usa —arma su carrusel con nominas.json y con los eventos— y son 923 KB.
+  // Ahora se piden al abrir la pestaña, en cargarParaVista().
+  if(evs.length)NOM_EVENTS=evs;
   if(ST.v==='trans')renderFondo();
 }
 async function initFB(){
@@ -571,10 +575,10 @@ async function initFB(){
           }
         }catch(e){ console.warn('[pasadas]',e); window.COMPES_PASADAS=window.COMPES_PASADAS||[]; }
       }catch(e){console.warn('[eventos]',e);}
-      // Las ediciones tienen que estar antes que las nóminas: la nómina muestra
-      // el nombre corregido de cada atleta, no el que venía en la inscripción.
+      // Las ediciones se cargan siempre: las usa el buscador de atletas, el
+      // ranking y la nómina. Las inscripciones NO: son 533 documentos que solo
+      // hacen falta en la pestaña Nóminas, y se piden allá.
       await loadEdits();
-      await loadFBNominas();
     })();
     // Si una falla, que no se lleve a las demás por delante.
     await Promise.allSettled([..._sueltas,_encadenadas]);
@@ -748,6 +752,7 @@ function _applyNominas(all){
       return{...ev,athletes,fromFirebase:true,liveCount:{total:athletes.length,approved,pending}};
     });
   NM.events=fbEvents;
+  window._nominasCargadas=true;
   renderFondo();
 }
 async function loadFBNominas(force){
@@ -1387,6 +1392,11 @@ function nom(){
   let h='';
   if(_nsudaVisible())h+=_nomSudaCard();
   const visibleEvs=(NM.events||[]).filter(ev=>ev.fromFirebase);
+  // Las inscripciones se piden al abrir esta pestaña, así que hay un momento en
+  // que todavía no llegaron. Decir "no hay campeonatos activos" ahí es mentira y
+  // asusta: se avisa que está cargando hasta que se sepa.
+  if(!visibleEvs.length&&!h&&!window._nominasCargadas)
+    return '<div class="emp" style="padding:40px;text-align:center;color:var(--muted)">Cargando campeonatos…</div>';
   if(!visibleEvs.length&&!h)return '<div class="emp" style="padding:40px;text-align:center;color:var(--muted)">No hay campeonatos activos. El administrador los publicará pronto.</div>';
   NM.events=visibleEvs;
   NM.events.forEach((ev,ei)=>{h+=_nomEvCard(ev,ei);});
@@ -2484,6 +2494,10 @@ async function cargarParaVista(v){
   const una=(k,fn)=>{ if(window._yaPedido[k])return null; window._yaPedido[k]=true; return fn(); };
   const tareas=[];
   if(v==='nominas'){
+    // Las inscripciones se vuelven a pedir cada vez que se entra: a diferencia de
+    // las fotos, cambian solas —alguien se inscribe, el admin aprueba— y la
+    // pestaña ya tiene su propio refresco cada tres minutos mientras se mira.
+    tareas.push(loadFBNominas());
     tareas.push(una('nsudafotos',async()=>{
 
   // ── Fotos de la nómina Sudamericano (para las fichas): caché 1h ──

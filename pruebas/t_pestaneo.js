@@ -119,10 +119,14 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     ok(/Promise\.allSettled/.test(idx),
        'con allSettled: si una falla no se lleva a las demás por delante');
     // Lo que sí lleva orden tiene que seguir teniéndolo: la nómina muestra el
-    // nombre corregido de cada atleta, así que las ediciones van antes.
+    // nombre corregido de cada atleta, así que las ediciones van antes. Ahora el
+    // orden lo da otra cosa: las ediciones se cargan en el arranque y las
+    // inscripciones recién al abrir la pestaña, que ocurre después.
     const enc = idx.slice(idx.indexOf('const _encadenadas='), idx.indexOf('await Promise.allSettled('));
-    ok(enc.indexOf('loadEdits()') < enc.indexOf('loadFBNominas()') && enc.indexOf('loadEdits()') > 0,
-       'y las ediciones siguen cargándose antes que las nóminas');
+    ok(enc.indexOf('loadEdits()') > 0, 'las ediciones se cargan en el arranque');
+    ok(idx.indexOf('await Promise.allSettled([..._sueltas,_encadenadas]);')
+       < idx.indexOf('await cargarParaVista(ST.v)'),
+       'y las inscripciones recién después, así que llegan con los nombres ya corregidos');
   }
 
   console.log('\n  Y ninguna carga de fondo llama a render() a secas');
@@ -147,12 +151,25 @@ console.log('\n  Y lo que la pestaña abierta no necesita, no se baja');
      'las fotos de la nómina se piden al abrir Nóminas');
   ok(/v==='entrenadores'/.test(fn) && /entrenadores/.test(fn),
      'y los entrenadores al abrir Entrenadores');
+  // Las 533 inscripciones, 923 KB, eran la consulta más pesada de todas y se
+  // hacía en cada carga. La portada no las usa: arma su carrusel con
+  // nominas.json y con los eventos.
+  ok(/tareas\.push\(loadFBNominas\(\)\)/.test(fn),
+     'y las inscripciones al abrir Nóminas, que es la única pestaña que las usa');
   ok(/window\._yaPedido/.test(fn), 'una sola vez por sesión, no cada vez que se vuelve');
   // Y ya no están en el arranque.
   const arranque = idx.slice(idx.indexOf('const _sueltas=['), idx.indexOf('await Promise.allSettled('));
   ok(!/atleta_fotos/.test(arranque), 'atleta_fotos ya no se baja al abrir el sitio');
   ok(!/nomina_suda_fotos/.test(arranque), 'ni las fotos del Sudamericano');
   ok(!/'entrenadores'\)/.test(arranque), 'ni los entrenadores');
+  const cadena = idx.slice(idx.indexOf('const _encadenadas='), idx.indexOf('await Promise.allSettled('));
+  ok(!/loadFBNominas/.test(cadena), 'ni las inscripciones');
+  ok(!/loadFBNominas\(\);\}/.test(idx.slice(idx.indexOf('function _applyEventos'), idx.indexOf('async function initFB'))),
+     'ni se arrastran cuando llegan los eventos');
+  // Y mientras llegan, la pestaña no puede decir que no hay campeonatos.
+  ok(/Cargando campeonatos…/.test(idx),
+     'mientras cargan, Nóminas avisa en vez de decir que no hay nada');
+  ok(/window\._nominasCargadas/.test(idx), 'y sabe distinguir "todavía no llegan" de "no hay"');
   // Red de seguridad: quien entra directo a una pestaña no pasa por sv().
   ok(/await cargarParaVista\(ST\.v\)/.test(idx),
      'y al terminar el arranque se pide lo de la pestaña en la que se entró');

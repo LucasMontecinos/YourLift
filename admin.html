@@ -2502,6 +2502,12 @@ window.spUploadLogo=async function(i,inp){
 };
 window.spSave=async function(){
   (ST.sponsors||[]).forEach((s,i)=>{const n=document.getElementById('sp_nom_'+i),g=document.getElementById('sp_ig_'+i),l=document.getElementById('sp_link_'+i),a=document.getElementById('sp_act_'+i);if(n)s.nombre=n.value;if(g)s.ig=g.value;if(l)s.link=l.value;if(a)s.activo=a.checked;});
+  // Los auspiciadores son un compromiso comercial: los define el owner. La regla
+  // de Firestore es la que de verdad lo impide; esto es para que quien no
+  // corresponda vea un mensaje claro en vez de un error de permisos.
+  if(ST.adminInfo?.role!=='owner'&&!ST.adminInfo?.bootstrap){
+    showToast('Solo el Owner puede modificar los auspiciadores',null,true); return;
+  }
   try{ await setDoc(doc(db,'site_backgrounds','sponsors'),{items:ST.sponsors||[],updatedAt:serverTimestamp()},{merge:true}); showToast('Auspiciadores guardados'); }
   catch(e){ showToast('Error: '+e.message,null,true); }
 };

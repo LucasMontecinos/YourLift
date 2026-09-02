@@ -122,6 +122,23 @@ const MARCAS = [
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs[0] : ''));
   await b.close();
 
+  console.log('\n  Solo el owner los define');
+  {
+    const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+    const reglas = fs.readFileSync(__dirname + '/../firestore.rules', 'utf8');
+    // Quién sale en el sitio y a dónde lleva su logo es un compromiso comercial.
+    ok(/view==='sponsors'\)\{if\(ST\.adminInfo\?\.role==='owner'/.test(adm),
+       'la pantalla es solo del owner');
+    const i = adm.indexOf("setDoc(doc(db,'site_backgrounds','sponsors')");
+    ok(/role!=='owner'/.test(adm.slice(i - 500, i)), 'y el guardado lo vuelve a comprobar');
+    // Pero esconder un botón no cierra una puerta: la regla del servidor es la
+    // única que de verdad lo impide.
+    ok(/function isOwner\(\)/.test(reglas),
+       'las reglas saben distinguir al owner del resto de los admin');
+    ok(/match \/site_backgrounds\/sponsors \{[\s\S]{0,90}allow write: if isOwner\(\)/.test(reglas),
+       'y el documento de auspiciadores solo lo puede escribir el owner');
+  }
+
   console.log('\n  Queda escrito en el código');
   {
     ok(/function clicAuspiciador\(marca\)/.test(idx), 'la función que cuenta el clic existe');
