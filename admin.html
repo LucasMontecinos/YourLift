@@ -412,21 +412,17 @@ async function loadAll(){
     if(r.editados||r.borrados)console.log('[edits] '+r.editados+' editados, '+r.borrados+' dados de baja');
   }catch(e){console.warn('[loadAll] athlete_edits:',e.message);}
 
-  // Load inscripciones — no orderBy to avoid index requirement
-  try{
-    const inscSnap=await getDocs(collection(db,'inscripciones'));
-    ST.inscripciones=[];
-    inscSnap.forEach(d=>ST.inscripciones.push({id:d.id,...d.data()}));
-    ST.inscripciones.sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0));
-  }catch(e){console.warn('[loadAll] inscripciones:',e.message);ST.inscripciones=[];}
+  // Inscripciones (533 documentos, la consulta más pesada del panel).
+  // Lo pobla el listener de más abajo, que en el primer aviso entrega la
+  // colección completa y además redibuja. Pedirla acá antes era pagarla dos
+  // veces por cada carga del panel.
 
-  // Load inscripciones_private (campos sensibles: pin, carnetURL, wadeURL).
-  // Solo admin puede leer. Se indexa por docId para merge rápido.
-  try{
-    const privSnap=await getDocs(collection(db,'inscripciones_private'));
-    ST.inscripcionesPrivate={};
-    privSnap.forEach(d=>{ST.inscripcionesPrivate[d.id]=d.data();});
-  }catch(e){console.warn('[loadAll] inscripciones_private:',e.message);ST.inscripcionesPrivate={};}
+
+  // Datos privados de la inscripción (pin, carnet, WADA), solo admin.
+  // Lo pobla el listener de más abajo, que en el primer aviso entrega la
+  // colección completa y además redibuja. Pedirla acá antes era pagarla dos
+  // veces por cada carga del panel.
+
 
   // Load atleta_fotos (foto_url por código + status). Lectura pública.
   // - status:'approved' (default si tiene foto_url) → mergea en ST.data para verse
@@ -461,12 +457,11 @@ async function loadAll(){
     });
   }catch(e){console.warn('[loadAll] atleta_achievements:',e.message);}
 
-  // Load edit_requests (solicitudes de edición pendientes de atletas).
-  try{
-    const reqSnap=await getDocs(collection(db,'edit_requests'));
-    ST.editRequests=reqSnap.docs.map(d=>({id:d.id,...d.data()}))
-      .sort((a,b)=>(b.ts?.seconds||0)-(a.ts?.seconds||0));
-  }catch(e){console.warn('[loadAll] edit_requests:',e.message);ST.editRequests=[];}
+  // Solicitudes de edición de los atletas.
+  // Lo pobla el listener de más abajo, que en el primer aviso entrega la
+  // colección completa y además redibuja. Pedirla acá antes era pagarla dos
+  // veces por cada carga del panel.
+
 
   // Real-time listeners (non-blocking, set up once)
   if(!window._inscListener){
@@ -574,18 +569,24 @@ async function loadAll(){
     }catch(e){console.warn('[loadAll] results listener:',e.message);}
   }
 
-  // Load eventos snapshot for campeonatos view
-  try{
-    const evSnap=await getDocs(collection(db,'eventos'));
-    ST.eventos=evSnap.docs.map(d=>({...d.data(),id:d.id}))
-      .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-  }catch(e){console.warn('[loadAll] eventos:',e.message);ST.eventos=[];}
+  // Los eventos también los pobla su listener. Acá además se pagaban dos veces
+  // para dejar una versión PEOR: esta copia no ponía el valor por defecto de
+  // recordsEnabled, así que entre esta lectura y el primer aviso del listener
+  // los récords quedaban indefinidos.
 
-  // Audit log — non-blocking, no ordering (avoids index requirement)
+  // Audit log — las últimas 100, ordenadas por el SERVIDOR.
+  //
+  // Antes se traía la colección entera y se cortaba en cien acá. El log crece
+  // para siempre —un documento por cada acción de admin— así que la cuenta la
+  // pagaba completa cada vez que alguien abría el panel, para mostrar cien
+  // líneas. Era, de lejos, la lectura más cara del sitio.
+  //
+  // El comentario que estaba acá decía que no se ordenaba para no tener que
+  // crear un índice. Eso vale para los índices COMPUESTOS: ordenar por un solo
+  // campo no necesita crear nada, Firestore lo tiene solo.
   try{
-    const logSnap=await getDocs(collection(db,'audit_log'));
-    ST.auditLog=logSnap.docs.map(d=>({id:d.id,...d.data()}))
-      .sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,100);
+    const logSnap=await getDocs(query(collection(db,'audit_log'),orderBy('ts','desc'),limit(100)));
+    ST.auditLog=logSnap.docs.map(d=>({id:d.id,...d.data()}));
   }catch(e){console.warn('[loadAll] audit_log:',e.message);ST.auditLog=[];}
 
   // Auto-close overdue nominations (non-blocking)
