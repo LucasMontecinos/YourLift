@@ -125,7 +125,7 @@ const rn = s => String(s || '').replace(/[^0-9kK]/g, '').toUpperCase();
     ok(!r.sinSuda, 'y en un campeonato cualquiera no aparece');
   }
 
-  console.log('\n  Aplica la nómina: acepta a los que van y rechaza a los que no');
+  console.log('\n  Aplica la nómina: acepta a los que van y elimina a los que no');
   {
     const r = await p.evaluate(() => {
       window.confirm = () => true;
@@ -139,13 +139,18 @@ const rn = s => String(s || '').replace(/[^0-9kK]/g, '').toUpperCase();
     const est = Object.fromEntries(r.estados);
     ok(['Viaja 1', 'Viaja 2', 'Viaja 3'].every(n => est[n] === 'approved'),
        'los tres que están en la nómina quedan aceptados');
-    ok(['Se bajó 1', 'Se bajó 2'].every(n => est[n] === 'rejected'),
-       'y los dos que no están, rechazados');
-    // Lo importante: nadie se borra. Rechazar se deshace, borrar no.
-    ok(r.borrado.length === 0, 'no se borró ninguna inscripción');
+    ok(!('Se bajó 1' in est) && !('Se bajó 2' in est),
+       'y los dos que no están quedan eliminados');
+    // Se borra la inscripción Y su documento privado: ahí viven el PIN, el
+    // carnet y el WADA, y dejarlos huérfanos es guardar datos de alguien que ya
+    // no compite.
+    ok(r.borrado.filter(x => x.col === 'inscripciones').length === 2,
+       'se borraron las dos inscripciones');
+    ok(r.borrado.filter(x => x.col === 'inscripciones_private').length === 2,
+       'y también sus documentos privados (PIN, carnet, WADA)');
     ok(est['Ajeno'] === 'pending', 'y la de otro campeonato no se tocó');
-    ok(r.escrito.length === 5, 'cinco escrituras, una por inscripción cambiada: ' + r.escrito.length);
-    ok(r.escrito.every(e => e.col === 'inscripciones'), 'todas sobre inscripciones');
+    ok(r.escrito.length === 3 && r.escrito.every(e => e.col === 'inscripciones'),
+       'tres escrituras, una por cada aceptada: ' + r.escrito.length);
   }
 
   console.log('\n  Correrlo dos veces no vuelve a escribir');
@@ -167,8 +172,8 @@ const rn = s => String(s || '').replace(/[^0-9kK]/g, '').toUpperCase();
     const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
     ok(/const SUDA_EV='Sudamericano_2026'/.test(adm), 'el campeonato está nombrado una sola vez');
     ok(/porCod\[a\.cod\]/.test(adm), 'el cruce va por el código YourLift, no por nombre');
-    ok(!/deleteDoc[^\n]*sudaAplicar/.test(adm) && /status:estado/.test(adm),
-       'cambia el estado, no borra');
+    ok(/inscripciones_private/.test(adm.slice(adm.indexOf('sudaAplicarNomina'), adm.indexOf('sudaAplicarNomina') + 3500)),
+       'al borrar se lleva también el documento privado');
   }
 
   console.log(fallas ? `\n${fallas} FALLA(S)` : '\nTodo OK');

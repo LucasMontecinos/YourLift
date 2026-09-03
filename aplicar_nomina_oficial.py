@@ -117,6 +117,12 @@ def main():
         if at.get('div') != p['div']:
             cambio_div += 1
             at['div'] = p['div']
+        # LA «R» DE RESERVA SE CAE. Venía de los PDF de nominación de GoodLift,
+        # que marcaban con una R a los suplentes de cada país. En la nominación
+        # FINAL no hay suplentes: los catorce que estaban marcados aparecen con
+        # sesión, ronda y tanda asignadas, o sea que compiten. Dejar la marca
+        # ponía una R al lado de gente que sí levanta.
+        at.pop('res', None)
         at['lote'] = p['lote']
         at['tanda'] = p['tanda']
         at['fecha'] = p['fecha']

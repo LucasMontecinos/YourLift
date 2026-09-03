@@ -301,10 +301,14 @@ NOM['fechas'] = (f"{int(primer[8:10])} al {int(ultimo[8:10])} de {_m} de {ultimo
                  f"{int(ultimo[8:10])} de {_m} de {ultimo[:4]}")
 # Las jornadas ya vienen del cronograma oficial (aplicar_nomina_oficial.py). Acá
 # solo se les pega el nombre legible, que se arma con quién está adentro.
-_nom_ses = {(f, h): n for f, d, p, h, n, filt, esp in SES}
+#
+# El nombre se calcula por JORNADA y no se busca por (fecha, hora): el 20 a las
+# 16.30 corren dos sesiones a la vez —el Equipado de hombres y Special Olympics—
+# y con esa clave las dos se quedaban con el nombre de la última. En la página,
+# la tarjeta de Special Olympics salía titulada «Hombres -59/-66/-74 Equipado».
 for j in NOM['jornadas']:
     j['dia'] = _dia_de[j['fecha']]
-    j['nombre'] = _nom_ses.get((j['fecha'], j['inicio']), j['campeonato'])
+    j['nombre'] = _nombre_sesion(j, [a for a in A if a.get('jornada') == j['id']])
 json.dump(NOM, open('nomina_sudamericano.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 
 # ── Reporte ──

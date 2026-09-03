@@ -5353,9 +5353,10 @@ window.apprFilter=function(v){ST.apprSearch=v;const el=document.getElementById('
 // que alguien viaje sin estar aceptado o al revés.
 //
 // La lista buena es la nómina publicada (nomina_sudamericano.json), que ya salió
-// del Excel oficial. Quien está ahí queda ACEPTADO; quien no, queda rechazado —
-// no se borra: rechazado se puede volver atrás con un clic y borrado no, y si
-// alguien vuelve a entrar a la selección hay que poder devolverlo.
+// del Excel oficial de FESUPO —el que trae los días de competencia—. Quien está
+// ahí queda ACEPTADO; quien no, se ELIMINA, junto con su documento privado (PIN,
+// carnet, WADA). Eso no se puede deshacer, así que se pide confirmar dos veces y
+// la lista de a quiénes se va a borrar se muestra completa antes.
 //
 // El cruce es por RUT y nunca por nombre: en la nómina de FESUPO los nombres
 // vienen acortados ("Olave Vega Sofia" por "Sofía Monserrat Olave Vega") y con
@@ -5383,7 +5384,7 @@ function _sudaBotonHtml(){
   return `<div class="card" style="margin-bottom:12px;background:rgba(212,168,67,.06);border-color:rgba(212,168,67,.4);display:flex;gap:12px;align-items:center;flex-wrap:wrap">
     <div style="flex:1;min-width:240px">
       <div style="font-family:Oswald;font-size:13px;font-weight:700;color:var(--gold);letter-spacing:1px">SUDAMERICANO 2026 · ${n} INSCRIPCIONES</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:3px">Deja aceptadas solo a las que están en la nómina final de FESUPO y rechaza el resto. Cruza por RUT, muestra el detalle antes de aplicar y no borra nada.</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">Deja aceptadas solo a las que están en la nómina final de FESUPO y elimina el resto. Cruza por RUT y muestra el detalle completo antes de aplicar.</div>
     </div>
     <button class="btn btn-g" onclick="sudaAplicarNomina()" style="white-space:nowrap">Aplicar nómina final</button>
   </div>`;
@@ -5402,32 +5403,40 @@ window.sudaAplicarNomina=async function(){
   const van=ins.filter(i=>nom.has(rut(i.rut)));
   const noVan=ins.filter(i=>!nom.has(rut(i.rut)));
   const aAceptar=van.filter(i=>(i.status||'approved')!=='approved');
-  const aRechazar=noVan.filter(i=>(i.status||'approved')!=='rejected');
+  const aBorrar=noVan;
   // Quien está en la nómina y nunca se inscribió: no se puede aceptar lo que no
   // existe, pero hay que decirlo — es alguien que viaja sin ficha en el sitio.
   const inscRuts=new Set(ins.map(i=>rut(i.rut)));
   const sinInsc=[...nom.entries()].filter(([r])=>!inscRuts.has(r)).map(([,a])=>a.n);
 
   let msg='Nómina final de FESUPO — '+SUDA_EV+'\n\n'
-        + van.length+' inscripciones están en la nómina ('+aAceptar.length+' cambian a ACEPTADA)\n'
-        + noVan.length+' no están ('+aRechazar.length+' cambian a RECHAZADA)\n';
+        + van.length+' inscripciones están en la nómina ('+aAceptar.length+' pasan a ACEPTADA)\n'
+        + aBorrar.length+' no están y se ELIMINAN\n';
   if(sinInsc.length) msg+='\n'+sinInsc.length+' están en la nómina y NO tienen inscripción en el sitio:\n  · '+sinInsc.join('\n  · ')+'\n';
-  if(aRechazar.length) msg+='\nSe van a rechazar:\n  · '+aRechazar.map(i=>i.nombre).join('\n  · ')+'\n';
-  msg+='\nNadie se borra: rechazar se puede deshacer.\n¿Aplicar?';
+  if(aBorrar.length) msg+='\nSe van a eliminar:\n  · '+aBorrar.map(i=>i.nombre).join('\n  · ')+'\n';
+  msg+='\n¿Aplicar?';
   if(!confirm(msg))return;
+  // Borrar no se puede deshacer, así que se pregunta una segunda vez y con el
+  // número delante: es lo único de este panel que no tiene vuelta atrás.
+  if(aBorrar.length && !confirm('Se van a ELIMINAR '+aBorrar.length+' inscripciones, con su carnet, WADA y PIN.\n\nEsto NO se puede deshacer. ¿Seguro?'))return;
 
   let ok=0,err=0;
-  for(const [lista,estado] of [[aAceptar,'approved'],[aRechazar,'rejected']]){
-    for(const i of lista){
-      try{
-        await updateDoc(doc(db,'inscripciones',i.id),{status:estado});
-        i.status=estado; ok++;
-      }catch(e){ console.error('[suda] '+i.nombre,e); err++; }
-    }
+  for(const i of aAceptar){
+    try{ await updateDoc(doc(db,'inscripciones',i.id),{status:'approved'}); i.status='approved'; ok++; }
+    catch(e){ console.error('[suda] '+i.nombre,e); err++; }
+  }
+  for(const i of aBorrar){
+    try{
+      await deleteDoc(doc(db,'inscripciones',i.id));
+      // El documento privado va junto: ahí viven el PIN y los archivos.
+      try{ await deleteDoc(doc(db,'inscripciones_private',i.id)); }catch(_){}
+      ST.inscripciones=ST.inscripciones.filter(x=>x.id!==i.id);
+      ok++;
+    }catch(e){ console.error('[suda] borrar '+i.nombre,e); err++; }
   }
   try{ await logAction('suda_aplicar_nomina',SUDA_EV,null,
-        ok+' cambiadas ('+aAceptar.length+' aceptadas, '+aRechazar.length+' rechazadas), '+err+' errores'); }catch(_){}
-  showToast(err?('✓ '+ok+' actualizadas — '+err+' con error'):('✓ '+ok+' inscripciones actualizadas'));
+        aAceptar.length+' aceptadas, '+aBorrar.length+' eliminadas, '+err+' errores'); }catch(_){}
+  showToast(err?('✓ '+ok+' aplicadas — '+err+' con error'):('✓ '+ok+' inscripciones aplicadas'));
   render();
 };
 function renderApprovals(){
