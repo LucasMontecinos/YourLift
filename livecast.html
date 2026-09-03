@@ -7670,11 +7670,50 @@ function renderTxJornada(){
   // Calculamos el alto de cada fila según cuántos atletas/categorías hay,
   // de modo que ocupen exactamente el alto disponible (sin sobra ni overflow).
   const VH=(window.innerHeight||1080);
-  const numCats=keys.length, numAth=pool.length;
   const topBarH=Math.round(VH*0.075);            // barra de título
   const theadH=Math.round(VH*0.032);             // fila de encabezados de columna
   const availH=Math.max(120,VH-topBarH-theadH-2);
-  const weight=numAth*1.0+numCats*1.32;          // las cabeceras de categoría pesan +
+  const peso=ks=>ks.reduce((n,k)=>n+groups[k].length+1.32,0);   // las cabeceras pesan +
+
+  // ── Que entre completa Y se lea de lejos ──────────────────────────────────
+  // Antes esto se resolvía achicando la letra sin piso: con varias tandas
+  // elegidas la tabla terminaba más alta que la pantalla y, como el contenedor
+  // recorta, las últimas filas desaparecían sin avisar. Nadie se entera de que
+  // faltan atletas hasta que alguien los busca.
+  //
+  // Ahora hay un piso de alto de fila —debajo de eso no se lee ni de cerca— y si
+  // no entra, se reparte en páginas que van rotando solas. Se pierde el ver todo
+  // de un vistazo, pero no se pierde información y lo que se ve se lee.
+  const UNIT_MIN=Math.max(14,VH*0.016);
+  let paginas=[keys];
+  if(availH/peso(keys)<UNIT_MIN){
+    const maxPeso=availH/UNIT_MIN;
+    paginas=[]; let act=[], w=0;
+    keys.forEach(k=>{
+      const pk=groups[k].length+1.32;
+      // Una categoría no se parte entre dos páginas: se lee como bloque.
+      if(act.length&&w+pk>maxPeso){paginas.push(act);act=[];w=0;}
+      act.push(k); w+=pk;
+    });
+    if(act.length)paginas.push(act);
+  }
+  const nPag=paginas.length;
+  if(nPag>1){
+    if(!window._jornPagTimer){
+      window._jornPagTimer=setInterval(function(){
+        window._JORN_PAG=(window._JORN_PAG||0)+1;
+        if(typeof R==='function')R();
+      },14000);
+    }
+  }else if(window._jornPagTimer){
+    clearInterval(window._jornPagTimer); window._jornPagTimer=null; window._JORN_PAG=0;
+  }
+  const iPag=nPag>1?((window._JORN_PAG||0)%nPag):0;
+  const keysPag=paginas[iPag]||keys;
+
+  const numCats=keysPag.length;
+  const numAth=keysPag.reduce((n,k)=>n+groups[k].length,0);
+  const weight=numAth*1.0+numCats*1.32;
   const unit=availH/weight;                       // alto de una fila de atleta (px)
   const hdrH=unit*1.32;                            // alto de fila de categoría (px)
   const s=Math.max(.6,Math.min(2.1,unit/26));     // factor de escala de fuente (más grande para proyección)
@@ -7684,7 +7723,7 @@ function renderTxJornada(){
 
   const H=(t)=>'<th style="padding:0 4px;font-family:Oswald;font-size:'+fs(12)+'px;letter-spacing:1px;color:rgba(220,230,245,.65);font-weight:600">'+t+'</th>';
   let rows='';
-  keys.forEach(k=>{
+  keysPag.forEach(k=>{
     const parts=k.split('|');
     const sexLabel=sexO(parts[0])? '♀':'♂';
     const divS=txDivShort(parts[2]);
@@ -7733,8 +7772,14 @@ function renderTxJornada(){
   return '<div style="position:absolute;inset:0;background:linear-gradient(135deg,#0A1628 0%,#0E1F3A 55%,#0A1628 100%);display:flex;flex-direction:column;overflow:hidden">'
     +'<div style="height:'+topBarH+'px;box-sizing:border-box;padding:0 26px;background:rgba(10,22,40,.6);border-bottom:2px solid #D4A843;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">'
       +'<div><div style="font-family:Oswald;font-size:'+Math.round(VH*0.013)+'px;letter-spacing:4px;color:rgba(212,168,67,.85)">TABLA DE CLASIFICACIÓN · JORNADA</div>'
-      +'<div style="font-family:Oswald;font-size:'+Math.round(VH*0.024)+'px;font-weight:700;letter-spacing:1px;color:#fff;margin-top:2px">'+evName+' <span style="font-size:'+Math.round(VH*0.015)+'px;color:rgba(212,168,67,.8);margin-left:8px">Tandas: '+flLabel+'</span></div></div>'
-      +'<img src="yourlift_logo_hd.png" alt="YourLift" style="height:'+Math.round(VH*0.04)+'px;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))" onerror="this.outerHTML=\'<span style=&quot;font-family:Oswald;color:#D4A843;letter-spacing:2px&quot;>YourLift</span>\'">'
+      +'<div style="font-family:Oswald;font-size:'+Math.round(VH*0.024)+'px;font-weight:700;letter-spacing:1px;color:#fff;margin-top:2px">'+evName+' <span style="font-size:'+Math.round(VH*0.015)+'px;color:rgba(212,168,67,.8);margin-left:8px">Tandas: '+flLabel+(nPag>1?'  ·  Página '+(iPag+1)+' de '+nPag:'')+'</span></div></div>'
+      // Los tres logos: federación, campeonato y YourLift. Van en la barra de
+      // título, que ya escala con el alto de la pantalla, así que crecen junto
+      // con el resto cuando esto se proyecta en grande.
+      +'<div style="display:flex;align-items:center;gap:'+Math.round(VH*0.016)+'px;flex-shrink:0">'
+        +_tiraLogos(['fed','camp'],Math.round(VH*0.05)+'px',Math.round(VH*0.014)+'px')
+        +'<img src="yourlift_logo_hd.png" alt="YourLift" style="height:'+Math.round(VH*0.04)+'px;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))" onerror="this.outerHTML=\'<span style=&quot;font-family:Oswald;color:#D4A843;letter-spacing:2px&quot;>YourLift</span>\'">'
+      +'</div>'
     +'</div>'
     +'<div style="flex:1;overflow:hidden;padding:0 14px;box-sizing:border-box">'
       +'<table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed">'
@@ -8120,6 +8165,7 @@ function renderScreenBarra(a){
   const modo=(window._SCREEN_STATE&&window._SCREEN_STATE.fondo)||'bandera';
   const fondo=_fondoBarra(a,modo);
   const logo=DATA.event&&DATA.event.logoUrl;
+  const logoFed=DATA.event&&DATA.event.logoFedUrl;
   const partes=String(a.name||'').trim().split(/\s+/);
   const apellidos=partes.slice(-2).join(' ');
   const nombres=partes.slice(0,-2).join(' ');
@@ -8160,6 +8206,8 @@ function renderScreenBarra(a){
 
     ${logo?B('bLogo',`<img src="${logo}" alt="" style="max-height:11vh;max-width:14vw;object-fit:contain;display:block" onerror="this.style.display='none'">`):''}
 
+    ${logoFed?B('bLogoFed',`<img src="${logoFed}" alt="" style="max-height:9vh;max-width:12vw;object-fit:contain;display:block" onerror="this.style.display='none'">`):''}
+
     ${_lucesEnTarima()?B('bLuces',renderLucesTarima(true)):''}
 
     <button onclick="barraResetLayout()" title="Volver a dejar la pantalla como venía"
@@ -8199,6 +8247,10 @@ const PI_DEFAULT_LAYOUT={
   subtitle:{x:50,y:78,scale:100},
   position:{x:50,y:84,scale:100},
   next:{x:50,y:93,scale:100},
+  // Los dos logos de la Pantalla de Intentos: arrancan arriba, en las esquinas,
+  // que es donde no estorban a nada de lo que ya había.
+  logoFed:{x:8,y:9,scale:100},
+  logoCamp:{x:92,y:9,scale:100},
   // "Atleta en barra" usa el mismo editor. Las claves llevan b- adelante para no
   // pisarse con las de arriba: las dos disposiciones conviven en el mismo archivo
   // guardado, y cada pantalla dibuja las suyas.
@@ -8212,6 +8264,7 @@ const PI_DEFAULT_LAYOUT={
   bPais:{x:10,y:75,scale:100},        // bandera + ARG
   bDatos:{x:50,y:75,scale:100},       // -63 kg · JR · Classic
   bLogo:{x:90,y:75,scale:100},        // logo del campeonato
+  bLogoFed:{x:90,y:88,scale:100},     // logo de la federación
   bLuces:{x:50,y:90,scale:100}        // las luces de los jueces
 };
 function _piLoadLayout(){
@@ -8286,6 +8339,13 @@ window.piResetColors=function(){
 };
 // Un bloque movible/redimensionable. isBarbell=true le agrega overflow visible
 // (la barra es más ancha que su contenedor centrado).
+// Un logo como bloque movible. Si no hay logo cargado no se dibuja nada: un
+// bloque vacío igual se puede seleccionar y arrastrar, y confunde.
+function _piLogoBloque(key,url,maxAlto,maxAncho){
+  if(!url)return '';
+  return _piBlock(key,'<img src="'+url+'" alt="" style="max-height:'+maxAlto+';max-width:'+maxAncho
+    +';object-fit:contain;display:block" onerror="this.style.display=\'none\'">');
+}
 function _piBlock(key,innerHtml){
   const pos=window._piLayout[key]||{x:50,y:50,scale:100};
   const selected=window._piSelected===key;
@@ -8624,6 +8684,8 @@ function renderScreenIntentos(cur,nxt){
     ${_piBlock('subtitle',subtitleHtml)}
     ${positionHtml?_piBlock('position',positionHtml):''}
     ${nextHtml?_piBlock('next',nextHtml):''}
+    ${_piLogoBloque('logoFed',(DATA.event||{}).logoFedUrl,'9vh','12vw')}
+    ${_piLogoBloque('logoCamp',(DATA.event||{}).logoUrl,'11vh','15vw')}
     ${_piSettingsPanelHtml()}
   </div>`;
 }
