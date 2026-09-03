@@ -8686,6 +8686,56 @@ window.clubEliminar=async function(club){
   if(fallaron.length) showToast('Club eliminado en '+ok+' atleta(s), fallaron '+fallaron.length+': '+fallaron.slice(0,3).join(', '),null,true);
   else showToast('Club "'+club+'" eliminado — '+ok+' atleta(s) quedaron sin club');
 };
+// ── Corregir el nombre de un club ──────────────────────────────────
+// Mismo razonamiento que eliminar: como la lista se arma de los atletas,
+// renombrar el club es cambiarle el nombre a todos los que lo tienen puesto. Si
+// se cambiara en un solo lado quedarían dos clubes donde hay uno, y el
+// desplegable de inscripción —que sale del mismo padrón— mostraría los dos.
+window.clubRenombrar=async function(club){
+  if(!ST.adminInfo||_ROLES_SIN_PANEL.includes(ST.adminInfo?.role)){
+    showToast('Tu cuenta no puede editar clubes',null,true); return;
+  }
+  const nuevo=(prompt('Nombre del club\n\nSe le cambia a todos sus atletas y entrenadores.',club)||'').trim();
+  if(!nuevo||nuevo===club)return;
+  const atletas=(ST.data||[]).filter(a=>a.club===club);
+  const entren=(ST.entrenadores||[]).filter(e=>e.club===club);
+  // Si ya existe otro club con ese nombre, esto los junta en uno. Es una decisión
+  // distinta a corregir un nombre y hay que decirla, no dejar que pase sola.
+  const yaExiste=[...new Set((ST.data||[]).map(a=>a.club).filter(Boolean))]
+    .some(c=>c!==club&&c===nuevo);
+  if(!confirm((yaExiste
+      ?'CUIDADO: ya hay un club llamado "'+nuevo+'".\nLos dos van a quedar como uno solo.\n\n'
+      :'')
+    +'Renombrar "'+club+'"\na "'+nuevo+'"\n\n'
+    +'Se le cambia el club a '+atletas.length+' atleta(s)'
+    +(entren.length?' y a '+entren.length+' entrenador(es)':'')+'.\n'
+    +'Perfiles, resultados y récords quedan igual.\n\n¿Seguir?'))return;
+  let ok=0,fallaron=[];
+  for(const a of atletas){
+    try{ a.club=nuevo; await _saveEdit(a); ok++; }
+    catch(e){ a.club=club; fallaron.push(a.nombre||a.codigo); console.warn('[clubRenombrar]',a.codigo,e); }
+  }
+  for(const e of entren){
+    try{ await updateDoc(doc(db,'entrenadores',e.id),{club:nuevo}); e.club=nuevo; ok++; }
+    catch(x){ fallaron.push(e.nombre||e.id); console.warn('[clubRenombrar] entrenador',e.id,x); }
+  }
+  // El logo se va con el nombre: si no, el club renombrado aparece sin logo y el
+  // viejo queda ocupando su lugar en la colección.
+  try{
+    const slugV=window.normClub(club), slugN=window.normClub(nuevo);
+    const fs=(window._CLUBS_FS||{})[slugV];
+    if(slugN!==slugV&&fs&&fs.logoUrl){
+      await setDoc(doc(db,'clubs',slugN),{name:nuevo,slug:slugN,logoUrl:fs.logoUrl,updatedAt:serverTimestamp()},{merge:true});
+      await deleteDoc(doc(db,'clubs',slugV));
+    }else if(fs){
+      await setDoc(doc(db,'clubs',slugV),{name:nuevo},{merge:true});
+    }
+  }catch(e){console.warn('[clubRenombrar] logo',e);}
+  await logAction('club_renombrado',club,club,nuevo,{atletas:atletas.length,entrenadores:entren.length});
+  render();
+  if(fallaron.length) showToast('Renombrado en '+ok+', fallaron '+fallaron.length+': '+fallaron.slice(0,3).join(', '),null,true);
+  else showToast('Ahora es "'+nuevo+'" — '+ok+' ficha(s) actualizada(s)');
+};
 function renderClubs(){
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const allClubs=[...new Set((ST.data||[]).map(a=>a.club).filter(Boolean))].sort();
@@ -8720,6 +8770,7 @@ function renderClubs(){
         <button class="btn btn-b" style="padding:5px 10px;font-size:11px" onclick="ST._clubExpanded=ST._clubExpanded==='${esc(club)}'?null:'${esc(club)}';render()">
           ${isOpen?'Ocultar':'Ver atletas'}
         </button>
+        <button class="btn btn-b" style="padding:5px 10px;font-size:11px" onclick="clubRenombrar('${esc(club).replace(/'/g,"\\'")}')" title="Le cambia el nombre del club a sus ${athletes.length} atleta(s). El logo se va con el nombre.">Renombrar</button>
         ${esOwner?`<button class="btn" style="padding:5px 10px;font-size:11px;border-color:var(--red);color:var(--red)" onclick="clubEliminar('${esc(club).replace(/'/g,"\\'")}')" title="Le vacía el club a sus ${athletes.length} atleta(s). Perfiles y resultados quedan intactos.">Eliminar</button>`:''}
       </div>
       ${isOpen?`<div style="margin-top:10px;max-height:220px;overflow-y:auto;border-top:1px solid var(--border);padding-top:8px">
