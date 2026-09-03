@@ -203,13 +203,36 @@ function demoUpdate(id, updates) {
 // ══════════════════════════════════════════════
 // DATA
 // ══════════════════════════════════════════════
-const CLUBS = [
+// Los clubes de FECHIPO son los que salen en la sección Clubes del panel, y esa
+// sección los saca de los atletas del padrón: un club figura mientras alguien lo
+// tenga puesto. Acá se arma la lista igual, del mismo padrón, para que las dos
+// no se puedan separar — antes esta era una lista escrita a mano y se fue
+// quedando atrás: ofrecía un club que ya no existe y le faltaba uno que sí.
+//
+// El respaldo es solo para cuando el padrón no alcanzó a llegar (sin conexión, o
+// en modo demo); si se usara, el desplegable quedaría vacío.
+const CLUBS_RESPALDO = [
   "All Power CD","Powerlifting Atacama","Athor Powerlifting","Beers and Lifts","Black Bars",
-  "Club Bushido Lifting","Club Deportivo Jacques Oliger","Club Kensei","Concebarbell",
-  "Hannya Strength","Himalaya Powerlifting",
-  "Iron Forces Powerlifting","Kaizen","Los Toros","Potencia Muscular CD","Primal Strength",
-  "REMA","Shoganai Strength","South Side Club","Wolf Strength","Otro"
+  "Club Bushido Lifting","Club Deportivo Jaques Oliger","Hannya Strength",
+  "Himalaya Powerlifting","Iron Forces Powerlifting","Kaizen","Los Toros",
+  "Potencia Muscular","Primal Strength","REMA","Shoganai Strength","South Side Club",
+  "Wolf Strength"
 ];
+
+// Las opciones del desplegable, en orden. `actual` es el club que ya tiene la
+// persona: si su club dejó de figurar igual se incluye, porque si no el <select>
+// se dibujaría en blanco y al guardar la inscripción perdería el club en silencio.
+function clubsParaElegir(actual){
+  const delPadron = [...new Set((athleteDB || [])
+    .map(a => (a.club || '').trim())
+    .filter(c => c && c !== 'Otro'))];
+  const base = delPadron.length ? delPadron : CLUBS_RESPALDO;
+  const out = base.slice().sort((a, b) => a.localeCompare(b, 'es'));
+  const norm = s => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (actual && actual !== 'Otro' && !out.some(c => norm(c) === norm(actual))) out.push(actual);
+  out.push('Otro');
+  return out;
+}
 
 // EVENTS loaded exclusively from Firestore eventos collection
 // Created and managed only through admin.html — no hardcoded events
@@ -352,7 +375,11 @@ const _STOR='https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.fireba
 fetch(_STOR+'public%2Fdata.json?alt=media',{cache:'no-cache'})
   .then(r=>r.ok?r.json():fetch('data.json?v='+Date.now()).then(r=>r.json()))
   .catch(()=>fetch('data.json?v='+Date.now()).then(r=>r.json()))
-  .then(d=>{athleteDB=d;_insAplicarEdits();}).catch(()=>{});
+  .then(d=>{athleteDB=d;_insAplicarEdits();
+    // El desplegable de clubes sale del padrón, así que hay que redibujar: si no,
+    // quien abrió el formulario antes de que llegara se queda con el respaldo.
+    try{render();}catch(e){}
+  }).catch(()=>{});
 
 // El padrón y las ediciones llegan por su cuenta y no se sabe cuál gana la
 // carrera, así que las ediciones se guardan y se pegan cuando ya están las dos.
@@ -928,7 +955,7 @@ function renderForm() {
         <label>Club <span class="req">*</span></label>
         <select class="input ${f.club?'ok':''}" onchange="updR('club',this.value)">
           <option value="">Seleccionar club...</option>
-          ${CLUBS.map(c => `<option ${f.club===c?'selected':''}>${c}</option>`).join('')}
+          ${clubsParaElegir(f.club).map(c => `<option ${f.club===c?'selected':''}>${c}</option>`).join('')}
         </select>
       </div>
       <div class="field">
@@ -1494,7 +1521,7 @@ function renderEdit() {
           <label>Club</label>
           <select class="input" onchange="updR('club',this.value)">
             <option value="">Seleccionar club...</option>
-            ${CLUBS.map(c => `<option ${f.club===c?'selected':''}>${c}</option>`).join('')}
+            ${clubsParaElegir(f.club).map(c => `<option ${f.club===c?'selected':''}>${c}</option>`).join('')}
           </select>
         </div>
       </div>
