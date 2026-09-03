@@ -10223,10 +10223,12 @@ function renderManage(){
     h+='<div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">';
     h+='<input id="manQ" type="text" value="'+esc(_mf0.q)+'" oninput="manBuscar(this.value)" placeholder="Buscar por nombre, club, país, categoría o lote…" '
       +'style="flex:1;min-width:240px;padding:9px 12px;border-radius:8px;border:1px solid '+(_mf0.q?'var(--gold)':'var(--border)')+';background:var(--bg);color:var(--text);font-size:13px">';
+    const _fdMan=_filaDias('pesaje',_tandas,_diaDeTanda(DATA.flight));
     if(_tandas.length>1){
+      h+='<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;width:100%">'+_fdMan.html+'</div>';
       h+='<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">';
       h+='<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-right:2px">TANDA</span>';
-      _tandas.forEach(f=>{
+      _fdMan.tandas.forEach(f=>{
         const on=_mf0.flight===f, col=FL_C[f]||'var(--muted)';
         const n=ath.filter(a=>a.flight===f).length;
         h+='<button onclick="manTanda(\''+f+'\')" title="'+n+' atletas" style="min-width:34px;padding:6px 7px;border-radius:6px;border:2px solid '
@@ -10565,9 +10567,13 @@ function renderCompete(){
   // directo, sin tener que abrir la sidebar. Define qué tanda ve Control TX ahora mismo.
   {const flightsCE=_allFlightsSorted();
    if(flightsCE.length){
+     // El día se elige aparte y solo filtra los botones: la tanda en tarima la
+     // sigue moviendo el operador con estos mismos botones, como siempre.
+     const _fdCE=_filaDias('control',flightsCE,_diaDeTanda(DATA.flight));
+     h+=_fdCE.html;
      h+='<div style="display:flex;align-items:center;gap:4px;margin-bottom:10px;flex-wrap:wrap">';
      h+='<span style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-right:2px">'+(window.NAV_LIBRE?'TANDA QUE ESTÁS MIRANDO (solo para ti)':'TANDA EN TARIMA (Control TX)')+'</span>';
-     h+=flightsCE.map(f=>{
+     h+=_fdCE.tandas.map(f=>{
        const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;
        const on=DATA.flight===f;
        return '<button onclick="DATA.flight=\''+f+'\';saveNow();R()" class="os" style="padding:5px 12px;border-radius:6px;border:2px solid '+(on?(FL_C[f]||'var(--gold)'):'var(--border)')+';background:'+(on?(FL_C[f]||'#666')+'22':'transparent')+';color:'+(on?(FL_C[f]||'#fff'):'var(--muted)')+';font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">'+f+'<span style="font-size:9px;opacity:.7;margin-left:4px">('+n+')</span></button>';
@@ -12354,11 +12360,64 @@ function _ytId(url){if(!url)return'';const m=url.match(/(?:youtu\.be\/|youtube\.
 // en la vista libre que ya usa el operador: con NAV_LIBRE, el lift/ronda/tanda de
 // ESTA pantalla no se toca cuando llega un snapshot, así que cargar un peso en la
 // tanda que está compitiendo ya no lo devuelve de un salto.
+// ── Los días del campeonato y sus tandas ─────────────────────────────────
+// El Sudamericano tiene 36 tandas en ocho días. En una tira sola —A, B… Z, AA…
+// AJ— no hay forma de encontrar la de uno sin contar letras, así que primero se
+// elige el día y quedan a la vista las cuatro o cinco de ese día.
+//
+// El día sale de la jornada que cada atleta trae anotada ("D3 22/09 · 10:00 · …").
+// Los campeonatos de un día no la traen, no hay días que elegir y todo se ve
+// igual que siempre.
+//
+// Elegir un día NO cambia nada de la competencia: filtra qué botones se dibujan.
+// La tarima, la tanda activa y la sincronización quedan donde estaban.
+window._DIA_SEL = window._DIA_SEL || {};
+function _diaDeTanda(f){
+  const a=DATA.athletes.find(x=>x.flight===f&&x.jornada);
+  const m=a&&/^D(\d+)\b/.exec(String(a.jornada));
+  return m?+m[1]:null;
+}
+function _fechaDeTanda(f){
+  const a=DATA.athletes.find(x=>x.flight===f&&x.jornada);
+  const m=a&&/^D\d+\s+([\d/]+)/.exec(String(a.jornada));
+  return m?m[1]:'';
+}
+function _tandasPorDia(tandas){
+  const porDia={};
+  tandas.forEach(f=>{ const d=_diaDeTanda(f); if(d)(porDia[d]=porDia[d]||[]).push(f); });
+  return porDia;
+}
+// Dibuja la fila de días y devuelve las tandas del día elegido. `zona` separa la
+// elección de cada pantalla: el operador puede estar mirando el día 2 en Control
+// en Vivo y el 3 en Atletas & Pesaje sin que una mueva a la otra.
+function _filaDias(zona, tandas, diaEnTarima){
+  const porDia=_tandasPorDia(tandas);
+  const dias=Object.keys(porDia).map(Number).sort((a,b)=>a-b);
+  if(dias.length<2) return {html:'', tandas};
+  if(window._DIA_SEL[zona]==null||!porDia[window._DIA_SEL[zona]])
+    window._DIA_SEL[zona]=diaEnTarima||dias[0];
+  const sel=window._DIA_SEL[zona];
+  let h='<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:8px">';
+  h+='<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-right:2px">VER DÍA</span>';
+  dias.forEach(d=>{
+    const on=d===sel, hoy=d===diaEnTarima;
+    h+='<button onclick="verDia(\''+zona+'\','+d+')" class="os" style="padding:5px 14px;border-radius:999px;border:2px solid '
+      +(on?'var(--gold)':'var(--border)')+';background:'+(on?'rgba(212,168,67,.14)':'transparent')
+      +';color:'+(on?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'
+      +'DÍA '+d+'<span style="font-size:9px;opacity:.65;margin-left:5px">'+_fechaDeTanda(porDia[d][0])+'</span>'
+      +(hoy?'<span style="font-size:8px;color:var(--green);margin-left:5px">EN TARIMA</span>':'')+'</button>';
+  });
+  h+='</div>';
+  return {html:h, tandas:porDia[sel]};
+}
+window.verDia=function(zona,d){ window._DIA_SEL[zona]=d; try{R();}catch(e){} };
+
 window.liveVerTanda=function(f){
   if(!f){ setNavLibre(false); }
   else { window.setNavLibre(true); DATA.flight=f; }
   try{ R(); }catch(e){}
 };
+
 
 
 function renderLiveView(){
@@ -12404,6 +12463,12 @@ function renderLiveView(){
   // de un salto. Es la misma vista libre que usa el operador, expuesta acá.
   {
     const tandas=[...new Set(DATA.athletes.map(a=>a.flight).filter(Boolean))].sort(_cmpFl);
+
+    const _fd=_filaDias('publico',tandas,_tandaEnTarima?_diaDeTanda(_tandaEnTarima):null);
+    h+=_fd.html;
+    const tandasVer=_fd.tandas;
+
+
     if(tandas.length>1){
       h += '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:12px">';
       h += '<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-right:2px">VER TANDA</span>';
@@ -12411,7 +12476,7 @@ function renderLiveView(){
         +(libre?'var(--border)':'var(--green)')+';background:'+(libre?'transparent':'rgba(34,197,94,.12)')
         +';color:'+(libre?'var(--muted)':'var(--green)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer" '
         +'title="Sigue sola a la tanda que está en tarima">AUTOMÁTICO</button>';
-      tandas.forEach(f=>{
+      tandasVer.forEach(f=>{
         const on=libre&&f===currentFlight, enTarima=f===_tandaEnTarima;
         const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;
         h += '<button onclick="liveVerTanda(\''+f+'\')" style="padding:5px 12px;border-radius:6px;border:2px solid '
@@ -12647,7 +12712,11 @@ function renderAtletaInfo(){
     
     // Header: photo + name
     h+='<div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">';
-    const fotoUrl=db?.foto_url||'';
+    // Los extranjeros no están en el padrón de la federación, así que `db` es
+    // nulo y quedaban con las iniciales aunque su foto estuviera cargada: vive en
+    // la nómina del Sudamericano, que se busca por nombre. De los 416 atletas,
+    // 231 tienen foto ahí.
+    const fotoUrl=db?.foto_url||(_fotoSudaFor(a)||{}).foto_url||'';
     h+='<div style="width:64px;height:64px;border-radius:12px;background:var(--bg);border:2px solid '+(fotoUrl?'rgba(212,168,67,.5)':'var(--border)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;overflow:hidden">';
     h+='<span style="font-family:Oswald;font-size:22px;font-weight:700;color:var(--border);position:absolute">'+initials+'</span>';
     if(fotoUrl){

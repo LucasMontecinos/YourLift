@@ -5346,99 +5346,118 @@ function apprListHtml(){
 }
 window.apprFilter=function(v){ST.apprSearch=v;const el=document.getElementById('apprList');if(el)el.innerHTML=apprListHtml();};
 
-// ── Dejar las inscripciones del Sudamericano como la nómina final ─────────
+// ── Agregar una inscripción a mano ───────────────────────────────────────
 //
-// Se inscribieron 103 y viajan 81: FESUPO mandó la nominación final y ahí quedó
-// definido quién va. Hacerlo a mano son 103 clics y basta equivocarse en uno para
-// que alguien viaje sin estar aceptado o al revés.
+// Las inscripciones entran por el formulario público, y hasta acá no había forma
+// de crear una desde el panel. Hace falta: un atleta puede estar en la nómina de
+// FESUPO y no haberse inscrito nunca en el sitio —le pasó a Carolina Andrea Ramos
+// Donoso, que compite el día 3 del Sudamericano—, y entonces aparece en la nómina
+// pública y en el livecast pero no en las listas de inscritos, que es de donde
+// salen la acreditación y el control de cupos.
 //
-// La lista buena es la nómina publicada (nomina_sudamericano.json), que ya salió
-// del Excel oficial de FESUPO —el que trae los días de competencia—. Quien está
-// ahí queda ACEPTADO; quien no, se ELIMINA, junto con su documento privado (PIN,
-// carnet, WADA). Eso no se puede deshacer, así que se pide confirmar dos veces y
-// la lista de a quiénes se va a borrar se muestra completa antes.
-//
-// El cruce es por RUT y nunca por nombre: en la nómina de FESUPO los nombres
-// vienen acortados ("Olave Vega Sofia" por "Sofía Monserrat Olave Vega") y con
-// los apellidos primero, así que comparar nombres deja fuera a gente que sí va.
-// El RUT sale del código YourLift que la nómina ya trae para cada chileno.
-const SUDA_EV='Sudamericano_2026';
-function _sudaRutsNomina(){
-  const j=ST.sudaNom;
-  if(!j||!Array.isArray(j.atletas))return null;
-  const rut=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
-  const porCod={};
-  (ST.data||[]).forEach(a=>{ if(a.codigo&&a.rut)porCod[a.codigo]=rut(a.rut); });
-  const out=new Map();
-  j.atletas.forEach(a=>{
-    const r=a.cod?porCod[a.cod]:null;
-    if(r)out.set(r,a);
-  });
-  return out;
-}
-// El botón solo aparece si hay inscripciones del Sudamericano: en cualquier otro
-// campeonato no significa nada y sería una puerta abierta a apretarla sin querer.
-function _sudaBotonHtml(){
-  const n=(ST.inscripciones||[]).filter(i=>i.evento===SUDA_EV).length;
-  if(!n)return '';
-  return `<div class="card" style="margin-bottom:12px;background:rgba(212,168,67,.06);border-color:rgba(212,168,67,.4);display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-    <div style="flex:1;min-width:240px">
-      <div style="font-family:Oswald;font-size:13px;font-weight:700;color:var(--gold);letter-spacing:1px">SUDAMERICANO 2026 · ${n} INSCRIPCIONES</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:3px">Deja aceptadas solo a las que están en la nómina final de FESUPO y elimina el resto. Cruza por RUT y muestra el detalle completo antes de aplicar.</div>
+// El atleta se elige del PADRÓN, no se escribe a mano: así el RUT, el código y el
+// club salen de una sola fuente y la inscripción queda cruzable con su ficha.
+let _insWork=null;
+window.openInsModal=function(){
+  _insWork={evento:ST.filterEv||'',codigo:'',modalidad:'Powerlifting Classic',
+            division:'Open',categoria:'',q:''};
+  const ov=document.createElement('div'); ov.id='insModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  document.body.appendChild(ov);
+  window.renderInsModal();
+};
+window.renderInsModal=function(){
+  const ov=document.getElementById('insModal'); if(!ov)return;
+  const campo='width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box';
+  const evs=[...new Set([...(ST.eventos||[]).map(e=>e.name||e.id),
+                         ...(ST.inscripciones||[]).map(i=>i.evento)])].filter(Boolean).sort();
+  const q=(_insWork.q||'').toLowerCase().trim();
+  const hits=q?(ST.data||[]).filter(a=>((a.nombre||'')+' '+(a.rut||'')+' '+(a.codigo||'')).toLowerCase().includes(q)).slice(0,8):[];
+  const sel=(ST.data||[]).find(a=>a.codigo===_insWork.codigo);
+  ov.innerHTML=`<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:460px;width:100%;max-height:90vh;overflow:auto">
+    <div style="font-family:Oswald;font-size:19px;font-weight:700;letter-spacing:1px;margin-bottom:4px">AGREGAR INSCRIPCIÓN</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Para un atleta que compite pero no alcanzó a inscribirse. Queda aceptada.</div>
+    <div style="display:grid;gap:9px">
+      <select id="ins_ev" style="${campo}" onchange="insSet('evento',this.value)">
+        <option value="">Campeonato…</option>
+        ${evs.map(e=>`<option value="${esc(e)}"${_insWork.evento===e?' selected':''}>${esc(e)}</option>`).join('')}
+      </select>
+      ${sel
+        ? `<div style="display:flex;gap:10px;align-items:center;background:var(--bg);border:1px solid var(--green);border-radius:8px;padding:9px 11px">
+             <div style="flex:1"><div style="font-weight:600;font-size:13px">${esc(sel.nombre)}</div>
+             <div style="font-size:11px;color:var(--muted)">${esc(sel.rut||'')} · ${esc(sel.codigo||'')}${sel.club?' · '+esc(sel.club):''}</div></div>
+             <button class="btn btn-o" style="padding:5px 10px;font-size:11px" onclick="insSet('codigo','',1)">Cambiar</button></div>`
+        : `<input id="ins_q" style="${campo}" placeholder="Buscar atleta por nombre, RUT o código…" value="${esc(_insWork.q||'')}" oninput="insBuscar(this)">
+           ${hits.map(a=>`<div onclick="insSet('codigo','${esc(a.codigo)}',1)" style="padding:7px 11px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px">
+             ${esc(a.nombre)} <span style="color:var(--muted)">· ${esc(a.rut||'')}</span></div>`).join('')}
+           ${q&&!hits.length?'<div style="font-size:12px;color:var(--muted);padding:4px 2px">Sin resultados en el padrón.</div>':''}`}
+      <select id="ins_mod" style="${campo}" onchange="insSet('modalidad',this.value)">
+        ${['Powerlifting Classic','Powerlifting Equipado','Only Bench Classic','Only Bench Equipado','Powerlifting Universitario','Olimpiadas Especiales']
+          .map(m=>`<option${_insWork.modalidad===m?' selected':''}>${m}</option>`).join('')}
+      </select>
+      <div style="display:flex;gap:9px">
+        <select id="ins_div" style="${campo}" onchange="insSet('division',this.value)">
+          ${['Sub-Junior','Junior','Open','Master I','Master II','Master III','Master IV','Universitario']
+            .map(d=>`<option${_insWork.division===d?' selected':''}>${d}</option>`).join('')}
+        </select>
+        <input id="ins_cat" style="${campo}" placeholder="Categoría (-69 kg)" value="${esc(_insWork.categoria||'')}" oninput="insSet('categoria',this.value)">
+      </div>
     </div>
-    <button class="btn btn-g" onclick="sudaAplicarNomina()" style="white-space:nowrap">Aplicar nómina final</button>
+    <div style="display:flex;gap:9px;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-o" onclick="document.getElementById('insModal').remove()">Cancelar</button>
+      <button class="btn btn-g" onclick="insGuardar()"${(!_insWork.evento||!_insWork.codigo)?' disabled':''}>Agregar</button>
+    </div>
   </div>`;
 }
-window.sudaAplicarNomina=async function(){
-  if(!ST.sudaNom){
-    try{ ST.sudaNom=await (await fetch('nomina_sudamericano.json?'+Date.now())).json(); }
-    catch(e){ showToast('No se pudo leer la nómina publicada',null,true); return; }
-  }
-  const nom=_sudaRutsNomina();
-  if(!nom||!nom.size){ showToast('La nómina publicada no trae atletas con código',null,true); return; }
-  const rut=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
-  const ins=(ST.inscripciones||[]).filter(i=>i.evento===SUDA_EV);
-  if(!ins.length){ showToast('No hay inscripciones del Sudamericano',null,true); return; }
-
-  const van=ins.filter(i=>nom.has(rut(i.rut)));
-  const noVan=ins.filter(i=>!nom.has(rut(i.rut)));
-  const aAceptar=van.filter(i=>(i.status||'approved')!=='approved');
-  const aBorrar=noVan;
-  // Quien está en la nómina y nunca se inscribió: no se puede aceptar lo que no
-  // existe, pero hay que decirlo — es alguien que viaja sin ficha en el sitio.
-  const inscRuts=new Set(ins.map(i=>rut(i.rut)));
-  const sinInsc=[...nom.entries()].filter(([r])=>!inscRuts.has(r)).map(([,a])=>a.n);
-
-  let msg='Nómina final de FESUPO — '+SUDA_EV+'\n\n'
-        + van.length+' inscripciones están en la nómina ('+aAceptar.length+' pasan a ACEPTADA)\n'
-        + aBorrar.length+' no están y se ELIMINAN\n';
-  if(sinInsc.length) msg+='\n'+sinInsc.length+' están en la nómina y NO tienen inscripción en el sitio:\n  · '+sinInsc.join('\n  · ')+'\n';
-  if(aBorrar.length) msg+='\nSe van a eliminar:\n  · '+aBorrar.map(i=>i.nombre).join('\n  · ')+'\n';
-  msg+='\n¿Aplicar?';
-  if(!confirm(msg))return;
-  // Borrar no se puede deshacer, así que se pregunta una segunda vez y con el
-  // número delante: es lo único de este panel que no tiene vuelta atrás.
-  if(aBorrar.length && !confirm('Se van a ELIMINAR '+aBorrar.length+' inscripciones, con su carnet, WADA y PIN.\n\nEsto NO se puede deshacer. ¿Seguro?'))return;
-
-  let ok=0,err=0;
-  for(const i of aAceptar){
-    try{ await updateDoc(doc(db,'inscripciones',i.id),{status:'approved'}); i.status='approved'; ok++; }
-    catch(e){ console.error('[suda] '+i.nombre,e); err++; }
-  }
-  for(const i of aBorrar){
-    try{
-      await deleteDoc(doc(db,'inscripciones',i.id));
-      // El documento privado va junto: ahí viven el PIN y los archivos.
-      try{ await deleteDoc(doc(db,'inscripciones_private',i.id)); }catch(_){}
-      ST.inscripciones=ST.inscripciones.filter(x=>x.id!==i.id);
-      ok++;
-    }catch(e){ console.error('[suda] borrar '+i.nombre,e); err++; }
-  }
-  try{ await logAction('suda_aplicar_nomina',SUDA_EV,null,
-        aAceptar.length+' aceptadas, '+aBorrar.length+' eliminadas, '+err+' errores'); }catch(_){}
-  showToast(err?('✓ '+ok+' aplicadas — '+err+' con error'):('✓ '+ok+' inscripciones aplicadas'));
-  render();
+// Los campos del modal se cambian por acá y no escribiendo en _insWork desde el
+// HTML: un manejador en línea se evalúa en el ámbito global y no ve las variables
+// del módulo, así que `oninput="_insWork.q=this.value"` no hacía nada. El buscador
+// no buscaba y el modal quedaba muerto.
+window.insSet=function(campo,valor,redibujar){
+  if(!_insWork)return;
+  _insWork[campo]=valor;
+  if(redibujar)window.renderInsModal();
 };
+window.insBuscar=function(el){
+  if(!_insWork)return;
+  _insWork.q=el.value;
+  window.renderInsModal();
+  // Redibujar la lista se lleva el foco: hay que devolverlo con el cursor al
+  // final, si no se escribe una letra y hay que volver a hacer clic.
+  const n=document.getElementById('ins_q');
+  if(n){ n.focus(); n.setSelectionRange(n.value.length,n.value.length); }
+};
+window.insGuardar=async function(){
+  const a=(ST.data||[]).find(x=>x.codigo===_insWork.codigo);
+  if(!a||!_insWork.evento){ showToast('Falta el campeonato o el atleta',null,true); return; }
+  const rutLimpio=String(a.rut||'').replace(/[^0-9kK]/g,'');
+  if(!rutLimpio){ showToast('Ese atleta no tiene RUT en el padrón',null,true); return; }
+  // El id se arma igual que en el formulario público: {evento}_{rut sin puntos}.
+  // Si ya existe una inscripción de esa persona en ese campeonato, es la misma
+  // y hay que avisar en vez de pisarla.
+  const id=`${_insWork.evento}_${rutLimpio}`;
+  if((ST.inscripciones||[]).some(i=>i.id===id)){
+    showToast(a.nombre+' ya tiene inscripción en ese campeonato',null,true); return;
+  }
+  const cat=String(_insWork.categoria||'').trim();
+  try{
+    await setDoc(doc(db,'inscripciones',id),{
+      evento:_insWork.evento, nombre:a.nombre, rut:a.rut, codigo:a.codigo,
+      sexo:a.sexo||'', club:a.club||'', fechaNac:a.fechaNac||'',
+      modalidad:_insWork.modalidad, division:_insWork.division,
+      categoria:cat&&!/kg/i.test(cat)?cat+' kg':cat,
+      status:'approved', timestamp:serverTimestamp(),
+      // Queda anotado que no vino del formulario: no tiene PIN ni documentos, y
+      // el que la revise después tiene que poder saber por qué.
+      origen:'panel', creadaPor:ST.user?.email||'admin',
+    });
+    await logAction('crear_inscripcion',id,null,'aceptada',{nombre:a.nombre,evento:_insWork.evento});
+    showToast('✓ '+a.nombre+' agregado a '+_insWork.evento);
+    const ov=document.getElementById('insModal'); if(ov)ov.remove();
+  }catch(e){ showToast('Error: '+e.message,null,true); }
+};
+
 function renderApprovals(){
   const tab=ST.apprTab||'pending';
   const c=s=>ST.inscripciones.filter(i=>((i.status||'approved')===s)).length;
@@ -5450,8 +5469,8 @@ function renderApprovals(){
       ${tabBtn('pending','En revisión',c('pending'))}
       ${tabBtn('approved','Aceptadas',c('approved'))}
       ${tabBtn('rejected','Rechazadas',c('rejected'))}
+      <button class="btn btn-g" onclick="openInsModal()" style="padding:9px 16px;font-size:12px">+ Agregar inscripción</button>
     </div>
-    ${_sudaBotonHtml()}
     <input type="text" value="${esc(ST.apprSearch||'')}" oninput="apprFilter(this.value)" placeholder="Buscar por nombre, RUT, club o evento…" style="width:100%;max-width:380px;margin-bottom:12px;background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;font-family:DM Sans">
     <div class="card" style="padding:0;overflow-x:auto" id="apprList">${apprListHtml()}</div>`;
 }
