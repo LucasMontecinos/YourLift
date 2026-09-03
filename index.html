@@ -1875,23 +1875,14 @@ function cronoSuda(){
   let h=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 16px">${chips}</div>`;
   h+=`<h3 style="font-family:Oswald;font-size:15px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:0 0 12px">${_escH(_cronoFechaLarga(ST.cronoDia))}</h3>`;
 
-  // Hay días con DOS sesiones a la misma hora, en tarimas distintas: el 20 a las
-  // 16.30 corren a la vez el Equipado de hombres y Special Olympics. Puestas una
-  // debajo de la otra se leen como si fueran seguidas, y ahí uno se pregunta cómo
-  // caben dos competencias en el mismo horario. Se dice.
-  const _mismaHora={};
-  delDia.forEach(j=>{ (_mismaHora[j.inicio]=_mismaHora[j.inicio]||[]).push(j); });
-
   delDia.forEach((j,si)=>{
     const mios=ats.filter(a=>a.jornada===j.id);
     const rondas=[...new Set(mios.map(a=>a.ronda||1))].sort((a,b)=>a-b);
     const azul=si%2===0, bd=azul?'#3b82f6':'#c41e3a', bg=azul?'rgba(59,130,246,.08)':'rgba(196,30,58,.08)', hd=azul?'rgba(59,130,246,.20)':'rgba(196,30,58,.20)';
-    const juntas=(_mismaHora[j.inicio]||[]).filter(x=>x.id!==j.id);
     h+=`<div style="background:${bg};border:1px solid ${bd}55;border-left:5px solid ${bd};border-radius:12px;margin-bottom:16px;overflow:hidden">`;
     h+=`<div style="background:${hd};padding:11px 14px">
-      <div style="font-family:Oswald;font-weight:700;letter-spacing:1px;font-size:14px">${_escH(j.nombre||j.campeonato||'')}${juntas.length?`<span style="margin-left:8px;font-size:10px;letter-spacing:1px;padding:2px 8px;border-radius:10px;border:1px solid var(--gold);color:var(--gold);vertical-align:middle">EN PARALELO</span>`:''}</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:3px">Pesaje ${_escH(j.pesaje||'—')} · Competencia ${_escH(j.inicio||'—')} · ${mios.length} inscripción(es)</div>
-      ${juntas.length?`<div style="font-size:11px;color:var(--gold);margin-top:4px">A la misma hora, en otra tarima: ${juntas.map(x=>_escH(x.nombre||x.campeonato||'')).join(' · ')}</div>`:''}</div>`;
+      <div style="font-family:Oswald;font-weight:700;letter-spacing:1px;font-size:14px">${_escH(j.nombre||j.campeonato||'')}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px">Pesaje ${_escH(j.pesaje||'—')} · Competencia ${_escH(j.inicio||'—')} · ${mios.length} inscripción(es)</div></div>`;
     if(!mios.length){
       h+=`<div style="padding:12px 14px;color:var(--muted);font-size:13px">Sin inscripciones.</div></div>`; return;
     }
