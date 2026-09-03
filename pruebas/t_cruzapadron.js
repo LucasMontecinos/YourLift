@@ -112,6 +112,27 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     ok(r.exacta === 'TEST-1', 'pero el nombre exacto sigue encontrando la suya');
   }
 
+  console.log('\n  Y el cartel dice la verdad según de dónde sea');
+  {
+    const r = await p.evaluate(([nombrePeru, nombreChile]) => {
+      const at = w => ({ sq: [{ w, r: null }, { w: 0, r: null }, { w: 0, r: null }],
+                         bp: [{ w: 0, r: null }, { w: 0, r: null }, { w: 0, r: null }],
+                         dl: [{ w: 0, r: null }, { w: 0, r: null }, { w: 0, r: null }] });
+      const mk = (name, pais) => ({ id: Math.random(), name, lot: 1, flight: 'B',
+        sex: 'Mujer', sexo: 'Mujer', cat: '-52', div: 'Junior', mod: 'Powerlifting Classic',
+        club: pais, country: pais, pais, bw: 51, bombed: false, att: at(100) });
+      DATA.event = { id: 'suda2026', name: 'Sudamericano 2026' };
+      DATA.athletes = [mk(nombrePeru, 'PER'), mk('Persona Que No Existe En El Padron', 'CHI')];
+      const d = document.createElement('div');
+      d.innerHTML = renderAtletaInfo();
+      return [...d.querySelectorAll('.card')].map(c => c.innerText);
+    }, ['Alvarez Fernanda', '']);
+    ok(/extranjer/i.test(r[0]) && !/Atleta nuevo/.test(r[0]),
+       'a la extranjera no se le dice "atleta nuevo"');
+    ok(/Atleta nuevo/.test(r[1]),
+       'y a una chilena que compite por primera vez sí');
+  }
+
   console.log('\n  Y una palabra suelta no alcanza');
   {
     const r = await buscar('Alvarez', '', { name: 'Alvarez', pais: 'CHI' });

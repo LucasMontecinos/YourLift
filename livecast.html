@@ -12938,7 +12938,13 @@ function renderAtletaInfo(){
       if(compWithResults>4)h+='<div style="font-size:9px;color:var(--muted);text-align:center;margin-top:2px">+'+(compWithResults-4)+' más</div>';
       h+='</div>';
     }else if(!matched){
-      h+='<div style="text-align:center;padding:8px;color:var(--muted);font-size:10px;font-style:italic;border-top:1px solid var(--border);margin-top:4px">Atleta nuevo — sin historial</div>';
+      // "Atleta nuevo" solo vale para un chileno que compite por primera vez. Un
+      // extranjero no es nuevo: tiene su carrera, pero en el padrón de SU
+      // federación, y este padrón es el chileno. Decirle nuevo es falso y encima
+      // invita a buscarle un historial que acá nunca va a estar.
+      h+='<div style="text-align:center;padding:8px;color:var(--muted);font-size:10px;font-style:italic;border-top:1px solid var(--border);margin-top:4px">'
+        +(_esDeChile(a)?'Atleta nuevo — sin historial':'Atleta extranjero — su historial no está en el padrón chileno')
+        +'</div>';
     }
     
     h+='</div>';
