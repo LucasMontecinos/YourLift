@@ -141,6 +141,45 @@ const PANTALLAS = [
     revisar(await leer(), 'CUARTO CUATRO', 'tras cambiar de tanda');
   }
 
+  // El globo gris del navegador. Si el mouse queda quieto sobre la ventana que
+  // captura OBS —y queda, porque el operador suelta el mouse ahí— un `title`
+  // saca ese globo AL AIRE. Pasó en el Sudamericano: tapó el apellido de una
+  // atleta en el marcador.
+  //
+  // Lo que NO se puede hacer es apagarle el puntero a todas las pantallas de
+  // transmisión: la de Intentos y la de Atleta en barra llevan el editor de
+  // bloques y se manejan con el mouse. Se apaga solo donde no hay nada que
+  // manejar, y del resto se sacan los `title`.
+  console.log('\n  Nada saca un globo del navegador al aire');
+  {
+    for (const { p, nombre } of paginas) {
+      const globos = await p.evaluate(() => [...document.querySelectorAll('[title]')].length);
+      ok(globos === 0, nombre + ': sin nada que saque un globo (' + globos + ')');
+    }
+    // El marcador es solo cartel: ahí sí se apaga el puntero.
+    const m = await ctx.newPage();
+    await m.goto(`http://localhost:${PUERTO}/livecast.html?tx=scoreboard`, { waitUntil: 'domcontentloaded' });
+    await m.waitForFunction(() => typeof renderTxWidget === 'function', null, { timeout: 25000 });
+    await m.evaluate(MONTAR);
+    await m.evaluate(() => { try { _txSbSig = null; } catch (e) {} renderTxWidget(); });
+    const pe = await m.evaluate(() => {
+      const c = document.querySelector('.sb-card-explode');
+      return c ? getComputedStyle(c).pointerEvents : '(no se dibujó)';
+    });
+    ok(pe === 'none', 'el marcador no reacciona al mouse (' + pe + ')');
+    await m.close();
+
+    // Y las que sí se editan tienen que seguir recibiendo clics.
+    for (const modo of ['screen', 'barbell']) {
+      const e = await ctx.newPage();
+      await e.goto(`http://localhost:${PUERTO}/livecast.html?tx=${modo}`, { waitUntil: 'domcontentloaded' });
+      await e.waitForFunction(() => typeof renderTxWidget === 'function', null, { timeout: 25000 });
+      const body = await e.evaluate(() => getComputedStyle(document.body).pointerEvents);
+      ok(body !== 'none', modo + ': sigue manejándose con el mouse, que ahí hay editor');
+      await e.close();
+    }
+  }
+
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs[0] : ''));
   await b.close();
 

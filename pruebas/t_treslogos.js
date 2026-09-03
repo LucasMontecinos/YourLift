@@ -10,7 +10,7 @@
 //   pantalla        federación  campeonato  yourlift
 //   transición          no       sí, grande     no
 //   scoreboard          sí          sí          no
-//   tabla actual        sí          sí          no
+//   tabla actual        no          sí          no
 //   perfil              sí          sí          sí
 //
 // El scoreboard y la tabla están al aire todo el rato, y ahí lo que tiene que
@@ -57,14 +57,14 @@ const CAMP = 'https://ejemplo.cl/sudamericano.png';
   {
     const r = await p.evaluate(() => ({
       scoreboard: _tiraLogos(['fed', 'camp'], '76px', '16px'),
-      tabla: _tiraLogos(['fed', 'camp'], '92px', '12px'),
+      tabla: _tiraLogos(['camp'], '92px', '12px'),
       perfil: _tiraLogos(['fed', 'camp', 'yl'], '40px', '14px'),
       barrido: _barridoLogoImg(),
     }));
     ok(cuales(r.scoreboard).join(',') === 'fed,camp',
        'scoreboard: federación y campeonato, sin YourLift — ' + cuales(r.scoreboard).join(','));
-    ok(cuales(r.tabla).join(',') === 'fed,camp',
-       'tabla actual: lo mismo — ' + cuales(r.tabla).join(','));
+    ok(cuales(r.tabla).join(',') === 'camp',
+       'tabla actual: solo el del campeonato — ' + cuales(r.tabla).join(','));
     ok(cuales(r.perfil).join(',') === 'fed,camp,yl',
        'perfil: los tres — ' + cuales(r.perfil).join(','));
     ok(cuales(r.barrido).join(',') === 'camp',
@@ -86,7 +86,7 @@ const CAMP = 'https://ejemplo.cl/sudamericano.png';
       DATA.event = { id: 'ev1', name: 'Prueba' };     // ningún logo subido
       return {
         scoreboard: _tiraLogos(['fed', 'camp'], '76px', '16px'),
-        tabla: _tiraLogos(['fed', 'camp'], '92px', '12px'),
+        tabla: _tiraLogos(['camp'], '92px', '12px'),
         perfil: _tiraLogos(['fed', 'camp', 'yl'], '40px', '14px'),
       };
     });
@@ -129,6 +129,8 @@ const CAMP = 'https://ejemplo.cl/sudamericano.png';
     // se rompería sin que nadie se diera cuenta.
     const sb = lc.slice(lc.indexOf('sb-card-explode'), lc.indexOf('sb-wipe-content'));
     ok(!/YourLift_logo\.png/.test(sb), 'el scoreboard ya no lo tiene escrito a mano');
+    ok(/_tiraLogos\(\['camp'\],'92px'/.test(lc),
+       'y la tabla actual pide solo el del campeonato');
 
     const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
     ok(/id="ef_logoFedUrl"/.test(adm), 'se sube desde la ficha del campeonato');

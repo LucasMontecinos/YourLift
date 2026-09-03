@@ -227,6 +227,11 @@ if(TX_MODE){
   document.head.appendChild(css);
   const ready=()=>{
     if(TX_MODE==='profile'||TX_MODE==='leaderboard'||TX_MODE==='jornada'||TX_MODE==='screen')document.body.classList.add('tx-opaque');
+    // Ojo con dejar sordas al puntero las pantallas de transmisión en bloque: NO
+    // todas son solo un cartel. La de Intentos y la de Atleta en barra llevan el
+    // editor de bloques —se arrastran y se redimensionan con el mouse—, así que
+    // apagarles el puntero las deja inservibles. El marcador sí es solo cartel y
+    // se apaga en su propio nodo, más abajo.
     const d=document.createElement('div');d.id='txWidget';document.body.appendChild(d);
     // Sin placeholder: queda transparente hasta que llegan los datos.
   };
@@ -6371,12 +6376,13 @@ function _btVideoTeardown(){
 //   pantalla        federación  campeonato  yourlift
 //   transición          no       sí, grande     no      ← se ve sola, tiene que dominar
 //   scoreboard          sí          sí          no
-//   tabla actual        sí          sí          no
+//   tabla actual        no          sí          no      ← es una tarjeta chica
 //   perfil              sí          sí          sí
 //
 // En el scoreboard y en la tabla no va el de YourLift a propósito: son las
 // pantallas que están al aire todo el rato y lo que tiene que leerse ahí es de
-// quién es el campeonato.
+// quién es el campeonato. Y en la tabla actual va solo el del campeonato: es una
+// tarjeta chica en una esquina y con dos logos el título quedaba apretado.
 function _logoCamp(){ return (DATA.event&&DATA.event.logoUrl)||''; }
 function _logoFed(){ return (DATA.event&&DATA.event.logoFedUrl)||''; }
 
@@ -7228,7 +7234,12 @@ function renderTxScoreboard(cur,lifterChanged){
   else{totVal='—';totClr=WHITE_DIM}
   const flagHtml=_flagImg(_ctry(cur),22);
   return `
-    <div class="sb-card-explode" style="position:absolute;bottom:0;left:0;right:0;display:flex;align-items:stretch;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
+    <!-- pointer-events:none — el marcador es un cartel, no una interfaz, y va al
+         aire. Si el mouse queda quieto encima (queda: es la ventana que captura
+         OBS) el navegador saca su globo gris y sale en la transmisión. Acá se
+         puede apagar el puntero sin romper nada porque este marcador no tiene
+         editor de bloques, a diferencia de Intentos y Atleta en barra. -->
+    <div class="sb-card-explode" style="pointer-events:none;position:absolute;bottom:0;left:0;right:0;display:flex;align-items:stretch;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
       <!-- Federación y campeonato. El de YourLift no va acá: esta pantalla está
            al aire todo el rato y lo que tiene que leerse es de quién es el
            campeonato. Si no hay ninguno cargado, el bloque no se dibuja y la
@@ -7239,7 +7250,10 @@ function renderTxScoreboard(cur,lifterChanged){
         <div style="${_sbRowAnim(_animDir,0)}display:flex;justify-content:space-between;align-items:center;background:${YL_NAVY};border-top:3px solid ${YL_GOLD};padding:6px 22px">
           <div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:rgba(255,255,255,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:38%">${cur.club||''}</div>
           <div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:rgba(255,255,255,.6)">${(rk.pos&&totalAth?rk.pos+'/'+totalAth+' en categoría':'')}</div>
-          <div style="font-family:Oswald;font-size:${willChange?'15px':'18px'};font-weight:800;color:${forecastColor};letter-spacing:${willChange?'1px':'2px'};white-space:nowrap" title="Posición forecast en su sexo+categoría+división">${forecastTxt}</div>
+          <!-- Sin title: es un globo del navegador —recuadro gris con texto— y si
+               el mouse queda quieto encima del marcador, sale AL AIRE tapando el
+               nombre del atleta. Pasó en el Sudamericano con Olguín Karen. -->
+          <div style="font-family:Oswald;font-size:${willChange?'15px':'18px'};font-weight:800;color:${forecastColor};letter-spacing:${willChange?'1px':'2px'};white-space:nowrap">${forecastTxt}</div>
         </div>
         <div style="${_sbRowAnim(_animDir,1)}background:linear-gradient(90deg,${_txC('nameBg')},${_txC('nameBg2')});padding:7px 22px;display:flex;align-items:center;gap:12px">
           ${flagHtml}
@@ -7827,7 +7841,7 @@ function renderTxTablaActual(cur,opts){
         <!-- Header -->
         <div data-ta-header style="padding:14px 20px;background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:2px solid #D4A843;overflow:hidden">
           <div style="display:flex;align-items:center;gap:16px;flex:1;min-width:0">
-            ${(()=>{const t=_tiraLogos(['fed','camp'],'92px','12px');
+            ${(()=>{const t=_tiraLogos(['camp'],'92px','12px');
               return t?`<div class="ta-logo-anim" style="flex-shrink:0">${t}</div>`:'';})()}
             <div data-ta-title style="min-width:0">
               <div style="font-family:Oswald;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.75);font-weight:600">TABLA ACTUAL · ${liftN} · R${(DATA.round||0)+1}</div>
