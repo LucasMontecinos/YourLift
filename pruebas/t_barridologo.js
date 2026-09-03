@@ -5,15 +5,16 @@
 // a mano: siempre el de YourLift, aunque el campeonato tuviera el suyo subido y
 // ya se estuviera viendo en el Scoreboard y en la Tabla Actual.
 //
-// Ahora se puede elegir. Por defecto sigue el de YourLift: que un campeonato
-// haya subido su logo para el scoreboard no significa que quiera reemplazar la
-// marca del barrido, así que se pide a propósito.
+// Ahora manda el del campeonato. El barrido es el único momento en que la
+// pantalla es suya, así que va el suyo y grande: antes salía chico y en medio de
+// la cascada no se alcanzaba a ver. El interruptor sigue estando para forzar el
+// de YourLift en un campeonato que prefiera esa marca.
 //
 // Y como estos logos llegan casi siempre como un JPG con un cuadrado de fondo
 // liso alrededor, al subirlos se ofrece quitárselo.
 //
 // Lo que se cuida:
-//   · que si nadie eligió nada, salga el de YourLift — es lo que había antes;
+//   · que si nadie eligió nada, salga el del campeonato — es su momento;
 //   · que si no hay logo del campeonato, siga saliendo el de YourLift — la
 //     transmisión no puede quedarse con un barrido pelado;
 //   · que si el logo del campeonato no carga en medio de la transmisión, caiga
@@ -33,8 +34,8 @@ console.log('\nEl logo sale del campeonato, no está escrito a mano');
   ok(/function _barridoLogoImg\(\)\{/.test(lc), 'hay una función que lo decide');
   ok(/\+_barridoLogoImg\(\)/.test(lc), 'y el barrido la usa');
   const f = lc.slice(lc.indexOf('function _barridoLogoImg'), lc.indexOf('function _startBarrido'));
-  ok(/ev\.barridoLogo==='campeonato'/.test(f),
-     'y solo usa el del campeonato si alguien lo eligió a propósito');
+  ok(/ev\.barridoLogo==='yourlift'/.test(f),
+     'y solo deja el del campeonato si alguien eligió a propósito el de YourLift');
   ok(/yourlift_logo_hd\.png/.test(f), 'y tiene al de YourLift de respaldo');
   ok(/onerror=/.test(f), 'con salida si la imagen no carga');
   // El barrido ya no puede tener el logo escrito adentro.
@@ -53,10 +54,10 @@ console.log('\nSe elige en el mismo panel donde se sube el logo');
   ok(/syncToFB/.test(g), 'y avisando a los widgets de OBS en el momento');
   ok(/val=cual==='campeonato'\?'campeonato':'yourlift'/.test(g),
      'cualquier otra cosa cae en YourLift, que es el que manda por defecto');
-  ok(/En el barrido va el logo de YourLift\. Es lo que viene por defecto/.test(lc),
+  ok(/Es lo que viene por defecto\. Si no cargara, sale el de YourLift/.test(lc),
      'y la pantalla dice qué está pasando');
-  ok(/Está elegido el del campeonato pero no hay ninguno subido/.test(lc),
-     'incluso si se eligió el del campeonato sin haber subido ninguno');
+  ok(/No hay logo de campeonato subido/.test(lc),
+     'incluso cuando no hay ninguno subido');
   ok(/en el barrido se ve a pantalla completa/i.test(lc), 'y por qué conviene subirlo grande');
 }
 
@@ -75,7 +76,8 @@ console.log('\nSe elige en el mismo panel donde se sube el logo');
   const correr = async (logoUrl) => p.evaluate((url) => {
     const cfg = (url && typeof url === 'object') ? url : { src: url || '', cual: 'campeonato' };
     DATA.event = { id: 'ev1', name: 'Campeonato de Prueba',
-                   logoUrl: cfg.src || '', barridoLogo: cfg.cual || 'yourlift' };
+                   // vacío = nadie eligió nada, que es el caso normal
+                   logoUrl: cfg.src || '', barridoLogo: cfg.cual || '' };
     _startBarrido('in');
     const el = _txBarridoEl;
     const img = el && el.querySelector('img');
@@ -90,12 +92,22 @@ console.log('\nSe elige en el mismo panel donde se sube el logo');
     };
   }, logoUrl);
 
-  console.log('\nPor defecto va el de YourLift');
+  console.log('\nPor defecto va el del campeonato');
   {
     const r = await correr({ src: 'https://ejemplo.cl/logo-campeonato.png', cual: '' });
     ok(r.hay, 'el barrido se dibuja');
+    ok(r.src === 'https://ejemplo.cl/logo-campeonato.png',
+       'sin elegir nada sale el del campeonato: ' + r.src);
+    // Lo que se veía chico y por eso no se notaba en medio de la cascada.
+    ok(/max-width:min\(72vw,1000px\)/.test(r.estilo),
+       'y ocupa la pantalla, no un rincón');
+  }
+
+  console.log('\n  Se puede forzar el de YourLift');
+  {
+    const r = await correr({ src: 'https://ejemplo.cl/logo-campeonato.png', cual: 'yourlift' });
     ok(r.src === 'yourlift_logo_hd.png',
-       'aunque el campeonato tenga su logo subido, sin elegirlo va el de YourLift');
+       'eligiendo YourLift va ese aunque el campeonato tenga el suyo: ' + r.src);
   }
 
   console.log('\n  Y también si el campeonato no tiene logo');
@@ -113,7 +125,7 @@ console.log('\nSe elige en el mismo panel donde se sube el logo');
     ok(/yourlift_logo_hd\.png/.test(r.onerror),
        'y si no carga en medio de la transmisión, cae al de YourLift');
     ok(/object-fit:contain/.test(r.estilo), 'sin deformarlo');
-    ok(/max-width:min\(46vw,520px\)/.test(r.estilo),
+    ok(/max-width:min\(72vw,1000px\)/.test(r.estilo),
        'y con lugar para uno apaisado, que es como suelen ser');
   }
 

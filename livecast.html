@@ -457,12 +457,15 @@ async function initFB(){
         const recordsEnabled=(typeof e.recordsEnabled==='boolean')
           ? e.recordsEnabled
           : !/universitar/i.test(e.name||'');
-        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0,logoUrl:e.logoUrl||''};
+        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0,logoUrl:e.logoUrl||'',logoFedUrl:e.logoFedUrl||''};
         if(DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
           DATA.event.recordsEnabled=recordsEnabled;
           DATA.event.logoUrl=e.logoUrl||'';
-          // Qué logo va en el barrido de transición. Por defecto, el de YourLift.
-          DATA.event.barridoLogo=e.barridoLogo==='campeonato'?'campeonato':'yourlift';
+          DATA.event.logoFedUrl=e.logoFedUrl||'';
+          // Qué logo va en el barrido de transición. Por defecto, el del
+          // campeonato: es su momento en pantalla. Solo si alguien eligió a
+          // propósito el de YourLift se usa ese.
+          DATA.event.barridoLogo=e.barridoLogo==='yourlift'?'yourlift':'campeonato';
         }
       });
       if(Object.keys(evs).length)LIVE_EVENTS=evs;
@@ -6356,17 +6359,63 @@ function _btVideoTeardown(){
 // completa y en OBS se escala todavía más: el chico se veía con los bordes rotos.
 // Y si el logo del campeonato no carga —un enlace vencido en medio de la
 // transmisión— cae al de YourLift en vez de dejar el barrido pelado.
+// ── Los tres logos de la transmisión ─────────────────────────────────────────
+// Son tres cosas distintas y cada pantalla muestra las que le corresponden:
+//
+//   · FEDERACIÓN — quién manda el campeonato. FESUPO en el Sudamericano, FECHIPO
+//     en los nacionales. Se sube por campeonato en el panel, así que cambiarlo
+//     no es tocar código.
+//   · CAMPEONATO — el logo del evento en sí.
+//   · YOURLIFT   — la marca del sistema.
+//
+//   pantalla        federación  campeonato  yourlift
+//   transición          no       sí, grande     no      ← se ve sola, tiene que dominar
+//   scoreboard          sí          sí          no
+//   tabla actual        sí          sí          no
+//   perfil              sí          sí          sí
+//
+// En el scoreboard y en la tabla no va el de YourLift a propósito: son las
+// pantallas que están al aire todo el rato y lo que tiene que leerse ahí es de
+// quién es el campeonato.
+function _logoCamp(){ return (DATA.event&&DATA.event.logoUrl)||''; }
+function _logoFed(){ return (DATA.event&&DATA.event.logoFedUrl)||''; }
+
+// Arma la tira de logos. `alto` es la altura en CSS (puede venir con clamp()).
+// Los que no estén cargados simplemente no se dibujan, y si no hay ninguno
+// devuelve '' para que quien lo llame no deje una caja vacía en pantalla.
+function _tiraLogos(cuales,alto,gap){
+  const sombra='filter:drop-shadow(0 2px 8px rgba(0,0,0,.6))';
+  const sep='<div style="width:1px;height:60%;background:rgba(212,168,67,.35);flex-shrink:0"></div>';
+  const piezas=[];
+  if(cuales.indexOf('fed')>=0&&_logoFed())
+    piezas.push('<img src="'+_logoFed()+'" alt="" style="height:'+alto+';width:auto;max-width:2.6em;object-fit:contain;'+sombra+'" onerror="this.style.display=\'none\'">');
+  if(cuales.indexOf('camp')>=0&&_logoCamp())
+    piezas.push('<img src="'+_logoCamp()+'" alt="" style="height:'+alto+';width:auto;max-width:3.2em;object-fit:contain;'+sombra+'" onerror="this.style.display=\'none\'">');
+  if(cuales.indexOf('yl')>=0)
+    piezas.push('<img src="YourLift_logo.png" alt="" style="height:'+alto+';width:auto;object-fit:contain;'+sombra+'" onerror="this.style.display=\'none\'">');
+  if(!piezas.length)return '';
+  return '<div style="display:flex;align-items:center;gap:'+(gap||'14px')+';font-size:'+alto+'">'
+    +piezas.join(sep)+'</div>';
+}
+
 function _barridoLogoImg(){
   const sombra='filter:drop-shadow(0 8px 24px rgba(0,0,0,.6))';
   const ev=DATA.event||{};
-  const propio=(ev.barridoLogo==='campeonato'&&ev.logoUrl)?ev.logoUrl:'';
+  // En la transición va SOLO el logo del campeonato, y grande: es el único
+  // momento en que la pantalla es suya y a media cascada tiene que notarse.
+  // Antes venía al revés —por defecto el de YourLift, y el del campeonato había
+  // que pedirlo con el interruptor— y quedaba chico y sin notarse. Ahora manda
+  // el del campeonato; el interruptor sigue sirviendo para forzar el de
+  // YourLift en un campeonato que lo prefiera así.
+  const propio=(ev.barridoLogo==='yourlift')?'':(ev.logoUrl||'');
   if(propio){
-    // Se deja más ancho que alto: los logos de campeonato suelen ser apaisados,
-    // y encajonarlos en un cuadrado los dejaba diminutos.
-    return '<img src="'+propio+'" alt="" style="max-width:min(46vw,520px);max-height:min(34vh,260px);object-fit:contain;'+sombra+'"'
+    // Más ancho que alto: los logos de campeonato suelen ser apaisados, y
+    // encajonarlos en un cuadrado los dejaba diminutos.
+    return '<img src="'+propio+'" alt="" style="max-width:min(72vw,1000px);max-height:min(52vh,520px);object-fit:contain;'+sombra+'"'
       +' onerror="this.onerror=null;this.src=\'yourlift_logo_hd.png\'">';
   }
-  return '<img src="yourlift_logo_hd.png" alt="" style="max-width:240px;max-height:240px;'+sombra+'"'
+  // Sin logo de campeonato el barrido no puede quedar pelado: va el de YourLift.
+  return '<img src="yourlift_logo_hd.png" alt="" style="max-width:min(52vw,560px);max-height:min(38vh,320px);object-fit:contain;'+sombra+'"'
     +' onerror="this.onerror=null;this.src=\'YourLift_logo.png\'">';
 }
 
@@ -7092,8 +7141,7 @@ function renderTxProfile(cur){
           </div>
         </div>
         <div style="position:absolute;top:clamp(20px,2.5vw,40px);right:clamp(20px,2.5vw,40px);display:flex;align-items:center;gap:12px;padding:8px 14px;background:rgba(10,22,40,.55);border:2px solid rgba(212,168,67,.4);border-radius:8px">
-          ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="Campeonato" style="height:clamp(32px,3.4vw,50px);width:auto;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))" onerror="this.style.display='none'"><div style="width:1px;height:clamp(24px,2.8vw,40px);background:rgba(212,168,67,.4)"></div>`:''}
-          <img src="YourLift_logo.png" alt="YourLift" style="height:clamp(28px,3vw,44px);filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(14px,1.4vw,20px);letter-spacing:3px;color:rgba(212,168,67,.7)\\'>YourLift</span>'">
+          ${_tiraLogos(['fed','camp','yl'],'clamp(34px,3.6vw,56px)','14px')}
         </div>
       </div>
     </div>
@@ -7181,9 +7229,12 @@ function renderTxScoreboard(cur,lifterChanged){
   const flagHtml=_flagImg(_ctry(cur),22);
   return `
     <div class="sb-card-explode" style="position:absolute;bottom:0;left:0;right:0;display:flex;align-items:stretch;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
-      <div style="flex-shrink:0;width:110px;background:${YL_NAVY};border-top:3px solid ${YL_GOLD};display:flex;align-items:center;justify-content:center">
-        <img src="YourLift_logo.png" alt="" style="height:58px;width:auto;object-fit:contain;filter:drop-shadow(0 2px 8px rgba(0,0,0,.7))" onerror="this.style.display='none'">
-      </div>
+      <!-- Federación y campeonato. El de YourLift no va acá: esta pantalla está
+           al aire todo el rato y lo que tiene que leerse es de quién es el
+           campeonato. Si no hay ninguno cargado, el bloque no se dibuja y la
+           tarjeta usa todo el ancho en vez de dejar un hueco azul. -->
+      ${(()=>{const t=_tiraLogos(['fed','camp'],'76px','16px');
+        return t?`<div style="flex-shrink:0;padding:0 20px;background:${YL_NAVY};border-top:3px solid ${YL_GOLD};display:flex;align-items:center;justify-content:center">${t}</div>`:'';})()}
       <div class="sb-wipe-content" style="flex:1;overflow:hidden">
         <div style="${_sbRowAnim(_animDir,0)}display:flex;justify-content:space-between;align-items:center;background:${YL_NAVY};border-top:3px solid ${YL_GOLD};padding:6px 22px">
           <div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:rgba(255,255,255,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:38%">${cur.club||''}</div>
@@ -7776,7 +7827,8 @@ function renderTxTablaActual(cur,opts){
         <!-- Header -->
         <div data-ta-header style="padding:14px 20px;background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:2px solid #D4A843;overflow:hidden">
           <div style="display:flex;align-items:center;gap:16px;flex:1;min-width:0">
-            ${DATA.event?.logoUrl?`<img src="${DATA.event.logoUrl}" alt="" class="ta-logo-anim" style="height:100px;width:100px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 4px 14px rgba(0,0,0,.7))" onerror="this.style.display='none'">`:''}
+            ${(()=>{const t=_tiraLogos(['fed','camp'],'92px','12px');
+              return t?`<div class="ta-logo-anim" style="flex-shrink:0">${t}</div>`:'';})()}
             <div data-ta-title style="min-width:0">
               <div style="font-family:Oswald;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.75);font-weight:600">TABLA ACTUAL · ${liftN} · R${(DATA.round||0)+1}</div>
               <div style="font-family:Oswald;font-size:18px;letter-spacing:1.5px;color:#fff;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,.4);margin-top:2px">${divS} • ${ref.cat} ${sexLabel==='Mujer'?'♀':'♂'}</div>
@@ -9831,11 +9883,11 @@ function renderDirector(){
     h+='<button id="dirChampLogoBtn" class="btn btn-o" onclick="dirUploadChampionshipLogo()" style="padding:10px 16px;font-size:12px;font-family:Oswald;letter-spacing:1.5px">⬆ '+(champLogo?'Cambiar logo':'Subir logo')+'</button>';
     if(champLogo) h+='<button class="btn" onclick="dirClearChampionshipLogo()" style="padding:10px 14px;font-size:12px;background:transparent;border:1px solid var(--red);color:var(--red);font-family:Oswald;letter-spacing:1.5px">✕ Quitar</button>';
     h+='</div></div>';
-    // Qué logo va en el barrido de transición. Por defecto el de YourLift: que un
-    // campeonato haya subido su logo para el scoreboard no significa que quiera
-    // reemplazar la marca del barrido, así que se pide a propósito.
+    // Qué logo va en el barrido de transición. Por defecto el del campeonato:
+    // el barrido es el único momento en que la pantalla es suya. El botón de
+    // YourLift queda para un campeonato que prefiera esa marca.
     {
-      const usaCamp=(DATA.event&&DATA.event.barridoLogo==='campeonato');
+      const usaCamp=!(DATA.event&&DATA.event.barridoLogo==='yourlift');
       h+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(212,168,67,.25)">';
       h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:1px;color:var(--muted);margin-bottom:8px">LOGO EN EL BARRIDO DE TRANSICIÓN</div>';
       h+='<div style="display:flex;gap:8px;flex-wrap:wrap">';
@@ -9847,9 +9899,9 @@ function renderDirector(){
       h+='</div>';
       h+='<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">'
         +(usaCamp
-          ? (champLogo?'En el barrido va el logo de este campeonato. Si no cargara, sale el de YourLift.'
-                      :'<b style="color:var(--red)">Está elegido el del campeonato pero no hay ninguno subido</b>, así que en el barrido sigue saliendo el de YourLift.')
-          : 'En el barrido va el logo de YourLift. Es lo que viene por defecto.')
+          ? (champLogo?'En el barrido va el logo de este campeonato, a pantalla completa. Es lo que viene por defecto. Si no cargara, sale el de YourLift.'
+                      :'<b style="color:var(--red)">No hay logo de campeonato subido</b>, así que en el barrido sale el de YourLift.')
+          : 'Elegiste el logo de YourLift para el barrido. Por defecto va el del campeonato.')
         +' En el barrido se ve a pantalla completa: conviene un archivo grande.</div>';
       h+='</div>';
     }

@@ -7074,6 +7074,22 @@ function renderCampeonatos(){
             <span id="ef_logoStatus" style="font-size:11px;color:var(--muted)"></span>
           </div>
         </label>
+        <!-- El de la federación va aparte del campeonato porque cambia según quién
+             organiza: FESUPO en el Sudamericano, FECHIPO en los nacionales. En las
+             pantallas de transmisión se muestran juntos. -->
+        <label class="field" style="grid-column:span 2">
+          <span>Logo de la federación <span style="font-weight:400;color:var(--muted)">(opcional · FESUPO, FECHIPO… sale en el scoreboard, la tabla y el perfil)</span></span>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:4px;flex-wrap:wrap">
+            <div style="width:64px;height:64px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">
+              <img id="ef_logoFedPreview" src="${editing.logoFedUrl||''}" style="max-width:100%;max-height:100%;object-fit:contain;${editing.logoFedUrl?'':'display:none'}" onerror="this.style.display='none'">
+            </div>
+            <input type="hidden" id="ef_logoFedUrl" value="${editing.logoFedUrl||''}">
+            <input type="file" id="ef_logoFedFile" accept="image/*" style="display:none" onchange="uploadEventLogo(this.files[0],'fed')">
+            <button type="button" class="btn" onclick="document.getElementById('ef_logoFedFile').click()" style="background:rgba(59,130,246,.15);border:1px solid #3b82f6;color:#3b82f6">Subir logo</button>
+            <button type="button" class="btn" onclick="document.getElementById('ef_logoFedUrl').value='';var p=document.getElementById('ef_logoFedPreview');p.src='';p.style.display='none'" style="background:transparent;border:1px solid var(--border);color:var(--muted)">Quitar</button>
+            <span id="ef_logoFedStatus" style="font-size:11px;color:var(--muted)"></span>
+          </div>
+        </label>
         <label class="field" style="grid-column:span 2">
           <span>Organizadores <span style="font-weight:400;color:var(--muted)">(puedes agregar más de uno · cada uno con su Instagram opcional)</span></span>
           <div id="ef_organizers" style="display:flex;flex-direction:column;gap:6px;margin-top:4px">${(()=>{
@@ -7334,18 +7350,25 @@ window.addOrganizerRow = function(){
   const tmp=document.createElement('div'); tmp.innerHTML=orgRowHtml('','');
   c.appendChild(tmp.firstElementChild);
 };
-window.uploadEventLogo = async function(file){
+// Sube el logo del campeonato o el de la federación —la misma rutina, cambia
+// dónde deja la URL. `cual` vacío = campeonato; 'fed' = federación.
+window.uploadEventLogo = async function(file,cual){
   if(!file)return;
-  const st=document.getElementById('ef_logoStatus'); if(st)st.textContent='⏳ Subiendo…';
+  const f = cual==='fed';
+  const idUrl = f?'ef_logoFedUrl':'ef_logoUrl';
+  const idPv  = f?'ef_logoFedPreview':'ef_logoPreview';
+  const st=document.getElementById(f?'ef_logoFedStatus':'ef_logoStatus'); if(st)st.textContent='⏳ Subiendo…';
   try{
     const storage=getStorage(app);
     const baseId=(document.getElementById('ef_id')?.value||ST.eventoForm?.id||'event').replace(/[^a-zA-Z0-9_]/g,'_').slice(0,50);
-    const compressed=await compressImg(file,500,0.85);
-    const sref=storageRef(storage,`logos/event/${baseId}_${Date.now()}.webp`);
+    // El de la federación se guarda más grande: en el scoreboard y en el barrido
+    // se ve a buen tamaño y a 500px se notaba pixelado.
+    const compressed=await compressImg(file,f?700:500,0.9);
+    const sref=storageRef(storage,`logos/event/${baseId}_${f?'fed_':''}${Date.now()}.webp`);
     await uploadBytes(sref,compressed,{contentType:'image/webp'});
     const url=await getDownloadURL(sref);
-    document.getElementById('ef_logoUrl').value=url;
-    const pv=document.getElementById('ef_logoPreview'); if(pv){pv.src=url;pv.style.display='';}
+    document.getElementById(idUrl).value=url;
+    const pv=document.getElementById(idPv); if(pv){pv.src=url;pv.style.display='';}
     if(st)st.textContent='✓ Logo subido';
   }catch(e){ if(st)st.textContent=''+e.message; console.warn('[logo]',e); }
 };
@@ -7455,6 +7478,7 @@ window.saveEvento = async function(){
   const posNac2026 = !!document.getElementById('ef_posNac2026')?.checked;
   const youtubeUrl = (document.getElementById('ef_youtubeUrl')?.value||'').trim();
   const logoUrl = (document.getElementById('ef_logoUrl')?.value||'').trim();
+  const logoFedUrl = (document.getElementById('ef_logoFedUrl')?.value||'').trim();
   const instagram = organizers[0]?.instagram || '';   // compat: IG del primer organizador
   const streamLogoUrl = (document.getElementById('ef_streamLogoUrl')?.value||'').trim();
   const streamInstagram = (document.getElementById('ef_streamIg')?.value||'').trim().replace(/^@/,'');
@@ -7470,7 +7494,7 @@ window.saveEvento = async function(){
     .map(cb=>cb.getAttribute('data-clave'));
   const data = {id, name, date, closeDate, preNominaCloseAt, nominaCloseAt, location, org, days, status, bloqueaClaves,
     extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, posNac2026, youtubeUrl,
-    organizers, logoUrl, instagram,    // organizadores (con IG) + logo del campeonato (se muestran en el home)
+    organizers, logoUrl, logoFedUrl, instagram,    // organizadores (con IG) + logo del campeonato y de la federación
     streamLogoUrl, streamInstagram,    // logo de productora + IG para la tarjeta de Transmisiones
     requiredDocs,    // nuevo: array de docKeys requeridos
     updatedAt: serverTimestamp()};
