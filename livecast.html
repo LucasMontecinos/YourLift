@@ -12112,10 +12112,44 @@ function exportBackupJSON(){
   a.click();
 }
 function nrm(s){return(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
-function findInDB(name,rut){
+// ¿Es de Chile? Sin país anotado se asume que sí: en un campeonato nacional
+// nadie carga el país y todos son chilenos.
+function _esDeChile(a){
+  const c=String((a&&(a.country||a.pais||a.pais3))||'').trim().toUpperCase();
+  return !c||c==='CHI'||c==='CHILE'||c==='CL';
+}
+// Cruce con el padrón de la federación (data.json).
+//
+// OJO CON EL NOMBRE: el padrón es CHILENO. Un extranjero no está ahí, y si igual
+// se lo busca por nombre termina pegado a la ficha de otra persona — le salen su
+// foto, su código, sus mejores marcas y su historial de competencias, todo bajo
+// el nombre del extranjero. No es un detalle estético: es mostrar en público los
+// datos de alguien que no tiene nada que ver.
+//
+// Pasó en el Sudamericano: la peruana "Alvarez Fernanda" quedó cruzada con la
+// chilena "Camila Fernanda Álvarez Carrasco" (código 2095CAC-2024), porque el
+// cruce flojo pedía que cada palabra buscada estuviera DENTRO del nombre del
+// padrón, y "alvarez" y "fernanda" están las dos.
+//
+// Reglas, de la más confiable a la menos:
+//   1. el RUT manda y vale para cualquiera;
+//   2. sin RUT solo se cruza por nombre a quien es de Chile;
+//   3. y el cruce flojo, además, exige palabras completas y UNA sola candidata:
+//      si hay dos que calzan no se elige ninguna, porque elegir mal es peor que
+//      no mostrar el historial.
+function findInDB(name,rut,ath){
   if(rut){const rc=rut.replace(/[^0-9kK]/g,'').toUpperCase();const m=DB_FULL.find(a=>{const dr=(a.rut||'').replace(/[^0-9kK]/g,'').toUpperCase();return dr&&dr===rc});if(m)return m}
-  const nn=nrm(name);const parts=nn.split(/\s+/);
-  return DB_FULL.find(a=>{const dn=nrm(a.nombre);return dn===nn})||DB_FULL.find(a=>{const dn=nrm(a.nombre);return parts.length>=2&&parts.every(p=>dn.includes(p))})||null;
+  const nn=nrm(name); if(!nn)return null;
+  if(ath&&!_esDeChile(ath))return null;
+  const exacto=DB_FULL.find(a=>nrm(a.nombre)===nn);
+  if(exacto)return exacto;
+  const parts=nn.split(/\s+/);
+  if(parts.length<2)return null;
+  const cand=DB_FULL.filter(a=>{
+    const pal=nrm(a.nombre).split(/\s+/);
+    return parts.every(p=>pal.includes(p));
+  });
+  return cand.length===1?cand[0]:null;
 }
 let _fotoUnsubLC=null;
 function _setupFotoListener(){
@@ -12826,7 +12860,7 @@ function renderAtletaInfo(){
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">';
   ath.forEach(a=>{
     // Cross-reference with data.json
-    const db=findInDB(a.name,a.rut);
+    const db=findInDB(a.name,a.rut,a);
     const bl=db?.bestLifts||{};
     const comps=db?.competencias||[];
     const debut=db?.debut||'';
