@@ -1049,6 +1049,22 @@ const _TX_COLOR_PALETTES={
       nameText:'#ffffff',accent:'#ffffff',headerBg:'#0A1628',
       gridBg:'#0b1826',lbHighlight:'#C41E3A',cardBg:'#0d1e38'}
   },
+  // Pensado para el Sudamericano en Chile: el fondo se queda en el azul marino de
+  // YourLift —es lo que sostiene la identidad— y lo chileno entra donde más se
+  // mira: la banda del nombre en el azul de la bandera, con el nombre en blanco.
+  //
+  // El acento va BLANCO y no rojo a propósito. El rojo de la bandera se parece
+  // demasiado al rojo de NO LIFT, y en una transmisión ese color tiene que
+  // significar una sola cosa: si además adorna, al marcar un nulo el ojo duda.
+  // El rojo queda reservado; lo chileno lo llevan el azul y el blanco.
+  suda:{
+    label:'Sudamericano Chile',desc:'Azul bandera · Blanco',
+    preview:['#0A1628','#0F3E9E','#ffffff','#22c55e','#ef4444'],
+    colors:{goodLift:'#22c55e',noLift:'#ef4444',puesto:'#ffffff',
+      curAttempt:'#12325f',nameBg:'#0F3E9E',nameBg2:'#092C77',
+      nameText:'#ffffff',accent:'#ffffff',headerBg:'#0A1628',
+      gridBg:'#081221',lbHighlight:'#0F3E9E',cardBg:'#0d1e38'}
+  },
   pizarra:{
     // La que se estaba usando en transmisión: azul pizarra más claro que el marino,
     // el nombre en blanco sobre la misma barra (sin dorado) y el subrayado del
@@ -8039,7 +8055,10 @@ function renderTxMedals(md){
     // La bandera va entre el nombre y el total: en un sudamericano es lo que se
     // busca de un vistazo, y ahí no compite con el número de puesto.
     const flag=_flagImg(_ctry(x.a),big?26:22);
-    return `<div style="display:flex;align-items:center;gap:12px;background:linear-gradient(90deg,rgba(10,22,40,.94),rgba(10,22,40,.86));border-left:6px solid ${RANK_BG[r]};border-radius:8px;padding:${big?'12px 20px':'9px 18px'};box-shadow:0 8px 20px rgba(0,0,0,.5)">
+    // El fondo sale de la paleta elegida en Control TX, como el resto de las
+    // pantallas. El ORO, la PLATA y el BRONCE no: son el color de la medalla y
+    // no cambian por tema — un primer lugar plateado no se entiende.
+    return `<div style="display:flex;align-items:center;gap:12px;background:linear-gradient(90deg,${_txC('cardBg')},${_txC('headerBg')});border-left:6px solid ${RANK_BG[r]};border-radius:8px;padding:${big?'12px 20px':'9px 18px'};box-shadow:0 8px 20px rgba(0,0,0,.5)">
       <div style="width:${big?'40px':'32px'};height:${big?'40px':'32px'};flex-shrink:0;border-radius:50%;background:${RANK_BG[r]};display:flex;align-items:center;justify-content:center;font-family:Oswald;font-weight:800;font-size:${big?'20px':'16px'};color:#0A1628">${r}</div>
       <div style="flex:1;font-family:Oswald;font-weight:700;font-size:${big?'24px':'18px'};color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.5)">${x.a.name||''}</div>
       ${flag}
@@ -8048,7 +8067,7 @@ function renderTxMedals(md){
   };
   return `
     <div style="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);width:min(760px,60vw);pointer-events:none">
-      <div style="text-align:center;margin-bottom:10px;font-family:Oswald;font-size:14px;letter-spacing:3px;color:${'#D4A843'};text-shadow:0 2px 6px rgba(0,0,0,.6)">MEDALLERO ${MEDAL_TIPOS[tipo]||'TOTAL'} · ${divS} ${md.cat} KG ${sexLabel} · ${_txModLabel(md.mod)}</div>
+      <div style="text-align:center;margin-bottom:10px;font-family:Oswald;font-size:14px;letter-spacing:3px;color:${_txC('accent')};text-shadow:0 2px 6px rgba(0,0,0,.6)">MEDALLERO ${MEDAL_TIPOS[tipo]||'TOTAL'} · ${divS} ${md.cat} KG ${sexLabel} · ${_txModLabel(md.mod)}</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         ${row(1,ranked[0])}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -10323,11 +10342,14 @@ function renderDirector(){
       {key:'headerBg',   label:'Header',           desc:'Fondo del encabezado del marcador/LB'},
       {key:'gridBg',     label:'Grid intentos',    desc:'Fondo de la fila de intentos'},
     ]},
-    {title:'LEADERBOARD',items:[
-      {key:'cardBg',     label:'Fondo tarjeta',    desc:'Fondo de la tarjeta del leaderboard'},
+    {title:'LEADERBOARD Y MEDALLERO',items:[
+      {key:'cardBg',     label:'Fondo tarjeta',    desc:'Tarjeta del leaderboard y filas del medallero'},
       {key:'lbHighlight',label:'Fila actual',      desc:'Color de la fila del atleta actual'},
     ]},
   ];
+  // Nota para quien venga a agregar colores: el oro, la plata y el bronce del
+  // medallero NO están acá a propósito. Son el color de la medalla, no del tema:
+  // un primer lugar plateado no se entiende en ninguna paleta.
   // ── Paletas rápidas ──────────────────────────────────────────
   const activePal=(_dirState&&_dirState.palette)||null;
   h+='<div style="margin-top:14px;background:var(--card-bg,rgba(18,28,50,.7));border:1px solid var(--border);border-radius:10px;padding:16px 18px">';
