@@ -346,7 +346,13 @@ try{window.aplicarFondoLC(window.lcFondo);}catch(e){}
 // cargan un peso — y como no escribe nada, congelar SU pantalla no le afecta a nadie.
 // Al operador se le sigue respetando: cuando guarda en vista libre publica el cursor
 // de la tarima, no el suyo (ver syncToFB).
-window._navLibreGuardada=(()=>{try{return localStorage.getItem('yl_nav_libre')==='1'}catch(e){return false}})();
+// Arranca SIEMPRE apagada. Antes se recordaba entre sesiones, y esa era la
+// trampa: una pantalla quedaba en vista libre de un día para otro, nadie se
+// acordaba, y al operar se veía una tanda distinta a la que estaba en tarima.
+// Parecía una desincronización y no lo era. Se prende a propósito cuando hace
+// falta, que es lo que corresponde para algo que cambia lo que ves.
+window._navLibreGuardada=false;
+try{localStorage.removeItem('yl_nav_libre')}catch(e){}
 Object.defineProperty(window,'NAV_LIBRE',{
   get(){ return !!(window._navLibreGuardada && !TX_MODE); },
   set(v){ window._navLibreGuardada=!!v; },
@@ -355,7 +361,7 @@ Object.defineProperty(window,'NAV_LIBRE',{
 window._NAV_REMOTA=null;   // último cursor que publicó la tarima
 window.setNavLibre=function(v){
   window.NAV_LIBRE=!!v;
-  try{localStorage.setItem('yl_nav_libre',v?'1':'0')}catch(e){}
+  // No se guarda: dura lo que dura esta pestaña abierta.
   // Al volver a seguir la tarima, saltar de una a donde está ella.
   if(!window.NAV_LIBRE&&window._NAV_REMOTA){
     const n=window._NAV_REMOTA;
@@ -602,7 +608,7 @@ function _syncWriteAlert(e){
     el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:100000;background:#C41E3A;color:#fff;padding:8px 14px;font-family:Oswald,sans-serif;font-size:13px;letter-spacing:.5px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.5)';
     document.body.appendChild(el);
   }
-  el.innerHTML='\u26A0 LOS CAMBIOS NO SE ESTÁN GUARDANDO — el espectador y OBS no ven lo que cargás.'
+  el.innerHTML='\u26A0 LOS CAMBIOS NO SE ESTÁN GUARDANDO — el espectador y OBS no ven lo que cargas.'
     +(perm?' <b>Inicia sesión con tu cuenta de administrador.</b>':' Revisa la conexión a internet.')
     +' <span style="opacity:.85;font-size:11px">(se reintenta solo)</span>';
 }
@@ -2665,6 +2671,43 @@ function _fotoSudaFor(a){
   const u=window.NSUDA_FOTOS_LC[_nsudaSlugLC(a&&a.name)];
   return u?{foto_url:u}:null;
 }
+
+// ── Marcas nominadas ────────────────────────────────────────────────────────
+// A un extranjero no se le puede mostrar historial: no está en el padrón chileno
+// y su carrera vive en la federación de su país. Pero la nómina oficial sí trae
+// con qué marcas lo inscribieron, y eso es información real y útil —es lo que va
+// a intentar— así que la ficha las muestra en vez de quedarse en blanco.
+//
+// Se rotulan NOMINADAS a propósito: no son marcas hechas en competencia ni
+// récords, son lo que declaró su federación al inscribirlo. Confundir una cosa
+// con la otra sería peor que no mostrar nada.
+//
+// La nómina se baja una sola vez y recién cuando hace falta: son 190 KB y a la
+// mayoría de las pantallas no le sirven.
+window.NSUDA_MARCAS=window.NSUDA_MARCAS||null;
+let _nsudaMarcasPidiendo=false;
+function _cargarMarcasSuda(){
+  if(window.NSUDA_MARCAS||_nsudaMarcasPidiendo)return;
+  _nsudaMarcasPidiendo=true;
+  fetch('nomina_sudamericano.json?v='+Date.now()).then(r=>r.json()).then(d=>{
+    const m={};
+    (d&&d.atletas||[]).forEach(a=>{
+      const k=_nsudaSlugLC(a.nDisp||a.n);
+      if(!k)return;
+      // Un atleta puede estar en dos modalidades; se guarda la de mayor total,
+      // que es la que la gente reconoce como "su" marca.
+      if(!m[k]||(a.total||0)>(m[k].total||0))
+        m[k]={sq:a.sq||0,bp:a.bp||0,dl:a.dl||0,total:a.total||0,mod:a.mod||'',pais:a.pais||''};
+    });
+    window.NSUDA_MARCAS=m;
+    if(typeof R==='function')R();
+  }).catch(e=>{window.NSUDA_MARCAS={};console.warn('[livecast] marcas de la nómina:',e.message);});
+}
+function _marcasSudaFor(a){
+  if(!window.NSUDA_MARCAS)return null;
+  const m=window.NSUDA_MARCAS[_nsudaSlugLC(a&&a.name)];
+  return (m&&(m.sq||m.bp||m.dl||m.total))?m:null;
+}
 function _cargarFotosSuda(){
   if(!fbReady||!window._fb||!fbDB||window._nsudaFotosLC)return;
   window._nsudaFotosLC=true;
@@ -3891,7 +3934,7 @@ window.limpiarAtletasAjenos=async function(){
   const det=fuera.slice(0,30).map(a=>'• '+a.name+'  ('+(a.div||'')+' '+(a.cat||'')+', tanda '+(a.flight||'')+')').join('\n')
     +(fuera.length>30?'\n… y '+(fuera.length-30)+' más':'');
   if(!confirm('Hay '+fuera.length+' atleta(s) que NO están en el Cronograma de "'+((DATA.event&&DATA.event.name)||'')+'":\n\n'+det
-    +'\n\nSe eliminan y quedan '+(DATA.athletes.length-fuera.length)+'.\n¿Confirmás?'))return;
+    +'\n\nSe eliminan y quedan '+(DATA.athletes.length-fuera.length)+'.\n¿Confirmas?'))return;
   const ids=new Set(fuera.map(a=>a.id));
   DATA.athletes=DATA.athletes.filter(a=>!ids.has(a.id));
   Object.keys(DATA.changeTimers||{}).forEach(k=>{ if(ids.has(parseInt(k,10)))delete DATA.changeTimers[k]; });
@@ -5631,7 +5674,7 @@ function renderObsTx(){
     {id:'tablaactual',icon:'',title:'Tabla actual (corner)',desc:'Ranking de la categoría del lifter en pantalla, esquina inferior derecha. Entra deslizando desde abajo, queda fijo. El levantador actual se resalta y muestra una flecha de proyección: posición actual → posición que tendría si el intento es válido (ej. 2→1 si se mueve al primer lugar). Activá/desactivá con el botón "Tabla actual" en Control TX o tecla A.',obsBg:'Transparente (overlay sobre cámara). Solo ocupa el cuadrante inferior derecho.',size:'1920×1080 (overlay)'},
     {id:'lbauto',icon:'',title:'Tabla de clasificación (AUTO)',desc:'Igual al leaderboard fijo, pero APARECE SOLO al detectar fin de ronda (cuando cambia lift/round/flight). Queda 10s en pantalla y se va. Ideal como overlay siempre activo en una escena de cámara.',obsBg:'Transparente (overlay sobre cámara).',size:'1920×1080 (overlay fullscreen)'},
     {id:'slam',icon:'',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activá una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcas ✓/✗ en Control en Vivo. Vuelve a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
-    {id:'lights',icon:'',title:'Luces de jueces',desc:'3 círculos para izq / central / der. Se prenden blanco (good) o rojo (no lift) cuando los jueces votan en su panel. Ideal arriba de la cámara o en pantalla aparte.',obsBg:'Transparente. Funciona solo si activás "Modo Jueces" en Control en Vivo.',size:'1920×1080 (autoescala)'},
+    {id:'lights',icon:'',title:'Luces de jueces',desc:'3 círculos para izq / central / der. Se prenden blanco (good) o rojo (no lift) cuando los jueces votan en su panel. Ideal arriba de la cámara o en pantalla aparte.',obsBg:'Transparente. Funciona solo si activas "Modo Jueces" en Control en Vivo.',size:'1920×1080 (autoescala)'},
     {id:'ceremony',icon:'',title:'Ceremonia (TODO-EN-UNO automático)',desc:'Widget orquestador. Detecta nuevo levantador → PROFILE fullscreen 5s → SCOREBOARD bottom-left (30s) → SLAM top-left flash al marcar resultado → IDLE hasta el próximo. Sin tabla de clasificación: ese ciclo lo manejás aparte con el widget Leaderboard fijo. (El tiempo para dar el intento ya no se muestra acá — es privado, solo lo ve el juez en Control en Vivo.)',obsBg:'Mixto: fullscreen opaco durante PROFILE, transparente sobre cámara durante SCOREBOARD/IDLE. Una sola escena con cámara de fondo + este browser source encima.',size:'1920×1080'},
     {id:'director',icon:'',title:'Director (control 100% MANUAL)',desc:'NO se activa solo. Lee comandos desde Firestore (livecast_director/current) que envías tú desde la barra lateral "Control TX". Cada componente (perfil, marcador, tabla, timer, slam) se muestra/esconde con un botón. Ideal si quieres controlar todo a mano sin tocar OBS.',obsBg:'Mixto. Una sola escena con cámara de fondo + este browser source encima. Tú eliges qué se ve y por cuánto tiempo desde el panel Control TX.',size:'1920×1080'},
   ];
@@ -5841,7 +5884,7 @@ function renderTxLbAuto(){
 //
 // PARA MODIFICAR LOS TIEMPOS, edita la línea de abajo (en milisegundos):
 //    profileMs:     duración del perfil fullscreen
-//    scoreboardMs:  duración del scoreboard bottom-left ← acá lo subís
+//    scoreboardMs:  duración del scoreboard bottom-left ← acá lo subes
 //    slamMs:        duración del flash GOOD/NO LIFT en la esquina
 const TX_CEREMONY={profileMs:5000,scoreboardMs:30000,slamMs:2000,recordMs:7000};
 let _txCerState='idle';            // idle | profile | scoreboard
@@ -7835,7 +7878,7 @@ function renderTxLeaderboard(cur,lifterChanged,opts){
             <div style="font-family:Oswald;font-size:clamp(11px,1.1vw,14px);color:rgba(220,230,245,.75);letter-spacing:3px">LEADERBOARD</div>
             <div style="font-family:Oswald;font-size:clamp(20px,2.2vw,30px);font-weight:700;color:#fff;letter-spacing:2px;margin-top:2px;text-shadow:0 2px 6px rgba(0,0,0,.6)">${divS} • ${ref.cat} (${sexLabel})</div>
           </div>
-          <img src="YourLift_logo.png" alt="YourLift" style="height:clamp(26px,2.6vw,38px);filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(12px,1.2vw,16px);color:rgba(212,168,67,.7);letter-spacing:2px\\'>YourLift</span>'">
+          ${_tiraLogos(['camp'],'clamp(26px,2.6vw,38px)','10px')}
         </div>
         <div style="display:grid;grid-template-columns:1fr 120px 120px 80px;padding:10px clamp(20px,2.5vw,32px);background:rgba(10,22,40,.35);border-bottom:1px solid rgba(212,168,67,.25);font-family:Oswald;font-size:clamp(10px,1vw,13px);color:rgba(220,230,245,.7);letter-spacing:2px">
           <div>NOMBRE</div><div style="text-align:center">TOTAL</div><div style="text-align:center">F.TOT</div><div style="text-align:center">POS</div>
@@ -9797,7 +9840,7 @@ function renderRemote(){
   h+='</div>';
   if(!(fbReady&&_evtReady)){
     h+='<div style="margin:0 0 12px;padding:10px 14px;border-radius:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);color:#f59e0b;font-size:12px;line-height:1.5">'
-      +(fbReady?'Esperando que cargue el evento. Asegurate de abrir el link con <b>?evento=TU_EVENTO&remote=1</b> y estar logueado como admin.':'Conectando a Firebase… Si no conecta, revisa tu internet y que estés logueado como admin.')
+      +(fbReady?'Esperando que cargue el evento. Asegúrate de abrir el link con <b>?evento=TU_EVENTO&remote=1</b> y estar logueado como admin.':'Conectando a Firebase… Si no conecta, revisa tu internet y que estés logueado como admin.')
       +'</div>';
     // Re-chequear en 1s hasta que esté listo (evita quedar en "conectando" para siempre).
     if(!window._remotePoll){window._remotePoll=setTimeout(()=>{window._remotePoll=null;if(DATA.phase==='remote'){_dirEnsureListener();R();}},1000);}
@@ -10701,7 +10744,7 @@ function renderCompete(){
    if(libre){
      h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:8px 12px;border-radius:8px;border:2px solid #60a5fa;background:rgba(96,165,250,.10)">'
        +'<div><span class="os" style="font-size:12px;font-weight:700;letter-spacing:1px;color:#60a5fa">👁 VISTA LIBRE</span>'
-       +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Te movés por tu cuenta y no arrastrás a nadie. Lo que cargues lo siguen viendo todos. La tarima está en <b style="color:var(--gold)">'+donde+'</b></div></div>'
+       +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Te mueves por tu cuenta y no arrastras a nadie. Lo que cargues lo siguen viendo todos. La tarima está en <b style="color:var(--gold)">'+donde+'</b></div></div>'
        +'<button onclick="setNavLibre(false)" style="padding:6px 14px;border-radius:6px;border:1px solid #60a5fa;background:transparent;color:#60a5fa;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;white-space:nowrap">VOLVER A LA TARIMA</button>'
      +'</div>';
    }else{
@@ -10943,7 +10986,7 @@ function renderCompete(){
   h+='</div>';
   // ── Auto-scroll estilo LiftingCast ──────────────────────────────────────
   // Acomoda la tabla al atleta EN TARIMA. Solo se mueve cuando CAMBIA el
-  // levantador/intento (no molesta mientras editás ni si scrolleás a mano), y
+  // levantador/intento (no molesta mientras editas ni si haces scroll a mano), y
   // respeta el foco en un input. Se puede apagar con el botón "⤓ Auto-scroll".
   {const _ck=cur?(DATA.flight+'_'+DATA.lift+'_'+DATA.round+'_'+cur.id+'_'+curAtt(cur)):'';
    if(window._ctAutoScroll!==false && _ck && _ck!==window._ctScrollKey){
@@ -12867,6 +12910,9 @@ function renderLiveView(){
 
 function renderAtletaInfo(){
   const ath=DATA.athletes;
+  // Si hay alguien de afuera, se baja la nómina para poder mostrarle sus marcas
+  // nominadas. Si son todos chilenos no hace falta y no se pide.
+  if(ath.some(a=>!_esDeChile(a)))_cargarMarcasSuda();
   let h='<div class="fade"><h2 class="os" style="font-size:22px;letter-spacing:1px;margin-bottom:16px">ATLETAS DEL CAMPEONATO</h2>';
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">';
   ath.forEach(a=>{
@@ -12949,13 +12995,32 @@ function renderAtletaInfo(){
       if(compWithResults>4)h+='<div style="font-size:9px;color:var(--muted);text-align:center;margin-top:2px">+'+(compWithResults-4)+' más</div>';
       h+='</div>';
     }else if(!matched){
-      // "Atleta nuevo" solo vale para un chileno que compite por primera vez. Un
-      // extranjero no es nuevo: tiene su carrera, pero en el padrón de SU
-      // federación, y este padrón es el chileno. Decirle nuevo es falso y encima
-      // invita a buscarle un historial que acá nunca va a estar.
-      h+='<div style="text-align:center;padding:8px;color:var(--muted);font-size:10px;font-style:italic;border-top:1px solid var(--border);margin-top:4px">'
-        +(_esDeChile(a)?'Atleta nuevo — sin historial':'Atleta extranjero — su historial no está en el padrón chileno')
-        +'</div>';
+      // Al extranjero, en vez de un hueco, lo que sí se sabe de él: las marcas con
+      // las que su federación lo nominó. Van rotuladas NOMINADAS porque no son
+      // marcas hechas en competencia.
+      const mn=_esDeChile(a)?null:_marcasSudaFor(a);
+      if(mn){
+        const kg=v=>v>0?String(v).replace(/\.0$/,''):'—';
+        h+='<div style="border-top:1px solid var(--border);margin-top:4px;padding-top:8px">';
+        h+='<div style="font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:4px">MARCAS NOMINADAS'+(mn.mod?' · '+mn.mod:'')+'</div>';
+        h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center">';
+        [['SQ',mn.sq,'#3b82f6'],['BP',mn.bp,'#f59e0b'],['DL',mn.dl,'#ef4444'],['TOTAL',mn.total,'var(--gold)']].forEach(([l,v,c])=>{
+          h+='<div style="background:rgba(10,22,40,.5);border-radius:6px;padding:5px 2px">'
+            +'<div style="font-size:8px;color:var(--muted);font-family:Oswald;letter-spacing:1px">'+l+'</div>'
+            +'<div style="font-family:Oswald;font-size:14px;font-weight:700;color:'+c+'">'+kg(v)+'</div></div>';
+        });
+        h+='</div>';
+        h+='<div style="font-size:9px;color:var(--muted);font-style:italic;margin-top:5px;text-align:center">Lo declarado por su federación al inscribirlo, no marcas de competencia</div>';
+        h+='</div>';
+      }else{
+        // "Atleta nuevo" solo vale para un chileno que compite por primera vez. Un
+        // extranjero no es nuevo: tiene su carrera, pero en el padrón de SU
+        // federación, y este padrón es el chileno. Decirle nuevo es falso y encima
+        // invita a buscarle un historial que acá nunca va a estar.
+        h+='<div style="text-align:center;padding:8px;color:var(--muted);font-size:10px;font-style:italic;border-top:1px solid var(--border);margin-top:4px">'
+          +(_esDeChile(a)?'Atleta nuevo — sin historial':'Atleta extranjero — su historial no está en el padrón chileno')
+          +'</div>';
+      }
     }
     
     h+='</div>';

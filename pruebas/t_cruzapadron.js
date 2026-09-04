@@ -133,6 +133,40 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
        'y a una chilena que compite por primera vez sí');
   }
 
+  console.log('\n  Al extranjero se le muestran sus marcas nominadas');
+  {
+    // No se le puede mostrar historial —no está en el padrón chileno— pero la
+    // nómina oficial sí trae con qué marcas lo inscribieron. Es lo que va a
+    // intentar, y es información real: mejor eso que un hueco.
+    const r = await p.evaluate(async () => {
+      const at = w => ({ sq: [{ w, r: null }, { w: 0, r: null }, { w: 0, r: null }],
+                         bp: [{ w: 0, r: null }, { w: 0, r: null }, { w: 0, r: null }],
+                         dl: [{ w: 0, r: null }, { w: 0, r: null }, { w: 0, r: null }] });
+      const mk = (name, pais) => ({ id: Math.random(), name, lot: 1, flight: 'B',
+        sex: 'Mujer', sexo: 'Mujer', cat: '-52', div: 'Junior', mod: 'Powerlifting Classic',
+        club: pais, country: pais, pais, bw: 51, bombed: false, att: at(100) });
+      DATA.event = { id: 'suda2026', name: 'Sudamericano 2026' };
+      DATA.athletes = [mk('Alvarez Fernanda', 'PER'), mk('Nadie Que Exista Aca', 'BRA'),
+                       mk('Persona Chilena Sin Ficha', 'CHI')];
+      renderAtletaInfo();                       // dispara la carga de la nómina
+      for (let i = 0; i < 60 && !window.NSUDA_MARCAS; i++) await new Promise(r => setTimeout(r, 100));
+      const d = document.createElement('div');
+      d.innerHTML = renderAtletaInfo();
+      return { cargadas: Object.keys(window.NSUDA_MARCAS || {}).length,
+               fichas: [...d.querySelectorAll('.card')].map(c => c.innerText) };
+    });
+    ok(r.cargadas > 300, 'la nómina se baja una vez (' + r.cargadas + ' atletas)');
+    const per = r.fichas[0] || '';
+    ok(/MARCAS NOMINADAS/.test(per), 'a la peruana le salen sus marcas nominadas');
+    ok(/132\.5/.test(per) && /75/.test(per) && /142\.5/.test(per) && /350/.test(per),
+       'y son las suyas: 132.5 · 75 · 142.5 · 350');
+    // Lo importante: que nadie las confunda con marcas hechas en competencia.
+    ok(/no marcas de competencia/.test(per), 'con el aviso de que son declaradas, no hechas');
+    ok(!/MEJORES MARCAS \(CARRERA\)/.test(per), 'y no se hacen pasar por marcas de carrera');
+    ok(/extranjero/.test(r.fichas[1] || ''), 'y a uno que no está en la nómina se le dice eso');
+    ok(/Atleta nuevo/.test(r.fichas[2] || ''), 'al chileno sin ficha se le sigue diciendo nuevo');
+  }
+
   console.log('\n  Y una palabra suelta no alcanza');
   {
     const r = await buscar('Alvarez', '', { name: 'Alvarez', pais: 'CHI' });
