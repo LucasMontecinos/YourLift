@@ -1538,10 +1538,38 @@ function _nomEvCard(ev,ei){
   });
 }
 
+// El campeonato que ya tiene su tarjeta de nómina publicada.
+//
+// El Sudamericano existe en DOS lados a la vez y es correcto que así sea: la
+// nómina oficial, que llega en nomina_sudamericano.json con sus 414 atletas, y
+// el evento del panel —id suda2026— que hace falta para la transmisión y el
+// cronograma. Pero en la pestaña Nóminas son el MISMO campeonato, y salían dos
+// tarjetas: la buena con los 414, y otra vacía, porque las inscripciones no
+// cuelgan de ese id.
+//
+// Es el mismo caso de las jornadas y se resuelve igual: la gente ya está en la
+// nómina grande, así que la tarjeta del evento sobra.
+function _nsudaMismoEvento(){
+  const j=window.NOMSUDA||{};
+  const norm=x=>String(x==null?'':x).trim().toLowerCase();
+  return new Set([j.eventoId,j.evento,j.eventoCorto].filter(Boolean).map(norm));
+}
 function nom(){
   let h='';
-  if(_nsudaVisible())h+=_nomSudaCard();
-  const visibleEvs=(NM.events||[]).filter(ev=>ev.fromFirebase);
+  const _haySuda=_nsudaVisible();
+  if(_haySuda)h+=_nomSudaCard();
+  let visibleEvs=(NM.events||[]).filter(ev=>ev.fromFirebase);
+  if(_haySuda){
+    const mismos=_nsudaMismoEvento();
+    const norm=x=>String(x==null?'':x).trim().toLowerCase();
+    visibleEvs=visibleEvs.filter(ev=>{
+      if(!mismos.has(norm(ev.id))&&!mismos.has(norm(ev.name)))return true;
+      // Se saca solo si está vacío. Si alguna vez tuviera inscripciones propias
+      // se deja ver: esconder una tarjeta con gente adentro sería peor que
+      // mostrar dos.
+      return ((ev.athletes||[]).length>0);
+    });
+  }
   // Las inscripciones se piden al abrir esta pestaña, así que hay un momento en
   // que todavía no llegaron. Decir "no hay campeonatos activos" ahí es mentira y
   // asusta: se avisa que está cargando hasta que se sepa.
