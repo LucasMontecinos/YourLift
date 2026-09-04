@@ -94,6 +94,51 @@ const MONTAR = `(paisRaro)=>{
     ok(/009C3B/i.test(r.colores[2]), 'Brasil su verde');
   }
 
+  console.log('\n  Los escudos y soles están dibujados, no son un círculo liso');
+  {
+    // Lo que se pidió mirando las banderas de otra página: que se note el sol de
+    // Argentina y Uruguay, el escudo de Ecuador, el de Bolivia. Antes cada uno de
+    // esos era un <circle> amarillo y a simple vista todas las banderas con
+    // emblema se parecían entre sí.
+    const { p } = await abrir();
+    const F = await p.evaluate(() => FLAG_SVG);
+
+    // Un sol se dibuja con rayos: muchos triangulitos en un path, no un círculo.
+    const rayos = k => ((F[k].match(/Z/g) || []).length);
+    ok(rayos('ARG') >= 16, 'el sol de Argentina tiene sus rayos (' + rayos('ARG') + ')');
+    ok(rayos('URU') >= 16, 'y el de Uruguay también (' + rayos('URU') + ')');
+    ok(/85340A/.test(F.ARG), 'con la cara del sol marcada');
+
+    // Los escudos son un dibujo, no un disco de un solo color.
+    const cuerpos = k => ((F[k].match(/<path|<ellipse/g) || []).length);
+    ok(cuerpos('ECU') >= 5, 'Ecuador lleva su escudo con el cóndor (' + cuerpos('ECU') + ' piezas)');
+    ok(cuerpos('BOL') >= 5, 'Bolivia el suyo con los laureles (' + cuerpos('BOL') + ')');
+    ok(/F5C518/.test(F.PAR), 'Paraguay la estrella de su emblema');
+    ok((F.VEN.match(/Z/g) || []).length >= 8, 'Venezuela sus ocho estrellas');
+    ok((F.USA.match(/Z/g) || []).length >= 12, 'y Estados Unidos las suyas en el cantón');
+    ok(/<path/.test(F.MEX) && /<path/.test(F.ESP) && /<path/.test(F.POR),
+       'México, España y Portugal dejan de ser franjas peladas');
+
+    // El detalle no puede costar el peso de la página: son 20 banderas dibujadas
+    // a mano, no imágenes.
+    const peso = Object.values(F).join('').length;
+    ok(peso < 20000, 'las veinte pesan ' + Math.round(peso / 1024) + ' KB en total');
+  }
+
+  console.log('\n  Son rectangulares, no redondas');
+  {
+    const { p } = await abrir();
+    const r = await p.evaluate(() => {
+      const s = document.querySelector('.flag-img');
+      const c = getComputedStyle(s);
+      return { radio: c.borderRadius, w: s.getBoundingClientRect().width,
+               h: s.getBoundingClientRect().height, box: s.getAttribute('viewBox') };
+    });
+    ok(!/50%|9999/.test(r.radio), 'la esquina apenas se redondea: ' + r.radio);
+    ok(Math.abs(r.w / r.h - 1.5) < 0.05, 'y guarda la proporción 3:2 de una bandera');
+    ok(r.box === '0 0 30 20', 'el lienzo también');
+  }
+
   console.log('\nNo se sale a buscar nada afuera: no hay red que pueda fallar');
   ok(externas.length === 0,
      'ninguna petición externa' + (externas.length ? ': ' + externas.slice(0, 3).join(' | ') : ''));
