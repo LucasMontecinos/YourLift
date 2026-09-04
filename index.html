@@ -131,6 +131,11 @@ a{color:var(--accent);text-decoration:none}
 .envivo-meta{font-size:11px;color:var(--muted);margin-top:3px}
 .envivo-cta{padding:0 16px;display:flex;align-items:center;flex-shrink:0}
 .envivo-cta span{background:var(--accent);color:#fff;font-family:Oswald,sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 14px;border-radius:20px;white-space:nowrap}
+/* El QR va al lado de "VER EN VIVO" y no dentro del enlace: se toca para
+   mostrarlo en pantalla, no para entrar a la competencia. */
+.envivo-cta{gap:8px}
+.envivo-qr{background:transparent;color:var(--gold);border:1px solid rgba(212,168,67,.5);border-radius:20px;font-family:Oswald,sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+.envivo-qr:hover{background:rgba(212,168,67,.14)}
 /* Teléfono: el nombre del campeonato es largo y empujaba el botón fuera de la
    pantalla (la tarjeta medía 477px en un ancho de 390). Se apila: el logo y el
    nombre arriba, y el botón abajo ocupando todo el ancho para que se vea y sea
@@ -145,6 +150,8 @@ a{color:var(--accent);text-decoration:none}
   .envivo-nom{font-size:14px}
   .envivo-cta{flex:1 1 100%;padding:0 12px 12px}
   .envivo-cta span{display:block;width:100%;text-align:center;padding:11px 0;font-size:13px;border-radius:10px}
+  .envivo-cta span{flex:1}
+  .envivo-qr{padding:11px 16px;font-size:13px;border-radius:10px}
 }
 
 /* ── Tarjetas de nómina en TELÉFONO ───────────────────────────────
@@ -429,6 +436,7 @@ function setBgForSection(section){
 </script>
 </div>
 <script src="clubs.js"></script>
+<script src="yl-qr.js"></script>
 <script src="yl-ediciones.js"></script>
 <script>
 // Firebase config (same as inscripcion.html)
@@ -1626,6 +1634,15 @@ function render(){const app=document.getElementById("app");
     // porque esas vistas son otra página metida adentro y no entra ahí.
     if(typeof buildMenu==='function')buildMenu();
   }
+// El QR de una competencia. Es el mismo link de "VER EN VIVO": se escanea con
+// la cámara del teléfono y se entra directo al seguimiento, sin buscar nada.
+// Sirve proyectado en la pantalla del recinto o impreso en la entrada.
+window.qrEnVivo=function(id,nombre){
+  if(!window.YLQR){alert('No se pudo cargar el generador de QR.');return;}
+  const el=document.createElement('div'); el.innerHTML=nombre||'';
+  YLQR.panel({url:YLQR.urlEvento(id), titulo:el.textContent||id,
+    archivo:'qr-'+String(id).replace(/[^A-Za-z0-9_-]+/g,'-')});
+};
 // ── COMPETENCIA EN VIVO (público) ─────────────────────────────────
 // Lista SOLO los eventos que se habilitaron para el público desde
 // admin → YourLift Público (campo publicoVisible en eventos/{id}). Abre el
@@ -1663,7 +1680,11 @@ function renderEnVivoPub(){
           <div class="envivo-nom">${e.name||e.id}</div>
           <div class="envivo-meta">${[_fpub(e.fecha),e.lugar].filter(Boolean).join(' · ')||'&nbsp;'}</div>
         </div>
-        <div class="envivo-cta"><span>VER EN VIVO</span></div>
+        <div class="envivo-cta">
+          <span>VER EN VIVO</span>
+          <button class="envivo-qr" title="Mostrar el código QR de esta competencia"
+            onclick="event.preventDefault();event.stopPropagation();qrEnVivo('${String(e.id).replace(/'/g,"\\'")}','${_escH(String(e.name||e.id)).replace(/'/g,"&#39;")}')">QR</button>
+        </div>
       </div></a>`;
   });
   h+=`</div></div>`;

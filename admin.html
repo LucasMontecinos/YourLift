@@ -125,6 +125,7 @@ body.nav-open .adm-burger{opacity:0;pointer-events:none}
 <body>
 <div id="bgGrid"></div>
 <script src="clubs.js"></script>
+<script src="yl-qr.js"></script>
 <script src="yl-ediciones.js"></script>
 <div id="app"><div class="login"><div class="login-c"><div class="spinner"></div><p style="text-align:center" id="loadingMsg">Cargando...</p><p id="loadingBtn" style="text-align:center;margin-top:12px;display:none"><button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #C41E3A;background:transparent;color:#C41E3A;cursor:pointer;font-size:13px">↻ Reintentar</button></p></div></div></div>
 
@@ -9226,6 +9227,20 @@ async function _pubLoadFile(){
   }catch(_){}
   render();
 }
+// El QR del seguimiento en vivo de un campeonato, para proyectarlo en la
+// pantalla del recinto, imprimirlo o mandarlo. Lleva al MISMO link de
+// "Competencia en Vivo" de yourlift.cl, así que si el campeonato todavía no
+// está marcado como visible, el QR se lee pero la gente no ve nada: por eso el
+// aviso.
+window.pubQR=function(id){
+  if(!window.YLQR){showToast('No se pudo cargar el generador de QR',null,true);return;}
+  const e=_pubEvs().find(x=>x.id===id)||{};
+  if(e.publicoVisible!==true&&!confirm('Este campeonato todavía no está visible para el público.\n\n'
+    +'El QR se va a generar igual, pero quien lo escanee no va a ver la competencia '
+    +'hasta que le des "MOSTRAR".\n\n¿Generarlo igual?'))return;
+  YLQR.panel({url:YLQR.urlEvento(id), titulo:e.name||id,
+    archivo:'qr-'+String(id).replace(/[^A-Za-z0-9_-]+/g,'-')});
+};
 function renderPublico(){
   _pubLoadFile();
   const evs=_pubEvs().sort((a,b)=>{
@@ -9257,6 +9272,7 @@ function renderPublico(){
         <div style="font-size:10px;color:var(--muted)">${esc(e.id)}${e.fecha?' · '+esc(e.fecha):''}${e.status?' · '+esc(e.status):''}${e._deArchivo?` · <span style="color:var(--gold)">nómina de archivo${e._n?' · '+e._n+' atletas':''}</span>`:''}</div>
       </div>
       ${on?`<span style="font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--green);white-space:nowrap">● EN VIVO PARA EL PÚBLICO</span>`:''}
+      <button onclick="pubQR('${esc(e.id)}')" title="Código QR del seguimiento en vivo, para proyectar o imprimir" style="padding:7px 12px;border-radius:8px;border:1px solid var(--gold);background:transparent;color:var(--gold);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">QR</button>
       <button onclick="pubToggle('${esc(e.id)}',${on?'false':'true'})" style="padding:7px 14px;border-radius:8px;border:1px solid ${on?'var(--red)':'var(--green)'};background:transparent;color:${on?'var(--red)':'var(--green)'};font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap">${on?'OCULTAR':'MOSTRAR'}</button>
     </div>`;
   });
