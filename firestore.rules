@@ -258,6 +258,31 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Base de jueces del panel, guardada por RUT. Es APARTE de `jueces`, que son
+    // las cuentas con las que un juez marca las luces desde el teléfono.
+    //
+    // Se lee en público porque la ficha del atleta muestra la corbata con su
+    // categoría — y eso es todo lo que sale afuera: acá no se guardan ni correos
+    // ni teléfonos, por lo mismo que la base de jueces del repositorio tampoco
+    // los trae. Escribe solo el admin.
+    //
+    // Faltaba, y por eso la importación de la planilla de FECHIPO agregaba cero
+    // jueces: sin un match propio caía en el `allow read, write: if false` del
+    // final y Firestore rechazaba las 39 escrituras, una por una.
+    match /referees/{rut} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Las tarjetas de nómina del inicio de yourlift.cl: foto, nombre del
+    // campeonato y la lista que se despliega al tocarla. Las lee cualquiera
+    // porque son la portada; las sube el admin. Le faltaba la regla igual que a
+    // `referees`.
+    match /nomina_cards/{slug} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /records/{id} {
       allow read: if true;
       allow write: if isAdmin();

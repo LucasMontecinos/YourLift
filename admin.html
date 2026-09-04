@@ -2556,7 +2556,13 @@ async function refEnsureLoaded(){
     const snap=await getDocs(collection(db,'referees'));
     ST.referees=snap.docs.map(d=>({id:d.id,...d.data()}))
       .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
-  }catch(e){ console.warn('[referees]',e.message); ST.referees=[]; }
+    ST._refError=null;
+  // Si Firestore rechaza la lectura hay que decirlo. Antes se tragaba el error y
+  // la pantalla quedaba igual que una base recién creada —"Sin jueces cargados
+  // todavía", todos los contadores en cero—, que es exactamente lo que se ve
+  // cuando falta la regla de la colección. Son dos problemas distintos y desde
+  // afuera se veían iguales.
+  }catch(e){ console.warn('[referees]',e.message); ST.referees=[]; ST._refError=e; }
   ST._refLoaded=true; render();
 }
 
@@ -2702,7 +2708,7 @@ window.refImportarBase=async function(){
   if(!confirm('Se van a vincular así'+(nuevos.length>12?' (los primeros 12 de '+nuevos.length+')':'')+':\n\n'
     +muestra+'\n\nSi alguno está mal, cancela y lo agregas a mano.\n\n¿Confirmas?'))return;
 
-  let ok=0; const fallaron=[];
+  let ok=0; const fallaron=[]; let permisos=false;
   for(const {juez,cand} of nuevos){
     const a=cand[0];
     const id=refRutId(a.rut);
@@ -2719,13 +2725,30 @@ window.refImportarBase=async function(){
         origen:'planilla FECHIPO', updatedAt:serverTimestamp()
       },{merge:true});
       ok++;
-    }catch(e){ fallaron.push(juez.nombre+': '+e.message); }
+    }catch(e){
+      fallaron.push(juez.nombre+': '+e.message);
+      if(/permission|insufficient|PERMISSION_DENIED/i.test(e.message||''))permisos=true;
+    }
   }
   await logAction('jueces_importados','planilla FECHIPO',null,ok+' de '+nuevos.length);
   ST._refLoaded=false; await refEnsureLoaded(); render();
   let msg='Se agregaron '+ok+' jueces';
   if(fallaron.length)msg+=' · '+fallaron.length+' fallaron';
   showToast(msg,null,!!fallaron.length);
+  // Un contador de fallas no sirve para arreglar nada: hay que decir POR QUÉ.
+  // Cuando fallan todas por permisos no es un problema de los datos sino de las
+  // reglas de Firestore, y eso se arregla en otra parte —en la consola, no acá—,
+  // así que el aviso lo dice con todas sus letras en vez de dejar buscando.
+  if(fallaron.length){
+    alert(permisos&&!ok
+      ? 'No se agregó ninguno: Firestore rechazó las '+fallaron.length+' escrituras por permisos.\n\n'
+        +'La colección `referees` necesita su regla publicada. Está escrita en firestore.rules '
+        +'del repositorio; hay que publicarla en la consola de Firebase '
+        +'(Firestore → Reglas → Publicar) y volver a importar.\n\n'
+        +'Error tal cual: '+(fallaron[0]||'').split(': ').slice(1).join(': ')
+      : 'No se pudieron agregar '+fallaron.length+':\n\n'+fallaron.slice(0,15).join('\n')
+        +(fallaron.length>15?'\n…':''));
+  }
   if(dudosos.length){
     const det=dudosos.map(x=>'  '+x.juez.nombre+' — '
       +(x.cand.length?x.cand.length+' personas con ese nombre':'no está en el padrón')).join('\n');
@@ -2752,7 +2775,17 @@ function refListHtml(){
     const t=(String(r.nombre||'')+' '+String(r.rut||'')).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
     return t.includes(q);
   });
-  if(!list.length)return '<div style="padding:26px;text-align:center;color:var(--muted);font-size:13px">Sin jueces cargados todavía.</div>';
+  if(!list.length){
+    // Base vacía y lectura rechazada se veían igual, y no son lo mismo: en el
+    // segundo caso puede haber jueces guardados y no estarse viendo ninguno.
+    if(ST._refError)return '<div style="padding:26px;text-align:center;color:var(--red);font-size:13px;line-height:1.6">'
+      +'<b>Firestore no deja leer esta base.</b><br>'
+      +'La colección <code>referees</code> necesita su regla publicada: está en '
+      +'<code>firestore.rules</code> del repositorio y hay que publicarla en la consola de Firebase '
+      +'(Firestore → Reglas → Publicar).<br>'
+      +'<span style="color:var(--muted);font-size:11px">'+esc(ST._refError.message||'')+'</span></div>';
+    return '<div style="padding:26px;text-align:center;color:var(--muted);font-size:13px">Sin jueces cargados todavía.</div>';
+  }
   return `<table class="tbl"><tr><th></th><th>Nombre</th><th>RUT</th><th>Insignia</th><th></th></tr>`
     +list.map(r=>{
       const k=REF_CORBATA[refClave(r)];
