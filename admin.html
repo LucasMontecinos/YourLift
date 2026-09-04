@@ -2289,6 +2289,17 @@ window.exportWebCSV=function(){
 // BASE DE ENTRENADORES (acreditaciones, vigencia 1 año, categoría) — Firestore
 // ═══════════════════════════════════════════
 function _entRutId(r){return String(r||'').replace(/[^0-9kK]/g,'').toUpperCase();}
+// La ficha se guarda con el RUT como identificador, porque es lo que permite
+// cruzarla con el padrón y ponerle la insignia de entrenador al atleta.
+//
+// Pero hay once entrenadores que no compiten y cuyo RUT en la planilla resultó
+// ser el de otra persona: se les dejó en blanco a propósito, porque un RUT
+// equivocado no es un dato incompleto sino la insignia de un entrenador colgada
+// en la ficha de alguien que no lo es. Esos quedan con un identificador armado
+// desde el nombre, aparecen en la lista marcados y se les puede escribir el RUT
+// cuando la federación lo confirme.
+function _entSlug(n){return String(n||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);}
+function _entDocId(c){ return _entRutId(c&&c.rut)||(c&&c.id)||('sr-'+_entSlug(c&&c.nombre)); }
 function _entVence(fecha){ if(!fecha)return ''; const p=String(fecha).split('-'); if(p.length<2)return ''; return (parseInt(p[0])+1)+'-'+p[1]; }
 function _entVigente(c){ const m=new Date().toISOString().slice(0,7); return (c.acreditaciones||[]).some(a=>a.vence&&a.vence>=m); }
 let _entWork=null;
@@ -2353,7 +2364,11 @@ window.saveEnt=async function(){
   const g=id=>document.getElementById(id);
   const nombre=(g('ent_nom').value||'').trim(), rut=(g('ent_rut').value||'').trim();
   if(!nombre){showToast('Falta el nombre',null,true);return;}
-  if(!rut){showToast('Falta el RUT',null,true);return;}
+  // Sin RUT se puede guardar, pero conviene saber lo que se pierde: es el único
+  // dato que enlaza al entrenador con su ficha de atleta.
+  if(!rut&&!confirm('Sin RUT la ficha se guarda igual, pero no se puede enlazar '
+    +'con el padrón: a esta persona no le va a salir la insignia de entrenador '
+    +'en su perfil.\n\n¿Guardar así?'))return;
   entSyncAcredsFromDOM();
   const data={
     nombre, rut, club:(g('ent_club').value||'').trim(),
@@ -2363,7 +2378,18 @@ window.saveEnt=async function(){
     acreditaciones:_entWork.acreditaciones.map(a=>({proceso:a.proceso||'',fecha:a.fecha||'',vence:a.vence||_entVence(a.fecha),categoria:a.categoria||'',cumple:a.cumple||''})),
     updatedAt:serverTimestamp()
   };
-  try{ await setDoc(doc(db,'entrenadores',_entRutId(rut)),data,{merge:true}); await logAction('ent_save',_entRutId(rut),null,nombre); showToast('Entrenador guardado'); closeEntModal(); }
+  if(_entWork&&_entWork.rut_planilla)data.rut_planilla=_entWork.rut_planilla;
+  // Escribirle el RUT a una ficha que no lo tenía —o corregirle uno equivocado—
+  // le cambia el identificador. Hay que mover la ficha, no dejar las dos: si la
+  // vieja se queda, sigue enlazada al atleta que no corresponde.
+  const idViejo=(_entWork&&_entWork.id)||'';
+  const idNuevo=_entRutId(rut)||idViejo||('sr-'+_entSlug(nombre));
+  try{
+    await setDoc(doc(db,'entrenadores',idNuevo),data,{merge:true});
+    if(idViejo&&idViejo!==idNuevo)await deleteDoc(doc(db,'entrenadores',idViejo));
+    await logAction('ent_save',idNuevo,null,nombre+(idViejo&&idViejo!==idNuevo?' (movido desde '+idViejo+')':''));
+    showToast('Entrenador guardado'); closeEntModal();
+  }
   catch(e){ showToast('Error: '+e.message,null,true); }
 };
 window.delEnt=async function(rut){
@@ -2384,18 +2410,39 @@ window.entExportXlsx=function(){
   });
   _xlsxDownload(aoa,'Entrenadores','Entrenadores.xlsx');
 };
+// Importar la base. Reemplaza lo que hay, no lo suma.
+//
+// Cuidado con las fichas que sobran. En la planilla que llegó de la federación
+// la columna del RUT venía corrida: cuarenta y tres entrenadores tenían el RUT
+// de otra persona, y como el RUT es el identificador de la ficha, esas fichas
+// quedaron guardadas con el número equivocado. Corregir el archivo no basta: la
+// ficha vieja sigue en Firestore con el RUT ajeno y le sigue poniendo la
+// insignia de entrenador al atleta al que ese RUT sí pertenece. Por eso la
+// importación ofrece borrar las que ya no están en la base.
 window.importEntrenadores=async function(){
-  if(!confirm('Importar la base de entrenadores (entrenadores_db.json) a Firestore?\nLos que ya existan (por RUT) se actualizan.'))return;
+  if(!confirm('¿Importar la base de entrenadores (entrenadores_db.json) a Firestore?\nLos que ya existan se actualizan.'))return;
   showToast('Importando…');
   try{
     const arr=await fetch('entrenadores_db.json?v='+Date.now()).then(r=>r.json());
-    let n=0;
+    const ids=new Set(); let n=0;
     for(const c of arr){
-      const id=_entRutId(c.rut); if(!id)continue;
+      const id=_entDocId(c); if(!id||id==='sr-')continue;
+      ids.add(id);
       await setDoc(doc(db,'entrenadores',id),{...c,updatedAt:serverTimestamp()},{merge:true}); n++;
     }
-    await logAction('ent_import','entrenadores',null,n+' registros');
-    showToast('Importados '+n+' entrenadores');
+    const sobran=(ST.entrenadores||[]).filter(c=>!ids.has(c.id));
+    let borrados=0;
+    if(sobran.length){
+      const txt=sobran.slice(0,20).map(c=>'· '+(c.nombre||c.id)+'  ('+(c.rut||c.id)+')').join('\n');
+      if(confirm('Quedan '+sobran.length+' ficha(s) que ya no están en la base:\n\n'+txt
+        +(sobran.length>20?'\n…':'')
+        +'\n\nSon las que estaban guardadas con el RUT de otra persona. Si no se borran, '
+        +'la insignia de entrenador le sigue saliendo al atleta equivocado.\n\n¿Borrarlas?')){
+        for(const c of sobran){ await deleteDoc(doc(db,'entrenadores',c.id)); borrados++; }
+      }
+    }
+    await logAction('ent_import','entrenadores',null,n+' registros'+(borrados?', '+borrados+' borrados':''));
+    showToast('Importados '+n+' entrenadores'+(borrados?' · '+borrados+' borrados':''));
   }catch(e){ showToast('Error importando: '+e.message,null,true); }
 };
 window.entFilter=function(v){ST.entSearch=v;const el=document.getElementById('entList');if(el)el.innerHTML=entListHtml();};
@@ -2416,8 +2463,11 @@ function entListHtml(){
     const vig=_entVigente(c);
     const procs=(c.acreditaciones||[]).map(a=>a.proceso).filter(Boolean).sort((a,b)=>a-b).join(', ');
     const ult=(c.acreditaciones||[]).reduce((m,a)=>(a.vence&&(!m||a.vence>m.vence)?a:m),null);
+    const rutTxt=c.rut
+      ? esc(c.rut)+(c.rut_planilla?` <span title="En la planilla venía ${esc(c.rut_planilla)}, que es el RUT de otra persona" style="color:var(--gold)">·corregido</span>`:'')
+      : `<span style="color:var(--red)">sin RUT — no se enlaza con el padrón</span>`;
     return `<tr>
-      <td>${esc(c.nombre||'')}<br><span style="font-size:9px;color:var(--muted)">${esc(c.rut||'')}${c.club?' · '+esc(c.club):''}</span></td>
+      <td>${esc(c.nombre||'')}<br><span style="font-size:9px;color:var(--muted)">${rutTxt}${c.club?' · '+esc(c.club):''}</span></td>
       <td style="font-size:11px">${esc((c.correos||[]).join(', ')||'—')}</td>
       <td><span class="badge b-y">${esc(c.categoria||'?')}</span></td>
       <td style="font-size:11px">P: ${procs||'—'}</td>
@@ -2436,6 +2486,7 @@ function renderEntrenadoresDB(){
   const total=list.length, vig=list.filter(_entVigente).length;
   const c1=list.filter(c=>/cat\.?\s*1/i.test(c.categoria||'')).length;
   const c2=list.filter(c=>/cat\.?\s*2/i.test(c.categoria||'')).length;
+  const sinRut=list.filter(c=>!_entRutId(c.rut)).length;
   const ks='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;text-align:center';
   return `<div class="h1">Base de Entrenadores</div>
     <p class="subtitle">Acreditaciones por proceso · cada una vigente 1 año · categoría · editable</p>
@@ -2444,7 +2495,13 @@ function renderEntrenadoresDB(){
       <div style="${ks}"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:#22c55e">${vig}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">VIGENTES</div></div>
       <div style="${ks}"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:#3b82f6">${c1}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">CAT. 1</div></div>
       <div style="${ks}"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:#ec4899">${c2}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">CAT. 2</div></div>
+      ${sinRut?`<div style="${ks};border-color:rgba(239,68,68,.45)"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:var(--red)">${sinRut}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">SIN RUT</div></div>`:''}
     </div>
+    ${sinRut?`<div style="background:rgba(239,68,68,.09);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;line-height:1.5">
+      <b>${sinRut} entrenador(es) sin RUT.</b> En la planilla traían el RUT de otra persona, así que se les dejó en blanco:
+      un RUT equivocado no es un dato que falta, es la insignia de entrenador colgada en la ficha de alguien que no lo es.
+      Escribiéndoles el RUT correcto en “Editar”, la insignia les aparece sola en su perfil.
+    </div>`:''}
     ${(()=>{
       const f=ST.entFilters||{};
       const selS='background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;font-family:DM Sans';

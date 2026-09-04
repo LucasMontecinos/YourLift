@@ -103,6 +103,51 @@ const soloNum = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase();
     ok(/ENTRENADOR CAT II/.test(t2), ej2.nombre + ' → CAT II');
   }
 
+  console.log('\n  El caso que lo destapó: Sergio Hernán Mardones Meza');
+  {
+    // Su perfil decía ENTRENADOR CAT II y es Cat. 1. No era un error de dibujo:
+    // la ficha de entrenador que le calzaba era la de OTRA persona, porque en la
+    // planilla llevaba un RUT ajeno.
+    const ent = entrenadores.find(e => /Mardones Meza/i.test(e.nombre || ''));
+    const atl = atletas.find(a => a.codigo === '1718SMM-2025');
+    ok(!!ent && !!atl, 'está en las dos bases');
+    ok(ent && atl && soloNum(ent.rut) === soloNum(atl.rut),
+       'la ficha de entrenador lleva SU RUT (' + (ent || {}).rut + ')');
+    ok(ent && /1/.test(ent.categoria || ''), 'y su categoría es ' + (ent || {}).categoria);
+    const t = await ver('1718SMM-2025');
+    ok(/ENTRENADOR CAT I(?!I)/.test(t), 'el perfil dice CAT I');
+  }
+
+  console.log('\n  Ninguna ficha lleva el RUT de otra persona');
+  {
+    // Esto es lo que hay que cuidar. Un RUT corrido de fila no deja un dato
+    // incompleto: le cuelga la insignia de entrenador —con su categoría— a un
+    // atleta que no es entrenador. Venían 43 así.
+    const nrm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(w => w.length > 1);
+    const porRutAtl = {};
+    atletas.forEach(a => { if (a.rut) (porRutAtl[soloNum(a.rut)] = porRutAtl[soloNum(a.rut)] || []).push(a); });
+    const ajenos = entrenadores.filter(e => {
+      const ats = e.rut ? porRutAtl[soloNum(e.rut)] : null;
+      if (!ats) return false;
+      const T = new Set(nrm(e.nombre));
+      return !ats.some(a => nrm(a.nombre).filter(w => T.has(w)).length >= 2);
+    });
+    ok(ajenos.length === 0, 'ninguna de las ' + entrenadores.length + ' fichas'
+       + (ajenos.length ? ' — se cuelan: ' + ajenos.map(e => e.nombre + ' ' + e.rut).join(', ') : ''));
+    // Un RUT chileno mal copiado casi siempre falla el dígito verificador.
+    const dv = c => { let s = 0; c.split('').reverse().forEach((ch, i) => s += (+ch) * [2,3,4,5,6,7][i % 6]);
+                      const r = 11 - (s % 11); return r === 11 ? '0' : r === 10 ? 'K' : String(r); };
+    const malDV = entrenadores.filter(e => { const r = soloNum(e.rut);
+      return r && !(r.length >= 8 && /^\d+$/.test(r.slice(0, -1)) && dv(r.slice(0, -1)) === r.slice(-1)); });
+    ok(malDV.length === 0, 'y todos los RUT tienen dígito verificador válido'
+       + (malDV.length ? ' — ' + malDV.map(e => e.nombre + ' ' + e.rut).join(', ') : ''));
+    // Los que no se pudieron verificar van SIN RUT, no con uno prestado.
+    const sinRut = entrenadores.filter(e => !soloNum(e.rut));
+    ok(sinRut.every(e => e.rut_planilla),
+       'los ' + sinRut.length + ' sin RUT dejan anotado el que traía la planilla');
+  }
+
   console.log('\n  Y a quien no es entrenador no le inventa nada');
   {
     const noEs = atletas.find(a => a.rut && !porRut[soloNum(a.rut)] && a.codigo);
@@ -119,6 +164,17 @@ const soloNum = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase();
     ok(/_aC\('atl_entren'/.test(at), 'los entrenadores se cachean, no se piden en cada ficha');
     ok(/porRut\[soloNum\(a\.rut\)\]/.test(at), 'el cruce es por RUT normalizado, no por nombre');
     ok(/const _catRomana=/.test(at), 'y la categoría se pasa a números romanos');
+
+    // Corregir el archivo no alcanza: la ficha vieja quedó guardada CON el RUT
+    // ajeno, y mientras esté ahí le sigue saliendo la insignia al que no es.
+    const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+    ok(/function _entDocId\(/.test(adm), 'la ficha sabe con qué identificador se guarda');
+    ok(/sobran\.length/.test(adm) && /deleteDoc\(doc\(db,'entrenadores',c\.id\)\)/.test(adm),
+       'y la importación ofrece borrar las que quedaron con el RUT de otro');
+    ok(/if\(idViejo&&idViejo!==idNuevo\)await deleteDoc/.test(adm),
+       'corregirle el RUT a mano mueve la ficha, no la duplica');
+    ok(/sin RUT — no se enlaza con el padrón/.test(adm),
+       'y las que no se pudieron verificar se ven en la lista');
   }
 
   console.log(fallas ? `\n${fallas} FALLA(S)` : '\nTodo OK');
