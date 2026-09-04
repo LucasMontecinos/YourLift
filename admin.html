@@ -2590,6 +2590,91 @@ window.refSave=async function(){
     closeRefModal(); ST._refLoaded=false; refEnsureLoaded();
   }catch(e){showToast('Error: '+e.message,null,true);}
 };
+// ── Importar la planilla de FECHIPO ─────────────────────────────────────────
+// La planilla llega con nombre, club y categoría, pero SIN RUT — y esta base se
+// guarda por RUT, porque es lo único que no cambia. El RUT sale de cruzar contra
+// el padrón.
+//
+// Ese cruce NO se aplica solo. Los nombres de la planilla vienen cortos
+// ("Felipe Romero") y el padrón los tiene completos ("Felipe Antonio Romero
+// Díaz"): ninguno calza exacto, así que hay que buscar por palabras, y eso puede
+// equivocarse. Ya pasó una vez, con una atleta peruana que quedó pegada a la
+// ficha de una chilena. Por eso acá se PROPONE y la persona confirma: se muestra
+// a quién se va a vincular cada juez y recién ahí se guarda.
+//
+// Los que tienen dos candidatas o ninguna se listan aparte, para agregarlos a
+// mano con su RUT.
+window.refImportarBase=async function(){
+  const nrm=x=>String(x==null?'':x).normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().split(/\s+/).filter(Boolean).join(' ');
+  let base;
+  try{ base=await (await fetch('jueces_base.json?v='+Date.now())).json(); }
+  catch(e){ showToast('No se pudo leer jueces_base.json: '+e.message,null,true); return; }
+  const jueces=(base&&base.jueces)||[];
+  if(!jueces.length){ showToast('La planilla vino vacía',null,true); return; }
+  await refEnsureLoaded();
+  // Quién ya está, comparado por RUT y no por nombre: acá se guarda el nombre
+  // COMPLETO del padrón ("Felipe Antonio Romero Díaz") y la planilla trae el
+  // corto ("Felipe Romero"), así que compararlos por nombre no calza nunca y
+  // volvía a reimportar a todos en cada pasada.
+  const yaEstan=new Set((ST.referees||[]).map(r=>refRutId(r.rut||r.id)));
+
+  const listos=[], dudosos=[];
+  jueces.forEach(j=>{
+    const pal=nrm(j.nombre).split(' ');
+    const cand=(ST.data||[]).filter(a=>{
+      const d=nrm(a.nombre).split(' ');
+      return pal.length>=2 && pal.every(x=>d.includes(x));
+    });
+    const item={juez:j, cand};
+    if(cand.length===1) listos.push(item); else dudosos.push(item);
+  });
+  const nuevos=listos.filter(x=>!yaEstan.has(refRutId(x.cand[0].rut)));
+
+  const resumen='Importar la planilla de FECHIPO\n\n'
+    +jueces.length+' jueces en la planilla.\n'
+    +nuevos.length+' se pueden vincular con el padrón y se van a agregar.\n'
+    +(listos.length-nuevos.length)+' ya estaban en la base.\n'
+    +dudosos.length+' quedan fuera: no se encontró a quién vincularlos o hay más de uno con ese nombre.\n\n'
+    +'A los que entran se les toma el RUT de su ficha del padrón.\n\n¿Seguir?';
+  if(!nuevos.length){ alert(resumen.replace('¿Seguir?','No hay nada nuevo que agregar.')); return; }
+  if(!confirm(resumen))return;
+
+  // Segunda pasada: se muestra a quién se vincula cada uno, para poder frenar.
+  const muestra=nuevos.slice(0,12).map(x=>'  '+x.juez.nombre+'  →  '+x.cand[0].nombre).join('\n');
+  if(!confirm('Se van a vincular así'+(nuevos.length>12?' (los primeros 12 de '+nuevos.length+')':'')+':\n\n'
+    +muestra+'\n\nSi alguno está mal, cancela y lo agregas a mano.\n\n¿Confirmas?'))return;
+
+  let ok=0; const fallaron=[];
+  for(const {juez,cand} of nuevos){
+    const a=cand[0];
+    const id=refRutId(a.rut);
+    if(!id){ fallaron.push(juez.nombre+' (su ficha no tiene RUT)'); continue; }
+    try{
+      await setDoc(doc(db,'referees',id),{
+        nombre:a.nombre,               // el nombre completo del padrón, no el corto
+        rut:a.rut,
+        categoria:/1/.test(juez.categoria)?'1':'2',
+        ambito:juez.certificacion==='IPF'?'internacional':'nacional',
+        club:juez.club||'', codigo:a.codigo||'',
+        olimpiadasEspeciales:!!juez.olimpiadasEspeciales,
+        parapowerlifting:!!juez.parapowerlifting,
+        origen:'planilla FECHIPO', updatedAt:serverTimestamp()
+      },{merge:true});
+      ok++;
+    }catch(e){ fallaron.push(juez.nombre+': '+e.message); }
+  }
+  await logAction('jueces_importados','planilla FECHIPO',null,ok+' de '+nuevos.length);
+  ST._refLoaded=false; await refEnsureLoaded(); render();
+  let msg='Se agregaron '+ok+' jueces';
+  if(fallaron.length)msg+=' · '+fallaron.length+' fallaron';
+  showToast(msg,null,!!fallaron.length);
+  if(dudosos.length){
+    const det=dudosos.map(x=>'  '+x.juez.nombre+' — '
+      +(x.cand.length?x.cand.length+' personas con ese nombre':'no está en el padrón')).join('\n');
+    alert('Estos '+dudosos.length+' hay que agregarlos a mano, con su RUT:\n\n'+det);
+  }
+};
 window.refDel=async function(id){
   const r=(ST.referees||[]).find(x=>x.id===id);
   if(!confirm('¿Eliminar a '+(r?.nombre||id)+' de la base de jueces?\n\nSu ficha de atleta, si la tiene, no se toca.'))return;
@@ -2642,6 +2727,7 @@ function renderReferees(){
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       <input value="${esc(ST.refSearch||'')}" oninput="refBuscar(this.value)" placeholder="Buscar nombre o RUT…" style="flex:1;min-width:200px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px">
       <button onclick="openRefModal('')" class="btn btn-g" style="padding:9px 15px">+ Agregar juez</button>
+      <button onclick="refImportarBase()" class="btn btn-b" style="padding:9px 15px" title="Lee la planilla de FECHIPO y propone a los que faltan">↓ Importar planilla FECHIPO</button>
     </div>
     <div class="card" style="padding:0;overflow-x:auto" id="refList">${refListHtml()}</div>`;
 }
