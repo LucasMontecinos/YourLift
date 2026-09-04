@@ -106,6 +106,39 @@ const CAMP = 'https://ejemplo.cl/sudamericano.png';
     ok(!/background:rgba\(212,168,67,\.35\)/.test(r), 'y sin el separador, que separaría de nada');
   }
 
+  console.log('\n  Los logos sobreviven a la sincronización');
+  {
+    // Acá estaba el bug de verdad, y es el que hizo que el logo de la federación
+    // "desapareciera" después de haberlo subido: DATA.event NO es un objeto
+    // estable. Cada snapshot de sincronización lo pisa entero
+    // (DATA.event=d.event||DATA.event) y un widget recién abierto lo arma desde
+    // la lista de eventos. Cualquiera de esas copias que no traiga el campo
+    // dejaba el logo en blanco, y desde afuera parecía que se había borrado.
+    const r = await p.evaluate(([fed, camp]) => {
+      const out = {};
+      window.LIVE_EVENT_META = { ev1: { name: 'Prueba', logoUrl: camp, logoFedUrl: fed } };
+      // Lo que llega por sync: el mismo evento, sin los logos.
+      DATA.event = { id: 'ev1', name: 'Prueba' };
+      out.trasSync = [_logoCamp(), _logoFed()];
+      // Y un widget que arranca desde la lista de eventos, también sin logos.
+      DATA.event = { id: 'ev1', name: 'Prueba', athletes: [], _fromUrl: true };
+      out.widget = [_logoCamp(), _logoFed()];
+      out.tira = (_tiraLogos(['fed', 'camp'], '76px', '16px').match(/src="([^"]+)"/g) || []).length;
+      // Pero si no hay logo en ninguna parte, no se inventa uno.
+      window.LIVE_EVENT_META = {};
+      DATA.event = { id: 'ev1', name: 'Prueba' };
+      out.sinNada = [_logoCamp(), _logoFed(), _tiraLogos(['fed', 'camp'], '76px', '16px')];
+      return out;
+    }, [FED, CAMP]);
+    ok(r.trasSync[0] === CAMP && r.trasSync[1] === FED,
+       'un snapshot que pisa el evento sin logos no los borra');
+    ok(r.widget[0] === CAMP && r.widget[1] === FED,
+       'y un widget recién abierto los encuentra igual');
+    ok(r.tira === 2, 'la tira dibuja los dos (' + r.tira + ')');
+    ok(r.sinNada[0] === '' && r.sinNada[1] === '' && r.sinNada[2] === '',
+       'y sin ninguno cargado no inventa nada');
+  }
+
   console.log('\n  Si un logo no carga en medio de la transmisión');
   {
     const r = await p.evaluate(() => {
@@ -125,6 +158,12 @@ const CAMP = 'https://ejemplo.cl/sudamericano.png';
     ok(/function _tiraLogos\(/.test(lc), 'una sola forma de armar la tira');
     ok(/DATA\.event\.logoFedUrl=e\.logoFedUrl\|\|''/.test(lc),
        'y el logo de la federación llega desde el campeonato');
+    // La red que evita que un sync lo borre.
+    ok(/function _metaEvento\(/.test(lc), 'hay un respaldo que la sincronización no toca');
+    ok(/_metaEvento\(\)\.logoFedUrl/.test(lc), 'y los logos lo consultan');
+    // Si alguna pantalla volviera a leer el campo a mano, se rompe otra vez.
+    ok(!/\(DATA\.event\|\|\{\}\)\.logoFedUrl/.test(lc),
+       'ninguna pantalla lee el campo por su cuenta');
     // Si el scoreboard volviera a tener el de YourLift escrito adentro, la regla
     // se rompería sin que nadie se diera cuenta.
     const sb = lc.slice(lc.indexOf('sb-card-explode'), lc.indexOf('sb-wipe-content'));

@@ -1968,8 +1968,8 @@ function _fondoBarra(a,modo){
     if(uri)return velo+',url('+uri+') center/cover no-repeat,'+AZUL;
     return AZUL;
   }
-  if(modo==='logo'&&DATA.event&&DATA.event.logoUrl){
-    return 'linear-gradient(0deg,rgba(10,22,40,.86),rgba(10,22,40,.86)),url('+DATA.event.logoUrl+') center/contain no-repeat,'+AZUL;
+  if(modo==='logo'&&_logoCamp()){
+    return 'linear-gradient(0deg,rgba(10,22,40,.86),rgba(10,22,40,.86)),url('+_logoCamp()+') center/contain no-repeat,'+AZUL;
   }
   return AZUL;
 }
@@ -6454,8 +6454,23 @@ function _btVideoTeardown(){
 // pantallas que están al aire todo el rato y lo que tiene que leerse ahí es de
 // quién es el campeonato. Y en la tabla actual va solo el del campeonato: es una
 // tarjeta chica en una esquina y con dos logos el título quedaba apretado.
-function _logoCamp(){ return (DATA.event&&DATA.event.logoUrl)||''; }
-function _logoFed(){ return (DATA.event&&DATA.event.logoFedUrl)||''; }
+// De dónde salen los logos, y por qué no basta con DATA.event.
+//
+// DATA.event NO es un objeto estable: se lo pisa entero cada vez que llega un
+// snapshot de sincronización (`DATA.event=d.event||DATA.event`) y también cuando
+// un widget arranca desde la lista de eventos. Cualquiera de esas copias que no
+// traiga el campo deja el logo en blanco, y desde afuera parece que el logo
+// "se borró" cuando en realidad nunca se guardó en esa copia.
+//
+// Por eso se busca en dos lados: primero en DATA.event —que es lo más fresco si
+// está— y si no, en LIVE_EVENT_META, que lo llena el listener de `eventos`
+// directamente desde el campeonato y no lo toca la sincronización.
+function _metaEvento(){
+  const m=window.LIVE_EVENT_META||{}, ev=DATA.event||{};
+  return m[ev.id]||m[ev.name]||{};
+}
+function _logoCamp(){ return (DATA.event&&DATA.event.logoUrl)||_metaEvento().logoUrl||''; }
+function _logoFed(){ return (DATA.event&&DATA.event.logoFedUrl)||_metaEvento().logoFedUrl||''; }
 
 // Arma la tira de logos. `alto` es la altura en CSS (puede venir con clamp()).
 // Los que no estén cargados simplemente no se dibujan, y si no hay ninguno
@@ -6484,7 +6499,7 @@ function _barridoLogoImg(){
   // que pedirlo con el interruptor— y quedaba chico y sin notarse. Ahora manda
   // el del campeonato; el interruptor sigue sirviendo para forzar el de
   // YourLift en un campeonato que lo prefiera así.
-  const propio=(ev.barridoLogo==='yourlift')?'':(ev.logoUrl||'');
+  const propio=(ev.barridoLogo==='yourlift')?'':_logoCamp();
   if(propio){
     // Más ancho que alto: los logos de campeonato suelen ser apaisados, y
     // encajonarlos en un cuadrado los dejaba diminutos.
@@ -8238,8 +8253,8 @@ function renderScreenBarra(a){
   const kg=(at&&at.w)||0;
   const modo=(window._SCREEN_STATE&&window._SCREEN_STATE.fondo)||'bandera';
   const fondo=_fondoBarra(a,modo);
-  const logo=DATA.event&&DATA.event.logoUrl;
-  const logoFed=DATA.event&&DATA.event.logoFedUrl;
+  const logo=_logoCamp();
+  const logoFed=_logoFed();
   const partes=String(a.name||'').trim().split(/\s+/);
   const apellidos=partes.slice(-2).join(' ');
   const nombres=partes.slice(0,-2).join(' ');
@@ -8758,8 +8773,8 @@ function renderScreenIntentos(cur,nxt){
     ${_piBlock('subtitle',subtitleHtml)}
     ${positionHtml?_piBlock('position',positionHtml):''}
     ${nextHtml?_piBlock('next',nextHtml):''}
-    ${_piLogoBloque('logoFed',(DATA.event||{}).logoFedUrl,'9vh','12vw')}
-    ${_piLogoBloque('logoCamp',(DATA.event||{}).logoUrl,'11vh','15vw')}
+    ${_piLogoBloque('logoFed',_logoFed(),'9vh','12vw')}
+    ${_piLogoBloque('logoCamp',_logoCamp(),'11vh','15vw')}
     ${_piSettingsPanelHtml()}
   </div>`;
 }
