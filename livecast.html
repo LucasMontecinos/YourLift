@@ -8889,8 +8889,19 @@ function renderShell(){
   h+='<button class="side-btn '+(p==='results'?'active':'')+'" onclick="go(\'results\')"><span class="icon">\uD83C\uDFC6</span>Resultados</button>';
   h+='<button class="side-btn '+(p==='atletaInfo'?'active':'')+'" onclick="go(\'atletaInfo\')"><span class="icon">\uD83D\uDC64</span>Atletas</button>';
   if(window._ensayoFree)h+='<button class="side-btn" onclick="ensayoToggleRole()" style="border:1px solid rgba(96,165,250,.5);color:#60a5fa;margin-top:4px"><span class="icon">'+(isAdmin?'\uD83D\uDC41':'\uD83C\uDF9B')+'</span>'+(isAdmin?'Cambiar a modo espectador':'Cambiar a modo admin')+'</button>';
-  h+='<div class="side-label">Vuelo Activo</div><div style="display:flex;gap:4px;flex-wrap:wrap">';
-  flights.forEach(f=>{const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;h+='<button onclick="DATA.flight=\''+f+'\';saveNow();R()" style="flex:1;min-width:36px;padding:6px 0;border-radius:6px;border:2px solid '+(DATA.flight===f?FL_C[f]||'var(--muted)':'var(--border)')+';background:'+(DATA.flight===f?(FL_C[f]||'#666')+'22':'transparent')+';color:'+(DATA.flight===f?FL_C[f]||'#fff':'var(--muted)')+';font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">'+f+'<span style="font-size:9px;opacity:.6;display:block">'+n+'</span></button>'});
+  // Vuelo activo, primero por día. Con 36 tandas —A hasta AJ, ocho días— la tira
+  // completa era una pared de botones donde encontrar el propio era contar
+  // letras. Se elige el día y quedan las cuatro o cinco de ese día, igual que en
+  // Control en Vivo, Competencia en Vivo y Atletas & Pesaje: misma fila, misma
+  // forma de óvalo, y cada pantalla se acuerda del día que estaba mirando.
+  //
+  // Elegir el día NO mueve la tarima: solo filtra los botones. Mover la tarima
+  // sigue siendo apretar una tanda, como siempre.
+  const _fdLat=_filaDias('lateral',flights,_diaDeTanda(DATA.flight));
+  h+='<div class="side-label">Vuelo Activo</div>';
+  h+=_fdLat.html;
+  h+='<div style="display:flex;gap:4px;flex-wrap:wrap">';
+  _fdLat.tandas.forEach(f=>{const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;h+='<button onclick="DATA.flight=\''+f+'\';saveNow();R()" style="flex:1;min-width:36px;padding:6px 0;border-radius:6px;border:2px solid '+(DATA.flight===f?FL_C[f]||'var(--muted)':'var(--border)')+';background:'+(DATA.flight===f?(FL_C[f]||'#666')+'22':'transparent')+';color:'+(DATA.flight===f?FL_C[f]||'#fff':'var(--muted)')+';font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">'+f+'<span style="font-size:9px;opacity:.6;display:block">'+n+'</span></button>'});
   h+='</div>';
   // Fondo de la interfaz \u2014 preferencia de esta pantalla, no se sincroniza.
   h+='<div class="side-label" style="margin-top:14px">Fondo</div><div style="display:flex;gap:4px">';

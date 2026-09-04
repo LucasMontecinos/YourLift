@@ -88,8 +88,10 @@ function atletas() {
     const r = await p.evaluate(() => ({
       hayDias: /VER DÍA/.test(document.body.innerText),
       sel: window._DIA_SEL.publico,
-      botones: [...document.querySelectorAll('button')].map(b => b.textContent.trim())
-        .filter(t => /^DÍA \d/.test(t)),
+      // Solo los de la vista pública: la barra lateral tiene su propia fila de
+      // días para el Vuelo Activo, y contarlos todos juntos daba seis.
+      botones: [...(document.querySelector('.main') || document).querySelectorAll('button')]
+        .map(b => b.textContent.trim()).filter(t => /^DÍA \d/.test(t)),
       // Las tandas listadas tienen que ser las de ese día.
       tandas: window.__tandasVisibles(),
     }));
@@ -176,6 +178,48 @@ function atletas() {
     }
   }
 
+  console.log('\n  Y en la barra lateral, el Vuelo Activo');
+  {
+    // Era la última tira que quedaba entera: 36 botones, A hasta AJ, donde
+    // encontrar el propio era contar letras.
+    const leer = () => {
+      const lbl = [...document.querySelectorAll('.side-label')].find(x => /Vuelo Activo/i.test(x.textContent));
+      if (!lbl) return null;
+      // El botón dice la letra y debajo la cantidad, y textContent los pega sin
+      // espacio: "D3" es la tanda D con 3 atletas.
+      return [...lbl.parentElement.querySelectorAll('button')]
+        .map(x => (x.textContent.trim().replace(/\s+/g, '').match(/^([A-Z]{1,2})\d+$/) || [])[1])
+        .filter(Boolean);
+    };
+    const r = await p.evaluate((fn) => {
+      const at = w => ({ sq: [{ w, r: null }, { w: 0, r: null }, { w: 0, r: null }],
+                         bp: [{ w: 0, r: null }, { w: 0, r: null }, { w: 0, r: null }],
+                         dl: [{ w: 0, r: null }, { w: 0, r: null }, { w: 0, r: null }] });
+      const dias = [[1, '20/09', ['A', 'B', 'C']], [2, '21/09', ['D', 'E']], [3, '22/09', ['F', 'G', 'H']]];
+      const ats = []; let id = 0;
+      dias.forEach(([d, fe, fls]) => fls.forEach(fl => {
+        for (let i = 0; i < 3; i++) ats.push({ id: id++, name: 'At ' + fl + i, lot: 100 * d + i,
+          flight: fl, sex: 'Hombre', sexo: 'Hombre', cat: '-83', div: 'Open',
+          mod: 'Powerlifting Classic', club: 'C', country: 'CHI', pais: 'CHI', bw: 80,
+          bombed: false, jornada: 'D' + d + ' ' + fe + ' · 09:00 · S', att: at(100) });
+      }));
+      DATA.event = { id: 'e', name: 'X' }; DATA.athletes = ats;
+      DATA.phase = 'compete'; DATA.lift = 'sq'; DATA.round = 0; DATA.flight = 'E';
+      ST_ADMIN = true; window._DIA_SEL = {}; R();
+      const lee = eval('(' + fn + ')');
+      const out = { arranque: lee(), sel: window._DIA_SEL.lateral };
+      verDia('lateral', 1); out.dia1 = lee();
+      verDia('lateral', 3); out.dia3 = lee();
+      out.tarima = DATA.flight;
+      return out;
+    }, leer.toString());
+    ok(r.sel === 2, 'arranca en el día donde está la tarima (' + r.sel + ')');
+    ok(r.arranque.join(',') === 'D,E', 'con las tandas de ese día: ' + r.arranque.join(','));
+    ok(r.dia1.join(',') === 'A,B,C', 'día 1 → ' + r.dia1.join(','));
+    ok(r.dia3.join(',') === 'F,G,H', 'día 3 → ' + r.dia3.join(','));
+    ok(r.tarima === 'E', 'y elegir el día no movió la tarima (' + r.tarima + ')');
+  }
+
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs[0] : ''));
   await b.close();
 
@@ -183,8 +227,8 @@ function atletas() {
   {
     const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
     ok(/window\.verDia=function/.test(lc), 'elegir día es su propia acción');
-    ok((lc.match(/_filaDias\(/g) || []).length >= 4,
-       'y una sola forma de armar la fila, usada en las tres pantallas');
+    ok((lc.match(/_filaDias\(/g) || []).length >= 5,
+       'y una sola forma de armar la fila, usada en las cuatro pantallas');
     // Si esto cambiara DATA.flight, elegir un día movería la pantalla de todos.
     const i = lc.indexOf('window.verDia=function');
     const f = lc.slice(i, lc.indexOf('};', i) + 2);
