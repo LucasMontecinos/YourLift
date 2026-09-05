@@ -98,6 +98,17 @@ let DATA={phase:'setup',events:[],event:null,athletes:[],lift:'sq',round:0,fligh
 // Standalone widgets for OBS Browser Sources. Read-only.
 // ══════════════════════════════════════════════
 const TX_URL=new URLSearchParams(location.search);
+// ── Entrar por el link (o el QR) de un campeonato ─────────────────────────────
+// Cuando la dirección trae ?evento=…, la persona ya eligió: no viene a elegir de
+// una lista. Pero los datos tardan —nominas.json y los campeonatos de Firestore—
+// y mientras tanto la pantalla dibujaba el selector con "NO HAY COMPETENCIAS EN
+// VIVO", y un segundo después entraba sola. Escaneando un QR eso se ve como si
+// algo hubiera fallado y después se arreglara solo.
+//
+// Con esta marca, mientras el evento del link no se resuelve, se muestra una sola
+// pantalla quieta que dice que está entrando. Se apaga cuando el evento queda
+// resuelto —o cuando se agotó la espera, y ahí sí corresponde mostrar la lista.
+window._EV_ESPERANDO=(function(){try{return !!TX_URL.get('evento')}catch(e){return false}})();
 const TX_MODE=TX_URL.get('tx')||null; // 'profile' | 'scoreboard' | 'leaderboard' | 'lbauto' | 'slam' | 'timer' | 'lights' | 'ceremony' | null
 const TARIMA=TX_URL.get('tarima')||null; // '1' o '2' para modo 2 tarimas; null = todas
 // Pantalla de tarima CLAVADA en un modo (?tx=screen&modo=intentos).
@@ -8803,7 +8814,16 @@ function R(){
     // se lo lleva a Resultados en vez de dejarlo en una pantalla sin salida.
     if(DATA.phase==='scoreboard'){DATA.phase='results';}
     if(DATA.phase==='transmision'){el.innerHTML=renderTransmision();setTimeout(initTxWidgets,0);return}
-    if(DATA.phase==='setup'){el.innerHTML=renderSetup();return}
+    if(DATA.phase==='setup'){
+      // El selector se vuelve a dibujar varias veces mientras cargan los datos
+      // (nóminas, campeonatos de Firestore, el conteo de atletas de cada uno).
+      // Como el contenedor lleva la animación de aparecer, cada reescritura la
+      // dispara de nuevo y la pantalla PESTAÑEA. Si lo que hay que dibujar es
+      // igual a lo que ya está, no se toca.
+      const _nuevo=renderSetup();
+      if(el.innerHTML!==_nuevo)el.innerHTML=_nuevo;
+      return;
+    }
     el.innerHTML=renderShell();
   }catch(e){ console.error('[R] render error',e); _renderRecovery(e); }
 }
@@ -8901,6 +8921,14 @@ function renderSetup(){
     if(_soloPub&&!_esPub(ev))return false;
     return true;
   };
+  // Vino por el link de un campeonato y todavía no se resuelve: no se le muestra
+  // la lista ni el "no hay competencias", que es mentira mientras carga.
+  if(window._EV_ESPERANDO&&!_flt){
+    h+='<div class="card" style="padding:34px 22px;text-align:center">'
+      +'<div class="os" style="font-size:15px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">ENTRANDO A LA COMPETENCIA</div>'
+      +'<div style="color:var(--muted);font-size:13px">Un segundo…</div></div></div>';
+    return h;
+  }
   if(_soloPub&&!_pub&&!_flt){
     h+='<div class="card" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">Cargando competencias…</div></div>';
     return h;
@@ -12461,7 +12489,7 @@ function _evParentName(id,hijos){
 function applyEventURLParam(){
   try{
     const p=new URLSearchParams(location.search).get('evento');
-    if(!p)return;
+    if(!p){window._EV_ESPERANDO=false;return;}
     const want=decodeURIComponent(p);
     // NOTA: acá ANTES había un atajo que, para widgets TX, armaba DATA.event usando
     // el slug crudo de la URL (ej. "regionalcentrosur") como name, sin buscar el
@@ -12482,6 +12510,9 @@ function applyEventURLParam(){
         const yaAdentro=DATA.event&&DATA.event.parent===want;
         if(!yaAdentro&&!(DATA.phase!=='setup'&&DATA.athletes&&DATA.athletes.length)){
           window._EV_FILTER={parent:want,name:(hijos0[0].parentName||_evParentName(want,hijos0))};
+          // Elegir la jornada SÍ es lo que corresponde mostrar: el campeonato de
+          // varios días no tiene atletas propios.
+          window._EV_ESPERANDO=false;
           _applyEvtRetries=0; DATA.phase='setup'; DATA.event=null; R(); return;
         }
       }
@@ -12535,12 +12566,18 @@ function applyEventURLParam(){
     if(!wanted){
       _applyEvtRetries++;
       if(_applyEvtRetries<=20){ // hasta 10s: nominas.json puede tardar en conexiones lentas
-        setTimeout(applyEventURLParam,500);
+        // Los primeros intentos van seguidos: con buena conexión los datos llegan
+        // en menos de medio segundo, y esperar 500 ms igual era medio segundo de
+        // pantalla quieta que se podía ahorrar.
+        setTimeout(applyEventURLParam,_applyEvtRetries<=6?150:500);
         if(_applyEvtRetries===1)console.log('[LC] Esperando que Firestore cargue el evento "'+want+'"...');
         return;
       }
       console.warn('[LC] No pude encontrar evento "'+want+'" después de 5s. Verifica nombre/id.');
-      if(!TX_MODE)return;
+      // Se acabó la espera: ahora sí corresponde mostrar la lista, porque el link
+      // no llevaba a ninguna parte.
+      window._EV_ESPERANDO=false;
+      if(!TX_MODE){R();return;}
       // Último recurso, SOLO para widgets TX de un evento que realmente no está en la
       // lista (ej. una sub-tarima generada sin doc propio en "eventos"): usar el slug
       // crudo como nombre, para no dejar el widget sin mostrar nada. Si el evento SÍ
@@ -12549,6 +12586,7 @@ function applyEventURLParam(){
       wanted={id:want,name:want,athletes:[],_fromUrl:true};
     }
     _applyEvtRetries=0;
+    window._EV_ESPERANDO=false;      // el evento del link quedó resuelto
     // TX widget mode: read-only. Just set DATA.event y suscribir a livecast_sync.
     if(TX_MODE){
       DATA.event=wanted;
@@ -12590,7 +12628,7 @@ function applyEventURLParam(){
     }
     // Fresh state: pick requested event directly.
     pickEvent(i);
-  }catch(e){console.warn('[LC] preselect err',e)}
+  }catch(e){window._EV_ESPERANDO=false;console.warn('[LC] preselect err',e)}
 }
 // Arranque: resolver el evento desde ?evento= en la URL. Imprescindible para
 // los widgets TX (profile/jornada/screen/etc.) abiertos en un navegador fresco
