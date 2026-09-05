@@ -796,8 +796,14 @@ window.editInsc=async function(insId,field){
     try{
       await updateDoc(doc(db,'inscripciones',insId),{[field]:nv});
       await logAction('edit_inscripcion',`${insId}.${field}`,old,nv,{nombre:ins.nombre});
-      showToast(`${field} actualizado: ${ins.nombre}`,async()=>{
+      ins[field]=nv;
+      // Corregir el club en la nómina lo corrige también en su ficha, que es lo
+      // que ve la gente y lo que propone la próxima inscripción.
+      const sync=(field==='club'||field==='clubOtro')?await _clubAlPadron(ins):null;
+      showToast(`${field} actualizado: ${ins.nombre}`+(sync?' · y su ficha también':''),async()=>{
         await updateDoc(doc(db,'inscripciones',insId),{[field]:old});
+        ins[field]=old;
+        await _clubAlPadronRevertir(sync);
         await logAction('undo_edit_inscripcion',`${insId}.${field}`,nv,old,{nombre:ins.nombre});
         showToast('Cambio revertido');
       });
@@ -840,6 +846,54 @@ async function _saveEdit(a){
   },{merge:true});
   await _marcarEdicion();
 }
+// ── El club viaja de la inscripción a la ficha del atleta ────────────────────
+// El club de alguien cambia: se va a otro y se inscribe con el nuevo. Ese dato
+// se quedaba SOLO en la inscripción y la ficha seguía diciendo el club viejo.
+// Peor: el formulario de inscripción PROPONE el club que dice la ficha, así que
+// en la inscripción siguiente volvía a salir el antiguo y había que corregirlo
+// otra vez. Lo mismo si el club se corrige a mano en la nómina.
+//
+// El cruce es por RUT y nunca por nombre, por lo mismo de siempre: el nombre de
+// la inscripción lo escribe la persona y el del padrón viene de la federación, y
+// no coinciden en tildes ni en el orden de los apellidos.
+//
+// No inventa fichas. Si el RUT no está en el padrón —un extranjero, alguien que
+// compite por primera vez y todavía no tiene código— no toca nada: escribirle el
+// club a quien no corresponde es peor que dejarlo sin actualizar.
+function _clubDeInscripcion(ins){
+  const c=String((ins&&ins.club)||'').trim();
+  return /^otro$/i.test(c) ? String((ins&&ins.clubOtro)||'').trim() : c;
+}
+const _clubIgual=(a,b)=>{
+  const n=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  return n(a)===n(b);
+};
+// Devuelve {nombre, antes, ahora, atleta} si la ficha cambió, o null si no había
+// nada que hacer. El que llama decide qué avisar y cómo deshacerlo.
+async function _clubAlPadron(ins){
+  try{
+    const nuevo=_clubDeInscripcion(ins);
+    if(!nuevo)return null;
+    const rut=String((ins&&ins.rut)||'').replace(/[^0-9kK]/gi,'').toUpperCase();
+    if(!rut)return null;
+    const a=(ST.data||[]).find(x=>String(x.rut||'').replace(/[^0-9kK]/gi,'').toUpperCase()===rut);
+    if(!a)return null;
+    if(_clubIgual(a.club,nuevo))return null;
+    const antes=a.club||'';
+    a.club=nuevo;
+    await _saveEdit(a);
+    await logAction('club_desde_inscripcion',a.codigo||rut,antes,nuevo,
+      {nombre:a.nombre||'',evento:(ins&&ins.evento)||''});
+    return {nombre:a.nombre||ins.nombre||'',antes,ahora:nuevo,atleta:a};
+  }catch(e){ console.warn('[club→ficha]',e.message); return null; }
+}
+// Deshacer lo anterior, para que el "revertir" de un toast devuelva las dos cosas.
+async function _clubAlPadronRevertir(sync){
+  if(!sync||!sync.atleta)return;
+  try{ sync.atleta.club=sync.antes; await _saveEdit(sync.atleta); }
+  catch(e){ console.warn('[club→ficha] revertir',e.message); }
+}
+
 window.editAthlete=async function(cod,field){
   const a=ST.data.find(x=>x.codigo===cod);if(!a)return;
   const cur=a[field]||'';
@@ -1014,8 +1068,13 @@ window.setStatus=async function(insId,status){
   try{
     await updateDoc(doc(db,'inscripciones',insId),{status});
     await logAction('change_status',insId,old,status,{nombre:ins.nombre});
-    showToast(`${ins.nombre}: ${status}`,async()=>{
+    // Aceptar una inscripción es aceptar también con qué club compite. Si se
+    // inscribió con uno distinto al de su ficha, se cambió de club: la ficha se
+    // pone al día sola.
+    const sync=(status==='approved')?await _clubAlPadron(ins):null;
+    showToast(`${ins.nombre}: ${status}`+(sync?` · club de su ficha: ${sync.antes||'—'} → ${sync.ahora}`:''),async()=>{
       await updateDoc(doc(db,'inscripciones',insId),{status:old});
+      await _clubAlPadronRevertir(sync);
       await logAction('undo_status',insId,status,old,{nombre:ins.nombre});
       showToast('Estado revertido');
     });
@@ -1060,7 +1119,13 @@ window.approveEditRequest=async function(reqId){
     }
     await deleteDoc(doc(db,'edit_requests',reqId));
     await logAction('approve_edit_request',req.inscripcionId,JSON.stringify(updates).substring(0,200),'applied',{rut:req.rut});
-    showToast('✓ Solicitud aplicada');
+    // Si el atleta pidió corregir su club, la ficha se corrige con él.
+    let sync=null;
+    if(updates.club!==undefined||updates.clubOtro!==undefined){
+      const ins=(ST.inscripciones||[]).find(x=>x.id===req.inscripcionId)||{rut:req.rut};
+      sync=await _clubAlPadron({...ins,...updates});
+    }
+    showToast('✓ Solicitud aplicada'+(sync?' · y su ficha también':''));
   }catch(e){showToast('Error: '+e.message,null,true)}
 }
 
@@ -2202,47 +2267,127 @@ async function loadWebAnalytics(){
   }
 }
 
-function _sumRange(days,fromDate){
-  let t=0,u=0;
-  days.forEach(d=>{ if(d.date>=fromDate){ t+=d.total; u+=d.unique; } });
-  return {t,u};
+// ── El rango que se está mirando ─────────────────────────────────────────────
+// El contador propio guarda un documento POR DÍA, así que puede responder
+// cualquier rango: no hay nada que pedirle a nadie. Antes mostraba tres cifras
+// fijas —hoy, 7 días, 30 días— y para comparar un mes contra otro había que
+// bajar el CSV y abrirlo en una planilla.
+//
+// Ojo con lo que este panel NO es: no es Google Analytics. Analytics mide con
+// otra vara (sesiones, no visitas) y trae el histórico anterior a este contador.
+// Por eso su foto sigue abajo, aparte y fechada, en vez de mezclar dos formas de
+// contar en el mismo número.
+const _WEB_RANGOS=[
+  {k:'7',   l:'7 DÍAS',    d:7},
+  {k:'30',  l:'30 DÍAS',   d:30},
+  {k:'60',  l:'60 DÍAS',   d:60},
+  {k:'90',  l:'90 DÍAS',   d:90},
+  {k:'mes', l:'ESTE MES'},
+  {k:'ant', l:'MES PASADO'},
+  {k:'todo',l:'TODO'},
+];
+const _ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function _webRango(){
+  const r=ST.webRango||{k:'30'};
+  const hoy=new Date();
+  if(r.k==='libre'&&r.desde&&r.hasta)return {desde:r.desde,hasta:r.hasta,libre:true};
+  if(r.k==='todo')return {desde:'0000-01-01',hasta:_ymd(hoy)};
+  if(r.k==='mes'){
+    return {desde:_ymd(new Date(hoy.getFullYear(),hoy.getMonth(),1)),hasta:_ymd(hoy)};
+  }
+  if(r.k==='ant'){
+    const p=new Date(hoy.getFullYear(),hoy.getMonth()-1,1);
+    return {desde:_ymd(p),hasta:_ymd(new Date(hoy.getFullYear(),hoy.getMonth(),0))};
+  }
+  const n=parseInt(r.k,10)||30;
+  const d=new Date(hoy); d.setDate(hoy.getDate()-(n-1));
+  return {desde:_ymd(d),hasta:_ymd(hoy)};
 }
+const _webEnRango=(days,r)=>days.filter(d=>d.date>=r.desde&&d.date<=r.hasta);
+// El mismo largo de rango, corrido hacia atrás: sirve para decir si subió o bajó
+// respecto del período anterior, que es la pregunta que uno se hace de verdad.
+function _webAnterior(days,r){
+  const dd=(a,b)=>Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000)+1;
+  const n=dd(r.desde,r.hasta);
+  if(!isFinite(n)||n<=0||r.desde==='0000-01-01')return null;
+  const fin=new Date(r.desde+'T00:00:00'); fin.setDate(fin.getDate()-1);
+  const ini=new Date(fin); ini.setDate(fin.getDate()-(n-1));
+  return _webEnRango(days,{desde:_ymd(ini),hasta:_ymd(fin)});
+}
+window.webSetRango=function(k){
+  ST.webRango={k:k};
+  const d=window._WEB_DAYS||[];
+  const c=document.getElementById('statsWebContent');
+  if(c){c.innerHTML=renderWebAnalytics(d);setTimeout(()=>initWebCharts(d),0);}
+};
+window.webSetFecha=function(cual,v){
+  const r=_webRango();
+  ST.webRango={k:'libre',desde:cual==='desde'?v:r.desde,hasta:cual==='hasta'?v:r.hasta};
+  const d=window._WEB_DAYS||[];
+  const c=document.getElementById('statsWebContent');
+  if(c){c.innerHTML=renderWebAnalytics(d);setTimeout(()=>initWebCharts(d),0);}
+};
 function renderWebAnalytics(days){
   // La foto de Google Analytics se muestra igual aunque el contador propio esté
   // vacío: es justamente el período que el contador no alcanzó a medir.
   if(!days.length) return '<div style="padding:40px;text-align:center;color:var(--muted)">El contador propio todavía no tiene datos. Se registran a medida que la gente entra a yourlift.cl.</div>'+renderGAFoto();
   const today=new Date();
-  const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const ymd=_ymd;
   const todayStr=ymd(today);
-  const weekAgo=new Date(today);weekAgo.setDate(today.getDate()-6);
-  const monthAgo=new Date(today);monthAgo.setDate(today.getDate()-29);
+  const R=_webRango();
+  const enR=_webEnRango(days,R);
+  const prev=_webAnterior(days,R);
+  const sum=l=>({t:(l||[]).reduce((s,d)=>s+d.total,0),u:(l||[]).reduce((s,d)=>s+d.unique,0)});
+  const act=sum(enR), ant=prev?sum(prev):null;
   const todayRow=days.find(d=>d.date===todayStr)||{total:0,unique:0};
-  const week=_sumRange(days,ymd(weekAgo));
-  const month=_sumRange(days,ymd(monthAgo));
   const totalAll=days.reduce((s,d)=>s+d.total,0);
-  const uniqueAll=days.reduce((s,d)=>s+d.unique,0);
-  // Páginas agregadas
+  // Cuánto cambió respecto del período anterior del mismo largo. Sin base no se
+  // inventa un porcentaje: "+100%" saliendo de cero no dice nada.
+  const _delta=(a,b)=>{
+    if(b===null||b===undefined||!b)return '';
+    const p=Math.round((a-b)/b*100);
+    const c=p>0?'#22c55e':(p<0?'#ef4444':'var(--muted)');
+    return `<div style="font-size:10px;color:${c};margin-top:3px;font-family:Oswald;letter-spacing:.5px">${p>0?'▲ +':(p<0?'▼ ':'')}${p}% vs período anterior</div>`;
+  };
+  // Páginas y orígenes: SOLO del rango elegido, si no el gráfico dice una cosa y
+  // las cifras de arriba otra.
   const pageAgg={};
-  days.forEach(d=>Object.entries(d.pages).forEach(([k,v])=>{pageAgg[k]=(pageAgg[k]||0)+v}));
+  enR.forEach(d=>Object.entries(d.pages||{}).forEach(([k,v])=>{pageAgg[k]=(pageAgg[k]||0)+v}));
   const pageTop=Object.entries(pageAgg).sort((a,b)=>b[1]-a[1]).slice(0,8);
-  // Orígenes agregados
   const refAgg={};
-  days.forEach(d=>Object.entries(d.refs).forEach(([k,v])=>{refAgg[k]=(refAgg[k]||0)+v}));
+  enR.forEach(d=>Object.entries(d.refs||{}).forEach(([k,v])=>{refAgg[k]=(refAgg[k]||0)+v}));
   const refTop=Object.entries(refAgg).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const _fL=f=>{const m=String(f||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return f||'';
+    const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    return (+m[3])+' '+M[(+m[2])-1]+(m[1]!==String(today.getFullYear())?' '+m[1]:'');};
+  const rk=(ST.webRango||{k:'30'}).k;
+  const btnR=r=>`<button onclick="webSetRango('${r.k}')" style="padding:6px 12px;border-radius:8px;cursor:pointer;font-family:Oswald;font-size:11px;letter-spacing:1px;font-weight:700;border:1px solid ${rk===r.k?'var(--gold)':'var(--border)'};background:${rk===r.k?'rgba(212,168,67,.16)':'transparent'};color:${rk===r.k?'var(--gold)':'var(--muted)'}">${r.l}</button>`;
+  const selector=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+    ${_WEB_RANGOS.map(btnR).join('')}
+    <span style="flex:1"></span>
+    <label style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">DESDE
+      <input type="date" value="${R.desde==='0000-01-01'?(days[0]||{}).date||'':R.desde}" max="${todayStr}" onchange="webSetFecha('desde',this.value)" style="background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:7px;padding:5px 8px;color:var(--text);font-size:11px;margin-left:5px"></label>
+    <label style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">HASTA
+      <input type="date" value="${R.hasta}" max="${todayStr}" onchange="webSetFecha('hasta',this.value)" style="background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:7px;padding:5px 8px;color:var(--text);font-size:11px;margin-left:5px"></label>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:14px">
+    ${_fL(R.desde==='0000-01-01'?((days[0]||{}).date||''):R.desde)} — ${_fL(R.hasta)} · ${enR.length} día${enR.length===1?'':'s'} con registro
+  </div>`;
   const PAGE_LABEL={home:'Inicio',nominas:'Nóminas',stats:'Estadísticas',records:'Records',trans:'Transmisiones',atletas:'Atletas',insc:'Inscripción',rank:'Ranking',glcalc:'Calc. GL'};
   const ks='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;text-align:center';
-  const kpi=(val,lbl,col)=>`<div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:${col}">${val.toLocaleString()}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">${lbl}</div></div>`;
+  const kpi=(val,lbl,col,extra)=>`<div style="${ks}"><div style="font-family:Oswald;font-size:34px;font-weight:700;color:${col}">${val.toLocaleString('es-CL')}</div><div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">${lbl}</div>${extra||''}</div>`;
   const card=(t,id,h='300px')=>`<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px"><div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted);margin-bottom:14px">${t}</div><div style="position:relative;height:${h}"><canvas id="${id}"></canvas></div></div>`;
   return `
   <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
     <button onclick="exportWebCSV()" style="background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);padding:8px 14px;border-radius:8px;font-family:Oswald;font-size:11px;letter-spacing:1px;cursor:pointer;font-weight:700">EXPORTAR CSV</button>
   </div>
+  ${selector}
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px">
-    ${kpi(todayRow.total,'VISITAS HOY','var(--gold)')}
-    ${kpi(week.t,'VISITAS 7 DÍAS','#3b82f6')}
-    ${kpi(month.t,'VISITAS 30 DÍAS','#22c55e')}
+    ${kpi(act.t,'VISITAS EN EL RANGO','var(--gold)',ant?_delta(act.t,ant.t):'')}
+    ${kpi(act.u,'VISITANTES ÚNICOS','#f59e0b',ant?_delta(act.u,ant.u):'')}
+    ${kpi(enR.length?Math.round(act.t/enR.length):0,'PROMEDIO POR DÍA','#3b82f6')}
+    ${kpi(todayRow.total,'VISITAS HOY','#22c55e')}
     ${kpi(totalAll,'VISITAS TOTALES','#a78bfa')}
-    ${kpi(uniqueAll,'VISITANTES ÚNICOS','#f59e0b')}
   </div>
   <div style="margin-bottom:12px;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--muted)">EVOLUCIÓN DE VISITAS</div>
   <div style="margin-bottom:16px">${card('VISITAS POR DÍA (TOTAL vs ÚNICOS)','webDaily','320px')}</div>
@@ -2259,30 +2404,36 @@ function initWebCharts(days){
   const base={color:'#D4E1F0',plugins:{legend:{labels:{color:'#D4E1F0',font:{family:'Oswald',size:11}}}},
     scales:{x:{ticks:{color:'#7A8FA6',font:{family:'Oswald',size:10}},grid:{color:'rgba(30,58,95,.5)'}},y:{ticks:{color:'#7A8FA6',font:{family:'Oswald',size:10}},grid:{color:'rgba(30,58,95,.5)'},beginAtZero:true}}};
   const mk=(id,type,data,extra={})=>{const el=document.getElementById(id);if(!el)return;_webCharts[id]=new Chart(el,{type,data,options:{responsive:true,maintainAspectRatio:false,...base,...extra,plugins:{...base.plugins,...(extra.plugins||{})}}})};
-  // Últimos 30 días
-  const last=days.slice(-30);
+  // El mismo rango que muestran las cifras de arriba. Antes el gráfico estaba
+  // clavado en los últimos 30 días y podía contradecir a los números.
+  const R=_webRango();
+  const last=_webEnRango(days,R);
   const labels=last.map(d=>d.date.slice(5));
   mk('webDaily','line',{labels,datasets:[
     {label:'Total',data:last.map(d=>d.total),borderColor:'#D4A843',backgroundColor:'rgba(212,168,67,.15)',fill:true,tension:.3},
     {label:'Únicos',data:last.map(d=>d.unique),borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.1)',fill:true,tension:.3}
   ]});
   // Páginas
-  const pageAgg={};days.forEach(d=>Object.entries(d.pages).forEach(([k,v])=>{pageAgg[k]=(pageAgg[k]||0)+v}));
+  const pageAgg={};last.forEach(d=>Object.entries(d.pages||{}).forEach(([k,v])=>{pageAgg[k]=(pageAgg[k]||0)+v}));
   const PAGE_LABEL={home:'Inicio',nominas:'Nóminas',stats:'Estadísticas',records:'Records',trans:'Transmisiones',atletas:'Atletas',insc:'Inscripción',rank:'Ranking',glcalc:'Calc. GL'};
   const pe=Object.entries(pageAgg).sort((a,b)=>b[1]-a[1]).slice(0,8);
   mk('webPages','bar',{labels:pe.map(([k])=>PAGE_LABEL[k]||k),datasets:[{label:'Vistas',data:pe.map(([,v])=>v),backgroundColor:'#22c55e'}]},{indexAxis:'y'});
   // Refs
-  const refAgg={};days.forEach(d=>Object.entries(d.refs).forEach(([k,v])=>{refAgg[k]=(refAgg[k]||0)+v}));
+  const refAgg={};last.forEach(d=>Object.entries(d.refs||{}).forEach(([k,v])=>{refAgg[k]=(refAgg[k]||0)+v}));
   const re=Object.entries(refAgg).sort((a,b)=>b[1]-a[1]).slice(0,8);
   mk('webRefs','doughnut',{labels:re.map(([k])=>k),datasets:[{data:re.map(([,v])=>v),backgroundColor:['#D4A843','#3b82f6','#22c55e','#ef4444','#a78bfa','#f59e0b','#ec4899','#06b6d4']}]},{scales:{}});
 }
 
 window.exportWebCSV=function(){
-  const days=window._WEB_DAYS||[];
+  // Se baja lo que se está mirando, no todo: si uno filtró un mes y el archivo
+  // trae el año entero, hay que volver a filtrar en la planilla.
+  const R=_webRango();
+  const days=_webEnRango(window._WEB_DAYS||[],R);
   const csv=['fecha,total,unicos'];
   days.forEach(d=>csv.push(`${d.date},${d.total},${d.unique}`));
   const blob=new Blob([csv.join('\n')],{type:'text/csv'});
-  const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download='yourlift_trafico_web.csv';a.click();
+  const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;
+  a.download='yourlift_trafico_'+(R.desde==='0000-01-01'?'todo':R.desde)+'_a_'+R.hasta+'.csv';a.click();
   setTimeout(()=>URL.revokeObjectURL(u),1000);
 };
 
