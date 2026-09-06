@@ -8666,7 +8666,7 @@ function renderScreenBarra(a){
     </div>`)}
 
     ${_logosPantallaSubidos().length
-      ? B('bLogosTira',_tiraLogosPantalla([],'9vh','1.6vw'))
+      ? _logosPantallaSubidos().map((u,i)=>B('bLogoN'+i,`<img src="${u}" alt="" style="max-height:10vh;max-width:14vw;object-fit:contain;display:block" onerror="this.style.display='none'">`)).join('')
       : (logo?B('bLogo',`<img src="${logo}" alt="" style="max-height:11vh;max-width:14vw;object-fit:contain;display:block" onerror="this.style.display='none'">`):'')
         +(logoFed?B('bLogoFed',`<img src="${logoFed}" alt="" style="max-height:9vh;max-width:12vw;object-fit:contain;display:block" onerror="this.style.display='none'">`):'')}
 
@@ -8713,7 +8713,6 @@ const PI_DEFAULT_LAYOUT={
   // que es donde no estorban a nada de lo que ya había.
   logoFed:{x:8,y:9,scale:100},
   logoCamp:{x:92,y:9,scale:100},
-  logosTira:{x:50,y:5,scale:100},     // la tira de logos subidos, cuando hay
   // "Atleta en barra" usa el mismo editor. Las claves llevan b- adelante para no
   // pisarse con las de arriba: las dos disposiciones conviven en el mismo archivo
   // guardado, y cada pantalla dibuja las suyas.
@@ -8728,13 +8727,37 @@ const PI_DEFAULT_LAYOUT={
   bDatos:{x:50,y:75,scale:100},       // -63 kg · JR · Classic
   bLogo:{x:90,y:75,scale:100},        // logo del campeonato
   bLogoFed:{x:90,y:88,scale:100},     // logo de la federación
-  bLogosTira:{x:50,y:93,scale:100},   // tira de logos subidos (atleta en barra)
   bLuces:{x:50,y:90,scale:100}        // las luces de los jueces
 };
+// Cada logo subido es un bloque suyo: bLogoN0, bLogoN1… en "atleta en barra" y
+// logoN0, logoN1… en la pantalla de intentos. Como son tantos como logos haya,
+// no pueden estar escritos en PI_DEFAULT_LAYOUT: la posición de fábrica se
+// calcula. Van en fila para que no salgan uno encima del otro, y de ahí se
+// arrastra cada uno a donde corresponda.
+const _RX_LOGO_N=/^(b?)[Ll]ogoN(\d+)$/;
+function _piDefLogoN(key){
+  const m=_RX_LOGO_N.exec(key||'');
+  if(!m)return null;
+  const i=+m[2];
+  // Separados 15% para que no se tapen —cada logo ocupa cerca de 14% de ancho—
+  // y saltando de fila cada seis, que es lo que entra a lo ancho.
+  const col=i%6, fila=Math.floor(i/6);
+  return m[1]==='b'
+    ? {x:88-col*15,y:Math.max(60,90-fila*11),scale:100}   // atleta en barra: abajo, de derecha a izquierda
+    : {x:8+col*15,y:Math.min(40,6+fila*11),scale:100};    // intentos: arriba, de izquierda a derecha
+}
+function _piDefBloque(key){
+  return PI_DEFAULT_LAYOUT[key]||_piDefLogoN(key)||{x:50,y:50,scale:100};
+}
 function _piLoadLayout(){
   try{
     const raw=localStorage.getItem(PI_LAYOUT_KEY);
-    if(raw){const saved=JSON.parse(raw);const merged={};Object.keys(PI_DEFAULT_LAYOUT).forEach(k=>{merged[k]=Object.assign({},PI_DEFAULT_LAYOUT[k],saved[k]||{});});return merged;}
+    if(raw){
+      const saved=JSON.parse(raw);const merged={};
+      Object.keys(PI_DEFAULT_LAYOUT).forEach(k=>{merged[k]=Object.assign({},PI_DEFAULT_LAYOUT[k],saved[k]||{});});
+      Object.keys(saved).forEach(k=>{ if(!merged[k]&&_RX_LOGO_N.test(k))merged[k]=Object.assign({},_piDefLogoN(k),saved[k]); });
+      return merged;
+    }
   }catch(e){}
   return JSON.parse(JSON.stringify(PI_DEFAULT_LAYOUT));
 }
@@ -8746,6 +8769,12 @@ function _piSaveLayout(){try{localStorage.setItem(PI_LAYOUT_KEY,JSON.stringify(w
 function _piResetClaves(pred){
   Object.keys(PI_DEFAULT_LAYOUT).forEach(k=>{
     if(pred(k))window._piLayout[k]=Object.assign({},PI_DEFAULT_LAYOUT[k]);
+  });
+  // Los logos sueltos no están en la lista de fábrica: se les vuelve a poner
+  // la posición calculada, o si no, 'Restablecer posiciones' los dejaba donde
+  // estaban y el botón parecía no hacer nada.
+  Object.keys(window._piLayout).forEach(k=>{
+    if(_RX_LOGO_N.test(k)&&pred(k))window._piLayout[k]=Object.assign({},_piDefLogoN(k));
   });
   _piSaveLayout();
   window._piSelected=null;
@@ -8815,7 +8844,7 @@ function _piLogoBloque(key,url,maxAlto,maxAncho){
     +';object-fit:contain;display:block" onerror="this.style.display=\'none\'">');
 }
 function _piBlock(key,innerHtml){
-  const pos=window._piLayout[key]||{x:50,y:50,scale:100};
+  const pos=window._piLayout[key]||_piDefBloque(key);
   const selected=window._piSelected===key;
   let h='<div class="pi-block" data-pi-key="'+key+'" style="position:absolute;left:'+pos.x+'%;top:'+pos.y+'%;transform:translate(-50%,-50%);padding:10px;border-radius:8px;'+(selected?'outline:2px dashed #D4A843;background:rgba(212,168,67,.08);':'')+'cursor:'+(selected?'move':'pointer')+'">';
   h+='<div class="pi-inner" style="transform:scale('+((pos.scale||100)/100)+');transform-origin:center center">'+innerHtml+'</div>';
@@ -9162,7 +9191,7 @@ function renderScreenIntentos(cur,nxt){
     ${positionHtml?_piBlock('position',positionHtml):''}
     ${nextHtml?_piBlock('next',nextHtml):''}
     ${_logosPantallaSubidos().length
-      ? _piBlock('logosTira',_tiraLogosPantalla([],'8vh','1.6vw'))
+      ? _logosPantallaSubidos().map((u,i)=>_piLogoBloque('logoN'+i,u,'9vh','13vw')).join('')
       : _piLogoBloque('logoFed',_logoFed(),'9vh','12vw')+_piLogoBloque('logoCamp',_logoCamp(),'11vh','15vw')}
     ${_piSettingsPanelHtml()}
   </div>`;

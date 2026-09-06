@@ -13,9 +13,14 @@
 //     par de siempre: nadie se queda sin logos por no haber entrado al panel.
 //   · Que la lista se guarde CON EL CAMPEONATO. El logo del campeonato se perdía
 //     al entrar de nuevo a Control TX y había que volver a subirlo cada vez.
-//   · Que "atleta en barra" y "pantalla de intentos" no compartan la posición de
-//     la tira: las dos disposiciones viven en el mismo archivo guardado, y con
-//     una sola clave, acomodar una movía la otra.
+//   · Que cada logo se mueva por su cuenta. Primero iban todos juntos en una
+//     tira y se arrastraba el grupo entero; ahora cada uno es su propio bloque,
+//     con su posición guardada. Como son tantos como logos haya, sus posiciones
+//     no pueden estar escritas a mano: si no se guardan aparte, mover un logo
+//     no se recuerda.
+//   · Que "atleta en barra" y "pantalla de intentos" no compartan esas
+//     posiciones: las dos disposiciones viven en el mismo archivo guardado, y
+//     acomodar una no tiene por qué mover la otra.
 //
 // Firestore está bloqueado en el sandbox, así que la lista se inyecta tal como
 // la dejaría el panel al subirlos.
@@ -51,14 +56,26 @@ const ESCENAS = ['profile', 'barra', 'intentos', 'luces', 'jornada'];
     ok(/LOGOS DE LA PANTALLA/.test(lc), 'y el panel tiene su sección');
   }
 
-  console.log('\n  Cada pantalla guarda la tira en su propia posición');
+  console.log('\n  Cada logo es un bloque propio, que se mueve solo');
   {
-    ok(/bLogosTira:\{/.test(lc) && /logosTira:\{/.test(lc),
-       'dos claves distintas: bLogosTira (barra) y logosTira (intentos)');
-    // El reset de cada pantalla filtra por el prefijo b+Mayúscula.
+    // Al principio iban todos juntos en una tira: se movía el grupo entero. Ahora
+    // cada uno es su bloque, y son tantos como logos haya, así que su posición de
+    // fábrica se calcula en vez de estar escrita en PI_DEFAULT_LAYOUT.
+    ok(/bLogoN'\+i/.test(lc), 'en atleta en barra: bLogoN0, bLogoN1…');
+    ok(/logoN'\+i/.test(lc), 'en la pantalla de intentos: logoN0, logoN1…');
+    ok(/const _RX_LOGO_N=/.test(lc) && /function _piDefLogoN\(/.test(lc),
+       'con una posición de fábrica calculada, separada para que no se tapen');
+    // Sin esto, mover un logo no se recordaba: al cargar solo sobrevivían las
+    // claves escritas a mano en la lista de fábrica.
+    ok(/Object\.keys\(saved\)\.forEach\(k=>\{ if\(!merged\[k\]&&_RX_LOGO_N\.test\(k\)\)/.test(lc),
+       'y la posición en que se dejó cada uno se guarda de verdad');
+    ok(/_RX_LOGO_N\.test\(k\)&&pred\(k\)/.test(lc),
+       '"Restablecer posiciones" también los alcanza');
+    // El reset de cada pantalla filtra por el prefijo b+Mayúscula: bLogoN0 es de
+    // "atleta en barra" y logoN0 de "intentos", así que cada una vuelve a lo suyo.
     ok(/_piResetClaves\(k=>!\/\^b\[A-Z\]\/\.test\(k\)\)/.test(lc)
        && /_piResetClaves\(k=>\/\^b\[A-Z\]\/\.test\(k\)\)/.test(lc),
-       'y cada una restablece solo las suyas');
+       'y una pantalla no mueve los de la otra');
   }
 
   const LOGOS = ['eventos/suda2026_fed.png', 'eventos/suda2026.png', 'fechipo_logo_blanco.png']
