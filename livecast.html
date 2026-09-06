@@ -1798,6 +1798,9 @@ function pickEvent(i){
   window._ACTA_DIA='';
   DATA.event=ev;
   _ensayoGrant();
+  // ¿Tiene este campeonato sus logos en el repo? Se pregunta una vez por
+  // campeonato, y solo se usan si la ficha no trae los suyos.
+  try{ _probarLogosLocales(); }catch(e){}
   // Load saved flight assignments from cronograma
   const cronoKey='fechipo_crono_'+(ev.name||'').replace(/\s+/g,'_');
   let flightMap=null;
@@ -1975,8 +1978,11 @@ function _veloBandera(){
   const v=typeof st.veloBandera==='number'?st.veloBandera:0.55;
   return Math.max(0.05,Math.min(0.92,v));
 }
-function _fondoBarra(a,modo){
-  const AZUL='linear-gradient(160deg,#0d2141,#0A1628 55%,#060d1a)';
+// `base` deja poner otro color de fondo debajo de la bandera: la pantalla de
+// intentos tiene su propio color elegible en el engranaje, y si no se respetara,
+// prender la bandera le borraría ese color al operador.
+function _fondoBarra(a,modo,base){
+  const AZUL=base?_hexRgba(base,1):'linear-gradient(160deg,#0d2141,#0A1628 55%,#060d1a)';
   if(modo==='bandera'){
     // La bandera ENTERA de fondo, centrada y estirada hasta las esquinas. Antes se
     // dibujaban franjas diagonales con sus colores, y así Chile perdía la estrella y
@@ -2046,14 +2052,46 @@ function _srCat(a){
   const plus=m[1]==='+'||antes.indexOf('+')>=0||/^\s*\d+(?:[.,]\d+)?\s*\+/.test(s);
   return (plus?'+':'-')+String(parseFloat(String(m[2]).replace(',','.')));
 }
-// Divisiones contra las que se mide este atleta: la suya y el Open.
+// Qué categorías se compiten en cada división, sacado de la MISMA tabla de
+// récords. No todas existen en todas: la -43 de mujeres y la -53 de hombres
+// están solo en Sub-Junior y Junior; el Open arranca en -47 y en -59.
+//
+// Esto no era un detalle. A una subjunior de -43 se la medía también contra el
+// récord Open de -43, que no existe; el sistema lo leía como "categoría sin
+// récord cargado" y entonces CUALQUIER peso lo rompía: a González Morena y a
+// Peralta les salían los nueve intentos marcados como récord.
+//
+// Se lee del archivo y no se escribe acá a mano para que, si FESUPO cambia las
+// categorías, baste con cambiar el archivo de récords.
+let _SR_CLASES=null;
+function _srClases(){
+  if(_SR_CLASES)return _SR_CLASES;
+  const s=new Set();
+  Object.keys(RECSUDA||{}).forEach(k=>{
+    const p=k.split('|');                 // sexo|equip|division|categoria|movimiento
+    if(p.length>=4)s.add(p.slice(0,4).join('|'));
+  });
+  return (_SR_CLASES=s);
+}
+function _srClaseExiste(sx,eq,dv,cat){
+  const s=_srClases();
+  return s.size?s.has([sx,eq,dv,cat].join('|')):true;   // sin tabla cargada no se filtra nada
+}
+// Divisiones contra las que se mide este atleta: la suya y el Open — descartando
+// aquellas en las que su categoría no se compite.
 function _srDivs(a){
   const d=_normDiv(String(a&&a.div||''));
   const ok=['Sub-Junior','Junior','Open','Master I','Master II','Master III','Master IV'];
   const out=[];
   if(ok.indexOf(d)>=0)out.push(d);
   if(out.indexOf('Open')<0)out.push('Open');
-  return out;
+  const eq=_srEquip(a), cat=_srCat(a), sx=_srSexo(a);
+  if(!eq||!cat)return out;
+  const hay=out.filter(dv=>_srClaseExiste(sx,eq,dv,cat));
+  // Si la tabla no conoce NINGUNA división de este atleta, se deja como estaba:
+  // puede ser una categoría que todavía no está en el archivo, y callarle todos
+  // los récords sería peor que marcarle de más.
+  return hay.length?hay:out;
 }
 function _srLiftKey(a,l){ return (l==='bp'&&_srSoloBanca(a))?'bpsl':l; }
 // Récords vigentes de un atleta para un movimiento: [{div,kg,quien,pais,fecha,lugar}]
@@ -4090,8 +4128,32 @@ const CP={
 // ═══════════════════════════════════════════════════════════
 // HOJA DE ALTURA DE RACK PDF  (portrait A4)
 // ═══════════════════════════════════════════════════════════
-async function generateHojaRack(){
-  const btn=document.getElementById('btnHojaRack');
+// Los documentos de mesa —pesaje, altura de rack, revisión de equipo y las
+// papeletas— se piden igual: todo el campeonato, o un solo día. El día lo pone
+// el Cronograma (_diaDeAtleta lee la jornada del atleta) y vacío significa
+// todos. Se dejan afuera los cuartos intentos, que son el mismo atleta otra vez
+// y meterían una fila duplicada en cada hoja.
+function _athDeDia(dia){
+  const d=String(dia||'').trim();
+  return DATA.athletes.filter(a=>!a.__is4&&(!d||_diaDeAtleta(a)===d));
+}
+// El día en el nombre del archivo, para no terminar con cuatro "AlturaRack.pdf"
+// en la carpeta de descargas sin saber cuál es cuál.
+function _sufDiaArchivo(dia,strip){
+  const d=String(dia||'').trim();
+  return d?('_'+strip(d).replace(/\s+/g,'_')):'';
+}
+// Si se pidió un día que no tiene a nadie es un error del Cronograma: mejor
+// decirlo que bajar un PDF vacío y descubrirlo en la mesa.
+function _avisaSinAtletas(n,dia){
+  if(n)return false;
+  alert(dia?('No hay atletas en '+dia+'. Revisa el Cronograma.')
+           :'No hay atletas cargados todavía.');
+  return true;
+}
+async function generateHojaRack(dia,idBoton){
+  const btn=document.getElementById(idBoton||'btnHojaRack');
+  const rotulo=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
     if(!window.jspdf){
@@ -4105,10 +4167,11 @@ async function generateHojaRack(){
     const C=CP;
 
     // Sort by flight then lot
-    const athletes=[...DATA.athletes].sort((a,b)=>{
+    const athletes=_athDeDia(dia).sort((a,b)=>{
       if(a.flight!==b.flight)return _cmpFl(a.flight,b.flight);
       return a.lot-b.lot;
     });
+    if(_avisaSinAtletas(athletes.length,dia))return;
 
     // 5 cols — usable 194mm portrait
     // Tanda|Nombre|Rack SQ|Rack BP|Firma
@@ -4222,12 +4285,12 @@ async function generateHojaRack(){
     }
 
     const evShort=strip(DATA.event?.short||DATA.event?.name||'campeonato').replace(/\s+/g,'_');
-    doc.save('AlturaRack_'+evShort+'.pdf');
+    doc.save('AlturaRack'+_sufDiaArchivo(dia,strip)+'_'+evShort+'.pdf');
   }catch(err){
     console.error('HojaRack error',err);
     alert('Error al generar hoja de rack: '+err.message);
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='Altura de Rack PDF';}
+    if(btn){btn.disabled=false;btn.textContent=rotulo;}
   }
 }
 
@@ -4250,8 +4313,9 @@ function _modHojaEquipo(a){
   if(m==='equipped_bench') return plus?'EQUIPADO + ONLY BENCH':'ONLY BENCH EQUIPADO';
   return 'CLASSIC';
 }
-async function generateHojaEquipo(){
-  const btn=document.getElementById('btnHojaEquipo');
+async function generateHojaEquipo(dia,idBoton){
+  const btn=document.getElementById(idBoton||'btnHojaEquipo');
+  const rotulo=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
     if(!window.jspdf){
@@ -4266,12 +4330,13 @@ async function generateHojaEquipo(){
     const C=CP;
 
     // Sort: by flight then by category weight then by name
-    const athletes=[...DATA.athletes].sort((a,b)=>{
+    const athletes=_athDeDia(dia).sort((a,b)=>{
       if(a.flight!==b.flight)return _cmpFl(a.flight,b.flight);
       const na=parseFloat((a.cat||'').replace(/[^0-9.]/g,''))||999;
       const nb=parseFloat((b.cat||'').replace(/[^0-9.]/g,''))||999;
       return na!==nb?na-nb:a.name.localeCompare(b.name);
     });
+    if(_avisaSinAtletas(athletes.length,dia))return;
 
     // Cols: Tanda|Categoría|Nombre|Singlet|Polera|Cinturón|Rodilleras|Muñequeras|Calzado SQ|Calzado BP|Calzado DL|Calcetas
     // Total usable: 297 - 2*8 = 281mm
@@ -4403,12 +4468,12 @@ async function generateHojaEquipo(){
     }
 
     const evShort=strip(DATA.event?.short||DATA.event?.name||'campeonato').replace(/\s+/g,'_');
-    doc.save('RevisionEquipo_'+evShort+'.pdf');
+    doc.save('RevisionEquipo'+_sufDiaArchivo(dia,strip)+'_'+evShort+'.pdf');
   }catch(err){
     console.error('HojaEquipo error',err);
     alert('Error al generar hoja de equipo: '+err.message);
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='Revisión Equipo PDF';}
+    if(btn){btn.disabled=false;btn.textContent=rotulo;}
   }
 }
 
@@ -4422,12 +4487,25 @@ async function generateHojaEquipo(){
 //     nómina. Con 461 atletas, escribir el nombre a mano en cada papeleta es
 //     media hora de trabajo y una fuente de nombres ilegibles.
 //
+// Y se puede pedir un solo día: en el Sudamericano son ocho, y llevar a la mesa
+// del día 3 las 461 papeletas para buscar entre ellas las 55 que sirven no tiene
+// sentido. `dia` es uno de los que devuelve _diasDelEvento() (los pone el
+// Cronograma); vacío = el campeonato entero.
+//
+// Sale UNA papeleta por atleta, no una por movimiento: las copias las saca la
+// impresora. Por eso también se dejan afuera los cuartos intentos, que son
+// atletas duplicados y darían dos papeletas a la misma persona.
+//
 // Los logos: el del CAMPEONATO arriba a la izquierda (el que se subió en la
 // ficha del campeonato), y el de YourLift chiquito, como marca de agua, adentro
 // de cada cuadradito de intento.
 // ═══════════════════════════════════════════════════════════
-async function generatePapeletas(conNombre){
-  const btn=document.getElementById(conNombre?'btnPapeletasNom':'btnPapeletas');
+// Los botones de Documentos llaman a todos los PDF igual —(día, idBotón)—, así
+// que las dos versiones de la papeleta entran por la misma puerta que las hojas.
+function generatePapeletasNom(dia,idBoton){ return generatePapeletas(true,dia,idBoton); }
+function generatePapeletasBco(dia,idBoton){ return generatePapeletas(false,dia,idBoton); }
+async function generatePapeletas(conNombre,dia,idBoton){
+  const btn=document.getElementById(idBoton||(conNombre?'btnPapeletasNom':'btnPapeletas'));
   const rotulo=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
@@ -4460,22 +4538,47 @@ async function generatePapeletas(conNombre){
       try{const c=document.createElement('canvas');c.width=c.height=1;
         c.getContext('2d').drawImage(img,0,0);c.toDataURL();return true;}catch(e){return false;}
     };
-    // Logo del campeonato: primero el archivo local (imprime siempre), después
-    // el que se subió a la ficha del campeonato.
+    // Logo del campeonato. Manda el que está cargado en su ficha: es el que se
+    // ve en todas partes y el que cambia cuando el campeonato cambia de logo.
+    // Detrás va un archivo local con el mismo nombre del campeonato, que sirve
+    // de red por si el de la ficha no se deja incrustar en el PDF (Storage puede
+    // servir la imagen a la pantalla y aun así no habilitar CORS).
     const _evId=String((DATA.event&&DATA.event.id)||'').trim();
     const campSrcs=[];
-    if(_evId)campSrcs.push('eventos/'+_evId+'.png','eventos/'+_evId+'.jpg');
     const _remoto=(typeof _logoCamp==='function')?_logoCamp():'';
     if(_remoto)campSrcs.push(_remoto);
-    const [fechipoImg,yourliftImg,campImg]=await Promise.all([
+    if(_evId)campSrcs.push('eventos/'+_evId+'.png','eventos/'+_evId+'.jpg');
+    const [fechipoImg,yourliftImg,campCrudo]=await Promise.all([
       loadFirst(['fechipo_logo.png','logo_fechipo.png','promo/assets/fechipo_logo.png']),
       loadFirst(['yourlift_logo_hd.png','YourLift_logo.png']),
       loadFirst(campSrcs),
     ]);
     const _prop=(img,d)=>(img&&img.naturalWidth&&img.naturalHeight)?(img.naturalWidth/img.naturalHeight):d;
+    // Los logos vienen con fondo transparente, que es lo que necesitan las
+    // pantallas de tarima. jsPDF, en cambio, aplasta la imagen a JPEG y lo
+    // transparente le sale NEGRO: el logo del campeonato quedaba como una mancha
+    // en cada papeleta. Se apoya sobre blanco —el color del papel— antes de
+    // meterlo al PDF, y así el mismo archivo sirve para las dos cosas.
+    const _sobreBlanco=img=>{
+      if(!img)return null;
+      try{
+        const c=document.createElement('canvas');
+        c.width=img.naturalWidth||img.width; c.height=img.naturalHeight||img.height;
+        if(!c.width||!c.height)return img;
+        const x=c.getContext('2d');
+        x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height);
+        x.drawImage(img,0,0);
+        const plano=new Image(); plano.src=c.toDataURL('image/png');
+        return plano;
+      }catch(e){ return img; }
+    };
+    const campImg=_sobreBlanco(campCrudo);
+    if(campImg&&!campImg.complete)await new Promise(r=>{campImg.onload=r;campImg.onerror=r;});
 
-    // Sort athletes by lot
-    const athletes=[...DATA.athletes].sort((a,b)=>(a.lot||0)-(b.lot||0));
+    // Una papeleta por atleta, ordenadas por lote. Si se pidió un día, solo los
+    // que compiten ese día.
+    const athletes=_athDeDia(dia).sort((a,b)=>(a.lot||0)-(b.lot||0));
+    if(_avisaSinAtletas(athletes.length,dia))return;
 
     const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
     const PW=210,PH=297;
@@ -4633,7 +4736,7 @@ async function generatePapeletas(conNombre){
     };
 
     // ── Render cards: una por atleta. Con nombre impreso o en blanco ──
-    const total_cards=athletes.length||1;
+    const total_cards=athletes.length;
     for(let ai=0;ai<total_cards;ai++){
       const pos=ai%(COLS*ROWS);
       if(pos===0&&ai>0)doc.addPage();
@@ -4662,7 +4765,7 @@ async function generatePapeletas(conNombre){
     }
 
     const evShort=strip(DATA.event?.short||DATA.event?.name||'campeonato').replace(/\s+/g,'_');
-    doc.save('Papeletas'+(conNombre?'_con_nombre_':'_')+evShort+'.pdf');
+    doc.save('Papeletas'+(conNombre?'_con_nombre':'')+_sufDiaArchivo(dia,strip)+'_'+evShort+'.pdf');
   }catch(err){
     console.error('Papeletas error',err);
     alert('Error al generar papeletas: '+err.message);
@@ -4674,8 +4777,9 @@ async function generatePapeletas(conNombre){
 // ═══════════════════════════════════════════════════════════
 // HOJA DE PESAJE PDF
 // ═══════════════════════════════════════════════════════════
-async function generateHojaPesaje(){
-  const btn=document.getElementById('btnHojaPesaje');
+async function generateHojaPesaje(dia,idBoton){
+  const btn=document.getElementById(idBoton||'btnHojaPesaje');
+  const rotulo=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
     if(!window.jspdf){
@@ -4685,7 +4789,8 @@ async function generateHojaPesaje(){
     const strip=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\x00-\x7F]/g,'?').trim();
 
     // All athletes sorted by lot
-    const athletes=[...DATA.athletes].sort((a,b)=>a.lot-b.lot);
+    const athletes=_athDeDia(dia).sort((a,b)=>a.lot-b.lot);
+    if(_avisaSinAtletas(athletes.length,dia))return;
     const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
     const PW=210,PH=297;
     const C=CP;
@@ -4819,12 +4924,12 @@ async function generateHojaPesaje(){
     }
 
     const evShort=strip(DATA.event?.short||DATA.event?.name||'campeonato').replace(/\s+/g,'_');
-    doc.save('HojaPesaje_'+evShort+'.pdf');
+    doc.save('HojaPesaje'+_sufDiaArchivo(dia,strip)+'_'+evShort+'.pdf');
   }catch(err){
     console.error('HojaPesaje error',err);
     alert('Error al generar hoja de pesaje: '+err.message);
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='Hoja de Pesaje PDF';}
+    if(btn){btn.disabled=false;btn.textContent=rotulo;}
   }
 }
 
@@ -6583,8 +6688,32 @@ function _metaEvento(){
   const m=window.LIVE_EVENT_META||{}, ev=DATA.event||{};
   return m[ev.id]||m[ev.name]||{};
 }
-function _logoCamp(){ return (DATA.event&&DATA.event.logoUrl)||_metaEvento().logoUrl||''; }
-function _logoFed(){ return (DATA.event&&DATA.event.logoFedUrl)||_metaEvento().logoFedUrl||''; }
+// Y si el campeonato no tiene logo cargado en su ficha, se busca uno en el repo
+// con su mismo nombre: eventos/<id>.png para el del campeonato y
+// eventos/<id>_fed.png para el de la federación. Es una red, no un reemplazo —
+// el de la ficha manda siempre, y así el logo se cambia desde admin sin tocar
+// código.
+//
+// El archivo se COMPRUEBA antes de darlo por bueno, y solo entonces se guarda
+// acá. Devolver la ruta a ciegas parecía inofensivo —cada <img> tiene su
+// onerror— pero rompía dos cosas de verdad: la tira de logos dibujaba un
+// separador entre logos que no existían, y el fondo "logo" de la pantalla de
+// tarima dejaba de caer al azul de YourLift cuando no había ninguno.
+window._LOGO_LOCAL={camp:'',fed:''};
+function _probarLogosLocales(){
+  window._LOGO_LOCAL={camp:'',fed:''};
+  const id=String((DATA.event&&DATA.event.id)||'').trim();
+  if(!id)return;
+  const probar=(clave,src)=>{
+    const i=new Image();
+    i.onload=()=>{ window._LOGO_LOCAL[clave]=src; if(typeof R==='function')R(); };
+    i.src=src;
+  };
+  probar('camp','eventos/'+id+'.png');
+  probar('fed','eventos/'+id+'_fed.png');
+}
+function _logoCamp(){ return (DATA.event&&DATA.event.logoUrl)||_metaEvento().logoUrl||(window._LOGO_LOCAL||{}).camp||''; }
+function _logoFed(){ return (DATA.event&&DATA.event.logoFedUrl)||_metaEvento().logoFedUrl||(window._LOGO_LOCAL||{}).fed||''; }
 
 // Arma la tira de logos. `alto` es la altura en CSS (puede venir con clamp()).
 // Los que no estén cargados simplemente no se dibujan, y si no hay ninguno
@@ -8512,7 +8641,11 @@ const PI_SETTINGS_KEY='yl_pant_intentos_settings';
 // showTimer en false: la pantalla de tarima no muestra cronómetro (el reloj del
 // minuto lo lleva el control, no la proyección). Se puede prender desde el
 // engranaje de esa misma pantalla.
-const PI_DEFAULT_SETTINGS={showTimer:false,bgColor:'',accentColor:'#D4A843',textColor:'#ffffff'};
+// fondoBandera: la bandera del país del atleta, difuminada, detrás de la
+// pantalla de intentos. Viene encendida — es lo que identifica de quién es el
+// intento desde el fondo del gimnasio— y se apaga desde el engranaje cuando el
+// proyector o la luz de la sala no la acompañan.
+const PI_DEFAULT_SETTINGS={showTimer:false,fondoBandera:true,bgColor:'',accentColor:'#D4A843',textColor:'#ffffff'};
 function _piLoadSettings(){
   try{
     const raw=localStorage.getItem(PI_SETTINGS_KEY);
@@ -8683,6 +8816,9 @@ function _piSettingsPanelHtml(){
   if(open){
     h+=`<div style="background:rgba(10,22,40,.94);border:1px solid rgba(212,225,245,.25);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
       <div style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:rgba(212,225,245,.5)">AJUSTES DE PANTALLA</div>
+      <label style="display:flex;align-items:center;gap:8px;font-family:Oswald;font-size:12px;color:#fff;cursor:pointer">
+        <input type="checkbox" ${piSet.fondoBandera!==false?'checked':''} onchange="piSetSetting('fondoBandera',this.checked)"> Bandera de fondo
+      </label>
       <label style="display:flex;align-items:center;gap:8px;font-family:Oswald;font-size:12px;color:#fff;cursor:pointer">
         <input type="checkbox" ${piSet.showTimer===true?'checked':''} onchange="piSetSetting('_timerElegido',true);piSetSetting('showTimer',this.checked)"> Mostrar cronómetro
       </label>
@@ -8881,7 +9017,13 @@ function renderScreenIntentos(cur,nxt){
       <div style="font-size:16px;letter-spacing:3px;opacity:.8">TIEMPO COMPENSATORIO</div>
       <div id="compTimerPant" style="font-size:56px;font-weight:900;color:${_ci.neg?'#ef4444':'#60a5fa'};line-height:1">${_ci.mmss}</div>
     </div>`:'';
-  return `<div class="pi-canvas" style="position:fixed;inset:0;overflow:hidden${piSet.bgColor?';background:'+piSet.bgColor:''}" id="pantIntentosBox">
+  // La bandera del país, difuminada, detrás de todo — la misma que usa el modo
+  // "Atleta en barra", para que las dos pantallas se vean como una sola cosa.
+  // Se apaga desde el engranaje de abajo a la izquierda.
+  const _fondoPant=(piSet.fondoBandera!==false)
+    ? _fondoBarra(cur,'bandera',piSet.bgColor||'')
+    : (piSet.bgColor||'');
+  return `<div class="pi-canvas" style="position:fixed;inset:0;overflow:hidden${_fondoPant?';background:'+_fondoPant:''}" id="pantIntentosBox">
     ${compHtml}
     ${piSet.showTimer===true?`<div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`:''}
     ${_piBlock('liftLabel',liftLabelHtml)}
@@ -9083,6 +9225,9 @@ function renderShell(){
   h+='<div class="logo"><img src="YourLift_logo.png" style="height:28px" onerror="this.remove()"> YourLift</div><div class="event-name-side" style="font-size:11px;color:var(--muted);margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(DATA.event?.short||DATA.event?.name||'')+'</div>';
   if(isAdmin){
   if(window._canAccess('manage'))h+='<div class="side-label">Gesti\u00f3n</div><button class="side-btn '+(p==='manage'?'active':'')+'" onclick="go(\'manage\')"><span class="icon">\uD83D\uDCCB</span>Atletas & Pesaje</button>';
+  // Todo lo que se imprime para la mesa. Sali\u00f3 de Atletas & Pesaje, donde eran
+  // cinco botones apretados en la barra de arriba y ya no cab\u00EDan.
+  if(window._canAccess('docs'))h+='<button class="side-btn '+(p==='docs'?'active':'')+'" onclick="go(\'docs\')"><span class="icon">\uD83D\uDCC4</span>Documentos</button>';
   h+='<div class="side-label">'+(window._esStreaming()?'Transmisi\u00f3n':'Competencia')+'</div>';
   if(window._canAccess('compete'))h+='<button class="side-btn '+(p==='compete'?'active':'')+'" onclick="go(\'compete\')"><span class="icon">\uD83C\uDFCB\uFE0F</span>Control en Vivo</button>';
   // "Scoreboard" se sacó del menú: era una pantalla vieja de proyección que quedó
@@ -9165,7 +9310,7 @@ function renderShell(){
   h+='</div>';
   }
   h+='</div><div class="main">';
-  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='remote'&&isAdmin)h+=renderRemote();else if(p==='screen'&&isAdmin)h+=renderScreenControl();else if(p==='results')h+=renderResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director'||p==='remote'||p==='screen')){DATA.phase='liveView';h+=renderLiveView();}
+  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='docs'&&isAdmin)h+=renderDocs();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='remote'&&isAdmin)h+=renderRemote();else if(p==='screen'&&isAdmin)h+=renderScreenControl();else if(p==='results')h+=renderResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='docs'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director'||p==='remote'||p==='screen')){DATA.phase='liveView';h+=renderLiveView();}
   h+='</div></div>';return h;
 }
 
@@ -10573,10 +10718,101 @@ function _manCoincide(a,q){
   const heno=_manNorm([a.name,a.club,_ctry(a),a.cat,a.div,a.lot].join(' '));
   return _manNorm(q).split(/\s+/).filter(Boolean).every(w=>heno.indexOf(w)>=0);
 }
+// ═══════════════════════════════════════════════════════════
+// DOCUMENTOS
+//
+// Todo lo que se imprime para la mesa, junto y en un solo lugar. Antes eran
+// cinco botones apretados en la barra de Atletas & Pesaje, entre "Generar
+// Lotes" y "Ordenar por Categoría", y ya son ocho documentos distintos: no
+// entraban, y ninguno tenía dónde explicar qué trae.
+//
+// Lo que cambia de verdad son las papeletas con nombre: en un campeonato de
+// varios días se bajan por día. La del día 3 trae UNA papeleta por cada atleta
+// que compite el día 3 — las copias las saca después la impresora.
+// ═══════════════════════════════════════════════════════════
+function _docsAtletas(dia){ return _athDeDia(dia); }
+// Un documento de la mesa: qué es, qué trae, y de dónde se baja. Si el
+// campeonato tiene más de un día se ofrece día por día, porque a la mesa del
+// día 3 se llevan los papeles del día 3 y no los ocho días completos. Los días
+// los pone el Cronograma.
+function _docBloque(o,dias,nTot){
+  const uno=dias.length<2;
+  let h='<div class="card" style="padding:14px 16px'
+    +(uno?';display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap':'')+'">'
+    +'<div'+(uno?' style="min-width:210px;flex:1"':'')+'>'
+    +'<div class="os" style="font-size:14px;letter-spacing:1px;color:var(--text)">'+esc(o.titulo)+'</div>'
+    +'<div style="color:var(--muted);font-size:11.5px;line-height:1.5;margin-top:3px'
+    +(uno?'':';margin-bottom:11px')+'">'+o.detalle+'</div></div>';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
+  if(!uno)dias.forEach((d,i)=>{
+    const n=_docsAtletas(d).length, id=o.id+'D'+i;
+    h+='<button id="'+id+'" class="btn" onclick="'+o.fn+'('+JSON.stringify(d).replace(/"/g,'&quot;')
+      +',\''+id+'\')" title="'+esc(n+' atletas compiten en '+d)+'" '
+      +'style="background:rgba('+o.color+',.15);border-color:rgb('+o.color+');color:rgb('+o.color+')">'
+      +esc(d)+' <span style="opacity:.7;font-weight:400">· '+n+'</span></button>';
+  });
+  h+='<button id="'+o.id+'" class="btn'+(uno?'':' btn-o')+'" onclick="'+o.fn+'()"'
+    +(uno?' style="background:rgba('+o.color+',.15);border-color:rgb('+o.color+');color:rgb('+o.color+')"'
+         :' title="Los '+nTot+' atletas del campeonato, en un solo archivo"')+'>'
+    +(uno?'Descargar PDF':'Todo el campeonato · '+nTot)+'</button>';
+  return h+'</div></div>';
+}
+function renderDocs(){
+  const dias=_diasDelEvento();
+  const nTot=_docsAtletas('').length;
+  let h='<div class="fade"><div style="margin-bottom:16px">'
+    +'<h2 class="os" style="font-size:22px;letter-spacing:1px">DOCUMENTOS</h2>'
+    +'<p style="color:var(--muted);font-size:12px">'+esc(DATA.event?.name||'')+' · '+nTot+' atletas'
+    +(dias.length>1?(' · '+dias.length+' días'):'')+'</p></div>';
+
+  h+='<div style="display:grid;gap:10px;max-width:900px">';
+
+  h+='<div class="side-label" style="margin:2px 0 0">Mesa de pesaje</div>';
+  h+=_docBloque({id:'btnHojaPesaje',fn:'generateHojaPesaje',color:'59,130,246',
+    titulo:'Hoja de Pesaje',
+    detalle:'Para anotar peso corporal, aperturas y altura de rack a mano durante el pesaje.'},dias,nTot);
+  h+=_docBloque({id:'btnHojaRack',fn:'generateHojaRack',color:'16,185,129',
+    titulo:'Altura de Rack',
+    detalle:'Las alturas de sentadilla y banca de cada atleta, para el equipo de tarima.'},dias,nTot);
+  h+=_docBloque({id:'btnHojaEquipo',fn:'generateHojaEquipo',color:'168,85,247',
+    titulo:'Revisión de Equipo',
+    detalle:'La lista para marcar el equipamiento revisado a cada atleta.'},dias,nTot);
+
+  h+='<div class="side-label" style="margin:10px 0 0">Papeletas de intentos</div>';
+  // Las dos versiones se parten igual: la cantidad que hace falta ese día es la
+  // misma se escriba el nombre o no. Sale UNA por atleta; las copias las saca
+  // después la impresora.
+  h+=_docBloque({id:'btnPapeletasNom',fn:'generatePapeletasNom',color:'234,179,8',
+    titulo:'Papeletas con nombre',
+    detalle:'Una papeleta por atleta, con el nombre ya impreso tal como está en la nómina.'},dias,nTot);
+  h+=_docBloque({id:'btnPapeletas',fn:'generatePapeletasBco',color:'234,179,8',
+    titulo:'Papeletas en blanco',
+    detalle:'Las mismas, sin el nombre escrito, para llenar a mano en la mesa.'},dias,nTot);
+
+  // Un atleta sin día en el Cronograma no cae en ninguno de los botones por día,
+  // y ese papel no se imprime nunca. Vale la pena decirlo acá y no descubrirlo
+  // en la mesa.
+  if(dias.length>1){
+    const sinDia=_docsAtletas('').filter(a=>!_diaDeAtleta(a));
+    if(sinDia.length){
+      h+='<div class="card" style="padding:11px 14px;border-color:rgba(245,158,11,.5);'
+        +'background:rgba(245,158,11,.08);color:#f59e0b;font-size:11.5px;line-height:1.5">'
+        +'<b>Ojo:</b> '+sinDia.length+' atleta'+(sinDia.length>1?'s no tienen':' no tiene')
+        +' día asignado en el Cronograma, así que no aparece'+(sinDia.length>1?'n':'')
+        +' en ningún documento por día: '
+        +esc(sinDia.slice(0,5).map(a=>a.name).join(' · '))+(sinDia.length>5?' …':'')
+        +'. Sí entra'+(sinDia.length>1?'n':'')+' en los de todo el campeonato.</div>';
+    }
+  }
+
+  h+='</div></div>';
+  return h;
+}
+
 function renderManage(){
   // Filtrar por tarima si está activo (modo 2 tarimas)
   const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin: trae cambios, borra eliminados sin datos y toma tanda, división, categoría y modalidad del Cronograma">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas(false)" title="Papeletas en blanco, para llenar a mano en la mesa" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">Papeletas en Blanco PDF</button><button id="btnPapeletasNom" class="btn" onclick="generatePapeletas(true)" title="Una papeleta por atleta con el nombre ya impreso, tal como está en la nómina" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">Papeletas con Nombre PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin: trae cambios, borra eliminados sin datos y toma tanda, división, categoría y modalidad del Cronograma">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-o" onclick="go(\'docs\')" title="Hoja de pesaje, altura de rack, revisión de equipo y papeletas" style="border-color:rgba(212,168,67,.55);color:var(--gold)">📄 Documentos</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
     // ── Barra de búsqueda y tandas ────────────────────────────────────────────
   {
     const _mf0=window._MAN_F||{q:'',flight:''};
@@ -12451,7 +12687,7 @@ fetch(_STOR+'public%2Frecords.json?alt=media',{cache:'no-cache'})
 // Récords sudamericanos (FESUPO) — solo se usan en los eventos que los declaran
 // (records:'suda'). Archivo estático: se genera con build_records_suda.py.
 fetch('records_suda.json',{cache:'no-cache'}).then(r=>r.ok?r.json():null)
-  .then(d=>{ if(d&&d.records){RECSUDA=d.records;window._SR_FUENTE=d.fuente||'';window.RECSUDA=d.records;if(DATA.phase==='compete'||DATA.phase==='liveView')R();} })
+  .then(d=>{ if(d&&d.records){RECSUDA=d.records;_SR_CLASES=null;window._SR_FUENTE=d.fuente||'';window.RECSUDA=d.records;if(DATA.phase==='compete'||DATA.phase==='liveView')R();} })
   .catch(()=>console.warn('[FECHIPO] records_suda.json no cargado'));
 // DATA.events se construye desde Firestore (LIVE_EVENT_META en renderSetup) MÁS
 // los eventos con nómina propia de nominas.json (ej. Sudamericano Día 1..9, que
