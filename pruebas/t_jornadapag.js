@@ -191,8 +191,14 @@ const MEDIR = () => {
     const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
     ok(/const UNIT_MIN=/.test(lc), 'hay un piso de alto de fila');
     ok(/_jornPagTimer/.test(lc), 'y páginas que rotan cuando no entra');
-    ok(/_tiraLogos\(\['fed','camp'\]/.test(lc.slice(lc.indexOf('function renderTxJornada'))),
+    // Los logos de la pantalla pasaron a ser una lista que se sube desde el
+    // panel; _tiraLogosPantalla los dibuja y, mientras no haya ninguno subido,
+    // cae en _tiraLogos con el par de siempre. Lo que se cuida sigue siendo lo
+    // mismo: que la tabla de jornada no se arme los suyos por su cuenta.
+    ok(/_tiraLogosPantalla\(\['fed','camp'\]/.test(lc.slice(lc.indexOf('function renderTxJornada'))),
        'la tabla de jornada arma sus logos con la misma función que el resto');
+    ok(/function _tiraLogosPantalla[\s\S]{0,400}return _tiraLogos\(cuales,alto,gap\)/.test(lc),
+       'y sin logos subidos vuelve al par de siempre');
     // Los logos movibles de las otras dos pantallas.
     ok(/logoFed:\{x:/.test(lc) && /logoCamp:\{x:/.test(lc),
        'la Pantalla de Intentos tiene sus dos logos como bloques movibles');

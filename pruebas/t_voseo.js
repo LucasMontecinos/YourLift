@@ -27,6 +27,7 @@ const formas = [
   'dejá', 'llamá', 'esperá', 'mandá', 'marcá', 'sacá', 'usá', 'probá', 'armá',
   'descargá', 'seleccioná', 'confirmá', 'avisá', 'fijate', 'acordate',
   'tildá', 'grabá', 'exportá', 'reseteá', 'ajustá', 'filtrá', 'activá',
+  'arrastrá', 'soltá', 'apagá', 'prendé', 'imprimí', 'llená', 'clickeá',
   'desactivá', 'generá', 'copiá', 'pegá', 'ordená', 'contactá',
   // -er → é
   'poné', 'tené', 'hacé', 'corré', 'volvé', 'leé', 'respondé', 'vendé', 'comé',

@@ -497,11 +497,18 @@ async function initFB(){
         const recordsEnabled=(typeof e.recordsEnabled==='boolean')
           ? e.recordsEnabled
           : !/universitar/i.test(e.name||'');
-        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0,logoUrl:e.logoUrl||'',logoFedUrl:e.logoFedUrl||''};
+        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0,logoUrl:e.logoUrl||'',logoFedUrl:e.logoFedUrl||'',logosPantalla:Array.isArray(e.logosPantalla)?e.logosPantalla:[]};
         if(DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
           DATA.event.recordsEnabled=recordsEnabled;
-          DATA.event.logoUrl=e.logoUrl||'';
-          DATA.event.logoFedUrl=e.logoFedUrl||'';
+          // El logo se BORRA solo si viene del documento exacto de este
+          // campeonato. Por nombre pueden calzar dos documentos —el del
+          // campeonato y alguna copia con el mismo nombre—, y el que llegara
+          // último con el campo vacío dejaba a DATA.event sin logo: por eso
+          // había que volver a subirlo cada vez que se entraba a Control TX.
+          const _mismoDoc=(DATA.event.id===d.id);
+          if(e.logoUrl||_mismoDoc)DATA.event.logoUrl=e.logoUrl||'';
+          if(e.logoFedUrl||_mismoDoc)DATA.event.logoFedUrl=e.logoFedUrl||'';
+          if(Array.isArray(e.logosPantalla)||_mismoDoc)DATA.event.logosPantalla=Array.isArray(e.logosPantalla)?e.logosPantalla:[];
           // Qué logo va en el barrido de transición. Por defecto, el del
           // campeonato: es su momento en pantalla. Solo si alguien eligió a
           // propósito el de YourLift se usa ese.
@@ -6764,6 +6771,31 @@ function _probarLogosLocales(){
   probar('camp','eventos/'+id+'.png');
   probar('fed','eventos/'+id+'_fed.png');
 }
+// Los logos que se ven en la Pantalla de Tarima. Es una lista: se suben los que
+// se quieran —el del campeonato, el de la federación, los auspiciadores— y salen
+// todos, en todas las escenas. Mientras no se suba ninguno se sigue usando el
+// par de siempre (federación + campeonato), así la pantalla nunca queda pelada.
+function _logosPantallaSubidos(){
+  const ev=DATA.event||{};
+  const l=Array.isArray(ev.logosPantalla)&&ev.logosPantalla.length
+    ? ev.logosPantalla : (_metaEvento().logosPantalla||[]);
+  return (l||[]).map(x=>(x&&x.url)||'').filter(Boolean);
+}
+// La tira de logos de la pantalla. Si no hay ninguno subido, cae en la tira de
+// siempre con los logos que pida cada escena.
+function _tiraLogosPantalla(cuales,alto,gap){
+  const subidos=_logosPantallaSubidos();
+  if(!subidos.length)return _tiraLogos(cuales,alto,gap);
+  // El alto manda y el ancho sale solo, para que un logo apaisado no quede
+  // aplastado. Si son muchos, la tira baja a una segunda fila en vez de salirse
+  // de la pantalla.
+  const sombra='filter:drop-shadow(0 2px 6px rgba(0,0,0,.55));';
+  return '<div style="display:flex;align-items:center;justify-content:center;flex-wrap:wrap;'
+    +'max-width:92vw;gap:'+(gap||'12px')+'">'
+    +subidos.map(u=>'<img src="'+u+'" alt="" style="height:'+alto+';width:auto;max-width:22vw;'
+      +'object-fit:contain;'+sombra+'" onerror="this.style.display=\'none\'">').join('')
+    +'</div>';
+}
 function _logoCamp(){ return (DATA.event&&DATA.event.logoUrl)||_metaEvento().logoUrl||(window._LOGO_LOCAL||{}).camp||''; }
 function _logoFed(){ return (DATA.event&&DATA.event.logoFedUrl)||_metaEvento().logoFedUrl||(window._LOGO_LOCAL||{}).fed||''; }
 
@@ -7443,9 +7475,14 @@ function renderScreenLuces(a){
       +'<div style="margin-top:.5em;font-size:clamp(15px,2.4vw,34px);font-weight:600;letter-spacing:.12em;color:#D4A843">'
       +(_LIFT_SIGLA[l]||'')+' '+(r+1)+(kg?' · '+kg.toFixed(1).replace(/\.0$/,'')+' KG':'')+'</div></div>';
   }
+  // Los logos, abajo, como en el resto de las escenas de la pantalla: esta era
+  // la única que no los mostraba.
+  const tira=_tiraLogosPantalla(['fed','camp'],'clamp(38px,6vh,92px)','clamp(14px,2vw,32px)');
   return '<div style="position:absolute;inset:0;background:linear-gradient(160deg,#0d2141,#0A1628 55%,#060d1a);'
     +'display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Oswald,sans-serif">'
-    +cab+luces+'</div>';
+    +cab+luces
+    +(tira?'<div style="position:absolute;left:0;right:0;bottom:clamp(14px,3vh,40px);display:flex;justify-content:center">'+tira+'</div>':'')
+    +'</div>';
 }
 // ¿Se muestran las luces en la pantalla de tarima? Arranca apagado: se prende
 // desde el panel cuando el campeonato las usa.
@@ -7528,7 +7565,7 @@ function renderTxProfile(cur){
           </div>
         </div>
         <div style="position:absolute;top:clamp(20px,2.5vw,40px);right:clamp(20px,2.5vw,40px);display:flex;align-items:center;gap:12px;padding:8px 14px;background:rgba(10,22,40,.55);border:2px solid rgba(212,168,67,.4);border-radius:8px">
-          ${_tiraLogos(['fed','camp','yl'],'clamp(34px,3.6vw,56px)','14px')}
+          ${_tiraLogosPantalla(['fed','camp','yl'],'clamp(34px,3.6vw,56px)','14px')}
         </div>
       </div>
     </div>
@@ -7767,6 +7804,41 @@ function renderScreenControl(){
   h+='</div>';
   h+='<div style="font-size:11px;color:var(--muted);margin-top:8px">Esta pantalla obedece los botones de abajo en tiempo real: sirve para el televisor que va cambiando durante la competencia. Si tienes más de una pantalla y cada una tiene que mostrar algo distinto, usa los links de abajo.</div>';
   h+='</div>';
+
+  // ── LOGOS DE LA PANTALLA ──────────────────────────────────
+  //
+  // Se suben una vez y quedan guardados con el campeonato: no hay que volver a
+  // ponerlos cada vez que se entra. Salen en TODAS las escenas de la pantalla.
+  {
+    const subidos=Array.isArray(DATA.event&&DATA.event.logosPantalla)?DATA.event.logosPantalla:[];
+    h+='<div class="card" style="margin-bottom:16px">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">';
+    h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold)">LOGOS DE LA PANTALLA</div>';
+    h+='<button id="scrLogosBtn" onclick="screenLogosSubir()" style="padding:8px 14px;background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">⬆ Agregar logos</button>';
+    h+='</div>';
+    h+='<div style="font-size:11px;color:var(--muted);line-height:1.55;margin-bottom:10px">Los que se suban acá salen en <b>todas</b> las escenas de la pantalla: perfil, atleta en barra, intentos, luces y tabla de la jornada. Puedes poner los que quieras —campeonato, federación, auspiciadores— y quedan guardados con el campeonato, así que no hay que volver a subirlos.</div>';
+    if(!subidos.length){
+      h+='<div style="font-size:11px;color:var(--muted);padding:12px 14px;border:1px dashed rgba(212,225,245,.25);border-radius:8px;line-height:1.5">'
+        +'Todavía no hay ninguno. Mientras tanto la pantalla muestra el logo de la <b>federación</b> y el del <b>campeonato</b>, los que estén cargados en la ficha. '
+        +'Al subir el primero, esta lista reemplaza a esos dos.</div>';
+    }else{
+      h+='<div style="display:flex;gap:10px;flex-wrap:wrap">';
+      subidos.forEach((lg,i)=>{
+        h+='<div style="width:132px;border:1px solid var(--border);border-radius:9px;padding:8px;background:rgba(10,22,40,.5)">'
+          +'<div style="height:56px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.06);border-radius:6px;overflow:hidden">'
+          +'<img src="'+esc(lg.url||'')+'" alt="" style="max-height:52px;max-width:118px;object-fit:contain" onerror="this.style.display=\'none\'"></div>'
+          +'<div style="font-size:9.5px;color:var(--muted);margin:5px 0 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(lg.nombre||'')+'">'+esc(lg.nombre||('Logo '+(i+1)))+'</div>'
+          +'<div style="display:flex;gap:4px">'
+          +'<button onclick="screenLogoMover('+i+',-1)"'+(i===0?' disabled':'')+' title="Mover a la izquierda" style="flex:1;padding:4px;border-radius:5px;border:1px solid var(--border);background:transparent;color:'+(i===0?'rgba(220,230,245,.25)':'var(--text)')+';cursor:'+(i===0?'default':'pointer')+';font-size:11px">←</button>'
+          +'<button onclick="screenLogoMover('+i+',1)"'+(i===subidos.length-1?' disabled':'')+' title="Mover a la derecha" style="flex:1;padding:4px;border-radius:5px;border:1px solid var(--border);background:transparent;color:'+(i===subidos.length-1?'rgba(220,230,245,.25)':'var(--text)')+';cursor:'+(i===subidos.length-1?'default':'pointer')+';font-size:11px">→</button>'
+          +'<button onclick="screenLogoBorrar('+i+')" title="Sacar de la pantalla" style="flex:1;padding:4px;border-radius:5px;border:1px solid rgba(239,68,68,.5);background:transparent;color:#ef4444;cursor:pointer;font-size:11px">✕</button>'
+          +'</div></div>';
+      });
+      h+='</div>';
+      h+='<div style="font-size:10.5px;color:var(--muted);margin-top:9px">Salen en ese orden, de izquierda a derecha. En las pantallas de <b>atleta en barra</b> e <b>intentos</b> van juntos en un bloque que se puede mover y agrandar como los demás.</div>';
+    }
+    h+='</div>';
+  }
 
   // ── UN LINK POR PANTALLA ──────────────────────────────────
   //
@@ -8163,7 +8235,7 @@ function renderTxJornada(){
       // título, que ya escala con el alto de la pantalla, así que crecen junto
       // con el resto cuando esto se proyecta en grande.
       +'<div style="display:flex;align-items:center;gap:'+Math.round(VH*0.016)+'px;flex-shrink:0">'
-        +_tiraLogos(['fed','camp'],Math.round(VH*0.05)+'px',Math.round(VH*0.014)+'px')
+        +_tiraLogosPantalla(['fed','camp'],Math.round(VH*0.05)+'px',Math.round(VH*0.014)+'px')
         +'<img src="yourlift_logo_hd.png" alt="YourLift" style="height:'+Math.round(VH*0.04)+'px;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))" onerror="this.outerHTML=\'<span style=&quot;font-family:Oswald;color:#D4A843;letter-spacing:2px&quot;>YourLift</span>\'">'
       +'</div>'
     +'</div>'
@@ -8593,9 +8665,10 @@ function renderScreenBarra(a){
       ${esc(cat)} <span style="opacity:.6">·</span> ${esc(divS)}${modS?` <span style="opacity:.6">·</span> ${esc(modS)}`:''}
     </div>`)}
 
-    ${logo?B('bLogo',`<img src="${logo}" alt="" style="max-height:11vh;max-width:14vw;object-fit:contain;display:block" onerror="this.style.display='none'">`):''}
-
-    ${logoFed?B('bLogoFed',`<img src="${logoFed}" alt="" style="max-height:9vh;max-width:12vw;object-fit:contain;display:block" onerror="this.style.display='none'">`):''}
+    ${_logosPantallaSubidos().length
+      ? B('bLogosTira',_tiraLogosPantalla([],'9vh','1.6vw'))
+      : (logo?B('bLogo',`<img src="${logo}" alt="" style="max-height:11vh;max-width:14vw;object-fit:contain;display:block" onerror="this.style.display='none'">`):'')
+        +(logoFed?B('bLogoFed',`<img src="${logoFed}" alt="" style="max-height:9vh;max-width:12vw;object-fit:contain;display:block" onerror="this.style.display='none'">`):'')}
 
     ${_lucesEnTarima()?B('bLuces',renderLucesTarima(true)):''}
 
@@ -8640,6 +8713,7 @@ const PI_DEFAULT_LAYOUT={
   // que es donde no estorban a nada de lo que ya había.
   logoFed:{x:8,y:9,scale:100},
   logoCamp:{x:92,y:9,scale:100},
+  logosTira:{x:50,y:5,scale:100},     // la tira de logos subidos, cuando hay
   // "Atleta en barra" usa el mismo editor. Las claves llevan b- adelante para no
   // pisarse con las de arriba: las dos disposiciones conviven en el mismo archivo
   // guardado, y cada pantalla dibuja las suyas.
@@ -8654,6 +8728,7 @@ const PI_DEFAULT_LAYOUT={
   bDatos:{x:50,y:75,scale:100},       // -63 kg · JR · Classic
   bLogo:{x:90,y:75,scale:100},        // logo del campeonato
   bLogoFed:{x:90,y:88,scale:100},     // logo de la federación
+  bLogosTira:{x:50,y:93,scale:100},   // tira de logos subidos (atleta en barra)
   bLuces:{x:50,y:90,scale:100}        // las luces de los jueces
 };
 function _piLoadLayout(){
@@ -8745,7 +8820,7 @@ function _piBlock(key,innerHtml){
   let h='<div class="pi-block" data-pi-key="'+key+'" style="position:absolute;left:'+pos.x+'%;top:'+pos.y+'%;transform:translate(-50%,-50%);padding:10px;border-radius:8px;'+(selected?'outline:2px dashed #D4A843;background:rgba(212,168,67,.08);':'')+'cursor:'+(selected?'move':'pointer')+'">';
   h+='<div class="pi-inner" style="transform:scale('+((pos.scale||100)/100)+');transform-origin:center center">'+innerHtml+'</div>';
   if(selected){
-    h+='<div class="pi-resize" data-pi-key="'+key+'" title="Arrastrá para agrandar/achicar" style="position:absolute;right:-15px;bottom:-15px;width:26px;height:26px;background:#D4A843;border:3px solid #0A1628;border-radius:50%;cursor:nwse-resize;box-shadow:0 2px 8px rgba(0,0,0,.5)"></div>';
+    h+='<div class="pi-resize" data-pi-key="'+key+'" title="Arrastra para agrandar o achicar" style="position:absolute;right:-15px;bottom:-15px;width:26px;height:26px;background:#D4A843;border:3px solid #0A1628;border-radius:50%;cursor:nwse-resize;box-shadow:0 2px 8px rgba(0,0,0,.5)"></div>';
   }
   h+='</div>';
   return h;
@@ -9086,8 +9161,9 @@ function renderScreenIntentos(cur,nxt){
     ${_piBlock('subtitle',subtitleHtml)}
     ${positionHtml?_piBlock('position',positionHtml):''}
     ${nextHtml?_piBlock('next',nextHtml):''}
-    ${_piLogoBloque('logoFed',_logoFed(),'9vh','12vw')}
-    ${_piLogoBloque('logoCamp',_logoCamp(),'11vh','15vw')}
+    ${_logosPantallaSubidos().length
+      ? _piBlock('logosTira',_tiraLogosPantalla([],'8vh','1.6vw'))
+      : _piLogoBloque('logoFed',_logoFed(),'9vh','12vw')+_piLogoBloque('logoCamp',_logoCamp(),'11vh','15vw')}
     ${_piSettingsPanelHtml()}
   </div>`;
 }
@@ -9617,6 +9693,72 @@ window.dirUploadChampionshipLogo=async function(){
     }catch(e){alert('Error subiendo logo: '+e.message); if(btn)btn.textContent='⬆ Cambiar logo';}
   };
   inp.click();
+};
+// ── LOGOS DE LA PANTALLA DE TARIMA ────────────────────────────────
+//
+// Una lista, no dos casillas fijas: se suben los que se quieran —el del
+// campeonato, el de la federación, los auspiciadores— y salen todos, en todas
+// las escenas de la pantalla. Se guarda en eventos/{evId}.logosPantalla, así que
+// queda puesta para siempre y no hay que volver a subirla cada vez que se entra.
+//
+// Mientras la lista esté vacía, la pantalla sigue mostrando el par de siempre
+// (federación + campeonato): nadie se queda sin logos por no haber entrado acá.
+function _evIdActual(){ return (DATA.event&&(DATA.event.id||DATA.event.name))||''; }
+async function _guardaLogosPantalla(lista){
+  const evId=_evIdActual();
+  if(!evId)throw new Error('No hay campeonato elegido');
+  await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{logosPantalla:lista});
+  DATA.event.logosPantalla=lista;
+  const m=(window.LIVE_EVENT_META||{})[evId]; if(m)m.logosPantalla=lista;
+  try{ if(typeof syncToFB==='function') await syncToFB(); }catch(e){}
+  R();
+}
+window.screenLogosSubir=async function(){
+  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía');return;}
+  if(!DATA.event){alert('Primero elige un campeonato');return;}
+  const inp=document.createElement('input');
+  inp.type='file';inp.multiple=true;
+  inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
+  inp.onchange=async()=>{
+    const files=[...(inp.files||[])]; if(!files.length)return;
+    const btn=document.getElementById('scrLogosBtn');
+    const rot=btn?btn.textContent:'';
+    try{
+      const {ref,uploadBytes,getDownloadURL}=window._fbSt;
+      const safeId=_evIdActual().replace(/[^a-zA-Z0-9_]/g,'_');
+      const lista=(Array.isArray(DATA.event.logosPantalla)?DATA.event.logosPantalla:[]).slice();
+      for(let i=0;i<files.length;i++){
+        const f=files[i];
+        if(btn)btn.textContent='Subiendo '+(i+1)+'/'+files.length+'…';
+        const limpio=f.name.replace(/[^A-Za-z0-9._-]/g,'_');
+        const r=ref(window._fbStInst,'logos/pantalla/'+safeId+'_'+Date.now()+'_'+limpio);
+        await uploadBytes(r,f,{contentType:f.type||'image/png'});
+        lista.push({url:await getDownloadURL(r),nombre:f.name});
+      }
+      await _guardaLogosPantalla(lista);
+      showToastLC('✓ '+files.length+(files.length>1?' logos agregados':' logo agregado'));
+    }catch(e){ alert('Error subiendo: '+(e.message||e)); }
+    finally{ if(btn)btn.textContent=rot||'⬆ Agregar logos'; }
+  };
+  inp.click();
+};
+window.screenLogoBorrar=async function(i){
+  const lista=(Array.isArray(DATA.event&&DATA.event.logosPantalla)?DATA.event.logosPantalla:[]).slice();
+  const q=lista[i]; if(!q)return;
+  if(!confirm('¿Sacar "'+(q.nombre||'este logo')+'" de la pantalla?'))return;
+  lista.splice(i,1);
+  // El archivo se queda en Storage a propósito: si fue un error, se vuelve a
+  // agregar desde el mismo link sin tener que buscarlo de nuevo en el
+  // computador. Ocupa unos KB.
+  try{ await _guardaLogosPantalla(lista); showToastLC('✓ Logo sacado de la pantalla'); }
+  catch(e){ alert('Error: '+(e.message||e)); }
+};
+window.screenLogoMover=async function(i,paso){
+  const lista=(Array.isArray(DATA.event&&DATA.event.logosPantalla)?DATA.event.logosPantalla:[]).slice();
+  const j=i+paso;
+  if(!lista[i]||j<0||j>=lista.length)return;
+  const t=lista[i];lista[i]=lista[j];lista[j]=t;
+  try{ await _guardaLogosPantalla(lista); }catch(e){ alert('Error: '+(e.message||e)); }
 };
 // Qué logo va en el barrido. Se guarda con el campeonato, así que queda elegido
 // para la próxima vez sin tener que acordarse.
@@ -10590,7 +10732,7 @@ function renderDirector(){
   const _ts=stl.titleSize!=null?stl.titleSize:8,_ms=stl.movSize!=null?stl.movSize:5,_tmr=stl.timerSize!=null?stl.timerSize:12;
   const _blur=stl.blurAmount!=null?stl.blurAmount:24,_ov=stl.overlayOpacity!=null?stl.overlayOpacity:0.65;
   h+='<details style="margin-top:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden" open>';
-  h+='<summary style="padding:9px 14px;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text);background:var(--card);list-style:none;display:flex;align-items:center;justify-content:space-between">EDITOR DE LAYOUT <span style="font-size:9px;color:var(--muted);font-weight:400">arrastrá los bloques para mover</span></summary>';
+  h+='<summary style="padding:9px 14px;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text);background:var(--card);list-style:none;display:flex;align-items:center;justify-content:space-between">EDITOR DE LAYOUT <span style="font-size:9px;color:var(--muted);font-weight:400">arrastra los bloques para mover</span></summary>';
   h+='<div style="background:#07111e">';
   // ── Canvas 16:9 ─────────────────────────────────────────────────────────
   h+='<div id="dirBtCanvas" style="position:relative;width:100%;aspect-ratio:16/9;background:'+_bg+';overflow:hidden;cursor:default;user-select:none;touch-action:none"'
@@ -10598,7 +10740,7 @@ function renderDirector(){
   // Bloque VIDEO (arrastrable + redimensionable)
   h+='<div id="dirBtVid" style="position:absolute;left:'+_vx+'%;top:'+_vy+'%;width:'+_vw+'%;height:'+_vh+'%;background:rgba(30,90,180,.25);border:2px solid rgba(80,150,255,.6);box-sizing:border-box;cursor:grab"'
     +' onmousedown="window.dirBtDown(event,\'vid\')">'
-    +'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:10px;color:rgba(255,255,255,.5);pointer-events:none;text-align:center"><br>VIDEO<br><span style="font-size:8px;opacity:.6">arrastrá</span></div>'
+    +'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:10px;color:rgba(255,255,255,.5);pointer-events:none;text-align:center"><br>VIDEO<br><span style="font-size:8px;opacity:.6">arrastra</span></div>'
     // Handle resize esquina inferior-derecha
     +'<div style="position:absolute;right:-1px;bottom:-1px;width:14px;height:14px;background:rgba(80,150,255,.8);cursor:se-resize;border-radius:2px 0 0 0" onmousedown="window.dirBtDown(event,\'vid-resize\');event.stopPropagation()"></div>'
     // Handle resize borde derecho (ancho)
@@ -10614,7 +10756,7 @@ function renderDirector(){
     +'<div style="width:60%;height:2px;background:'+_ac+';margin:4px 0;pointer-events:none"></div>'
     +'<div style="font-family:Oswald;font-size:clamp(4px,1.4vw,10px);font-weight:700;color:#fff;pointer-events:none;line-height:1">'+movPreview+'</div>'
     +'<div style="font-family:Oswald;font-size:clamp(8px,3vw,20px);font-weight:900;color:#fff;pointer-events:none;line-height:1;margin-top:2px">10:00</div>'
-    +'<div style="font-size:7px;color:rgba(255,255,255,.4);pointer-events:none;margin-top:3px">arrastrá</div>'
+    +'<div style="font-size:7px;color:rgba(255,255,255,.4);pointer-events:none;margin-top:3px">arrastra</div>'
   +'</div>';
   h+='</div>'; // fin canvas
   // ── Controles de estilo debajo del canvas ───────────────────────────────
