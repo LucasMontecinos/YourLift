@@ -4143,6 +4143,37 @@ function _sufDiaArchivo(dia,strip){
   const d=String(dia||'').trim();
   return d?('_'+strip(d).replace(/\s+/g,'_')):'';
 }
+// Los dos logos que van arriba en las hojas de mesa: FECHIPO en blanco —la banda
+// del encabezado es azul oscuro, el logo a color se perdería— y YourLift, que
+// ya viene con letras blancas. Antes ahí decía "FECHIPO" escrito con la fuente
+// del PDF. Se cargan una sola vez y las tres hojas los comparten.
+let _PDF_LOGOS_MESA=null;
+async function _pdfLogosMesa(){
+  if(_PDF_LOGOS_MESA)return _PDF_LOGOS_MESA;
+  const cargar=src=>new Promise(r=>{
+    const i=new Image();i.crossOrigin='anonymous';
+    i.onload=()=>r(i);i.onerror=()=>r(null);i.src=src+'?t='+Date.now();
+  });
+  const [fech,yl]=await Promise.all([
+    cargar('fechipo_logo_blanco.png'),
+    cargar('yourlift_logo_hd.png'),
+  ]);
+  return (_PDF_LOGOS_MESA={fech:fech,yl:yl});
+}
+// Los dibuja uno al lado del otro y dice hasta dónde llegó. Si alguno no cargó
+// se salta y el otro corre a la izquierda; si no cargó ninguno, quien llama
+// vuelve a escribir "FECHIPO" y la hoja no queda con un hueco.
+function _pdfLogosDibuja(doc,logos,x,y,alto){
+  let cx=x, puestos=0;
+  const poner=(img,aspDef)=>{
+    if(!img)return;
+    const asp=(img.naturalWidth&&img.naturalHeight)?(img.naturalWidth/img.naturalHeight):aspDef;
+    try{ doc.addImage(img,'PNG',cx,y,alto*asp,alto); cx+=alto*asp+2.5; puestos++; }catch(e){}
+  };
+  poner(logos&&logos.fech,883/265);
+  poner(logos&&logos.yl,1400/537);
+  return puestos?cx:0;
+}
 // Si se pidió un día que no tiene a nadie es un error del Cronograma: mejor
 // decirlo que bajar un PDF vacío y descubrirlo en la mesa.
 function _avisaSinAtletas(n,dia){
@@ -4160,6 +4191,7 @@ async function generateHojaRack(dia,idBoton){
       await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
     }
     const {jsPDF}=window.jspdf;
+    const LG=await _pdfLogosMesa();   // FECHIPO en blanco + YourLift, arriba
     const strip=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\x00-\x7F]/g,'?').trim();
 
     const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
@@ -4189,8 +4221,10 @@ async function generateHojaRack(dia,idBoton){
     const drawPageHeader=(cont=false)=>{
       doc.setFillColor(...C.bg);doc.rect(0,0,PW,PH,'F');
       doc.setFillColor(...C.hFill);doc.rect(0,0,PW,14,'F');
-      doc.setTextColor(...C.hText);doc.setFont('helvetica','bold');doc.setFontSize(12);
-      doc.text('FECHIPO',8,9.5);
+      if(!_pdfLogosDibuja(doc,LG,8,3.5,7)){
+        doc.setTextColor(...C.hText);doc.setFont('helvetica','bold');doc.setFontSize(12);
+        doc.text('FECHIPO',8,9.5);
+      }
       doc.setFont('helvetica','normal');doc.setFontSize(9);
       doc.text(strip(DATA.event?.name||'Campeonato').toUpperCase(),PW/2,9.5,{align:'center'});
       doc.setFontSize(8);doc.text(new Date().toLocaleDateString('es-CL'),PW-8,9.5,{align:'right'});
@@ -4322,6 +4356,7 @@ async function generateHojaEquipo(dia,idBoton){
       await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
     }
     const {jsPDF}=window.jspdf;
+    const LG=await _pdfLogosMesa();   // FECHIPO en blanco + YourLift, arriba
     const strip=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\x00-\x7F]/g,'?').trim();
 
     // Landscape A4: 297 x 210mm — usable 281mm wide, 194mm tall
@@ -4366,8 +4401,10 @@ async function generateHojaEquipo(dia,idBoton){
     const drawPageHeader=(cont=false)=>{
       doc.setFillColor(...C.bg);doc.rect(0,0,PW,PH,'F');
       doc.setFillColor(...C.hFill);doc.rect(0,0,PW,12,'F');
-      doc.setTextColor(...C.hText);doc.setFont('helvetica','bold');doc.setFontSize(11);
-      doc.text('FECHIPO',8,8.5);
+      if(!_pdfLogosDibuja(doc,LG,8,2.8,6.4)){
+        doc.setTextColor(...C.hText);doc.setFont('helvetica','bold');doc.setFontSize(11);
+        doc.text('FECHIPO',8,8.5);
+      }
       doc.setFont('helvetica','normal');doc.setFontSize(9);
       doc.text(strip(DATA.event?.name||'Campeonato').toUpperCase(),PW/2,8.5,{align:'center'});
       doc.setFontSize(8);doc.text(new Date().toLocaleDateString('es-CL'),PW-8,8.5,{align:'right'});
@@ -4786,6 +4823,7 @@ async function generateHojaPesaje(dia,idBoton){
       await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
     }
     const {jsPDF}=window.jspdf;
+    const LG=await _pdfLogosMesa();   // FECHIPO en blanco + YourLift, arriba
     const strip=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\x00-\x7F]/g,'?').trim();
 
     // All athletes sorted by lot
@@ -4823,8 +4861,10 @@ async function generateHojaPesaje(dia,idBoton){
     const drawPageHeader=(fl='',cont=false)=>{
       doc.setFillColor(...C.bg);doc.rect(0,0,PW,PH,'F');
       doc.setFillColor(...C.hFill);doc.rect(0,0,PW,14,'F');
-      doc.setTextColor(...C.hText);doc.setFont('helvetica','bold');doc.setFontSize(12);
-      doc.text('FECHIPO',8,9.5);
+      if(!_pdfLogosDibuja(doc,LG,8,3.5,7)){
+        doc.setTextColor(...C.hText);doc.setFont('helvetica','bold');doc.setFontSize(12);
+        doc.text('FECHIPO',8,9.5);
+      }
       doc.setFont('helvetica','normal');doc.setFontSize(9);
       doc.text(strip(DATA.event?.name||'Campeonato').toUpperCase(),PW/2,9.5,{align:'center'});
       doc.setFontSize(8);doc.text(new Date().toLocaleDateString('es-CL'),PW-8,9.5,{align:'right'});
@@ -5136,8 +5176,20 @@ function _esNombreDeDia(s){
   return _DIAS_ACTA.some(d=>n.indexOf(d)>=0);     // "Sábado", "sabado 8"
 }
 function _diaDeAtleta(a){
-  const partes=String((a&&a.jornada)||'').split('·').map(x=>x.trim()).filter(Boolean);
-  return partes.find(_esNombreDeDia)||'';
+  const j=String((a&&a.jornada)||'');
+  // El Sudamericano escribe la jornada como "D1 20/09 · 09:00 · Mujeres -43/-47/-52
+  // Classic": el día viene como D1, D2… y no como "Día 1". Es la misma forma que
+  // ya lee la fila de días de la planilla (_diaDeTanda), pero acá no se
+  // reconocía, así que para el campeonato de ocho días no aparecía NINGÚN día:
+  // ni en las actas por día ni en los documentos de la mesa.
+  // Se normaliza a "Día N" para que el rótulo en pantalla y el nombre del
+  // archivo se lean igual venga escrito de una forma o de la otra.
+  const dn=/^\s*D(\d{1,2})\b/.exec(j);
+  if(dn)return 'Día '+(+dn[1]);
+  const partes=j.split('·').map(x=>x.trim()).filter(Boolean);
+  const hallado=partes.find(_esNombreDeDia)||'';
+  const m=/^d[ií]a\s*(\d{1,2})\b/i.exec(hallado);
+  return m?('Día '+(+m[1])):hallado;
 }
 // Los días del campeonato, en el orden en que se corren (el de las tandas).
 function _diasDelEvento(){

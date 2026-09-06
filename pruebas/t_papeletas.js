@@ -59,6 +59,22 @@ const JSPDF = ['/opt/node22/lib/node_modules/jspdf/dist/jspdf.umd.min.js',
       ok(docs.indexOf("fn:'" + f + "'") >= 0, '  · ' + f + ' se baja desde Documentos'));
   }
 
+  console.log('\n  Los dos logos van arriba en las tres hojas de mesa');
+  {
+    // Antes ahí decía "FECHIPO" escrito con la fuente del PDF. La banda del
+    // encabezado es azul oscuro, así que el logo va en su versión blanca.
+    ok(/cargar\('fechipo_logo_blanco\.png'\)/.test(lc), 'el de FECHIPO en blanco');
+    ok(/cargar\('yourlift_logo_hd\.png'\)/.test(lc), 'y el de YourLift');
+    ['generateHojaPesaje', 'generateHojaRack', 'generateHojaEquipo'].forEach(f => {
+      const i = lc.indexOf('async function ' + f + '(');
+      const cuerpo = lc.slice(i, lc.indexOf('\n}\n', i));
+      ok(/const LG=await _pdfLogosMesa\(\)/.test(cuerpo) && /_pdfLogosDibuja\(doc,LG/.test(cuerpo),
+         '  · en ' + f);
+      ok(/if\(!_pdfLogosDibuja[\s\S]{0,220}doc\.text\('FECHIPO'/.test(cuerpo),
+         '    y si no cargan, vuelve el texto: la hoja no queda con un hueco');
+    });
+  }
+
   console.log('\n  Los cinco documentos aceptan un día, no solo las papeletas');
   {
     // Son los papeles de la mesa: en un campeonato de ocho días, a la mesa del
@@ -310,6 +326,49 @@ const JSPDF = ['/opt/node22/lib/node_modules/jspdf/dist/jspdf.umd.min.js',
   ok(/^Papeletas_D[ií]a_\d_Suda2026\.pdf$/.test(r.blancoDia1.archivo), '  · ' + r.blancoDia1.archivo);
 
   ok(errs.length === 0, 'sin errores en la página' + (errs.length ? ': ' + errs.slice(0, 2).join(' | ') : ''));
+
+  // ── El campeonato de verdad, que es donde esto falló ────────────────────
+  //
+  // Los ensayos escriben la jornada como "Día 2 · 09.00 · …", pero el
+  // Sudamericano la escribe como "D1 20/09 · 09:00 · Mujeres -43/-47/-52
+  // Classic": el día viene como D1, D2… Esa forma no se reconocía, así que en el
+  // campeonato de ocho días —el único donde separar por día importa de verdad—
+  // no aparecía NINGÚN día: ni en las actas ni en los documentos de la mesa.
+  console.log('\n  El Sudamericano de verdad: ocho días, 431 atletas');
+  {
+    const b2 = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+    const p2 = await (await b2.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
+    const e2 = []; p2.on('pageerror', e => e2.push(e.message));
+    await p2.goto('http://localhost:8972/livecast.html?evento=suda2026_fesupo_full',
+                  { waitUntil: 'domcontentloaded' });
+    await p2.waitForFunction(() => typeof DATA !== 'undefined' && DATA.events && DATA.events.length,
+                             null, { timeout: 25000 });
+    const s = await p2.evaluate(() => {
+      isAdmin = true;
+      const i = DATA.events.findIndex(e => e.id === 'suda2026');
+      if (i < 0) return { falta: true };
+      pickEvent(i);
+      const dias = _diasDelEvento();
+      return { nombre: DATA.event.name, total: _docsAtletas('').length, dias,
+               porDia: dias.map(d => _docsAtletas(d).length),
+               sinDia: _docsAtletas('').filter(a => !_diaDeAtleta(a)).length,
+               jornada: (DATA.athletes[0] || {}).jornada || '' };
+    });
+    await b2.close();
+
+    ok(!s.falta, 'el Sudamericano está en la nómina');
+    if (!s.falta) {
+      ok(/^D\d/.test(s.jornada), 'su jornada se escribe "D1 …": ' + s.jornada.slice(0, 34));
+      ok(s.dias.length === 8, 'y aun así salen los 8 días (' + s.dias.length + '): ' + s.dias.join(', '));
+      ok(s.dias.join(',') === 'Día 1,Día 2,Día 3,Día 4,Día 5,Día 6,Día 7,Día 8',
+         'rotulados "Día N" y en orden, venga escrito como venga');
+      ok(s.sinDia === 0, 'ningún atleta se queda sin día (' + s.sinDia + ')');
+      const suma = s.porDia.reduce((x, y) => x + y, 0);
+      ok(suma === s.total, 'y entre los ocho están los ' + s.total + ' (' + suma + ')');
+      ok(s.porDia.every(n => n > 0), 'ningún día queda vacío: ' + s.porDia.join(' · '));
+    }
+    ok(e2.length === 0, 'sin errores' + (e2.length ? ': ' + e2.slice(0, 2).join(' | ') : ''));
+  }
 
   console.log(fallas ? `\n${fallas} FALLA(S)` : '\nTodo OK');
   process.exit(fallas ? 1 : 0);
