@@ -575,7 +575,8 @@ async function initFB(){
         try{
           const _ev=_fsCache('eventos',10*60*1000)||[];
           window.EVENTOS_PUB=_ev.filter(e=>e&&e.publicoVisible===true)
-            .map(e=>({id:e.id,name:e.name||e.id,logoUrl:e.logoUrl||'',fecha:e.fecha||e.fechas||'',lugar:e.lugar||e.location||''}));
+            .map(e=>({id:e.id,name:e.name||e.id,logoUrl:e.logoUrl||'',fecha:e.fecha||e.fechas||'',
+                      lugar:e.lugar||e.location||'',qrPublico:e.qrPublico===true}));
           if(ST.v==='envivo')renderFondo();
         }catch(_){ window.EVENTOS_PUB=window.EVENTOS_PUB||[]; }
         // Actas de competencias pasadas (admin → Competencias pasadas). Solo las
@@ -1637,6 +1638,11 @@ function render(){const app=document.getElementById("app");
 // El QR de una competencia. Es el mismo link de "VER EN VIVO": se escanea con
 // la cámara del teléfono y se entra directo al seguimiento, sin buscar nada.
 // Sirve proyectado en la pantalla del recinto o impreso en la entrada.
+//
+// Al público NO se le muestra por defecto: el botón aparece solo en los
+// campeonatos donde el owner lo encendió (admin → YourLift Público). El QR
+// sigue funcionando igual —desde el panel se genera y se imprime cuando haga
+// falta—; lo que se controla es si la gente lo ve en la tarjeta o no.
 window.qrEnVivo=function(id,nombre){
   if(!window.YLQR){alert('No se pudo cargar el generador de QR.');return;}
   const el=document.createElement('div'); el.innerHTML=nombre||'';
@@ -1658,7 +1664,7 @@ function renderEnVivoPub(){
     return (+m[3])+' '+M[(+m[2])-1]+' '+m[1];};
   let h=`<div style="max-width:900px;margin:0 auto;padding:0 4px">`;
   h+=`<h2 style="font-family:Oswald;font-size:clamp(20px,5vw,28px);letter-spacing:2px;text-transform:uppercase;margin:0 0 4px">Competencia en Vivo</h2>`;
-  h+=`<p style="color:var(--muted);font-size:13px;margin-bottom:18px">Seguí la competencia en tiempo real: atleta en tarima, intentos y resultados.</p>`;
+  h+=`<p style="color:var(--muted);font-size:13px;margin-bottom:18px">Sigue la competencia en tiempo real: atleta en tarima, intentos y resultados.</p>`;
   if(!window.EVENTOS_PUB){
     h+=`<div class="cd2" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">Cargando competencias…</div></div>`;
     return h;
@@ -1682,8 +1688,8 @@ function renderEnVivoPub(){
         </div>
         <div class="envivo-cta">
           <span>VER EN VIVO</span>
-          <button class="envivo-qr" title="Mostrar el código QR de esta competencia"
-            onclick="event.preventDefault();event.stopPropagation();qrEnVivo('${String(e.id).replace(/'/g,"\\'")}','${_escH(String(e.name||e.id)).replace(/'/g,"&#39;")}')">QR</button>
+          ${e.qrPublico?`<button class="envivo-qr" title="Mostrar el código QR de esta competencia"
+            onclick="event.preventDefault();event.stopPropagation();qrEnVivo('${String(e.id).replace(/'/g,"\\'")}','${_escH(String(e.name||e.id)).replace(/'/g,"&#39;")}')">QR</button>`:''}
         </div>
       </div></a>`;
   });

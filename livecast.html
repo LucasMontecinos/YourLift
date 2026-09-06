@@ -30,11 +30,15 @@ input,select,button{font-family:inherit;outline:none}
    El rojo acá no significa nulo. Es el rojo de la IPF para un intento de récord,
    y por eso está SOLO en el borde y en la palabra de arriba: el fondo rojo sigue
    queriendo decir una sola cosa en toda la pantalla, NO LIFT. */
-@keyframes recBorde{0%,100%{border-color:#E01B34;box-shadow:0 0 0 rgba(224,27,52,0)}
-                    50%{border-color:#FF5A6E;box-shadow:0 0 11px rgba(224,27,52,.8)}}
-.rec-borde{border:2px solid #E01B34!important;animation:recBorde 1.1s ease-in-out infinite}
-@keyframes recTag{0%,100%{opacity:1}55%{opacity:.3}}
-.rec-tag{animation:recTag 1.1s ease-in-out infinite}
+@keyframes recBorde{0%,100%{border-color:#F2C230;box-shadow:0 0 6px rgba(242,194,48,.55)}
+                    50%{border-color:#FFE884;box-shadow:0 0 18px 3px rgba(242,194,48,.95)}}
+.rec-borde{border:3px solid #F2C230!important;animation:recBorde 1s ease-in-out infinite}
+@keyframes recTag{0%,100%{opacity:1}55%{opacity:.35}}
+.rec-tag{animation:recTag 1s ease-in-out infinite}
+/* La palabra y el recuadro van en la misma caja para que queden centrados uno
+   sobre otro. Sueltos dentro de la celda, la palabra se centraba respecto de la
+   celda entera —con su relleno— y el recuadro no, así que se veían corridos. */
+.rec-caja{display:inline-block;text-align:center}
 @media (prefers-reduced-motion:reduce){.rec-borde,.rec-tag{animation:none}}
 .fade{animation:fadeIn .3s ease}
 .shell{min-height:100vh}
@@ -4411,9 +4415,20 @@ async function generateHojaEquipo(){
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
 // PAPELETAS DE INTENTOS PDF
+//
+// Dos versiones de la misma papeleta:
+//   · en blanco  → la de siempre, para llenar a mano en la mesa.
+//   · con nombre → una por atleta, con el nombre ya impreso tal como está en la
+//     nómina. Con 461 atletas, escribir el nombre a mano en cada papeleta es
+//     media hora de trabajo y una fuente de nombres ilegibles.
+//
+// Los logos: el del CAMPEONATO arriba a la izquierda (el que se subió en la
+// ficha del campeonato), y el de YourLift chiquito, como marca de agua, adentro
+// de cada cuadradito de intento.
 // ═══════════════════════════════════════════════════════════
-async function generatePapeletas(){
-  const btn=document.getElementById('btnPapeletas');
+async function generatePapeletas(conNombre){
+  const btn=document.getElementById(conNombre?'btnPapeletasNom':'btnPapeletas');
+  const rotulo=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
     if(!window.jspdf){
@@ -4421,15 +4436,43 @@ async function generatePapeletas(){
     }
     const {jsPDF}=window.jspdf;
     const strip=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\x00-\x7F]/g,'?').trim();
+    // El nombre del atleta va con sus tildes y su ñ: las fuentes base de jsPDF
+    // son WinAnsi y las tienen. Solo se saca lo que esa codificación no cubre,
+    // para que no aparezca un cuadrito en medio de un apellido.
+    const nomPdf=s=>String(s||'').normalize('NFC')
+      .replace(/[^\x20-\x7E\xA0-\xFF]/g,'').replace(/\s+/g,' ').trim();
 
     // Preload logos. Se prueban varias rutas para el logo FECHIPO (cuando exista
     // el archivo oficial, se toma automáticamente). YourLift usa la versión HD.
-    const loadImg=src=>new Promise(r=>{const i=new Image();i.crossOrigin='anonymous';i.onload=()=>r(i);i.onerror=()=>r(null);i.src=src+'?t='+Date.now();});
-    const loadFirst=async(srcs)=>{for(const s of srcs){const img=await loadImg(s);if(img)return img;}return null;};
-    const [fechipoImg,yourliftImg]=await Promise.all([
+    // A las rutas locales se les pone anti-caché; a las URL de Firebase Storage
+    // no, porque ya traen su propia query (?alt=media&token=…) y una segunda la
+    // rompe.
+    const loadImg=src=>new Promise(r=>{
+      if(!src)return r(null);
+      const i=new Image();i.crossOrigin='anonymous';i.onload=()=>r(i);i.onerror=()=>r(null);
+      i.src=src+(/^https?:/i.test(src)?'':'?t='+Date.now());
+    });
+    const loadFirst=async(srcs)=>{for(const s of srcs){const img=await loadImg(s);if(img&&_dibujable(img))return img;}return null;};
+    // Una imagen de otro dominio sin CORS carga bien pero envenena el canvas, y
+    // jsPDF revienta recién al agregarla. Se comprueba antes, una sola vez, para
+    // poder caer al plan B en vez de tirar el PDF entero abajo.
+    const _dibujable=img=>{
+      try{const c=document.createElement('canvas');c.width=c.height=1;
+        c.getContext('2d').drawImage(img,0,0);c.toDataURL();return true;}catch(e){return false;}
+    };
+    // Logo del campeonato: primero el archivo local (imprime siempre), después
+    // el que se subió a la ficha del campeonato.
+    const _evId=String((DATA.event&&DATA.event.id)||'').trim();
+    const campSrcs=[];
+    if(_evId)campSrcs.push('eventos/'+_evId+'.png','eventos/'+_evId+'.jpg');
+    const _remoto=(typeof _logoCamp==='function')?_logoCamp():'';
+    if(_remoto)campSrcs.push(_remoto);
+    const [fechipoImg,yourliftImg,campImg]=await Promise.all([
       loadFirst(['fechipo_logo.png','logo_fechipo.png','promo/assets/fechipo_logo.png']),
       loadFirst(['yourlift_logo_hd.png','YourLift_logo.png']),
+      loadFirst(campSrcs),
     ]);
+    const _prop=(img,d)=>(img&&img.naturalWidth&&img.naturalHeight)?(img.naturalWidth/img.naturalHeight):d;
 
     // Sort athletes by lot
     const athletes=[...DATA.athletes].sort((a,b)=>(a.lot||0)-(b.lot||0));
@@ -4444,7 +4487,24 @@ async function generatePapeletas(){
     const cardH=(PH-2*mY-(ROWS-1)*gY)/ROWS;   // ~65.75 mm
     const pad=3.5;
 
-    const drawCard=(ox,oy)=>{
+    // Marca de agua de YourLift adentro de un cuadradito de intento. Solo el
+    // logo, sin ningún recuadro detrás: sobre el papel blanco el logo se sostiene
+    // igual —la "YOUR" blanca tiene contorno gris, y la "LIFT", la barra y las
+    // franjas son rojas y azules—. Va tenue a propósito, porque encima se escribe
+    // el kilaje a mano y eso es lo que tiene que leerse.
+    const GS=o=>{try{doc.setGState(new doc.GState({opacity:o}));}catch(e){}};
+    const marcaAgua=(bX,bY,bW,bH)=>{
+      if(!yourliftImg||!doc.GState)return;
+      const asp=_prop(yourliftImg,24/8.4);
+      let wW=Math.min(bW-3.5,11), wH=wW/asp;
+      if(wH>bH-4.5){wH=bH-4.5;wW=wH*asp;}
+      const wX=bX+(bW-wW)/2, wY=bY+(bH-wH)/2;
+      GS(0.45);
+      try{doc.addImage(yourliftImg,'PNG',wX,wY,wW,wH);}catch(e){}
+      GS(1);
+    };
+
+    const drawCard=(ox,oy,at)=>{
       // ── background & border ──────────────────────────────
       doc.setFillColor(255,255,255);doc.rect(ox,oy,cardW,cardH,'F');
       doc.setDrawColor(150,150,150);doc.setLineWidth(0.35);
@@ -4456,38 +4516,66 @@ async function generatePapeletas(){
       doc.text(nameLabel,ox+pad,oy+8.5);
       const nlW=doc.getTextWidth(nameLabel);
       doc.setDrawColor(0,0,0);doc.setLineWidth(0.35);
-      doc.line(ox+pad+nlW+1.5,oy+9,ox+cardW-pad,oy+9);
+      const nomX=ox+pad+nlW+1.5;
+      doc.line(nomX,oy+9,ox+cardW-pad,oy+9);
+      // Con nombre impreso: el nombre va sobre la línea, tal cual está en la
+      // nómina. Se achica solo si no entra — hay nombres de cinco palabras y
+      // cortarlos deja al atleta sin apellido.
+      if(at){
+        const nom=nomPdf(at.name);
+        if(nom){
+          const anchoLibre=(ox+cardW-pad)-nomX-1;
+          let fs=8.5;
+          doc.setFont('helvetica','bold');doc.setFontSize(fs);
+          while(fs>4.6&&doc.getTextWidth(nom)>anchoLibre){fs-=0.25;doc.setFontSize(fs);}
+          doc.setTextColor(0,0,0);
+          doc.text(nom,nomX+1,oy+8.3);
+        }
+      }
 
       // ── Divider ───────────────────────────────────────────
       doc.setDrawColor(200,200,200);doc.setLineWidth(0.2);
       doc.line(ox+pad,oy+11,ox+cardW-pad,oy+11);
 
-      // ── Logos izquierda: FECHIPO arriba, YourLift abajo ───
+      // ── Logo del campeonato (izquierda) ───────────────────
+      // Es el que se subió en la ficha del campeonato. Si no hay ninguno, se
+      // vuelve al par FECHIPO + YourLift que traía la papeleta antes, para que
+      // el espacio no quede vacío.
       const lX=ox+pad, lY=oy+12.5;
-      // FECHIPO logo (~4:1). Si no hay archivo de logo, texto negro legible
-      // (sobre blanco) en vez del rojo que quedaba flotando.
-      const fW2=30, fH2=8;
-      const fechipoText=()=>{doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(20,20,20);doc.text('FECHIPO',lX,lY+fH2/2+1.5);};
-      if(fechipoImg){try{doc.addImage(fechipoImg,'PNG',lX,lY,fW2,fH2);}catch(e){fechipoText();}}else{fechipoText();}
-      // YourLift: el logo tiene partes blancas que se pierden sobre el papel, así que
-      // va dentro de un chip oscuro redondeado (como se ve en la web) para que se
-      // lea bien. Se usa la versión HD para que imprima nítido.
-      const ylW=24, ylH=8.4;
-      const ylX=lX, ylY=lY+fH2+2.5;
-      const chPad=1.4;
-      doc.setFillColor(10,22,40); // #0A1628 (fondo azul oscuro de la marca)
-      if(doc.roundedRect)doc.roundedRect(ylX-chPad,ylY-chPad,ylW+2*chPad,ylH+2*chPad,1.2,1.2,'F');
-      else doc.rect(ylX-chPad,ylY-chPad,ylW+2*chPad,ylH+2*chPad,'F');
-      if(yourliftImg){try{doc.addImage(yourliftImg,'PNG',ylX,ylY,ylW,ylH);}catch(e){
-        doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(255,255,255);
-        doc.text('YourLift',ylX+ylW/2,ylY+ylH/2+1.5,{align:'center'});
-      }}else{
-        doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(255,255,255);
-        doc.text('YourLift',ylX+ylW/2,ylY+ylH/2+1.5,{align:'center'});
+      const zonaW=30, zonaH=18.5;
+      let logoZoneW=zonaW+7;
+      if(campImg){
+        const asp=_prop(campImg,1.4);
+        let w=zonaW, h=w/asp;
+        if(h>zonaH){h=zonaH;w=h*asp;}
+        try{doc.addImage(campImg,'PNG',lX+(zonaW-w)/2,lY+(zonaH-h)/2,w,h);}
+        catch(e){/* si no se puede incrustar, queda el espacio en blanco */}
+      }else{
+        // FECHIPO logo (~4:1). Si no hay archivo de logo, texto negro legible
+        // (sobre blanco) en vez del rojo que quedaba flotando.
+        const fW2=30, fH2=8;
+        const fechipoText=()=>{doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(20,20,20);doc.text('FECHIPO',lX,lY+fH2/2+1.5);};
+        if(fechipoImg){try{doc.addImage(fechipoImg,'PNG',lX,lY,fW2,fH2);}catch(e){fechipoText();}}else{fechipoText();}
+        // YourLift: el logo tiene partes blancas que se pierden sobre el papel, así que
+        // va dentro de un chip oscuro redondeado (como se ve en la web) para que se
+        // lea bien. Se usa la versión HD para que imprima nítido.
+        const ylW=24, ylH=8.4;
+        const ylX=lX, ylY=lY+fH2+2.5;
+        const chPad=1.4;
+        doc.setFillColor(10,22,40); // #0A1628 (fondo azul oscuro de la marca)
+        if(doc.roundedRect)doc.roundedRect(ylX-chPad,ylY-chPad,ylW+2*chPad,ylH+2*chPad,1.2,1.2,'F');
+        else doc.rect(ylX-chPad,ylY-chPad,ylW+2*chPad,ylH+2*chPad,'F');
+        if(yourliftImg){try{doc.addImage(yourliftImg,'PNG',ylX,ylY,ylW,ylH);}catch(e){
+          doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(255,255,255);
+          doc.text('YourLift',ylX+ylW/2,ylY+ylH/2+1.5,{align:'center'});
+        }}else{
+          doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(255,255,255);
+          doc.text('YourLift',ylX+ylW/2,ylY+ylH/2+1.5,{align:'center'});
+        }
+        logoZoneW=Math.max(fW2,ylW)+7;
       }
 
       // ── Discipline checkboxes (centro) ────────────────────
-      const logoZoneW=Math.max(fW2,ylW)+7;
       const cbX=ox+pad+logoZoneW;
       const discs=[{l:'Sentadilla',dy:0},{l:'Press de Banca',dy:7},{l:'Peso Muerto',dy:14}];
       discs.forEach(d=>{
@@ -4518,6 +4606,7 @@ async function generatePapeletas(){
       const bW=(totalBW-4*1.5)/5;
       boxes.forEach((b,i)=>{
         const bX=ox+pad+i*(bW+1.5);
+        marcaAgua(bX,bY,bW,bH);
         doc.setDrawColor(0,0,0);doc.setLineWidth(0.5);
         doc.rect(bX,bY,bW,bH,'S');
         doc.setFont('helvetica','normal');doc.setFontSize(6);doc.setTextColor(80,80,80);
@@ -4543,7 +4632,7 @@ async function generatePapeletas(){
       doc.line(firmaX+firmW+1.5,botY+0.5,ox+cardW-pad,botY+0.5);
     };
 
-    // ── Render cards (una por atleta, todas en blanco) ────
+    // ── Render cards: una por atleta. Con nombre impreso o en blanco ──
     const total_cards=athletes.length||1;
     for(let ai=0;ai<total_cards;ai++){
       const pos=ai%(COLS*ROWS);
@@ -4552,7 +4641,7 @@ async function generatePapeletas(){
       const row=Math.floor(pos/COLS);
       const ox=mX+col*(cardW+gX);
       const oy=mY+row*(cardH+gY);
-      drawCard(ox,oy);
+      drawCard(ox,oy,conNombre?athletes[ai]:null);
     }
 
     // ── Cut lines (dashed) on every page ─────────────────
@@ -4573,12 +4662,12 @@ async function generatePapeletas(){
     }
 
     const evShort=strip(DATA.event?.short||DATA.event?.name||'campeonato').replace(/\s+/g,'_');
-    doc.save('Papeletas_'+evShort+'.pdf');
+    doc.save('Papeletas'+(conNombre?'_con_nombre_':'_')+evShort+'.pdf');
   }catch(err){
     console.error('Papeletas error',err);
     alert('Error al generar papeletas: '+err.message);
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='Papeletas de Intentos PDF';}
+    if(btn){btn.disabled=false;btn.textContent=rotulo;}
   }
 }
 
@@ -5712,9 +5801,9 @@ function renderObsTx(){
     {id:'scoreboard',icon:'',title:'Scoreboard (lower-third)',desc:'Barra inferior con categoría, rank, timer, nombre, club e intentos. Aparece al cambiar levantador / intento / peso, queda 20s en pantalla y se va con animación. Hasta el próximo cambio queda oculto.',obsBg:'Transparente (superpuesto sobre cámara).',size:'1920×320 (parte inferior)'},
     {id:'barbell',icon:'',title:'Barra con discos (lower-third)',desc:'Franja inferior que muestra la barra con discos IPF a color, nombre del atleta, club, categoría, peso del intento en kg/lbs, ronda y pronóstico de posición ("Si es válido pasará del X° al Y° lugar"). Se anima al entrar cuando cambia el levantador.',obsBg:'Transparente (overlay sobre cámara). Fondo se fusiona hacia abajo.',size:'1920×1080 (contenido en el tercio inferior)'},
     {id:'leaderboard',icon:'',title:'Tabla de clasificación (FIJO)',desc:'Ranking completo de la categoría actual. Cascada fila por fila. SIEMPRE visible mientras la escena esté activa — úsalo para escenas de pausa entre rondas que manejas tú manualmente.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
-    {id:'tablaactual',icon:'',title:'Tabla actual (corner)',desc:'Ranking de la categoría del lifter en pantalla, esquina inferior derecha. Entra deslizando desde abajo, queda fijo. El levantador actual se resalta y muestra una flecha de proyección: posición actual → posición que tendría si el intento es válido (ej. 2→1 si se mueve al primer lugar). Activá/desactivá con el botón "Tabla actual" en Control TX o tecla A.',obsBg:'Transparente (overlay sobre cámara). Solo ocupa el cuadrante inferior derecho.',size:'1920×1080 (overlay)'},
+    {id:'tablaactual',icon:'',title:'Tabla actual (corner)',desc:'Ranking de la categoría del lifter en pantalla, esquina inferior derecha. Entra deslizando desde abajo, queda fijo. El levantador actual se resalta y muestra una flecha de proyección: posición actual → posición que tendría si el intento es válido (ej. 2→1 si se mueve al primer lugar). Activa/desactiva con el botón "Tabla actual" en Control TX o tecla A.',obsBg:'Transparente (overlay sobre cámara). Solo ocupa el cuadrante inferior derecho.',size:'1920×1080 (overlay)'},
     {id:'lbauto',icon:'',title:'Tabla de clasificación (AUTO)',desc:'Igual al leaderboard fijo, pero APARECE SOLO al detectar fin de ronda (cuando cambia lift/round/flight). Queda 10s en pantalla y se va. Ideal como overlay siempre activo en una escena de cámara.',obsBg:'Transparente (overlay sobre cámara).',size:'1920×1080 (overlay fullscreen)'},
-    {id:'slam',icon:'',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activá una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcas ✓/✗ en Control en Vivo. Vuelve a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
+    {id:'slam',icon:'',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activa una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcas ✓/✗ en Control en Vivo. Vuelve a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
     {id:'lights',icon:'',title:'Luces de jueces',desc:'3 círculos para izq / central / der. Se prenden blanco (good) o rojo (no lift) cuando los jueces votan en su panel. Ideal arriba de la cámara o en pantalla aparte.',obsBg:'Transparente. Funciona solo si activas "Modo Jueces" en Control en Vivo.',size:'1920×1080 (autoescala)'},
     {id:'ceremony',icon:'',title:'Ceremonia (TODO-EN-UNO automático)',desc:'Widget orquestador. Detecta nuevo levantador → PROFILE fullscreen 5s → SCOREBOARD bottom-left (30s) → SLAM top-left flash al marcar resultado → IDLE hasta el próximo. Sin tabla de clasificación: ese ciclo lo manejás aparte con el widget Leaderboard fijo. (El tiempo para dar el intento ya no se muestra acá — es privado, solo lo ve el juez en Control en Vivo.)',obsBg:'Mixto: fullscreen opaco durante PROFILE, transparente sobre cámara durante SCOREBOARD/IDLE. Una sola escena con cámara de fondo + este browser source encima.',size:'1920×1080'},
     {id:'director',icon:'',title:'Director (control 100% MANUAL)',desc:'NO se activa solo. Lee comandos desde Firestore (livecast_director/current) que envías tú desde la barra lateral "Control TX". Cada componente (perfil, marcador, tabla, timer, slam) se muestra/esconde con un botón. Ideal si quieres controlar todo a mano sin tocar OBS.',obsBg:'Mixto. Una sola escena con cámara de fondo + este browser source encima. Tú eliges qué se ve y por cuánto tiempo desde el panel Control TX.',size:'1920×1080'},
@@ -5786,11 +5875,11 @@ function renderObsTx(){
   h+='<div class="card" style="margin-top:20px;padding:16px 20px">';
   h+='<div class="os" style="font-size:14px;letter-spacing:2px;color:var(--gold);margin-bottom:10px">SETUP EN OBS</div>';
   h+='<ol style="color:var(--muted);font-size:12px;line-height:1.9;padding-left:20px;margin:0">';
-  h+='<li>En OBS: <b style="color:var(--text)">Sources → +  → Browser</b> → pegá la URL del widget.</li>';
+  h+='<li>En OBS: <b style="color:var(--text)">Sources → +  → Browser</b> → pega la URL del widget.</li>';
   h+='<li>Width/Height según el widget (Profile y Leaderboard: 1920×1080 · Scoreboard: 1920×1080 también, ya queda posicionado abajo).</li>';
   h+='<li><b style="color:#ff6b6b">DESMARCAR</b> <b style="color:var(--text)">"Refresh browser when scene becomes active"</b>. La animación se reproduce automáticamente cuando OBS activa la escena (vía evento <code>obsSourceActiveChanged</code>), así nunca se ve el flash de carga.</li>';
   h+='<li>Tampoco marqués <b style="color:var(--text)">"Shutdown source when not visible"</b> — mantené el browser source siempre cargado en memoria para que el replay sea instantáneo.</li>';
-  h+='<li>Creá <b style="color:var(--text)">escenas separadas</b>: "Cámara + Scoreboard" (cámara de fondo + browser source scoreboard encima), "Profile fullscreen", "Leaderboard fullscreen".</li>';
+  h+='<li>Crea <b style="color:var(--text)">escenas separadas</b>: "Cámara + Scoreboard" (cámara de fondo + browser source scoreboard encima), "Profile fullscreen", "Leaderboard fullscreen".</li>';
   h+='<li>Transiciones de OBS (Stinger/Fade/Cut) entre escenas — la animación de entrada la maneja la página al activarse la escena.</li>';
   h+='<li>Los widgets leen el estado en vivo: lifter actual, intento, peso, timer. Cuando marcas ✓/✗ en "Control en Vivo", todos los widgets se actualizan en tiempo real.</li>';
   h+='<li>Si una escena no se anima al activarse (versiones viejas de OBS), recargá manualmente el browser source con click derecho → "Refresh".</li>';
@@ -5909,7 +5998,7 @@ function renderTxLbAuto(){
     setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},TX_LBAUTO_DURATION+400);
   }
   if(Date.now()-_txLbAutoShownAt>TX_LBAUTO_DURATION)return '';
-  // Re-usá el render de leaderboard fijo, envolviéndolo en el ciclo de animación.
+  // Se reusa el render de leaderboard fijo, envolviéndolo en el ciclo de animación.
   const cur=liftQueue()[0];
   const inner=renderTxLeaderboard(cur,false);
   if(!inner)return '';
@@ -6748,7 +6837,7 @@ function renderTxDirector(container){
     } else if(showProf){
       html+='<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;font-family:Oswald,sans-serif;'+fade+'">'
         +'<div style="font-size:clamp(28px,3vw,42px);color:#D4A843;letter-spacing:4px;margin-bottom:16px">SIN LEVANTADOR ACTUAL</div>'
-        +'<div style="font-size:clamp(14px,1.4vw,18px);color:rgba(220,230,245,.7);max-width:600px;line-height:1.6">El widget no encontró un atleta con peso cargado en el intento actual del flight '+(DATA.flight||'?')+'. Andá a Atletas &amp; Pesaje en YourLift y cargá pesos de apertura para que aparezca.</div>'
+        +'<div style="font-size:clamp(14px,1.4vw,18px);color:rgba(220,230,245,.7);max-width:600px;line-height:1.6">El widget no encontró un atleta con peso cargado en el intento actual del flight '+(DATA.flight||'?')+'. Anda a Atletas &amp; Pesaje en YourLift y carga pesos de apertura para que aparezca.</div>'
       +'</div>';
     }
   }
@@ -7593,7 +7682,7 @@ function renderScreenControl(){
   // Tamaño de los nombres en la tabla
   const nscale=window._SCREEN_LOCAL.nameScale||1;
   h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">TAMAÑO DE LOS NOMBRES EN LA TABLA</div>';
-  h+='<p style="font-size:11px;color:var(--muted);margin-bottom:12px">Ajustá qué tan grandes se ven los nombres de los atletas en la pantalla. Se aplica en vivo.</p>';
+  h+='<p style="font-size:11px;color:var(--muted);margin-bottom:12px">Ajusta qué tan grandes se ven los nombres de los atletas en la pantalla. Se aplica en vivo.</p>';
   h+='<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
   h+='<button onclick="screenNudgeNameScale(-0.1)" style="width:42px;height:42px;border-radius:10px;border:2px solid var(--border);background:transparent;color:var(--text);font-size:22px;font-weight:700;cursor:pointer;line-height:1">−</button>';
   h+='<input id="scrNameRange" type="range" min="0.6" max="2.2" step="0.05" value="'+nscale+'" oninput="screenSetNameScale(this.value)" style="flex:1;min-width:200px;accent-color:#D4A843;cursor:pointer">';
@@ -9234,7 +9323,7 @@ window.obsWsTestEvent=async function(){
   if(!_obsWs||!_obsWsConnected){alert('Conecta primero a OBS WebSocket');return}
   try{
     await _obsWs.call('BroadcastCustomEvent',{eventData:{action:'toggle',component:'profile',_test:true}});
-    alert('✓ Evento enviado a OBS. Si la conexión está bien, el perfil debería togglearse en pantalla en 1-2s. Mirá el log abajo "Últimos eventos recibidos".');
+    alert('✓ Evento enviado a OBS. Si la conexión está bien, el perfil debería togglearse en pantalla en 1-2s. Mira el log de abajo, "Últimos eventos recibidos".');
   }catch(e){alert('Error enviando evento: '+(e.message||e))}
 };
 // Auto-conectar al cargar (si está habilitado)
@@ -10047,8 +10136,8 @@ function renderDirector(){
   // Setup help
   h+='<details style="margin-top:10px"><summary style="cursor:pointer;font-size:11px;color:var(--gold);font-family:Oswald;letter-spacing:1px">CÓMO CONFIGURAR (CLICK PARA EXPANDIR)</summary>';
   h+='<div style="margin-top:8px;font-size:11px;line-height:1.7;color:var(--muted)">';
-  h+='<b style="color:var(--text)">1. Habilitar WebSocket en OBS</b> (una sola vez):<br>OBS → menú <code>Tools → WebSocket Server Settings</code> → ✓ Enable WebSocket Server → poné un password → Apply.<br><br>';
-  h+='<b style="color:var(--text)">2. Pegá host (<code>localhost</code> si OBS corre en la misma PC), puerto y password arriba</b> → click "Guardar y conectar". Debería ponerse CONECTADO.<br><br>';
+  h+='<b style="color:var(--text)">1. Habilitar WebSocket en OBS</b> (una sola vez):<br>OBS → menú <code>Tools → WebSocket Server Settings</code> → ✓ Enable WebSocket Server → pon un password → Apply.<br><br>';
+  h+='<b style="color:var(--text)">2. Pega host (<code>localhost</code> si OBS corre en la misma PC), puerto y password arriba</b> → click "Guardar y conectar". Debería ponerse CONECTADO.<br><br>';
   h+='<b style="color:var(--text)">3. Configurar Stream Deck</b> (Elgato Stream Deck app):<br>';
   h+='• Si tienes el plugin <i>"OBS Studio"</i> instalado: agrega un botón con acción <code>OBS Studio → Send Custom Event</code>.<br>';
   h+='• Event name: <code>tx</code> (cualquiera, lo importante es el JSON del payload).<br>';
@@ -10076,7 +10165,7 @@ function renderDirector(){
   // Setup widget URL card
   h+='<div class="card" style="margin-bottom:14px;padding:12px 16px;background:rgba(212,168,67,.06);border-color:rgba(212,168,67,.3)">';
   h+='<div style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px;margin-bottom:6px">URL DEL WIDGET PARA OBS (UNA SOLA VEZ)</div>';
-  h+='<div style="font-size:12px;color:var(--muted);line-height:1.6">En OBS: Sources → + → Browser → pegá esta URL → 1920×1080 → DESMARCAR "Refresh on activate" y "Shutdown when not visible".</div>';
+  h+='<div style="font-size:12px;color:var(--muted);line-height:1.6">En OBS: Sources → + → Browser → pega esta URL → 1920×1080 → DESMARCAR "Refresh on activate" y "Shutdown when not visible".</div>';
   h+='<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><code style="flex:1;background:rgba(10,22,40,.6);padding:8px 12px;border-radius:6px;font-size:10px;color:rgba(200,215,240,.8);word-break:break-all">'+widgetUrl+'</code>';
   h+='<button class="btn btn-g" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent).then(()=>{this.textContent=\'✓ Copiado\';setTimeout(()=>this.textContent=\'Copiar\',1500)})" style="padding:7px 14px;font-size:11px;flex-shrink:0">Copiar</button></div>';
   h+='</div>';
@@ -10277,7 +10366,7 @@ function renderDirector(){
   h+='<button onclick="window.dirBtLoadVideos()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px;cursor:pointer">CARGAR</button>';
   h+='</div></div>';
   if(_dirBtVideoList===null){
-    h+='<div style="padding:10px 12px;font-size:11px;color:var(--muted)">Hacé clic en CARGAR para ver los videos disponibles.</div>';
+    h+='<div style="padding:10px 12px;font-size:11px;color:var(--muted)">Haz clic en CARGAR para ver los videos disponibles.</div>';
   } else if(_dirBtVideoList.length===0){
     h+='<div style="padding:10px 12px;font-size:11px;color:var(--muted)">No hay videos en storage. Sube uno con ⬆ SUBIR.</div>';
   } else {
@@ -10487,7 +10576,7 @@ function _manCoincide(a,q){
 function renderManage(){
   // Filtrar por tarima si está activo (modo 2 tarimas)
   const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin: trae cambios, borra eliminados sin datos y toma tanda, división, categoría y modalidad del Cronograma">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas()" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">Papeletas de Intentos PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin: trae cambios, borra eliminados sin datos y toma tanda, división, categoría y modalidad del Cronograma">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button id="btnHojaPesaje" class="btn" onclick="generateHojaPesaje()" style="background:rgba(59,130,246,.15);border-color:#3b82f6;color:#3b82f6">Hoja de Pesaje PDF</button><button id="btnHojaRack" class="btn" onclick="generateHojaRack()" style="background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981">Altura de Rack PDF</button><button id="btnHojaEquipo" class="btn" onclick="generateHojaEquipo()" style="background:rgba(168,85,247,.15);border-color:#a855f7;color:#a855f7">Revisión Equipo PDF</button><button id="btnPapeletas" class="btn" onclick="generatePapeletas(false)" title="Papeletas en blanco, para llenar a mano en la mesa" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">Papeletas en Blanco PDF</button><button id="btnPapeletasNom" class="btn" onclick="generatePapeletas(true)" title="Una papeleta por atleta con el nombre ya impreso, tal como está en la nómina" style="background:rgba(234,179,8,.15);border-color:#eab308;color:#ca8a04">Papeletas con Nombre PDF</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
     // ── Barra de búsqueda y tandas ────────────────────────────────────────────
   {
     const _mf0=window._MAN_F||{q:'',flight:''};
@@ -10707,10 +10796,10 @@ function _attCellCompete(a,l,j,isCurrentCell){
     // Letra blanca y la misma tipografía de los nombres de la tabla (la del
     // cuerpo, DM Sans): la palabra tiene que leerse como parte de la planilla,
     // no como un cartel pegado encima. El rojo queda en el borde, no en el texto.
-    if(srR.length)cell+='<div class="'+(srHecho?'':'rec-tag')+'" style="font-size:'
+    if(srR.length)cell+='<div class="rec-caja"><div class="'+(srHecho?'':'rec-tag')+'" style="font-size:'
       +Math.round(9*sc)+'px;font-weight:800;letter-spacing:.6px;line-height:1;margin-bottom:2px;'
       +'text-align:center;color:#fff">'+(srHecho?'★ RÉCORD':'RÉCORD')+'</div>';
-    cell+='<div class="'+c+' att'+(srR.length?' rec-borde':'')+'" onclick="editAtt('+a.id+',\''+l+'\','+j+')"'+(srR.length?' title="'+_srBadge(srR).replace(/"/g,'&quot;')+' — supera '+srR.map(function(x){return x.div+' '+(x.vacio?'(sin récord)':x.kg+'kg')}).join(', ')+'"':'')+' style="font-size:'+Math.round((isCurrentCell?15:12)*sc)+'px;font-weight:700;padding:'+Math.round((isCurrentCell?10:8)*sc)+'px 4px;'+srCss+(isCurrentCell?'box-shadow:inset 0 0 0 3px '+LIFT_C[l]+';':'')+'">'+(at.w||'—')+'</div>';
+    cell+='<div class="'+c+' att'+(srR.length?' rec-borde':'')+'" onclick="editAtt('+a.id+',\''+l+'\','+j+')"'+(srR.length?' title="'+_srBadge(srR).replace(/"/g,'&quot;')+' — supera '+srR.map(function(x){return x.div+' '+(x.vacio?'(sin récord)':x.kg+'kg')}).join(', ')+'"':'')+' style="font-size:'+Math.round((isCurrentCell?15:12)*sc)+'px;font-weight:700;padding:'+Math.round((isCurrentCell?10:8)*sc)+'px 4px;'+srCss+(isCurrentCell?'box-shadow:inset 0 0 0 3px '+LIFT_C[l]+';':'')+'">'+(at.w||'—')+'</div>'+(srR.length?'</div>':'');
   }
   if(isCurrentCell){
     cell+='<div style="display:flex;gap:2px;margin-top:3px">'
@@ -12959,10 +13048,10 @@ function renderLiveView(){
         // Récord sudamericano: el público ve la misma marca amarilla que el control
         const srR2=_srRompe(ra,l,at.w), srOk2=srR2.length&&at.r==='g';
         const srCss2='';   // el color de adentro es el del intento, como en el control
-        if(srR2.length)h+='<div class="'+(srOk2?'':'rec-tag')+'" style="font-size:8.5px;'
+        if(srR2.length)h+='<div class="rec-caja"><div class="'+(srOk2?'':'rec-tag')+'" style="font-size:8.5px;'
           +'font-weight:800;letter-spacing:.5px;line-height:1;margin-bottom:2px;text-align:center;color:#fff">'
           +(srOk2?'★ RÉCORD':'RÉCORD')+'</div>';
-        h += '<div class="'+cls+' att'+(srR2.length?' rec-borde':'')+'"'+(srR2.length?' title="'+_srBadge(srR2).replace(/"/g,'&quot;')+'"':'')+' style="font-size:'+(isCurAtt?15:11)+'px;font-weight:700;padding:'+(isCurAtt?'10px 3px':'6px 3px')+';cursor:default;'+srCss2+(isCurAtt?'box-shadow:inset 0 0 0 2px '+LIFT_C[l]+';':'')+'min-width:46px;text-align:center">'+(at.w||'—')+'</div>';
+        h += '<div class="'+cls+' att'+(srR2.length?' rec-borde':'')+'"'+(srR2.length?' title="'+_srBadge(srR2).replace(/"/g,'&quot;')+'"':'')+' style="font-size:'+(isCurAtt?15:11)+'px;font-weight:700;padding:'+(isCurAtt?'10px 3px':'6px 3px')+';cursor:default;'+srCss2+(isCurAtt?'box-shadow:inset 0 0 0 2px '+LIFT_C[l]+';':'')+'min-width:46px;text-align:center">'+(at.w||'—')+'</div>'+(srR2.length?'</div>':'');
         // El que acaba de salir a tarima: cartelito chico bajo su intento, para
         // no perder de vista por dónde va la tanda cuando la lista se reordena.
         if(ultimo && !a.__is4 && ra.id===ultimo.id && l===ultimo.lift && j===ultimo.round)

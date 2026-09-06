@@ -225,11 +225,27 @@ function leerQR(m, ver, ecl, mask) {
     ok(u.startsWith(`http://localhost:${PUERTO}/`), 'armada sobre la página que está abierta');
   }
 
-  console.log('\n  El botón está en la tarjeta de cada competencia');
+  console.log('\n  Al público NO se le muestra, salvo que el owner lo encienda');
   {
+    // El QR funciona siempre: desde el panel se genera y se imprime. Lo que se
+    // controla es si la gente ve el botón en la tarjeta, y por defecto no.
     await p.evaluate(() => {
       window.EVENTOS_PUB = [{ id: 'suda2026', name: 'Sudamericano 2026 — Día 1',
         fecha: '2026-09-20', lugar: 'Estadio Nacional, Ñuñoa' }];
+      sv('envivo');
+    });
+    await p.waitForTimeout(400);
+    ok(await p.$$eval('.envivo-qr', e => e.length) === 0,
+       'un campeonato sin encender no muestra el botón');
+    ok(await p.$$eval('.envivo-cta span', e => e.length) === 1,
+       'pero VER EN VIVO sigue ahí: lo que se oculta es el QR, no la competencia');
+  }
+
+  console.log('\n  Encendido, el botón aparece en su tarjeta');
+  {
+    await p.evaluate(() => {
+      window.EVENTOS_PUB = [{ id: 'suda2026', name: 'Sudamericano 2026 — Día 1',
+        fecha: '2026-09-20', lugar: 'Estadio Nacional, Ñuñoa', qrPublico: true }];
       sv('envivo');
     });
     await p.waitForTimeout(400);
@@ -281,6 +297,14 @@ function leerQR(m, ver, ecl, mask) {
     ok(/window\.pubQR=/.test(adm), 'desde el panel también se saca el QR de un campeonato');
     ok(/todavía no está visible para el público/.test(adm),
        'y avisa si el campeonato todavía no lo ve nadie');
+    // El interruptor: decide quién lo ve, no si funciona.
+    ok(/window\.pubQRToggle=/.test(adm), 'el owner puede encenderlo por campeonato');
+    ok(/QR OCULTO/.test(adm) && /QR PÚBLICO/.test(adm), 'y la lista dice en cuál está encendido');
+    ok(/Solo el Owner decide si el QR se le muestra al público/.test(adm),
+       'lo decide el owner, no cualquier admin');
+    ok(/qrPublico:e\.qrPublico===true/.test(idx),
+       'la página pública lee ese permiso del campeonato');
+    ok(/\$\{e\.qrPublico\?/.test(idx), 'y sin él no dibuja el botón');
   }
 
   console.log(fallas ? `\n${fallas} FALLA(S)` : '\nTodo OK');
