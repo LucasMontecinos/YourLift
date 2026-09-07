@@ -177,6 +177,51 @@ console.log('\n  Y lo que la pestaña abierta no necesita, no se baja');
      'además de al cambiar de pestaña');
 }
 
+  // ── Y lo mismo entrando al livecast ────────────────────────────────────
+  //
+  // Ahí el pestañeo tenía otra causa. La pantalla se redibuja varias veces
+  // seguidas mientras llegan los datos —la nómina, los campeonatos, el estado en
+  // vivo, los récords— y eso está bien: cada vez hay más que mostrar. Lo que no
+  // estaba bien es que CADA reescritura hacía arrancar de nuevo la animación de
+  // aparecer, que entra desde opacidad cero y desplazada seis píxeles. La
+  // pantalla saltaba tres o cuatro veces en menos de un segundo.
+  //
+  // La animación tiene sentido al CAMBIAR de pantalla. Al quedarse en la misma y
+  // solo recibir datos, se apaga.
+  console.log('\n  Entrando al livecast tampoco salta');
+  {
+    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    ok(/\.sin-anim \.fade\{animation:none\}/.test(lc),
+       'hay una manera de apagar la animación de aparecer');
+    ok(/el\.classList\.toggle\('sin-anim', window\._ultPantalla===_pant\)/.test(lc),
+       'y se apaga cuando se sigue en la misma pantalla');
+    ok(/const _nuevo=renderShell\(\);\s*\n\s*if\(el\.innerHTML!==_nuevo\)el\.innerHTML=_nuevo;/.test(lc),
+       'y si lo que hay que dibujar es igual, no se reescribe');
+
+    const b2 = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+    const p2 = await (await b2.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
+    const e2 = []; p2.on('pageerror', e => e2.push(e.message));
+    await p2.goto('http://localhost:8972/livecast.html?evento=suda2026_fesupo_full&controller=1',
+                  { waitUntil: 'domcontentloaded' });
+    await p2.waitForFunction(() => typeof DATA !== 'undefined' && DATA.athletes && DATA.athletes.length,
+                             null, { timeout: 30000 });
+    const r = await p2.evaluate(() => {
+      const el = document.getElementById('R');
+      DATA.phase = 'compete'; isAdmin = true;
+      window._ultPantalla = null;
+      R(); const alLlegar = el.classList.contains('sin-anim');   // primera vez: se anima
+      R(); const alActualizar = el.classList.contains('sin-anim'); // misma pantalla: no
+      DATA.phase = 'results';
+      R(); const alCambiar = el.classList.contains('sin-anim');   // otra pantalla: se anima
+      return { alLlegar, alActualizar, alCambiar };
+    });
+    await b2.close();
+    ok(r.alLlegar === false, 'al llegar a una pantalla, se anima');
+    ok(r.alActualizar === true, 'al recibir datos de la misma, NO se anima — ahí estaba el salto');
+    ok(r.alCambiar === false, 'y al cambiar de pantalla vuelve a animarse');
+    ok(e2.length === 0, 'sin errores' + (e2.length ? ': ' + e2.slice(0, 2) : ''));
+  }
+
   console.log(fallas ? `\n${fallas} FALLA(S)` : '\nTodo OK');
   process.exit(fallas ? 1 : 0);
 })();

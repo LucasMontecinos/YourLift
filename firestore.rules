@@ -66,6 +66,16 @@ service cloud.firestore {
     // Un solo bloque por colección: si se repite el match más abajo, las reglas
     // se suman (basta que una permita) y se vuelve difícil de leer.
     match /livecast_sync/{doc}     { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
+    // livecast_flash: se probó un canal aparte y chico para que el peso llegara
+    // antes a las pantallas (livecast_sync lleva la nómina entera —217 KB con los
+    // 431 del Sudamericano— y baja completa a cada pantalla en cada cambio). Se
+    // dio marcha atrás antes del Sudamericano: no vale la pena tocar el camino
+    // que lleva los pesos a la tarima justo antes del campeonato.
+    //
+    // La regla queda porque ya está publicada y no abre nada: hoy no hay una
+    // sola línea de código que escriba o lea esa colección. Si algún día se
+    // retoma la idea, ya está lista; si no, se saca sin apuro.
+    match /livecast_flash/{doc}    { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
     match /livecast_director/{doc} { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
     match /livecast_screen/{doc}   { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }
     match /livecast_record/{doc}   { allow read: if true; allow write: if isAdmin() || esEnsayo(doc); }

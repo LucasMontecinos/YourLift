@@ -540,7 +540,9 @@ async function loadAll(){
           }
           return e;
         }).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-        if(ST.view==='campeonatos'||ST.view==='dashboard'||ST.view==='athletes')render();
+        // Tarjetas de Nóminas arma su lista con ST.eventos, así que también se
+        // redibuja: si no, un campeonato recién publicado no aparece hasta recargar.
+        if(ST.view==='campeonatos'||ST.view==='dashboard'||ST.view==='athletes'||ST.view==='nomcards')render();
       },(e)=>console.warn('[listener] eventos:',e.message));
     }catch(e){console.warn('[loadAll] eventos listener:',e.message);}
   }
@@ -4922,22 +4924,37 @@ function _ncSlug(s){
   return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'')
     .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,'-').slice(0,80);
 }
-window.ncLoad=async function(){
-  if(ST.ncList)return;
+// Los campeonatos que tienen tarjeta son los MISMOS que salen en la pestaña
+// Nóminas de yourlift.cl: los de la colección `eventos` que no están archivados
+// ni en borrador, más el Sudamericano (que vive en nomina_sudamericano.json).
+//
+// Antes esta lista se armaba con nominas.json, que es un archivo estático con
+// ocho eventos escritos adentro —tres campeonatos ya corridos y los cuatro
+// ensayos—. O sea: los campeonatos con inscripciones abiertas o cerradas no
+// aparecían nunca acá, y sí aparecían archivados. La lista tiene que salir de
+// Firestore, que es de donde sale la del sitio.
+//
+// El id de cada tarjeta es el slug del NOMBRE, no el id del evento: así lo busca
+// yourlift.cl (_nsudaSlug(ev.name)), y tiene que coincidir o la tarjeta guardada
+// no se encuentra.
+function _ncEventos(){
   const list=[];
+  if(ST.ncSuda)list.push({id:'suda2026',name:ST.ncSuda});
+  (ST.eventos||[])
+    .filter(e=>e&&e.name&&e.status!=='archived'&&e.status!=='draft'&&!e.parent)
+    .forEach(e=>list.push({id:_ncSlug(e.name),name:e.name,status:e.status||''}));
+  const seen=new Set();
+  return list.filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return true;});
+}
+window._ncEventos=_ncEventos;   // admin.html es un módulo: sin esto la prueba no lo ve
+window.ncLoad=async function(){
+  if(ST.ncData)return;
+  ST.ncData={};
   try{
     const j=await (await fetch('nomina_sudamericano.json?'+Date.now())).json();
-    list.push({id:'suda2026',name:j.eventoCorto||'Sudamericano 2026'});
+    ST.ncSuda=j.eventoCorto||'Sudamericano 2026';
   }catch(e){}
-  try{
-    const n=await (await fetch('nominas.json?'+Date.now())).json();
-    (n.events||[]).forEach(e=>{if(e.name)list.push({id:_ncSlug(e.name),name:e.name});});
-  }catch(e){}
-  // quitar duplicados por id
-  const seen=new Set();
-  ST.ncList=list.filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return true;});
   // cargar lo guardado
-  ST.ncData={};
   try{
     const snap=await getDocs(collection(db,'nomina_cards'));
     snap.docs.forEach(d=>{ST.ncData[d.id]=d.data();});
@@ -4977,18 +4994,20 @@ function ncEstado(el,txt,tipo){
                  : 'var(--muted)';
 }
 function renderNomCards(){
-  if(!ST.ncList){ncLoad();return `<div style="padding:30px;text-align:center;color:var(--muted)">Cargando nóminas…</div>`;}
+  if(!ST.ncData){ncLoad();return `<div style="padding:30px;text-align:center;color:var(--muted)">Cargando nóminas…</div>`;}
+  const lista=_ncEventos();
   let h=`<div style="font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:2px;margin-bottom:18px">TARJETAS DE NÓMINAS</div>`;
   h+=`<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:18px">
     <div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:4px">CÓMO SE VE CADA CAMPEONATO EN yourlift.cl</div>
-    <p style="font-size:11px;color:var(--muted);margin-bottom:14px">La foto, fecha, organizador y lugar que se ven en la tarjeta de cada campeonato en la pestaña Nóminas del sitio. La foto se convierte a WebP automáticamente.</p>`;
-  ST.ncList.forEach(ev=>{
+    <p style="font-size:11px;color:var(--muted);margin-bottom:14px">La foto, fecha, organizador y lugar que se ven en la tarjeta de cada campeonato en la pestaña Nóminas del sitio. Salen los campeonatos con inscripciones abiertas o cerradas — los archivados no. La foto se convierte a WebP automáticamente.</p>`;
+  if(!lista.length)h+=`<p style="font-size:12px;color:var(--muted);padding:10px 0">No hay campeonatos con inscripciones abiertas o cerradas. Cuando publiques uno en Campeonatos, aparece acá.</p>`;
+  lista.forEach(ev=>{
     const d=ST.ncData[ev.id]||{};
     h+=`<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">`;
     h+=`<div style="width:150px;flex-shrink:0"><div style="width:150px;height:64px;border-radius:8px;overflow:hidden;background:#0a1628;border:1px solid var(--border);display:flex;align-items:center;justify-content:center">${d.fotoUrl?`<img src="${esc(d.fotoUrl)}" style="width:100%;height:100%;object-fit:cover">`:'<span style="font-size:10px;color:var(--muted)">sin foto</span>'}</div>
       <label class="btn" style="display:block;text-align:center;margin-top:6px;padding:5px;font-size:11px;cursor:pointer">📷 Subir foto<input type="file" accept="image/*" onchange="ncFoto('${ev.id}',this)" style="display:none"></label></div>`;
     h+=`<div style="flex:1;min-width:230px">
-      <div style="font-weight:600;font-size:13px;margin-bottom:8px">${esc(ev.name)}</div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px">${esc(ev.name)}${ev.status?` <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;vertical-align:1px;background:${ev.status==='open'?'rgba(34,197,94,.15)':'rgba(212,168,67,.12)'};color:${ev.status==='open'?'var(--green)':'var(--gold)'};border:1px solid ${ev.status==='open'?'rgba(34,197,94,.3)':'rgba(212,168,67,.3)'}">${ev.status==='open'?'Inscripciones abiertas':'Inscripciones cerradas'}</span>`:''}</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
         <input placeholder="Fecha (ej. 20-27 sep 2026)" value="${esc(d.fecha||'')}" oninput="ncSet('${ev.id}','fecha',this.value)" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px">
         <input placeholder="Organizador" value="${esc(d.organizador||'')}" oninput="ncSet('${ev.id}','organizador',this.value)" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px">

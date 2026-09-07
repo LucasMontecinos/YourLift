@@ -38,12 +38,72 @@ const {chromium}=require('playwright');
    const Z=DATA.athletes[2]; Z.flight='A';
    Z.att.sq[0].w=100; Z.att.sq[1].w=110; setResult(Z.id,'sq',0,'g');
    out['7_con_peso_ya_declarado_no_arranca']=!DATA.changeTimers[Z.id+'_sq_1'];
+   // CORREGIR una decisión —válido a nulo, o al revés— VUELVE A ARRANCAR el
+   // minuto para declarar el intento siguiente. Es a propósito: la mesa acaba de
+   // decidir de nuevo, y el atleta cuenta su minuto desde esa decisión, no desde
+   // la que quedó sin efecto. Queda escrito acá para que nadie lo "arregle"
+   // pensando que es un error.
+   const W=DATA.athletes[3]; W.flight='A';
+   W.att.sq=[{w:100,r:null},{w:0,r:null},{w:0,r:null}];
+   delete DATA.changeTimers[W.id+'_sq_1'];
+   setResult(W.id,'sq',0,'g');
+   const t1=DATA.changeTimers[W.id+'_sq_1'];
+   out['8_al_juzgar_arranca']=!!t1;
+   t1.remaining=17;                       // como si ya hubieran pasado 43 segundos
+   setResult(W.id,'sq',0,'n');            // se corrige: era nulo
+   const t2=DATA.changeTimers[W.id+'_sq_1'];
+   out['9_al_corregir_vuelve_a_60']=!!t2&&t2.remaining===60;
+   out['9_segundos_tras_corregir']=(t2||{}).remaining;
+   // y al revés: de nulo a válido, lo mismo
+   DATA.changeTimers[W.id+'_sq_1'].remaining=8;
+   setResult(W.id,'sq',0,'g');
+   out['10_y_al_volver_a_valido_tambien']=(DATA.changeTimers[W.id+'_sq_1']||{}).remaining===60;
+   // ── El CUADRADO NARANJO de Control en Vivo ────────────────────────────
+   // Corregir una decisión desde Control en Vivo no pasa por setResult sino por
+   // overrideResult, que arma el minuto solo si el intento corregido es del
+   // movimiento y la ronda que se están compitiendo.
+   const V=DATA.athletes[4]; V.flight='A';
+   DATA.lift='sq';DATA.round=0;
+   V.att.sq=[{w:100,r:'g'},{w:0,r:null},{w:0,r:null}];
+   delete DATA.changeTimers[V.id+'_sq_1'];
+   overrideResult(V.id,'sq',0,'n');                 // válido -> nulo
+   out['11_override_sin_peso_arranca']=(DATA.changeTimers[V.id+'_sq_1']||{}).remaining===60;
+   // MISMO caso pero con el peso del siguiente YA declarado: acá está el reporte.
+   const U=DATA.athletes[5]; U.flight='A';
+   U.att.sq=[{w:100,r:'g'},{w:110,r:null},{w:0,r:null}];
+   DATA.changeTimers[U.id+'_sq_1']={remaining:22,expired:false,startedAt:Date.now()-38000};
+   overrideResult(U.id,'sq',0,'n');
+   // Antes acá el timer se BORRABA: el cuadrado naranjo desaparecía en vez de
+   // volver a 60. Corregida la decisión, el atleta puede querer cambiar ese peso,
+   // así que el minuto arranca de nuevo.
+   out['12_override_con_peso_declarado_vuelve_a_60']=(DATA.changeTimers[U.id+'_sq_1']||{}).remaining===60;
+   // Corrección de un intento de OTRA ronda: no arma nada (queda como está).
+   const T=DATA.athletes[6]; T.flight='A';
+   T.att.sq=[{w:100,r:'g'},{w:110,r:'g'},{w:0,r:null}];
+   delete DATA.changeTimers[T.id+'_sq_2'];
+   overrideResult(T.id,'sq',1,'n');                 // ronda 1, se compite la 0
+   out['13_otra_ronda_no_arranca']=!DATA.changeTimers[T.id+'_sq_2'];
+   // PRIMERA decisión (no corrección) con el peso siguiente ya declarado: sigue sin
+   // arrancar nada. Lo que cambió es solo el caso de corregir.
+   const S=DATA.athletes[7]; S.flight='A';
+   S.att.sq=[{w:100,r:null},{w:110,r:null},{w:0,r:null}];
+   delete DATA.changeTimers[S.id+'_sq_1'];
+   overrideResult(S.id,'sq',0,'g');
+   out['14_primera_decision_con_peso_no_arranca']=!DATA.changeTimers[S.id+'_sq_1'];
    return out;
  });
  console.log(JSON.stringify(r,null,1));
  const ok=r['1_normal_arranca']&&r['2_al_conceder_extra_se_corta']&&r['3_no_arranca_con_extra_pendiente']
-   &&r['4_tras_el_extra_arranca']&&r['5_self_se_corta']&&r['6_self_tras_el_extra_arranca']&&r['7_con_peso_ya_declarado_no_arranca'];
+   &&r['4_tras_el_extra_arranca']&&r['5_self_se_corta']&&r['6_self_tras_el_extra_arranca']
+   &&r['7_con_peso_ya_declarado_no_arranca']&&r['8_al_juzgar_arranca']
+   &&r['9_al_corregir_vuelve_a_60']&&r['10_y_al_volver_a_valido_tambien']
+   &&r['11_override_sin_peso_arranca']&&r['12_override_con_peso_declarado_vuelve_a_60']
+   &&r['13_otra_ronda_no_arranca']&&r['14_primera_decision_con_peso_no_arranca'];
  console.log('\nTODO CORRECTO:', ok);
  console.log('errores:',errs.length?errs.slice(0,3):'ninguno');
  await b.close();
+ // El veredicto tiene que estar en el CÓDIGO DE SALIDA: esta prueba solo
+ // imprimía, así que la batería la daba por buena aunque fallara todo.
+ if(!ok||errs.length){ console.log('\nFALLA'); process.exit(1); }
+ process.exit(0);
 })();

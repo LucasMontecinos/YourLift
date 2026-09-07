@@ -41,6 +41,13 @@ input,select,button{font-family:inherit;outline:none}
 .rec-caja{display:inline-block;text-align:center}
 @media (prefers-reduced-motion:reduce){.rec-borde,.rec-tag{animation:none}}
 .fade{animation:fadeIn .3s ease}
+/* Al entrar, la pantalla se redibuja varias veces seguidas mientras llegan
+   los datos —la nómina, los campeonatos, el estado en vivo, los récords— y
+   cada reescritura hacía arrancar de nuevo la animación de aparecer: la
+   pantalla saltaba tres o cuatro veces en menos de un segundo. La animación
+   tiene sentido al CAMBIAR de pantalla, no cada vez que llega un dato, así
+   que mientras se sigue en la misma se apaga. */
+.sin-anim .fade{animation:none}
 .shell{min-height:100vh}
 /* Botón hamburguesa: siempre visible arriba a la izquierda */
 .hamb{position:fixed;top:12px;left:12px;z-index:1001;width:46px;height:46px;border-radius:10px;border:1px solid rgba(212,168,67,.45);background:#0d1b30;color:#D4A843;font-size:22px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;box-shadow:0 2px 10px rgba(0,0,0,.35)}
@@ -648,7 +655,7 @@ function _syncWriteAlert(e){
     +(perm?' <b>Inicia sesión con tu cuenta de administrador.</b>':' Revisa la conexión a internet.')
     +' <span style="opacity:.85;font-size:11px">(se reintenta solo)</span>';
 }
-function _syncWriteOk(){ const el=document.getElementById('syncErrBanner'); if(el)el.remove(); window._syncFallo=0; }
+function _syncWriteOk(){ const el=document.getElementById('syncErrBanner'); if(el)el.remove(); window._syncFallo=0; window._syncFalloMsg=''; }
 let _syncInFlight=false,_syncPending=false,_fbLastOk=0;
 window._syncFallo=0;      // ts del último fallo definitivo de escritura
 let _reintentoTO=null;
@@ -719,6 +726,10 @@ async function syncToFB(){
           window._forceFullWrite=false;
         }else if(_huella(_mkPayload())===window._ultHuella){
           // Nada cambió desde la última escritura confirmada: no se escribe.
+          // Pero lo pendiente igual se suelta: si quedaba una marca de algo que
+          // no viaja en el payload, se quedaba ahí para siempre y esta pantalla
+          // no volvía a dar por guardado nada.
+          sent.forEach(k=>{ try{window._pendingEdits.delete(k)}catch(_){} });
           window._lastSyncedSig=_dataSig();
           _fbLastOk=Date.now(); _syncWriteOk();
           return;
@@ -749,6 +760,9 @@ async function syncToFB(){
           // Aviso VISIBLE: que el operador se entere de que lo que carga NO está
           // llegando al espectador/OBS, en vez de descubrirlo tarde.
           window._syncFallo=Date.now();
+          // El mensaje del servidor decide qué se le dice al operador: permisos y
+          // conexión se arreglan de maneras distintas.
+          window._syncFalloMsg=String((e&&(e.code||e.message))||'');
           _syncWriteAlert(e);
           _reintentarSync();          // y se sigue intentando solo
           return;
@@ -921,7 +935,14 @@ function startFBSync(){
       DATA.lotsGenerated=d.lotsGenerated||false;
       // Alinear la firma con lo que acaba de llegar: así el aviso de "modo
       // espectador" solo aparece si ESTA pantalla editó algo por su cuenta.
-      try{window._lastSyncedSig=_dataSig();}catch(e){}
+      // Solo si esta pantalla no tiene nada propio sin mandar: alinear la firma
+      // con lo que llega mientras hay ediciones pendientes las daba por guardadas
+      // y la pastilla se ponía VERDE con cambios que no habían salido de acá.
+      try{
+        const _limpio=!_syncInFlight&&!_syncPending
+          &&!(window._pendingEdits&&window._pendingEdits.size);
+        if(_limpio)window._lastSyncedSig=_dataSig();
+      }catch(e){}
       if(typeof d.timer==='number'){
         DATA.timerOn=d.timerOn||false;
         // Con la hora de arranque, esta pantalla descuenta sola: no necesita que
@@ -2424,12 +2445,17 @@ function _extraPendienteDe(a,l){ const at=(a&&a.att&&a.att[l]||[])[3]; return !!
 // ese intento sabe con cuánto seguir, así que pedirle el peso antes —y hacerle
 // sonar la alarma a los 60s— no tiene sentido. Cuando el extra se juzga, el
 // minuto arranca ahí.
-// Tampoco corre si el peso del siguiente ya estaba cargado.
-function _armarChangeTimer(a,l,rSig){
+// Tampoco corre si el peso del siguiente ya estaba cargado —salvo que esto sea
+// una CORRECCIÓN de una decisión ya tomada (corrige=true). Ahí el minuto vuelve a
+// arrancar aunque el peso esté declarado: la decisión cambió, así que el atleta
+// puede querer cambiar ese peso y tiene su minuto desde la nueva decisión. Antes
+// este caso BORRABA el timer, y el cuadrado naranjo desaparecía en vez de
+// reiniciarse.
+function _armarChangeTimer(a,l,rSig,corrige){
   if(!a||!(rSig>=0)||rSig>2)return;
   const key=a.id+'_'+l+'_'+rSig;
   const yaTienePeso=a.att[l][rSig]&&a.att[l][rSig].w;
-  if(window._CT_ENABLED && !yaTienePeso && !_extraPendienteDe(a,l)){
+  if(window._CT_ENABLED && (corrige||!yaTienePeso) && !_extraPendienteDe(a,l)){
     DATA.changeTimers[key]={remaining:60,expired:false,startedAt:Date.now()};
     startCT(key);
   } else if(DATA.changeTimers[key]){
@@ -2441,13 +2467,17 @@ function setResult(id,l,r,res){
   // Foto de los récords ANTES de esta decisión: si la marca los mueve, hay que
   // saber contra qué estaban tirando los demás para reacomodar sus declarados.
   const _hoyAntes=(res==='g'&&_srOn())?_srHoyCalc():null;
+  const _corrige=(a.att[l][r].r==='g'||a.att[l][r].r==='n')&&a.att[l][r].r!==res;
   a.att[l][r].r=res;
   _markAtt(id,'att_'+l+'_'+r);
   if(_hoyAntes)_srAvisarSubidas(_srSubirDeclarados(_hoyAntes));
   _clearCompIfJudged(id,l,r);
   // Al juzgar el EXTRA, el minuto del intento siguiente arranca recién ahora.
-  if(r===3) _armarChangeTimer(a,l,((a.att[l][3]||{}).grantedRound??DATA.round)+1);
-  else if(r<2) _armarChangeTimer(a,l,r+1);
+  // Y corregir una decisión —de válido a nulo, o al revés— lo vuelve a arrancar:
+  // la mesa acaba de decidir de nuevo, así que el minuto para declarar el
+  // intento siguiente empieza desde ahí. Es a propósito.
+  if(r===3) _armarChangeTimer(a,l,((a.att[l][3]||{}).grantedRound??DATA.round)+1,_corrige);
+  else if(r<2) _armarChangeTimer(a,l,r+1,_corrige);
   // NOTA: si falla los 3 intentos de un lift, queda DQ para el total
   // pero NO bombed (sigue compitiendo en los lifts siguientes).
   // bombed solo si falla los 9 intentos del meet completo.
@@ -3478,6 +3508,9 @@ function overrideResult(id,l,r,res){
   if(!_confirmDecisionChange(a,l,r,res))return;
   // Toggle: clicking same result clears it
   const wasSame=(a.att[l][r].r===res);
+  // ¿Es una corrección de una decisión ya tomada, o la primera decisión del intento?
+  // De eso depende que el minuto vuelva a arrancar aunque el peso siguiente ya esté.
+  const _corrige=!wasSame&&(a.att[l][r].r==='g'||a.att[l][r].r==='n');
   const _hoyAntes=(!wasSame&&res==='g'&&_srOn())?_srHoyCalc():null;
   a.att[l][r].r=wasSame?null:res;
   _markAtt(id,'att_'+l+'_'+r);
@@ -3494,8 +3527,8 @@ function overrideResult(id,l,r,res){
   if(!wasSame && res){
     // Igual que en setResult: al juzgar el EXTRA arranca el minuto del siguiente,
     // y mientras el extra siga pendiente no arranca ninguno.
-    if(r===3) _armarChangeTimer(a,l,((a.att[l][3]||{}).grantedRound??DATA.round)+1);
-    else if(l===DATA.lift && r===DATA.round && r<2) _armarChangeTimer(a,l,r+1);
+    if(r===3) _armarChangeTimer(a,l,((a.att[l][3]||{}).grantedRound??DATA.round)+1,_corrige);
+    else if(l===DATA.lift && r===DATA.round && r<2) _armarChangeTimer(a,l,r+1,_corrige);
     DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);mainTI=null;
     setTimeout(()=>{if(typeof startTimer==='function')startTimer();},150);
   }
@@ -6433,7 +6466,11 @@ function _renderTxCerScoreboardBL(cur,opts){
         const isCur=j===DATA.round&&at.r===null&&at.w>0;
         return '<div style="padding:7px 10px;text-align:center;background:'+bg+';border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:18px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+(isCur?'box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';':'')+'">'+(at.w||'—')+'</div>';
       }).join('')
-      +'<div style="padding:7px 10px;text-align:center;background:'+(isDQ(cur)?_txC('noLift'):_txC('accent'))+';color:'+(isDQ(cur)?'#fff':_txC('nameText'))+';font-family:Oswald;font-size:20px;font-weight:700;letter-spacing:1px">'+(isDQ(cur)?'DQ':(subTotal(cur,DATA.lift)||0).toFixed(1))+'</div>'
+      // El subtotal va sobre el MISMO fondo que los intentos: usaba el color de
+      // acento de fondo y en las paletas claras salía un cuadro blanco al final
+      // de la fila, como si faltara algo. El acento pasa al número, que es lo
+      // que tiene que resaltar. El DQ sigue en rojo, que ahí sí es un aviso.
+      +'<div style="padding:7px 10px;text-align:center;background:'+(isDQ(cur)?_txC('noLift'):_txC('gridBg'))+';color:'+(isDQ(cur)?'#fff':_txC('accent'))+';font-family:Oswald;font-size:20px;font-weight:700;letter-spacing:1px">'+(isDQ(cur)?'DQ':(subTotal(cur,DATA.lift)||0).toFixed(1))+'</div>'
     +'</div>'
   +'</div>';
 }
@@ -9231,7 +9268,14 @@ function R(){
       if(el.innerHTML!==_nuevo)el.innerHTML=_nuevo;
       return;
     }
-    el.innerHTML=renderShell();
+    // Solo se anima al llegar a una pantalla distinta. Y si lo que hay que
+    // dibujar es igual a lo que ya está, no se toca: reescribir de gusto pierde
+    // el scroll y el foco de la casilla que se está tecleando.
+    const _pant=DATA.phase+'|'+(TARIMA||'');
+    el.classList.toggle('sin-anim', window._ultPantalla===_pant);
+    window._ultPantalla=_pant;
+    const _nuevo=renderShell();
+    if(el.innerHTML!==_nuevo)el.innerHTML=_nuevo;
   }catch(e){ console.error('[R] render error',e); _renderRecovery(e); }
 }
 function _renderRecovery(e){
@@ -11361,10 +11405,31 @@ function renderCompete(){
     else window._desincDesde=0;
     const esperando=window._desincDesde?Math.round((Date.now()-window._desincDesde)/1000):0;
     let col,txt,tip;
-    if(!ctrl){col='var(--red)';txt='NO GUARDA';tip='Esta pantalla está en modo ESPECTADOR: no escribe nada.';}
-    else if(!fbReady||!fbUnsub){col='var(--red)';txt='SIN CONEXIÓN';tip='No hay conexión con el servidor. Se reintenta solo — revisa internet.';}
-    else if(window._syncFallo){col='var(--red)';txt='NO SE GUARDA';tip='La última escritura falló. Se sigue reintentando solo. '+ultimo;}
-    else if(pendiente&&esperando>=12){col='var(--red)';txt='NO SE GUARDA';tip='Hace '+esperando+'s que hay cambios sin confirmar. Revisa la conexión y la sesión.';}
+    // Una pantalla en modo ESPECTADOR no está fallando: está haciendo lo suyo,
+    // mirar. Antes salía en ROJO igual que una escritura caída, así que el PC de
+    // OBS y cualquier pantalla de apoyo mostraban una alarma permanente. Un rojo
+    // que está siempre encendido deja de avisar, que es justo lo que no puede
+    // pasar con el que sí importa.
+    if(!ctrl){
+      col='var(--muted)';txt='SOLO LECTURA';
+      tip='Esta pantalla mira, no escribe. Está bien así: es lo que corresponde en '
+        +'el PC de OBS o en una pantalla de apoyo. Para que escriba, cámbiala a Controlador.';
+    }
+    // El rojo dice QUÉ pasa. "No se guarda" a secas obliga a adivinar entre
+    // internet, sesión y permisos, que se arreglan de maneras distintas.
+    else if(!fbReady){col='var(--red)';txt='SIN CONEXIÓN';tip='No hay conexión con el servidor. Se reintenta solo — revisa el internet del lugar.';}
+    else if(!fbUnsub){col='var(--red)';txt='SIN CAMPEONATO';tip='Hay conexión, pero esta pantalla no está escuchando ningún campeonato. Vuelve a elegirlo.';}
+    else if(window._syncFallo){
+      col='var(--red)';txt='NO SE GUARDA';
+      const m=String(window._syncFalloMsg||'');
+      tip=(/permission|insufficient/i.test(m)
+            ? 'El servidor rechazó la escritura por permisos: la sesión pudo haber caducado. Vuelve a entrar.'
+            : /offline|network|unavailable|deadline/i.test(m)
+            ? 'No se pudo llegar al servidor: es la conexión. Se sigue reintentando solo.'
+            : 'La última escritura falló y se sigue reintentando solo.')
+          +' '+ultimo+(m?' ('+m.slice(0,90)+')':'');
+    }
+    else if(pendiente&&esperando>=12){col='var(--red)';txt='NO SE GUARDA';tip='Hace '+esperando+'s que hay cambios sin confirmar. La conexión está lenta o cortada — se sigue intentando.';}
     else if(pendiente){col='var(--orange)';txt='GUARDANDO…';tip='Mandando los últimos cambios al servidor.';}
     else {col='var(--green)';txt='EN LÍNEA';tip='Todo guardado — '+ultimo+'.';}
     h+='<span id="syncPill" title="'+tip+'" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;border:1px solid '+col+';color:'+col+';font-family:Oswald;font-size:10px;font-weight:700;letter-spacing:.5px"><span style="width:7px;height:7px;border-radius:50%;background:'+col+'"></span>SYNC '+txt+'</span>';
