@@ -1898,7 +1898,29 @@ function _normSex(s){
 }
 // Clave única de categoría (sexo|cat|div) normalizada — agrupa correctamente aunque
 // los valores vengan con espacios, mayúsculas o sinónimos distintos.
-function _catGroupKey(a){return _normSex(a&&a.sex)+'|'+_normCat((a&&a.cat)||'?')+'|'+_normDiv((a&&a.div)||'Sin Div');}
+// ¿Contra quién compite este atleta? El sexo, la categoría y la división no
+// alcanzan: un EQUIPADO no compite contra un classic, y el only bench es otra
+// competencia que la del total. Comparar sus marcas es comparar dos cosas que no
+// se juegan en la misma cancha — un equipado sale con más kilos porque lleva
+// traje, no porque levante más.
+//
+// La línea y la modalidad salen de _nomLineMod, que ya resuelve el caso
+// enredado: 'equipped_bench' le toca tanto al combinado equipado como al Only
+// Bench Equipado puro, y quién compite en las dos lo dice la bandera plusBench,
+// no el código. PL y PL+BP compiten los dos por el total, así que van juntos; el
+// ONLY BENCH va aparte. El invitado, que no entra al ranking de su categoría,
+// queda en su propio grupo.
+function _lineaComp(a){
+  const [linea,modal]=_nomLineMod(a);
+  return linea+'/'+(modal==='ONLY BENCH'?'BP':'PL');
+}
+// Etiqueta corta para los encabezados: sin esto, dos grupos que ahora se separan
+// se verían con el mismo título y parecería que la tabla salió repetida.
+function _lineaLbl(a){
+  const [linea,modal]=_nomLineMod(a);
+  return linea+(modal==='ONLY BENCH'?' · ONLY BENCH':'');
+}
+function _catGroupKey(a){return _normSex(a&&a.sex)+'|'+_normCat((a&&a.cat)||'?')+'|'+_normDiv((a&&a.div)||'Sin Div')+'|'+_lineaComp(a);}
 // ── Países (código IPF de 3 letras → ISO2 para bandera + nombre) ──────────────
 // Para campeonatos internacionales (ej. Sudamericano). Default CHI.
 const COUNTRY={
@@ -8273,6 +8295,7 @@ function renderTxJornada(){
     // header de categoría
     rows+='<tr style="height:'+hdrH.toFixed(2)+'px"><td colspan="16" style="padding:0 12px;background:linear-gradient(90deg,rgba(196,30,58,.32),rgba(196,30,58,.05));border-left:'+Math.max(3,Math.round(4*s))+'px solid #C41E3A;vertical-align:middle">'
       +'<span style="font-family:Oswald;font-size:'+fs(16)+'px;font-weight:700;letter-spacing:2px;color:#fff">'+sexLabel+' '+parts[1]+' kg · '+divS+'</span>'
+      +'<span style="font-family:Oswald;font-size:'+fs(12)+'px;color:rgba(220,230,245,.6);margin-left:10px;letter-spacing:1px">'+(parts[3]||'').replace('/PL','').replace('/BP',' · ONLY BENCH')+'</span>'
       +'<span style="font-family:Oswald;font-size:'+fs(12)+'px;color:rgba(212,168,67,.85);margin-left:10px">'+list.length+' atletas</span></td></tr>';
     list.forEach((row,i)=>{
       const a=row.a;
@@ -8351,7 +8374,8 @@ function renderTxLeaderboard(cur,lifterChanged,opts){
   if(!ref)return '';
   // allFlights: ranking de TODA la categoría (cubre todos los vuelos), usado en cycle de fin de lift
   // Mismo sexo + cat + div (separar divisiones de edad en el leaderboard)
-  const sameCat=DATA.athletes.filter(a=>a.cat===ref.cat&&a.div===ref.div&&a.sex===ref.sex&&(opts.allFlights||a.flight===DATA.flight)&&!a.bombed);
+  const sameCat=DATA.athletes.filter(a=>a.cat===ref.cat&&a.div===ref.div&&a.sex===ref.sex
+    &&_lineaComp(a)===_lineaComp(ref)&&(opts.allFlights||a.flight===DATA.flight)&&!a.bombed);
   const ranked=sameCat.map(a=>({...a,total:totalOf(a),fTotal:forecastTotal(a),fPlace:0}));
   ranked.sort((a,b)=>b.fTotal-a.fTotal);
   ranked.forEach((a,i)=>a.fPlace=i+1);
@@ -8364,7 +8388,7 @@ function renderTxLeaderboard(cur,lifterChanged,opts){
         <div style="padding:clamp(14px,2vh,22px) clamp(20px,2.5vw,32px);background:${_txC('headerBg')};border-bottom:2px solid ${_txC('accent')};display:flex;justify-content:space-between;align-items:center">
           <div>
             <div style="font-family:Oswald;font-size:clamp(11px,1.1vw,14px);color:rgba(220,230,245,.75);letter-spacing:3px">LEADERBOARD</div>
-            <div style="font-family:Oswald;font-size:clamp(20px,2.2vw,30px);font-weight:700;color:#fff;letter-spacing:2px;margin-top:2px;text-shadow:0 2px 6px rgba(0,0,0,.6)">${divS} • ${ref.cat} (${sexLabel})</div>
+            <div style="font-family:Oswald;font-size:clamp(20px,2.2vw,30px);font-weight:700;color:#fff;letter-spacing:2px;margin-top:2px;text-shadow:0 2px 6px rgba(0,0,0,.6)">${divS} • ${ref.cat} (${sexLabel}) <span style="font-size:.7em;opacity:.8">· ${_lineaLbl(ref)}</span></div>
           </div>
           ${_tiraLogos(['camp'],'clamp(26px,2.6vw,38px)','10px')}
         </div>
@@ -8402,7 +8426,8 @@ function renderTxTablaActual(cur,opts){
   opts=opts||{};
   const ref=cur||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
   if(!ref)return '';
-  const sameCat=DATA.athletes.filter(a=>a.cat===ref.cat&&a.div===ref.div&&a.sex===ref.sex&&!a.bombed);
+  const sameCat=DATA.athletes.filter(a=>a.cat===ref.cat&&a.div===ref.div&&a.sex===ref.sex
+    &&_lineaComp(a)===_lineaComp(ref)&&!a.bombed);
   // 1) Ranking ACTUAL: por total ya levantado (solo lifts válidos)
   const curRank=sameCat.map(a=>({id:a.id,total:totalOf(a)})).sort((a,b)=>b.total-a.total);
   const curPosOf={}; curRank.forEach((a,i)=>curPosOf[a.id]=i+1);
@@ -8433,7 +8458,7 @@ function renderTxTablaActual(cur,opts){
               return t?`<div class="ta-logo-anim" style="flex-shrink:0">${t}</div>`:'';})()}
             <div data-ta-title style="min-width:0">
               <div style="font-family:Oswald;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.75);font-weight:600">TABLA ACTUAL · ${liftN} · R${(DATA.round||0)+1}</div>
-              <div style="font-family:Oswald;font-size:18px;letter-spacing:1.5px;color:#fff;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,.4);margin-top:2px">${divS} • ${ref.cat} ${sexLabel==='Mujer'?'♀':'♂'}</div>
+              <div style="font-family:Oswald;font-size:18px;letter-spacing:1.5px;color:#fff;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,.4);margin-top:2px">${divS} • ${ref.cat} ${sexLabel==='Mujer'?'♀':'♂'} <span style="font-size:.72em;opacity:.8">· ${_lineaLbl(ref)}</span></div>
             </div>
           </div>
           <div style="text-align:right;flex-shrink:0">
@@ -12042,7 +12067,8 @@ function _renderResultsTable(opts){
       const sello=cerrada
         ? '<span style="background:rgba(34,197,94,.18);border:1px solid rgba(34,197,94,.5);color:var(--green);font-size:9px;letter-spacing:1px;padding:1px 7px;border-radius:4px;margin-left:8px">POSICIÓN FINAL</span>'
         : '<span style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.45);color:#f59e0b;font-size:9px;letter-spacing:1px;padding:1px 7px;border-radius:4px;margin-left:8px" title="Todavía quedan intentos por levantar en esta categoría">POSICIÓN VIRTUAL</span>';
-      h+='<tr><td colspan="'+colspanTotal+'" style="padding:7px 8px;background:rgba(196,30,58,.1);border-bottom:2px solid var(--accent);font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--accent)">'+symb+' '+_normCat(a.cat||'?')+' — '+_normDiv(a.div||'Sin Div')+sello+'</td></tr>';
+      h+='<tr><td colspan="'+colspanTotal+'" style="padding:7px 8px;background:rgba(196,30,58,.1);border-bottom:2px solid var(--accent);font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--accent)">'+symb+' '+_normCat(a.cat||'?')+' — '+_normDiv(a.div||'Sin Div')
+        +' <span style="opacity:.7;font-size:10px;letter-spacing:1px">· '+_lineaLbl(a)+'</span>'+sello+'</td></tr>';
       prevCat=catKey;
     }
     const dq = view==='meet' && isDQ(a);
