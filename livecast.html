@@ -7582,8 +7582,12 @@ function renderTxProfile(cur){
   // Nombre y apellido con la MISMA tipografía, tamaño y mayúsculas. Antes el
   // nombre iba en fina y el apellido en negrita, y se leían como dos cosas
   // distintas en la pantalla de perfil.
-  const firstName=(parts.slice(0,-2).join(' ')||parts[0]||'').toUpperCase();
-  const lastName=parts.slice(-2).join(' ').toUpperCase();
+  // Con DOS palabras —"Ojeda Emilse", que es como viene media nómina de FESUPO—
+  // slice(0,-2) daba vacío y el respaldo repetía parts[0]: en pantalla se leía
+  // "OJEDA OJEDA EMILSE". Se parte igual que en el resto de las pantallas: dos
+  // apellidos solo cuando hay más de dos palabras.
+  const firstName=(parts.length>2?parts.slice(0,-2):parts.slice(0,-1)).join(' ').toUpperCase();
+  const lastName=(parts.length>2?parts.slice(-2):parts.slice(-1)).join(' ').toUpperCase();
   const club=cur.club||full?.club||'';
   const cat=txCatLabel(cur.cat)||(txCatNum(cur.cat)+'kg');
   const divS=txDivShort(cur.div);
@@ -8535,7 +8539,7 @@ function renderTxMedals(md){
   };
   return `
     <div style="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);width:min(760px,60vw);pointer-events:none">
-      <div style="text-align:center;margin-bottom:10px;font-family:Oswald;font-size:14px;letter-spacing:3px;color:${_txC('accent')};text-shadow:0 2px 6px rgba(0,0,0,.6)">MEDALLERO ${MEDAL_TIPOS[tipo]||'TOTAL'} · ${divS} ${md.cat} KG ${sexLabel} · ${_txModLabel(md.mod)}</div>
+      <div style="text-align:center;margin-bottom:10px;font-family:Oswald;font-size:14px;letter-spacing:3px;color:${_txC('accent')};text-shadow:0 2px 6px rgba(0,0,0,.6)">MEDALLERO ${MEDAL_TIPOS[tipo]||'TOTAL'} · ${divS} ${txCatLabel(md.cat)||md.cat} ${sexLabel} · ${_txModLabel(md.mod)}</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         ${row(1,ranked[0])}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">

@@ -59,6 +59,22 @@ const SEL = { mod: 'classic', sex: 'Hombre', div: 'Open', cat: '83' };
      'con el podio completo');
   ok(/550/.test(t), 'y con los totales');
 
+  console.log('\n  La categoría se escribe una sola vez');
+  {
+    // La nómina de FESUPO trae la categoría escrita completa: "-83 kg (Hombre)".
+    // El encabezado le pegaba " KG" al final y salía al aire
+    // "-83 kg (Hombre) KG ♂" — el kg dos veces y el sexo dos veces, porque al
+    // lado ya va el símbolo. Ahora pasa por la misma normalización que el resto
+    // de las pantallas.
+    const CAT = '-83 kg (Hombre)';
+    await p.evaluate(c => { DATA.athletes.forEach(a => { if (a.cat === '83') a.cat = c; }); }, CAT);
+    const th = await pintar({ medals: Object.assign({ active: true, until: 0 }, SEL, { cat: CAT }) });
+    ok(/-83kg/.test(th), 'la categoría sale normalizada (-83kg)');
+    ok(!/KG\s*♂|\(Hombre\)/.test(th), 'sin el "KG" pegado ni el sexo repetido');
+    ok(/Primero Uno/.test(th), 'y el podio sigue saliendo');
+    await p.evaluate(c => { DATA.athletes.forEach(a => { if (a.cat === c) a.cat = '83'; }); }, CAT);
+  }
+
   console.log('\n  Con un fullscreen encima seguiría tapado…');
   t = await pintar(conMedallero({ profile: { active: true, until: 0 } }));
   ok(!/MEDALLERO/.test(t), 'el perfil lo tapa, que visualmente corresponde');
