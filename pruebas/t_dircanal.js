@@ -47,7 +47,7 @@ function sacar(texto, nombre) {
 // Monta el listener del widget con un Firestore de mentira. `evento` es una caja
 // mutable: empieza en null (todavía no se resolvió) y después se llena, que es
 // justo la carrera que rompía esto.
-function montar(evento) {
+function montar(evento, txMode) {
   const subs = [];          // cada suscripción hecha, en orden
   const vivas = new Set();  // las que siguen escuchando
   const timers = new Set();
@@ -56,6 +56,11 @@ function montar(evento) {
   const fbDB = {};
   const TX_DIR_DEFAULT = { profile: { active: false, until: 0 }, medals: { active: false, until: 0 } };
   let _txDirState = null, _txDirUnsub = null, _txDirUnsubDocId = null, _txDirPoll = null, _txDirLastSig = null;
+  // Las pantallas del recinto (tx=screen / tx=jornada) escuchan este mismo canal,
+  // pero de todo lo que manda el director solo les toca el timer de descanso.
+  const TX_MODE = txMode || null;
+  let _txDescSig = null;
+  let renders = 0;
 
   const fbDocId = () => evento.nombre ? evento.nombre.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 55) : null;
   const txDocId = base => base;
@@ -63,7 +68,7 @@ function montar(evento) {
 
   const setInterval = (fn) => { const t = { fn }; timers.add(t); return t; };
   const clearInterval = t => { timers.delete(t); };
-  const renderTxWidget = () => {};
+  const renderTxWidget = () => { renders++; };
   const console = { log() {}, warn() {} };
 
   const window = {
@@ -91,6 +96,7 @@ function montar(evento) {
       return llego;
     },
     subs, vivas,
+    renders: () => renders,
     estado: () => _txDirState
   };
 }
@@ -130,6 +136,38 @@ console.log('\n  Con el evento resuelto se queda quieto');
   w.correr(); w.correr(); w.correr();
   ok(w.subs.length === antes, 're-renderizar no vuelve a suscribir');
   ok(w.estado().medals.active === true, 'y no le borra el medallero que estaba puesto');
+}
+
+console.log('\n  Una pantalla del recinto solo se redibuja si cambió el descanso');
+{
+  // La Tabla de Jornada y la Pantalla de Intentos escuchan al director porque de
+  // ahí sale el timer de descanso. Pero el director manda MUCHO más que eso:
+  // prender el perfil, sacar el medallero, cambiar el marcador. Si cada uno de
+  // esos comandos redibujara la pantalla del gimnasio, la tabla se rehace entera
+  // —cientos de filas— por algo que no la toca, y eso se ve como un parpadeo.
+  const evt = { nombre: 'X' };
+  const s = montar(evt, 'jornada');
+  s.correr();
+  const r0 = s.renders();
+  s.mandarComando('current__X', { medals: { active: true, until: 0 }, breakTimer: { active: false } });
+  ok(s.renders() === r0 + 1, 'el primer estado que llega la dibuja');
+  s.mandarComando('current__X', { medals: { active: false, until: 0 }, breakTimer: { active: false } });
+  ok(s.renders() === r0 + 1, 'apagar el medallero de la transmisión NO la redibuja');
+  s.mandarComando('current__X', { breakTimer: { active: true, startedAt: 1, durationSec: 600 } });
+  ok(s.renders() === r0 + 2, 'y poner el descanso sí');
+  s.mandarComando('current__X', { breakTimer: { active: true, startedAt: 1, durationSec: 600 } });
+  ok(s.renders() === r0 + 2, 'el mismo descanso repetido tampoco');
+}
+
+console.log('\n  Un widget de transmisión sí se redibuja con todo');
+{
+  const evt = { nombre: 'Y' };
+  const s = montar(evt, null);          // sin tx=screen: es un widget de OBS
+  s.correr();
+  const r0 = s.renders();
+  s.mandarComando('current__Y', { medals: { active: true, until: 0 } });
+  s.mandarComando('current__Y', { medals: { active: false, until: 0 } });
+  ok(s.renders() === r0 + 2, 'los dos comandos lo redibujan');
 }
 
 console.log('\n  El control y el widget calculan el mismo id');

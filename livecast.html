@@ -192,6 +192,11 @@ if(TX_MODE){
     body.tx-opaque{background:linear-gradient(135deg,#0A1628 0%,#0E1F3A 50%,#0A1628 100%)!important}
     #R{display:none!important}
     #txWidget{position:fixed;inset:0;font-family:'Oswald',sans-serif;color:#fff;z-index:2}
+    /* Capa del timer de descanso: cubre toda la pantalla para que el bloque se
+       pueda arrastrar a cualquier lado, pero deja pasar los clicks — si no, se
+       come la selección de todos los demás bloques que hay debajo. */
+    .pi-desc-capa{pointer-events:none}
+    .pi-desc-capa .pi-block{pointer-events:auto}
     @keyframes txSlideRight{from{transform:translateX(-40px);opacity:0}to{transform:translateX(0);opacity:1}}
     @keyframes txSlideUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}
     @keyframes txSlideDown{from{transform:translateY(-40px);opacity:0}to{transform:translateY(0);opacity:1}}
@@ -3731,6 +3736,27 @@ setInterval(()=>{
       if(el&&ci)el.textContent=ci.mmss;
     });
   }
+  // ── Timer de descanso ────────────────────────────────────────────────
+  // La cuenta regresiva se parcha en su lugar, sin redibujar la pantalla: el
+  // cartel puede estar puesto media hora y no tiene sentido rehacer la tabla de
+  // jornada entera 1.800 veces. El redibujado completo se pide una sola vez,
+  // cuando el cartel aparece o se va.
+  if(TX_MODE==='screen'||TX_MODE==='jornada'){
+    const dsc=(typeof _descInfo==='function')?_descInfo():null;
+    const rel=document.getElementById('descRel');
+    if(dsc&&rel){
+      rel.textContent=dsc.mmss;
+      rel.style.color=dsc.rem<=10?'#ef4444':dsc.rem<=30?'#f59e0b':'#ffffff';
+      const pa=document.getElementById('descPausa');
+      if(pa)pa.innerHTML=dsc.pausado?'\u23F8 PAUSADO':'';
+    } else if((!!dsc)!==(!!rel)){
+      // Apareció sin estar dibujado, o se fue y quedó el cartel: hay que redibujar.
+      // Ojo con sacar la condición de arriba: en Control en Vivo no existe el
+      // cartel, así que esta rama se cumpliría SIEMPRE y redibujaría la pantalla
+      // entera una vez por segundo mientras dure el descanso.
+      if(typeof renderTxWidget==='function')renderTxWidget();
+    }
+  }
   // Re-render completo SOLO si el auto-relleno cambió un peso (ver comentario arriba).
   if(needsRerender && DATA.phase==='compete' && typeof R==='function'){
     setTimeout(R,100);
@@ -6134,6 +6160,10 @@ let _txLastLifter=null;
 function renderTxWidget(){
   if(!TX_MODE)return false;
   const c=document.getElementById('txWidget');if(!c)return true;
+  // Las pantallas del recinto también escuchan al director: de ahí sale el timer
+  // de descanso. Es idempotente — si ya está escuchando el doc correcto, no hace
+  // nada.
+  if(TX_MODE==='screen'||TX_MODE==='jornada'){try{_txStartDirectorListener()}catch(e){}}
   // Widgets que NO dependen de DATA.athletes
   if(TX_MODE==='timer'){c.innerHTML=renderTxTimer();return true}
   if(TX_MODE==='lights'){c.innerHTML=renderTxLights();return true}
@@ -6146,7 +6176,7 @@ function renderTxWidget(){
   if(TX_MODE==='slam'){c.innerHTML=renderTxSlam();return true}
   if(TX_MODE==='lbauto'){c.innerHTML=renderTxLbAuto();return true}
   if(TX_MODE==='ceremony'){renderTxCeremony(c);return true}
-  if(TX_MODE==='jornada'){c.innerHTML=renderTxJornada();return true}
+  if(TX_MODE==='jornada'){c.innerHTML=renderTxJornada()+_descCapaHtml()+_descGearHtml();return true}
   if(TX_MODE==='screen'){renderTxScreen(c);return true}
   // Widgets que dependen del lifter actual
   const cur=liftQueue()[0];
@@ -6615,6 +6645,9 @@ function _widgetHandleDirectObsEvent(d){
 // admin pushea cambios y este widget renderiza lo que esté activo.
 const TX_DIR_DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',tipo:'total',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[],movement:'',style:{bgColor:'#0A1628',accentColor:'#C41E3A',videoX:0,videoY:5,videoW:40,videoH:80,textX:44,textY:10,titleSize:8,movSize:5,timerSize:12,showLogos:true,blurAmount:24,overlayOpacity:0.65}}};
 let _txDirState=null;
+// Firma del timer de descanso, para no redibujar las pantallas de tarima por
+// cambios del director que no las tocan.
+let _txDescSig=null;
 let _txDirUnsub=null;
 let _txDirUnsubDocId=null;
 let _txDirPoll=null;
@@ -6663,6 +6696,17 @@ function _txStartDirectorListener(){
         _txDirState={...TX_DIR_DEFAULT};
       }
       _txDirLastSig=null;
+      // Las pantallas del recinto miran del director UNA sola cosa: el timer de
+      // descanso. Si se redibujaran con cualquier cambio suyo, cada vez que la
+      // transmisión prende o apaga un componente la tabla de jornada se rehace
+      // entera — un parpadeo en la pantalla del gimnasio por algo que no la toca.
+      if(TX_MODE==='screen'||TX_MODE==='jornada'){
+        const bt=_txDirState.breakTimer||{};
+        const sig=[!!bt.active,bt.startedAt||0,bt.durationSec||0,bt.pausedAt||0,
+                   bt.label||'',bt.movement||''].join('|');
+        if(sig===_txDescSig)return;
+        _txDescSig=sig;
+      }
       if(typeof renderTxWidget==='function')renderTxWidget();
     });
   }catch(e){console.warn('[TX] director listen',e)}
@@ -8068,7 +8112,7 @@ function renderTxScreen(c){
   if(st.mode==='profile'){
     const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
     document.body.classList.add('tx-opaque');
-    c.innerHTML=cur?renderTxProfile(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>';
+    c.innerHTML=(cur?renderTxProfile(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')+_descCapaHtml()+_descGearHtml();
     return;
   }
   if(st.mode==='barra'){
@@ -8076,7 +8120,7 @@ function renderTxScreen(c){
     document.body.classList.add('tx-opaque');
     // Las luces van adentro de renderScreenBarra, como un bloque más que se puede
     // mover; por eso acá no se agregan aparte.
-    c.innerHTML=(cur?renderScreenBarra(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>');
+    c.innerHTML=(cur?renderScreenBarra(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')+_descCapaHtml()+_descGearHtml();
     return;
   }
   if(st.mode==='intentos'){
@@ -8085,18 +8129,18 @@ function renderTxScreen(c){
     const nxt=_piQ[1]||null;
     document.body.classList.add('tx-opaque');
     c.innerHTML=(cur?renderScreenIntentos(cur,nxt):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')
-      +(_lucesEnTarima()?renderLucesTarima():'');
+      +(_lucesEnTarima()?renderLucesTarima():'')+_descCapaHtml();
     return;
   }
   if(st.mode==='luces'){
     const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
     document.body.classList.add('tx-opaque');
-    c.innerHTML=renderScreenLuces(cur||null);
+    c.innerHTML=renderScreenLuces(cur||null)+_descCapaHtml()+_descGearHtml();
     return;
   }
   // jornada (default)
   document.body.classList.add('tx-opaque');
-  c.innerHTML=renderTxJornada();
+  c.innerHTML=renderTxJornada()+_descCapaHtml()+_descGearHtml();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -8738,6 +8782,9 @@ function renderScreenBarra(a){
 // ════════════════════════════════════════════════════════════════
 const PI_LAYOUT_KEY='yl_pant_intentos_layout';
 const PI_DEFAULT_LAYOUT={
+  // El cartel de descanso arranca en el medio, tapando la pantalla: cuando está
+  // puesto es lo único que importa. De ahí se corre a donde convenga.
+  descanso:{x:50,y:45,scale:100},
   record:{x:50,y:7,scale:100},       // cartel de intento de récord: arriba de todo
   liftLabel:{x:50,y:15,scale:100},
   weight:{x:50,y:22,scale:100},
@@ -8999,6 +9046,167 @@ if(!window._piHandlersInit){
     if(window._piResize){_piSaveLayout();window._piResize=null;}
   });
 }
+// ══════════════════════════════════════════════════════════════════
+// TIMER DE DESCANSO EN LAS PANTALLAS DE TARIMA
+//
+// "Cuánto falta para que empiece": el cartel con la cuenta regresiva que hasta
+// ahora solo existía para la transmisión (Control TX → Descanso) también se ve
+// en las pantallas del recinto: Pantalla de Intentos, Atleta en Barra y Tabla
+// de Jornada.
+//
+// Es EL MISMO timer, no otro. Vive en livecast_director/{evento}, así que
+// ponerlo desde acá lo pone también en la transmisión, y pausarlo desde el
+// Control TX lo pausa acá. Un solo descanso, un solo reloj: dos relojes de
+// descanso distintos marcando cosas distintas en la misma sala sería peor que
+// no tener ninguno.
+//
+// Se maneja desde el engranaje de abajo a la izquierda, que es donde está el
+// operador de la tarima, sin tener que ir hasta el Control TX.
+// ══════════════════════════════════════════════════════════════════
+// El estado llega por dos caminos según dónde se esté: en una pantalla, por el
+// listener del director (_txDirState); en el panel de control, por el suyo
+// (_dirState). Se mira el que exista.
+function _descBT(){
+  const a=(typeof _txDirState!=='undefined'&&_txDirState)?_txDirState.breakTimer:null;
+  if(a&&a.active)return a;
+  const b=(typeof _dirState!=='undefined'&&_dirState)?_dirState.breakTimer:null;
+  if(b&&b.active)return b;
+  return null;
+}
+// Cuánto falta, en limpio. Devuelve null cuando no hay descanso puesto.
+function _descInfo(){
+  const bt=_descBT(); if(!bt)return null;
+  const dur=(bt.durationSec||0)*1000;
+  // Pausado: el reloj se congela en lo que quedaba al pausar.
+  const corrido=bt.pausedAt?(bt.pausedAt-bt.startedAt):(Date.now()-bt.startedAt);
+  const rem=Math.max(0,Math.ceil((dur-corrido)/1000));
+  // Llegado a cero se queda medio minuto en 0:00 —para que se vea que se acabó—
+  // y después se saca solo. Si no, una pantalla con "DESCANSO 0:00" se queda así
+  // el resto de la competencia porque nadie se acordó de quitarla.
+  if(rem<=0 && !bt.pausedAt && corrido>dur+30000) return null;
+  return {rem, mmss:Math.floor(rem/60)+':'+String(rem%60).padStart(2,'0'),
+          pausado:!!bt.pausedAt, texto:(bt.label||'').trim()||'DESCANSO',
+          mov:(bt.movement||'').trim()};
+}
+// El cartel, como un bloque más del editor: se arrastra y se agranda igual que
+// el nombre o el peso. Va en su propia capa que cubre la pantalla —así se puede
+// llevar a cualquier esquina— pero que deja pasar los clicks a lo de abajo.
+function _descCapaHtml(){
+  const d=_descInfo(); if(!d)return '';
+  const col=d.rem<=10?'#ef4444':d.rem<=30?'#f59e0b':'#ffffff';
+  const inner='<div style="text-align:center;font-family:Oswald,sans-serif;white-space:nowrap;'
+    +'background:rgba(10,22,40,.88);border:2px solid rgba(212,168,67,.55);border-radius:14px;'
+    +'padding:2.2vh 3.2vw;box-shadow:0 10px 40px rgba(0,0,0,.6)">'
+    +'<div style="font-size:clamp(13px,1.9vw,30px);letter-spacing:.35em;color:#D4A843">'+esc(d.texto)+'</div>'
+    +(d.mov?'<div style="font-size:clamp(12px,1.5vw,24px);letter-spacing:.2em;color:rgba(235,242,250,.75);margin-top:.4vh">'+esc(d.mov)+'</div>':'')
+    +'<div id="descRel" style="font-size:clamp(46px,9vw,150px);font-weight:900;line-height:1.05;color:'+col+'">'+d.mmss+'</div>'
+    +'<div id="descPausa" style="font-size:clamp(11px,1.3vw,20px);letter-spacing:.3em;color:#f59e0b;height:1.2em">'+(d.pausado?'&#9208; PAUSADO':'')+'</div>'
+    +'</div>';
+  return '<div class="pi-canvas pi-desc-capa" style="position:fixed;inset:0;z-index:40">'
+    +_piBlock('descanso',inner)+'</div>';
+}
+// ── Ponerlo, pausarlo, sacarlo ────────────────────────────────────────────
+// Se escribe con merge: el documento del director lleva TODOS los componentes de
+// la transmisión, y esta pantalla solo sabe del descanso. Sin merge le borraría
+// al Control TX lo que tenga puesto.
+function _descPuede(){ return !!(isAdmin||window._ensayoFree); }
+async function _descEscribe(bt){
+  if(typeof _txDirState!=='undefined'&&_txDirState)_txDirState.breakTimer=bt;   // que se vea al toque
+  if(typeof _dirState!=='undefined'&&_dirState)_dirState.breakTimer=bt;
+  if(typeof R==='function')R();
+  if(!fbReady||!window._fb||!fbDB){showToastLC('Sin conexión: el descanso se ve acá pero no llega a las otras pantallas');return;}
+  if(!fbDocId()){showToastLC('Todavía se está cargando el campeonato — espera unos segundos');return;}
+  try{
+    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director',evStateDocId('current')),
+      {show:{breakTimer:bt},ts:Date.now()},{merge:true});
+  }catch(e){showToastLC('No se pudo enviar el descanso: '+(e.message||e));}
+}
+function _descEstiloPrevio(){
+  const bt=(typeof _txDirState!=='undefined'&&_txDirState&&_txDirState.breakTimer)
+        || (typeof _dirState!=='undefined'&&_dirState&&_dirState.breakTimer) || {};
+  return bt.style||{};
+}
+window.descPoner=function(min){
+  const seg=Math.round(Number(min)*60);
+  if(!(seg>0))return;
+  const rot=(document.getElementById('descTexto')||{}).value;
+  _descEscribe({active:true,startedAt:Date.now(),durationSec:seg,
+    label:(rot||'').trim(),pausedAt:0,videos:[],movement:'',style:_descEstiloPrevio()});
+};
+window.descPausar=function(){
+  const bt=_descBT(); if(!bt)return;
+  if(bt.pausedAt){
+    // Seguir: se corre el arranque tanto como duró la pausa, así no se pierde
+    // el tiempo que estuvo detenido.
+    _descEscribe(Object.assign({},bt,{startedAt:bt.startedAt+(Date.now()-bt.pausedAt),pausedAt:0}));
+  } else {
+    _descEscribe(Object.assign({},bt,{pausedAt:Date.now()}));
+  }
+};
+window.descQuitar=function(){
+  _descEscribe({active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,
+    videos:[],movement:'',style:_descEstiloPrevio()});
+};
+// Los minutos que se usan de verdad entre tandas y para arrancar la jornada.
+const DESC_MINUTOS=[5,10,15,20,30];
+// La Pantalla de Intentos tiene su panel de ajustes completo y ahí el descanso va
+// adentro. Atleta en Barra y la Tabla de Jornada no tienen panel —sus ajustes no
+// existen— así que llevan un botón propio, con el reloj y nada más. Sin esto, el
+// descanso solo se podía poner estando en la Pantalla de Intentos, y el operador
+// de la tarima no siempre está en esa.
+window._descPanelOpen=false;
+window.descTogglePanel=function(){
+  window._descPanelOpen=!window._descPanelOpen;
+  if(typeof renderTxWidget==='function'&&TX_MODE)renderTxWidget();
+  else if(typeof R==='function')R();
+};
+function _descGearHtml(){
+  const open=!!window._descPanelOpen;
+  let h='<div style="position:fixed;bottom:18px;left:18px;z-index:51;display:flex;flex-direction:column;align-items:flex-start;gap:10px">';
+  if(open){
+    h+='<div style="background:rgba(10,22,40,.94);border:1px solid rgba(212,225,245,.25);border-radius:10px;'
+      +'padding:14px 16px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.5)">'+_descPanelHtml(true)+'</div>';
+  }
+  // Sin `title`: en una pantalla que se proyecta, el globo gris del navegador
+  // aparece AL AIRE si el mouse queda quieto encima. Pasó en el Sudamericano.
+  h+='<button onclick="descTogglePanel()" style="width:28px;height:28px;border-radius:50%;'
+    +'border:1px solid rgba(212,225,245,'+(open?'.35':'.15')+');background:rgba(10,22,40,'+(open?'.85':'.15')+');'
+    +'color:rgba(255,255,255,'+(open?'.9':'.2')+');font-size:13px;line-height:1;cursor:pointer;display:flex;'
+    +'align-items:center;justify-content:center;transition:all .15s">\u23F1</button>';
+  h+='</div>';
+  return h;
+}
+function _descPanelHtml(solo){
+  const d=_descInfo();
+  const puede=_descPuede();
+  const bot=(txt,fn,color)=>'<button onclick="'+fn+'" style="flex:1;min-width:38px;padding:6px 4px;border-radius:6px;border:1px solid '
+    +(color||'rgba(212,225,245,.3)')+';background:rgba(255,255,255,.05);color:'+(color||'#fff')
+    +';font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">'+txt+'</button>';
+  let h='<div style="'+(solo?'':'border-top:1px solid rgba(212,225,245,.15);padding-top:10px;')
+    +'display:flex;flex-direction:column;gap:8px">';
+  h+='<div style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:rgba(212,225,245,.5)">DESCANSO</div>';
+  if(!puede){
+    h+='<div style="font-family:Oswald;font-size:10px;color:rgba(212,225,245,.45);letter-spacing:.5px;max-width:210px;line-height:1.5">'
+      +'Esta pantalla no tiene sesión de admin: el descanso se pone desde el control y acá se ve solo.</div>';
+    if(d)h+='<div style="font-family:Oswald;font-size:13px;color:#D4A843">'+esc(d.texto)+' · '+d.mmss+(d.pausado?' (pausado)':'')+'</div>';
+    return h+'</div>';
+  }
+  h+='<input id="descTexto" placeholder="Rótulo (ej. COMENZAMOS EN)" value="'+esc(d?d.texto:'')+'"'
+    +' style="padding:6px 8px;border-radius:6px;border:1px solid rgba(212,225,245,.25);background:rgba(255,255,255,.06);color:#fff;font-family:Oswald;font-size:11px;letter-spacing:1px;width:100%;box-sizing:border-box">';
+  h+='<div style="display:flex;gap:5px">'+DESC_MINUTOS.map(m=>bot(m+"'",'descPoner('+m+')')).join('')+'</div>';
+  h+='<div style="display:flex;gap:5px;align-items:center">'
+    +'<input id="descMin" type="number" min="1" max="180" placeholder="min"'
+    +' style="width:58px;padding:6px 8px;border-radius:6px;border:1px solid rgba(212,225,245,.25);background:rgba(255,255,255,.06);color:#fff;font-family:Oswald;font-size:11px">'
+    +bot('PONER','descPoner((document.getElementById(\'descMin\')||{}).value)','#22c55e')+'</div>';
+  if(d){
+    h+='<div style="font-family:Oswald;font-size:13px;color:#D4A843;letter-spacing:1px">En pantalla · '+d.mmss+(d.pausado?' · pausado':'')+'</div>';
+    h+='<div style="display:flex;gap:5px">'
+      +bot(d.pausado?'SEGUIR':'PAUSAR','descPausar()','#f59e0b')
+      +bot('QUITAR','descQuitar()','#ef4444')+'</div>';
+  }
+  h+='</div>';
+  return h;
+}
 // Engranaje discreto (esquina inferior izquierda) + panel de ajustes. Cerrado
 // por defecto para que la transmisión se vea limpia; el engranaje queda casi
 // invisible (baja opacidad) pero siempre clickeable para volver a entrar.
@@ -9029,6 +9237,7 @@ function _piSettingsPanelHtml(){
         <button onclick="piResetLayout()" style="padding:6px 10px;border-radius:6px;border:1px solid rgba(212,225,245,.3);background:rgba(255,255,255,.05);color:#fff;font-family:Oswald;font-size:10px;cursor:pointer;letter-spacing:1px">RESTABLECER POSICIONES</button>
       </div>
       <div style="font-family:Oswald;font-size:9px;color:rgba(212,225,245,.35);letter-spacing:.5px;max-width:210px">Click en un bloque de la pantalla para moverlo o agrandarlo.</div>
+      ${_descPanelHtml()}
     </div>`;
   }
   h+=`<button onclick="piToggleSettingsPanel()" title="Ajustes de pantalla" style="width:28px;height:28px;border-radius:50%;border:1px solid rgba(212,225,245,${open?'.35':'.15'});background:rgba(10,22,40,${open?'.85':'.15'});color:rgba(255,255,255,${open?'.9':'.2'});font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s">⚙</button>`;
