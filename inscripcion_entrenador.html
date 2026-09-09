@@ -1,0 +1,576 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/png" href="favicon.png?v=2">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#C41E3A">
+<title>YourLift — Inscripción de entrenadores</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="bg-fechipo.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0A1628;--card:#11223B;--border:#1E3A5F;--text:#D4E1F0;--muted:#7A8FA6;--accent:#C41E3A;--blue:#1E5BA8;--gold:#D4A843;--green:#22c55e;--red:#ef4444}
+body{font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+input,select,button,textarea{font-family:inherit;outline:none}
+.os{font-family:'Oswald',sans-serif}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fade{animation:fadeIn .4s ease}
+.sp{width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+.ctn{max-width:720px;margin:0 auto;padding:16px 20px 60px}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:rgba(17,34,59,.95);position:sticky;top:0;z-index:100;backdrop-filter:blur(10px)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 24px;border-radius:8px;border:none;font-weight:600;font-size:14px;cursor:pointer;font-family:'Oswald',sans-serif;letter-spacing:1px;text-transform:uppercase;transition:all .15s}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-accent{background:var(--accent);color:#fff}.btn-accent:hover:not(:disabled){background:#a8182f}
+.btn-green{background:var(--green);color:#fff}.btn-green:hover:not(:disabled){background:#1aa34a}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--muted)}.btn-outline:hover{border-color:var(--accent);color:var(--text)}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-family:'Oswald',sans-serif}
+.field label .req{color:var(--accent)}
+.input{width:100%;padding:12px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;transition:border-color .2s}
+.input:focus{border-color:var(--accent)}
+.input.ok{border-color:var(--green)}
+select.input{cursor:pointer}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.row{grid-template-columns:1fr}}
+.upload-zone{border:2px dashed var(--border);border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.upload-zone:hover{border-color:var(--accent);background:rgba(196,30,58,.05)}
+.upload-zone.done{border-color:var(--green);border-style:solid;background:rgba(34,197,94,.05)}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.upload-zone .icon{font-size:28px;margin-bottom:6px}
+.upload-zone .txt{font-size:12px;color:var(--muted)}
+.upload-zone .fname{font-size:13px;color:var(--green);font-weight:600;margin-top:4px}
+.step-bar{display:flex;gap:4px;margin-bottom:24px}
+.step-dot{flex:1;height:4px;border-radius:2px;background:var(--border);transition:background .3s}
+.step-dot.active{background:var(--accent)}
+.step-dot.done{background:var(--green)}
+.alert{padding:14px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;line-height:1.55}
+.alert-info{background:rgba(30,91,168,.15);border:1px solid rgba(30,91,168,.35);color:#8ab4e8}
+.alert-error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red)}
+.alert-ok{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:var(--green)}
+.alert-warn{background:rgba(212,168,67,.1);border:1px solid rgba(212,168,67,.35);color:var(--gold)}
+.ath{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:9px;margin-bottom:7px;cursor:pointer;transition:all .15s}
+.ath:hover{border-color:var(--accent)}
+.ath.sel{border-color:var(--green);background:rgba(34,197,94,.07)}
+.ath input{width:18px;height:18px;cursor:pointer;flex-shrink:0}
+.ath .n{font-weight:600;font-size:14px}
+.ath .d{font-size:11px;color:var(--muted);margin-top:2px}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:600;letter-spacing:.5px}
+.pill-ok{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.4)}
+.pill-warn{background:rgba(212,168,67,.15);color:var(--gold);border:1px solid rgba(212,168,67,.4)}
+.muted{color:var(--muted);font-size:12px;line-height:1.55}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="os" style="font-weight:700;letter-spacing:2px;font-size:18px"><span style="color:var(--accent)">YOUR</span>LIFT</div>
+  <a href="index.html" style="color:var(--muted);text-decoration:none;font-size:12px">← Volver al sitio</a>
+</div>
+<div class="ctn"><div id="app"><div class="card" style="text-align:center"><div class="sp"></div><div class="muted" style="margin-top:10px">Cargando…</div></div></div></div>
+
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import {getFirestore,collection,getDocs,getDoc,doc,setDoc,query,where,serverTimestamp,runTransaction} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import {getStorage,ref,uploadBytes,getDownloadURL} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+const app=initializeApp({apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app"});
+window.FBE={db:getFirestore(app),storage:getStorage(app),collection,getDocs,getDoc,doc,setDoc,query,where,serverTimestamp,runTransaction,ref,uploadBytes,getDownloadURL};
+window.dispatchEvent(new Event('fbe-listo'));
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// INSCRIPCIÓN DE ENTRENADORES
+//
+// Es un período aparte del de los atletas y no reemplaza a nada: el entrenador
+// se inscribe él, dice a qué atletas lleva —de los que YA están inscritos en ese
+// campeonato— y sube los documentos que ese campeonato le pide a él.
+//
+// Hasta ahora el vínculo atleta↔entrenador solo existía en el cronograma,
+// escrito a mano por la organización. Acá lo declara el propio entrenador antes
+// de que el cronograma exista.
+//
+// Dos decisiones que valen la pena dejar escritas:
+//
+// · NO pide iniciar sesión, igual que la inscripción del atleta. Se identifica
+//   por RUT y guarda un PIN de 4 dígitos para poder volver. Si pidiera cuenta,
+//   no se inscribiría nadie.
+//
+// · Estar acreditado NO es un requisito para inscribirse. Se busca el RUT en la
+//   base de acreditados: si está y su acreditación está vigente, se rellenan sus
+//   datos solos y queda marcado. Si no está —el caso de una organización que no
+//   es FECHIPO, como Olimpiadas Especiales— se inscribe igual llenando sus datos,
+//   y la organización lo ve marcado al revisar. Exigirlo dejaría fuera a
+//   campeonatos enteros el primer día.
+// ══════════════════════════════════════════════════════════════
+let FB=null, LISTO=false;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const nn=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
+const rutLimpio=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
+
+let EVENTOS=[], ATLETAS=[], BASE_ENT=null;
+
+const state={
+  step:0, evento:'', cargandoAtletas:false, buscaAtleta:'',
+  ent:{rut:'',nombre:'',club:'',categoria:'',correo:'',telefono:'',pin:''},
+  acred:null,          // null = todavía no se busca; {vigente,hasta,encontrado}
+  buscandoRut:false,
+  atletas:[],          // ruts elegidos
+  archivos:{},         // key -> File
+  nombres:{},          // key -> nombre del archivo
+  enviando:false, error:'', ok:'', docId:''
+};
+
+// ── Formato de RUT, igual que en la inscripción del atleta ──
+function formatRut(val){
+  let v=String(val||'').replace(/[^0-9kK]/g,'').toUpperCase();
+  if(!v)return'';
+  if(v.length===1)return v;
+  const dv=v.slice(-1), cuerpo=v.slice(0,-1);
+  return cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+'-'+dv;
+}
+// Dígito verificador. Un RUT mal tipeado se pega al de otra persona en la base,
+// así que conviene atajarlo antes de guardar nada.
+function rutValido(v){
+  const s=rutLimpio(v); if(s.length<8)return false;
+  const cuerpo=s.slice(0,-1), dv=s.slice(-1);
+  if(!/^\d+$/.test(cuerpo))return false;
+  let suma=0,m=2;
+  for(let i=cuerpo.length-1;i>=0;i--){ suma+=parseInt(cuerpo[i],10)*m; m=m===7?2:m+1; }
+  const r=11-(suma%11);
+  const esp=r===11?'0':r===10?'K':String(r);
+  return esp===dv;
+}
+
+// ── El campeonato y sus documentos ────────────────────────────
+function evActual(){ return EVENTOS.find(e=>e.id===state.evento)||null; }
+function _limpiaLista(a){ return Array.isArray(a)?a.map(x=>String(x==null?'':x).trim()).filter(Boolean):[]; }
+
+// Los documentos que este campeonato le pide al ENTRENADOR. Son propios del
+// campeonato —no hay catálogo fijo para entrenadores— y se cargan desde
+// Admin → Campeonatos igual que los del atleta.
+function docsEntrenador(evObj){
+  const out={};
+  (Array.isArray(evObj&&evObj.docsEntrenador)?evObj.docsEntrenador:[]).forEach(d=>{
+    if(!d||!d.key)return;
+    out['e_'+d.key]={
+      key:'e_'+d.key, label:d.label||'Documento', desc:d.desc||'',
+      plantillaUrl:d.plantillaUrl||'', linkUrl:d.linkUrl||'', linkTexto:d.linkTexto||''
+    };
+  });
+  return out;
+}
+function faltantes(){
+  const cat=docsEntrenador(evActual());
+  return Object.values(cat).filter(m=>!state.archivos[m.key]).map(m=>m.label);
+}
+
+// El período de inscripción de entrenadores es aparte del de los atletas: puede
+// abrir después y cerrar antes, y por eso tiene su propia fecha.
+function entrenadoresAbierto(ev){
+  if(!ev||!ev.entrenadoresOpen)return false;
+  const cierre=String(ev.entrenadoresCloseAt||'').trim();
+  if(!cierre)return true;
+  return hoyISO()<=cierre;
+}
+function hoyISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+// ── Acreditación ──────────────────────────────────────────────
+// Vigente = tiene alguna acreditación cuyo término no ha pasado. Es la misma
+// cuenta que hace el panel en la Base de Entrenadores.
+function acreditacionVigente(c){
+  const m=new Date().toISOString().slice(0,7);
+  const acs=(c&&c.acreditaciones)||[];
+  const vig=acs.filter(a=>a.vence&&a.vence>=m).sort((a,b)=>String(b.vence).localeCompare(String(a.vence)));
+  return vig.length?vig[0]:null;
+}
+
+window.buscarRut=async function(){
+  const r=state.ent.rut;
+  if(!rutValido(r)){ state.acred=null; state.error='Ese RUT no es válido. Revísalo.'; render(); return; }
+  state.error=''; state.buscandoRut=true; render();
+  try{
+    const d=await FB.getDoc(FB.doc(FB.db,'entrenadores',formatRut(r)));
+    let c=d.exists()?d.data():null;
+    // En la base el id es el RUT con puntos, pero hay registros viejos guardados
+    // de otra forma: si no calza al primer intento, se busca por RUT limpio.
+    if(!c){
+      const d2=await FB.getDoc(FB.doc(FB.db,'entrenadores',rutLimpio(r)));
+      if(d2.exists())c=d2.data();
+    }
+    if(c){
+      const v=acreditacionVigente(c);
+      state.acred={encontrado:true, vigente:!!v, hasta:v?v.vence:'',
+                   categoria:c.categoria||''};
+      // Se rellena lo que sirve para identificarlo. El CORREO no: la base es de
+      // lectura pública, y devolver el correo de cualquiera que teclee un RUT
+      // convertiría este formulario en un buscador de correos ajenos.
+      if(!state.ent.nombre) state.ent.nombre=c.nombre||'';
+      if(!state.ent.club)   state.ent.club=c.club||'';
+      state.ent.categoria=c.categoria||'';
+    }else{
+      state.acred={encontrado:false, vigente:false, hasta:'', categoria:''};
+    }
+  }catch(e){
+    console.warn('[rut]',e);
+    state.acred={encontrado:false, vigente:false, hasta:'', categoria:'', fallo:true};
+  }
+  state.buscandoRut=false; render();
+};
+
+// ── Atletas ya inscritos en el campeonato ─────────────────────
+async function cargarAtletas(){
+  state.cargandoAtletas=true; render();
+  ATLETAS=[];
+  try{
+    const q=FB.query(FB.collection(FB.db,'inscripciones'),FB.where('evento','==',state.evento));
+    const snap=await FB.getDocs(q);
+    snap.forEach(d=>{
+      const a=d.data();
+      // Los rechazados no: ése no va a competir. Los pendientes sí — el período
+      // del entrenador corre junto al del atleta y casi todos van a estar
+      // pendientes de revisión todavía.
+      if(a.status==='rejected')return;
+      ATLETAS.push({rut:rutLimpio(a.rut), nombre:a.nombre||'', club:a.club||'',
+                    modalidad:a.modalidad||'', division:a.division||'',
+                    categoria:a.categoria||'', status:a.status||'pending'});
+    });
+    ATLETAS.sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  }catch(e){ console.warn('[atletas]',e); state.error='No se pudo cargar la lista de atletas: '+e.message; }
+  state.cargandoAtletas=false; render();
+}
+
+window.togglAtleta=function(rut){
+  const i=state.atletas.indexOf(rut);
+  if(i<0)state.atletas.push(rut); else state.atletas.splice(i,1);
+  render();
+};
+
+// ── Archivos ──────────────────────────────────────────────────
+window.tomarArchivo=function(inp,key){
+  const f=inp.files&&inp.files[0]; if(!f)return;
+  if(f.size>10*1024*1024){ state.error='El archivo es muy grande (máximo 10 MB).'; render(); return; }
+  state.error=''; state.archivos[key]=f; state.nombres[key]=f.name; render();
+};
+
+// ── Navegación ────────────────────────────────────────────────
+window.irA=function(n){ state.step=n; state.error=''; window.scrollTo(0,0); render(); };
+window.setEvento=function(v){
+  state.evento=v; state.atletas=[]; state.error=''; render();
+  if(v)cargarAtletas();
+};
+window.setCampo=function(k,v){
+  if(k==='rut'){ state.ent.rut=formatRut(v); state.acred=null; }
+  else state.ent[k]=v;
+  render();
+};
+window.setBusca=function(v){ state.buscaAtleta=v; render(); };
+
+function puedeSeguir(){
+  if(state.step===0) return !!state.evento;
+  if(state.step===1) return rutValido(state.ent.rut) && state.ent.nombre.trim().length>2
+    && /.+@.+\..+/.test(state.ent.correo) && /^\d{4}$/.test(state.ent.pin);
+  if(state.step===2) return state.atletas.length>=1;
+  if(state.step===3) return faltantes().length===0;
+  return true;
+}
+
+// ── Enviar ────────────────────────────────────────────────────
+window.enviar=async function(){
+  if(state.enviando)return;
+  state.enviando=true; state.error=''; render();
+  const ev=evActual();
+  const rc=rutLimpio(state.ent.rut);
+  try{
+    // Los documentos van a athlete_files/{rut}/…, que es la carpeta de quien se
+    // inscribe y ya tiene su regla publicada. El nombre lleva delante
+    // "entrenador_" para que no se confunda con lo que subió como atleta: hay
+    // entrenadores que además compiten, y son la misma persona y el mismo RUT.
+    const urls={};
+    for(const meta of Object.values(docsEntrenador(ev))){
+      const f=state.archivos[meta.key]; if(!f)continue;
+      const ext=(String(f.name||'').match(/\.([a-zA-Z0-9]+)$/)||[])[1]||'pdf';
+      const r=FB.ref(FB.storage,`athlete_files/${rc}/entrenador_${meta.key}_${Date.now()}.${ext}`);
+      await FB.uploadBytes(r,f,{contentType:f.type||'application/octet-stream'});
+      urls[meta.key]=await FB.getDownloadURL(r);
+    }
+    const elegidos=ATLETAS.filter(a=>state.atletas.indexOf(a.rut)>=0)
+      .map(a=>({rut:a.rut,nombre:a.nombre,modalidad:a.modalidad,division:a.division,categoria:a.categoria}));
+
+    const pub={
+      evento:state.evento,
+      nombre:state.ent.nombre.trim(),
+      rut:formatRut(state.ent.rut),
+      club:state.ent.club.trim(),
+      categoria:state.ent.categoria||'',
+      acreditado:!!(state.acred&&state.acred.vigente),
+      acreditadoHasta:(state.acred&&state.acred.hasta)||'',
+      enBase:!!(state.acred&&state.acred.encontrado),
+      atletas:elegidos,
+      status:'pending',
+      timestamp:FB.serverTimestamp()
+    };
+    const priv={
+      pin:state.ent.pin, rut:formatRut(state.ent.rut),
+      correo:state.ent.correo.trim(), telefono:state.ent.telefono.trim(),
+      docs:urls, ts:FB.serverTimestamp()
+    };
+    const id=`${state.evento}_${rc}`;
+    const refPub=FB.doc(FB.db,'inscripciones_entrenador',id);
+    const refPriv=FB.doc(FB.db,'inscripciones_entrenador_priv',id);
+    await FB.runTransaction(FB.db,async tx=>{
+      const y=await tx.get(refPub);
+      if(y.exists()&&y.data().status!=='rejected') throw new Error('YA_INSCRITO');
+      tx.set(refPub,pub); tx.set(refPriv,priv);
+    });
+    state.docId=id; state.ok='listo'; state.enviando=false; window.scrollTo(0,0); render();
+  }catch(e){
+    console.error('[enviar]',e);
+    state.error = e.message==='YA_INSCRITO'
+      ? 'Ya hay una inscripción de entrenador con ese RUT para este campeonato.'
+      : 'No se pudo enviar: '+e.message;
+    state.enviando=false; render();
+  }
+};
+
+// ══════════════ Pantalla ══════════════
+function render(){
+  const app=$('app'); if(!app)return;
+  if(!LISTO){ app.innerHTML='<div class="card" style="text-align:center"><div class="sp"></div><div class="muted" style="margin-top:10px">Cargando campeonatos…</div></div>'; return; }
+  if(state.ok){ app.innerHTML=vistaListo(); return; }
+
+  const abiertos=EVENTOS.filter(entrenadoresAbierto);
+  if(!abiertos.length){
+    app.innerHTML=`<div class="card">
+      <h2 class="os" style="font-size:19px;letter-spacing:1px;margin-bottom:10px">Inscripción de entrenadores</h2>
+      <div class="alert alert-info">Por ahora no hay ningún campeonato con la inscripción de entrenadores abierta.
+      Cuando se abra, aparece acá.</div></div>`;
+    return;
+  }
+
+  let h=`<div class="step-bar">${[0,1,2,3,4].map(i=>
+    `<div class="step-dot ${state.step===i?'active':''} ${state.step>i?'done':''}"></div>`).join('')}</div>`;
+
+  if(state.error) h+=`<div class="alert alert-error">${esc(state.error)}</div>`;
+
+  if(state.step===0) h+=pasoEvento(abiertos);
+  else if(state.step===1) h+=pasoDatos();
+  else if(state.step===2) h+=pasoAtletas();
+  else if(state.step===3) h+=pasoDocs();
+  else h+=pasoConfirmar();
+
+  app.innerHTML=h;
+}
+
+function pasoEvento(abiertos){
+  const ev=evActual();
+  return `<div class="card fade">
+    <h2 class="os" style="font-size:19px;letter-spacing:1px;margin-bottom:6px">Inscripción de entrenadores</h2>
+    <p class="muted" style="margin-bottom:18px">Este es el formulario del entrenador, aparte del de los atletas.
+      Vas a decir a qué atletas llevas —de los que ya están inscritos— y a subir los documentos que pida el campeonato.</p>
+    <div class="field">
+      <label>Campeonato <span class="req">*</span></label>
+      <select class="input" onchange="setEvento(this.value)">
+        <option value="">— Elige el campeonato —</option>
+        ${abiertos.map(e=>`<option value="${esc(e.id)}" ${state.evento===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}
+      </select>
+    </div>
+    ${ev&&ev.entrenadoresTexto?`<div class="alert alert-info">${esc(ev.entrenadoresTexto).replace(/\n/g,'<br>')}</div>`:''}
+    ${ev&&ev.entrenadoresCloseAt?`<p class="muted">Las inscripciones de entrenadores para este campeonato cierran el <b>${esc(ev.entrenadoresCloseAt)}</b>.</p>`:''}
+    <div style="margin-top:18px"><button class="btn btn-accent" onclick="irA(1)" ${puedeSeguir()?'':'disabled'}>Continuar</button></div>
+  </div>`;
+}
+
+function pasoDatos(){
+  const a=state.acred;
+  let aviso='';
+  if(state.buscandoRut) aviso=`<div class="alert alert-info">Buscando en la base de acreditados…</div>`;
+  else if(a&&a.fallo) aviso=`<div class="alert alert-warn">No se pudo consultar la base de acreditados en este momento. Puedes seguir igual: llena tus datos y la organización lo revisa.</div>`;
+  else if(a&&a.encontrado&&a.vigente) aviso=`<div class="alert alert-ok"><b>Acreditación vigente</b> hasta ${esc(a.hasta)}${a.categoria?' · '+esc(a.categoria):''}. Tus datos se rellenaron solos; revísalos por si algo cambió.</div>`;
+  else if(a&&a.encontrado&&!a.vigente) aviso=`<div class="alert alert-warn">Estás en la base de entrenadores, pero <b>tu acreditación no está vigente</b>. Puedes inscribirte igual: queda anotado y lo revisa la organización.</div>`;
+  else if(a&&!a.encontrado) aviso=`<div class="alert alert-warn">Tu RUT no está en la base de acreditados de FECHIPO. <b>Puedes inscribirte igual</b> —es lo normal si vienes de otra organización—: llena tus datos y la organización lo revisa.</div>`;
+
+  return `<div class="card fade">
+    <h2 class="os" style="font-size:18px;letter-spacing:1px;margin-bottom:16px">Tus datos</h2>
+    <div class="field">
+      <label>RUT <span class="req">*</span></label>
+      <div style="display:flex;gap:8px">
+        <input class="input ${state.ent.rut&&rutValido(state.ent.rut)?'ok':''}" value="${esc(state.ent.rut)}"
+          placeholder="12.345.678-9" onchange="setCampo('rut',this.value)" oninput="setCampo('rut',this.value)">
+        <button class="btn btn-outline" style="white-space:nowrap" onclick="buscarRut()" ${rutValido(state.ent.rut)?'':'disabled'}>Buscar</button>
+      </div>
+      <p class="muted" style="margin-top:5px">Con tu RUT revisamos si ya estás acreditado y te ahorramos escribir.</p>
+    </div>
+    ${aviso}
+    <div class="row">
+      <div class="field"><label>Nombre completo <span class="req">*</span></label>
+        <input class="input" value="${esc(state.ent.nombre)}" oninput="setCampo('nombre',this.value)" placeholder="Nombre y apellidos"></div>
+      <div class="field"><label>Club o institución</label>
+        <input class="input" value="${esc(state.ent.club)}" oninput="setCampo('club',this.value)" placeholder="Club"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Correo <span class="req">*</span></label>
+        <input class="input" type="email" value="${esc(state.ent.correo)}" oninput="setCampo('correo',this.value)" placeholder="tucorreo@gmail.com"></div>
+      <div class="field"><label>Teléfono</label>
+        <input class="input" value="${esc(state.ent.telefono)}" oninput="setCampo('telefono',this.value)" placeholder="+56 9 …"></div>
+    </div>
+    <div class="field" style="max-width:220px">
+      <label>PIN de 4 dígitos <span class="req">*</span></label>
+      <input class="input" inputmode="numeric" maxlength="4" value="${esc(state.ent.pin)}"
+        oninput="setCampo('pin',this.value.replace(/\\D/g,'').slice(0,4))" placeholder="1234">
+      <p class="muted" style="margin-top:5px">Guárdalo: es lo que te va a pedir la organización si necesitas cambiar algo.</p>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-outline" onclick="irA(0)">Atrás</button>
+      <button class="btn btn-accent" onclick="irA(2)" ${puedeSeguir()?'':'disabled'}>Continuar</button>
+    </div>
+  </div>`;
+}
+
+function pasoAtletas(){
+  if(state.cargandoAtletas) return `<div class="card" style="text-align:center"><div class="sp"></div><div class="muted" style="margin-top:10px">Cargando los atletas inscritos…</div></div>`;
+  const b=nn(state.buscaAtleta);
+  const vis=ATLETAS.filter(a=>!b||nn(a.nombre).includes(b)||nn(a.club).includes(b));
+  return `<div class="card fade">
+    <h2 class="os" style="font-size:18px;letter-spacing:1px;margin-bottom:6px">Tus atletas</h2>
+    <p class="muted" style="margin-bottom:14px">Marca a todos los que llevas en este campeonato. Tiene que ser
+      <b>al menos uno</b>, y no hay tope. Solo salen los que ya están inscritos.</p>
+    ${!ATLETAS.length?`<div class="alert alert-warn">Todavía no hay atletas inscritos en este campeonato.
+      Si tus atletas aún no se inscriben, espera a que lo hagan y vuelve.</div>`:`
+      <div class="field"><input class="input" placeholder="Buscar por nombre o club…" value="${esc(state.buscaAtleta)}" oninput="setBusca(this.value)"></div>
+      <div style="max-height:420px;overflow-y:auto;margin-bottom:6px">
+        ${vis.map(a=>{
+          const s=state.atletas.indexOf(a.rut)>=0;
+          return `<label class="ath ${s?'sel':''}">
+            <input type="checkbox" ${s?'checked':''} onchange="togglAtleta('${esc(a.rut)}')">
+            <div style="flex:1;min-width:0">
+              <div class="n">${esc(a.nombre)}</div>
+              <div class="d">${esc([a.club,a.modalidad,a.division,a.categoria?a.categoria+' kg':''].filter(Boolean).join(' · '))}</div>
+            </div>
+            ${a.status==='pending'?'<span class="pill pill-warn">por revisar</span>':'<span class="pill pill-ok">inscrito</span>'}
+          </label>`;
+        }).join('')||'<div class="muted">Ningún atleta calza con esa búsqueda.</div>'}
+      </div>
+      <p class="muted">Elegidos: <b style="color:var(--text)">${state.atletas.length}</b></p>`}
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-outline" onclick="irA(1)">Atrás</button>
+      <button class="btn btn-accent" onclick="irA(3)" ${puedeSeguir()?'':'disabled'}>Continuar</button>
+    </div>
+  </div>`;
+}
+
+function pasoDocs(){
+  const cat=docsEntrenador(evActual());
+  const lista=Object.values(cat);
+  let h=`<div class="card fade">
+    <h2 class="os" style="font-size:18px;letter-spacing:1px;margin-bottom:6px">Tus documentos</h2>`;
+  if(!lista.length){
+    h+=`<div class="alert alert-info">Este campeonato no pide documentos al entrenador. Puedes continuar.</div>`;
+  }else{
+    h+=`<p class="muted" style="margin-bottom:16px">Son los que este campeonato le pide al entrenador. Máximo 10 MB cada uno.</p>`;
+    lista.forEach(m=>{
+      const nom=state.nombres[m.key]||'';
+      h+=`<div class="field">`;
+      if(m.plantillaUrl||m.linkUrl){
+        h+=`<div style="background:rgba(30,91,168,.08);border:1px solid rgba(30,91,168,.4);border-radius:10px;padding:14px 16px;margin-bottom:12px">
+          <div style="font-size:13px;font-weight:600;color:#60a5fa;margin-bottom:4px">${esc(m.label)}</div>
+          <div class="muted">${esc(m.desc)}${m.plantillaUrl?'. Descarga el formulario, complétalo y súbelo firmado':''}.</div>
+          ${m.linkUrl?`<div class="muted" style="margin-top:6px">${esc(m.linkTexto||'Este documento se obtiene en otra página.')}</div>`:''}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            ${m.plantillaUrl?`<a href="${esc(m.plantillaUrl)}" download style="display:inline-flex;padding:8px 14px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.5);border-radius:6px;color:#60a5fa;font-size:12px;font-weight:600;text-decoration:none;font-family:Oswald,sans-serif;letter-spacing:1px">⬇ DESCARGAR FORMULARIO</a>`:''}
+            ${m.linkUrl?`<a href="${esc(m.linkUrl)}" target="_blank" rel="noopener" style="display:inline-flex;padding:8px 14px;background:rgba(212,168,67,.15);border:1px solid rgba(212,168,67,.5);border-radius:6px;color:var(--gold);font-size:12px;font-weight:600;text-decoration:none;font-family:Oswald,sans-serif;letter-spacing:1px">↗ IR A LA PÁGINA</a>`:''}
+          </div>
+        </div>`;
+      }
+      h+=`<label>${esc(m.label)} <span class="req">*</span></label>
+        <div class="upload-zone ${nom?'done':''}">
+          <input type="file" accept="application/pdf,image/*" onchange="tomarArchivo(this,'${esc(m.key)}')">
+          ${nom?`<div class="icon">✅</div><div class="fname">${esc(nom)}</div><div class="txt">Toca para cambiarlo</div>`
+              :`<div class="icon">📄</div><div class="txt">${esc(m.desc||'Toca para subir')}</div>`}
+        </div></div>`;
+    });
+  }
+  h+=`<div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-outline" onclick="irA(2)">Atrás</button>
+      <button class="btn btn-accent" onclick="irA(4)" ${puedeSeguir()?'':'disabled'}>Continuar</button>
+    </div></div>`;
+  return h;
+}
+
+function pasoConfirmar(){
+  const ev=evActual();
+  const elegidos=ATLETAS.filter(a=>state.atletas.indexOf(a.rut)>=0);
+  const a=state.acred;
+  return `<div class="card fade">
+    <h2 class="os" style="font-size:18px;letter-spacing:1px;margin-bottom:16px">Revisa antes de enviar</h2>
+    <div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px">
+      <div class="muted">Campeonato</div><div style="font-weight:600;margin-bottom:10px">${esc(ev?ev.name:'')}</div>
+      <div class="muted">Entrenador</div>
+      <div style="font-weight:600">${esc(state.ent.nombre)} · ${esc(formatRut(state.ent.rut))}</div>
+      <div class="muted" style="margin-top:2px">${esc(state.ent.club||'Sin club')} · ${esc(state.ent.correo)}</div>
+      <div style="margin-top:8px">${a&&a.vigente
+        ?`<span class="pill pill-ok">ACREDITACIÓN VIGENTE${a.hasta?' HASTA '+esc(a.hasta):''}</span>`
+        :`<span class="pill pill-warn">SIN ACREDITACIÓN VIGENTE · LA ORGANIZACIÓN LO REVISA</span>`}</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px">
+      <div class="muted" style="margin-bottom:6px">Atletas que llevas (${elegidos.length})</div>
+      ${elegidos.map(x=>`<div style="font-size:13px;padding:3px 0">${esc(x.nombre)} <span class="muted">${esc([x.modalidad,x.division].filter(Boolean).join(' · '))}</span></div>`).join('')}
+    </div>
+    ${Object.keys(state.nombres).length?`<div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px">
+      <div class="muted" style="margin-bottom:6px">Documentos</div>
+      ${Object.values(docsEntrenador(ev)).map(m=>`<div style="font-size:13px;padding:3px 0">${esc(m.label)}: ${state.nombres[m.key]?'✅ '+esc(state.nombres[m.key]):'❌ falta'}</div>`).join('')}
+    </div>`:''}
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-outline" onclick="irA(3)" ${state.enviando?'disabled':''}>Atrás</button>
+      <button class="btn btn-green" onclick="enviar()" ${state.enviando?'disabled':''}>
+        ${state.enviando?'<span class="sp" style="width:16px;height:16px;border-width:2px"></span> Enviando…':'Enviar inscripción'}</button>
+    </div>
+  </div>`;
+}
+
+function vistaListo(){
+  const ev=evActual();
+  return `<div class="card fade" style="text-align:center;padding:36px 24px">
+    <div style="font-size:44px;margin-bottom:10px">✅</div>
+    <h2 class="os" style="font-size:21px;letter-spacing:1px;margin-bottom:8px">Inscripción enviada</h2>
+    <p class="muted" style="max-width:440px;margin:0 auto 16px">Quedaste inscrito como entrenador en
+      <b style="color:var(--text)">${esc(ev?ev.name:'')}</b> con ${state.atletas.length} atleta(s).
+      La organización la revisa y te avisa a ${esc(state.ent.correo)}.</p>
+    <div class="alert alert-info" style="text-align:left;max-width:440px;margin:0 auto">
+      Anota tu PIN: <b>${esc(state.ent.pin)}</b>. Es lo que te van a pedir si necesitas cambiar algo.</div>
+    <div style="margin-top:20px"><a href="index.html" class="btn btn-outline">Volver al sitio</a></div>
+  </div>`;
+}
+
+// ── Arranque ──────────────────────────────────────────────────
+async function arrancar(){
+  FB=window.FBE;
+  try{
+    const snap=await FB.getDocs(FB.collection(FB.db,'eventos'));
+    EVENTOS=[]; snap.forEach(d=>{ const e={id:d.id,...d.data()}; if(e.status!=='archived')EVENTOS.push(e); });
+    EVENTOS.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+    // Si solo hay uno abierto, se elige solo: no tiene sentido hacer elegir de una lista de uno.
+    const ab=EVENTOS.filter(entrenadoresAbierto);
+    if(ab.length===1){ state.evento=ab[0].id; cargarAtletas(); }
+  }catch(e){ console.warn('[eventos]',e); }
+  LISTO=true; render();
+}
+if(window.FBE) arrancar(); else window.addEventListener('fbe-listo',arrancar);
+
+// Para las pruebas: montar un campeonato y un Firebase de mentira. En el cajón de
+// pruebas no hay salida a Firebase, así que el módulo de arriba nunca llega a
+// cargar; esto deja mirar el formulario igual.
+window._montar=function(evs,fbFalso){ EVENTOS=evs||[]; if(fbFalso)FB=fbFalso; LISTO=true; render(); };
+window._estado=state;
+window._atletas=function(a){ ATLETAS=a||[]; render(); };
+window.docsEntrenador=docsEntrenador;
+window.entrenadoresAbierto=entrenadoresAbierto;
+window.acreditacionVigente=acreditacionVigente;
+window.rutValido=rutValido;
+window.render=render;
+</script>
+</body>
+</html>

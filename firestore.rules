@@ -157,6 +157,55 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── INSCRIPCIÓN DE ENTRENADORES ──────────────────────────────
+    // Un período aparte del de los atletas. El entrenador se inscribe SIN cuenta,
+    // igual que el atleta: se identifica por RUT y guarda un PIN. Por eso acá
+    // tampoco se puede exigir request.auth != null.
+    //
+    // Estar acreditado no es requisito para inscribirse —hay organizaciones que no
+    // son FECHIPO— así que la regla no lo mira: lo que llega queda 'pending' y lo
+    // revisa la organización. Lo que sí se exige es que venga con nombre, RUT,
+    // evento y al menos un atleta, y que NO traiga el estado ya aprobado ni datos
+    // que no le corresponden.
+    function inscEntrenadorValida() {
+      return request.resource.data.status == 'pending'
+          && request.resource.data.nombre is string
+          && request.resource.data.nombre.size() > 2
+          && request.resource.data.rut is string
+          && request.resource.data.evento is string
+          && request.resource.data.atletas is list
+          && request.resource.data.atletas.size() >= 1
+          && request.resource.data.atletas.size() <= 60
+          && !request.resource.data.keys().hasAny(['pin','correo','telefono','docs']);
+    }
+    match /inscripciones_entrenador/{id} {
+      // Se lee sin sesión: de acá sale la nómina pública de entrenadores.
+      allow read: if true;
+      allow create: if isAdmin() || inscEntrenadorValida();
+      // Volver a inscribirse después de un rechazo, igual que el atleta.
+      allow update: if isAdmin()
+                    || (resource.data.status == 'rejected' && inscEntrenadorValida());
+      allow delete: if isAdmin();
+    }
+
+    // Lo privado del entrenador: su PIN, su correo, su teléfono y los links de
+    // sus documentos. Nunca se lee desde el sitio, solo desde el panel.
+    function datosEntrenadorValidos() {
+      return request.resource.data.keys().hasOnly(['pin','rut','correo','telefono','docs','ts'])
+          && request.resource.data.pin is string
+          && request.resource.data.pin.size() == 4;
+    }
+    match /inscripciones_entrenador_priv/{id} {
+      allow read: if isAdmin();
+      allow create: if datosEntrenadorValidos();
+      // Los dos documentos se escriben en la misma transacción: si uno se
+      // permitiera y el otro no, no se guardaría ninguno.
+      allow update: if isAdmin()
+                    || (get(/databases/$(database)/documents/inscripciones_entrenador/$(id)).data.status == 'rejected'
+                        && datosEntrenadorValidos());
+      allow delete: if isAdmin();
+    }
+
     match /edit_requests/{id} {
       allow read, update, delete: if isAdmin();
       allow create: if request.resource.data.keys().hasAll(['inscripcionId','rut','pin','changes','status','ts'])
