@@ -60,9 +60,26 @@ for (const [nombre, filas] of Object.entries(REALES)) {
 
   ok(salida.length === filas.length, 'salen los mismos atletas que entraron');
 
-  // Regla 1: nunca se mezclan sexos.
+  // Regla 1: hombres y mujeres van separados, SALVO la tanda de apertura y solo
+  // cuando no hay reparto legal de otra forma.
+  //
+  // Antes esto era "nunca se mezclan", a secas. Lo cambió el propio Regional
+  // Norte: con quince mujeres no hay forma —en una tanda son 15 y se pasan del
+  // tope, en dos son 8+7 y una queda bajo el mínimo—, y la comisión técnica lo
+  // resolvió metiendo los hombres de las categorías más livianas en la tanda de
+  // las mujeres. Es la única tanda mixta de los tres cronogramas que ya se
+  // corrieron, y aparece exactamente en ese caso.
   const mezcladas = tandas.filter(([, g]) => new Set(g.map(r => r.sexo)).size > 1);
-  ok(mezcladas.length === 0, 'ninguna tanda mezcla hombres con mujeres');
+  ok(mezcladas.length <= 1, 'a lo más UNA tanda mezcla hombres con mujeres');
+  if (mezcladas.length) {
+    ok(mezcladas[0][0] === tandas[0][0], 'y es la de apertura');
+    // Si se mezcló es porque hacía falta: sin los prestados, quedaba corta.
+    const g = mezcladas[0][1];
+    const sexMayor = (a => a.H > a.M ? 'H' : 'M')(
+      g.reduce((a, r) => (a[r.sexo] = (a[r.sexo] || 0) + 1, a), { H: 0, M: 0 }));
+    const propios = g.filter(r => r.sexo === sexMayor && !esBench(r.modalidad)).length;
+    ok(propios < 8, 'se mezcló porque sin los prestados quedaba bajo 8 (' + propios + ')');
+  }
 
   // Regla 2: ningún grupo categoría+división partido en dos tandas.
   const donde = {};

@@ -5961,7 +5961,7 @@ window.cronoClear=async function(){
 // Reglas: cada categoría+división JUNTA en un flight · máx 14 por flight · una sola tarima
 window.cronoAutoDistribute=async function(){
   const rows=ST.cronoRows||[]; if(!rows.length){showToast('No hay atletas',null,true);return;}
-  if(!confirm('Auto-distribuir '+rows.length+' atletas?\n\nReglas del reglamento:\n· Hombres y mujeres nunca en la misma tanda\n· Una categoría de peso + división de edad NO se parte: va entera en una tanda\n· 8 mínimo, 14 máximo de powerlifting por tanda\n· Only Bench no cuenta para el 14 y puede llevar la tanda hasta 17\n\nUna sola tarima, tandas A, B, C… la primera mitad en AM y la segunda en PM.'))return;
+  if(!confirm('Auto-distribuir '+rows.length+' atletas?\n\nReglas del reglamento:\n· Hombres y mujeres en tandas separadas — salvo la de apertura, y solo si no hay otra forma de que ninguna quede bajo 8\n· Una categoría de peso + división de edad NO se parte: va entera en una tanda\n· 8 mínimo, 14 máximo de powerlifting por tanda\n· Only Bench no cuenta para el 14 y puede llevar la tanda hasta 17\n\nUna sola tarima, tandas A, B, C… la primera mitad en AM y la segunda en PM.'))return;
   // Los tres números del reglamento, juntos y con nombre.
   const MIN_PL=8;      // mínimo de powerlifting por tanda
   const MAX_PL=14;     // máximo de powerlifting por tanda
@@ -6159,6 +6159,59 @@ window.cronoAutoDistribute=async function(){
     }
   }
 
+  // ── Último recurso: la tanda de apertura mixta ─────────────────────────
+  // Quince mujeres no se parten: en una tanda son 15 y pasan del tope, en dos
+  // son 8+7 y una queda corta. Pasó en el Regional Norte y en el Regional Sur
+  // Austral, con quince en los dos.
+  //
+  // En el Norte la comisión técnica lo resolvió así: a las siete mujeres de la
+  // primera tanda les sumó los dos hombres de las categorías más livianas
+  // —-59 Sub-Junior y -66 Sub-Junior— y armó una tanda de nueve. Es la ÚNICA
+  // tanda mixta de los tres cronogramas que ya se corrieron, y aparece
+  // exactamente en este caso: cuando no hay reparto legal de otra forma.
+  //
+  // Así que acá se hace lo mismo, y solo acá: si una tanda quedó bajo el
+  // mínimo, se le pasan grupos enteros de las categorías más livianas del otro
+  // sexo, mientras el que los presta no quede corto él. Si no alcanza para
+  // llegar a ocho, se deshace y queda como estaba.
+  const grpKey=r=>sexOf(r)+'|'+(r.division||'?')+'|'+(r.categoria||'?');
+  for(let i=0;i<fl.length;i++){
+    const corta=fl[i];
+    if(nPL(corta.rows)===0||nPL(corta.rows)>=MIN_PL)continue;
+    // Quien presta: la tanda del OTRO sexo con las categorías más livianas.
+    const cand=fl.filter(f=>f!==corta&&f.sex!==corta.sex&&nPL(f.rows)>MIN_PL)
+      .sort((a,b)=>Math.min(...a.rows.map(r=>kilos(r.categoria)))-Math.min(...b.rows.map(r=>kilos(r.categoria))));
+    const don=cand[0]; if(!don)continue;
+    // Sus grupos, del más liviano al más pesado: se prestan enteros.
+    const porG={};
+    don.rows.forEach(r=>{(porG[grpKey(r)]=porG[grpKey(r)]||[]).push(r);});
+    const gs=Object.keys(porG).sort((a,b)=>kilos(a.split('|')[2])-kilos(b.split('|')[2]));
+    const movidos=[];
+    for(const g of gs){
+      if(nPL(corta.rows)>=MIN_PL)break;
+      const grupo=porG[g];
+      if(nPL(don.rows)-nPL(grupo)<MIN_PL)continue;          // el que presta no puede quedar corto
+      if(nPL(corta.rows)+nPL(grupo)>MAX_PL)continue;
+      if(corta.rows.length+grupo.length>MAX_TOT)continue;
+      corta.rows=corta.rows.concat(grupo);
+      don.rows=don.rows.filter(r=>grupo.indexOf(r)<0);
+      movidos.push(grupo);
+    }
+    if(nPL(corta.rows)<MIN_PL){
+      // No alcanzó: se deshace, mejor una tanda corta que dos tandas tocadas.
+      movidos.forEach(grupo=>{
+        corta.rows=corta.rows.filter(r=>grupo.indexOf(r)<0);
+        don.rows=don.rows.concat(grupo);
+      });
+    }else if(movidos.length){
+      // Mixta: se ordena por peso, sin importar el sexo. Es como quedó la del
+      // Norte —-47, -57, -59, -63, -63, -66— y es el orden en que se levanta.
+      corta.rows.sort((a,b)=>kilos(a.categoria)-kilos(b.categoria)||drank(a.division)-drank(b.division));
+      corta.mixta=true;
+      don.rows.sort((a,b)=>kilos(a.categoria)-kilos(b.categoria)||drank(a.division)-drank(b.division));
+    }
+  }
+
   // ── Asignar tarima, letra y jornada ────────────────────────────────────
   const half=Math.ceil(fl.length/2);
   fl.forEach((f,idx)=>{
@@ -6173,6 +6226,9 @@ window.cronoAutoDistribute=async function(){
   const largas=fl.filter(f=>nPL(f.rows)>MAX_PL);
   let msg=fl.length+' tandas · '+half+' AM / '+(fl.length-half)+' PM';
   const avisos=[];
+  const mixtas=fl.filter(f=>f.mixta);
+  if(mixtas.length)avisos.push(mixtas.length+' mixta ('+mixtas.map(f=>LETTERS[fl.indexOf(f)]).join(', ')
+    +'): las categorías más livianas del otro sexo, para que ninguna quedara bajo '+MIN_PL);
   if(largas.length)avisos.push(largas.length+' pasan de '+MAX_PL+' ('+largas.map(f=>LETTERS[fl.indexOf(f)]+': '+nPL(f.rows)).join(', ')+') porque una categoría no se puede partir');
   if(cortas.length)avisos.push(cortas.length+' quedan bajo '+MIN_PL+' ('+cortas.map(f=>LETTERS[fl.indexOf(f)]+': '+nPL(f.rows)).join(', ')+') y no se pudieron juntar sin pasarse del tope');
   showToast(msg+(avisos.length?' — revisar: '+avisos.join(' · '):''), null, avisos.length>0);
