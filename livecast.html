@@ -2844,11 +2844,27 @@ function _cargarMarcasSuda(){
       // Un atleta puede estar en dos modalidades; se guarda la de mayor total,
       // que es la que la gente reconoce como "su" marca.
       if(!m[k]||(a.total||0)>(m[k].total||0))
-        m[k]={sq:a.sq||0,bp:a.bp||0,dl:a.dl||0,total:a.total||0,mod:a.mod||'',pais:a.pais||''};
+        m[k]={sq:_marcaSana(a.sq,a.total),bp:_marcaSana(a.bp,a.total),
+              dl:_marcaSana(a.dl,a.total),total:a.total||0,mod:a.mod||'',pais:a.pais||''};
     });
     window.NSUDA_MARCAS=m;
     if(typeof R==='function')R();
   }).catch(e=>{window.NSUDA_MARCAS={};console.warn('[livecast] marcas de la nómina:',e.message);});
+}
+// Una marca nominada NO puede ser mayor que el total declarado: el total es la
+// suma de los tres levantamientos, así que ninguno solo puede pasarlo. Cuando
+// pasa es un dedo de más al tipear.
+//
+// Salió de la nómina de FESUPO: José Manuel Conejera venía con 1125.5 en banca
+// —son 112.5— y con eso se publicó una lámina del día 4 antes de que alguien lo
+// notara. La suma NO sirve de control: las marcas nominadas son la mejor
+// sentadilla, la mejor banca y el mejor peso muerto de su carrera, y el mejor
+// total de una competencia, así que casi nunca cuadran entre sí —hay veinte
+// atletas con diferencias de medio kilo a cincuenta, y todas son legítimas—.
+// Lo que sí es imposible es que un solo movimiento pase al total.
+function _marcaSana(v,total){
+  v=+v||0; total=+total||0;
+  return (total>0&&v>total)?0:v;
 }
 function _marcasSudaFor(a){
   if(!window.NSUDA_MARCAS)return null;

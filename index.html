@@ -1090,6 +1090,19 @@ function _nsudaSlug(s){
 // las fotos de la nómina y las correcciones del admin están guardadas en
 // Firestore con el slug de `n`, y darlo vuelta las dejaría a todas huérfanas.
 function _nsudaNombre(a){ return (a&&a.nDisp)||(a&&a.n)||''; }
+// Una marca nominada NO puede ser mayor que el total declarado: el total es la
+// suma de los tres levantamientos, así que ninguno solo puede pasarlo. Cuando
+// pasa es un dedo de más al tipear la planilla —José Manuel Conejera venía con
+// 1125.5 en banca, que son 112.5—. Mejor no mostrar nada que mostrar un número
+// imposible al lado de su nombre.
+//
+// Ojo: la SUMA no sirve de control. Las marcas nominadas son la mejor sentadilla,
+// la mejor banca y el mejor peso muerto de su carrera, y el mejor total de una
+// competencia: casi nunca cuadran entre sí, y eso es normal.
+function _marcaSana(v,total){
+  v=+v||0; total=+total||0;
+  return (total>0&&v>total)?0:v;
+}
 function _nsudaCatKey(c){const plus=(c||'').includes('+');return (parseFloat(String(c).replace(/[^0-9.]/g,''))||999)+(plus?0.5:0)}
 // ── Día en que compite cada inscripción del Sudamericano ──────────
 // Con la nómina FINAL de FESUPO cada inscripción trae anotada su sesión, así que
@@ -1355,7 +1368,8 @@ function _nomSudaRows(){
     const jo=_nsudaJornada(a);
     return {n:a.n,year:a.born||'',sexo:a.sexo,cat:_nomCatN(a.cat),div:a.div,mod:a.mod,
       team:a.pais,teamHtml:_nomFlag(a.pais)+a.pais,uni:a.uni||'',res:!!a.res,
-      sq:a.sq,bp:a.bp,dl:a.dl,total:a.total,nameHtml:av+nm,
+      sq:_marcaSana(a.sq,a.total),bp:_marcaSana(a.bp,a.total),dl:_marcaSana(a.dl,a.total),
+      total:a.total,nameHtml:av+nm,
       diaLbl:_nsudaDiaLbl(jo),diaSes:jo?`${jo.nombre} · pesaje ${jo.pesaje}`:''};
   });
 }
