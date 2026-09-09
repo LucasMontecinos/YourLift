@@ -1916,10 +1916,33 @@ function _anioNac(fechaNac) {
 // corresponde.
 // Se calcula en UN solo lugar y lo usan el formulario, el resumen, el botón de
 // enviar y la validación final — si se separaran, volvería a pasar lo mismo.
-function docsRequeridos(evObj, fechaNac) {
+// Un documento puede estar limitado a ciertas modalidades o divisiones.
+//
+// No todo el campeonato compite en lo mismo. Olimpiadas Especiales pide sus
+// antecedentes solo a los suyos, y pedírselos a todos los que se inscriben en
+// las otras modalidades del mismo campeonato es papeleo que no corresponde.
+//
+// La condición vive en evObj.docsCond[docKey] = {mods:[…], divs:[…]}. Una lista
+// vacía o ausente significa "a todos": es el caso normal y no hay que declararlo.
+function _docAplica(evObj, docKey, modalidad, division) {
+  const c = evObj && evObj.docsCond && evObj.docsCond[docKey];
+  if (!c) return true;
+  const mods = _limpiaLista(c.mods), divs = _limpiaLista(c.divs);
+  if (mods.length && mods.indexOf(String(modalidad || '').trim()) < 0) return false;
+  if (divs.length && divs.indexOf(String(division || '').trim()) < 0) return false;
+  return true;
+}
+function docsRequeridos(evObj, fechaNac, modalidad, division) {
   const lista = (evObj && Array.isArray(evObj.requiredDocs)) ? evObj.requiredDocs : [];
-  if (requiereConsentimientoMenor(fechaNac)) return lista.slice();
-  return lista.filter(k => k !== 'menorConsent');
+  // Sin modalidad explícita se usa la que está eligiendo el formulario. Así las
+  // cuatro llamadas —el formulario, el resumen, el botón de enviar y la
+  // validación final— ven siempre lo mismo sin tener que pasarla cada una.
+  let mod = modalidad, div = division;
+  if (mod === undefined) { try { mod = state.form.modalidad; } catch (e) { mod = ''; } }
+  if (div === undefined) { try { div = state.form.division; } catch (e) { div = ''; } }
+  const porModalidad = lista.filter(k => _docAplica(evObj, k, mod, div));
+  if (requiereConsentimientoMenor(fechaNac)) return porModalidad;
+  return porModalidad.filter(k => k !== 'menorConsent');
 }
 
 function handleFile(input, type) {

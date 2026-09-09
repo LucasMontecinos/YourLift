@@ -159,6 +159,69 @@ const EVENTO = {
        'y con "solo estas" ya no se ofrecen las que no corresponden');
   }
 
+  console.log('\n  Un documento se le puede pedir solo a una modalidad');
+  {
+    // Un campeonato mixto: Olimpiadas Especiales corre junto al powerlifting.
+    // Sus antecedentes son de ellos, y pedírselos a todo el campeonato es
+    // papeleo que no corresponde.
+    const ev = { ...EVENTO,
+      requiredDocs: ['carnetIdFront', 'x_med1'],
+      docsCond: { x_med1: { mods: ['Olimpiadas Especiales'], divs: [] } } };
+    const r = await p.evaluate(e => {
+      EVENTS.length = 0; EVENTS.push(e); state.form.evento = e.id;
+      state.form.fechaNac = '1998-05-10';
+      const pide = mod => { state.form.modalidad = mod; state.form.division = 'Open';
+                            return docsRequeridos(e, '1998-05-10'); };
+      const oe = pide('Olimpiadas Especiales');
+      const cl = pide('Powerlifting Classic');
+      // Y lo que se DIBUJA tiene que ser lo mismo que se exige: si el documento
+      // no sale en pantalla pero sigue en la lista, el atleta queda trancado sin
+      // poder enviar y sin nada que subir.
+      state.form.modalidad = 'Powerlifting Classic'; state.step = 3; render();
+      const dibujaClassic = /Certificado médico OE/.test(document.body.innerHTML);
+      state.form.modalidad = 'Olimpiadas Especiales'; render();
+      const dibujaOE = /Certificado médico OE/.test(document.body.innerHTML);
+      return { oe, cl, dibujaClassic, dibujaOE };
+    }, ev);
+    ok(r.oe.indexOf('x_med1') >= 0, 'al de Olimpiadas Especiales se le pide');
+    ok(r.cl.indexOf('x_med1') < 0, 'y al de Powerlifting Classic no');
+    ok(r.cl.indexOf('carnetIdFront') >= 0, 'pero el carnet, que no está limitado, se le pide igual');
+    ok(!r.dibujaClassic, 'al classic no se le dibuja la casilla');
+    ok(r.dibujaOE, 'y al de Olimpiadas Especiales sí');
+  }
+  {
+    // La división filtra igual, y las dos condiciones se suman.
+    const r = await p.evaluate(() => {
+      const ev = { id: 'z', name: 'Z', requiredDocs: ['notas'],
+                   docsCond: { notas: { mods: [], divs: ['Universitario'] } } };
+      const pide = (mod, div) => { state.form.modalidad = mod; state.form.division = div;
+                                   return docsRequeridos(ev, '1998-05-10').length; };
+      const ambas = { id: 'z2', name: 'Z2', requiredDocs: ['notas'],
+                      docsCond: { notas: { mods: ['Powerlifting Universitario'], divs: ['Universitario'] } } };
+      const pide2 = (mod, div) => { state.form.modalidad = mod; state.form.division = div;
+                                    return docsRequeridos(ambas, '1998-05-10').length; };
+      return { uni: pide('Powerlifting Classic', 'Universitario'),
+               open: pide('Powerlifting Classic', 'Open'),
+               lasDos: pide2('Powerlifting Universitario', 'Universitario'),
+               soloUna: pide2('Powerlifting Classic', 'Universitario') };
+    });
+    ok(r.uni === 1 && r.open === 0, 'la división filtra igual que la modalidad');
+    ok(r.lasDos === 1, 'con las dos condiciones puestas, hay que cumplir las dos');
+    ok(r.soloUna === 0, 'y cumplir solo una no alcanza');
+  }
+  {
+    // Lo de siempre no puede cambiar: sin condición, se le pide a todos.
+    const r = await p.evaluate(() => {
+      const ev = { id: 'w', name: 'W', requiredDocs: ['carnetIdFront', 'wadaIntl'] };
+      state.form.modalidad = 'Lo Que Sea'; state.form.division = 'Cualquiera';
+      return { sinCond: docsRequeridos(ev, '1998-05-10').length,
+               condVacia: docsRequeridos({ ...ev, docsCond: { carnetIdFront: { mods: [], divs: [] } } },
+                                         '1998-05-10').length };
+    });
+    ok(r.sinCond === 2, 'un campeonato sin condiciones sigue pidiendo todo a todos');
+    ok(r.condVacia === 2, 'y una condición vacía tampoco esconde nada');
+  }
+
   console.log('\n  Las reglas publicadas dejan pasar lo que el formulario guarda');
   {
     // Esto no es un detalle de estilo. Las reglas de Firestore para

@@ -510,6 +510,21 @@ async function loadAll(){
       },(e)=>console.warn('[listener] entrenadores:',e.message));
     }catch(e){console.warn('[loadAll] ent listener:',e.message);}
   }
+  // Inscripciones de ENTRENADORES. Van en su propia colección porque son otro
+  // período y otra ficha: el entrenador no compite, declara a qué atletas lleva.
+  if(!window._entInscListener){
+    try{
+      window._entInscListener=onSnapshot(collection(db,'inscripciones_entrenador'),(snap)=>{
+        ST.entInsc=snap.docs.map(d=>({id:d.id,...d.data()}))
+          .sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+        if(ST.view==='entInsc')render();
+      },(e)=>console.warn('[listener] inscripciones_entrenador:',e.message));
+      window._entInscPrivListener=onSnapshot(collection(db,'inscripciones_entrenador_priv'),(snap)=>{
+        ST.entInscPriv={}; snap.docs.forEach(d=>{ ST.entInscPriv[d.id]=d.data(); });
+        if(ST.view==='entInsc')render();
+      },(e)=>console.warn('[listener] inscripciones_entrenador_priv:',e.message));
+    }catch(e){console.warn('[loadAll] entInsc listener:',e.message);}
+  }
   if(!window._allCompResListener){
     try{
       window._allCompResListener=onSnapshot(collection(db,'competition_results'),(snap)=>{
@@ -1059,6 +1074,146 @@ window.removeAchievement=async function(codigo,idx){
     render();
   }catch(e){showToast('Error: '+e.message,null,true);}
 };
+
+// ═══════════════════════════════════════════════════════════
+// INSCRIPCIÓN DE ENTRENADORES — revisión
+// ═══════════════════════════════════════════════════════════
+// Llegan de inscripcion_entrenador.html: el entrenador se inscribe él, dice a
+// qué atletas lleva y sube sus documentos. Acá se revisan y se aprueban.
+//
+// La acreditación NO tranca la inscripción a propósito —hay organizaciones que
+// no son FECHIPO, como Olimpiadas Especiales— así que lo que llega puede venir
+// sin ella. Por eso la columna de acreditación es lo primero que se ve: es
+// justo lo que hay que mirar al revisar.
+window.entInscFiltro=function(k,v){ ST['entIns_'+k]=v; render(); };
+window.entInscEstado=async function(id,status){
+  id=decodeURIComponent(id);
+  const e=(ST.entInsc||[]).find(x=>x.id===id); if(!e)return;
+  const antes=e.status;
+  try{
+    await updateDoc(doc(db,'inscripciones_entrenador',id),{status});
+    await logAction('ent_insc_status',id,antes,status,{nombre:e.nombre});
+    showToast(`${e.nombre}: ${status}`,async()=>{
+      await updateDoc(doc(db,'inscripciones_entrenador',id),{status:antes});
+      await logAction('undo_ent_insc_status',id,status,antes,{nombre:e.nombre});
+      showToast('Estado revertido');
+    });
+  }catch(err){ showToast('Error: '+err.message,null,true); }
+};
+window.entInscBorrar=async function(id){
+  id=decodeURIComponent(id);
+  const e=(ST.entInsc||[]).find(x=>x.id===id); if(!e)return;
+  if(!confirm(`¿Eliminar la inscripción de ${e.nombre}?\n\nSe borra también su PIN y sus documentos.`))return;
+  try{
+    await deleteDoc(doc(db,'inscripciones_entrenador',id));
+    try{ await deleteDoc(doc(db,'inscripciones_entrenador_priv',id)); }catch(_){}
+    await logAction('delete_ent_insc',id,e.nombre,'deleted',{evento:e.evento});
+    showToast(`${e.nombre} eliminado`);
+  }catch(err){ showToast('Error: '+err.message,null,true); }
+};
+window.entInscExportar=function(){
+  const list=_entInscFiltrada();
+  if(!list.length){ showToast('Nada que exportar',null,true); return; }
+  const filas=[['Campeonato','Entrenador','RUT','Club','Acreditación','Vence','Estado','Atletas','Correo','Teléfono']];
+  list.forEach(e=>{
+    const pv=(ST.entInscPriv||{})[e.id]||{};
+    filas.push([
+      (ST.eventos.find(x=>x.id===e.evento)||{}).name||e.evento,
+      e.nombre||'', e.rut||'', e.club||'',
+      e.acreditado?'Vigente':(e.enBase?'Vencida':'No está en la base'),
+      e.acreditadoHasta||'', e.status||'',
+      (e.atletas||[]).map(a=>a.nombre).join(' | '),
+      pv.correo||'', pv.telefono||''
+    ]);
+  });
+  const csv='﻿'+filas.map(f=>f.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(';')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='entrenadores_inscritos.csv'; a.click();
+};
+function _entInscFiltrada(){
+  let l=(ST.entInsc||[]).slice();
+  const ev=ST.entIns_evento||'', st=ST.entIns_status||'', q=(ST.entIns_q||'').toLowerCase().trim();
+  if(ev)l=l.filter(x=>x.evento===ev);
+  if(st)l=l.filter(x=>(x.status||'pending')===st);
+  if(q)l=l.filter(x=>((x.nombre||'')+' '+(x.rut||'')+' '+(x.club||'')).toLowerCase().includes(q));
+  return l;
+}
+function renderEntInsc(){
+  const list=_entInscFiltrada();
+  const todos=ST.entInsc||[];
+  const evs=[...new Set(todos.map(x=>x.evento))];
+  const pend=todos.filter(x=>(x.status||'pending')==='pending').length;
+  const sinAcred=todos.filter(x=>!x.acreditado).length;
+  const filas=list.map(e=>{
+    const pv=(ST.entInscPriv||{})[e.id]||{};
+    const docs=Object.entries(pv.docs||{});
+    const evObj=ST.eventos.find(x=>x.id===e.evento)||{};
+    const nomDoc=k=>{
+      const d=(evObj.docsEntrenador||[]).find(x=>'e_'+x.key===k);
+      return d?d.label:k;
+    };
+    const st=e.status||'pending';
+    const badge=st==='approved'?'<span class="badge b-g">Aprobado</span>'
+      :st==='rejected'?'<span class="badge b-r">Rechazado</span>'
+      :'<span class="badge b-y">Pendiente</span>';
+    const acred=e.acreditado
+      ? `<span class="badge b-g">Vigente</span>${e.acreditadoHasta?`<br><span style="font-size:9px;color:var(--muted)">hasta ${esc(e.acreditadoHasta)}</span>`:''}`
+      : e.enBase
+        ? `<span class="badge b-r">Vencida</span>`
+        : `<span class="badge b-r">No está en la base</span>`;
+    return `<tr>
+      <td><div style="font-weight:600">${esc(e.nombre||'')}</div>
+          <div style="font-size:10px;color:var(--muted)">${esc(e.rut||'')} · ${esc(e.club||'sin club')}</div>
+          ${pv.correo?`<div style="font-size:10px;color:var(--muted)">${esc(pv.correo)}${pv.telefono?' · '+esc(pv.telefono):''}</div>`:''}</td>
+      <td style="font-size:11px">${esc(evObj.name||e.evento)}</td>
+      <td>${acred}</td>
+      <td style="font-size:11px;max-width:260px">
+        <b>${(e.atletas||[]).length}</b>
+        <div style="color:var(--muted);line-height:1.5">${(e.atletas||[]).map(a=>esc(a.nombre)).join('<br>')}</div>
+      </td>
+      <td style="font-size:11px">${docs.length
+        ? docs.map(([k,u])=>`<a href="${esc(u)}" target="_blank" style="color:var(--gold);display:block">${esc(nomDoc(k))}</a>`).join('')
+        : '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${badge}</td>
+      <td style="white-space:nowrap">
+        ${st!=='approved'?`<button class="btn" style="padding:4px 9px;font-size:11px;background:var(--green);color:#04210f" onclick="entInscEstado('${encodeURIComponent(e.id)}','approved')">Aprobar</button>`:''}
+        ${st!=='rejected'?`<button class="btn" style="padding:4px 9px;font-size:11px;background:transparent;border:1px solid var(--red);color:var(--red);margin-left:4px" onclick="entInscEstado('${encodeURIComponent(e.id)}','rejected')">Rechazar</button>`:''}
+        <button class="btn" style="padding:4px 9px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted);margin-left:4px" onclick="entInscBorrar('${encodeURIComponent(e.id)}')">Borrar</button>
+      </td>
+    </tr>`;
+  }).join('');
+  return `
+  <div class="h1">Inscripción de Entrenadores</div>
+  <p class="subtitle">El período de los entrenadores, aparte del de los atletas · ${todos.length} inscritos${pend?` · ${pend} por revisar`:''}${sinAcred?` · ${sinAcred} sin acreditación vigente`:''}</p>
+  ${!todos.length?`<div class="card" style="color:var(--muted);font-size:13px;line-height:1.6">
+      Todavía no hay ninguna inscripción de entrenador.<br><br>
+      Se abre desde <b>Campeonatos → editar → Abrir inscripción de entrenadores</b>, y el
+      formulario queda en <b>inscripcion_entrenador.html</b>. Ahí el entrenador entra con su
+      RUT, elige a los atletas que lleva de los que ya están inscritos, y sube los documentos
+      que le pidas.
+    </div>`:`
+  <div class="card">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <input class="inp" placeholder="Buscar por nombre, RUT o club…" value="${esc(ST.entIns_q||'')}"
+        oninput="entInscFiltro('q',this.value)" style="flex:1;min-width:200px">
+      <select class="inp" onchange="entInscFiltro('evento',this.value)" style="width:auto">
+        <option value="">Todos los campeonatos</option>
+        ${evs.map(id=>`<option value="${esc(id)}" ${ST.entIns_evento===id?'selected':''}>${esc((ST.eventos.find(x=>x.id===id)||{}).name||id)}</option>`).join('')}
+      </select>
+      <select class="inp" onchange="entInscFiltro('status',this.value)" style="width:auto">
+        <option value="">Todos</option>
+        ${['pending','approved','rejected'].map(s=>`<option value="${s}" ${ST.entIns_status===s?'selected':''}>${s==='pending'?'Pendientes':s==='approved'?'Aprobados':'Rechazados'}</option>`).join('')}
+      </select>
+      <button class="btn" style="padding:7px 14px;font-size:12px" onclick="entInscExportar()">Exportar CSV</button>
+    </div>
+    <div style="overflow-x:auto">
+    <table class="tbl"><thead><tr>
+      <th>Entrenador</th><th>Campeonato</th><th>Acreditación</th><th>Atletas</th><th>Documentos</th><th>Estado</th><th></th>
+    </tr></thead><tbody>${filas||'<tr><td colspan="7" style="color:var(--muted)">Nada calza con ese filtro.</td></tr>'}</tbody></table>
+    </div>
+  </div>`}`;
+}
 
 // ═══════════════════════════════════════════
 // APPROVE / REJECT INSCRIPCIONES
@@ -1864,6 +2019,7 @@ function render(){
       <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')">Revisión inscripciones</button>
       <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')">Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
       <button class="side-btn ${ST.view==='entrenadoresDB'?'active':''}" onclick="go('entrenadoresDB')">Base Entrenadores</button>
+      <button class="side-btn ${ST.view==='entInsc'?'active':''}" onclick="go('entInsc')">Inscripción Entrenadores${(()=>{const n=(ST.entInsc||[]).filter(x=>x.status==='pending').length;return n?` <span style="background:var(--gold);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${n}</span>`:'';})()}</button>
       <button class="side-btn ${ST.view==='referees'?'active':''}" onclick="go('referees')">Jueces</button>
       <button class="side-btn ${ST.view==='clubs'?'active':''}" onclick="go('clubs')">Clubes</button>
       <button class="side-btn ${ST.view==='fotos'?'active':''}" onclick="go('fotos')">Fotos Atletas</button>
@@ -1904,6 +2060,7 @@ function render(){
   else if(ST.view==='editRequests')content=renderEditRequests();
   else if(ST.view==='entrenadores')content=renderEntrenadores();
   else if(ST.view==='entrenadoresDB')content=renderEntrenadoresDB();
+  else if(ST.view==='entInsc')content=renderEntInsc();
   else if(ST.view==='referees'){if(!ST.adminInfo||_ROLES_SIN_PANEL.includes(ST.adminInfo?.role))go('athletes');else content=renderReferees();}
   else if(ST.view==='clubs')content=renderClubs();
   else if(ST.view==='fotos')content=renderFotos();
@@ -7442,8 +7599,15 @@ function renderCampeonatos(){
     if(ST._efDocsXPara !== (editing.id||'__nuevo__')){
       ST._efDocsXPara = editing.id||'__nuevo__';
       window._efDocsX = (Array.isArray(editing.docsExtra)?editing.docsExtra:[]).map(d=>Object.assign({},d));
+      window._efDocsE = (Array.isArray(editing.docsEntrenador)?editing.docsEntrenador:[]).map(d=>Object.assign({},d));
+      // Y a quién se le pide cada documento, por la misma razón: copiado, no apuntado.
+      window._efDocsCond = {};
+      Object.entries(editing.docsCond||{}).forEach(([k,c])=>{
+        window._efDocsCond[k] = {mods:(c&&c.mods||[]).slice(), divs:(c&&c.divs||[]).slice()};
+      });
     }
-    setTimeout(()=>{ try{efDocXPinta()}catch(e){} },0);
+    setTimeout(()=>{ try{efDocPinta('x')}catch(e){} try{efDocPinta('e')}catch(e){}
+                     try{window.renderDocsChecklist()}catch(e){} },0);
     return `
     <div class="h1">${isNew?'Nuevo Campeonato':'Editar Campeonato'}</div>
     <p class="subtitle">${isNew?'Se publicará inmediatamente en inscripciones y nómina':'Cambios se propagan en tiempo real a todos los archivos'}</p>
@@ -7572,39 +7736,17 @@ function renderCampeonatos(){
           <div style="background:rgba(212,168,67,.06);border:1px solid rgba(212,168,67,.35);border-radius:10px;padding:14px 16px">
             <div style="font-weight:600;color:var(--gold);margin-bottom:6px">Documentos requeridos en inscripción</div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5">
-              Marca qué documentos pedir al atleta cuando se inscriba. Si dejas todo desmarcado, se usa la <b>lógica vieja</b> (carnet + WADA por default, IPF World detección por nombre, consentimiento menor si fechaNac &lt; 18, foto si "requiere foto" está activo arriba).
+              Marca qué documentos pedir al atleta cuando se inscriba. Cada uno se le pide a todos, pero
+              puedes <b>limitarlo a ciertas modalidades o divisiones</b>: así los antecedentes de una
+              organización se le piden solo a los suyos y no a todo el campeonato.
+              Si dejas todo desmarcado, se usa la <b>lógica vieja</b> (carnet + WADA por default, IPF World detección por nombre, consentimiento menor si fechaNac &lt; 18, foto si "requiere foto" está activo arriba).
             </div>
-            <div id="ef_docs_container" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${(()=>{
-              const DOC_TYPES = {
-                carnetIdFront: { label:'Carnet de Identidad (frente)', icon:'', desc:'Cara frontal del carnet' },
-                carnetIdReverso:{ label:'Carnet de Identidad (reverso)', icon:'', desc:'Cara trasera del carnet' },
-                fotoBlanco:    { label:'Foto fondo blanco',  icon:'', desc:'Tipo carnet, sin accesorios' },
-                pasaporte:     { label:'Pasaporte',          icon:'', desc:'Página de datos' },
-                wadaIntl:      { label:'ADEL/WADA Internacional', icon:'', desc:'Vigente' },
-                ipfConsent:    { label:'Consentimiento IPF', icon:'', desc:'Firmado · PDF descargable' },
-                menorConsent:  { label:'Consentimiento Menor', icon:'', desc:'Tutor firma · PDF descargable' },
-                notas:         { label:'Concentración de Notas', icon:'', desc:'Certificado académico' }
-              };
-              // Los documentos PROPIOS de este campeonato, cargados más abajo,
-              // aparecen en la misma lista: se marcan y se desmarcan igual que
-              // los fijos, y así todo lo demás —el formulario de inscripción, la
-              // validación, la ficha— los trata como uno más.
-              (Array.isArray(editing.docsExtra)?editing.docsExtra:[]).forEach(d=>{
-                if(d&&d.key)DOC_TYPES['x_'+d.key]={label:d.label||'Documento',icon:'',
-                  desc:(d.desc||'')+' · propio de este campeonato'};
-              });
-              const current = Array.isArray(editing.requiredDocs) ? editing.requiredDocs : [];
-              return Object.entries(DOC_TYPES).map(([k,meta])=>{
-                const checked = current.includes(k);
-                return `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:${checked?'rgba(34,197,94,.08)':'transparent'};border:1px solid ${checked?'rgba(34,197,94,.4)':'var(--border)'};border-radius:6px;cursor:pointer;transition:all .15s">
-                  <input type="checkbox" data-doc-key="${k}" ${checked?'checked':''} onchange="this.parentElement.style.background=this.checked?'rgba(34,197,94,.08)':'transparent';this.parentElement.style.borderColor=this.checked?'rgba(34,197,94,.4)':'var(--border)'" style="width:16px;height:16px;cursor:pointer;margin-top:2px;flex-shrink:0">
-                  <div style="flex:1;min-width:0">
-                    <div style="font-weight:600;font-size:13px;color:var(--text)">${meta.icon} ${meta.label}</div>
-                    <div style="font-size:10px;color:var(--muted);margin-top:1px">${meta.desc}</div>
-                  </div>
-                </label>`;
-              }).join('');
-            })()}</div>
+            <!-- Lo dibuja renderDocsChecklist(). Antes esta misma lista se armaba
+                 también acá, y como el hook de render vuelve a pintar el
+                 contenedor con SOLO el catálogo fijo, los documentos propios del
+                 campeonato desaparecían de la lista apenas se redibujaba la
+                 pantalla. Un solo lugar que la dibuje. -->
+            <div id="ef_docs_container" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
             <div style="border-top:1px solid rgba(212,168,67,.25);margin-top:14px;padding-top:12px">
               <div style="font-weight:600;color:var(--gold);margin-bottom:4px">Documentos propios de este campeonato</div>
               <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">
@@ -7614,7 +7756,7 @@ function renderCampeonatos(){
                 su espacio para subir.
               </div>
               <div id="ef_docsx"></div>
-              <button type="button" class="btn" onclick="efDocXAgregar()" style="margin-top:8px;padding:6px 14px;font-size:12px">+ Agregar documento</button>
+              <button type="button" class="btn" onclick="efDocAgregar('x')" style="margin-top:8px;padding:6px 14px;font-size:12px">+ Agregar documento</button>
             </div>
             <div style="border-top:1px solid rgba(212,168,67,.25);margin-top:14px;padding-top:12px">
               <div style="font-weight:600;color:var(--gold);margin-bottom:4px">Modalidades y divisiones propias</div>
@@ -7641,6 +7783,46 @@ function renderCampeonatos(){
                   </label>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+        <!-- ── Inscripción de ENTRENADORES ─────────────────────────────────────── -->
+        <div class="field" style="grid-column:span 2">
+          <div style="background:rgba(30,91,168,.07);border:1px solid rgba(30,91,168,.4);border-radius:10px;padding:14px 16px">
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin:0">
+              <input type="checkbox" id="ef_entOpen" ${editing.entrenadoresOpen?'checked':''} style="width:18px;height:18px;cursor:pointer;margin-top:2px">
+              <div>
+                <div style="font-weight:600;color:#8ab4e8">Abrir inscripción de entrenadores</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5">
+                  Un formulario aparte del de los atletas, en
+                  <b>inscripcion_entrenador.html</b>. El entrenador entra con su RUT, se le
+                  revisa la acreditación, elige de la lista a los atletas que lleva —los que ya
+                  están inscritos en este campeonato— y sube los documentos que le pidas acá abajo.
+                  Sin acreditación vigente se inscribe igual y te queda marcado al revisar.
+                </div>
+              </div>
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:12px">
+              <div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Cierra el</div>
+                <input type="date" id="ef_entClose" value="${esc(editing.entrenadoresCloseAt||'')}"
+                  style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px">
+                <div style="font-size:10px;color:var(--muted);margin-top:3px">Vacío = sin fecha de cierre</div>
+              </div>
+              <div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Texto que ve el entrenador al empezar</div>
+                <textarea id="ef_entTexto" rows="3" placeholder="Instrucciones, plazos, a quién escribir…"
+                  style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px;font-family:inherit">${esc(editing.entrenadoresTexto||'')}</textarea>
+              </div>
+            </div>
+            <div style="border-top:1px solid rgba(30,91,168,.3);margin-top:14px;padding-top:12px">
+              <div style="font-weight:600;color:#8ab4e8;margin-bottom:4px">Documentos que se le piden al entrenador</div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+                Igual que los del atleta: nombre, el PDF en blanco que descarga y el link si el papel
+                se saca en otra página. Acá <b>se piden todos</b> los que agregues, no hay que marcarlos.
+              </div>
+              <div id="ef_docse"></div>
+              <button type="button" class="btn" onclick="efDocAgregar('e')" style="margin-top:8px;padding:6px 14px;font-size:12px">+ Agregar documento del entrenador</button>
             </div>
           </div>
         </div>
@@ -7774,33 +7956,113 @@ window.DOC_TYPES_CATALOG = {
   notas:         { label: 'Concentración de Notas', icon: '', desc: 'Certificado académico' }
 };
 
-// Renderiza el container de checkboxes de docs cuando el form de evento está visible
+// Las modalidades y divisiones de la federación (espejo de inscripcion.html).
+// Sirven para elegir a quién se le pide cada documento.
+window.MODALIDADES_BASE = ['Powerlifting Classic','Only Bench Classic',
+  'Powerlifting Classic + Only Bench Classic','Powerlifting Equipado','Only Bench Equipado',
+  'Powerlifting Equipado + Only Bench Equipado','Olimpiadas Especiales','Powerlifting Universitario'];
+window.DIVISIONES_BASE = ['Sub-Junior','Junior','Open','Master I','Master II','Master III','Master IV','Universitario'];
+
+// Las listas que le van a salir a quien se inscriba en ESTE campeonato. Se leen
+// de los cuadros de texto, no de lo guardado: si el admin acaba de escribir una
+// modalidad propia, tiene que poder condicionarle un documento sin guardar antes.
+function _efListasVivas(){
+  const lin = id => (document.getElementById(id)?.value||'').split('\n')
+    .map(s=>s.trim()).filter(Boolean);
+  const mx = lin('ef_modsx'), dx = lin('ef_divsx');
+  const soloM = !!document.getElementById('ef_modsSolo')?.checked;
+  const soloD = !!document.getElementById('ef_divsSolo')?.checked;
+  return {
+    mods: mx.length ? (soloM ? mx : window.MODALIDADES_BASE.concat(mx)) : window.MODALIDADES_BASE.slice(),
+    divs: dx.length ? (soloD ? dx : window.DIVISIONES_BASE.concat(dx)) : window.DIVISIONES_BASE.slice()
+  };
+}
+
+// A quién se le pide cada documento: {docKey:{mods:[],divs:[]}}. Vacío = a todos.
+window._efDocsCond = {};
+window.efCondToggle = function(k, tipo, valor){
+  const c = window._efDocsCond[k] || (window._efDocsCond[k] = {mods:[],divs:[]});
+  const arr = c[tipo] || (c[tipo] = []);
+  const i = arr.indexOf(valor);
+  if(i<0) arr.push(valor); else arr.splice(i,1);
+  window.renderDocsChecklist();
+};
+window.efCondLimpiar = function(k){ delete window._efDocsCond[k]; window.renderDocsChecklist(); };
+window.efCondAbrir = function(k){
+  window._efDocsCond[k] = window._efDocsCond[k] || {mods:[],divs:[]};
+  window._efDocsCond[k]._abierto = true;
+  window.renderDocsChecklist();
+};
+
+// Renderiza el container de checkboxes de docs cuando el form de evento está visible.
+// Es el ÚNICO lugar que lo dibuja, y lleva tanto el catálogo fijo como los
+// documentos propios del campeonato, que se marcan igual que los demás.
 window.renderDocsChecklist = function(){
   const cont = document.getElementById('ef_docs_container');
   if(!cont || !ST.eventoForm) return;
   const current = Array.isArray(ST.eventoForm.requiredDocs) ? ST.eventoForm.requiredDocs : [];
+  const TIPOS = Object.assign({}, window.DOC_TYPES_CATALOG);
+  (window._efDocsX||[]).forEach(d=>{
+    if(d && d.key) TIPOS['x_'+d.key] = {label:d.label||'(documento sin nombre)', icon:'',
+      desc:(d.desc||'')+' · propio de este campeonato'};
+  });
+  const listas = _efListasVivas();
+  const chip = (k,tipo,v,on)=>`<button type="button" onclick="efCondToggle('${k}','${tipo}',${JSON.stringify(v).replace(/"/g,'&quot;')})"
+    style="padding:2px 8px;border-radius:20px;font-size:10px;cursor:pointer;margin:2px 3px 0 0;
+    border:1px solid ${on?'rgba(34,197,94,.6)':'var(--border)'};
+    background:${on?'rgba(34,197,94,.18)':'transparent'};color:${on?'#4ade80':'var(--muted)'}">${esc(v)}</button>`;
+
   let h = '';
-  Object.entries(window.DOC_TYPES_CATALOG).forEach(([k, meta])=>{
+  Object.entries(TIPOS).forEach(([k, meta])=>{
     const checked = current.includes(k);
+    const c = window._efDocsCond[k] || null;
+    const mods = (c && c.mods) || [], divs = (c && c.divs) || [];
+    const limitado = mods.length || divs.length;
+    let cond = '';
+    if(checked){
+      if(!limitado && !(c && c._abierto)){
+        cond = `<div style="margin-top:5px"><span style="font-size:10px;color:var(--muted)">Se lo piden a todos · </span>
+          <a href="#" onclick="event.preventDefault();event.stopPropagation();efCondAbrir('${k}')"
+             style="font-size:10px;color:var(--gold)">limitar a ciertas modalidades</a></div>`;
+      }else{
+        cond = `<div onclick="event.preventDefault();event.stopPropagation()" style="margin-top:6px;padding:6px 8px;border:1px dashed var(--border);border-radius:6px">
+          <div style="font-size:9px;color:var(--muted);letter-spacing:1px">SOLO A ESTAS MODALIDADES</div>
+          <div>${listas.mods.map(m=>chip(k,'mods',m,mods.indexOf(m)>=0)).join('')}</div>
+          <div style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:6px">Y SOLO A ESTAS DIVISIONES</div>
+          <div>${listas.divs.map(d=>chip(k,'divs',d,divs.indexOf(d)>=0)).join('')}</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:6px;line-height:1.4">
+            ${limitado?'Sin marcar nada en una fila, esa fila no filtra.':'No has marcado nada: se lo piden a todos.'}
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();efCondLimpiar('${k}')" style="color:var(--gold)">pedírselo a todos</a>
+          </div>
+        </div>`;
+      }
+    }
     h += `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:${checked?'rgba(34,197,94,.08)':'transparent'};border:1px solid ${checked?'rgba(34,197,94,.4)':'var(--border)'};border-radius:6px;cursor:pointer;transition:all .15s">
-      <input type="checkbox" data-doc-key="${k}" ${checked?'checked':''} onchange="this.parentElement.style.background=this.checked?'rgba(34,197,94,.08)':'transparent';this.parentElement.style.borderColor=this.checked?'rgba(34,197,94,.4)':'var(--border)'" style="width:16px;height:16px;cursor:pointer;margin-top:2px;flex-shrink:0">
+      <input type="checkbox" data-doc-key="${k}" ${checked?'checked':''} onchange="efDocMarcado(this,'${k}')" style="width:16px;height:16px;cursor:pointer;margin-top:2px;flex-shrink:0">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:13px;color:var(--text)">${meta.icon} ${meta.label}</div>
+        <div style="font-weight:600;font-size:13px;color:var(--text)">${meta.icon} ${meta.label}${limitado?' <span style="font-size:9px;color:#4ade80;border:1px solid rgba(34,197,94,.5);border-radius:10px;padding:1px 6px;vertical-align:middle">limitado</span>':''}</div>
         <div style="font-size:10px;color:var(--muted);margin-top:1px">${meta.desc}</div>
+        ${cond}
       </div>
     </label>`;
   });
   cont.innerHTML = h;
 };
-// Hook a render: cada vez que se renderiza el form, dibuja los checkboxes después
-const _origRender_docsHook = window.render;
-if(!window._docsHookInstalled){
-  window._docsHookInstalled = true;
-  window.render = function(){
-    if(typeof _origRender_docsHook==='function') _origRender_docsHook();
-    setTimeout(()=>{ try{ window.renderDocsChecklist(); }catch(e){} }, 0);
-  };
-}
+// Marcar o desmarcar tiene que quedar en ST antes de volver a dibujar: el
+// contenedor se repinta entero y, si no, el visto se perdería al toque.
+window.efDocMarcado = function(inp, k){
+  const cur = Array.isArray(ST.eventoForm.requiredDocs) ? ST.eventoForm.requiredDocs.slice() : [];
+  const i = cur.indexOf(k);
+  if(inp.checked && i<0) cur.push(k);
+  if(!inp.checked && i>=0) cur.splice(i,1);
+  ST.eventoForm.requiredDocs = cur;
+  window.renderDocsChecklist();
+};
+// Antes esto se colgaba de window.render con un hook. No servía: el panel es un
+// módulo, y adentro `render()` es la función local, no la de window. El hook solo
+// corría cuando lo llamaba un onclick del HTML, así que la lista se dibujaba unas
+// veces sí y otras no. Ahora la llama renderCampeonatos(), que es quien dibuja el
+// formulario y sabe cuándo el contenedor existe.
 
 // Fila de organizador (nombre + IG) para el editor de evento
 function orgRowHtml(name,ig){
@@ -7931,76 +8193,110 @@ function _bloqueoFormHtml(editing){
 // la inscripción del atleta y en la ruta de su archivo. Si cambiara al renombrar
 // el documento, los que ya se inscribieron quedarían apuntando a una clave que
 // no existe.
-window._efDocsX = [];
-function efDocXPinta(){
-  const c=document.getElementById('ef_docsx'); if(!c)return;
-  if(!window._efDocsX.length){
+// Hay DOS listas de documentos propios: los del atleta y los del entrenador.
+// Son lo mismo por dentro, así que el editor es uno solo y recibe de cuál se
+// trata: 'x' para el atleta, 'e' para el entrenador. Duplicarlo habría sido
+// garantía de arreglar un lado y olvidar el otro.
+window._efDocsX = [];   // documentos propios que se le piden al ATLETA
+window._efDocsE = [];   // documentos propios que se le piden al ENTRENADOR
+const DOCED = {
+  x: {cont:'ef_docsx', pref:'x_', lista:()=>window._efDocsX, quien:'el atleta'},
+  e: {cont:'ef_docse', pref:'e_', lista:()=>window._efDocsE, quien:'el entrenador'}
+};
+function efDocPinta(w){
+  const cfg=DOCED[w]; if(!cfg)return;
+  const c=document.getElementById(cfg.cont); if(!c)return;
+  const L=cfg.lista();
+  if(!L.length){
     c.innerHTML='<div style="font-size:11px;color:var(--muted);padding:4px 0">Ninguno todavía.</div>';
     return;
   }
-  c.innerHTML=window._efDocsX.map((d,i)=>`
+  c.innerHTML=L.map((d,i)=>`
     <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:rgba(10,22,40,.35)">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
         <input value="${esc(d.label||'')}" placeholder="Nombre del documento (ej. Certificado médico)"
-          oninput="efDocXSet(${i},'label',this.value)" style="flex:1;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px">
-        <button type="button" onclick="efDocXBorrar(${i})" title="Quitar"
+          oninput="efDocSet('${w}',${i},'label',this.value)" style="flex:1;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px">
+        <button type="button" onclick="efDocBorrar('${w}',${i})" title="Quitar"
           style="padding:5px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.5);background:transparent;color:var(--red);font-size:11px;cursor:pointer">Quitar</button>
       </div>
-      <input value="${esc(d.desc||'')}" placeholder="Descripción corta que ve el atleta"
-        oninput="efDocXSet(${i},'desc',this.value)" style="width:100%;box-sizing:border-box;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px;margin-bottom:8px">
+      <input value="${esc(d.desc||'')}" placeholder="Descripción corta que ve ${cfg.quien}"
+        oninput="efDocSet('${w}',${i},'desc',this.value)" style="width:100%;box-sizing:border-box;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px;margin-bottom:8px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div>
           <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Formulario para descargar (PDF)</div>
           ${d.plantillaUrl
             ? `<div style="display:flex;gap:6px;align-items:center"><a href="${esc(d.plantillaUrl)}" target="_blank" style="font-size:11px;color:var(--gold);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">ver el PDF cargado</a>
-               <button type="button" onclick="efDocXSet(${i},'plantillaUrl','')" style="padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:10px;cursor:pointer">quitar</button></div>`
-            : `<label class="btn" style="display:block;text-align:center;padding:5px;font-size:11px;cursor:pointer">Subir PDF<input type="file" accept="application/pdf,image/*" onchange="efDocXPdf(${i},this)" style="display:none"></label>`}
-          <div id="efdocx_st_${i}" style="font-size:10px;color:var(--muted);margin-top:3px"></div>
+               <button type="button" onclick="efDocSet('${w}',${i},'plantillaUrl','')" style="padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:10px;cursor:pointer">quitar</button></div>`
+            : `<label class="btn" style="display:block;text-align:center;padding:5px;font-size:11px;cursor:pointer">Subir PDF<input type="file" accept="application/pdf,image/*" onchange="efDocPdf('${w}',${i},this)" style="display:none"></label>`}
+          <div id="efdoc_st_${w}_${i}" style="font-size:10px;color:var(--muted);margin-top:3px"></div>
         </div>
         <div>
           <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Link a otra página (opcional)</div>
           <input value="${esc(d.linkUrl||'')}" placeholder="https://…"
-            oninput="efDocXSet(${i},'linkUrl',this.value)" style="width:100%;box-sizing:border-box;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:11px">
-          <input value="${esc(d.linkTexto||'')}" placeholder="Qué decirle al atleta del link"
-            oninput="efDocXSet(${i},'linkTexto',this.value)" style="width:100%;box-sizing:border-box;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:11px;margin-top:5px">
+            oninput="efDocSet('${w}',${i},'linkUrl',this.value)" style="width:100%;box-sizing:border-box;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:11px">
+          <input value="${esc(d.linkTexto||'')}" placeholder="Qué decirle del link"
+            oninput="efDocSet('${w}',${i},'linkTexto',this.value)" style="width:100%;box-sizing:border-box;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:11px;margin-top:5px">
         </div>
       </div>
     </div>`).join('');
 }
-window.efDocXAgregar=function(){
+window.efDocAgregar=function(w){
   // Clave estable y sin acentos ni espacios: es parte de la ruta del archivo.
-  window._efDocsX.push({key:'d'+Date.now().toString(36),label:'',desc:'',
-    plantillaUrl:'',linkUrl:'',linkTexto:''});
-  efDocXPinta();
+  const key='d'+Date.now().toString(36);
+  DOCED[w].lista().push({key,label:'',desc:'',plantillaUrl:'',linkUrl:'',linkTexto:''});
+  // El del atleta se marca solo como requerido: quien agrega un documento lo
+  // agrega para pedirlo. Los del entrenador se piden todos, así que no hay lista.
+  if(w==='x'){
+    const cur=Array.isArray(ST.eventoForm.requiredDocs)?ST.eventoForm.requiredDocs.slice():[];
+    cur.push('x_'+key); ST.eventoForm.requiredDocs=cur;
+  }
+  efDocPinta(w); if(w==='x'){try{window.renderDocsChecklist()}catch(e){}}
 };
-window.efDocXSet=function(i,k,v){ if(window._efDocsX[i]){window._efDocsX[i][k]=v; if(k==='plantillaUrl')efDocXPinta();} };
-window.efDocXBorrar=function(i){
-  const d=window._efDocsX[i]; if(!d)return;
+window.efDocSet=function(w,i,k,v){
+  const L=DOCED[w].lista(); if(!L[i])return;
+  L[i][k]=v;
+  if(k==='plantillaUrl')efDocPinta(w);
+  // El nombre se ve también en la lista de arriba, donde se marca y se limita.
+  if(k==='label'&&w==='x'){ try{window.renderDocsChecklist()}catch(e){} }
+};
+window.efDocBorrar=function(w,i){
+  const L=DOCED[w].lista(); const d=L[i]; if(!d)return;
   if(d.label&&!confirm('¿Quitar "'+d.label+'"?\n\nA quien ya se inscribió no se le borra lo que subió.'))return;
-  window._efDocsX.splice(i,1); efDocXPinta();
+  if(w==='x'){
+    const k='x_'+d.key;
+    ST.eventoForm.requiredDocs=(Array.isArray(ST.eventoForm.requiredDocs)?ST.eventoForm.requiredDocs:[]).filter(x=>x!==k);
+    delete window._efDocsCond[k];
+  }
+  L.splice(i,1); efDocPinta(w); if(w==='x'){try{window.renderDocsChecklist()}catch(e){}}
 };
-window.efDocXPdf=async function(i,inp){
+window.efDocPdf=async function(w,i,inp){
   const f=inp.files&&inp.files[0]; if(!f)return;
-  const st=document.getElementById('efdocx_st_'+i); if(st)st.textContent='Subiendo…';
+  const st=document.getElementById('efdoc_st_'+w+'_'+i); if(st)st.textContent='Subiendo…';
   try{
     const ev=(ST.eventoForm&&ST.eventoForm.id)||'evento';
-    const nom=(window._efDocsX[i]||{}).key||'doc';
+    const L=DOCED[w].lista();
+    const nom=DOCED[w].pref+((L[i]||{}).key||'doc');
     const ext=(String(f.name||'').match(/\.([a-zA-Z0-9]+)$/)||[])[1]||'pdf';
     const sref=storageRef(getStorage(app),'evento_docs/'+ev+'/'+nom+'.'+ext);
     await uploadBytes(sref,f,{contentType:f.type||'application/pdf'});
     const url=await getDownloadURL(sref);
-    window._efDocsX[i].plantillaUrl=url;
+    L[i].plantillaUrl=url;
     if(st)st.textContent='';
-    efDocXPinta();
+    efDocPinta(w);
   }catch(e){ if(st){st.textContent='Error: '+e.message; st.style.color='var(--red)';} }
 };
-function efDocXLeer(){
+function efDocLeer(w){
   // Solo los que tienen nombre: una fila vacía que quedó del botón no se guarda.
-  return (window._efDocsX||[]).filter(d=>d&&d.key&&String(d.label||'').trim())
+  return (DOCED[w].lista()||[]).filter(d=>d&&d.key&&String(d.label||'').trim())
     .map(d=>({key:d.key,label:String(d.label).trim(),desc:String(d.desc||'').trim(),
               plantillaUrl:d.plantillaUrl||'',linkUrl:String(d.linkUrl||'').trim(),
               linkTexto:String(d.linkTexto||'').trim()}));
 }
+// Los nombres viejos siguen andando: los usa el HTML del formulario del atleta.
+function efDocXPinta(){ return efDocPinta('x'); }
+function efDocXLeer(){ return efDocLeer('x'); }
+window.efDocXAgregar=function(){ return window.efDocAgregar('x'); };
+
 window.saveEvento = async function(){
   const isNew = ST.eventoFormMode === 'create';
   const id  = isNew ? (document.getElementById('ef_id').value||'').trim().replace(/\s+/g,'_') : ST.eventoForm.id;
@@ -8036,17 +8332,26 @@ window.saveEvento = async function(){
   // NUEVO: leer los checkboxes de documentos requeridos
   const requiredDocs = Array.from(document.querySelectorAll('#ef_docs_container input[type="checkbox"]:checked'))
     .map(cb => cb.getAttribute('data-doc-key'));
-  const docsExtra = efDocXLeer();
+  const docsExtra = efDocLeer('x');
+  // Inscripción de entrenadores: su interruptor, su fecha, su texto y sus documentos.
+  const entrenadoresOpen = !!document.getElementById('ef_entOpen')?.checked;
+  const entrenadoresCloseAt = (document.getElementById('ef_entClose')?.value||'').trim();
+  const entrenadoresTexto = (document.getElementById('ef_entTexto')?.value||'').trim();
+  const docsEntrenador = efDocLeer('e');
   // Una por línea, sin vacías ni repetidas.
   const _lineas = id => [...new Set(String((document.getElementById(id)||{}).value||'')
     .split('\n').map(x=>x.trim()).filter(Boolean))];
   const modsExtra = _lineas('ef_modsx'), divsExtra = _lineas('ef_divsx');
   const modsSolo = !!document.getElementById('ef_modsSolo')?.checked;
   const divsSolo = !!document.getElementById('ef_divsSolo')?.checked;
-  // Un documento propio recién agregado todavía no tiene su casilla dibujada
-  // arriba —esa lista se arma al abrir el formulario—, así que se marca solo. Si
-  // no, había que guardar, reabrir y marcarlo: nadie lo iba a adivinar.
-  docsExtra.forEach(d=>{ const k='x_'+d.key; if(requiredDocs.indexOf(k)<0)requiredDocs.push(k); });
+  // A quién se le pide cada documento. Se guarda solo lo que de verdad limita:
+  // una condición vacía es "a todos", y guardarla no aportaría nada.
+  const docsCond = {};
+  Object.entries(window._efDocsCond||{}).forEach(([k,c])=>{
+    if(requiredDocs.indexOf(k)<0) return;      // no se guarda la condición de un doc que no se pide
+    const mods=(c&&c.mods||[]).filter(Boolean), divs=(c&&c.divs||[]).filter(Boolean);
+    if(mods.length||divs.length) docsCond[k]={mods,divs};
+  });
 
   if(!id || !name){ showToast('ID y nombre son obligatorios', null, true); return; }
   if(isNew && ST.eventos.find(e=>e.id===id)){ showToast('Ya existe un campeonato con ese ID', null, true); return; }
@@ -8059,8 +8364,10 @@ window.saveEvento = async function(){
     organizers, logoUrl, logoFedUrl, instagram,    // organizadores (con IG) + logo del campeonato y de la federación
     streamLogoUrl, streamInstagram,    // logo de productora + IG para la tarjeta de Transmisiones
     requiredDocs,    // array de docKeys requeridos
+    docsCond,        // a qué modalidades/divisiones se le pide cada uno (vacío = a todas)
     docsExtra,       // documentos propios del campeonato (nombre, PDF y link)
     modsExtra, modsSolo, divsExtra, divsSolo,   // modalidades y divisiones propias
+    entrenadoresOpen, entrenadoresCloseAt, entrenadoresTexto, docsEntrenador,  // período de entrenadores
     updatedAt: serverTimestamp()};
   if(isNew) data.createdAt = serverTimestamp();
 
