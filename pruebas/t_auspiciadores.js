@@ -109,7 +109,11 @@ const MARCAS = [
       ST.sel = null;
       ['home', 'rank', 'insc', 'atletas', 'crono', 'records', 'entrenadores'].forEach(v => {
         ST.v = v; render();
-        out[v] = document.getElementById('app').innerHTML.includes('AUSPICIADORES');
+        // Se busca la franja por su clase, NO por el rótulo. El rótulo es texto
+        // que se cambia cuando se quiera —pasó de AUSPICIADORES a COLABORADORES—
+        // y esta prueba no es sobre cómo se llama la sección, sino sobre en qué
+        // pantallas aparece.
+        out[v] = document.getElementById('app').innerHTML.includes('yl-marq');
       });
       ST.v = antes; ST.sel = antesSel; render();
       return out;
