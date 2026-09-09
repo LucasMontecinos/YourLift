@@ -510,6 +510,18 @@ async function loadAll(){
       },(e)=>console.warn('[listener] entrenadores:',e.message));
     }catch(e){console.warn('[loadAll] ent listener:',e.message);}
   }
+  // Los FORMULARIOS de entrenador. No cuelgan de un campeonato a propósito: el
+  // mismo mecanismo sirve para la inscripción a un campeonato y para una
+  // convocatoria de acreditación, que no tiene campeonato ninguno.
+  if(!window._formEntListener){
+    try{
+      window._formEntListener=onSnapshot(collection(db,'formularios_entrenador'),(snap)=>{
+        ST.formEnt=snap.docs.map(d=>({id:d.id,...d.data()}))
+          .sort((a,b)=>String(b.updatedAtISO||'').localeCompare(String(a.updatedAtISO||'')));
+        if(ST.view==='formEnt'||ST.view==='entInsc')render();
+      },(e)=>console.warn('[listener] formularios_entrenador:',e.message));
+    }catch(e){console.warn('[loadAll] formEnt listener:',e.message);}
+  }
   // Inscripciones de ENTRENADORES. Van en su propia colección porque son otro
   // período y otra ficha: el entrenador no compite, declara a qué atletas lleva.
   if(!window._entInscListener){
@@ -1076,6 +1088,209 @@ window.removeAchievement=async function(codigo,idx){
 };
 
 // ═══════════════════════════════════════════════════════════
+// FORMULARIOS DE ENTRENADOR
+// ═══════════════════════════════════════════════════════════
+// Un formulario de entrenador NO cuelga de un campeonato. Empezó ahí —dentro de
+// la ficha del campeonato, junto a los documentos del atleta— y se sacó: el
+// mismo mecanismo tiene que servir para las convocatorias de acreditación, que
+// no tienen campeonato ninguno. Metido adentro del campeonato, cada convocatoria
+// habría necesitado tocar el código.
+//
+// Hay dos tipos y la única diferencia real es si se eligen atletas:
+//   · campeonato  → el entrenador dice a qué atletas lleva, de los inscritos ahí.
+//   · acreditación → no hay atletas; postula él y sube sus papeles.
+//
+// Lo demás —quién puede, qué documentos, qué texto, hasta cuándo— es igual en
+// los dos, y por eso es un solo constructor.
+window.FE_TIPOS={campeonato:'Inscripción a un campeonato', acreditacion:'Convocatoria de acreditación'};
+function _feVacio(){
+  return {id:'', nombre:'', tipo:'campeonato', evento:'', abierto:true, cierra:'', texto:'', documentos:[]};
+}
+window.feNuevo=function(){
+  ST.feForm=_feVacio(); ST.feModo='crear'; window._efDocsE=[];
+  setTimeout(()=>{try{efDocPinta('e')}catch(e){}},0); render();
+};
+window.feEditar=function(id){
+  const f=(ST.formEnt||[]).find(x=>x.id===id); if(!f)return;
+  ST.feForm={..._feVacio(), ...f};
+  ST.feModo='editar';
+  window._efDocsE=(Array.isArray(f.documentos)?f.documentos:[]).map(d=>Object.assign({},d));
+  setTimeout(()=>{try{efDocPinta('e')}catch(e){}},0); render();
+};
+window.feCerrarForm=function(){ ST.feForm=null; window._efDocsE=[]; render(); };
+window.feCampo=function(k,v){ if(ST.feForm){ ST.feForm[k]=v; render();
+  setTimeout(()=>{try{efDocPinta('e')}catch(e){}},0); } };
+window.feGuardar=async function(){
+  const f=ST.feForm; if(!f)return;
+  const nombre=(document.getElementById('fe_nombre')?.value||'').trim();
+  const tipo=document.getElementById('fe_tipo')?.value||'campeonato';
+  const evento=tipo==='campeonato'?(document.getElementById('fe_evento')?.value||''):'';
+  const cierra=(document.getElementById('fe_cierra')?.value||'').trim();
+  const texto=(document.getElementById('fe_texto')?.value||'').trim();
+  const abierto=!!document.getElementById('fe_abierto')?.checked;
+  if(!nombre){ showToast('Ponle un nombre al formulario',null,true); return; }
+  if(tipo==='campeonato'&&!evento){ showToast('Elige de qué campeonato es',null,true); return; }
+  const id=f.id||('fe_'+Date.now().toString(36));
+  const data={id,nombre,tipo,evento,abierto,cierra,texto,
+              documentos:efDocLeer('e'), updatedAtISO:new Date().toISOString(),
+              updatedAt:serverTimestamp()};
+  try{
+    await setDoc(doc(db,'formularios_entrenador',id),data,{merge:true});
+    await logAction(f.id?'form_ent_edit':'form_ent_create',id,null,nombre);
+    showToast('Formulario guardado');
+    ST.feForm=null; window._efDocsE=[]; render();
+  }catch(e){ showToast('Error: '+e.message,null,true); }
+};
+window.feBorrar=async function(id){
+  const f=(ST.formEnt||[]).find(x=>x.id===id); if(!f)return;
+  const n=(ST.entInsc||[]).filter(x=>x.formulario===id).length;
+  if(!confirm(`¿Borrar "${f.nombre}"?`+(n?`\n\nHay ${n} inscripción(es) hechas con él. No se borran, pero quedan sin formulario.`:'')))return;
+  try{
+    await deleteDoc(doc(db,'formularios_entrenador',id));
+    await logAction('form_ent_delete',id,f.nombre,'deleted');
+    showToast('Formulario borrado');
+  }catch(e){ showToast('Error: '+e.message,null,true); }
+};
+window.feAbrirCerrar=async function(id,abierto){
+  try{
+    await updateDoc(doc(db,'formularios_entrenador',id),{abierto,updatedAtISO:new Date().toISOString()});
+    showToast(abierto?'Formulario abierto':'Formulario cerrado');
+  }catch(e){ showToast('Error: '+e.message,null,true); }
+};
+// Los campeonatos que quedaron con la configuración vieja, de cuando esto vivía
+// adentro de su ficha. Se traen de una vez y el campeonato queda limpio.
+function _feHeredables(){
+  return (ST.eventos||[]).filter(e=>e&&(e.entrenadoresOpen||(e.docsEntrenador||[]).length));
+}
+window.feMigrar=async function(){
+  const evs=_feHeredables(); if(!evs.length)return;
+  if(!confirm(`Traer ${evs.length} configuración(es) de campeonato a formularios propios?`))return;
+  try{
+    for(const e of evs){
+      const id='fe_ev_'+String(e.id).replace(/[^a-zA-Z0-9_]/g,'_');
+      await setDoc(doc(db,'formularios_entrenador',id),{
+        id, nombre:'Entrenadores · '+(e.name||e.id), tipo:'campeonato', evento:e.id,
+        abierto:!!e.entrenadoresOpen, cierra:e.entrenadoresCloseAt||'', texto:e.entrenadoresTexto||'',
+        documentos:Array.isArray(e.docsEntrenador)?e.docsEntrenador:[],
+        updatedAtISO:new Date().toISOString(), updatedAt:serverTimestamp()},{merge:true});
+      await updateDoc(doc(db,'eventos',e.id),{entrenadoresOpen:false});
+    }
+    await logAction('form_ent_migrar','eventos',null,evs.length+' migrados');
+    showToast('Traídos '+evs.length);
+  }catch(err){ showToast('Error: '+err.message,null,true); }
+};
+
+function renderFormEnt(){
+  const f=ST.feForm;
+  if(f) return _feEditorHtml(f);
+  const list=ST.formEnt||[];
+  const hered=_feHeredables();
+  const hoy=new Date().toISOString().slice(0,10);
+  const filas=list.map(x=>{
+    const insc=(ST.entInsc||[]).filter(y=>y.formulario===x.id).length;
+    const venc=x.cierra&&x.cierra<hoy;
+    const vivo=x.abierto&&!venc;
+    const ev=x.tipo==='campeonato'?((ST.eventos||[]).find(e=>e.id===x.evento)||{}).name||x.evento:'—';
+    return `<tr>
+      <td><div style="font-weight:600">${esc(x.nombre||'')}</div>
+          <div style="font-size:10px;color:var(--muted)">${esc(window.FE_TIPOS[x.tipo]||x.tipo)}</div></td>
+      <td style="font-size:11px">${esc(ev)}</td>
+      <td style="font-size:11px">${(x.documentos||[]).length}</td>
+      <td style="font-size:11px">${x.cierra?esc(x.cierra):'<span style="color:var(--muted)">sin fecha</span>'}</td>
+      <td>${vivo?'<span class="badge b-g">Abierto</span>':venc?'<span class="badge b-r">Vencido</span>':'<span class="badge b-y">Cerrado</span>'}</td>
+      <td style="font-size:11px">${insc||'<span style="color:var(--muted)">0</span>'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn" style="padding:4px 9px;font-size:11px" onclick="feEditar('${esc(x.id)}')">Editar</button>
+        <button class="btn" style="padding:4px 9px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted);margin-left:4px" onclick="feAbrirCerrar('${esc(x.id)}',${x.abierto?'false':'true'})">${x.abierto?'Cerrar':'Abrir'}</button>
+        <button class="btn" style="padding:4px 9px;font-size:11px;background:transparent;border:1px solid var(--red);color:var(--red);margin-left:4px" onclick="feBorrar('${esc(x.id)}')">Borrar</button>
+      </td></tr>`;
+  }).join('');
+  return `
+  <div class="h1">Formularios de Entrenadores</div>
+  <p class="subtitle">Los formularios que llena el entrenador · sirven para inscribirse a un campeonato y para las convocatorias de acreditación</p>
+  ${hered.length?`<div class="card" style="border-color:rgba(212,168,67,.5);background:rgba(212,168,67,.06)">
+    <div style="font-weight:600;color:var(--gold);margin-bottom:4px">Hay configuración vieja en ${hered.length} campeonato(s)</div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:10px">
+      Esto antes se configuraba adentro de la ficha del campeonato. Se trae acá tal cual
+      —nombre, fecha, texto y documentos— y el campeonato queda limpio.
+    </div>
+    <button class="btn" onclick="feMigrar()" style="padding:7px 16px;font-size:12px">Traerlos</button>
+  </div>`:''}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--muted)">
+        El formulario vive en <b>inscripcion_entrenador.html</b>. Ahí salen todos los que estén abiertos.
+      </div>
+      <button class="btn" onclick="feNuevo()" style="padding:8px 16px;font-size:12px">+ Nuevo formulario</button>
+    </div>
+    ${!list.length?`<div style="color:var(--muted);font-size:13px;line-height:1.6;padding:8px 0">
+      Todavía no hay ninguno.<br><br>
+      Uno de tipo <b>campeonato</b> le pide al entrenador que elija a los atletas que lleva, de los que
+      ya están inscritos ahí. Uno de <b>acreditación</b> no pide atletas: postula él y sube sus papeles.
+      En los dos casos, los documentos los define usted.
+    </div>`:`<div style="overflow-x:auto"><table class="tbl"><thead><tr>
+      <th>Formulario</th><th>Campeonato</th><th>Docs</th><th>Cierra</th><th>Estado</th><th>Inscritos</th><th></th>
+    </tr></thead><tbody>${filas}</tbody></table></div>`}
+  </div>`;
+}
+
+function _feEditorHtml(f){
+  const evs=(ST.eventos||[]).filter(e=>e.status!=='archived');
+  return `
+  <div class="h1">${ST.feModo==='crear'?'Nuevo formulario de entrenador':'Editar formulario'}</div>
+  <p class="subtitle">Lo que va a ver y llenar el entrenador</p>
+  <div class="card" style="max-width:680px">
+    <div class="field"><label>Nombre del formulario</label>
+      <input class="inp" id="fe_nombre" value="${esc(f.nombre||'')}" placeholder="ej. Entrenadores · Nacional Olimpiadas Especiales">
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">Es lo que el entrenador ve en la lista al entrar.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="field"><label>Tipo</label>
+        <select class="inp" id="fe_tipo" onchange="feCampo('tipo',this.value)">
+          ${Object.entries(window.FE_TIPOS).map(([k,v])=>`<option value="${k}" ${f.tipo===k?'selected':''}>${esc(v)}</option>`).join('')}
+        </select>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">
+          ${f.tipo==='campeonato'
+            ?'Le pide al entrenador que elija a los atletas que lleva.'
+            :'No pide atletas: postula él y sube sus papeles.'}
+        </div>
+      </div>
+      <div class="field"><label>Cierra el</label>
+        <input class="inp" type="date" id="fe_cierra" value="${esc(f.cierra||'')}">
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">Vacío = sin fecha de cierre.</div>
+      </div>
+    </div>
+    ${f.tipo==='campeonato'?`<div class="field"><label>Campeonato</label>
+      <select class="inp" id="fe_evento">
+        <option value="">— Elegir —</option>
+        ${evs.map(e=>`<option value="${esc(e.id)}" ${f.evento===e.id?'selected':''}>${esc(e.name||e.id)}</option>`).join('')}
+      </select>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">De ahí salen los atletas que puede elegir.</div>
+    </div>`:''}
+    <div class="field"><label>Texto que ve el entrenador al empezar</label>
+      <textarea class="inp" id="fe_texto" rows="3" placeholder="Instrucciones, plazos, a quién escribir…">${esc(f.texto||'')}</textarea>
+    </div>
+    <label class="field" style="display:flex;align-items:center;gap:10px">
+      <input type="checkbox" id="fe_abierto" ${f.abierto?'checked':''} style="width:18px;height:18px;cursor:pointer">
+      <span style="margin:0">Abierto — se puede llenar ahora</span>
+    </label>
+    <div style="border-top:1px solid rgba(212,168,67,.25);margin-top:6px;padding-top:12px">
+      <div style="font-weight:600;color:var(--gold);margin-bottom:4px">Documentos que se le piden</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+        Nombre, el PDF en blanco que descarga y el link si el papel se saca en otra página.
+        <b>Se piden todos</b> los que agregues.
+      </div>
+      <div id="fe_docs"></div>
+      <button type="button" class="btn" onclick="efDocAgregar('e')" style="margin-top:8px;padding:6px 14px;font-size:12px">+ Agregar documento</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn" onclick="feGuardar()">Guardar</button>
+      <button class="btn" style="background:transparent;border:1px solid var(--border);color:var(--muted)" onclick="feCerrarForm()">Cancelar</button>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
 // INSCRIPCIÓN DE ENTRENADORES — revisión
 // ═══════════════════════════════════════════════════════════
 // Llegan de inscripcion_entrenador.html: el entrenador se inscribe él, dice a
@@ -1150,7 +1365,8 @@ function renderEntInsc(){
     const docs=Object.entries(pv.docs||{});
     const evObj=ST.eventos.find(x=>x.id===e.evento)||{};
     const nomDoc=k=>{
-      const d=(evObj.docsEntrenador||[]).find(x=>'e_'+x.key===k);
+      const fo=(ST.formEnt||[]).find(x=>x.id===e.formulario)||{};
+      const d=(fo.documentos||[]).find(x=>'e_'+x.key===k);
       return d?d.label:k;
     };
     const st=e.status||'pending';
@@ -2019,6 +2235,7 @@ function render(){
       <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')">Revisión inscripciones</button>
       <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')">Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
       <button class="side-btn ${ST.view==='entrenadoresDB'?'active':''}" onclick="go('entrenadoresDB')">Base Entrenadores</button>
+      <button class="side-btn ${ST.view==='formEnt'?'active':''}" onclick="go('formEnt')">Formularios Entrenadores</button>
       <button class="side-btn ${ST.view==='entInsc'?'active':''}" onclick="go('entInsc')">Inscripción Entrenadores${(()=>{const n=(ST.entInsc||[]).filter(x=>x.status==='pending').length;return n?` <span style="background:var(--gold);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${n}</span>`:'';})()}</button>
       <button class="side-btn ${ST.view==='referees'?'active':''}" onclick="go('referees')">Jueces</button>
       <button class="side-btn ${ST.view==='clubs'?'active':''}" onclick="go('clubs')">Clubes</button>
@@ -2060,6 +2277,7 @@ function render(){
   else if(ST.view==='editRequests')content=renderEditRequests();
   else if(ST.view==='entrenadores')content=renderEntrenadores();
   else if(ST.view==='entrenadoresDB')content=renderEntrenadoresDB();
+  else if(ST.view==='formEnt'){content=renderFormEnt(); if(ST.feForm)setTimeout(()=>{try{efDocPinta('e')}catch(e){}},0);}
   else if(ST.view==='entInsc')content=renderEntInsc();
   else if(ST.view==='referees'){if(!ST.adminInfo||_ROLES_SIN_PANEL.includes(ST.adminInfo?.role))go('athletes');else content=renderReferees();}
   else if(ST.view==='clubs')content=renderClubs();
@@ -7599,15 +7817,13 @@ function renderCampeonatos(){
     if(ST._efDocsXPara !== (editing.id||'__nuevo__')){
       ST._efDocsXPara = editing.id||'__nuevo__';
       window._efDocsX = (Array.isArray(editing.docsExtra)?editing.docsExtra:[]).map(d=>Object.assign({},d));
-      window._efDocsE = (Array.isArray(editing.docsEntrenador)?editing.docsEntrenador:[]).map(d=>Object.assign({},d));
       // Y a quién se le pide cada documento, por la misma razón: copiado, no apuntado.
       window._efDocsCond = {};
       Object.entries(editing.docsCond||{}).forEach(([k,c])=>{
         window._efDocsCond[k] = {mods:(c&&c.mods||[]).slice(), divs:(c&&c.divs||[]).slice()};
       });
     }
-    setTimeout(()=>{ try{efDocPinta('x')}catch(e){} try{efDocPinta('e')}catch(e){}
-                     try{window.renderDocsChecklist()}catch(e){} },0);
+    setTimeout(()=>{ try{efDocPinta('x')}catch(e){} try{window.renderDocsChecklist()}catch(e){} },0);
     return `
     <div class="h1">${isNew?'Nuevo Campeonato':'Editar Campeonato'}</div>
     <p class="subtitle">${isNew?'Se publicará inmediatamente en inscripciones y nómina':'Cambios se propagan en tiempo real a todos los archivos'}</p>
@@ -7783,46 +7999,6 @@ function renderCampeonatos(){
                   </label>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-        <!-- ── Inscripción de ENTRENADORES ─────────────────────────────────────── -->
-        <div class="field" style="grid-column:span 2">
-          <div style="background:rgba(30,91,168,.07);border:1px solid rgba(30,91,168,.4);border-radius:10px;padding:14px 16px">
-            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin:0">
-              <input type="checkbox" id="ef_entOpen" ${editing.entrenadoresOpen?'checked':''} style="width:18px;height:18px;cursor:pointer;margin-top:2px">
-              <div>
-                <div style="font-weight:600;color:#8ab4e8">Abrir inscripción de entrenadores</div>
-                <div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5">
-                  Un formulario aparte del de los atletas, en
-                  <b>inscripcion_entrenador.html</b>. El entrenador entra con su RUT, se le
-                  revisa la acreditación, elige de la lista a los atletas que lleva —los que ya
-                  están inscritos en este campeonato— y sube los documentos que le pidas acá abajo.
-                  Sin acreditación vigente se inscribe igual y te queda marcado al revisar.
-                </div>
-              </div>
-            </label>
-            <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:12px">
-              <div>
-                <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Cierra el</div>
-                <input type="date" id="ef_entClose" value="${esc(editing.entrenadoresCloseAt||'')}"
-                  style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px">
-                <div style="font-size:10px;color:var(--muted);margin-top:3px">Vacío = sin fecha de cierre</div>
-              </div>
-              <div>
-                <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Texto que ve el entrenador al empezar</div>
-                <textarea id="ef_entTexto" rows="3" placeholder="Instrucciones, plazos, a quién escribir…"
-                  style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px;font-family:inherit">${esc(editing.entrenadoresTexto||'')}</textarea>
-              </div>
-            </div>
-            <div style="border-top:1px solid rgba(30,91,168,.3);margin-top:14px;padding-top:12px">
-              <div style="font-weight:600;color:#8ab4e8;margin-bottom:4px">Documentos que se le piden al entrenador</div>
-              <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">
-                Igual que los del atleta: nombre, el PDF en blanco que descarga y el link si el papel
-                se saca en otra página. Acá <b>se piden todos</b> los que agregues, no hay que marcarlos.
-              </div>
-              <div id="ef_docse"></div>
-              <button type="button" class="btn" onclick="efDocAgregar('e')" style="margin-top:8px;padding:6px 14px;font-size:12px">+ Agregar documento del entrenador</button>
             </div>
           </div>
         </div>
@@ -8198,10 +8374,10 @@ function _bloqueoFormHtml(editing){
 // trata: 'x' para el atleta, 'e' para el entrenador. Duplicarlo habría sido
 // garantía de arreglar un lado y olvidar el otro.
 window._efDocsX = [];   // documentos propios que se le piden al ATLETA
-window._efDocsE = [];   // documentos propios que se le piden al ENTRENADOR
+window._efDocsE = [];   // documentos del FORMULARIO de entrenador que se esté editando
 const DOCED = {
   x: {cont:'ef_docsx', pref:'x_', lista:()=>window._efDocsX, quien:'el atleta'},
-  e: {cont:'ef_docse', pref:'e_', lista:()=>window._efDocsE, quien:'el entrenador'}
+  e: {cont:'fe_docs', pref:'e_', lista:()=>window._efDocsE, quien:'el entrenador'}
 };
 function efDocPinta(w){
   const cfg=DOCED[w]; if(!cfg)return;
@@ -8292,6 +8468,7 @@ function efDocLeer(w){
               plantillaUrl:d.plantillaUrl||'',linkUrl:String(d.linkUrl||'').trim(),
               linkTexto:String(d.linkTexto||'').trim()}));
 }
+window.efDocLeer=efDocLeer;
 // Los nombres viejos siguen andando: los usa el HTML del formulario del atleta.
 function efDocXPinta(){ return efDocPinta('x'); }
 function efDocXLeer(){ return efDocLeer('x'); }
@@ -8333,11 +8510,6 @@ window.saveEvento = async function(){
   const requiredDocs = Array.from(document.querySelectorAll('#ef_docs_container input[type="checkbox"]:checked'))
     .map(cb => cb.getAttribute('data-doc-key'));
   const docsExtra = efDocLeer('x');
-  // Inscripción de entrenadores: su interruptor, su fecha, su texto y sus documentos.
-  const entrenadoresOpen = !!document.getElementById('ef_entOpen')?.checked;
-  const entrenadoresCloseAt = (document.getElementById('ef_entClose')?.value||'').trim();
-  const entrenadoresTexto = (document.getElementById('ef_entTexto')?.value||'').trim();
-  const docsEntrenador = efDocLeer('e');
   // Una por línea, sin vacías ni repetidas.
   const _lineas = id => [...new Set(String((document.getElementById(id)||{}).value||'')
     .split('\n').map(x=>x.trim()).filter(Boolean))];
@@ -8367,7 +8539,6 @@ window.saveEvento = async function(){
     docsCond,        // a qué modalidades/divisiones se le pide cada uno (vacío = a todas)
     docsExtra,       // documentos propios del campeonato (nombre, PDF y link)
     modsExtra, modsSolo, divsExtra, divsSolo,   // modalidades y divisiones propias
-    entrenadoresOpen, entrenadoresCloseAt, entrenadoresTexto, docsEntrenador,  // período de entrenadores
     updatedAt: serverTimestamp()};
   if(isNew) data.createdAt = serverTimestamp();
 

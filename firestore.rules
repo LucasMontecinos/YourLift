@@ -157,6 +157,16 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── FORMULARIOS DE ENTRENADOR ────────────────────────────────
+    // Los arma el admin y los lee cualquiera sin sesión: son la definición del
+    // formulario que va a llenar el entrenador (qué documentos, hasta cuándo,
+    // de qué campeonato si es que hay uno). No cuelgan de un campeonato a
+    // propósito: el mismo mecanismo sirve para una convocatoria de acreditación.
+    match /formularios_entrenador/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ── INSCRIPCIÓN DE ENTRENADORES ──────────────────────────────
     // Un período aparte del de los atletas. El entrenador se inscribe SIN cuenta,
     // igual que el atleta: se identifica por RUT y guarda un PIN. Por eso acá
@@ -174,8 +184,12 @@ service cloud.firestore {
           && request.resource.data.rut is string
           && request.resource.data.evento is string
           && request.resource.data.atletas is list
-          && request.resource.data.atletas.size() >= 1
           && request.resource.data.atletas.size() <= 60
+          // Si es de un campeonato tiene que traer al menos un atleta. En una
+          // convocatoria de acreditación no hay atletas que declarar, y exigir
+          // uno dejaría el formulario imposible de enviar.
+          && (request.resource.data.evento == ''
+              || request.resource.data.atletas.size() >= 1)
           && !request.resource.data.keys().hasAny(['pin','correo','telefono','docs']);
     }
     match /inscripciones_entrenador/{id} {

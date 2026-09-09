@@ -177,62 +177,99 @@ const LEER = `(() => {
     ok(r.enLista, 'y su nombre aparece arriba apenas se escribe');
   }
 
-  console.log('\n  Los documentos del ENTRENADOR se editan aparte de los del atleta');
+  console.log('\n  El constructor de formularios de entrenador');
   {
+    // El formulario de entrenador NO cuelga de un campeonato: empezó ahí y se
+    // sacó, porque el mismo mecanismo tiene que servir para las convocatorias de
+    // acreditación, que no tienen campeonato ninguno.
     const r = await p.evaluate(() => {
-      // El editor es uno solo y recibe de cuál se trata. Agregar uno del
-      // entrenador no puede tocar la lista de requeridos del atleta, que es otra.
-      const reqAntes = (ST.eventoForm.requiredDocs || []).slice();
-      efDocAgregar('e');
-      const i = window._efDocsE.length - 1;
-      // Se escribe en el campo como lo haría una persona, no llamando a la
-      // función por dentro: así se comprueba que el cuadro está dibujado y que
-      // lo que se teclea llega al modelo.
-      const inp = document.querySelector('#ef_docse input');
-      inp.value = 'Certificado de antecedentes';
-      inp.dispatchEvent(new Event('input', { bubbles: true }));
-      efDocSet('e', i, 'linkUrl', 'https://registrocivil.cl');
-      return {
-        cuantos: window._efDocsE.length,
-        label: window._efDocsE[i].label,
-        clave: window._efDocsE[i].key,
-        reqIgual: JSON.stringify(ST.eventoForm.requiredDocs || []) === JSON.stringify(reqAntes),
-        // El nombre vive en un input, así que se lee su value: el textContent de
-        // un input siempre viene vacío y la comprobación habría sido falsa.
-        enPantalla: [...document.querySelectorAll('#ef_docse input')].some(x => x.value === 'Certificado de antecedentes'),
-        // Y no se coló en la lista de arriba, que es la del atleta.
-        noEnAtleta: !/Certificado de antecedentes/.test(document.getElementById('ef_docs_container').textContent || ''),
-      };
+      ST.eventoForm = null;
+      ST.eventos = [{ id: 'oe', name: 'Nacional OE', status: 'open' }];
+      ST.formEnt = []; ST.view = 'formEnt'; render();
+      const vacio = document.body.innerText;
+      feNuevo();
+      return { vacio, editor: document.body.innerHTML,
+               tipos: [...document.querySelectorAll('#fe_tipo option')].map(o => o.value) };
     });
-    ok(r.cuantos === 1 && r.label === 'Certificado de antecedentes', 'se agrega a su propia lista');
-    ok(r.enPantalla, 'y se dibuja en su propio cuadro, con el nombre escrito');
-    ok(r.reqIgual, 'sin tocar los documentos requeridos del atleta');
-    ok(r.noEnAtleta, 'ni aparecer en la lista del atleta');
+    ok(/Todavía no hay ninguno/.test(r.vacio), 'sin formularios, explica para qué sirve cada tipo');
+    ok(/acreditación/i.test(r.vacio), 'nombrando la acreditación, que es lo que motivó sacarlo del campeonato');
+    ok(/Nuevo formulario de entrenador/.test(r.editor), 'se puede crear uno');
+    ok(r.tipos.join() === 'campeonato,acreditacion', 'con los dos tipos');
   }
   {
-    // Lo que se carga al abrir el campeonato viene de docsEntrenador, y lo que se
-    // guarda vuelve ahí: si se cruzaran, el entrenador vería los papeles del atleta.
-    const r = await p.evaluate(() => {
-      ST.eventoForm = null; render();
-      ST.eventos = [{ id: 'ev2', name: 'Otro', requiredDocs: [],
-        docsExtra: [{ key: 'a1', label: 'Del atleta' }],
-        docsEntrenador: [{ key: 'e1', label: 'Del entrenador' }] }];
-      editEvento('ev2');
-      return { x: (window._efDocsX || []).map(d => d.label),
-               e: (window._efDocsE || []).map(d => d.label) };
+    // De campeonato: pide elegir cuál. De acreditación: ese campo desaparece,
+    // porque no hay campeonato al que pertenezca.
+    const r = await p.evaluate(async () => {
+      feCampo('tipo', 'campeonato');
+      await new Promise(r => setTimeout(r, 50));
+      const conCamp = !!document.getElementById('fe_evento');
+      const textoCamp = document.body.innerText;
+      feCampo('tipo', 'acreditacion');
+      await new Promise(r => setTimeout(r, 50));
+      return { conCamp, textoCamp, sinCamp: !!document.getElementById('fe_evento'),
+               textoAcred: document.body.innerText };
     });
-    ok(r.x.length === 1 && r.x[0] === 'Del atleta', 'al abrir, los del atleta salen de docsExtra');
-    ok(r.e.length === 1 && r.e[0] === 'Del entrenador', 'y los del entrenador de docsEntrenador');
+    ok(r.conCamp, 'el de campeonato pide de cuál es');
+    ok(/elija a los atletas/i.test(r.textoCamp), 'y avisa que va a pedir atletas');
+    ok(!r.sinCamp, 'el de acreditación no pide campeonato');
+    ok(/No pide atletas/i.test(r.textoAcred), 'y avisa que no pide atletas');
+  }
+  {
+    // Los documentos se editan acá, en el formulario, y no tocan nada del atleta.
+    const r = await p.evaluate(async () => {
+      feCampo('tipo', 'acreditacion');
+      await new Promise(r => setTimeout(r, 60));
+      efDocAgregar('e');
+      await new Promise(r => setTimeout(r, 30));
+      const inp = document.querySelector('#fe_docs input');
+      inp.value = 'Currículum deportivo';
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      return { cuantos: window._efDocsE.length,
+               enPantalla: [...document.querySelectorAll('#fe_docs input')].some(x => x.value === 'Currículum deportivo'),
+               leido: efDocLeer('e') };
+    });
+    ok(r.cuantos === 1 && r.enPantalla, 'se agrega un documento y se dibuja en el formulario');
+    ok(r.leido.length === 1 && r.leido[0].label === 'Currículum deportivo',
+       'y lo que se guarda es lo que se escribió');
+  }
+  {
+    // Y al abrir uno guardado, sus documentos salen de él, no del campeonato.
+    const r = await p.evaluate(() => {
+      ST.feForm = null;
+      ST.formEnt = [{ id: 'f1', nombre: 'Quinta acreditación 2027', tipo: 'acreditacion',
+        abierto: true, cierra: '2027-03-01',
+        documentos: [{ key: 'cv', label: 'Currículum deportivo' }] }];
+      ST.view = 'formEnt'; render();
+      const lista = document.body.innerText;
+      feEditar('f1');
+      return { lista, docs: (window._efDocsE || []).map(d => d.label),
+               nombre: document.getElementById('fe_nombre').value };
+    });
+    ok(/Quinta acreditación 2027/.test(r.lista), 'el formulario guardado sale en la lista');
+    ok(/Abierto/.test(r.lista), 'con su estado');
+    ok(r.nombre === 'Quinta acreditación 2027' && r.docs.join() === 'Currículum deportivo',
+       'y al editarlo vuelven su nombre y sus documentos');
+  }
+  {
+    // Un formulario con la fecha pasada se ve vencido aunque siga marcado abierto.
+    const r = await p.evaluate(() => {
+      ST.feForm = null;
+      ST.formEnt = [{ id: 'f2', nombre: 'Ya pasó', tipo: 'acreditacion', abierto: true, cierra: '2020-01-01' }];
+      render();
+      return document.body.innerText;
+    });
+    ok(/Vencido/.test(r), 'la fecha pasada manda sobre el interruptor');
   }
 
   console.log('\n  La revisión de inscripciones de entrenadores');
   {
     const r = await p.evaluate(() => {
       ST.eventoForm = null;
-      ST.eventos = [{ id: 'oe', name: 'Nacional OE',
-        docsEntrenador: [{ key: 'ant', label: 'Certificado de antecedentes' }] }];
+      ST.eventos = [{ id: 'oe', name: 'Nacional OE' }];
+      ST.formEnt = [{ id: 'f_oe', nombre: 'Entrenadores · Nacional OE', tipo: 'campeonato', evento: 'oe',
+        documentos: [{ key: 'ant', label: 'Certificado de antecedentes' }] }];
       ST.entInsc = [
-        { id: 'oe_111', evento: 'oe', nombre: 'Marta Fuentes', rut: '11.111.111-1', club: 'Club Uno',
+        { id: 'oe_111', evento: 'oe', formulario: 'f_oe', nombre: 'Marta Fuentes', rut: '11.111.111-1', club: 'Club Uno',
           acreditado: true, enBase: true, acreditadoHasta: '2027-05', status: 'pending',
           atletas: [{ rut: '1', nombre: 'Ana Soto' }, { rut: '2', nombre: 'Bruno Díaz' }] },
         { id: 'oe_222', evento: 'oe', nombre: 'Pedro Sin Base', rut: '22.222.222-2', club: '',
@@ -252,7 +289,7 @@ const LEER = `(() => {
     ok(/Vencida/.test(r.t), 'igual que el que la tiene vencida');
     ok(/Ana Soto/.test(r.t) && /Bruno Díaz/.test(r.t), 'con los atletas que declaró cada uno');
     ok(/Certificado de antecedentes/.test(r.t) && /x\/a\.pdf/.test(r.html),
-       'y sus documentos, con el nombre que les puso el campeonato');
+       'y sus documentos, con el nombre que les puso el formulario');
     ok(/marta@ejemplo\.cl/.test(r.t), 'el correo se ve acá, que es donde corresponde');
     ok(/2 por revisar/.test(r.t) && /2 sin acreditación vigente/.test(r.t),
        'y el resumen dice cuántos hay que mirar');

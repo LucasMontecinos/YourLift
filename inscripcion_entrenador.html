@@ -111,10 +111,10 @@ const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 const nn=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
 const rutLimpio=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
 
-let EVENTOS=[], ATLETAS=[], BASE_ENT=null;
+let FORMS=[], EVENTOS=[], ATLETAS=[], BASE_ENT=null;
 
 const state={
-  step:0, evento:'', cargandoAtletas:false, buscaAtleta:'',
+  step:0, form:'', cargandoAtletas:false, buscaAtleta:'',
   ent:{rut:'',nombre:'',club:'',categoria:'',correo:'',telefono:'',pin:''},
   acred:null,          // null = todavía no se busca; {vigente,hasta,encontrado}
   buscandoRut:false,
@@ -145,16 +145,21 @@ function rutValido(v){
   return esp===dv;
 }
 
-// ── El campeonato y sus documentos ────────────────────────────
-function evActual(){ return EVENTOS.find(e=>e.id===state.evento)||null; }
+// ── El formulario y sus documentos ────────────────────────────
+// El formulario NO cuelga de un campeonato: es su propia ficha, hecha desde
+// Admin → Formularios Entrenadores. Así el mismo mecanismo sirve para
+// inscribirse a un campeonato y para una convocatoria de acreditación, que no
+// tiene campeonato ninguno. Lo único que cambia entre los dos es si se eligen
+// atletas.
+function formActual(){ return FORMS.find(f=>f.id===state.form)||null; }
+function esDeCampeonato(f){ return !!(f&&f.tipo!=='acreditacion'&&f.evento); }
 function _limpiaLista(a){ return Array.isArray(a)?a.map(x=>String(x==null?'':x).trim()).filter(Boolean):[]; }
 
-// Los documentos que este campeonato le pide al ENTRENADOR. Son propios del
-// campeonato —no hay catálogo fijo para entrenadores— y se cargan desde
-// Admin → Campeonatos igual que los del atleta.
-function docsEntrenador(evObj){
+// Los documentos que este formulario le pide al entrenador. No hay catálogo
+// fijo: los define entero quien arma el formulario.
+function docsEntrenador(fObj){
   const out={};
-  (Array.isArray(evObj&&evObj.docsEntrenador)?evObj.docsEntrenador:[]).forEach(d=>{
+  (Array.isArray(fObj&&fObj.documentos)?fObj.documentos:[]).forEach(d=>{
     if(!d||!d.key)return;
     out['e_'+d.key]={
       key:'e_'+d.key, label:d.label||'Documento', desc:d.desc||'',
@@ -164,15 +169,14 @@ function docsEntrenador(evObj){
   return out;
 }
 function faltantes(){
-  const cat=docsEntrenador(evActual());
+  const cat=docsEntrenador(formActual());
   return Object.values(cat).filter(m=>!state.archivos[m.key]).map(m=>m.label);
 }
 
-// El período de inscripción de entrenadores es aparte del de los atletas: puede
-// abrir después y cerrar antes, y por eso tiene su propia fecha.
-function entrenadoresAbierto(ev){
-  if(!ev||!ev.entrenadoresOpen)return false;
-  const cierre=String(ev.entrenadoresCloseAt||'').trim();
+// Abierto = lo dejaron abierto y no se pasó la fecha. Sin fecha, no vence.
+function formAbierto(f){
+  if(!f||!f.abierto)return false;
+  const cierre=String(f.cierra||'').trim();
   if(!cierre)return true;
   return hoyISO()<=cierre;
 }
@@ -223,10 +227,12 @@ window.buscarRut=async function(){
 
 // ── Atletas ya inscritos en el campeonato ─────────────────────
 async function cargarAtletas(){
+  const f=formActual();
+  if(!esDeCampeonato(f)){ ATLETAS=[]; return; }
   state.cargandoAtletas=true; render();
   ATLETAS=[];
   try{
-    const q=FB.query(FB.collection(FB.db,'inscripciones'),FB.where('evento','==',state.evento));
+    const q=FB.query(FB.collection(FB.db,'inscripciones'),FB.where('evento','==',f.evento));
     const snap=await FB.getDocs(q);
     snap.forEach(d=>{
       const a=d.data();
@@ -257,9 +263,23 @@ window.tomarArchivo=function(inp,key){
 };
 
 // ── Navegación ────────────────────────────────────────────────
+// Los pasos que tiene ESTE formulario. En una acreditación no hay atletas que
+// elegir, así que ese paso no existe: no se muestra vacío ni se salta con un
+// botón que no hace nada.
+function pasos(){
+  return esDeCampeonato(formActual()) ? [0,1,2,3,4] : [0,1,3,4];
+}
 window.irA=function(n){ state.step=n; state.error=''; window.scrollTo(0,0); render(); };
-window.setEvento=function(v){
-  state.evento=v; state.atletas=[]; state.error=''; render();
+window.avanzar=function(){
+  const p=pasos(), i=p.indexOf(state.step);
+  irA(p[Math.min(i+1,p.length-1)]);
+};
+window.volver=function(){
+  const p=pasos(), i=p.indexOf(state.step);
+  irA(p[Math.max(i-1,0)]);
+};
+window.setForm=function(v){
+  state.form=v; state.atletas=[]; state.error=''; render();
   if(v)cargarAtletas();
 };
 window.setCampo=function(k,v){
@@ -270,7 +290,7 @@ window.setCampo=function(k,v){
 window.setBusca=function(v){ state.buscaAtleta=v; render(); };
 
 function puedeSeguir(){
-  if(state.step===0) return !!state.evento;
+  if(state.step===0) return !!state.form;
   if(state.step===1) return rutValido(state.ent.rut) && state.ent.nombre.trim().length>2
     && /.+@.+\..+/.test(state.ent.correo) && /^\d{4}$/.test(state.ent.pin);
   if(state.step===2) return state.atletas.length>=1;
@@ -282,7 +302,7 @@ function puedeSeguir(){
 window.enviar=async function(){
   if(state.enviando)return;
   state.enviando=true; state.error=''; render();
-  const ev=evActual();
+  const fo=formActual();
   const rc=rutLimpio(state.ent.rut);
   try{
     // Los documentos van a athlete_files/{rut}/…, que es la carpeta de quien se
@@ -290,7 +310,7 @@ window.enviar=async function(){
     // "entrenador_" para que no se confunda con lo que subió como atleta: hay
     // entrenadores que además compiten, y son la misma persona y el mismo RUT.
     const urls={};
-    for(const meta of Object.values(docsEntrenador(ev))){
+    for(const meta of Object.values(docsEntrenador(fo))){
       const f=state.archivos[meta.key]; if(!f)continue;
       const ext=(String(f.name||'').match(/\.([a-zA-Z0-9]+)$/)||[])[1]||'pdf';
       const r=FB.ref(FB.storage,`athlete_files/${rc}/entrenador_${meta.key}_${Date.now()}.${ext}`);
@@ -301,7 +321,13 @@ window.enviar=async function(){
       .map(a=>({rut:a.rut,nombre:a.nombre,modalidad:a.modalidad,division:a.division,categoria:a.categoria}));
 
     const pub={
-      evento:state.evento,
+      // El formulario es el dueño de la inscripción. El campeonato va aparte y
+      // queda vacío en una acreditación, que no tiene ninguno: de ahí sale la
+      // nómina pública, que se arma por campeonato.
+      formulario:state.form,
+      formularioNombre:(fo&&fo.nombre)||'',
+      tipo:(fo&&fo.tipo)||'campeonato',
+      evento:esDeCampeonato(fo)?fo.evento:'',
       nombre:state.ent.nombre.trim(),
       rut:formatRut(state.ent.rut),
       club:state.ent.club.trim(),
@@ -318,7 +344,7 @@ window.enviar=async function(){
       correo:state.ent.correo.trim(), telefono:state.ent.telefono.trim(),
       docs:urls, ts:FB.serverTimestamp()
     };
-    const id=`${state.evento}_${rc}`;
+    const id=`${state.form}_${rc}`;
     const refPub=FB.doc(FB.db,'inscripciones_entrenador',id);
     const refPriv=FB.doc(FB.db,'inscripciones_entrenador_priv',id);
     await FB.runTransaction(FB.db,async tx=>{
@@ -342,21 +368,22 @@ function render(){
   if(!LISTO){ app.innerHTML='<div class="card" style="text-align:center"><div class="sp"></div><div class="muted" style="margin-top:10px">Cargando campeonatos…</div></div>'; return; }
   if(state.ok){ app.innerHTML=vistaListo(); return; }
 
-  const abiertos=EVENTOS.filter(entrenadoresAbierto);
+  const abiertos=FORMS.filter(formAbierto);
   if(!abiertos.length){
     app.innerHTML=`<div class="card">
-      <h2 class="os" style="font-size:19px;letter-spacing:1px;margin-bottom:10px">Inscripción de entrenadores</h2>
-      <div class="alert alert-info">Por ahora no hay ningún campeonato con la inscripción de entrenadores abierta.
-      Cuando se abra, aparece acá.</div></div>`;
+      <h2 class="os" style="font-size:19px;letter-spacing:1px;margin-bottom:10px">Entrenadores</h2>
+      <div class="alert alert-info">Por ahora no hay ningún formulario de entrenador abierto.
+      Cuando se abra uno —para un campeonato o para una acreditación— aparece acá.</div></div>`;
     return;
   }
 
-  let h=`<div class="step-bar">${[0,1,2,3,4].map(i=>
+  const p=pasos();
+  let h=`<div class="step-bar">${p.map(i=>
     `<div class="step-dot ${state.step===i?'active':''} ${state.step>i?'done':''}"></div>`).join('')}</div>`;
 
   if(state.error) h+=`<div class="alert alert-error">${esc(state.error)}</div>`;
 
-  if(state.step===0) h+=pasoEvento(abiertos);
+  if(state.step===0) h+=pasoForm(abiertos);
   else if(state.step===1) h+=pasoDatos();
   else if(state.step===2) h+=pasoAtletas();
   else if(state.step===3) h+=pasoDocs();
@@ -365,22 +392,29 @@ function render(){
   app.innerHTML=h;
 }
 
-function pasoEvento(abiertos){
-  const ev=evActual();
+function pasoForm(abiertos){
+  const f=formActual();
+  const camp=esDeCampeonato(f);
+  const ev=f&&EVENTOS.find(e=>e.id===f.evento);
   return `<div class="card fade">
-    <h2 class="os" style="font-size:19px;letter-spacing:1px;margin-bottom:6px">Inscripción de entrenadores</h2>
+    <h2 class="os" style="font-size:19px;letter-spacing:1px;margin-bottom:6px">Entrenadores</h2>
     <p class="muted" style="margin-bottom:18px">Este es el formulario del entrenador, aparte del de los atletas.
-      Vas a decir a qué atletas llevas —de los que ya están inscritos— y a subir los documentos que pida el campeonato.</p>
+      Elige cuál vas a llenar.</p>
     <div class="field">
-      <label>Campeonato <span class="req">*</span></label>
-      <select class="input" onchange="setEvento(this.value)">
-        <option value="">— Elige el campeonato —</option>
-        ${abiertos.map(e=>`<option value="${esc(e.id)}" ${state.evento===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}
+      <label>Formulario <span class="req">*</span></label>
+      <select class="input" onchange="setForm(this.value)">
+        <option value="">— Elegir —</option>
+        ${abiertos.map(x=>`<option value="${esc(x.id)}" ${state.form===x.id?'selected':''}>${esc(x.nombre||x.id)}</option>`).join('')}
       </select>
     </div>
-    ${ev&&ev.entrenadoresTexto?`<div class="alert alert-info">${esc(ev.entrenadoresTexto).replace(/\n/g,'<br>')}</div>`:''}
-    ${ev&&ev.entrenadoresCloseAt?`<p class="muted">Las inscripciones de entrenadores para este campeonato cierran el <b>${esc(ev.entrenadoresCloseAt)}</b>.</p>`:''}
-    <div style="margin-top:18px"><button class="btn btn-accent" onclick="irA(1)" ${puedeSeguir()?'':'disabled'}>Continuar</button></div>
+    ${f?`<div class="alert alert-info">
+      ${camp
+        ? `Vas a decir a qué atletas llevas${ev?' en <b>'+esc(ev.name)+'</b>':''} —de los que ya están inscritos— y a subir los documentos que se piden.`
+        : 'Postulas tú: llenas tus datos y subes los documentos que se piden. Acá no se eligen atletas.'}
+      ${f.texto?'<br><br>'+esc(f.texto).replace(/\n/g,'<br>'):''}
+    </div>`:''}
+    ${f&&f.cierra?`<p class="muted">Cierra el <b>${esc(f.cierra)}</b>.</p>`:''}
+    <div style="margin-top:18px"><button class="btn btn-accent" onclick="avanzar()" ${puedeSeguir()?'':'disabled'}>Continuar</button></div>
   </div>`;
 }
 
@@ -424,8 +458,8 @@ function pasoDatos(){
       <p class="muted" style="margin-top:5px">Guárdalo: es lo que te va a pedir la organización si necesitas cambiar algo.</p>
     </div>
     <div style="display:flex;gap:8px;margin-top:8px">
-      <button class="btn btn-outline" onclick="irA(0)">Atrás</button>
-      <button class="btn btn-accent" onclick="irA(2)" ${puedeSeguir()?'':'disabled'}>Continuar</button>
+      <button class="btn btn-outline" onclick="volver()">Atrás</button>
+      <button class="btn btn-accent" onclick="avanzar()" ${puedeSeguir()?'':'disabled'}>Continuar</button>
     </div>
   </div>`;
 }
@@ -456,19 +490,19 @@ function pasoAtletas(){
       </div>
       <p class="muted">Elegidos: <b style="color:var(--text)">${state.atletas.length}</b></p>`}
     <div style="display:flex;gap:8px;margin-top:14px">
-      <button class="btn btn-outline" onclick="irA(1)">Atrás</button>
-      <button class="btn btn-accent" onclick="irA(3)" ${puedeSeguir()?'':'disabled'}>Continuar</button>
+      <button class="btn btn-outline" onclick="volver()">Atrás</button>
+      <button class="btn btn-accent" onclick="avanzar()" ${puedeSeguir()?'':'disabled'}>Continuar</button>
     </div>
   </div>`;
 }
 
 function pasoDocs(){
-  const cat=docsEntrenador(evActual());
+  const cat=docsEntrenador(formActual());
   const lista=Object.values(cat);
   let h=`<div class="card fade">
     <h2 class="os" style="font-size:18px;letter-spacing:1px;margin-bottom:6px">Tus documentos</h2>`;
   if(!lista.length){
-    h+=`<div class="alert alert-info">Este campeonato no pide documentos al entrenador. Puedes continuar.</div>`;
+    h+=`<div class="alert alert-info">Este formulario no pide documentos. Puedes continuar.</div>`;
   }else{
     h+=`<p class="muted" style="margin-bottom:16px">Son los que este campeonato le pide al entrenador. Máximo 10 MB cada uno.</p>`;
     lista.forEach(m=>{
@@ -494,20 +528,23 @@ function pasoDocs(){
     });
   }
   h+=`<div style="display:flex;gap:8px;margin-top:8px">
-      <button class="btn btn-outline" onclick="irA(2)">Atrás</button>
-      <button class="btn btn-accent" onclick="irA(4)" ${puedeSeguir()?'':'disabled'}>Continuar</button>
+      <button class="btn btn-outline" onclick="volver()">Atrás</button>
+      <button class="btn btn-accent" onclick="avanzar()" ${puedeSeguir()?'':'disabled'}>Continuar</button>
     </div></div>`;
   return h;
 }
 
 function pasoConfirmar(){
-  const ev=evActual();
+  const fo=formActual();
+  const camp=esDeCampeonato(fo);
+  const ev=fo&&EVENTOS.find(e=>e.id===fo.evento);
   const elegidos=ATLETAS.filter(a=>state.atletas.indexOf(a.rut)>=0);
   const a=state.acred;
   return `<div class="card fade">
     <h2 class="os" style="font-size:18px;letter-spacing:1px;margin-bottom:16px">Revisa antes de enviar</h2>
     <div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px">
-      <div class="muted">Campeonato</div><div style="font-weight:600;margin-bottom:10px">${esc(ev?ev.name:'')}</div>
+      <div class="muted">${camp?'Campeonato':'Convocatoria'}</div>
+      <div style="font-weight:600;margin-bottom:10px">${esc(camp&&ev?ev.name:(fo?fo.nombre:''))}</div>
       <div class="muted">Entrenador</div>
       <div style="font-weight:600">${esc(state.ent.nombre)} · ${esc(formatRut(state.ent.rut))}</div>
       <div class="muted" style="margin-top:2px">${esc(state.ent.club||'Sin club')} · ${esc(state.ent.correo)}</div>
@@ -515,16 +552,16 @@ function pasoConfirmar(){
         ?`<span class="pill pill-ok">ACREDITACIÓN VIGENTE${a.hasta?' HASTA '+esc(a.hasta):''}</span>`
         :`<span class="pill pill-warn">SIN ACREDITACIÓN VIGENTE · LA ORGANIZACIÓN LO REVISA</span>`}</div>
     </div>
-    <div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px">
+    ${camp?`<div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px">
       <div class="muted" style="margin-bottom:6px">Atletas que llevas (${elegidos.length})</div>
       ${elegidos.map(x=>`<div style="font-size:13px;padding:3px 0">${esc(x.nombre)} <span class="muted">${esc([x.modalidad,x.division].filter(Boolean).join(' · '))}</span></div>`).join('')}
-    </div>
+    </div>`:''}
     ${Object.keys(state.nombres).length?`<div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px">
       <div class="muted" style="margin-bottom:6px">Documentos</div>
-      ${Object.values(docsEntrenador(ev)).map(m=>`<div style="font-size:13px;padding:3px 0">${esc(m.label)}: ${state.nombres[m.key]?'✅ '+esc(state.nombres[m.key]):'❌ falta'}</div>`).join('')}
+      ${Object.values(docsEntrenador(fo)).map(m=>`<div style="font-size:13px;padding:3px 0">${esc(m.label)}: ${state.nombres[m.key]?'✅ '+esc(state.nombres[m.key]):'❌ falta'}</div>`).join('')}
     </div>`:''}
     <div style="display:flex;gap:8px">
-      <button class="btn btn-outline" onclick="irA(3)" ${state.enviando?'disabled':''}>Atrás</button>
+      <button class="btn btn-outline" onclick="volver()" ${state.enviando?'disabled':''}>Atrás</button>
       <button class="btn btn-green" onclick="enviar()" ${state.enviando?'disabled':''}>
         ${state.enviando?'<span class="sp" style="width:16px;height:16px;border-width:2px"></span> Enviando…':'Enviar inscripción'}</button>
     </div>
@@ -532,12 +569,15 @@ function pasoConfirmar(){
 }
 
 function vistaListo(){
-  const ev=evActual();
+  const fo=formActual();
+  const camp=esDeCampeonato(fo);
+  const ev=fo&&EVENTOS.find(e=>e.id===fo.evento);
   return `<div class="card fade" style="text-align:center;padding:36px 24px">
     <div style="font-size:44px;margin-bottom:10px">✅</div>
-    <h2 class="os" style="font-size:21px;letter-spacing:1px;margin-bottom:8px">Inscripción enviada</h2>
-    <p class="muted" style="max-width:440px;margin:0 auto 16px">Quedaste inscrito como entrenador en
-      <b style="color:var(--text)">${esc(ev?ev.name:'')}</b> con ${state.atletas.length} atleta(s).
+    <h2 class="os" style="font-size:21px;letter-spacing:1px;margin-bottom:8px">${camp?'Inscripción enviada':'Postulación enviada'}</h2>
+    <p class="muted" style="max-width:440px;margin:0 auto 16px">
+      ${camp?'Quedaste inscrito como entrenador en':'Quedó enviada tu postulación a'}
+      <b style="color:var(--text)">${esc(camp&&ev?ev.name:(fo?fo.nombre:''))}</b>${camp?` con ${state.atletas.length} atleta(s)`:''}.
       La organización la revisa y te avisa a ${esc(state.ent.correo)}.</p>
     <div class="alert alert-info" style="text-align:left;max-width:440px;margin:0 auto">
       Anota tu PIN: <b>${esc(state.ent.pin)}</b>. Es lo que te van a pedir si necesitas cambiar algo.</div>
@@ -549,12 +589,18 @@ function vistaListo(){
 async function arrancar(){
   FB=window.FBE;
   try{
-    const snap=await FB.getDocs(FB.collection(FB.db,'eventos'));
-    EVENTOS=[]; snap.forEach(d=>{ const e={id:d.id,...d.data()}; if(e.status!=='archived')EVENTOS.push(e); });
-    EVENTOS.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+    const [sf,se]=await Promise.all([
+      FB.getDocs(FB.collection(FB.db,'formularios_entrenador')),
+      FB.getDocs(FB.collection(FB.db,'eventos'))
+    ]);
+    FORMS=[]; sf.forEach(d=>FORMS.push({id:d.id,...d.data()}));
+    FORMS.sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es'));
+    // Los campeonatos se traen solo para poder decir el nombre del que le toca a
+    // cada formulario; los atletas se piden después, cuando ya se eligió uno.
+    EVENTOS=[]; se.forEach(d=>{ const e={id:d.id,...d.data()}; if(e.status!=='archived')EVENTOS.push(e); });
     // Si solo hay uno abierto, se elige solo: no tiene sentido hacer elegir de una lista de uno.
-    const ab=EVENTOS.filter(entrenadoresAbierto);
-    if(ab.length===1){ state.evento=ab[0].id; cargarAtletas(); }
+    const ab=FORMS.filter(formAbierto);
+    if(ab.length===1){ state.form=ab[0].id; cargarAtletas(); }
   }catch(e){ console.warn('[eventos]',e); }
   LISTO=true; render();
 }
@@ -563,11 +609,13 @@ if(window.FBE) arrancar(); else window.addEventListener('fbe-listo',arrancar);
 // Para las pruebas: montar un campeonato y un Firebase de mentira. En el cajón de
 // pruebas no hay salida a Firebase, así que el módulo de arriba nunca llega a
 // cargar; esto deja mirar el formulario igual.
-window._montar=function(evs,fbFalso){ EVENTOS=evs||[]; if(fbFalso)FB=fbFalso; LISTO=true; render(); };
+window._montar=function(forms,fbFalso,evs){ FORMS=forms||[]; EVENTOS=evs||[]; if(fbFalso)FB=fbFalso; LISTO=true; render(); };
 window._estado=state;
 window._atletas=function(a){ ATLETAS=a||[]; render(); };
 window.docsEntrenador=docsEntrenador;
-window.entrenadoresAbierto=entrenadoresAbierto;
+window.formAbierto=formAbierto;
+window.esDeCampeonato=esDeCampeonato;
+window.pasos=pasos;
 window.acreditacionVigente=acreditacionVigente;
 window.rutValido=rutValido;
 window.render=render;

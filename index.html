@@ -795,10 +795,27 @@ function _aplicaEntrenadores(todos){
 // justo donde va a buscarlo, que es la pestaña de inscripción. Solo aparece
 // cuando hay algún campeonato con ese período abierto.
 function _fechaHoyISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+// Los formularios de entrenador abiertos. Salen de su propia colección: no
+// cuelgan de un campeonato, porque el mismo mecanismo sirve para una
+// convocatoria de acreditación, que no tiene campeonato ninguno.
+window.FORMS_ENT=[];
+async function loadFBFormsEnt(force){
+  if(!fbReady)return;
+  try{
+    if(!force){
+      const c=_fsCache('formularios_entrenador',5*60*1000);
+      if(c){window.FORMS_ENT=c;return;}
+    }
+    const snap=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'formularios_entrenador'));
+    const all=[];snap.forEach(d=>all.push({id:d.id,...d.data()}));
+    _fsSetCache('formularios_entrenador',all);
+    window.FORMS_ENT=all;
+  }catch(e){console.warn('Error loading formularios_entrenador',e)}
+}
 function _conEntrenadoresAbierto(){
-  return (NOM_EVENTS||[]).filter(e=>{
-    if(!e||e.status==='archived'||!e.entrenadoresOpen)return false;
-    const c=String(e.entrenadoresCloseAt||'').trim();
+  return (window.FORMS_ENT||[]).filter(f=>{
+    if(!f||!f.abierto)return false;
+    const c=String(f.cierra||'').trim();
     return !c||_fechaHoyISO()<=c;
   });
 }
@@ -810,8 +827,8 @@ function _avisoEntrenadores(){
     <div style="flex:1;min-width:220px">
       <div style="font-family:Oswald;font-size:14px;letter-spacing:1px;color:#8ab4e8">¿ERES ENTRENADOR?</div>
       <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.55">
-        ${l.length===1?esc(l[0].name)+' tiene':'Hay '+l.length+' campeonatos con'} la inscripción de entrenadores abierta.
-        Es un formulario aparte: eliges a los atletas que llevas y subes tus documentos.
+        ${l.length===1?'Está abierto <b>'+esc(l[0].nombre||'')+'</b>':'Hay '+l.length+' formularios abiertos'}.
+        Es aparte del de los atletas: llenas tus datos y subes tus documentos.
       </div>
     </div>
     <a href="inscripcion_entrenador.html" style="padding:11px 20px;border-radius:8px;background:var(--blue,#1E5BA8);color:#fff;font-family:Oswald;font-size:12px;letter-spacing:1px;text-decoration:none;white-space:nowrap">INSCRIBIRME COMO ENTRENADOR</a>
@@ -2905,6 +2922,7 @@ async function cargarParaVista(v){
     // pestaña ya tiene su propio refresco cada tres minutos mientras se mira.
     tareas.push(loadFBNominas());
     tareas.push(loadFBEntrenadores());
+    tareas.push(loadFBFormsEnt());
     tareas.push(una('nsudafotos',async()=>{
 
   // ── Fotos de la nómina Sudamericano (para las fichas): caché 1h ──

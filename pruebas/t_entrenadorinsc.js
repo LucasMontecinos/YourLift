@@ -31,17 +31,29 @@ const HOY = new Date().toISOString().slice(0, 10);
 const AYER = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
 const PROX = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
 
+// Los campeonatos existen solo para poder decir el nombre del que le toca a un
+// formulario. El formulario es el que manda.
 const EVENTOS = [
-  { id: 'oe_nac', name: 'Nacional Olimpiadas Especiales', date: '2026-11-14', status: 'open',
-    entrenadoresOpen: true, entrenadoresCloseAt: PROX,
-    entrenadoresTexto: 'Inscribe primero a tus atletas y después vuelve acá.',
-    docsEntrenador: [{ key: 'ant1', label: 'Certificado de antecedentes',
+  { id: 'oe_nac', name: 'Nacional Olimpiadas Especiales', date: '2026-11-14', status: 'open' },
+  { id: 'reg', name: 'Regional', date: '2026-10-01', status: 'open' },
+];
+
+const FORMS = [
+  { id: 'f_camp', nombre: 'Entrenadores · Nacional Olimpiadas Especiales', tipo: 'campeonato',
+    evento: 'oe_nac', abierto: true, cierra: PROX,
+    texto: 'Inscribe primero a tus atletas y después vuelve acá.',
+    documentos: [{ key: 'ant1', label: 'Certificado de antecedentes',
       desc: 'Vigente, no más de 90 días', plantillaUrl: 'https://ejemplo.cl/form.pdf',
       linkUrl: 'https://registrocivil.cl', linkTexto: 'Se saca en el Registro Civil' }] },
-  { id: 'cerrado', name: 'Regional con el plazo vencido', date: '2026-10-01', status: 'open',
-    entrenadoresOpen: true, entrenadoresCloseAt: AYER, docsEntrenador: [] },
-  { id: 'sin_ent', name: 'Nacional sin período de entrenadores', date: '2026-12-01', status: 'open',
-    entrenadoresOpen: false, docsEntrenador: [] },
+  { id: 'f_venc', nombre: 'Formulario con el plazo vencido', tipo: 'campeonato',
+    evento: 'reg', abierto: true, cierra: AYER, documentos: [] },
+  { id: 'f_cerr', nombre: 'Formulario todavía cerrado', tipo: 'campeonato',
+    evento: 'reg', abierto: false, documentos: [] },
+  // El que justifica todo el cambio: una convocatoria de acreditación no tiene
+  // campeonato ni atletas.
+  { id: 'f_acred', nombre: 'Quinta acreditación de entrenadores 2027', tipo: 'acreditacion',
+    evento: '', abierto: true, cierra: PROX, texto: 'Postulación a Cat. 2.',
+    documentos: [{ key: 'cv', label: 'Currículum deportivo', desc: 'PDF' }] },
 ];
 
 const ATLETAS = [
@@ -72,9 +84,11 @@ const FB_FALSO = `{
   })
 }`;
 
-const montar = async (p, evs) => p.evaluate(([e, fb]) => {
-  window._montar(e, eval('(' + fb + ')'));
-}, [evs, FB_FALSO]);
+const montar = async (p, forms, evs) => p.evaluate(([f, fb, e]) => {
+  window._montar(f, eval('(' + fb + ')'), e);
+}, [forms, FB_FALSO, evs || EVENTOS_G]);
+
+global.EVENTOS_G = EVENTOS;
 
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -84,28 +98,48 @@ const montar = async (p, evs) => p.evaluate(([e, fb]) => {
   await p.goto(`http://localhost:${PUERTO}/inscripcion_entrenador.html`, { waitUntil: 'domcontentloaded' });
   await p.waitForFunction(() => typeof window._montar === 'function', null, { timeout: 25000 });
 
-  console.log('\nSolo salen los campeonatos con el período abierto');
+  console.log('\nSolo salen los formularios abiertos');
   {
-    await montar(p, EVENTOS);
+    await montar(p, FORMS);
     const r = await p.evaluate(() => {
       const ops = [...document.querySelectorAll('select option')].map(o => o.textContent.trim());
       return { ops,
-        abierto: entrenadoresAbierto(window.__EV = { entrenadoresOpen: true, entrenadoresCloseAt: '' }),
-        vencido: entrenadoresAbierto({ entrenadoresOpen: true, entrenadoresCloseAt: '2020-01-01' }),
-        apagado: entrenadoresAbierto({ entrenadoresOpen: false }) };
+        abierto: formAbierto({ abierto: true, cierra: '' }),
+        vencido: formAbierto({ abierto: true, cierra: '2020-01-01' }),
+        apagado: formAbierto({ abierto: false }) };
     });
-    ok(r.ops.some(o => /Olimpiadas Especiales/.test(o)), 'el que tiene el período abierto sale');
+    ok(r.ops.some(o => /Olimpiadas Especiales/.test(o)), 'el abierto sale');
+    ok(r.ops.some(o => /Quinta acreditación/.test(o)), 'la acreditación también, sin campeonato ninguno');
     ok(!r.ops.some(o => /plazo vencido/.test(o)), 'el que ya cerró, no');
-    ok(!r.ops.some(o => /sin período/.test(o)), 'y el que no lo abrió, tampoco');
+    ok(!r.ops.some(o => /todavía cerrado/.test(o)), 'y el que no está abierto, tampoco');
     ok(r.abierto && !r.vencido && !r.apagado, 'sin fecha de cierre queda abierto; con fecha pasada, cerrado');
   }
 
   console.log('\n  Si no hay ninguno abierto, se dice y no se muestra un formulario vacío');
   {
-    await montar(p, [EVENTOS[2]]);
+    await montar(p, [FORMS[2]]);
     const t = await p.evaluate(() => document.body.innerText);
-    ok(/no hay ningún campeonato/i.test(t), 'lo dice con todas sus letras');
+    ok(/no hay ningún formulario/i.test(t), 'lo dice con todas sus letras');
     ok(!/Tus datos/.test(t), 'y no ofrece llenar nada');
+  }
+
+  console.log('\n  Una acreditación no pide atletas: ese paso no existe');
+  {
+    await montar(p, FORMS);
+    const r = await p.evaluate(() => {
+      setForm('f_acred');
+      const acred = pasos().slice();
+      setForm('f_camp');
+      const camp = pasos().slice();
+      // Y avanzando desde los datos, la acreditación salta al de documentos.
+      setForm('f_acred'); _estado.step = 1; avanzar();
+      const siguiente = _estado.step;
+      return { acred, camp, siguiente, texto: document.body.innerText };
+    });
+    ok(r.camp.join() === '0,1,2,3,4', 'la de campeonato tiene el paso de atletas');
+    ok(r.acred.join() === '0,1,3,4', 'la acreditación no');
+    ok(r.siguiente === 3, 'y avanzar desde los datos lleva directo a los documentos');
+    ok(!/Tus atletas/.test(r.texto), 'no se dibuja el paso de atletas');
   }
 
   console.log('\n  El RUT se valida antes de tocar la base');
@@ -140,7 +174,7 @@ const montar = async (p, evs) => p.evaluate(([e, fb]) => {
     // Acreditado: se le rellenan los datos y sale en verde. Pero el CORREO no se
     // rellena: la base de entrenadores se lee sin sesión, y devolver el correo de
     // quien sea que tecleen convertiría esto en un buscador de correos ajenos.
-    await montar(p, EVENTOS);
+    await montar(p, FORMS);
     const r = await p.evaluate(async f => {
       window.__BASE = { '11.111.111-1': { nombre: 'Pedro Rojas', club: 'Club Uno',
         categoria: 'Cat. 2', correos: ['secreto@ejemplo.cl'],
@@ -190,7 +224,11 @@ const montar = async (p, evs) => p.evaluate(([e, fb]) => {
   console.log('\n  Elegir atletas: de los que ya están inscritos, y al menos uno');
   {
     const r = await p.evaluate(async () => {
-      _estado.step = 2; _estado.atletas = []; window._atletas(window.__INSC.filter(a => a.status !== 'rejected'));
+      // Se deja que los atletas los cargue el propio formulario desde Firestore,
+      // que es como pasa de verdad: setForm dispara la carga.
+      setForm('f_camp');
+      await new Promise(r => setTimeout(r, 150));
+      _estado.step = 2; _estado.atletas = []; render();
       const nombres = [...document.querySelectorAll('.ath .n')].map(x => x.textContent.trim());
       const btnAntes = [...document.querySelectorAll('button')].find(b => /Continuar/i.test(b.textContent));
       const trancadoSinNinguno = !!btnAntes && btnAntes.disabled;
@@ -212,7 +250,7 @@ const montar = async (p, evs) => p.evaluate(([e, fb]) => {
         { rut: '444444444', nombre: 'Rechazado Pérez', status: 'rejected', evento: 'oe_nac' },
         { rut: '555555555', nombre: 'Aceptada Rojas', status: 'approved', evento: 'oe_nac' },
       ];
-      setEvento('oe_nac');
+      setForm('f_camp');
       await new Promise(r => setTimeout(r, 120));
       _estado.step = 2; render();
       return document.body.innerText;
@@ -224,7 +262,7 @@ const montar = async (p, evs) => p.evaluate(([e, fb]) => {
   console.log('\n  Los documentos del entrenador, con su formulario y su link');
   {
     const r = await p.evaluate(() => {
-      const cat = docsEntrenador({ docsEntrenador: [{ key: 'ant1', label: 'Certificado de antecedentes',
+      const cat = docsEntrenador({ documentos: [{ key: 'ant1', label: 'Certificado de antecedentes',
         desc: 'Vigente', plantillaUrl: 'https://ejemplo.cl/form.pdf', linkUrl: 'https://registrocivil.cl',
         linkTexto: 'Se saca en el Registro Civil' }] });
       _estado.step = 3; _estado.archivos = {}; _estado.nombres = {}; render();
@@ -244,9 +282,8 @@ const montar = async (p, evs) => p.evaluate(([e, fb]) => {
   {
     // Un campeonato que no le pide nada al entrenador no lo deja trancado.
     const r = await p.evaluate(() => {
-      _estado.evento = 'sin_docs';
-      window._montar([{ id: 'sin_docs', name: 'Sin documentos', entrenadoresOpen: true, docsEntrenador: [] }]);
-      _estado.evento = 'sin_docs'; _estado.step = 3; _estado.archivos = {}; render();
+      window._montar([{ id: 'sin_docs', nombre: 'Sin documentos', tipo: 'acreditacion', abierto: true, documentos: [] }]);
+      _estado.form = 'sin_docs'; _estado.step = 3; _estado.archivos = {}; render();
       const btn = [...document.querySelectorAll('button')].find(b => /Continuar/i.test(b.textContent));
       return { t: document.body.innerText, trancado: !!btn && btn.disabled };
     });
@@ -256,10 +293,10 @@ const montar = async (p, evs) => p.evaluate(([e, fb]) => {
 
   console.log('\n  Lo que se guarda cabe en lo que las reglas aceptan');
   {
-    await montar(p, EVENTOS);
+    await montar(p, FORMS);
     const escrito = await p.evaluate(async ats => {
       window.__ESCRITO = {};
-      _estado.evento = 'oe_nac'; _estado.ok = '';
+      setForm('f_camp'); _estado.ok = '';
       _estado.ent = { rut: '11.111.111-1', nombre: 'Marta Fuentes', club: 'Club Uno',
                       categoria: 'Cat. 2', correo: 'marta@ejemplo.cl', telefono: '+56 9 1111 1111', pin: '4321' };
       _estado.acred = { encontrado: true, vigente: true, hasta: '2027-05', categoria: 'Cat. 2' };
@@ -339,19 +376,18 @@ const montar = async (p, evs) => p.evaluate(([e, fb]) => {
     // Y el entrenador tiene que poder ENCONTRAR el formulario. Si el aviso no
     // sale en la pestaña de inscripción, nadie va a adivinar que la página existe.
     const av = await p2.evaluate(([prox, ayer]) => {
-      const hacer = evs => { NOM_EVENTS.length = 0; evs.forEach(e => NOM_EVENTS.push(e)); return _avisoEntrenadores(); };
+      const hacer = fs => { window.FORMS_ENT = fs; return _avisoEntrenadores(); };
       return {
-        abierto: hacer([{ id: 'oe', name: 'Nacional OE', status: 'open', entrenadoresOpen: true, entrenadoresCloseAt: prox }]),
-        cerrado: hacer([{ id: 'oe', name: 'Nacional OE', status: 'open', entrenadoresOpen: true, entrenadoresCloseAt: ayer }]),
-        apagado: hacer([{ id: 'oe', name: 'Nacional OE', status: 'open', entrenadoresOpen: false }]),
-        dos: hacer([{ id: 'a', name: 'Uno', status: 'open', entrenadoresOpen: true },
-                    { id: 'b', name: 'Dos', status: 'open', entrenadoresOpen: true }]),
+        abierto: hacer([{ id: 'f1', nombre: 'Entrenadores · Nacional OE', abierto: true, cierra: prox }]),
+        cerrado: hacer([{ id: 'f1', nombre: 'Entrenadores · Nacional OE', abierto: true, cierra: ayer }]),
+        apagado: hacer([{ id: 'f1', nombre: 'Entrenadores · Nacional OE', abierto: false }]),
+        dos: hacer([{ id: 'a', nombre: 'Uno', abierto: true }, { id: 'b', nombre: 'Dos', abierto: true }]),
       };
     }, [PROX, AYER]);
     ok(/inscripcion_entrenador\.html/.test(av.abierto), 'el aviso enlaza al formulario del entrenador');
-    ok(/Nacional OE/.test(av.abierto), 'y nombra el campeonato cuando es uno solo');
-    ok(av.cerrado === '' && av.apagado === '', 'y no sale si el período está cerrado o apagado');
-    ok(/2 campeonatos/.test(av.dos), 'con varios, dice cuántos son');
+    ok(/Nacional OE/.test(av.abierto), 'y lo nombra cuando es uno solo');
+    ok(av.cerrado === '' && av.apagado === '', 'y no sale si está cerrado o vencido');
+    ok(/2 formularios/.test(av.dos), 'con varios, dice cuántos son');
     await p2.close();
   }
 
