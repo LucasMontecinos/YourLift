@@ -315,6 +315,90 @@ const LEER = `(() => {
     ok(/inscripcion_entrenador\.html/.test(t), 'y dice dónde está el formulario');
   }
 
+  console.log('\n  Lo que declaró el entrenador llega al cronograma');
+  {
+    // Ésta es la razón para que los entrenadores se inscriban por acá en TODOS
+    // los campeonatos y no solo en uno: la columna Entrenador del cronograma se
+    // escribía a mano, fila por fila, y es exactamente el dato que el entrenador
+    // ya declaró al inscribirse. Se cruza por RUT.
+    const r = await p.evaluate(() => {
+      ST.feForm = null; ST.view = 'cronograma'; ST.cronoEv = 'oe';
+      ST.entInsc = [
+        { id: 'a', evento: 'oe', status: 'approved', nombre: 'Marta Fuentes',
+          atletas: [{ rut: '11.111.111-1', nombre: 'Ana Soto' }, { rut: '22222222-2', nombre: 'Bruno Díaz' }] },
+        // Pendiente: todavía la revisa la organización, no puede escribir el cronograma.
+        { id: 'b', evento: 'oe', status: 'pending', nombre: 'Pedro Pendiente',
+          atletas: [{ rut: '33.333.333-3', nombre: 'Carla Vera' }] },
+        // De otro campeonato: no se mezcla.
+        { id: 'c', evento: 'otro', status: 'approved', nombre: 'Ajeno Ruiz',
+          atletas: [{ rut: '44.444.444-4', nombre: 'Dani Paz' }] },
+      ];
+      const m = _entrenadorPorRut('oe');
+      return { m,
+        // El RUT se cruza normalizado: en la inscripción viene con puntos y en el
+        // cronograma puede venir sin ellos.
+        conPuntos: m['111111111'], sinPuntos: m['222222222'],
+        pendiente: m['333333333'], ajeno: m['444444444'] };
+    });
+    ok(r.conPuntos === 'Marta Fuentes' && r.sinPuntos === 'Marta Fuentes',
+       'cruza el RUT venga con puntos o sin ellos');
+    ok(!r.pendiente, 'una inscripción de entrenador pendiente no escribe el cronograma');
+    ok(!r.ajeno, 'y la de otro campeonato tampoco');
+  }
+  {
+    // Y al traerlos a un cronograma ya armado: llena los vacíos, NO pisa lo
+    // escrito a mano, y no pierde el trabajo de acomodar tandas.
+    const r = await p.evaluate(async () => {
+      ST.cronoRows = [
+        { nombre: 'Ana Soto', rut: '11111111-1', flight: 'C', jornada: '2', entrenador: '' },
+        { nombre: 'Bruno Díaz', rut: '22.222.222-2', flight: 'A', jornada: '1', entrenador: 'Otro Nombre' },
+        { nombre: 'Sin Rut', rut: '', flight: 'A', jornada: '1', entrenador: '' },
+      ];
+      window.cronoSaveDoc = async () => {};
+      const cuenta = await cronoTraerEntrenadores();
+      return { filas: ST.cronoRows.map(x => [x.nombre, x.entrenador, x.flight, x.jornada]), cuenta };
+    });
+    ok(r.filas[0][1] === 'Marta Fuentes', 'al que estaba vacío se le pone el entrenador');
+    ok(r.filas[1][1] === 'Otro Nombre', 'al que ya tenía un nombre escrito NO se le pisa');
+    ok(r.filas[2][1] === '', 'y el que no tiene RUT queda igual, no se puede cruzar');
+    ok(r.filas[0][2] === 'C' && r.filas[0][3] === '2', 'la tanda y la jornada no se tocan');
+    ok(r.cuenta.puestos === 1 && r.cuenta.distintos === 1 && r.cuenta.sinRut === 1,
+       'y lleva la cuenta de lo que puso, lo que dejó y lo que no pudo cruzar');
+  }
+  {
+    // Sin inscripciones de entrenador aprobadas, avisa en vez de no hacer nada.
+    const r = await p.evaluate(async () => {
+      ST.entInsc = []; ST.cronoEv = 'oe';
+      return await cronoTraerEntrenadores();
+    });
+    ok(r && r.hay === false && r.puestos === 0,
+       'sin inscripciones de entrenador aprobadas no toca nada y lo avisa');
+  }
+
+  console.log('\n  El atajo desde la ficha del campeonato');
+  {
+    const r = await p.evaluate(() => {
+      ST.formEnt = []; ST.eventos = [{ id: 'oe', name: 'Nacional OE', status: 'open' }];
+      ST.view = 'campeonatos'; ST.eventoForm = null; render();
+      const sinForm = document.body.innerText;
+      feNuevoPara('oe');
+      const vistaTrasAtajo = ST.view;
+      const nombre = document.getElementById('fe_nombre')?.value;
+      const evSel = document.getElementById('fe_evento')?.value;
+      // Y con un formulario ya creado, la ficha dice en qué estado está.
+      ST.feForm = null;
+      ST.formEnt = [{ id: 'f1', nombre: 'Entrenadores · Nacional OE', tipo: 'campeonato', evento: 'oe', abierto: true }];
+      ST.view = 'campeonatos'; render();
+      return { sinForm, nombre, evSel, conForm: document.body.innerText, vista: vistaTrasAtajo };
+    });
+    ok(/\+ Inscripción de entrenadores/.test(r.sinForm),
+       'si el campeonato no tiene formulario, ofrece crearlo');
+    ok(r.vista === 'formEnt', 'y el atajo lleva al constructor, no deja la configuración en Campeonatos');
+    ok(r.nombre === 'Entrenadores · Nacional OE', 'con el nombre propuesto');
+    ok(r.evSel === 'oe', 'y el campeonato ya elegido');
+    ok(/Entrenadores: abierto/.test(r.conForm), 'y si ya existe, la ficha dice si está abierto');
+  }
+
   ok(!errs.length, 'sin errores de JavaScript' + (errs.length ? ': ' + errs[0] : ''));
   await b.close();
   console.log(fallas ? `\n${fallas} FALLA(S)` : '\nTODO CORRECTO');

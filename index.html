@@ -2611,6 +2611,10 @@ function renderEntrenadoresPub(){
   const clubs=[...new Set(list.map(e=>e.club).filter(Boolean))].sort();
   let h=`<div style="font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:2px;margin-bottom:6px">ENTRENADORES <span style="color:var(--gold)">ACREDITADOS</span></div>
   <div style="font-size:12px;color:var(--muted);margin-bottom:20px">${list.length} entrenador${list.length!==1?'es':''} · FECHIPO</div>`;
+  // Ésta es la pantalla donde mira quien anda buscando algo de entrenadores, así
+  // que acá tiene que estar el formulario abierto. Antes solo salía en la pestaña
+  // de inscripción, que es la del atleta.
+  h+=_avisoEntrenadores();
   for(const club of clubs){
     const members=list.filter(e=>e.club===club);
     const lg=window.clubLogoImg?window.clubLogoImg(club,22,'background:rgba(10,22,40,.4);padding:1px;vertical-align:middle;margin-right:6px;'):'';
@@ -2954,6 +2958,7 @@ async function cargarParaVista(v){
     }));
   }
   if(v==='entrenadores'){
+    tareas.push(loadFBFormsEnt());
     tareas.push(una('entrenadores',async()=>{
 // ── Entrenadores: getDocs + caché 2h ──
   try{

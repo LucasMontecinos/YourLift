@@ -1110,6 +1110,16 @@ window.feNuevo=function(){
   ST.feForm=_feVacio(); ST.feModo='crear'; window._efDocsE=[];
   setTimeout(()=>{try{efDocPinta('e')}catch(e){}},0); render();
 };
+// Atajo desde la ficha del campeonato: abre el constructor con el campeonato ya
+// elegido y un nombre propuesto. La configuración sigue viviendo en su pestaña;
+// esto solo ahorra el camino.
+window.feNuevoPara=function(eventoId){
+  const ev=(ST.eventos||[]).find(e=>e.id===eventoId)||{};
+  ST.feForm={..._feVacio(), tipo:'campeonato', evento:eventoId,
+             nombre:'Entrenadores · '+(ev.name||eventoId)};
+  ST.feModo='crear'; window._efDocsE=[];
+  go('formEnt');
+};
 window.feEditar=function(id){
   const f=(ST.formEnt||[]).find(x=>x.id===id); if(!f)return;
   ST.feForm={..._feVacio(), ...f};
@@ -6615,6 +6625,54 @@ window.cronoAutoDistribute=async function(){
   if(avisos.length)console.warn('[crono] '+avisos.join('\n'));
   render();
 };
+// ── El entrenador de cada atleta, según lo que declararon ellos mismos ──
+//
+// La columna Entrenador del cronograma se escribía a mano, fila por fila, y es
+// justo el dato que el entrenador ya declaró al inscribirse: dijo a qué atletas
+// lleva. Acá se cruza por RUT.
+//
+// Solo cuentan las inscripciones de entrenador APROBADAS. Una pendiente todavía
+// la está revisando la organización, y dejarla escribir el cronograma sería
+// darle por buena antes de tiempo.
+const _rutN=r=>String(r||'').replace(/[^0-9kK]/g,'').toUpperCase();
+window._entrenadorPorRut=_entrenadorPorRut;
+function _entrenadorPorRut(eventoId){
+  const m={};
+  (ST.entInsc||[]).forEach(e=>{
+    if(e.evento!==eventoId) return;
+    if((e.status||'pending')!=='approved') return;
+    (e.atletas||[]).forEach(a=>{ const r=_rutN(a.rut); if(r) m[r]=e.nombre||''; });
+  });
+  return m;
+}
+// Rellena la columna en un cronograma que YA está armado, sin rehacerlo: el
+// trabajo de acomodar tandas y jornadas no se puede perder por traer un dato.
+// Y no pisa lo que ya está escrito — si alguien escribió otro nombre a mano,
+// manda esa persona; solo se avisa cuántos no calzan.
+window.cronoTraerEntrenadores=async function(){
+  if(!ST.cronoEv){showToast('Elige un campeonato primero',null,true);return;}
+  const mapa=_entrenadorPorRut(ST.cronoEv);
+  const cuantos=Object.keys(mapa).length;
+  if(!cuantos){
+    showToast('No hay inscripciones de entrenador aprobadas en este campeonato',null,true);
+    return {hay:false, puestos:0, distintos:0, sinRut:0};
+  }
+  let puestos=0, distintos=0, sinRut=0;
+  (ST.cronoRows||[]).forEach(r=>{
+    const k=_rutN(r.rut);
+    if(!k){ if(!r.entrenador)sinRut++; return; }
+    const q=mapa[k]; if(!q) return;
+    if(!String(r.entrenador||'').trim()){ r.entrenador=q; puestos++; }
+    else if(String(r.entrenador).trim()!==q) distintos++;
+  });
+  if(!puestos&&!distintos){ showToast('No había ninguno que completar'); return {hay:true,puestos,distintos,sinRut}; }
+  await cronoSaveDoc(); render();
+  showToast(`Entrenador puesto en ${puestos} atleta(s)`
+    +(distintos?` · ${distintos} ya tenían otro nombre escrito y se dejaron como estaban`:'')
+    +(sinRut?` · ${sinRut} sin RUT en el cronograma, no se pueden cruzar`:''));
+  return {hay:true,puestos,distintos,sinRut};
+};
+
 window.cronoLoadFromNomina=async function(){
   if(!ST.cronoEv){showToast('Elige un campeonato primero',null,true);return;}
   const evObj=(ST.eventos||[]).find(e=>e.id===ST.cronoEv);
@@ -6627,10 +6685,14 @@ window.cronoLoadFromNomina=async function(){
   // "M", igual que Mujer → todos terminaban marcados "M". Hay que reconocer
   // ambas formas explícitamente.
   const _sexoHM=s=>{s=String(s||'').trim().toLowerCase();return /^(hombre|masculino|m(a|á)sc)/.test(s)?'H':/^(mujer|femenino|fem)/.test(s)?'M':'';};
+  // El entrenador viene de lo que ellos mismos declararon al inscribirse. Si en
+  // este campeonato no hubo inscripción de entrenadores, queda vacío como antes
+  // y se escribe a mano.
+  const _entPorRut=_entrenadorPorRut(ST.cronoEv);
   ST.cronoRows=list.map(i=>({
     nombre:i.nombre||'', rut:i.rut||'', division:i.division||'', categoria:i.categoria||'', sexo:_sexoHM(i.sexo),
     club:i.club||'', modalidad:i.modalidad||'', tarima:'1', flight:(i.flight||'A'), jornada:'',
-    entrenador:'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
+    entrenador:_entPorRut[_rutN(i.rut)]||'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
   })).sort((a,b)=>String(a.flight).localeCompare(String(b.flight))||(a.nombre||'').localeCompare(b.nombre||''));
   await cronoSaveDoc();
   showToast('Cargados '+ST.cronoRows.length+' atletas desde la nómina');
@@ -6652,10 +6714,11 @@ window.cronoAddMissingFromNomina=async function(){
   const nuevos=list.filter(i=>!yaEsta.has(_nn(i.nombre)));
   if(!nuevos.length){showToast('No hay atletas nuevos — el cronograma ya tiene a todos los aprobados');return;}
   if(!confirm('Agregar '+nuevos.length+' atleta(s) nuevo(s) al cronograma?\n\n'+nuevos.map(i=>'• '+i.nombre).join('\n')+'\n\nEntran en flight "A" sin jornada — los mueves a mano después. No toca a los que ya están ubicados.'))return;
+  const _entPorRut=_entrenadorPorRut(ST.cronoEv);
   ST.cronoRows=(ST.cronoRows||[]).concat(nuevos.map(i=>({
     nombre:i.nombre||'', rut:i.rut||'', division:i.division||'', categoria:i.categoria||'', sexo:_sexoHM(i.sexo),
     club:i.club||'', modalidad:i.modalidad||'', tarima:'1', flight:'A', jornada:'',
-    entrenador:'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
+    entrenador:_entPorRut[_rutN(i.rut)]||'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
   })));
   await cronoSaveDoc();
   showToast('Agregados '+nuevos.length+' atleta(s) nuevo(s) al cronograma');
@@ -6739,7 +6802,7 @@ function renderCronoEditor(){
       <select onchange="cronoPickEvent(this.value)" style="background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;min-width:240px">
         <option value="">— Elegir campeonato —</option>${evOpts}
       </select>
-      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g" title="Reemplaza TODO el cronograma actual">Cargar desde nómina</button><button onclick="cronoAddMissingFromNomina()" class="btn btn-g" title="Suma solo los aprobados que todavía no están — no toca a los ya ubicados">+ Nuevos de nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoImportXlsx()" class="btn" title="Sube un Excel con las columnas Nombre/División/Categoría/Sexo/Club/Modalidad/Flight/Jornada/Entrenador/Handlers">Importar Excel</button><button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button><label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;margin-left:4px"><input type="checkbox" ${ST.cronoHideCoaches?'checked':''} onchange="cronoToggleCoaches(this.checked)"> Ocultar entrenador/handlers en el público</label>`:''}
+      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g" title="Reemplaza TODO el cronograma actual">Cargar desde nómina</button><button onclick="cronoAddMissingFromNomina()" class="btn btn-g" title="Suma solo los aprobados que todavía no están — no toca a los ya ubicados">+ Nuevos de nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoTraerEntrenadores()" class="btn" title="Llena la columna Entrenador con lo que los propios entrenadores declararon al inscribirse. No pisa lo que ya está escrito.">Traer entrenadores</button><button onclick="cronoImportXlsx()" class="btn" title="Sube un Excel con las columnas Nombre/División/Categoría/Sexo/Club/Modalidad/Flight/Jornada/Entrenador/Handlers">Importar Excel</button><button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button><label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;margin-left:4px"><input type="checkbox" ${ST.cronoHideCoaches?'checked':''} onchange="cronoToggleCoaches(this.checked)"> Ocultar entrenador/handlers en el público</label>`:''}
     </div>`;
   if(!ST.cronoEv) return h+`<div class="card" style="color:var(--muted)">Elige un campeonato para ver y editar su cronograma.</div>`;
   if(ST.cronoRows===null) return h+`<div class="card" style="color:var(--muted)">Cargando…</div>`;
@@ -8094,6 +8157,15 @@ function renderCampeonatos(){
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center">
           <a href="inscripcion.html" target="_blank" style="font-size:10px;color:var(--blue);text-decoration:none;padding:3px 8px;border:1px solid rgba(59,130,246,.3);border-radius:4px">Formulario público</a>
           <a href="cronograma.html?evento=${encodeURIComponent(ev.id)}" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">Cronograma</a>
+          ${(()=>{
+            // Atajo, no configuración: el formulario del entrenador se arma en su
+            // propia pestaña. Acá solo se dice si este campeonato ya tiene uno y
+            // se salta para allá con el campeonato puesto.
+            const fe=(ST.formEnt||[]).find(f=>f.tipo!=='acreditacion'&&f.evento===ev.id);
+            return fe
+              ? `<button onclick="feEditar('${esc(fe.id)}');go('formEnt')" style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid ${fe.abierto?'rgba(34,197,94,.4)':'var(--border)'};background:transparent;color:${fe.abierto?'var(--green)':'var(--muted)'};cursor:pointer;font-family:inherit">Entrenadores: ${fe.abierto?'abierto':'cerrado'}</button>`
+              : `<button onclick="feNuevoPara('${ev.id}')" style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid rgba(30,91,168,.45);background:transparent;color:#8ab4e8;cursor:pointer;font-family:inherit">+ Inscripción de entrenadores</button>`;
+          })()}
           <a href="livecast.html?evento=${encodeURIComponent(ev.id)}" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">YourLift (operador)</a>
           <button onclick="copyPublicLink('${ev.id}',this)" style="font-size:10px;color:var(--gold);background:transparent;text-decoration:none;padding:3px 8px;border:1px solid rgba(212,168,67,.4);border-radius:4px;cursor:pointer;font-family:inherit">Link público en vivo</button>
           <button onclick="toggleLivecastVisible('${ev.id}',${ev.livecastVisible!==false})" style="font-size:10px;padding:3px 10px;border-radius:4px;border:1px solid ${ev.livecastVisible!==false?'rgba(34,197,94,.4)':'rgba(239,68,68,.4)'};background:${ev.livecastVisible!==false?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)'};color:${ev.livecastVisible!==false?'var(--green)':'var(--red)'};cursor:pointer;font-family:inherit;font-weight:700" title="Visible en el selector de eventos de YourLift">${ev.livecastVisible!==false?'YourLift: ON':'YourLift: OFF'}</button>

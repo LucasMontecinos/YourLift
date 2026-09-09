@@ -388,6 +388,25 @@ global.EVENTOS_G = EVENTOS;
     ok(/Nacional OE/.test(av.abierto), 'y lo nombra cuando es uno solo');
     ok(av.cerrado === '' && av.apagado === '', 'y no sale si está cerrado o vencido');
     ok(/2 formularios/.test(av.dos), 'con varios, dice cuántos son');
+
+    // Y en la pestaña de entrenadores del sitio, que es donde mira quien anda
+    // buscando algo de entrenadores. Antes solo salía en la del atleta.
+    // Se dibuja la pantalla de verdad —ST.v + render()— en vez de llamar a la
+    // función suelta: las de esa zona de index.html no quedan colgadas de window,
+    // y pasar por render() es además lo que hace el sitio.
+    const ent = await p2.evaluate(prox => {
+      window._ENTRENADORES_PUB = [{ nombre: 'Pedro Rojas', club: 'Club Uno', categoria: 'Cat. 2' }];
+      const pinta = fs => { window.FORMS_ENT = fs; ST.v = 'entrenadores'; render();
+                            return document.getElementById('app').innerHTML; };
+      const con = pinta([{ id: 'f1', nombre: 'Quinta acreditación 2027', abierto: true, cierra: prox }]);
+      return { con, sin: pinta([]) };
+    }, PROX);
+    ok(/inscripcion_entrenador\.html/.test(ent.con),
+       'la pestaña Entrenadores del sitio también lleva al formulario');
+    ok(/Quinta acreditación 2027/.test(ent.con), 'y lo nombra');
+    ok(/Pedro Rojas/.test(ent.con), 'sin tapar la lista de acreditados');
+    ok(!/inscripcion_entrenador\.html/.test(ent.sin),
+       'y si no hay ninguno abierto, no sale el aviso');
     await p2.close();
   }
 
