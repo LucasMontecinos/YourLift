@@ -1430,6 +1430,11 @@ window.viewInsDocs = function(sid){
     notasURL:          { label: 'Concentración de Notas', icon: '' }
   };
   const NEW_MAP = (window.DOC_TYPES_CATALOG||{});
+  // Los documentos propios del campeonato no están en el catálogo fijo: su
+  // nombre vive en el evento. Sin esto, la tarjeta se titularía "x_med1".
+  const _evDoc = (ST.eventos||[]).find(e=>e.id===i.evento) || {};
+  const XTRA = {};
+  (_evDoc.docsExtra||[]).forEach(d=>{ if(d&&d.key) XTRA['x_'+d.key]={label:d.label||d.key,icon:'',desc:d.desc||''}; });
 
   // Construir lista unificada de docs (sin duplicar)
   const docs = [];
@@ -1437,7 +1442,7 @@ window.viewInsDocs = function(sid){
   if(priv.docs && typeof priv.docs==='object'){
     Object.entries(priv.docs).forEach(([k, url])=>{
       if(!url) return; // clave presente pero sin URL real → no mostrar tarjeta rota
-      const meta = NEW_MAP[k] || { label: k, icon: '', desc: '' };
+      const meta = NEW_MAP[k] || XTRA[k] || { label: k, icon: '', desc: '' };
       docs.push({ key: k, url, label: meta.label, icon: meta.icon, source: 'docs' });
     });
   }
@@ -7422,10 +7427,23 @@ const STATUS_COLORS = {open:'var(--green)', closed:'var(--accent)', draft:'var(-
 function renderCampeonatos(){
   const evs = ST.eventos;
   const editing = ST.eventoForm;
+  // Al cerrar el formulario se suelta la lista de documentos propios: si no,
+  // volver a abrir el MISMO campeonato mostraba lo que se había tecleado y
+  // cancelado, en vez de lo que está guardado.
+  if(!editing) ST._efDocsXPara = null;
 
   if(editing){
     const isNew = ST.eventoFormMode === 'create';
     const inscCount = ST.inscripciones.filter(i=>i.evento===editing.id).length;
+    // Los documentos propios se editan en una lista viva, no en el HTML: se
+    // copian del campeonato al abrir y se pintan cuando el formulario ya está
+    // en pantalla. Se copian —no se apunta al mismo arreglo— para que cancelar
+    // no deje tocado lo que está guardado.
+    if(ST._efDocsXPara !== (editing.id||'__nuevo__')){
+      ST._efDocsXPara = editing.id||'__nuevo__';
+      window._efDocsX = (Array.isArray(editing.docsExtra)?editing.docsExtra:[]).map(d=>Object.assign({},d));
+    }
+    setTimeout(()=>{ try{efDocXPinta()}catch(e){} },0);
     return `
     <div class="h1">${isNew?'Nuevo Campeonato':'Editar Campeonato'}</div>
     <p class="subtitle">${isNew?'Se publicará inmediatamente en inscripciones y nómina':'Cambios se propagan en tiempo real a todos los archivos'}</p>
@@ -7567,6 +7585,14 @@ function renderCampeonatos(){
                 menorConsent:  { label:'Consentimiento Menor', icon:'', desc:'Tutor firma · PDF descargable' },
                 notas:         { label:'Concentración de Notas', icon:'', desc:'Certificado académico' }
               };
+              // Los documentos PROPIOS de este campeonato, cargados más abajo,
+              // aparecen en la misma lista: se marcan y se desmarcan igual que
+              // los fijos, y así todo lo demás —el formulario de inscripción, la
+              // validación, la ficha— los trata como uno más.
+              (Array.isArray(editing.docsExtra)?editing.docsExtra:[]).forEach(d=>{
+                if(d&&d.key)DOC_TYPES['x_'+d.key]={label:d.label||'Documento',icon:'',
+                  desc:(d.desc||'')+' · propio de este campeonato'};
+              });
               const current = Array.isArray(editing.requiredDocs) ? editing.requiredDocs : [];
               return Object.entries(DOC_TYPES).map(([k,meta])=>{
                 const checked = current.includes(k);
@@ -7579,6 +7605,43 @@ function renderCampeonatos(){
                 </label>`;
               }).join('');
             })()}</div>
+            <div style="border-top:1px solid rgba(212,168,67,.25);margin-top:14px;padding-top:12px">
+              <div style="font-weight:600;color:var(--gold);margin-bottom:4px">Documentos propios de este campeonato</div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+                Para lo que pide cada organización y no está en la lista de arriba. Le pones nombre, el
+                PDF que el atleta tiene que descargar y, si el documento se saca en otra página, el link.
+                Al guardar aparecen arriba para marcarlos, y salen en el formulario de inscripción con
+                su espacio para subir.
+              </div>
+              <div id="ef_docsx"></div>
+              <button type="button" class="btn" onclick="efDocXAgregar()" style="margin-top:8px;padding:6px 14px;font-size:12px">+ Agregar documento</button>
+            </div>
+            <div style="border-top:1px solid rgba(212,168,67,.25);margin-top:14px;padding-top:12px">
+              <div style="font-weight:600;color:var(--gold);margin-bottom:4px">Modalidades y divisiones propias</div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+                Una por línea. Si dejas esto vacío se usan las de siempre. Marcando
+                <b>solo estas</b> reemplazan a la lista completa en vez de sumarse — es lo que
+                conviene en un campeonato que corre con sus propias líneas.
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div>
+                  <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Modalidades</div>
+                  <textarea id="ef_modsx" rows="4" placeholder="Juegos Especiales&#10;Otra modalidad"
+                    style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px;font-family:inherit">${(editing.modsExtra||[]).join('\n')}</textarea>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:5px;cursor:pointer">
+                    <input type="checkbox" id="ef_modsSolo" ${editing.modsSolo?'checked':''}> solo estas
+                  </label>
+                </div>
+                <div>
+                  <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Divisiones</div>
+                  <textarea id="ef_divsx" rows="4" placeholder="Nivel 1&#10;Nivel 2"
+                    style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px;font-family:inherit">${(editing.divsExtra||[]).join('\n')}</textarea>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:5px;cursor:pointer">
+                    <input type="checkbox" id="ef_divsSolo" ${editing.divsSolo?'checked':''}> solo estas
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <!-- ──────────────────────────────────────────────────────────────────────── -->
@@ -7853,6 +7916,91 @@ function _bloqueoFormHtml(editing){
   h+='</div>';
   return h;
 }
+// ── Documentos propios de un campeonato ────────────────────────────────────
+//
+// El catálogo fijo —carnet, pasaporte, WADA, los consentimientos— cubre lo que
+// pide la federación. Pero cada organización tiene lo suyo: Olimpiadas
+// Especiales trae antecedentes que no están en esa lista, y esperar a que
+// alguien toque el código para abrir una inscripción no sirve.
+//
+// Acá se agregan a mano: nombre, descripción, el PDF que el atleta descarga y,
+// si el documento se saca en otra página, el link. Se guardan en el propio
+// campeonato y el formulario de inscripción los dibuja como uno más.
+//
+// La CLAVE se genera una vez y no se vuelve a tocar: es la que queda escrita en
+// la inscripción del atleta y en la ruta de su archivo. Si cambiara al renombrar
+// el documento, los que ya se inscribieron quedarían apuntando a una clave que
+// no existe.
+window._efDocsX = [];
+function efDocXPinta(){
+  const c=document.getElementById('ef_docsx'); if(!c)return;
+  if(!window._efDocsX.length){
+    c.innerHTML='<div style="font-size:11px;color:var(--muted);padding:4px 0">Ninguno todavía.</div>';
+    return;
+  }
+  c.innerHTML=window._efDocsX.map((d,i)=>`
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:rgba(10,22,40,.35)">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input value="${esc(d.label||'')}" placeholder="Nombre del documento (ej. Certificado médico)"
+          oninput="efDocXSet(${i},'label',this.value)" style="flex:1;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px">
+        <button type="button" onclick="efDocXBorrar(${i})" title="Quitar"
+          style="padding:5px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.5);background:transparent;color:var(--red);font-size:11px;cursor:pointer">Quitar</button>
+      </div>
+      <input value="${esc(d.desc||'')}" placeholder="Descripción corta que ve el atleta"
+        oninput="efDocXSet(${i},'desc',this.value)" style="width:100%;box-sizing:border-box;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px;margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Formulario para descargar (PDF)</div>
+          ${d.plantillaUrl
+            ? `<div style="display:flex;gap:6px;align-items:center"><a href="${esc(d.plantillaUrl)}" target="_blank" style="font-size:11px;color:var(--gold);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">ver el PDF cargado</a>
+               <button type="button" onclick="efDocXSet(${i},'plantillaUrl','')" style="padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:10px;cursor:pointer">quitar</button></div>`
+            : `<label class="btn" style="display:block;text-align:center;padding:5px;font-size:11px;cursor:pointer">Subir PDF<input type="file" accept="application/pdf,image/*" onchange="efDocXPdf(${i},this)" style="display:none"></label>`}
+          <div id="efdocx_st_${i}" style="font-size:10px;color:var(--muted);margin-top:3px"></div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Link a otra página (opcional)</div>
+          <input value="${esc(d.linkUrl||'')}" placeholder="https://…"
+            oninput="efDocXSet(${i},'linkUrl',this.value)" style="width:100%;box-sizing:border-box;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:11px">
+          <input value="${esc(d.linkTexto||'')}" placeholder="Qué decirle al atleta del link"
+            oninput="efDocXSet(${i},'linkTexto',this.value)" style="width:100%;box-sizing:border-box;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:11px;margin-top:5px">
+        </div>
+      </div>
+    </div>`).join('');
+}
+window.efDocXAgregar=function(){
+  // Clave estable y sin acentos ni espacios: es parte de la ruta del archivo.
+  window._efDocsX.push({key:'d'+Date.now().toString(36),label:'',desc:'',
+    plantillaUrl:'',linkUrl:'',linkTexto:''});
+  efDocXPinta();
+};
+window.efDocXSet=function(i,k,v){ if(window._efDocsX[i]){window._efDocsX[i][k]=v; if(k==='plantillaUrl')efDocXPinta();} };
+window.efDocXBorrar=function(i){
+  const d=window._efDocsX[i]; if(!d)return;
+  if(d.label&&!confirm('¿Quitar "'+d.label+'"?\n\nA quien ya se inscribió no se le borra lo que subió.'))return;
+  window._efDocsX.splice(i,1); efDocXPinta();
+};
+window.efDocXPdf=async function(i,inp){
+  const f=inp.files&&inp.files[0]; if(!f)return;
+  const st=document.getElementById('efdocx_st_'+i); if(st)st.textContent='Subiendo…';
+  try{
+    const ev=(ST.eventoForm&&ST.eventoForm.id)||'evento';
+    const nom=(window._efDocsX[i]||{}).key||'doc';
+    const ext=(String(f.name||'').match(/\.([a-zA-Z0-9]+)$/)||[])[1]||'pdf';
+    const sref=storageRef(getStorage(app),'evento_docs/'+ev+'/'+nom+'.'+ext);
+    await uploadBytes(sref,f,{contentType:f.type||'application/pdf'});
+    const url=await getDownloadURL(sref);
+    window._efDocsX[i].plantillaUrl=url;
+    if(st)st.textContent='';
+    efDocXPinta();
+  }catch(e){ if(st){st.textContent='Error: '+e.message; st.style.color='var(--red)';} }
+};
+function efDocXLeer(){
+  // Solo los que tienen nombre: una fila vacía que quedó del botón no se guarda.
+  return (window._efDocsX||[]).filter(d=>d&&d.key&&String(d.label||'').trim())
+    .map(d=>({key:d.key,label:String(d.label).trim(),desc:String(d.desc||'').trim(),
+              plantillaUrl:d.plantillaUrl||'',linkUrl:String(d.linkUrl||'').trim(),
+              linkTexto:String(d.linkTexto||'').trim()}));
+}
 window.saveEvento = async function(){
   const isNew = ST.eventoFormMode === 'create';
   const id  = isNew ? (document.getElementById('ef_id').value||'').trim().replace(/\s+/g,'_') : ST.eventoForm.id;
@@ -7888,6 +8036,17 @@ window.saveEvento = async function(){
   // NUEVO: leer los checkboxes de documentos requeridos
   const requiredDocs = Array.from(document.querySelectorAll('#ef_docs_container input[type="checkbox"]:checked'))
     .map(cb => cb.getAttribute('data-doc-key'));
+  const docsExtra = efDocXLeer();
+  // Una por línea, sin vacías ni repetidas.
+  const _lineas = id => [...new Set(String((document.getElementById(id)||{}).value||'')
+    .split('\n').map(x=>x.trim()).filter(Boolean))];
+  const modsExtra = _lineas('ef_modsx'), divsExtra = _lineas('ef_divsx');
+  const modsSolo = !!document.getElementById('ef_modsSolo')?.checked;
+  const divsSolo = !!document.getElementById('ef_divsSolo')?.checked;
+  // Un documento propio recién agregado todavía no tiene su casilla dibujada
+  // arriba —esa lista se arma al abrir el formulario—, así que se marca solo. Si
+  // no, había que guardar, reabrir y marcarlo: nadie lo iba a adivinar.
+  docsExtra.forEach(d=>{ const k='x_'+d.key; if(requiredDocs.indexOf(k)<0)requiredDocs.push(k); });
 
   if(!id || !name){ showToast('ID y nombre son obligatorios', null, true); return; }
   if(isNew && ST.eventos.find(e=>e.id===id)){ showToast('Ya existe un campeonato con ese ID', null, true); return; }
@@ -7899,7 +8058,9 @@ window.saveEvento = async function(){
     extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, posNac2026, youtubeUrl,
     organizers, logoUrl, logoFedUrl, instagram,    // organizadores (con IG) + logo del campeonato y de la federación
     streamLogoUrl, streamInstagram,    // logo de productora + IG para la tarjeta de Transmisiones
-    requiredDocs,    // nuevo: array de docKeys requeridos
+    requiredDocs,    // array de docKeys requeridos
+    docsExtra,       // documentos propios del campeonato (nombre, PDF y link)
+    modsExtra, modsSolo, divsExtra, divsSolo,   // modalidades y divisiones propias
     updatedAt: serverTimestamp()};
   if(isNew) data.createdAt = serverTimestamp();
 

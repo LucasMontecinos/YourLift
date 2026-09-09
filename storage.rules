@@ -9,6 +9,8 @@ rules_version = '2';
 //
 // Uso esperado de Storage:
 //   - athlete_files/{rut}/…   → carnet, WADA, pasaporte (los sube quien se inscribe)
+//   - evento_docs/{evento}/…  → formularios propios de un campeonato (los sube el
+//                               admin, los descarga quien se va a inscribir)
 //   - athlete_photos/…        → foto del atleta (ficha, nómina, Control TX)
 //   - athlete_gifs/…          → clip corto del atleta para la transmisión
 //   - logos/…                 → clubes, eventos, transmisión, auspiciadores
@@ -114,6 +116,25 @@ service firebase.storage {
     match /athlete_files/{rut}/{file} {
       allow read: if true;
       allow create, update: if request.resource.size < 20 * 1024 * 1024;
+      allow delete: if isAdmin();
+    }
+
+    // ── Formularios propios de cada campeonato ───────────────────
+    // Cuando un campeonato pide un documento que no está en el catálogo fijo
+    // —el certificado médico de Olimpiadas Especiales, por ejemplo— el admin
+    // crea el documento desde Campeonatos y puede adjuntarle el formulario en
+    // blanco. Ese PDF queda en evento_docs/{eventoId}/{clave}.pdf.
+    //
+    // La lectura es abierta a propósito: el botón "Descargar formulario" está en
+    // el paso de documentos de la inscripción, y ahí NADIE tiene sesión iniciada.
+    // Si esto pidiera auth, el atleta vería "no tienes permiso" justo cuando va a
+    // buscar el papel que después tiene que subir.
+    //
+    // Subirlo y borrarlo sí es del admin. El tope va en create, update porque al
+    // borrar no hay request.resource (ver la nota 2 de arriba).
+    match /evento_docs/{evento}/{file} {
+      allow read: if true;
+      allow create, update: if isAdmin() && request.resource.size < 20 * 1024 * 1024;
       allow delete: if isAdmin();
     }
 

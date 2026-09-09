@@ -314,6 +314,39 @@ const DOC_TYPES = {
 };
 window.DOC_TYPES = DOC_TYPES; // exponer para admin.html
 
+// Los documentos PROPIOS de un campeonato, cargados desde el panel.
+//
+// El catálogo de arriba es fijo: carnet, pasaporte, WADA, los consentimientos.
+// Pero cada organización pide lo suyo —Olimpiadas Especiales tiene sus propios
+// antecedentes— y no puede depender de que alguien toque el código cada vez.
+// Desde Admin → Campeonatos se agregan con su nombre, su descripción, el PDF que
+// el atleta tiene que descargar y, si hace falta, un link a otra página.
+//
+// Se les arma la misma forma que a los fijos para que TODO lo de abajo —dibujar
+// la casilla, guardar el archivo, exigirlo antes de enviar— siga siendo un solo
+// camino. Un documento propio no es un caso especial: es una entrada más del
+// catálogo, con la clave prefijada para no chocar nunca con las fijas.
+function docsDelEvento(evObj){
+  const extra = (evObj && Array.isArray(evObj.docsExtra)) ? evObj.docsExtra : [];
+  const out = Object.assign({}, DOC_TYPES);
+  extra.forEach(d => {
+    const k = String(d && d.key || '').trim();
+    if (!k) return;
+    out['x_' + k] = {
+      label: d.label || 'Documento',
+      icon: d.icon || '\u{1F4CE}',
+      desc: d.desc || 'Sube el documento',
+      accept: d.accept || 'image/*,.pdf',
+      stateKey: 'xf_' + k, nameKey: 'xn_' + k, urlKey: 'xu_' + k,
+      storagePath: 'x_' + k,
+      plantillaUrl: d.plantillaUrl || '',
+      linkUrl: d.linkUrl || '', linkTexto: d.linkTexto || '',
+      propio: true
+    };
+  });
+  return out;
+}
+
 const CATEGORIES_M = ["-53 kg","-59 kg","-66 kg","-74 kg","-83 kg","-93 kg","-105 kg","-120 kg","+120 kg"];
 const CATEGORIES_F = ["-43 kg","-47 kg","-52 kg","-57 kg","-63 kg","-69 kg","-76 kg","-84 kg","+84 kg"];
 const DIVISIONS = ["Sub-Junior","Junior","Open","Master I","Master II","Master III","Master IV","Universitario"];
@@ -329,6 +362,33 @@ const MODALITIES = [
 ];
 
 const ZONAS = ["Zona Norte","Zona Centro","Zona Sur","Internacional"];
+
+// Las modalidades y divisiones de ESTE campeonato.
+//
+// Las listas de arriba son las de la federación. Pero un campeonato puede correr
+// con las suyas —Olimpiadas Especiales tiene sus propias líneas— y esperar a que
+// alguien toque el código para abrir una inscripción no sirve. Desde
+// Admin → Campeonatos se agregan; con "solo estas" REEMPLAZAN a la lista en vez
+// de sumarse, porque a quien se inscribe en una copa de Olimpiadas Especiales no
+// le sirve que le ofrezcan "Powerlifting Equipado + Only Bench".
+// Recorta y saca las vacías. El panel ya lo hace al guardar, pero una línea con
+// solo espacios llegaba igual desde un documento viejo y creaba una modalidad
+// fantasma en el desplegable: una opción en blanco que se podía elegir.
+function _limpiaLista(a){
+  return Array.isArray(a) ? a.map(x=>String(x==null?'':x).trim()).filter(Boolean) : [];
+}
+function modalidadesDe(evObj){
+  const x = _limpiaLista(evObj && evObj.modsExtra);
+  if (!x.length) return MODALITIES.slice();
+  return (evObj && evObj.modsSolo) ? x.slice() : MODALITIES.concat(x);
+}
+function divisionesDe(evObj){
+  const x = _limpiaLista(evObj && evObj.divsExtra);
+  if (!x.length) return DIVISIONS.slice();
+  return (evObj && evObj.divsSolo) ? x.slice() : DIVISIONS.concat(x);
+}
+// El campeonato que se está inscribiendo, para las dos de arriba.
+function _evActual(){ try{ return EVENTS.find(e=>e.id===state.form.evento)||null; }catch(e){ return null; } }
 
 // ══════════════════════════════════════════════
 // FORMATTING HELPERS
@@ -1025,7 +1085,7 @@ function renderForm() {
         <label>División de Edad <span class="req">*</span></label>
         <select class="input ${f.division?'ok':''}" onchange="updR('division',this.value)">
           <option value="">Seleccionar...</option>
-          ${DIVISIONS.map(d => `<option ${f.division===d?'selected':''}>${d}</option>`).join('')}
+          ${divisionesDe(_evActual()).map(d => `<option ${f.division===d?'selected':''}>${d}</option>`).join('')}
           ${isUni?'<option '+(f.division==='Universitario'?'selected':'')+'>Universitario</option>':''}
         </select>
       </div>
@@ -1041,7 +1101,7 @@ function renderForm() {
       <label>Modalidad <span class="req">*</span></label>
       <select class="input ${f.modalidad?'ok':''}" onchange="updR('modalidad',this.value)">
         <option value="">Seleccionar...</option>
-        ${MODALITIES.map(m => `<option ${f.modalidad===m?'selected':''}>${m}</option>`).join('')}
+        ${modalidadesDe(_evActual()).map(m => `<option ${f.modalidad===m?'selected':''}>${m}</option>`).join('')}
       </select>
     </div>
     ${isUni ? `<div class="field">
@@ -1066,6 +1126,7 @@ function renderForm() {
     // consentimiento del tutor cuando no es menor por año de nacimiento.
     const _docsPedidos = docsRequeridos(_evObj, f.fechaNac);
     const _docTemplates = _evObj?.docTemplates || {};
+    const _CAT = docsDelEvento(_evObj);
     const isIPFWorld = !_hasNewDocs && (/IPF\s*World/i.test(_evName) || _evObj?.tipo==='ipf_world');
 
     h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Documentos${isIPFWorld?' · 🌍 IPF WORLD':''}${_hasNewDocs?' · '+(_evObj.docsLabel||_evName):''}</h3>`;
@@ -1073,16 +1134,23 @@ function renderForm() {
     // ─── SISTEMA NUEVO: requiredDocs explícito en el evento ───
     if (_hasNewDocs) {
       _docsPedidos.forEach(docKey => {
-        const meta = DOC_TYPES[docKey];
+        const meta = _CAT[docKey];
         if (!meta) return;
         const stName = state[meta.nameKey] || '';
-        const dlUrl = _docTemplates[docKey] || meta.defaultPdfUrl || null;
+        const dlUrl = _docTemplates[docKey] || meta.plantillaUrl || meta.defaultPdfUrl || null;
         h += `<div class="field">`;
-        if (dlUrl) {
+        // El formulario para descargar y el link a otra página van en UNA sola
+        // tarjeta, con el nombre del documento arriba. Separados, el link quedaba
+        // suelto y no se entendía a cuál de los documentos correspondía.
+        if (dlUrl || meta.linkUrl) {
           h += `<div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.4);border-radius:10px;padding:14px 16px;margin-bottom:12px">
             <div style="font-size:13px;font-weight:600;color:#60a5fa;margin-bottom:4px">${meta.icon} ${meta.label}</div>
-            <div style="font-size:12px;color:var(--muted);line-height:1.5">${meta.desc}. Descarga el formulario, complétalo y sube el documento firmado.</div>
-            <a href="${dlUrl}" download style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:8px 14px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.5);border-radius:6px;color:#60a5fa;font-size:12px;font-weight:600;text-decoration:none;font-family:Oswald,sans-serif;letter-spacing:1px">⬇ DESCARGAR FORMULARIO</a>
+            <div style="font-size:12px;color:var(--muted);line-height:1.5">${meta.desc}${dlUrl?'. Descarga el formulario, complétalo y sube el documento firmado':''}.</div>
+            ${meta.linkUrl?`<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px">${meta.linkTexto||'Este documento se obtiene en otra página.'}</div>`:''}
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+              ${dlUrl?`<a href="${dlUrl}" download style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.5);border-radius:6px;color:#60a5fa;font-size:12px;font-weight:600;text-decoration:none;font-family:Oswald,sans-serif;letter-spacing:1px">\u2B07 DESCARGAR FORMULARIO</a>`:''}
+              ${meta.linkUrl?`<a href="${meta.linkUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(212,168,67,.15);border:1px solid rgba(212,168,67,.5);border-radius:6px;color:var(--gold);font-size:12px;font-weight:600;text-decoration:none;font-family:Oswald,sans-serif;letter-spacing:1px">\u2197 IR A LA PÁGINA</a>`:''}
+            </div>
           </div>`;
         }
         h += `<label>${meta.icon} ${meta.label} <span class="req">*</span></label>
@@ -1104,13 +1172,13 @@ function renderForm() {
       }
       // Summary + botones + cierre card
       const allDocsCheck = _docsPedidos.map(k=>{
-        const m=DOC_TYPES[k]; if(!m) return '';
+        const m=_CAT[k]; if(!m) return '';
         const ok = !!state[m.nameKey];
         return `<div><span style="color:var(--muted)">${m.icon} ${m.label}:</span> ${ok?'✅':'❌ Falta'}</div>`;
       }).join('');
       const allDocsDisabled = (()=>{
         for(const k of _docsPedidos){
-          const m=DOC_TYPES[k]; if(!m) continue;
+          const m=_CAT[k]; if(!m) continue;
           if(!state[m.nameKey]) return 'disabled';
         }
         if(state.submitting) return 'disabled';
@@ -1497,7 +1565,7 @@ function renderEdit() {
           <label>División</label>
           <select class="input" onchange="updR('division',this.value)">
             <option value="">Seleccionar...</option>
-            ${DIVISIONS.map(d => `<option ${f.division===d?'selected':''}>${d}</option>`).join('')}
+            ${divisionesDe(_evActual()).map(d => `<option ${f.division===d?'selected':''}>${d}</option>`).join('')}
             ${isUni?`<option ${f.division==='Universitario'?'selected':''}>Universitario</option>`:''}
           </select>
         </div>
@@ -1514,7 +1582,7 @@ function renderEdit() {
           <label>Modalidad</label>
           <select class="input" onchange="updR('modalidad',this.value)">
             <option value="">Seleccionar...</option>
-            ${MODALITIES.map(m => `<option ${f.modalidad===m?'selected':''}>${m}</option>`).join('')}
+            ${modalidadesDe(_evActual()).map(m => `<option ${f.modalidad===m?'selected':''}>${m}</option>`).join('')}
           </select>
         </div>
         <div class="field">
@@ -1861,7 +1929,8 @@ function handleFile(input, type) {
   state.error = '';
   // Genérico: ubica el documento por su storagePath en el catálogo (sirve para
   // wada, carnetBack y cualquier doc nuevo, sin tener que agregar un caso a mano).
-  const meta = Object.values(DOC_TYPES).find(m => m.storagePath === type);
+  const _ev = EVENTS.find(e=>e.id===state.form.evento);
+  const meta = Object.values(docsDelEvento(_ev)).find(m => m.storagePath === type);
   if (meta) { state[meta.stateKey] = file; state[meta.nameKey] = file.name; }
   // Compatibilidad con llamadas legacy (nombres viejos del sistema anterior).
   else if (type === 'carnet') { state.carnetFile = file; state.carnetName = file.name; }
@@ -2039,14 +2108,31 @@ async function submitForm() {
       if (state.notasFile) {
         privateEntry.notasURL = await uploadOne(state.notasFile, 'notas');
       }
+      // Los documentos propios del campeonato van en un barrido, no uno a uno:
+      // no se sabe cuántos son ni cómo se llaman hasta que se abre el evento.
+      //
+      // Y NO quedan como campo suelto de la inscripción privada. Las reglas de
+      // Firestore aceptan una lista cerrada de campos (hasOnly): un `xu_loquesea`
+      // que no esté en esa lista bota la inscripción ENTERA con "Missing or
+      // insufficient permissions", justo al final, después de subir todo. Por eso
+      // las URLs se juntan acá y terminan dentro del mapa `docs`, que sí está
+      // permitido y es de donde el panel las lee.
+      const _urlsPropias = {};
+      const _CATSUB = docsDelEvento(EVENTS.find(e=>e.id===f.evento));
+      for (const meta of Object.values(_CATSUB)) {
+        if (!meta.propio) continue;
+        if (state[meta.stateKey])
+          _urlsPropias[meta.urlKey] = await uploadOne(state[meta.stateKey], meta.storagePath);
+      }
       // Construir el mapa `docs` estandarizado (nuevo sistema): para cada docKey
       // del catálogo cuyo stateKey tenga archivo, guarda la URL bajo docKey.
       const _docsMap = {};
       const _evObj2 = EVENTS.find(e=>e.id===f.evento);
-      const _useNewSys = Array.isArray(_evObj2?.requiredDocs) && _evObj2.requiredDocs.length>0;
-      if (_useNewSys && window.DOC_TYPES) {
-        Object.entries(window.DOC_TYPES).forEach(([dk, meta])=>{
-          const url = privateEntry[meta.urlKey];
+      const _useNewSys = (Array.isArray(_evObj2?.requiredDocs) && _evObj2.requiredDocs.length>0)
+                      || Object.keys(_urlsPropias).length>0;
+      if (_useNewSys) {
+        Object.entries(docsDelEvento(_evObj2)).forEach(([dk, meta])=>{
+          const url = privateEntry[meta.urlKey] || _urlsPropias[meta.urlKey];
           if (url) _docsMap[dk] = url;
         });
         if (Object.keys(_docsMap).length) privateEntry.docs = _docsMap;
