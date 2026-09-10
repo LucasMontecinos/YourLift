@@ -343,7 +343,7 @@ window.doLogout=async function(){
 // Usa una "secondary app" para no cerrar la sesión del admin actual.
 // Uso desde la consola del navegador (tras login admin):
 //   await createCoach('coach@yourlift.cl', 'Passw0rd!', 'Nombre Apellido', 'Nacional', '12345678')
-window.createCoach=async function(email,password,nombre,grado,rut){
+window.createCoach=async function(email,password,nombre,grado,rut,extra){
   if(!ST.user) throw new Error('Debes estar autenticado como admin.');
   if(!email||!password||!nombre) throw new Error('email, password y nombre son obligatorios.');
   if(password.length<8) throw new Error('La contraseña debe tener al menos 8 caracteres.');
@@ -352,14 +352,14 @@ window.createCoach=async function(email,password,nombre,grado,rut){
   try{
     const cred=await createUserWithEmailAndPassword(secondaryAuth,email,password);
     const uid=cred.user.uid;
-    await setDoc(doc(db,'coaches',uid),{
+    await setDoc(doc(db,'coaches',uid),Object.assign({
       email:email.toLowerCase(),
       nombre,
       grado:grado||'',
       rut:rut||'',
       createdAt:serverTimestamp(),
       createdBy:ST.user.email
-    });
+    },extra||{}));
     try{await signOut(secondaryAuth);}catch(_){}
     await logAction('coach_create','coaches/'+uid,null,{email,nombre,grado,rut});
     console.log('✓ Coach creado:',email,'UID:',uid);
@@ -2849,6 +2849,86 @@ function _entSlug(n){return String(n||'').normalize('NFD').replace(/[\u0300-\u03
 function _entDocId(c){ return _entRutId(c&&c.rut)||(c&&c.id)||('sr-'+_entSlug(c&&c.nombre)); }
 function _entVence(fecha){ if(!fecha)return ''; const p=String(fecha).split('-'); if(p.length<2)return ''; return (parseInt(p[0])+1)+'-'+p[1]; }
 function _entVigente(c){ const m=new Date().toISOString().slice(0,7); return (c.acreditaciones||[]).some(a=>a.vence&&a.vence>=m); }
+
+// ── Cuentas de acceso de los entrenadores ────────────────────────────────────
+//
+// Para inscribirse a un campeonato el entrenador entra con una cuenta suya, y no
+// escribiendo su nombre a mano: así el que se inscribe como coach es el que la
+// federación acreditó, y no cualquiera que sepa escribir un RUT.
+//
+// La cuenta se crea ACÁ y no se puede pedir sola. Es a propósito: la clave
+// inicial es el RUT, que no es un secreto —está en cada nómina—, así que si el
+// registro estuviera abierto, el primero que llegue con un correo y un RUT se
+// queda con la cuenta de otro. Creándolas desde el panel, un correo sin cuenta
+// simplemente no entra.
+//
+// Al primer ingreso el entrenador tiene que cambiarla: `debeCambiarClave` es lo
+// que se lo exige.
+function _entCorreo(c){ return String(((c&&c.correos)||[])[0]||'').trim().toLowerCase(); }
+// Puede entrar quien tenga acreditación vigente, correo y RUT. Los once sin RUT
+// no quedan fuera por castigo: la clave inicial ES el RUT, así que sin él no hay
+// con qué entrar. Se les carga en "Editar" y aparecen acá solos.
+function _entPuedeCuenta(c){ return _entVigente(c) && !!_entCorreo(c) && _entRutId(c.rut).length>=8; }
+function _entTieneCuenta(c){
+  const mails=window._COACH_MAILS;
+  if(!mails)return false;
+  return mails.has(_entCorreo(c));
+}
+// Los correos que ya tienen cuenta. Se piden una vez y quedan cacheados, porque
+// esto se dibuja en cada render de la lista.
+async function _entCargarCuentas(){
+  if(window._COACH_MAILS)return;
+  window._COACH_MAILS=new Set();
+  try{
+    const snap=await getDocs(collection(db,'coaches'));
+    snap.forEach(d=>{ const m=String((d.data()||{}).email||'').toLowerCase(); if(m)window._COACH_MAILS.add(m); });
+  }catch(e){ console.warn('[coaches]',e.message); }
+  if(ST.view==='entrenadoresDB')render();
+}
+window.entCrearCuentas=async function(){
+  const list=(ST.entrenadores||[]);
+  await _entCargarCuentas();
+  const faltan=list.filter(c=>_entPuedeCuenta(c)&&!_entTieneCuenta(c));
+  const sinRut=list.filter(c=>_entVigente(c)&&_entRutId(c.rut).length<8).length;
+  const sinMail=list.filter(c=>_entVigente(c)&&!_entCorreo(c)).length;
+  if(!faltan.length){
+    showToast(sinRut?`No hay cuentas que crear. Quedan ${sinRut} sin RUT: cárgaselo en Editar y vuelve.`:'Todos los entrenadores vigentes ya tienen cuenta.');
+    return;
+  }
+  const detalle=[`Se van a crear ${faltan.length} cuenta(s).`,'',
+    'Entra con su correo y, de clave, su RUT sin puntos ni guion.',
+    'Al primer ingreso tiene que cambiarla.',''];
+  if(sinRut)detalle.push(`Quedan fuera ${sinRut} sin RUT en la base (la clave es el RUT).`);
+  if(sinMail)detalle.push(`Y ${sinMail} sin correo.`);
+  if(!confirm(detalle.join('\n')))return;
+  const btn=document.getElementById('entCuentasBtn');
+  const rot=btn?btn.textContent:'';
+  let ok=0; const malas=[];
+  for(let i=0;i<faltan.length;i++){
+    const c=faltan[i];
+    if(btn)btn.textContent=`Creando ${i+1}/${faltan.length}…`;
+    const mail=_entCorreo(c), clave=_entRutId(c.rut);
+    try{
+      await window.createCoach(mail,clave,c.nombre||'',c.categoria||'',c.rut||'',{
+        debeCambiarClave:true,
+        entrenadorId:c.id||'',
+        origen:'base_entrenadores'
+      });
+      window._COACH_MAILS.add(mail); ok++;
+    }catch(e){
+      // El correo ya existe en Auth aunque no tenga doc en coaches/: pasa si la
+      // cuenta se creó antes por otra vía. No es un error que haya que arreglar.
+      const cod=e&&e.code||'';
+      if(cod==='auth/email-already-in-use'){ window._COACH_MAILS.add(mail); continue; }
+      malas.push((c.nombre||mail)+': '+(e.message||cod||e));
+    }
+  }
+  if(btn)btn.textContent=rot||'Crear cuentas';
+  await logAction('coach_alta_masiva','entrenadores',null,`${ok} creadas, ${malas.length} con error`);
+  render();
+  if(malas.length)alert(`Se crearon ${ok}.\n\nNo se pudo con ${malas.length}:\n`+malas.slice(0,12).join('\n'));
+  else showToast(`✓ ${ok} cuenta(s) creada(s). La clave de cada uno es su RUT sin puntos ni guion.`);
+};
 let _entWork=null;
 window.openEntModal=function(rut){
   const src=rut?(ST.entrenadores||[]).find(x=>x.id===rut):null;
@@ -3030,7 +3110,10 @@ function entListHtml(){
 }
 function renderEntrenadoresDB(){
   const list=ST.entrenadores||[];
+  _entCargarCuentas();   // perezoso: la primera vez vuelve a dibujar cuando llegan
   const total=list.length, vig=list.filter(_entVigente).length;
+  const conCuenta=window._COACH_MAILS?list.filter(_entTieneCuenta).length:null;
+  const puedenCuenta=list.filter(c=>_entPuedeCuenta(c)&&!_entTieneCuenta(c)).length;
   const c1=list.filter(c=>/cat\.?\s*1/i.test(c.categoria||'')).length;
   const c2=list.filter(c=>/cat\.?\s*2/i.test(c.categoria||'')).length;
   const sinRut=list.filter(c=>!_entRutId(c.rut)).length;
@@ -3043,7 +3126,15 @@ function renderEntrenadoresDB(){
       <div style="${ks}"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:#3b82f6">${c1}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">CAT. 1</div></div>
       <div style="${ks}"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:#ec4899">${c2}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">CAT. 2</div></div>
       ${sinRut?`<div style="${ks};border-color:rgba(239,68,68,.45)"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:var(--red)">${sinRut}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">SIN RUT</div></div>`:''}
+      <div style="${ks}"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:#a78bfa">${conCuenta===null?'…':conCuenta}</div><div style="color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px">CON CUENTA</div></div>
     </div>
+    ${puedenCuenta?`<div style="background:rgba(167,139,250,.09);border:1px solid rgba(167,139,250,.32);border-radius:10px;padding:11px 14px;margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div style="flex:1;min-width:240px;font-size:12px;line-height:1.5">
+        <b>${puedenCuenta} entrenador(es) vigentes sin cuenta.</b> Sin cuenta no pueden inscribirse a un campeonato como coach.
+        Se crean con el correo de la base y, de clave, su RUT sin puntos ni guion; al primer ingreso tienen que cambiarla.
+      </div>
+      <button id="entCuentasBtn" onclick="entCrearCuentas()" class="btn" style="padding:8px 14px;background:rgba(167,139,250,.16);border:1px solid #a78bfa;color:#a78bfa">Crear ${puedenCuenta} cuenta(s)</button>
+    </div>`:''}
     ${sinRut?`<div style="background:rgba(239,68,68,.09);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;line-height:1.5">
       <b>${sinRut} entrenador(es) sin RUT.</b> En la planilla traían el RUT de otra persona, así que se les dejó en blanco:
       un RUT equivocado no es un dato que falta, es la insignia de entrenador colgada en la ficha de alguien que no lo es.
