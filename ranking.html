@@ -152,6 +152,7 @@ html.embedded .tabs button,html.embedded .tab,html.embedded button.tab{font-weig
   <div class="title">
     <h2 class="os">RANKING <em id="rkAnio">2026</em></h2>
     <p id="rkCiclo" style="display:none"></p>
+    <div id="rkTemporada" style="margin-top:10px"></div>
   </div>
   <div class="tabs" id="tabs"></div>
   <div style="margin-bottom:12px">
@@ -312,6 +313,9 @@ function _normDiv(d){
 // aparte, y recalcularla la haría desaparecer.
 // ════════════════════════════════════════════════════════════════
 var ANIO_RANKING=new Date().getFullYear();
+// El año real, para poder volver. ANIO_RANKING se mueve cuando alguien mira la
+// temporada siguiente; este no.
+var ANIO_HOY=ANIO_RANKING;
 function _divVigente(e){
   var guardada=_normDiv(e&&e.d);
   if(!e||guardada==='Universitario')return guardada;
@@ -558,13 +562,51 @@ TABS.forEach(function(t){
   th+='<button class="tb '+t.s+(t.id===CUR?' act':'')+'" data-t="'+t.id+'" onclick="setTab(\''+t.id+'\')">'+t.lb+'</button>';
 });
 document.getElementById('tabs').innerHTML=th;
-// El año del título también se corre solo el 1 de enero, junto con las
-// divisiones. Antes estaba escrito a mano y había que acordarse de cambiarlo.
-(function(){
+// ════════════════════════════════════════════════════════════════
+// VER LA TEMPORADA SIGUIENTE
+//
+// El 1 de enero un montón de atletas cambian de división sin haber hecho nada:
+// el que cumple 19 pasa a Junior, el que cumple 24 a Open, el que cumple 40 a
+// Master I. Eso ya ocurre solo —la división se calcula, no se guarda— pero
+// recién se ve cuando llega el año, y para armar el Nacional conviene saberlo
+// antes: quién va a estar compitiendo contra quién.
+//
+// No se llama "actualizar" a propósito. Acá no se guarda ni se cambia ningún
+// dato: es el MISMO ranking mirado contra otro año. Si dijera "actualizar",
+// quien lo apriete va a creer que movió algo y que hay que deshacerlo.
+//
+// Tampoco "proyección": no hay nada que estimar. Las fechas de nacimiento ya
+// están, así que el resultado es exacto, no un pronóstico.
+function rkVerTemporada(anio){
+  ANIO_RANKING=anio;
+  rkPintaTemporada();
+  R();
+  try{ window.scrollTo({top:0,behavior:'smooth'}); }catch(e){ window.scrollTo(0,0); }
+}
+function rkPintaTemporada(){
   var el=document.getElementById('rkAnio');
   if(el)el.textContent=ANIO_RANKING;
   document.title='YourLift — Ranking '+ANIO_RANKING;
-})();
+  var box=document.getElementById('rkTemporada');
+  if(!box)return;
+  var sig=ANIO_HOY+1;
+  var futuro=ANIO_RANKING>ANIO_HOY;
+  var btn='padding:8px 15px;border-radius:8px;font-family:Oswald,sans-serif;font-size:12px;'
+    +'font-weight:700;letter-spacing:1.4px;cursor:pointer;text-transform:uppercase';
+  box.innerHTML= futuro
+    ? '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center">'
+      +'<span style="background:rgba(212,168,67,.14);border:1px solid rgba(212,168,67,.5);color:#D4A843;'
+      +'border-radius:8px;padding:7px 13px;font-size:12px;line-height:1.45;text-align:left">'
+      +'Estás viendo cómo queda el ranking el <b>1 de enero de '+ANIO_RANKING+'</b>, '
+      +'con cada atleta en la división que le va a tocar. Los resultados son los mismos.</span>'
+      +'<button onclick="rkVerTemporada('+ANIO_HOY+')" style="'+btn
+      +';background:transparent;border:1px solid rgba(220,230,245,.35);color:rgba(220,230,245,.85)">'
+      +'Volver a '+ANIO_HOY+'</button></div>'
+    : '<button onclick="rkVerTemporada('+sig+')" title="Cada atleta en la división que le toca el 1 de enero de '+sig+'" style="'+btn
+      +';background:rgba(212,168,67,.12);border:1px solid rgba(212,168,67,.45);color:#D4A843">'
+      +'Ver temporada '+sig+' ▸</button>';
+}
+rkPintaTemporada();
 R();
 </script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js').then(r=>console.log('[PWA] SW:',r.scope)).catch(e=>console.warn('[PWA]',e));});}</script>
