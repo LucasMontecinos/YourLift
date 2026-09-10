@@ -3451,19 +3451,201 @@ function renderStats(){
   const tab=ST.statsTab||'deporte';
   const tabBtn=(id,label)=>`<button onclick="ST.statsTab='${id}';render()" style="padding:10px 20px;border-radius:9px;border:1px solid ${tab===id?'var(--gold)':'var(--border)'};background:${tab===id?'rgba(212,168,67,.12)':'transparent'};color:${tab===id?'var(--gold)':'var(--muted)'};font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">${label}</button>`;
   return `<div class="h1">Estadísticas</div>
-    <div style="display:flex;gap:10px;margin:14px 0 20px">
+    <div style="display:flex;gap:10px;margin:14px 0 20px;flex-wrap:wrap">
       ${tabBtn('deporte','DEPORTE')}
+      ${tabBtn('2026','2026')}
       ${tabBtn('corte','CORTE NACIONAL')}
       ${_statsOwner()?tabBtn('demografia','DEMOGRAFÍA'):''}
       ${_statsOwner()?tabBtn('web','TRÁFICO WEB'):''}
     </div>
     ${tab==='web'
       ? `<div id="statsWebContent"><div style="padding:40px;text-align:center;color:var(--muted)">Cargando analytics…</div></div>`
+      : tab==='2026'
+      ? `<p class="subtitle">Atletas únicos que compitieron en 2026 · considera Nacional y todos los Regionales</p><div id="statsContent">${render2026Stats()}</div>`
       : tab==='corte'
       ? `<p class="subtitle">Simulador de mínimos para clasificar · se prueba un corte y se ve a cuántos deja dentro, antes de fijarlo</p><div id="statsContent">${renderCorte()}</div>`
       : tab==='demografia'
       ? `<p class="subtitle">Base completa de atletas · calculado en vivo desde data.json</p><div id="statsContent">${renderDemografia()}</div>`
       : `<p class="subtitle">Dashboard interactivo · Filtros globales · Export para Power BI</p><div id="statsContent">${renderStatsContent()}</div>`}`;
+}
+
+// ── 2026 Statistics: Unique athletes across all 2026 events (national + regionals) ──
+function build2026Stats(){
+  const athletes2026 = new Map(); // key: rut or codigo, value: {name, sexo, club, rut, codigo, eventos: Set, competencias2026: [...]}
+  const eventDetails = {}; // evento → {total, nuevasAfiliaciones, recompetidores}
+
+  (ST.data || []).forEach((o) => {
+    const competencias = o.competencias || [];
+    const comp2026 = competencias.filter(c => {
+      const eventoName = (c.evento || '').toLowerCase();
+      return /20\d{2}/.test(eventoName) && eventoName.includes('2026');
+    });
+
+    if (comp2026.length > 0) {
+      const key = o.rut || o.codigo || ('unnamed_' + Math.random());
+      if (!athletes2026.has(key)) {
+        athletes2026.set(key, {
+          name: o.nombre || o.name || 'Sin nombre',
+          sexo: o.sexo || 'N/D',
+          club: o.club || 'Sin club',
+          rut: o.rut || '',
+          codigo: o.codigo || '',
+          eventos: new Set(),
+          competencias2026: []
+        });
+      }
+      const athlete = athletes2026.get(key);
+      athlete.competencias2026 = comp2026;
+      comp2026.forEach(c => {
+        athlete.eventos.add(c.evento);
+      });
+    }
+  });
+
+  // Para cada atleta, determinar su PRIMER evento del año
+  athletes2026.forEach((athlete) => {
+    if (athlete.competencias2026.length > 0) {
+      // Ordenar por fecha (si existe) o por nombre
+      const sorted = athlete.competencias2026.sort((a, b) => {
+        const dateA = a.fecha ? new Date(a.fecha).getTime() : 0;
+        const dateB = b.fecha ? new Date(b.fecha).getTime() : 0;
+        if (dateA !== dateB) return dateA - dateB;
+        return (a.evento || '').localeCompare(b.evento || '');
+      });
+      athlete.primerEvento = sorted[0].evento;
+    }
+  });
+
+  // Contar nuevas afiliaciones vs recompetidores por evento
+  athletes2026.forEach((athlete) => {
+    athlete.eventos.forEach(evento => {
+      if (!eventDetails[evento]) {
+        eventDetails[evento] = { total: 0, nuevasAfiliaciones: 0, recompetidores: 0 };
+      }
+      eventDetails[evento].total++;
+      if (athlete.primerEvento === evento) {
+        eventDetails[evento].nuevasAfiliaciones++;
+      } else {
+        eventDetails[evento].recompetidores++;
+      }
+    });
+  });
+
+  const uniqueAthletes = athletes2026.size;
+  const totalAfiliciones = Array.from(athletes2026.values()).filter(a => a.primerEvento).length;
+  const eventList = Object.entries(eventDetails).sort((a, b) => b[1].nuevasAfiliaciones - a[1].nuevasAfiliaciones);
+
+  const sexoCount = { M: 0, F: 0, 'N/D': 0 };
+  athletes2026.forEach(a => {
+    const s = String(a.sexo || '').toLowerCase().trim();
+    if (s.includes('f') || s.includes('mujer') || s.includes('dama')) {
+      sexoCount.F++;
+    } else if (s.includes('m') || s.includes('hombre') || s.includes('masc') || s === 'v') {
+      sexoCount.M++;
+    } else {
+      sexoCount['N/D']++;
+    }
+  });
+
+  const clubCounts = {};
+  athletes2026.forEach(a => {
+    const club = a.club || 'Sin club';
+    clubCounts[club] = (clubCounts[club] || 0) + 1;
+  });
+  const topClubs = Object.entries(clubCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+  return {
+    uniqueAthletes,
+    totalAfiliciones,
+    eventList,
+    sexoCount,
+    topClubs,
+    athletes: Array.from(athletes2026.values())
+  };
+}
+
+function render2026Stats(){
+  const stats = build2026Stats();
+  const ks = 'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;text-align:center';
+  const card = (t, content) => `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px"><div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted);margin-bottom:14px">${t}</div>${content}</div>`;
+
+  // KPI cards
+  const totalMasculino = stats.sexoCount.M;
+  const totalFemenino = stats.sexoCount.F;
+  const pctFemenino = stats.uniqueAthletes > 0 ? Math.round(totalFemenino / stats.uniqueAthletes * 100) : 0;
+
+  // Events table con desglose de nuevas afiliaciones vs recompetidores
+  const eventsTable = stats.eventList.map(([evt, details]) => {
+    const { total, nuevasAfiliaciones, recompetidores } = details;
+    return `<tr>
+      <td style="padding:8px;text-align:left;color:var(--text);font-size:13px">${evt}</td>
+      <td style="padding:8px;text-align:right;font-weight:700;color:var(--text);font-size:13px">${total}</td>
+      <td style="padding:8px;text-align:right;font-weight:700;color:var(--green);font-size:13px">${nuevasAfiliaciones}</td>
+      <td style="padding:8px;text-align:right;color:var(--muted);font-size:12px">${recompetidores}</td>
+    </tr>`;
+  }).join('');
+
+  // Top clubs table
+  const clubsTable = stats.topClubs.map(([club, cnt]) => {
+    const pct = Math.round(cnt / stats.uniqueAthletes * 100);
+    return `<tr>
+      <td style="padding:8px;text-align:left;color:var(--text);font-size:13px">${club}</td>
+      <td style="padding:8px;text-align:right;font-weight:700;color:var(--text);font-size:13px">${cnt}</td>
+      <td style="padding:8px;text-align:right;color:var(--muted);font-size:12px">${pct}%</td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px">
+    <div style="${ks}">
+      <div style="font-family:Oswald;font-size:42px;font-weight:700;color:var(--accent)">${stats.uniqueAthletes.toLocaleString()}</div>
+      <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">ATLETAS ÚNICOS 2026</div>
+    </div>
+    <div style="${ks}">
+      <div style="font-family:Oswald;font-size:42px;font-weight:700;color:var(--green)">${stats.totalAfiliciones.toLocaleString()}</div>
+      <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">AFILIACIONES 2026</div>
+      <div style="color:var(--muted);font-size:9px;margin-top:2px">(nuevas en el año)</div>
+    </div>
+    <div style="${ks}">
+      <div style="font-family:Oswald;font-size:42px;font-weight:700;color:#3b82f6">${stats.eventList.length}</div>
+      <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">EVENTOS</div>
+    </div>
+    <div style="${ks}">
+      <div style="font-family:Oswald;font-size:42px;font-weight:700;color:#ec4899">${totalFemenino}</div>
+      <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">MUJERES (${pctFemenino}%)</div>
+    </div>
+    <div style="${ks}">
+      <div style="font-family:Oswald;font-size:42px;font-weight:700;color:#f59e0b">${totalMasculino}</div>
+      <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">HOMBRES</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    ${card('AFILIACIONES POR EVENTO', `<table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="border-bottom:2px solid var(--border)">
+        <th style="padding:8px;text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">Evento</th>
+        <th style="padding:8px;text-align:right;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">Total</th>
+        <th style="padding:8px;text-align:right;color:var(--green);font-size:10px;text-transform:uppercase;letter-spacing:1px">Nuevas</th>
+        <th style="padding:8px;text-align:right;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">Recomp.</th>
+      </tr></thead>
+      <tbody>${eventsTable}</tbody>
+    </table>`)}
+    ${card('TOP 10 CLUBES', `<table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="border-bottom:2px solid var(--border)">
+        <th style="padding:8px;text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">Club</th>
+        <th style="padding:8px;text-align:right;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">Atletas</th>
+        <th style="padding:8px;text-align:right;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">%</th>
+      </tr></thead>
+      <tbody>${clubsTable}</tbody>
+    </table>`)}
+  </div>
+
+  <p style="color:var(--muted);font-size:11px;margin-top:14px;line-height:1.5">
+    <strong>Atletas únicos</strong> = personas distintas contadas una sola vez, aunque hayan compitido en múltiples eventos en 2026.
+    <strong>Afiliaciones</strong> = atletas que compitieron por primera vez en el año (1 ene–31 dic); la afiliación se paga una sola vez por año.
+    En la tabla de eventos: <strong>Total</strong> = todos los que compitieron en ese evento, <strong>Nuevas</strong> = compitieron por primera vez en ese evento, <strong>Recomp.</strong> = ya habían compitido en otro evento antes ese año.
+    El año 2026 incluye el Nacional FECHIPO y todos los campeonatos regionales y zonales disputados en 2026.
+  </p>`;
 }
 
 // ── Demografía: total, rangos de edad, zona y sexo (auto desde data.json) ──
