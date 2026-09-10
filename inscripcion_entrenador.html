@@ -75,8 +75,11 @@ select.input{cursor:pointer}
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {getFirestore,collection,getDocs,getDoc,doc,setDoc,query,where,serverTimestamp,runTransaction} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import {getStorage,ref,uploadBytes,getDownloadURL} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged,updatePassword} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import {updateDoc} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 const app=initializeApp({apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app"});
-window.FBE={db:getFirestore(app),storage:getStorage(app),collection,getDocs,getDoc,doc,setDoc,query,where,serverTimestamp,runTransaction,ref,uploadBytes,getDownloadURL};
+window.FBE={db:getFirestore(app),storage:getStorage(app),collection,getDocs,getDoc,doc,setDoc,updateDoc,query,where,serverTimestamp,runTransaction,ref,uploadBytes,getDownloadURL,
+  auth:getAuth(app),signInWithEmailAndPassword,signOut,onAuthStateChanged,updatePassword};
 window.dispatchEvent(new Event('fbe-listo'));
 </script>
 
@@ -92,18 +95,24 @@ window.dispatchEvent(new Event('fbe-listo'));
 // escrito a mano por la organización. Acá lo declara el propio entrenador antes
 // de que el cronograma exista.
 //
-// Dos decisiones que valen la pena dejar escritas:
+// Los dos tipos de formulario NO piden lo mismo, y conviene tener claro por qué.
 //
-// · NO pide iniciar sesión, igual que la inscripción del atleta. Se identifica
-//   por RUT y guarda un PIN de 4 dígitos para poder volver. Si pidiera cuenta,
-//   no se inscribiría nadie.
+// · ACREDITACIÓN — abierto, sin cuenta. Es el formulario con el que alguien se
+//   acredita por primera vez: exigirle una cuenta sería pedirle lo que viene a
+//   buscar. Se identifica por RUT y deja un PIN de 4 dígitos para poder volver.
 //
-// · Estar acreditado NO es un requisito para inscribirse. Se busca el RUT en la
-//   base de acreditados: si está y su acreditación está vigente, se rellenan sus
-//   datos solos y queda marcado. Si no está —el caso de una organización que no
-//   es FECHIPO, como Olimpiadas Especiales— se inscribe igual llenando sus datos,
-//   y la organización lo ve marcado al revisar. Exigirlo dejaría fuera a
-//   campeonatos enteros el primer día.
+// · CAMPEONATO — pide entrar con cuenta. Inscribirse como coach de un atleta es
+//   declarar que uno es el entrenador acreditado que va a estar en la tarima, y
+//   eso no puede quedar en que alguien teclee un nombre y un RUT: los dos son
+//   públicos, están en cada nómina. Entra con el correo que dejó en su
+//   acreditación y una clave suya; la cuenta la crea la federación desde el
+//   panel, así que un correo que no esté acreditado y vigente no entra.
+//
+//   La primera clave es su RUT, que tampoco es secreto, y por eso al primer
+//   ingreso se la hace cambiar antes de dejarlo hacer nada.
+//
+// Con la sesión iniciada sus datos salen de su cuenta y no se escriben a mano:
+// el que se inscribe es el que la federación acreditó.
 // ══════════════════════════════════════════════════════════════
 let FB=null, LISTO=false;
 const $=id=>document.getElementById(id);
@@ -121,7 +130,12 @@ const state={
   atletas:[],          // ruts elegidos
   archivos:{},         // key -> File
   nombres:{},          // key -> nombre del archivo
-  enviando:false, error:'', ok:'', docId:''
+  enviando:false, error:'', ok:'', docId:'',
+  // Sesión del entrenador — solo la piden los formularios de campeonato.
+  sesion:null,         // {uid,correo,nombre,rut,categoria,debeCambiarClave}
+  authListo:false,     // ya sabemos si hay sesión o no; hasta entonces, "cargando"
+  login:{correo:'',clave:'',cargando:false},
+  clave:{a:'',b:'',cargando:false}
 };
 
 // ── Formato de RUT, igual que en la inscripción del atleta ──
@@ -190,6 +204,164 @@ function acreditacionVigente(c){
   const acs=(c&&c.acreditaciones)||[];
   const vig=acs.filter(a=>a.vence&&a.vence>=m).sort((a,b)=>String(b.vence).localeCompare(String(a.vence)));
   return vig.length?vig[0]:null;
+}
+
+// ── Sesión del entrenador ─────────────────────────────────────
+// La cuenta la crea la federación desde el panel; acá solo se entra. Un correo
+// sin cuenta no puede registrarse solo, que es lo que impide que alguien se
+// quede con la cuenta de otro sabiendo su RUT.
+function _sesionDesde(u,datos){
+  return {
+    uid:u.uid,
+    correo:u.email||'',
+    nombre:(datos&&datos.nombre)||'',
+    rut:(datos&&datos.rut)||'',
+    categoria:(datos&&datos.grado)||'',
+    debeCambiarClave:!!(datos&&datos.debeCambiarClave)
+  };
+}
+async function _mirarSesion(u){
+  if(!u){ state.sesion=null; state.authListo=true; render(); return; }
+  let datos=null;
+  try{
+    const d=await FB.getDoc(FB.doc(FB.db,'coaches',u.uid));
+    if(d.exists())datos=d.data();
+  }catch(e){ console.warn('[coach]',e); }
+  // Una cuenta de Auth sin ficha en coaches/ no es un entrenador: puede ser un
+  // admin que dejó la sesión abierta en este navegador. No se le deja pasar.
+  if(!datos){
+    state.sesion=null; state.authListo=true;
+    state.error='Esa cuenta no es de entrenador. Si eres de la organización, entra por el panel.';
+    try{ await FB.signOut(FB.auth); }catch(_){}
+    render(); return;
+  }
+  state.sesion=_sesionDesde(u,datos);
+  // Con la sesión abierta los datos salen de la cuenta, no del teclado.
+  state.ent.nombre=state.sesion.nombre||state.ent.nombre;
+  state.ent.rut=state.sesion.rut?formatRut(state.sesion.rut):state.ent.rut;
+  state.ent.correo=state.sesion.correo;
+  state.ent.categoria=state.sesion.categoria||'';
+  state.authListo=true; render();
+}
+window.setLogin=function(k,v){ state.login[k]=v; };
+window.entrar=async function(){
+  const correo=String(state.login.correo||'').trim().toLowerCase();
+  const clave=String(state.login.clave||'');
+  if(!/.+@.+\..+/.test(correo)){ state.error='Escribe el correo con el que te acreditaste.'; render(); return; }
+  if(!clave){ state.error='Falta la clave.'; render(); return; }
+  state.error=''; state.login.cargando=true; render();
+  try{
+    await FB.signInWithEmailAndPassword(FB.auth,correo,clave);
+    state.login={correo:'',clave:'',cargando:false};
+    // onAuthStateChanged se encarga del resto.
+  }catch(e){
+    state.login.cargando=false;
+    const c=e&&e.code||'';
+    // No se distingue "no existe" de "clave mala" a propósito: decirlo permite
+    // averiguar qué correos están acreditados probando de a uno.
+    state.error=(c==='auth/too-many-requests')
+      ? 'Demasiados intentos seguidos. Espera unos minutos y vuelve a probar.'
+      : 'El correo o la clave no calzan. Si nunca entraste, tu clave es tu RUT sin puntos ni guion. Si aun así no entra, es que todavía no tienes cuenta: escríbele a la federación.';
+    render();
+  }
+};
+window.salir=async function(){
+  try{ await FB.signOut(FB.auth); }catch(_){}
+  state.sesion=null; state.step=0; state.atletas=[]; state.archivos={}; state.nombres={};
+  render();
+};
+window.setClave=function(k,v){ state.clave[k]=v; };
+window.guardarClave=async function(){
+  const a=String(state.clave.a||''), b=String(state.clave.b||'');
+  if(a.length<8){ state.error='La clave nueva tiene que tener al menos 8 caracteres.'; render(); return; }
+  if(a!==b){ state.error='Las dos claves no son iguales.'; render(); return; }
+  if(state.sesion&&rutLimpio(state.sesion.rut)&&a===rutLimpio(state.sesion.rut)){
+    state.error='Esa es la clave que te vino de fábrica: es tu RUT y cualquiera lo sabe. Pon otra.';
+    render(); return;
+  }
+  state.error=''; state.clave.cargando=true; render();
+  try{
+    await FB.updatePassword(FB.auth.currentUser,a);
+    await FB.updateDoc(FB.doc(FB.db,'coaches',state.sesion.uid),{debeCambiarClave:false});
+    state.sesion.debeCambiarClave=false;
+    state.clave={a:'',b:'',cargando:false};
+    render();
+  }catch(e){
+    state.clave.cargando=false;
+    const c=e&&e.code||'';
+    state.error=(c==='auth/requires-recent-login')
+      ? 'Por seguridad hay que volver a entrar antes de cambiarla. Sal y entra de nuevo.'
+      : 'No se pudo cambiar la clave: '+(e.message||c);
+    render();
+  }
+};
+
+function vistaLogin(){
+  const fo=formActual();
+  const ev=fo&&EVENTOS.find(e=>e.id===fo.evento);
+  return `<div class="card fade">
+    <h2 class="os" style="font-size:19px;letter-spacing:1px;margin-bottom:6px">Entra con tu cuenta</h2>
+    <p class="muted" style="margin-bottom:16px">
+      Para inscribirte como entrenador en <b style="color:var(--text)">${esc(ev?ev.name:(fo?fo.nombre:'este campeonato'))}</b>
+      tienes que entrar con tu cuenta. Es la que la federación te creó con el correo de tu acreditación.</p>
+    <div class="field">
+      <label>Correo <span class="req">*</span></label>
+      <input class="input" type="email" autocomplete="username" value="${esc(state.login.correo)}"
+             oninput="setLogin('correo',this.value)" placeholder="el correo con el que te acreditaste">
+    </div>
+    <div class="field">
+      <label>Clave <span class="req">*</span></label>
+      <input class="input" type="password" autocomplete="current-password" value="${esc(state.login.clave)}"
+             oninput="setLogin('clave',this.value)"
+             onkeydown="if(event.key==='Enter')entrar()" placeholder="la primera vez, tu RUT sin puntos ni guion">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="btn btn-outline" onclick="irA(0)" ${state.login.cargando?'disabled':''}>Atrás</button>
+      <button class="btn btn-green" onclick="entrar()" ${state.login.cargando?'disabled':''}>
+        ${state.login.cargando?'<span class="sp" style="width:16px;height:16px;border-width:2px"></span> Entrando…':'Entrar'}</button>
+    </div>
+    <div class="alert alert-info" style="margin-top:16px">
+      <b>¿Primera vez?</b> Tu clave es tu RUT sin puntos ni guion. Al entrar te vamos a pedir que la cambies.<br>
+      <b>¿No entra?</b> Puede ser que tu acreditación esté vencida o que todavía no tengas cuenta. Escríbele a la federación.
+    </div>
+  </div>`;
+}
+
+function vistaCambioClave(){
+  return `<div class="card fade">
+    <h2 class="os" style="font-size:19px;letter-spacing:1px;margin-bottom:6px">Cambia tu clave</h2>
+    <p class="muted" style="margin-bottom:16px">
+      Entraste con tu RUT, y tu RUT lo sabe cualquiera: está en las nóminas y en las actas.
+      Antes de seguir, pon una clave que sea tuya.</p>
+    <div class="field">
+      <label>Clave nueva <span class="req">*</span></label>
+      <input class="input" type="password" autocomplete="new-password" value="${esc(state.clave.a)}"
+             oninput="setClave('a',this.value)" placeholder="al menos 8 caracteres">
+    </div>
+    <div class="field">
+      <label>Repítela <span class="req">*</span></label>
+      <input class="input" type="password" autocomplete="new-password" value="${esc(state.clave.b)}"
+             oninput="setClave('b',this.value)" onkeydown="if(event.key==='Enter')guardarClave()">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="btn btn-outline" onclick="salir()" ${state.clave.cargando?'disabled':''}>Salir</button>
+      <button class="btn btn-green" onclick="guardarClave()" ${state.clave.cargando?'disabled':''}>
+        ${state.clave.cargando?'<span class="sp" style="width:16px;height:16px;border-width:2px"></span> Guardando…':'Guardar y seguir'}</button>
+    </div>
+  </div>`;
+}
+
+// La barra que dice con qué cuenta está trabajando, y por dónde se sale.
+function barraSesion(){
+  if(!state.sesion)return '';
+  const s=state.sesion;
+  return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.28);border-radius:10px;padding:9px 13px;margin-bottom:14px">
+    <div style="flex:1;min-width:200px;font-size:12.5px;line-height:1.45">
+      <b>${esc(s.nombre||s.correo)}</b>${s.categoria?` · <span class="muted">${esc(s.categoria)}</span>`:''}
+      <div class="muted" style="font-size:11px">${esc(s.correo)}</div>
+    </div>
+    <button class="btn btn-outline" style="padding:5px 11px;font-size:11px" onclick="salir()">Salir</button>
+  </div>`;
 }
 
 window.buscarRut=async function(){
