@@ -481,7 +481,7 @@ async function loadAll(){
         // que se rehace cuando cambian: si no, aprobar o rechazar una no movía
         // la columna hasta recargar la página.
         window._HIST_ANIO=null;
-        if(ST.view==='nominas'||ST.view==='dashboard'||ST.view==='approvals'||ST.view==='athletes')render();
+        if(ST.view==='nominas'||ST.view==='dashboard'||ST.view==='approvals'||ST.view==='athletes'||ST.view==='stats')render();
       },(e)=>console.warn('[listener] inscripciones:',e.message));
     }catch(e){console.warn('[loadAll] insc listener:',e.message);}
   }
@@ -542,7 +542,10 @@ async function loadAll(){
       window._allCompResListener=onSnapshot(collection(db,'competition_results'),(snap)=>{
         ST.allCompResults=snap.docs.map(d=>({id:d.id,...d.data()}));
         window._HIST_ANIO=null;   // el índice del año se rehace con los datos nuevos
-        if(ST.view==='athleteProfile'||ST.view==='approvals'||ST.view==='nominas'||ST.view==='rankingCiclo')render();
+        // Estadísticas también: la pestaña de afiliaciones se arma con estos
+        // resultados, y sin esto quedaba mostrando solo lo de data.json hasta
+        // que alguien cambiara de pantalla y volviera.
+        if(ST.view==='athleteProfile'||ST.view==='approvals'||ST.view==='nominas'||ST.view==='rankingCiclo'||ST.view==='stats')render();
       },(e)=>console.warn('[listener] competition_results:',e.message));
     }catch(e){console.warn('[loadAll] allCompRes listener:',e.message);}
   }
@@ -3453,7 +3456,7 @@ function renderStats(){
   return `<div class="h1">Estadísticas</div>
     <div style="display:flex;gap:10px;margin:14px 0 20px;flex-wrap:wrap">
       ${tabBtn('deporte','DEPORTE')}
-      ${tabBtn('2026','2026')}
+      ${tabBtn('2026','AFILIACIONES '+new Date().getFullYear())}
       ${tabBtn('corte','CORTE NACIONAL')}
       ${_statsOwner()?tabBtn('demografia','DEMOGRAFÍA'):''}
       ${_statsOwner()?tabBtn('web','TRÁFICO WEB'):''}
@@ -3461,7 +3464,7 @@ function renderStats(){
     ${tab==='web'
       ? `<div id="statsWebContent"><div style="padding:40px;text-align:center;color:var(--muted)">Cargando analytics…</div></div>`
       : tab==='2026'
-      ? `<p class="subtitle">Atletas únicos que compitieron en 2026 · considera Nacional y todos los Regionales</p><div id="statsContent">${render2026Stats()}</div>`
+      ? `<p class="subtitle">Cuántas afiliaciones aportó cada campeonato del año · cada persona cuenta una sola vez, en el primero que corre</p><div id="statsContent">${render2026Stats()}</div>`
       : tab==='corte'
       ? `<p class="subtitle">Simulador de mínimos para clasificar · se prueba un corte y se ve a cuántos deja dentro, antes de fijarlo</p><div id="statsContent">${renderCorte()}</div>`
       : tab==='demografia'
@@ -3469,182 +3472,233 @@ function renderStats(){
       : `<p class="subtitle">Dashboard interactivo · Filtros globales · Export para Power BI</p><div id="statsContent">${renderStatsContent()}</div>`}`;
 }
 
-// ── 2026 Statistics: Unique athletes across all 2026 events (national + regionals) ──
-function build2026Stats(){
-  const athletes2026 = new Map(); // key: rut or codigo, value: {name, sexo, club, rut, codigo, eventos: Set, competencias2026: [...]}
-  const eventDetails = {}; // evento → {total, nuevasAfiliaciones, recompetidores}
+// ── Afiliaciones del año ─────────────────────────────────────────────────────
+// Una afiliación es una persona que compitió al menos una vez en el año: se paga
+// una sola vez, del 1 de enero al 31 de diciembre, y no se vuelve a pagar aunque
+// después corra tres campeonatos más. Así que lo que hay que contar por
+// campeonato no es cuánta gente hubo, sino cuánta gente DEBUTÓ en el año ahí.
+//
+// El dato no está en un solo lugar y por eso esto mira las tres fuentes:
+//   · competition_results — lo que cierra el livecast y lo que suben los atletas.
+//     Es la única fuente del Regional Norte y del Centro Sur, y de campeonatos
+//     como el Debutantes, que corrió con una sola tarima y no pasó por el
+//     livecast: ahí los resultados los cargó cada atleta.
+//   · data.json — el histórico publicado. Trae el Nacional, que nunca pasó por
+//     competition_results.
+//   · inscripciones — lo que está entrando ahora. No suma afiliaciones todavía:
+//     va aparte, porque la nómina no ha cerrado y esa gente aún puede bajarse.
+//
+// Un mismo campeonato viene escrito de varias formas ("Regional Centro 2026" y
+// "Campeonato Regional Centro FECHIPO 2026" son el mismo torneo, y el Debutantes
+// vino partido en dos tarimas), así que se agrupa por _evClave y no por el
+// nombre, que es lo mismo que hace la columna de participación.
+function buildAnioStats(anio){
+  const A = String(anio || new Date().getFullYear());
+  const hoy = new Date().toISOString().slice(0,10);
+  const anioDe = (evento,fecha) =>
+    String(fecha||'').slice(0,4) || (String(evento||'').match(/\b(20\d\d)\b/)||[])[1] || '';
+  // Mismo criterio que la columna de participación: DQ es haber competido —estuvo
+  // en la tarima—, pero una línea sin ningún kilo es solo una inscripción.
+  const compitioDe = (r) => {
+    if(!r) return false;
+    if(String(r.status||'').toUpperCase()==='DQ') return true;
+    return (r.total||0)>0 || (r.sq||0)>0 || (r.bp||0)>0 || (r.dl||0)>0;
+  };
+  const esEnsayo = (ev) => /\bensayo\b/i.test(String(ev||''));
 
-  (ST.data || []).forEach((o) => {
-    const competencias = o.competencias || [];
-    const comp2026 = competencias.filter(c => {
-      const eventoName = (c.evento || '').toLowerCase();
-      return /20\d{2}/.test(eventoName) && eventoName.includes('2026');
+  const evs = {};      // clave → {nombre, fecha, compiten:Set, inscritos:Set, enCurso}
+  const gente = {};    // id → {nombre, sexo, club}
+
+  const meter = (rut,nombre,evento,fecha,compitio,sexo,club,enCurso) => {
+    if(!evento || esEnsayo(evento)) return;
+    if(anioDe(evento,fecha) !== A) return;
+    const k = _evClave(evento); if(!k) return;
+    const id = _hRut(rut) || (_hNom(nombre) ? 'n:'+_hNom(nombre) : '');
+    if(!id) return;
+    const e = evs[k] || (evs[k] = {clave:k, nombre:evento, fecha:fecha||'', compiten:new Set(), inscritos:new Set(), enCurso:false});
+    // De los varios nombres del mismo torneo se conserva el más completo.
+    if(String(evento).length > e.nombre.length) e.nombre = evento;
+    if(fecha && (!e.fecha || fecha < e.fecha)) e.fecha = fecha;
+    if(enCurso) e.enCurso = true;
+    (compitio ? e.compiten : e.inscritos).add(id);
+    const p = gente[id] || (gente[id] = {nombre:'', sexo:'', club:''});
+    if(nombre && !p.nombre) p.nombre = nombre;
+    if(sexo && !p.sexo) p.sexo = sexo;
+    if(club && !p.club) p.club = club;
+  };
+
+  (ST.allCompResults||[]).forEach(d => {
+    // Lo que sale del livecast o lo sube un atleta es, por definición, gente que
+    // estuvo en la tarima.
+    meter(d.rut, d.nombre, d.evento, d.fecha, true, d.sexo, d.club, false);
+  });
+  (ST.data||[]).forEach(o => {
+    (o.competencias||[]).forEach(c => {
+      meter(o.rut, o.nombre, c.evento, c.fecha, compitioDe(c.resultado), c.sexo||o.sexo, o.club, false);
     });
-
-    if (comp2026.length > 0) {
-      const key = o.rut || o.codigo || ('unnamed_' + Math.random());
-      if (!athletes2026.has(key)) {
-        athletes2026.set(key, {
-          name: o.nombre || o.name || 'Sin nombre',
-          sexo: o.sexo || 'N/D',
-          club: o.club || 'Sin club',
-          rut: o.rut || '',
-          codigo: o.codigo || '',
-          eventos: new Set(),
-          competencias2026: []
-        });
-      }
-      const athlete = athletes2026.get(key);
-      athlete.competencias2026 = comp2026;
-      comp2026.forEach(c => {
-        athlete.eventos.add(c.evento);
-      });
-    }
+  });
+  (ST.inscripciones||[]).forEach(i => {
+    if(i.status==='rejected') return;
+    const ev = (ST.eventos||[]).find(e => e.id===i.evento);
+    const nombre = (ev&&ev.name) || i.evento || '';
+    const fecha  = (ev&&(ev.date||ev.fecha)) || '';
+    meter(i.rut, i.nombre, nombre, fecha, false, i.sexo, i.club, true);
   });
 
-  // Para cada atleta, determinar su PRIMER evento del año
-  athletes2026.forEach((athlete) => {
-    if (athlete.competencias2026.length > 0) {
-      // Ordenar por fecha (si existe) o por nombre
-      const sorted = athlete.competencias2026.sort((a, b) => {
-        const dateA = a.fecha ? new Date(a.fecha).getTime() : 0;
-        const dateB = b.fecha ? new Date(b.fecha).getTime() : 0;
-        if (dateA !== dateB) return dateA - dateB;
-        return (a.evento || '').localeCompare(b.evento || '');
-      });
-      athlete.primerEvento = sorted[0].evento;
-    }
+  // Un campeonato ya disputado cuenta afiliaciones; uno que todavía no corre va
+  // aparte. Si no hay ni un resultado y la fecha no llegó, está en curso.
+  const lista = Object.values(evs).map(e => {
+    const disputado = e.compiten.size>0 || (!!e.fecha && e.fecha < hoy);
+    // Con resultados cargados manda la tarima. Sin ninguno, lo único que hay es
+    // la nómina, y se usa marcando que es la nómina y no lo que pasó.
+    const cuentan = e.compiten.size>0 ? e.compiten : e.inscritos;
+    return {
+      clave:e.clave, nombre:e.nombre, fecha:e.fecha,
+      compiten:e.compiten.size, inscritos:e.inscritos.size,
+      participantes:new Set([...e.compiten, ...e.inscritos]).size,
+      cuentan, disputado,
+      fuente: e.compiten.size>0 ? 'resultados' : 'nomina'
+    };
   });
+  const disputados = lista.filter(e => e.disputado).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+  const enCurso    = lista.filter(e => !e.disputado).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
 
-  // Contar nuevas afiliaciones vs recompetidores por evento
-  athletes2026.forEach((athlete) => {
-    athlete.eventos.forEach(evento => {
-      if (!eventDetails[evento]) {
-        eventDetails[evento] = { total: 0, nuevasAfiliaciones: 0, recompetidores: 0 };
-      }
-      eventDetails[evento].total++;
-      if (athlete.primerEvento === evento) {
-        eventDetails[evento].nuevasAfiliaciones++;
-      } else {
-        eventDetails[evento].recompetidores++;
-      }
+  // La primera vez del año de cada persona: ahí es donde se paga la afiliación.
+  // Se recorre en orden de fecha, así que el primer campeonato que la nombra es
+  // el que se la lleva.
+  const yaVisto = new Set();
+  disputados.forEach(e => {
+    e.nuevas = 0; e.recomp = 0;
+    e.cuentan.forEach(id => {
+      if(yaVisto.has(id)) e.recomp++;
+      else { yaVisto.add(id); e.nuevas++; }
     });
   });
-
-  const uniqueAthletes = athletes2026.size;
-  const totalAfiliciones = Array.from(athletes2026.values()).filter(a => a.primerEvento).length;
-  const eventList = Object.entries(eventDetails).sort((a, b) => b[1].nuevasAfiliaciones - a[1].nuevasAfiliaciones);
-
-  const sexoCount = { M: 0, F: 0, 'N/D': 0 };
-  athletes2026.forEach(a => {
-    const s = String(a.sexo || '').toLowerCase().trim();
-    if (s.includes('f') || s.includes('mujer') || s.includes('dama')) {
-      sexoCount.F++;
-    } else if (s.includes('m') || s.includes('hombre') || s.includes('masc') || s === 'v') {
-      sexoCount.M++;
-    } else {
-      sexoCount['N/D']++;
-    }
+  // Los que están entrando ahora y todavía no compitieron este año: si la nómina
+  // cierra y corren, son afiliaciones nuevas.
+  enCurso.forEach(e => {
+    e.nuevas = 0; e.recomp = 0;
+    e.cuentan.forEach(id => { if(yaVisto.has(id)) e.recomp++; else e.nuevas++; });
   });
 
-  const clubCounts = {};
-  athletes2026.forEach(a => {
-    const club = a.club || 'Sin club';
-    clubCounts[club] = (clubCounts[club] || 0) + 1;
+  const sexoDe = (s) => {
+    s = String(s||'').toLowerCase().trim();
+    if(/^f|muj|dama|femen/.test(s)) return 'F';
+    if(/^m|^v|hom|masc|varon/.test(s)) return 'M';
+    return 'N/D';
+  };
+  const sexoCount = {M:0, F:0, 'N/D':0};
+  const clubCount = {};
+  yaVisto.forEach(id => {
+    const p = gente[id] || {};
+    sexoCount[sexoDe(p.sexo)]++;
+    const c = p.club || 'Sin club';
+    clubCount[c] = (clubCount[c]||0)+1;
   });
-  const topClubs = Object.entries(clubCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
 
   return {
-    uniqueAthletes,
-    totalAfiliciones,
-    eventList,
+    anio:A,
+    afiliaciones: yaVisto.size,
+    disputados, enCurso,
     sexoCount,
-    topClubs,
-    athletes: Array.from(athletes2026.values())
+    topClubs: Object.entries(clubCount).sort((a,b)=>b[1]-a[1]).slice(0,10),
+    enCursoNuevas: enCurso.reduce((s,e)=>s+e.nuevas,0)
   };
 }
 
 function render2026Stats(){
-  const stats = build2026Stats();
+  const S = buildAnioStats(new Date().getFullYear());
   const ks = 'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;text-align:center';
-  const card = (t, content) => `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px"><div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted);margin-bottom:14px">${t}</div>${content}</div>`;
+  const card = (t,sub,content) => `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px">
+    <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted);margin-bottom:${sub?'4px':'14px'}">${t}</div>
+    ${sub?`<div style="font-size:10px;color:var(--muted);margin-bottom:12px;line-height:1.4">${sub}</div>`:''}
+    ${content}</div>`;
+  const th = (t,align,color) => `<th style="padding:8px;text-align:${align||'right'};color:${color||'var(--muted)'};font-size:10px;text-transform:uppercase;letter-spacing:1px;font-family:Oswald">${t}</th>`;
 
-  // KPI cards
-  const totalMasculino = stats.sexoCount.M;
-  const totalFemenino = stats.sexoCount.F;
-  const pctFemenino = stats.uniqueAthletes > 0 ? Math.round(totalFemenino / stats.uniqueAthletes * 100) : 0;
+  const totF = S.sexoCount.F, totM = S.sexoCount.M;
+  const pctF = S.afiliaciones ? Math.round(totF/S.afiliaciones*100) : 0;
 
-  // Events table con desglose de nuevas afiliaciones vs recompetidores
-  const eventsTable = stats.eventList.map(([evt, details]) => {
-    const { total, nuevasAfiliaciones, recompetidores } = details;
+  // Un campeonato del que solo tenemos la nómina se marca: el número es de
+  // inscritos, no de gente que pisó la tarima, y conviene que se note.
+  const filaEv = (e) => {
+    const soloNom = e.fuente==='nomina';
     return `<tr>
-      <td style="padding:8px;text-align:left;color:var(--text);font-size:13px">${evt}</td>
-      <td style="padding:8px;text-align:right;font-weight:700;color:var(--text);font-size:13px">${total}</td>
-      <td style="padding:8px;text-align:right;font-weight:700;color:var(--green);font-size:13px">${nuevasAfiliaciones}</td>
-      <td style="padding:8px;text-align:right;color:var(--muted);font-size:12px">${recompetidores}</td>
+      <td style="padding:8px;text-align:left;color:var(--text);font-size:13px">${esc(e.nombre)}
+        ${soloNom?`<span title="Sin resultados cargados: la cifra sale de la nómina de inscritos" style="color:var(--orange);font-size:10px;margin-left:5px">⚠ s/resultados</span>`:''}
+        <div style="color:var(--muted);font-size:10px">${esc(e.fecha||'sin fecha')}</div></td>
+      <td style="padding:8px;text-align:right;font-weight:700;color:var(--text);font-size:13px">${e.cuentan.size}</td>
+      <td style="padding:8px;text-align:right;font-weight:700;color:var(--green);font-size:14px">${e.nuevas}</td>
+      <td style="padding:8px;text-align:right;color:var(--muted);font-size:12px">${e.recomp}</td>
     </tr>`;
-  }).join('');
+  };
 
-  // Top clubs table
-  const clubsTable = stats.topClubs.map(([club, cnt]) => {
-    const pct = Math.round(cnt / stats.uniqueAthletes * 100);
-    return `<tr>
-      <td style="padding:8px;text-align:left;color:var(--text);font-size:13px">${club}</td>
-      <td style="padding:8px;text-align:right;font-weight:700;color:var(--text);font-size:13px">${cnt}</td>
-      <td style="padding:8px;text-align:right;color:var(--muted);font-size:12px">${pct}%</td>
-    </tr>`;
-  }).join('');
+  const tablaDisputados = S.disputados.length
+    ? `<table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+          ${th('Campeonato','left')}${th('Compitieron')}${th('Nuevas','right','var(--green)')}${th('Ya afiliado')}
+        </tr></thead><tbody>${S.disputados.map(filaEv).join('')}</tbody>
+        <tfoot><tr style="border-top:2px solid var(--border)">
+          <td style="padding:9px 8px;text-align:left;font-family:Oswald;letter-spacing:1px;font-size:11px;color:var(--gold)">TOTAL AFILIACIONES ${S.anio}</td>
+          <td></td>
+          <td style="padding:9px 8px;text-align:right;font-family:Oswald;font-size:16px;font-weight:700;color:var(--green)">${S.afiliaciones}</td>
+          <td></td>
+        </tr></tfoot></table>`
+    : `<div style="color:var(--muted);font-size:12px;padding:10px 0">Todavía no hay campeonatos disputados en ${S.anio}.</div>`;
+
+  const tablaCurso = S.enCurso.length
+    ? `<table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+          ${th('Campeonato','left')}${th('Inscritos')}${th('Serían nuevas','right','var(--gold)')}${th('Ya afiliado')}
+        </tr></thead><tbody>${S.enCurso.map(e=>`<tr>
+          <td style="padding:8px;text-align:left;color:var(--text);font-size:13px">${esc(e.nombre)}
+            <div style="color:var(--muted);font-size:10px">${esc(e.fecha||'sin fecha')} · inscripción abierta</div></td>
+          <td style="padding:8px;text-align:right;font-weight:700;color:var(--text);font-size:13px">${e.cuentan.size}</td>
+          <td style="padding:8px;text-align:right;font-weight:700;color:var(--gold);font-size:14px">${e.nuevas}</td>
+          <td style="padding:8px;text-align:right;color:var(--muted);font-size:12px">${e.recomp}</td>
+        </tr>`).join('')}</tbody></table>`
+    : `<div style="color:var(--muted);font-size:12px;padding:10px 0">No hay inscripciones abiertas para ${S.anio}.</div>`;
+
+  const clubsTable = S.topClubs.length
+    ? `<table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:2px solid var(--border)">${th('Club','left')}${th('Atletas')}${th('%')}</tr></thead>
+        <tbody>${S.topClubs.map(([club,cnt])=>`<tr>
+          <td style="padding:8px;text-align:left;color:var(--text);font-size:13px">${esc(club)}</td>
+          <td style="padding:8px;text-align:right;font-weight:700;color:var(--text);font-size:13px">${cnt}</td>
+          <td style="padding:8px;text-align:right;color:var(--muted);font-size:12px">${S.afiliaciones?Math.round(cnt/S.afiliaciones*100):0}%</td>
+        </tr>`).join('')}</tbody></table>`
+    : '<div style="color:var(--muted);font-size:12px">Sin datos de club.</div>';
+
+  const kpi = (val,label,color,sub) => `<div style="${ks}">
+    <div style="font-family:Oswald;font-size:42px;font-weight:700;color:${color}">${val}</div>
+    <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">${label}</div>
+    ${sub?`<div style="color:var(--muted);font-size:9px;margin-top:2px">${sub}</div>`:''}</div>`;
 
   return `
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px">
-    <div style="${ks}">
-      <div style="font-family:Oswald;font-size:42px;font-weight:700;color:var(--accent)">${stats.uniqueAthletes.toLocaleString()}</div>
-      <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">ATLETAS ÚNICOS 2026</div>
-    </div>
-    <div style="${ks}">
-      <div style="font-family:Oswald;font-size:42px;font-weight:700;color:var(--green)">${stats.totalAfiliciones.toLocaleString()}</div>
-      <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">AFILIACIONES 2026</div>
-      <div style="color:var(--muted);font-size:9px;margin-top:2px">(nuevas en el año)</div>
-    </div>
-    <div style="${ks}">
-      <div style="font-family:Oswald;font-size:42px;font-weight:700;color:#3b82f6">${stats.eventList.length}</div>
-      <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">EVENTOS</div>
-    </div>
-    <div style="${ks}">
-      <div style="font-family:Oswald;font-size:42px;font-weight:700;color:#ec4899">${totalFemenino}</div>
-      <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">MUJERES (${pctFemenino}%)</div>
-    </div>
-    <div style="${ks}">
-      <div style="font-family:Oswald;font-size:42px;font-weight:700;color:#f59e0b">${totalMasculino}</div>
-      <div style="color:var(--muted);font-size:11px;margin-top:4px;font-family:Oswald;letter-spacing:1px">HOMBRES</div>
-    </div>
+    ${kpi(S.afiliaciones.toLocaleString(),'AFILIACIONES '+S.anio,'var(--green)','personas distintas que ya compitieron')}
+    ${kpi(S.disputados.length,'CAMPEONATOS','#3b82f6','disputados este año')}
+    ${kpi(S.enCursoNuevas.toLocaleString(),'EN CAMINO','var(--gold)','inscritos que aún no se afilian')}
+    ${kpi(totF.toLocaleString(),'MUJERES','#ec4899',pctF+'% del total')}
+    ${kpi(totM.toLocaleString(),'HOMBRES','#f59e0b','')}
+  </div>
+
+  <div style="margin-bottom:16px">
+    ${card('AFILIACIONES POR CAMPEONATO','Cada persona se cuenta una sola vez en el año: paga en el primero que corre y en los siguientes ya está afiliada.',tablaDisputados)}
   </div>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-    ${card('AFILIACIONES POR EVENTO', `<table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="border-bottom:2px solid var(--border)">
-        <th style="padding:8px;text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">Evento</th>
-        <th style="padding:8px;text-align:right;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">Total</th>
-        <th style="padding:8px;text-align:right;color:var(--green);font-size:10px;text-transform:uppercase;letter-spacing:1px">Nuevas</th>
-        <th style="padding:8px;text-align:right;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">Recomp.</th>
-      </tr></thead>
-      <tbody>${eventsTable}</tbody>
-    </table>`)}
-    ${card('TOP 10 CLUBES', `<table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="border-bottom:2px solid var(--border)">
-        <th style="padding:8px;text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">Club</th>
-        <th style="padding:8px;text-align:right;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">Atletas</th>
-        <th style="padding:8px;text-align:right;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">%</th>
-      </tr></thead>
-      <tbody>${clubsTable}</tbody>
-    </table>`)}
+    ${card('INSCRIPCIONES EN CURSO','Nóminas todavía abiertas. No suman hasta que el campeonato se corra.',tablaCurso)}
+    ${card('TOP 10 CLUBES','Sobre las '+S.afiliaciones+' personas afiliadas este año.',clubsTable)}
   </div>
 
-  <p style="color:var(--muted);font-size:11px;margin-top:14px;line-height:1.5">
-    <strong>Atletas únicos</strong> = personas distintas contadas una sola vez, aunque hayan compitido en múltiples eventos en 2026.
-    <strong>Afiliaciones</strong> = atletas que compitieron por primera vez en el año (1 ene–31 dic); la afiliación se paga una sola vez por año.
-    En la tabla de eventos: <strong>Total</strong> = todos los que compitieron en ese evento, <strong>Nuevas</strong> = compitieron por primera vez en ese evento, <strong>Recomp.</strong> = ya habían compitido en otro evento antes ese año.
-    El año 2026 incluye el Nacional FECHIPO y todos los campeonatos regionales y zonales disputados en 2026.
+  <p style="color:var(--muted);font-size:11px;margin-top:14px;line-height:1.55">
+    <strong>Afiliación</strong> = persona que compitió al menos una vez en el año (1 ene–31 dic). Se paga una sola vez, así que cada persona
+    suma en el primer campeonato que corre y en los siguientes aparece como <strong>ya afiliado</strong>: la columna
+    <strong>Nuevas</strong> es lo que ese campeonato aportó de afiliaciones, y la suma de esa columna es el total del año.
+    Los datos se cruzan por RUT entre los resultados del livecast, los que suben los atletas y el histórico publicado, así que un
+    campeonato escrito de dos formas —o partido en dos tarimas— cuenta una sola vez.
+    Un campeonato marcado <span style="color:var(--orange)">⚠ s/resultados</span> todavía no tiene resultados cargados y la cifra sale de su
+    nómina de inscritos: va a ajustarse sola cuando se carguen.
   </p>`;
 }
 
