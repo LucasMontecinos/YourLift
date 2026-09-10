@@ -5972,9 +5972,12 @@ function _esRegional(ev){return /regional/i.test(String(ev||''));}
 // 2026": son el mismo torneo, y sin esto el atleta aparecería compitiendo dos
 // veces. Se sacan las palabras de relleno y las tarimas, y queda lo que identifica
 // al campeonato. "Regional Centro" y "Regional Centro Sur" siguen siendo distintos.
+// El separador antes de la tarima es opcional: cuando el resultado lo sube el
+// atleta y no el livecast, el campeonato llega escrito a mano y el guión puede
+// no venir. "Debutantes - Tarima 1" y "Debutantes Tarima 2" son el mismo.
 function _evClave(ev){
   return String(ev||'')
-    .replace(/\s*[-–]\s*Tarima\s*\d+\s*$/i,'')
+    .replace(/\s*[-–—:]?\s*tarima\s*\d+\s*$/i,'')
     .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
     .replace(/\b(campeonato|fechipo|torneo|de|del|cd)\b/g,' ')
     .replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
@@ -6119,7 +6122,7 @@ function _histDe(rut,nombre){
   // grupo se muestra el nombre más completo y la fecha que exista.
   const porClave={};
   arr.forEach(it=>{
-    const base=it.evento.replace(/\s*[-–]\s*Tarima\s*\d+\s*$/i,'').trim();
+    const base=it.evento.replace(/\s*[-–—:]?\s*tarima\s*\d+\s*$/i,'').trim();
     const k=_evClave(it.evento);
     const y=porClave[k];
     if(!y){porClave[k]=Object.assign({},it,{evento:base});return;}
