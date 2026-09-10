@@ -3426,28 +3426,23 @@ function renderSponsors(){
     <p style="font-size:11px;color:var(--muted);margin-top:12px">Tras guardar, el carrusel aparece en el Inicio. Logos PNG con fondo transparente se ven mejor.</p>`;
 }
 
-// Quién ve qué dentro de Estadísticas.
+// Estadísticas es del owner y de nadie más.
 //
-// Lo deportivo —atletas, GL points, corte para el Nacional— lo puede ver la
-// comisión técnica y el directorio: es información del deporte y les sirve para
-// trabajar. La DEMOGRAFÍA y el TRÁFICO WEB no: la demografía son las edades, las
-// comunas y los clubes de todo el padrón, y el tráfico web es del negocio del
-// sitio. Esas dos quedan solo para el owner.
-//
-// Los jueces y las cuentas de streaming no entran acá: tienen su propia pantalla.
+// Antes lo deportivo —atletas, GL points, corte para el Nacional— lo veía
+// cualquiera que estuviera en admins/, y solo la demografía y el tráfico web
+// quedaban reservados. Pero la pantalla completa dice cuánta gente compite, de
+// qué clubes, cuánto crece el padrón y cuántas afiliaciones deja cada
+// campeonato: es la información con la que se negocia, no una herramienta de
+// trabajo del día a día. Así que la puerta es una sola y la abre el owner.
 const _statsOwner=()=>ST.adminInfo?.role==='owner'||!!ST.adminInfo?.bootstrap;
-// Quién entra al panel lo decide estar en admins/{uid}; el `role` solo AFINA.
-// Preguntar por una lista de roles dejaba fuera a la comisión técnica: si su
-// documento no trae el campo `role` —o trae uno que no está en la lista— el
-// includes daba false y no veía las estadísticas, aunque hubiera entrado al panel
-// sin problema. Ahora se pregunta al revés: las ve cualquiera que esté en admins/,
-// salvo las cuentas que tienen su propia pantalla y no pintan nada acá.
+const _statsPuede=_statsOwner;
+// Las cuentas que tienen su propia pantalla y no pintan nada en el panel. Ya no
+// decide quién ve Estadísticas —eso es del owner— pero sí el resto de pantallas
+// que la usan, como la de jueces.
 const _ROLES_SIN_PANEL=['juez','streaming','transmision'];
-const _statsPuede=()=>_statsOwner()
-  || (!!ST.adminInfo && !_ROLES_SIN_PANEL.includes(ST.adminInfo?.role));
 function renderStats(){
   if(!_statsPuede())
-    return '<div class="h1">Sin acceso</div><p class="subtitle">Las estadísticas son para el owner, los superadmin y la comisión técnica.</p>';
+    return '<div class="h1">Sin acceso</div><p class="subtitle">Las estadísticas son solo para el owner.</p>';
   // La pestaña vive en el navegador, así que se vuelve a comprobar acá: que no
   // se dibuje el botón no basta para dar por cerrada una puerta.
   if((ST.statsTab==='demografia'||ST.statsTab==='web')&&!_statsOwner())ST.statsTab='deporte';
