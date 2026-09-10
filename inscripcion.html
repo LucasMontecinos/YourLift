@@ -1618,6 +1618,23 @@ function renderEdit() {
 // `edit_requests` y el admin la revisa (valida el PIN contra
 // `inscripciones_private`). Esto evita exponer el PIN en la colección
 // pública de inscripciones.
+// Editar una inscripción solo tiene sentido mientras el campeonato sigue vivo:
+// con la inscripción abierta, o cerrada y todavía por correrse. Uno archivado ya
+// se compitió y sus resultados están publicados, así que un cambio de categoría
+// ahí no arregla nada —llega tarde— y solo deja una solicitud en la bandeja del
+// organizador por un campeonato que ya nadie está mirando. Un borrador tampoco:
+// todavía no existe para el público.
+//
+// Un campeonato sin `status` no se bloquea: los hay antiguos que nunca lo
+// tuvieron, y quedarían sin poder editarse por un campo que nadie llenó.
+function _evPermiteEditar(ev){
+  if(!ev) return true;
+  const s = String(ev.status || '').toLowerCase();
+  return !s || s === 'open' || s === 'closed';
+}
+const MSG_EV_CERRADO = '🔒 Este campeonato ya está archivado: sus resultados están publicados '
+  + 'y las inscripciones no se pueden seguir editando.\n\nSi hay algo que corregir, contacta al organizador.';
+
 async function lookupEdit() {
   const rut = formatRut(document.getElementById('editRut')?.value || '');
   const pin = document.getElementById('editPin')?.value || '';
@@ -1648,6 +1665,11 @@ async function lookupEdit() {
     // VERIFICAR cierre de pre-nómina: si ya pasó, NO se puede editar
     // (solo el admin puede modificar inscripciones post-cierre)
     const ev = EVENTS.find(e => e.id === found.evento);
+    if (!_evPermiteEditar(ev)) {
+      state.error = MSG_EV_CERRADO;
+      render();
+      return;
+    }
     if (ev?.preNominaCloseAt) {
       const close = new Date(ev.preNominaCloseAt);
       if (!isNaN(close) && new Date() > close) {
@@ -1698,6 +1720,14 @@ async function saveEdit() {
     // Re-validar el cierre de pre-nómina al momento de enviar
     // (el atleta pudo abrir el form ANTES del cierre y enviar DESPUÉS)
     const ev = EVENTS.find(e => e.id === f.evento);
+    // Igual que con la pre-nómina: el campeonato pudo archivarse entre que abrió
+    // el formulario y apretó guardar.
+    if (!_evPermiteEditar(ev)) {
+      state.submitting = false;
+      state.error = MSG_EV_CERRADO;
+      render();
+      return;
+    }
     if (ev?.preNominaCloseAt) {
       const close = new Date(ev.preNominaCloseAt);
       if (!isNaN(close) && new Date() > close) {
