@@ -676,6 +676,74 @@ function _syncWriteAlert(e){
 }
 function _syncWriteOk(){ const el=document.getElementById('syncErrBanner'); if(el)el.remove(); window._syncFallo=0; window._syncFalloMsg=''; }
 let _syncInFlight=false,_syncPending=false,_fbLastOk=0;
+
+// ── El semáforo: se ve que está en verde ─────────────────────────────────────
+//
+// Los dos avisos de arriba son carteles que aparecen cuando algo se rompe, y
+// eso deja al operador sin forma de comprobar que va bien: no ver el cartel rojo
+// puede significar que todo se está guardando, o que el aviso tampoco funciona.
+// Quien opere el Sudamericano no va a conocer el sistema, y necesita algo que
+// mirar y saber, sin preguntarle a nadie, que lo que carga está llegando.
+//
+// Por eso este es un semáforo permanente y no un aviso: está siempre puesto, y
+// el "hace N segundos" que va subiendo es la prueba de que sigue vivo. Un cartel
+// que no aparece no prueba nada; un número que corre, sí.
+//
+// Va solo en las pantallas donde alguien opera. En los televisores y en los
+// widgets de OBS no pinta nada: ahí nadie puede arreglar lo que diga.
+// Verde quiere decir UNA cosa: lo que hay en esta pantalla es lo que está
+// viendo el público. No que la escritura salió — eso solo dice que Firestore la
+// aceptó— sino que el documento ya volvió publicado desde el servidor, que es el
+// mismo que leen la web pública, los televisores y OBS.
+function _syncEstado(){
+  if(!window.IS_CONTROLLER) return {c:'#7A8FA6',t:'SOLO MIRAS',d:'lo que cargues acá no se guarda'};
+  if(window._syncFallo)     return {c:'#C41E3A',t:'NO SE ESTÁ GUARDANDO',d:'reintentando solo'};
+  let pend=false;
+  try{ pend=_syncInFlight||_syncPending||(_dataSig()!==window._lastSyncedSig); }catch(e){}
+  if(pend)                  return {c:'#D4A843',t:'GUARDANDO…',d:''};
+  // Escrito pero todavía sin volver: durante un par de segundos es lo normal.
+  // Si se queda pegado acá, es que la escritura salió pero no está llegando de
+  // vuelta, y entonces el público está viendo algo más viejo que esta pantalla.
+  if(window._pubPendiente){
+    const e=Math.round((Date.now()-(_fbLastOk||Date.now()))/1000);
+    return e>8
+      ? {c:'#C41E3A',t:'EL PÚBLICO VE ALGO VIEJO',d:'guardado, pero sin confirmar hace '+e+' s'}
+      : {c:'#D4A843',t:'PUBLICANDO…',d:''};
+  }
+  if(!_fbLastOk)            return {c:'#7A8FA6',t:'SIN CAMBIOS TODAVÍA',d:'apenas cargues algo se publica'};
+  // Que hayan pasado minutos sin escribir NO es un problema: es que nadie tocó
+  // nada. Lo que importa es que no quede nada sin publicar, y eso ya se comprobó.
+  const s=Math.round((Date.now()-(window._pubUltimo||_fbLastOk))/1000);
+  return {c:'#22c55e',t:'EL PÚBLICO LO VE',d:'al día · hace '+(s<60?s+' s':Math.round(s/60)+' min')};
+}
+function _syncPintaSemaforo(){
+  // Ni en los televisores ni en OBS: ahí nadie puede hacer nada con esto.
+  if(TX_MODE||PRACTICE_MODE||!isAdmin){
+    const v=document.getElementById('syncPill'); if(v)v.remove();
+    return;
+  }
+  let el=document.getElementById('syncPill');
+  if(!el){
+    el=document.createElement('div'); el.id='syncPill';
+    el.title='Estado de la sincronización con el servidor';
+    el.style.cssText='position:fixed;right:14px;bottom:14px;z-index:99998;display:flex;align-items:center;gap:9px;'
+      +'background:rgba(8,16,30,.93);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:8px 15px 8px 12px;'
+      +'font-family:Oswald,sans-serif;font-size:12px;letter-spacing:1px;color:#D4E1F0;'
+      +'box-shadow:0 3px 14px rgba(0,0,0,.5);pointer-events:none;backdrop-filter:blur(6px)';
+    el.innerHTML='<span id="syncPillDot" style="width:9px;height:9px;border-radius:50%;flex:none"></span>'
+      +'<span><span id="syncPillTxt" style="font-weight:700"></span>'
+      +'<span id="syncPillSub" style="opacity:.6;font-weight:400;letter-spacing:.3px"></span></span>';
+    document.body.appendChild(el);
+  }
+  const e=_syncEstado();
+  const dot=document.getElementById('syncPillDot');
+  const txt=document.getElementById('syncPillTxt');
+  const sub=document.getElementById('syncPillSub');
+  if(dot){ dot.style.background=e.c; dot.style.boxShadow='0 0 8px '+e.c; }
+  if(txt){ txt.textContent=e.t; txt.style.color=e.c; }
+  if(sub) sub.textContent=e.d?' · '+e.d:'';
+}
+setInterval(()=>{try{_syncPintaSemaforo()}catch(e){}},1000);
 window._syncFallo=0;      // ts del último fallo definitivo de escritura
 let _reintentoTO=null;
 // Tras un fallo definitivo se vuelve a intentar solo. Antes se quedaba esperando
@@ -778,6 +846,10 @@ async function syncToFB(){
         window._lastSyncedSig=_dataSig();
         window._ultHuella=_huella(_mkPayload());
         _fbLastOk=Date.now();
+        // Escrito y aceptado, pero todavía no consta que haya salido publicado:
+        // eso lo dice el eco cuando el servidor devuelve este mismo documento.
+        // Hasta entonces el semáforo no da verde.
+        window._pubPendiente=true;
         _syncWriteOk(); _spectatorEditOk();
         return;
       }catch(e){
@@ -879,7 +951,18 @@ function startFBSync(){
     }
     // Multi-controlador: ignorar SOLO el eco de mi propia escritura (evita parpadeo),
     // pero SÍ aplicar lo que escribieron los demás controladores → todos sincronizados.
-    if(d.writer && d.writer===window._WRITER_ID)return;
+    if(d.writer && d.writer===window._WRITER_ID){
+      // Este es mi propia escritura volviendo del servidor. No se aplica —
+      // parpadearía— pero vale por sí sola: es el MISMO documento que están
+      // leyendo el público, los televisores y OBS. Que haya vuelto prueba que lo
+      // que cargué no se quedó en esta pantalla.
+      //
+      // Sin esto, dar por bueno el `await` de la escritura solo decía que
+      // Firestore la aceptó. Esto dice que ya salió publicada.
+      window._pubPendiente=false;
+      window._pubUltimo=Date.now();
+      return;
+    }
     // Si hay un campo enfocado, el operador está escribiendo un peso: NO se
     // re-dibuja la pantalla (le borraría lo que está tecleando). Pero los datos
     // sí se aplican igual. Antes acá se descartaba el snapshot COMPLETO, y como
