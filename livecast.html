@@ -184,7 +184,21 @@ const PRACTICE_REAL=PRACTICE_MODE && TX_URL.get('real')==='1';
 // ?remote=1 → al loguearse admin, aterriza directo en el Control Remoto (phone-first).
 // Pensado para mandarle el link al teléfono que controla el overlay de OBS.
 const WANT_REMOTE=TX_URL.get('remote')==='1';
-function _inTarima(flightLetter){if(!TARIMA)return true;return String(flightLetter||'').endsWith(TARIMA);}
+// El filtro de ?tarima=1|2 sirve cuando el campeonato reparte sus tandas entre
+// dos plataformas y se las nombra con el número pegado: 'A1' va a la tarima 1,
+// 'A2' a la 2.
+//
+// Una tanda SIN número pegado —'A', 'AA', las 36 del Sudamericano— no es de una
+// tarima ni de la otra: es de un campeonato que no está partido. Filtrarla
+// contra un '1' la dejaba afuera siempre, y como esto decide qué atletas se
+// cargan, un ?tarima= puesto de más en el link no vaciaba una pantalla: vaciaba
+// la competencia entera, sin decir por qué. Esas tandas pasan.
+function _inTarima(flightLetter){
+  if(!TARIMA)return true;
+  const f=String(flightLetter||'');
+  if(!/\d$/.test(f))return true;
+  return f.endsWith(TARIMA);
+}
 if(TX_MODE){
   const css=document.createElement('style');
   css.textContent=`
@@ -714,8 +728,15 @@ async function syncToFB(){
           compTimer:DATA.compTimer||null,ts:Date.now(),writer:window._WRITER_ID});
         // Huella de lo que se va a escribir, sin la hora ni el firmante: si es
         // idéntica a la última confirmada, no se escribe. Cada escritura le
-        // reparte el documento entero (~40 KB) a todas las pantallas, así que
-        // repetir una igual es puro gasto de red — y contención al pedo.
+        // reparte el documento ENTERO a todas las pantallas, así que repetir una
+        // igual es puro gasto de red — y contención al pedo.
+        //
+        // Cuánto pesa ese documento depende de cuántos atletas tenga cargados el
+        // evento: son ~600 bytes por atleta. Un regional de 74 son ~45 KB; el
+        // Sudamericano abierto entero, con sus 431, son ~260 KB. Firestore corta
+        // en 1 MiB, así que ninguno se acerca — pero esos 260 KB viajan a CADA
+        // pantalla en CADA escritura, y por eso conviene abrir la jornada del día
+        // y no el evento completo cuando el campeonato se corre por sesiones.
         // `timerStartedAt` SÍ entra: reiniciar el reloj para el atleta siguiente
         // no cambia nada más, y si se saltea esa escritura las otras pantallas
         // siguen descontando desde el arranque viejo.
