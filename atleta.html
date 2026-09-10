@@ -1013,7 +1013,7 @@ window.showProfile=function(codigo){
                 +(glVal?'<div style="font-size:10px;color:var(--muted)">GL '+glVal+(r.pos?' · #'+r.pos:'')+'</div>':'')
             )
           +'</div>'
-          +'<button onclick="window._editResultDialog(\''+a.rut.replace(/'/g,"\\'")+'\',\''+c.evento.replace(/'/g,"\\'")+'\',this)" style="background:transparent;border:none;color:var(--muted);font-size:10px;cursor:pointer;padding:2px 6px;text-decoration:underline">Editar</button>'
+          +'<button data-rut="'+a.rut+'" data-evento="'+c.evento+'" onclick="window._editResultDialog(this.dataset.rut,this.dataset.evento,this)" style="background:transparent;border:none;color:var(--muted);font-size:10px;cursor:pointer;padding:2px 6px;text-decoration:underline">Editar</button>'
         +'</div>'
       +'</div>';
     });
@@ -1059,34 +1059,40 @@ window.marcarComoInvitado=async function(rutAthlete,eventoName){
 }
 
 // Dialog para editar un resultado
-window._editResultDialog=function(rut,evento,btn){
+window._editResultDialog=function(rut,evento){
   const dialog=document.createElement('div');
   dialog.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:999';
-  dialog.innerHTML='<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;max-width:400px;color:var(--text)">'
-    +'<h2 style="font-size:16px;margin-bottom:12px;font-weight:600">Editar resultado</h2>'
+  const chk=document.createElement('input');
+  chk.type='checkbox';
+  chk.style.cssText='width:18px;height:18px;cursor:pointer';
+  const saveBtn=document.createElement('button');
+  saveBtn.style.cssText='padding:8px 14px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;font-weight:600';
+  saveBtn.textContent='Guardar';
+  saveBtn.onclick=async function(){
+    if(chk.checked){
+      await window.marcarComoInvitado(rut,evento);
+    }
+    dialog.remove();
+  };
+  const cancelBtn=document.createElement('button');
+  cancelBtn.style.cssText='padding:8px 14px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px';
+  cancelBtn.textContent='Cancelar';
+  cancelBtn.onclick=()=>dialog.remove();
+  const inner=document.createElement('div');
+  inner.style.cssText='background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;max-width:400px;color:var(--text)';
+  inner.innerHTML='<h2 style="font-size:16px;margin-bottom:12px;font-weight:600">Editar resultado</h2>'
     +'<p style="font-size:13px;color:var(--muted);margin-bottom:16px">'+evento+'</p>'
     +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px;cursor:pointer">'
-      +'<input type="checkbox" id="invitadoChk" style="width:18px;height:18px;cursor:pointer">'
       +'<span>Marcar como Invitado</span>'
     +'</label>'
-    +'<div style="display:flex;gap:8px;justify-content:flex-end">'
-      +'<button onclick="this.closest(\'div\').remove()" style="padding:8px 14px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px">Cancelar</button>'
-      +'<button onclick="window._saveResultEdit(\''+rut+'\',\''+evento.replace(/'/g,"\\'")+'\',document.getElementById(\'invitadoChk\').checked,this)" style="padding:8px 14px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;font-weight:600">Guardar</button>'
-    +'</div>'
-    +'</div>';
+    +'<div style="display:flex;gap:8px;justify-content:flex-end"></div>';
+  inner.querySelector('label').insertBefore(chk,inner.querySelector('label').querySelector('span'));
+  inner.querySelector('div:last-of-type').appendChild(cancelBtn);
+  inner.querySelector('div:last-of-type').appendChild(saveBtn);
+  dialog.appendChild(inner);
   document.body.appendChild(dialog);
   dialog.onclick=function(e){if(e.target===dialog)dialog.remove();}
-  dialog.querySelector('input[type=checkbox]').focus();
-}
-
-// Guarda la edición del resultado
-window._saveResultEdit=async function(rut,evento,invitado,btn){
-  if(invitado){
-    await window.marcarComoInvitado(rut,evento);
-    btn.closest('[style*="position:fixed"]').remove();
-  }else{
-    btn.closest('[style*="position:fixed"]').remove();
-  }
+  chk.focus();
 }
 
 if('serviceWorker' in navigator){
