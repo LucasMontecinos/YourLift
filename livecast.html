@@ -811,20 +811,36 @@ async function syncToFB(){
         const _huella=(p)=>{const {ts,writer,timer,...r}=p;return JSON.stringify(r);};
         // Ediciones que estoy por confirmar (se limpian solo si la escritura sale bien)
         const sent=[...(window._pendingEdits||[])];
+        // Lo que se va a mandar, CONGELADO acá.
+        //
+        // Esto arregla la pérdida de pesos que se veía cargando rápido: "pongo
+        // tres y queda uno". Antes, al terminar el `await`, se daba por escrita
+        // la huella de _mkPayload() llamado DE NUEVO — o sea, del estado en ese
+        // instante, que ya incluía lo que el operador había cargado mientras la
+        // escritura viajaba. Eso marcaba como guardado algo que nunca se mandó, y
+        // el reintento pendiente comparaba huellas, las encontraba iguales y no
+        // escribía. El peso se perdía sin un solo error por pantalla.
+        //
+        // Congelando el payload, lo que se da por escrito es exactamente lo que
+        // se escribió, y cualquier cambio posterior tiene una huella distinta:
+        // el reintento lo ve y lo manda.
+        const _pay=_mkPayload();
+        const _huellaEsta=_huella(_pay);
+        const _sigEsta=_dataSig();
         // Operaciones AUTORITATIVAS (reiniciar datos, borrar atletas, regenerar
         // lotes): el estado local MANDA y debe reemplazar al remoto. Si se mergeara,
         // el remoto (que todavía tiene los datos viejos) los devolvería y el reinicio
         // nunca llegaría al público.
         if(window._forceFullWrite){
-          await window._fb.setDoc(ref,_mkPayload());
+          await window._fb.setDoc(ref,_pay);
           window._forceFullWrite=false;
-        }else if(_huella(_mkPayload())===window._ultHuella){
+        }else if(_huellaEsta===window._ultHuella){
           // Nada cambió desde la última escritura confirmada: no se escribe.
           // Pero lo pendiente igual se suelta: si quedaba una marca de algo que
           // no viaja en el payload, se quedaba ahí para siempre y esta pantalla
           // no volvía a dar por guardado nada.
           sent.forEach(k=>{ try{window._pendingEdits.delete(k)}catch(_){} });
-          window._lastSyncedSig=_dataSig();
+          window._lastSyncedSig=_sigEsta;
           _fbLastOk=Date.now(); _syncWriteOk();
           return;
         }else if(window._fb.runTransaction && !PRACTICE_MODE){
@@ -837,14 +853,17 @@ async function syncToFB(){
             if(snap.exists()){
               try{ ath=_mergeForWrite(DATA.athletes, JSON.parse(snap.data().athletes||'[]')); }catch(_){}
             }
-            tx.set(ref,_mkPayload(ath));
+            // Los atletas van mergeados con lo remoto, pero el resto del payload
+            // es el congelado: el cursor y el reloj que se mandan son los del
+            // momento en que se decidió escribir.
+            tx.set(ref,Object.assign({},_pay,{athletes:JSON.stringify(ath)}));
           });
         }else{
-          await window._fb.setDoc(ref,_mkPayload());
+          await window._fb.setDoc(ref,_pay);
         }
         sent.forEach(k=>{ try{window._pendingEdits.delete(k)}catch(_){} });
-        window._lastSyncedSig=_dataSig();
-        window._ultHuella=_huella(_mkPayload());
+        window._lastSyncedSig=_sigEsta;
+        window._ultHuella=_huellaEsta;
         _fbLastOk=Date.now();
         // Escrito y aceptado, pero todavía no consta que haya salido publicado:
         // eso lo dice el eco cuando el servidor devuelve este mismo documento.
@@ -870,7 +889,16 @@ async function syncToFB(){
     }
   }finally{
     _syncInFlight=false;
-    if(_syncPending){_syncPending=false;setTimeout(()=>{try{syncToFB()}catch(e){}},60);}
+    // Si mientras se escribía quedó algo sin mandar, se vuelve a escribir.
+    //
+    // La marca `_syncPending` la pone quien intentó sincronizar durante el await,
+    // y cubre el caso normal. La comparación de firmas es la red debajo: si algún
+    // camino cambia un peso o una decisión sin pasar por syncToFB, el cambio se
+    // detecta igual y no se queda sin publicar. Cuesta una comparación de texto y
+    // evita que un dato se pierda sin que nadie se entere, que es lo caro.
+    let quedaAlgo=_syncPending;
+    if(!quedaAlgo){ try{ quedaAlgo=(_dataSig()!==window._lastSyncedSig); }catch(e){} }
+    if(quedaAlgo){_syncPending=false;setTimeout(()=>{try{syncToFB()}catch(e){}},60);}
   }
 }
 // Sync liviano solo del timer — corre cada 1s mientras el timer está activo,
