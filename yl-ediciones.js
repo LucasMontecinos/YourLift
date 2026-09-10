@@ -161,6 +161,11 @@
           if (a[c] === ed[c]) return;
           a[c] = ed[c]; toco = true;
         });
+        // Overrides para resultados de competencias (ej: marcar como invitado)
+        if (ed.competencias_edits && Array.isArray(ed.competencias_edits)) {
+          a._competencias_edits = ed.competencias_edits;
+          toco = true;
+        }
       });
       if (toco) editados++;
     });

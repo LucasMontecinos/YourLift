@@ -400,6 +400,20 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
   if(!window._DB_LISTA)_dbLista();
 })();
 
+// Aplica overrides de competencias (ej: marcar como invitado) al atleta
+function _aplicarCompetenciasEdits(a){
+  if(!a||!a._competencias_edits||!a.competencias)return;
+  const edits=a._competencias_edits;
+  a.competencias.forEach(comp=>{
+    const key=nrm(comp.evento||'');
+    const ovr=edits.find(e=>nrm(e.evento||'')===key);
+    if(ovr){
+      if(ovr.invitado)comp.invitado=true;
+      if(ovr.categoria)comp.categoria=ovr.categoria;
+    }
+  });
+}
+
 // ── Helpers ──────────────────────────────────────────────
 function nrm(s){return(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
 
@@ -526,6 +540,7 @@ window.showProfile=function(codigo){
     return;
   }
   history.replaceState(null,'','?codigo='+codigo);
+  _aplicarCompetenciasEdits(a);
 
   const allComps=a.competencias||[];
   // Calcular best lifts dinámicamente desde TODAS las competencias (estáticas + Firestore)
@@ -971,7 +986,10 @@ window.showProfile=function(codigo){
       const posBadge=(_pos&&!isDQ)?'<span style="display:inline-block;background:'+_posCol+'22;border:1px solid '+_posCol+';color:'+_posCol+';font-family:Oswald;font-weight:700;font-size:11px;letter-spacing:1px;padding:2px 9px;border-radius:5px">'+(_pos<=3?_pos+'° LUGAR':'#'+_pos+' LUGAR')+'</span>':'';
       h+='<div class="comp-row"'+(isDQ?' style="opacity:.85"':'')+'>'
         +'<div style="flex:1;min-width:0">'
-          +'<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+c.evento+'</div>'
+          +'<div style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden">'
+            +'<span style="overflow:hidden;text-overflow:ellipsis">'+c.evento+'</span>'
+            +(c.invitado?' <span style="font-family:DM Sans;font-weight:400;font-size:11px;color:var(--gold);flex-shrink:0">Invitado</span>':'')
+          +'</div>'
           +(posBadge?'<div style="margin-top:4px">'+posBadge+'</div>':'')
           +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+(c.division||'—')+' · '+(c.categoria||'—')+(c.modalidad?' · '+c.modalidad:'')+'</div>'
           +(c.fecha?'<div style="font-size:10px;color:var(--muted)">'+c.fecha+'</div>':'')
@@ -1015,6 +1033,28 @@ window.backToSearch=function(){
   window._curCodigo=null;
   history.replaceState(null,'','atleta.html');
 }
+
+// Marca un resultado como Invitado en el athlete_edits de Firestore
+window.marcarComoInvitado=async function(rutAthlete,eventoName){
+  if(!_fbDB||!_fbMod){console.warn('Firebase not ready');return;}
+  try{
+    const rutNorm=String(rutAthlete||'').replace(/[^0-9kK]/gi,'').toUpperCase();
+    if(!rutNorm){console.warn('RUT required');return;}
+    const edCol=_fbMod.collection(_fbDB,'athlete_edits');
+    const docRef=_fbMod.doc(edCol,rutNorm);
+    const snap=await _fbMod.getDoc(docRef);
+    const current=snap.exists()?snap.data():{};
+    const edits=current.competencias_edits||[];
+    const idx=edits.findIndex(e=>nrm(e.evento||'')===nrm(eventoName||''));
+    if(idx>=0)edits[idx].invitado=true;
+    else edits.push({evento:eventoName,invitado:true});
+    await _fbMod.setDoc(docRef,{...current,rut:rutNorm,competencias_edits:edits,ts:Date.now()},{merge:true});
+    console.log('[invitado] marked:',eventoName);
+    window.YLEdiciones.olvidarCopia();
+    if(window._curCodigo)showProfile(window._curCodigo);
+  }catch(e){console.error('[invitado]',e);}
+}
+
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
     navigator.serviceWorker.register('/sw.js')
