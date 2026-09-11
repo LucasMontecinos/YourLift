@@ -94,7 +94,7 @@ html.embedded{scrollbar-width:none;-ms-overflow-style:none}
   <a href="ranking.html" class="rank">🏆 Ranking</a>
 </div>
 <script src="clubs.js"></script>
-<script src="yl-ediciones.js"></script>
+<script src="yl-ediciones.js?v=2"></script>
 
 <div class="wrap">
   <div id="searchSection">
@@ -408,8 +408,21 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
 // la pasada que hace `aplicar()` al cargar todavía no los tenía delante.
 // Declaradas como function y no como const: _applyResults las usa y se define
 // más arriba en el archivo, así que con const quedarían en zona muerta.
-function _claveResultado(c){ return window.YLEdiciones.claveResultado(c); }
-function _aplicarCompetenciasEdits(a){ return window.YLEdiciones.aplicarCompetencias(a); }
+//
+// Y con red por si el módulo que llega es uno viejo: el service worker guardó
+// durante meses los .js del sitio y los servía desde el caché, así que una
+// página nueva puede terminar corriendo con un yl-ediciones sin estas funciones.
+// Llamarlas a ciegas tiraba la ficha entera; así, a lo sumo no se aplica una
+// corrección hasta la carga siguiente.
+function _claveResultado(c){
+  const YL=window.YLEdiciones;
+  if(YL&&YL.claveResultado)return YL.claveResultado(c);
+  return c&&c.id?String(c.id):'ev:'+nrm((c&&c.evento)||'')+'|'+nrm((c&&c.modalidad)||'');
+}
+function _aplicarCompetenciasEdits(a){
+  const YL=window.YLEdiciones;
+  if(YL&&YL.aplicarCompetencias)YL.aplicarCompetencias(a);
+}
 
 // ── Helpers ──────────────────────────────────────────────
 function nrm(s){return(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}

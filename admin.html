@@ -126,7 +126,7 @@ body.nav-open .adm-burger{opacity:0;pointer-events:none}
 <div id="bgGrid"></div>
 <script src="clubs.js"></script>
 <script src="yl-qr.js"></script>
-<script src="yl-ediciones.js"></script>
+<script src="yl-ediciones.js?v=2"></script>
 <div id="app"><div class="login"><div class="login-c"><div class="spinner"></div><p style="text-align:center" id="loadingMsg">Cargando...</p><p id="loadingBtn" style="text-align:center;margin-top:12px;display:none"><button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #C41E3A;background:transparent;color:#C41E3A;cursor:pointer;font-size:13px">↻ Reintentar</button></p></div></div></div>
 
 <script>
@@ -9794,7 +9794,7 @@ function renderAthleteProfile(){
           <div class="os" style="font-size:19px;font-weight:700;color:var(--gold)">${r.total} kg</div>
           ${delta!==null?`<div style="font-size:11px;font-weight:700;color:${delta>0?'var(--green)':delta<0?'var(--red)':'var(--muted)'}">${delta>0?'+':''}${delta} kg</div>`:''}
           ${glVal?`<div style="font-size:10px;color:var(--muted)">GL ${glVal}${r.pos?' · #'+r.pos:''}</div>`:''}
-          <button onclick="abrirEdicionResultado('${escapeJsAttr(window.YLEdiciones.claveResultado(c))}')" style="margin-top:6px;background:transparent;border:1px solid var(--border);color:var(--muted);font-size:10px;cursor:pointer;padding:3px 9px;border-radius:5px">Corregir</button>
+          <button onclick="abrirEdicionResultado('${escapeJsAttr(_claveRes(c))}')" style="margin-top:6px;background:transparent;border:1px solid var(--border);color:var(--muted);font-size:10px;cursor:pointer;padding:3px 9px;border-radius:5px">Corregir</button>
         </div>
       </div>`;
     });
@@ -9818,13 +9818,25 @@ function renderAthleteProfile(){
 // reescribir desde el navegador; y los de livecast son la base del acta oficial,
 // que no se toca. Además, hecho así, la corrección se deshace sola borrándola.
 // ═══════════════════════════════════════════════════════════
+// Igual que en la ficha: si el módulo que cargó es uno viejo del caché del
+// service worker, no se cae la pantalla entera por una función que no está.
+function _claveRes(c){
+  const YL=window.YLEdiciones;
+  if(YL&&YL.claveResultado)return YL.claveResultado(c);
+  const n=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  return c&&c.id?String(c.id):'ev:'+n(c&&c.evento)+'|'+n(c&&c.modalidad);
+}
+function _aplicarComps(a){
+  const YL=window.YLEdiciones;
+  if(YL&&YL.aplicarCompetencias)YL.aplicarCompetencias(a);
+}
 function _compDeClave(a,clave){
-  return (a.competencias||[]).find(c=>window.YLEdiciones.claveResultado(c)===clave);
+  return (a.competencias||[]).find(c=>_claveRes(c)===clave);
 }
 // La corrección guardada para este resultado, si ya hay una.
 function _ovrDeClave(a,clave){
   const eds=a._competencias_edits||[];
-  return eds.find(e=>e && (e.key ? e.key===clave : window.YLEdiciones.claveResultado({evento:e.evento})===clave)) || null;
+  return eds.find(e=>e && (e.key ? e.key===clave : _claveRes({evento:e.evento})===clave)) || null;
 }
 
 window.abrirEdicionResultado=function(clave){
@@ -9915,7 +9927,7 @@ window.guardarEdicionResultado=async function(clave){
       const i=eds.findIndex(e=>e&&e.key===clave);
       if(i>=0)eds[i]=ovr; else eds.push(ovr);
     },'corregir_resultado',(ovr.evento||clave));
-    window.YLEdiciones.aplicarCompetencias(a);
+    _aplicarComps(a);
     document.getElementById('ovrModal')?.remove();
     showToast('Corrección guardada');
     render();
@@ -9944,7 +9956,7 @@ window.excluirResultadoAdmin=async function(clave){
   try{
     await _guardarCapa(a,(eds,fuera)=>{ if(!fuera.includes(clave))fuera.push(clave); },
                        'excluir_resultado',clave);
-    window.YLEdiciones.aplicarCompetencias(a);
+    _aplicarComps(a);
     document.getElementById('ovrModal')?.remove();
     showToast('Resultado sacado de la ficha');
     render();
