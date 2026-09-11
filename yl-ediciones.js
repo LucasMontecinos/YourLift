@@ -166,6 +166,11 @@
           a._competencias_edits = ed.competencias_edits;
           toco = true;
         }
+        // Exclusiones de resultados (ej: resultado incorrecto que fue asignado por nombre)
+        if (ed.excluded_results && Array.isArray(ed.excluded_results)) {
+          a._excluded_results = ed.excluded_results;
+          toco = true;
+        }
       });
       if (toco) editados++;
     });
