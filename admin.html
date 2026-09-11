@@ -429,6 +429,7 @@ async function loadAll(){
   // - status:'approved' (default si tiene foto_url) → mergea en ST.data para verse
   // - status:'rejected' → no aparece como pendiente, no se muestra
   ST.fotosByCodigo = {};
+  ST.fotosByRut = {};
   ST.fotosDesdeCache = false;
   try{
     const fotosSnap=await getDocs(collection(db,'atleta_fotos'));
@@ -442,6 +443,12 @@ async function loadAll(){
       const data=d.data();
       const codigo=data.codigo||d.id;
       ST.fotosByCodigo[codigo] = data;
+      // Y también por RUT. El código cambia —se calcula con RUT, iniciales y año
+      // de debut—, así que buscar la foto por código solo es una apuesta: si no
+      // acierta, el panel cree que nunca se decidió nada sobre ese atleta y lo
+      // devuelve a la lista de pendientes aunque su foto esté publicada.
+      const rf=String(data.rut||'').replace(/[^0-9kK]/gi,'').toLowerCase();
+      if(rf) ST.fotosByRut[rf] = data;
       // Por RUT primero: el código cambia cuando se corrige un nombre o un RUT, y
       // la foto quedaba colgando del viejo sin que la encontrara nadie.
       const ath=window.YLEdiciones.buscarAtleta(ST.data,Object.assign({id:d.id},data));
@@ -11103,6 +11110,19 @@ function _findInscriptionPhotoByRut(rut, idx){
   return e ? e.url : null;
 }
 
+// Deja anotado lo que se acaba de guardar en las dos entradas —código y RUT—,
+// para que la fila se vaya de la lista sin esperar a recargar.
+function _recordarFoto(codigo, rut, datos){
+  if(!ST.fotosByCodigo) ST.fotosByCodigo = {};
+  if(!ST.fotosByRut) ST.fotosByRut = {};
+  const prev = ST.fotosByCodigo[codigo] || {};
+  const fd = Object.assign({}, prev, datos);
+  ST.fotosByCodigo[codigo] = fd;
+  const k = _rutFoto(rut);
+  if(k) ST.fotosByRut[k] = fd;
+  return fd;
+}
+
 // Cuándo se decidió por última vez sobre la foto de este atleta. Sirve para las
 // fotos viejas, de antes de que se guardara `source_url`: si la decisión es
 // posterior a la subida, ya se miró esa foto.
@@ -11129,7 +11149,7 @@ function _fotoPendienteDe(a, idx){
   const e = (idx || _fotosInscripcionIndex())[_rutFoto(a.rut)];
   if(!e || !e.url) return null;
   const u = e.url;
-  const fd = (ST.fotosByCodigo||{})[a.codigo];
+  const fd = (ST.fotosByCodigo||{})[a.codigo] || (ST.fotosByRut||{})[_rutFoto(a.rut)];
   if(fd && (fd.foto_url===u || fd.source_url===u || fd.rejected_url===u)) return null;
   if(a.foto_url){
     // Ya tiene una publicada: esta solo es "nueva" si la mandó DESPUÉS de que se
@@ -11262,10 +11282,9 @@ window.confirmarFotosBulk = async function(){
         updated: Date.now()
       };
       await setDoc(docRef, datos, {merge:true});
-      if(!ST.fotosByCodigo) ST.fotosByCodigo = {};
       // La copia local se guardaba recortada (solo codigo/foto_url/status) y
       // perdía justo la fecha y el origen, así que la fila reaparecía sola.
-      ST.fotosByCodigo[codigo] = Object.assign({}, ST.fotosByCodigo[codigo]||{}, datos);
+      _recordarFoto(codigo, a.rut, datos);
       a.foto_url = url;
       delete F.bulkSel[codigo];
       done++;
@@ -11319,8 +11338,7 @@ window.rechazarFotoInscripcion = async function(){
       rejected_by: ST.user?.email || 'admin'
     };
     await setDoc(docRef, datos, {merge:true});
-    if(!ST.fotosByCodigo) ST.fotosByCodigo = {};
-    ST.fotosByCodigo[F.selected.codigo] = Object.assign({}, ST.fotosByCodigo[F.selected.codigo]||{}, datos);
+    _recordarFoto(F.selected.codigo, F.selected.rut, datos);
     F.pendingPhotoUrl = null;
     F.importedFrom = null;
     F.status = '✓ Foto rechazada (no se publicó)';
@@ -11529,8 +11547,7 @@ window.guardarFotoAtleta = async function(){
     };
     await setDoc(docRef, datos, {merge:true});
     // Update local cache
-    if(!ST.fotosByCodigo) ST.fotosByCodigo = {};
-    ST.fotosByCodigo[F.selected.codigo] = Object.assign({}, ST.fotosByCodigo[F.selected.codigo]||{}, datos);
+    _recordarFoto(F.selected.codigo, F.selected.rut, datos);
     F.pendingPhotoUrl = null;
     F.importedFrom = null;
     // Update local state
@@ -11565,6 +11582,7 @@ window.borrarFotoAtleta = async function(){
     await deleteDoc(docRef);
     delete F.selected.foto_url;
     if(ST.fotosByCodigo) delete ST.fotosByCodigo[F.selected.codigo];
+    if(ST.fotosByRut) delete ST.fotosByRut[_rutFoto(F.selected.rut)];
     const localAth = (ST.data||[]).find(a=>a.codigo===F.selected.codigo);
     if(localAth) delete localAth.foto_url;
     F.pendingPhotoUrl = _fotoPendienteDe(F.selected);   // vuelve a quedar por revisar

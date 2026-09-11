@@ -1,5 +1,5 @@
 // YourLift Service Worker — v2
-const CACHE = 'yourlift-v3';
+const CACHE = 'yourlift-v4';
 
 const PRECACHE_URLS = [
   '/',
@@ -106,8 +106,15 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // HTML pages — network-first, cache fallback (stay up-to-date)
-  if (url.pathname.endsWith('.html') || url.pathname === '/' || url.pathname === '') {
+  // HTML pages y los .js del propio sitio — network-first, cache fallback.
+  //
+  // Los .js caían en el catch-all de abajo, que es cache-first: una vez
+  // guardados quedaban congelados para siempre. Son los que llevan la lógica
+  // compartida —yl-ediciones.js, yl-divisiones.js, clubs.js— así que arreglar
+  // algo ahí no le llegaba nunca a quien ya había entrado al sitio, aunque
+  // recargara. La página nueva terminaba corriendo con el archivo viejo.
+  const propio = url.origin === self.location.origin;
+  if (url.pathname.endsWith('.html') || (propio && url.pathname.endsWith('.js')) || url.pathname === '/' || url.pathname === '') {
     e.respondWith(
       fetch(req)
         .then(res => {
