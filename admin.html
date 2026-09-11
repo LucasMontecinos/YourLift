@@ -9772,6 +9772,23 @@ function renderAthleteProfile(){
   }
 
   // ── Competition history ───────────────────────────────────
+  // Aparte, dentro de su propio try: si algo acá se cae, se cae SOLO el
+  // historial y la ficha se sigue viendo. Sin esto, una función que faltaba en
+  // el módulo compartido tiró la excepción en pleno render y la ficha del
+  // atleta no se abría — no había forma de entrar a nada, ni de saber por qué.
+  try{ h+=_histCompetencias(sorted); }
+  catch(e){
+    console.error('[ficha] historial:',e);
+    h+=`<div class="card"><div class="h2">Historial de competencias</div>
+      <p style="color:var(--red);font-size:12px;margin-top:8px">No se pudo dibujar el historial: ${escapeHtml(e.message||'error')}</p>
+      <p style="color:var(--muted);font-size:11px;margin-top:4px">Probá recargar la página. El resto de la ficha está arriba.</p></div>`;
+  }
+
+  return h;
+}
+
+function _histCompetencias(sorted){
+  let h='';
   if(sorted.length){
     h+=`<div class="card"><div class="h2">Historial de competencias (${sorted.length})</div>`;
     sorted.forEach((c,ci)=>{
