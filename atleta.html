@@ -296,9 +296,11 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
         if(!ath && d.nombre){const nnorm=String(d.nombre).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');ath=(DB||[]).find(a=>String(a.nombre||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')===nnorm);}
         if(!ath){ath={codigo:d.codigo||('FB_'+d.id),rut:d.rut||'',nombre:d.nombre||'',club:d.club||'',competencias:[]};(DB||[]).push(ath);}
         ath.competencias=ath.competencias||[];
+        // Aplicar exclusiones: si el resultado está en la lista de exclusión del atleta, no agregarlo
+        if(ath._excluded_results&&ath._excluded_results.includes(d.id))return;
         const _catPlus2=(c,bw,sx)=>{var s=String(c||'').trim();if(s.indexOf('+')>=0)return s;var m=s.match(/(\d+(?:\.\d+)?)/);if(!m)return s;var n=parseFloat(m[1]);var f=/^(f|muj|w)/i.test(String(sx||''));if(n===84&&f&&(bw||0)>84)return '84+';if(n===120&&!f&&(bw||0)>120)return '120+';return s;};
         const sameIdx=ath.competencias.findIndex(c=>c.evento===d.evento&&c.modalidad===d.modalidad);
-        const comp={evento:d.evento,fecha:d.fecha||'',sexo:d.sexo||'',division:d.division||'',categoria:_catPlus2(d.categoria||'',(d.resultado||{}).bw||0,d.sexo||''),modalidad:d.modalidad||'',posicion:((d.posicion!=null&&d.posicion!=='')?parseInt(d.posicion,10):0)||_placeMap[d.id]||null,resultado:d.resultado||{},source:d.source||'yourlift_livecast'};
+        const comp={id:d.id,evento:d.evento,fecha:d.fecha||'',sexo:d.sexo||'',division:d.division||'',categoria:_catPlus2(d.categoria||'',(d.resultado||{}).bw||0,d.sexo||''),modalidad:d.modalidad||'',posicion:((d.posicion!=null&&d.posicion!=='')?parseInt(d.posicion,10):0)||_placeMap[d.id]||null,resultado:d.resultado||{},source:d.source||'yourlift_livecast'};
         if(sameIdx>=0)ath.competencias[sameIdx]=comp;else ath.competencias.push(comp);
       });
       // Los grupos de la comparativa se arman con data.json, que es de ayer. Estos
@@ -399,6 +401,20 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
   // quedarían esperando para siempre y la página no mostraría nada.
   if(!window._DB_LISTA)_dbLista();
 })();
+
+// Aplica overrides de competencias (ej: marcar como invitado) al atleta
+function _aplicarCompetenciasEdits(a){
+  if(!a||!a._competencias_edits||!a.competencias)return;
+  const edits=a._competencias_edits;
+  a.competencias.forEach(comp=>{
+    const key=nrm(comp.evento||'');
+    const ovr=edits.find(e=>nrm(e.evento||'')===key);
+    if(ovr){
+      if(ovr.invitado)comp.invitado=true;
+      if(ovr.categoria)comp.categoria=ovr.categoria;
+    }
+  });
+}
 
 // ── Helpers ──────────────────────────────────────────────
 function nrm(s){return(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
@@ -526,6 +542,7 @@ window.showProfile=function(codigo){
     return;
   }
   history.replaceState(null,'','?codigo='+codigo);
+  _aplicarCompetenciasEdits(a);
 
   const allComps=a.competencias||[];
   // Calcular best lifts dinámicamente desde TODAS las competencias (estáticas + Firestore)
@@ -971,7 +988,10 @@ window.showProfile=function(codigo){
       const posBadge=(_pos&&!isDQ)?'<span style="display:inline-block;background:'+_posCol+'22;border:1px solid '+_posCol+';color:'+_posCol+';font-family:Oswald;font-weight:700;font-size:11px;letter-spacing:1px;padding:2px 9px;border-radius:5px">'+(_pos<=3?_pos+'° LUGAR':'#'+_pos+' LUGAR')+'</span>':'';
       h+='<div class="comp-row"'+(isDQ?' style="opacity:.85"':'')+'>'
         +'<div style="flex:1;min-width:0">'
-          +'<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+c.evento+'</div>'
+          +'<div style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden">'
+            +'<span style="overflow:hidden;text-overflow:ellipsis">'+c.evento+'</span>'
+            +(c.invitado?' <span style="font-family:DM Sans;font-weight:400;font-size:11px;color:var(--gold);flex-shrink:0">Invitado</span>':'')
+          +'</div>'
           +(posBadge?'<div style="margin-top:4px">'+posBadge+'</div>':'')
           +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+(c.division||'—')+' · '+(c.categoria||'—')+(c.modalidad?' · '+c.modalidad:'')+'</div>'
           +(c.fecha?'<div style="font-size:10px;color:var(--muted)">'+c.fecha+'</div>':'')
@@ -981,18 +1001,21 @@ window.showProfile=function(codigo){
             +(r.dl?'<span style="font-size:9px;background:rgba(34,197,94,.1);color:var(--green);padding:1px 5px;border-radius:3px">DL '+r.dl+'</span>':'')
           +'</div>'
         +'</div>'
-        +'<div style="text-align:right;flex-shrink:0;margin-left:12px">'
-          +(isDQ
-            ? '<div class="os" style="font-size:19px;font-weight:700;color:var(--red)">DQ</div>'
-              +(dqLiftedTotal>0?'<div style="font-size:13px;font-weight:700;color:var(--muted)">'+dqLiftedTotal+' kg levantados</div>':'')
-              // El motivo por defecto es el habitual (tres nulos en un lift), pero
-              // no es el único: también se queda sin total quien no da el peso de
-              // su categoría. Cuando el resultado trae `motivo`, manda ese.
-              +'<div style="font-size:10px;color:var(--red);opacity:.85">'+(r.motivo||'3 fallos en algún lift')+'</div>'
-            : '<div class="os" style="font-size:19px;font-weight:700;color:var(--gold)">'+(r.total||'—')+' kg</div>'
-              +(delta!==null?'<div style="font-size:11px;font-weight:700;color:'+(delta>0?'var(--green)':delta<0?'var(--red)':'var(--muted)')+'">'+  (delta>0?'+':'')+delta+' kg</div>':'')
-              +(glVal?'<div style="font-size:10px;color:var(--muted)">GL '+glVal+(r.pos?' · #'+r.pos:'')+'</div>':'')
-          )
+        +'<div style="text-align:right;flex-shrink:0;margin-left:12px;display:flex;flex-direction:column;align-items:flex-end;gap:6px">'
+          +'<div>'
+            +(isDQ
+              ? '<div class="os" style="font-size:19px;font-weight:700;color:var(--red)">DQ</div>'
+                +(dqLiftedTotal>0?'<div style="font-size:13px;font-weight:700;color:var(--muted)">'+dqLiftedTotal+' kg levantados</div>':'')
+                // El motivo por defecto es el habitual (tres nulos en un lift), pero
+                // no es el único: también se queda sin total quien no da el peso de
+                // su categoría. Cuando el resultado trae `motivo`, manda ese.
+                +'<div style="font-size:10px;color:var(--red);opacity:.85">'+(r.motivo||'3 fallos en algún lift')+'</div>'
+              : '<div class="os" style="font-size:19px;font-weight:700;color:var(--gold)">'+(r.total||'—')+' kg</div>'
+                +(delta!==null?'<div style="font-size:11px;font-weight:700;color:'+(delta>0?'var(--green)':delta<0?'var(--red)':'var(--muted)')+'">'+  (delta>0?'+':'')+delta+' kg</div>':'')
+                +(glVal?'<div style="font-size:10px;color:var(--muted)">GL '+glVal+(r.pos?' · #'+r.pos:'')+'</div>':'')
+            )
+          +'</div>'
+          +'<button data-rut="'+a.rut+'" data-evento="'+c.evento+'" data-result-id="'+(c.id||'')+'" onclick="window._editResultDialog(this.dataset.rut,this.dataset.evento,this.dataset.resultId)" style="background:transparent;border:none;color:var(--muted);font-size:10px;cursor:pointer;padding:2px 6px;text-decoration:underline">Editar</button>'
         +'</div>'
       +'</div>';
     });
@@ -1015,6 +1038,96 @@ window.backToSearch=function(){
   window._curCodigo=null;
   history.replaceState(null,'','atleta.html');
 }
+
+// Marca un resultado como Invitado en el athlete_edits de Firestore
+window.marcarComoInvitado=async function(rutAthlete,eventoName){
+  if(!_fbDB||!_fbMod){console.warn('Firebase not ready');return;}
+  try{
+    const rutNorm=String(rutAthlete||'').replace(/[^0-9kK]/gi,'').toUpperCase();
+    if(!rutNorm){console.warn('RUT required');return;}
+    const edCol=_fbMod.collection(_fbDB,'athlete_edits');
+    const docRef=_fbMod.doc(edCol,rutNorm);
+    const snap=await _fbMod.getDoc(docRef);
+    const current=snap.exists()?snap.data():{};
+    const edits=current.competencias_edits||[];
+    const idx=edits.findIndex(e=>nrm(e.evento||'')===nrm(eventoName||''));
+    if(idx>=0)edits[idx].invitado=true;
+    else edits.push({evento:eventoName,invitado:true});
+    await _fbMod.setDoc(docRef,{...current,rut:rutNorm,competencias_edits:edits,ts:Date.now()},{merge:true});
+    console.log('[invitado] marked:',eventoName);
+    window.YLEdiciones.olvidarCopia();
+    if(window._curCodigo)showProfile(window._curCodigo);
+  }catch(e){console.error('[invitado]',e);}
+}
+
+// Excluye un resultado de la lista de competencias de un atleta
+window.excluirResultado=async function(rutAthlete,resultIdToExclude){
+  if(!_fbDB||!_fbMod){console.warn('Firebase not ready');return;}
+  try{
+    const rutNorm=String(rutAthlete||'').replace(/[^0-9kK]/gi,'').toUpperCase();
+    if(!rutNorm){console.warn('RUT required');return;}
+    const edCol=_fbMod.collection(_fbDB,'athlete_edits');
+    const docRef=_fbMod.doc(edCol,rutNorm);
+    const snap=await _fbMod.getDoc(docRef);
+    const current=snap.exists()?snap.data():{};
+    const excluded=current.excluded_results||[];
+    if(!excluded.includes(resultIdToExclude)){
+      excluded.push(resultIdToExclude);
+      await _fbMod.setDoc(docRef,{...current,rut:rutNorm,excluded_results:excluded,ts:Date.now()},{merge:true});
+      console.log('[excluir] result excluded:',resultIdToExclude);
+      window.YLEdiciones.olvidarCopia();
+      if(window._curCodigo)showProfile(window._curCodigo);
+    }
+  }catch(e){console.error('[excluir]',e);}
+}
+
+// Dialog para editar un resultado
+window._editResultDialog=function(rut,evento,resultId){
+  const dialog=document.createElement('div');
+  dialog.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:999';
+  const chkInvitado=document.createElement('input');
+  chkInvitado.type='checkbox';
+  chkInvitado.style.cssText='width:18px;height:18px;cursor:pointer';
+  const chkExcluir=document.createElement('input');
+  chkExcluir.type='checkbox';
+  chkExcluir.style.cssText='width:18px;height:18px;cursor:pointer';
+  const saveBtn=document.createElement('button');
+  saveBtn.style.cssText='padding:8px 14px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;font-weight:600';
+  saveBtn.textContent='Guardar';
+  saveBtn.onclick=async function(){
+    if(chkInvitado.checked){
+      await window.marcarComoInvitado(rut,evento);
+    }
+    if(chkExcluir.checked){
+      await window.excluirResultado(rut,resultId);
+    }
+    dialog.remove();
+  };
+  const cancelBtn=document.createElement('button');
+  cancelBtn.style.cssText='padding:8px 14px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px';
+  cancelBtn.textContent='Cancelar';
+  cancelBtn.onclick=()=>dialog.remove();
+  const inner=document.createElement('div');
+  inner.style.cssText='background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;max-width:400px;color:var(--text)';
+  inner.innerHTML='<h2 style="font-size:16px;margin-bottom:12px;font-weight:600">Editar resultado</h2>'
+    +'<p style="font-size:13px;color:var(--muted);margin-bottom:16px">'+evento+'</p>'
+    +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px;cursor:pointer">'
+      +'<span>Marcar como Invitado</span>'
+    +'</label>'
+    +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px;cursor:pointer;color:var(--muted)">'
+      +'<span style="font-size:11px">Este resultado no me pertenece (excluir)</span>'
+    +'</label>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end"></div>';
+  inner.querySelector('label:nth-of-type(1)').insertBefore(chkInvitado,inner.querySelector('label:nth-of-type(1)').querySelector('span'));
+  inner.querySelector('label:nth-of-type(2)').insertBefore(chkExcluir,inner.querySelector('label:nth-of-type(2)').querySelector('span'));
+  inner.querySelector('div:last-of-type').appendChild(cancelBtn);
+  inner.querySelector('div:last-of-type').appendChild(saveBtn);
+  dialog.appendChild(inner);
+  document.body.appendChild(dialog);
+  dialog.onclick=function(e){if(e.target===dialog)dialog.remove();}
+  chkInvitado.focus();
+}
+
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
     navigator.serviceWorker.register('/sw.js')

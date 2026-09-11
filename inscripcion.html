@@ -224,13 +224,14 @@ const CLUBS_RESPALDO = [
 // se dibujaría en blanco y al guardar la inscripción perdería el club en silencio.
 function clubsParaElegir(actual){
   const delPadron = [...new Set((athleteDB || [])
+    .filter(a => a && a.club)
     .map(a => (a.club || '').trim())
     .filter(c => c && c !== 'Otro'))];
-  const base = delPadron.length ? delPadron : CLUBS_RESPALDO;
+  const base = (athleteDB && athleteDB.length && delPadron.length) ? delPadron : CLUBS_RESPALDO;
   const out = base.slice().sort((a, b) => a.localeCompare(b, 'es'));
   const norm = s => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
   if (actual && actual !== 'Otro' && !out.some(c => norm(c) === norm(actual))) out.push(actual);
-  out.push('Otro');
+  if (!out.includes('Otro')) out.push('Otro');
   return out;
 }
 
@@ -435,11 +436,15 @@ const _STOR='https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.fireba
 fetch(_STOR+'public%2Fdata.json?alt=media',{cache:'no-cache'})
   .then(r=>r.ok?r.json():fetch('data.json?v='+Date.now()).then(r=>r.json()))
   .catch(()=>fetch('data.json?v='+Date.now()).then(r=>r.json()))
-  .then(d=>{athleteDB=d;_insAplicarEdits();
+  .then(d=>{
+    athleteDB=d;
+    _insAplicarEdits();
     // El desplegable de clubes sale del padrón, así que hay que redibujar: si no,
     // quien abrió el formulario antes de que llegara se queda con el respaldo.
-    try{render();}catch(e){}
-  }).catch(()=>{});
+    if(typeof render==='function'){
+      try{render();}catch(e){console.warn('[clubs] render error',e);}
+    }
+  }).catch(e=>{console.warn('[data.json] load failed',e);});
 
 // El padrón y las ediciones llegan por su cuenta y no se sabe cuál gana la
 // carrera, así que las ediciones se guardan y se pegan cuando ya están las dos.
