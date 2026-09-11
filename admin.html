@@ -445,7 +445,15 @@ async function loadAll(){
       // Por RUT primero: el código cambia cuando se corrige un nombre o un RUT, y
       // la foto quedaba colgando del viejo sin que la encontrara nadie.
       const ath=window.YLEdiciones.buscarAtleta(ST.data,Object.assign({id:d.id},data));
-      if(ath && data.foto_url && data.status!=='rejected') ath.foto_url = data.foto_url;
+      // 'rejected' habla de la foto que se rechazó, no de la que está publicada.
+      // Si al atleta ya se le había aprobado una y después se le rechaza la que
+      // mandó al inscribirse, el doc queda con la foto vieja Y con status
+      // 'rejected': el sitio público la seguía mostrando y el panel la escondía,
+      // así que el atleta figuraba sin foto y volvía a la lista de pendientes
+      // aunque su foto estuviera publicada. Solo se esconde si lo rechazado es
+      // justamente lo que el doc tiene publicado.
+      const rechazadaLaPublicada = data.status==='rejected' && (!data.foto_url || data.foto_url===data.rejected_url);
+      if(ath && data.foto_url && !rechazadaLaPublicada) ath.foto_url = data.foto_url;
       // Y se deja anotada bajo el código VIGENTE del atleta, para que el panel la
       // muestre como cargada y no ofrezca subirla de nuevo.
       if(ath && ath.codigo && ath.codigo!==codigo) ST.fotosByCodigo[ath.codigo] = data;
@@ -10735,7 +10743,7 @@ function renderFotos(){
 
   // Atletas con foto pendiente de inscripción (sin foto_url todavía)
   // Match: cada atleta con RUT que tenga carnetPhotoURL en alguna inscripción privada
-  const {lista: pendientes, url: urlPend} = _fotosPendientes();
+  const {lista: pendientes, url: urlPend, nueva: nuevaPend} = _fotosPendientes();
 
   if(ST.fotosDesdeCache){
     h += '<div class="card" style="margin-bottom:14px;background:rgba(196,30,58,.08);border-color:var(--accent)">'
@@ -10751,8 +10759,11 @@ function renderFotos(){
     const allSelected = pendientes.length>0 && pendientes.every(a=>F.bulkSel && F.bulkSel[a.codigo]);
     h += '<div class="card" style="margin-bottom:14px;background:rgba(212,168,67,.05);border-color:rgba(212,168,67,.4)">';
     h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap">';
+    const nNuevas = pendientes.filter(a=>nuevaPend[a.codigo]).length;
     h += '<div><div style="font-size:14px;font-weight:700;color:var(--gold)">'+pendientes.length+' atleta(s) con foto pendiente de inscripción</div>';
-    h += '<div style="font-size:11px;color:var(--muted);margin-top:2px">Estas fotos las subieron los atletas al inscribirse. Marca las que quieres confirmar y usa el botón, o haz click en una para procesarla individualmente (quitar fondo, recortar, etc).</div></div>';
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:2px">Estas fotos las subieron los atletas al inscribirse. Marca las que quieres confirmar y usa el botón, o haz click en una para procesarla individualmente (quitar fondo, recortar, etc).'
+      + (nNuevas ? ' <b style="color:var(--gold)">'+nNuevas+'</b> ya tenían foto publicada y mandaron otra: van marcadas <b style="color:var(--gold)">NUEVA</b> y, si las confirmás, reemplazan a la que tienen.' : '')
+      + '</div></div>';
     h += '<div style="display:flex;gap:8px;align-items:center;flex-shrink:0">';
     h += '<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer"><input type="checkbox" '+(allSelected?'checked':'')+' onchange="toggleFotoBulkSelAll(this.checked)"> Seleccionar todas</label>';
     h += '<button onclick="confirmarFotosBulk()" '+(bulkCount===0||F.bulkProcessing?'disabled':'')+' style="padding:9px 16px;background:'+(bulkCount>0?'var(--green)':'var(--border)')+';color:#000;border:none;border-radius:6px;cursor:'+(bulkCount>0?'pointer':'default')+';font-size:12px;font-weight:700;white-space:nowrap">'+(F.bulkProcessing?(F.bulkProgress||'Confirmando...'):'✓ Confirmar seleccionadas ('+bulkCount+')')+'</button>';
@@ -10769,6 +10780,7 @@ function renderFotos(){
       h += '<img src="'+escapeHtml(photoUrl)+'" style="width:36px;height:48px;object-fit:cover;border-radius:3px;flex-shrink:0">';
       h += '<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escapeHtml(a.nombre||'')+'</div>';
       h += '<div style="font-size:9px;color:var(--muted)">'+escapeHtml(a.rut||'')+'</div>';
+      if(nuevaPend[a.codigo]) h += '<div style="font-size:9px;color:var(--gold);font-weight:700;margin-top:2px" title="Ya tiene foto publicada; esta la reemplaza">NUEVA · reemplaza</div>';
       if(a._isPending) h += '<div style="font-size:9px;color:var(--gold);font-weight:700;margin-top:2px">★ DEBUT</div>';
       h += '</div>';
       h += '</div>';
@@ -10829,12 +10841,13 @@ function renderFotos(){
     // Columna derecha: subida + preview
     h += '<div><div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:1px">SUBIR NUEVA FOTO</div>';
     // Si hay foto pendiente de inscripcion, mostrar opcion de importarla
-    if(F.pendingPhotoUrl && !a.foto_url){
+    if(F.pendingPhotoUrl){
+      const esReemplazo = !!a.foto_url;
       h += '<div style="background:rgba(212,168,67,.1);border:1px dashed var(--gold);padding:12px;border-radius:8px;margin-bottom:12px">';
-      h += '<div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:8px">FOTO PENDIENTE DE REVISIÓN</div>';
+      h += '<div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:8px">'+(esReemplazo?'FOTO NUEVA PENDIENTE DE REVISIÓN':'FOTO PENDIENTE DE REVISIÓN')+'</div>';
       h += '<div style="display:flex;gap:10px;align-items:flex-start">';
       h += '<img src="'+escapeHtml(F.pendingPhotoUrl)+'" style="width:120px;height:160px;object-fit:cover;border-radius:4px;border:1px solid var(--border)">';
-      h += '<div style="flex:1"><div style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:8px">El atleta subió esta foto al inscribirse. <b>NO está publicada todavía</b>. Revisala y decidí:</div>';
+      h += '<div style="flex:1"><div style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:8px">'+(esReemplazo?'El atleta volvió a subir foto al inscribirse. <b>Si la aceptás, reemplaza a la que tiene publicada</b> (la de la izquierda).':'El atleta subió esta foto al inscribirse. <b>NO está publicada todavía</b>.')+' Revisala y decidí:</div>';
       h += '<div style="display:flex;flex-direction:column;gap:6px">';
       h += '<button onclick="importarFotoInscripcion()" '+(F.processing?'disabled':'')+' style="padding:10px;background:var(--gold);color:#000;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">Importar y quitar fondo</button>';
       h += '<button onclick="importarFotoInscripcionSinFondo()" '+(F.processing?'disabled':'')+' title="Sube la foto del atleta tal cual, sin quitarle el fondo" style="padding:10px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">Importar tal cual (con fondo)</button>';
@@ -11090,30 +11103,62 @@ function _findInscriptionPhotoByRut(rut, idx){
   return e ? e.url : null;
 }
 
+// Cuándo se decidió por última vez sobre la foto de este atleta. Sirve para las
+// fotos viejas, de antes de que se guardara `source_url`: si la decisión es
+// posterior a la subida, ya se miró esa foto.
+function _fotoDecisionMs(fd){
+  if(!fd) return 0;
+  const ts = fd.ts && fd.ts.seconds ? fd.ts.seconds*1000 : (+fd.ts||0);
+  return Math.max(+fd.updated||0, +fd.rejected_at||0, ts);
+}
+
+// La foto de inscripción de este atleta sobre la que TODAVÍA no se decidió nada,
+// o null si ya se resolvió. Antes la pregunta era "¿tiene foto publicada?", y
+// eso fallaba por los dos lados:
+//
+//   · Si la foto publicada no llegaba a pegarse sobre el padrón —el doc quedó
+//     colgando de un código viejo, o el status decía 'rejected' por una foto
+//     posterior— el atleta volvía a la lista aunque su foto ya estuviera al aire.
+//   · Y al revés: el que YA tenía foto y mandaba otra nueva al inscribirse no
+//     aparecía nunca, porque bastaba tener una publicada para quedar fuera. Esa
+//     foto nueva no la veía nadie.
+//
+// Ahora se compara contra la foto puntual: se resolvió si se publicó tal cual,
+// si la publicada salió de ella (`source_url`), o si se rechazó.
+function _fotoPendienteDe(a, idx){
+  const e = (idx || _fotosInscripcionIndex())[_rutFoto(a.rut)];
+  if(!e || !e.url) return null;
+  const u = e.url;
+  const fd = (ST.fotosByCodigo||{})[a.codigo];
+  if(fd && (fd.foto_url===u || fd.source_url===u || fd.rejected_url===u)) return null;
+  if(a.foto_url){
+    // Ya tiene una publicada: esta solo es "nueva" si la mandó DESPUÉS de que se
+    // decidió la que tiene. Sin fecha de decisión —fotos de data.json, docs
+    // viejos— no hay con qué comparar y se deja quieta, para no llenar la lista
+    // de fotos que nadie pidió revisar.
+    const dec = _fotoDecisionMs(fd);
+    if(!dec || !e.subida || dec >= e.subida) return null;
+  }
+  return u;
+}
+
 // Quiénes tienen foto de inscripción esperando revisión. Una sola vez, porque
 // esto se preguntaba en TRES lugares —la tarjeta, "seleccionar todas" y el
 // contador— cada uno con su propia copia de la regla, y bastaba que una se
 // quedara atrás para que el botón dijera una cosa y la lista mostrara otra.
-// Devuelve la lista y, para cada uno, la foto exacta que se va a publicar.
+// Devuelve la lista, la foto exacta que se va a publicar, y si reemplaza a una
+// que el atleta ya tenía.
 function _fotosPendientes(){
   const idx = _fotosInscripcionIndex();
-  const url = {};
+  const url = {}, nueva = {};
   const lista = (ST.data||[]).filter(a=>{
-    if(a.foto_url) return false;  // ya aceptada y publicada
-    const u = _findInscriptionPhotoByRut(a.rut, idx);
+    const u = _fotoPendienteDe(a, idx);
     if(!u) return false;
-    // RECHAZADA: no vuelve a aparecer… salvo que el atleta haya mandado OTRA.
-    //
-    // Al rechazar se le dice al atleta que puede subir otra foto, pero el panel
-    // la escondía igual: bastaba el status 'rejected' para no mostrarlo nunca
-    // más, aunque la foto que hubiera ahora fuera distinta de la rechazada. La
-    // foto nueva no la veía nadie y el atleta quedaba sin foto para siempre.
-    const fotoDoc = (ST.fotosByCodigo||{})[a.codigo];
-    if(fotoDoc && fotoDoc.status === 'rejected' && u === fotoDoc.rejected_url) return false;
     url[a.codigo] = u;
+    nueva[a.codigo] = !!a.foto_url;   // ya tiene foto: esta la reemplaza
     return true;
   });
-  return {lista, url};
+  return {lista, url, nueva};
 }
 
 // Manejo del input de búsqueda: actualiza estado, re-renderiza, y
@@ -11156,8 +11201,11 @@ window.seleccionarAtletaFoto = function(codigo){
     endTime:  _gifDoc?.gif_end       ?? null,
     duration: null,
   };
-  // Detectar foto pendiente de la inscripcion
-  window._fotosState.pendingPhotoUrl = _findInscriptionPhotoByRut(a.rut);
+  // Detectar foto pendiente de la inscripcion. Solo la que falta revisar: si se
+  // mostrara siempre la última que mandó, el que ya tiene su foto aprobada vería
+  // un "pendiente de revisión" con la misma foto que ya está publicada.
+  window._fotosState.pendingPhotoUrl = _fotoPendienteDe(a);
+  window._fotosState.importedFrom = null;
   render();
 };
 
@@ -11202,15 +11250,22 @@ window.confirmarFotosBulk = async function(){
     if(!url){ errors++; fallaron.push((a.nombre||codigo)+': no se encontró la foto de su inscripción'); continue; }
     try{
       const docRef = doc(db, 'atleta_fotos', codigo);
-      await setDoc(docRef, {
+      // `source_url` deja anotado de QUÉ foto de inscripción salió esta. Sin eso
+      // no hay forma de distinguir "ya la revisé" de "mandó otra después", y el
+      // atleta volvía a la lista de pendientes en cada carga.
+      const datos = {
         codigo, rut: a.rut||'', nombre: a.nombre||'',
-        foto_url: url, status: 'approved',
+        foto_url: url, source_url: url, status: 'approved',
         approved_by: ST.user?.email || 'admin',
         source: 'bulk_import_inscripcion',
+        rejected_url: null,
         updated: Date.now()
-      }, {merge:true});
+      };
+      await setDoc(docRef, datos, {merge:true});
       if(!ST.fotosByCodigo) ST.fotosByCodigo = {};
-      ST.fotosByCodigo[codigo] = {codigo, foto_url: url, status:'approved'};
+      // La copia local se guardaba recortada (solo codigo/foto_url/status) y
+      // perdía justo la fecha y el origen, así que la fila reaparecía sola.
+      ST.fotosByCodigo[codigo] = Object.assign({}, ST.fotosByCodigo[codigo]||{}, datos);
       a.foto_url = url;
       delete F.bulkSel[codigo];
       done++;
@@ -11253,16 +11308,21 @@ window.rechazarFotoInscripcion = async function(){
   render();
   try{
     const docRef = doc(db, 'atleta_fotos', F.selected.codigo);
-    await setDoc(docRef, {
+    const datos = {
       codigo: F.selected.codigo,
       rut: F.selected.rut||'',
       nombre: F.selected.nombre||'',
       status: 'rejected',
       rejected_url: F.pendingPhotoUrl,
       rejected_at: Date.now(),
+      updated: Date.now(),
       rejected_by: ST.user?.email || 'admin'
-    }, {merge:true});
+    };
+    await setDoc(docRef, datos, {merge:true});
+    if(!ST.fotosByCodigo) ST.fotosByCodigo = {};
+    ST.fotosByCodigo[F.selected.codigo] = Object.assign({}, ST.fotosByCodigo[F.selected.codigo]||{}, datos);
     F.pendingPhotoUrl = null;
+    F.importedFrom = null;
     F.status = '✓ Foto rechazada (no se publicó)';
     F.processing = false;
     render();
@@ -11308,8 +11368,10 @@ window.importarFotoInscripcion = async function(){
     });
     const file = new File([blob], 'inscripcion_photo.jpg', {type: 'image/jpeg'});
     const fakeInput = {files:[file]};
+    const origen = F.pendingPhotoUrl;
     F.processing = false;
     await window.cargarFotoAtleta(fakeInput);
+    F.importedFrom = origen;   // después: cargarFotoAtleta lo limpia al empezar
   } catch(e){
     console.error('[Fotos] importar inscripcion error:', e);
     F.error = 'Error importando: '+e.message+' — alternativa: descarga la foto manualmente del enlace Ver en Nóminas y súbela con "Elegir otra foto".';
@@ -11341,6 +11403,7 @@ window.importarFotoInscripcionSinFondo = async function(){
     canvas.height = img.naturalHeight;
     canvas.getContext('2d').drawImage(img, 0, 0);
     F.preview = canvas.toDataURL('image/jpeg', 0.95);   // tal cual, con su fondo
+    F.importedFrom = F.pendingPhotoUrl;
     F.status = '✓ Lista para subir (foto del atleta, sin modificar).';
     F.processing = false;
     render();
@@ -11358,6 +11421,7 @@ window.cargarFotoAtleta = async function(input){
   if(!file) return;
   const F = window._fotosState;
   F.file = file;
+  F.importedFrom = null;   // archivo elegido a mano: no viene de una inscripción
   F.status = 'Procesando foto (quitando fondo)... esto puede tomar 10-30s';
   F.error = '';
   F.preview = null;
@@ -11402,6 +11466,7 @@ window.cargarFotoAtletaSinFondo = async function(input){
   if(!file) return;
   const F = window._fotosState;
   F.file = file;
+  F.importedFrom = null;   // archivo elegido a mano: no viene de una inscripción
   F.status = 'Cargando imagen...';
   F.error = '';
   F.preview = null;
@@ -11448,19 +11513,26 @@ window.guardarFotoAtleta = async function(){
     const url = await getDownloadURL(ref);
     // Guardamos la foto en la colección atleta_fotos (separada de data.json)
     const docRef = doc(db, 'atleta_fotos', F.selected.codigo);
-    await setDoc(docRef, {
+    const datos = {
       codigo: F.selected.codigo,
       rut: F.selected.rut||'',
       nombre: F.selected.nombre||'',
       foto_url: url,
+      // De cuál foto de inscripción salió, si salió de una: es lo que después
+      // distingue "ya la revisé" de "el atleta mandó otra".
+      source_url: F.importedFrom || null,
       storage_path: path,
       status: 'approved',
+      rejected_url: null,
       approved_by: ST.user?.email || 'admin',
       updated: ts
-    }, {merge:true});
+    };
+    await setDoc(docRef, datos, {merge:true});
     // Update local cache
     if(!ST.fotosByCodigo) ST.fotosByCodigo = {};
-    ST.fotosByCodigo[F.selected.codigo] = {codigo: F.selected.codigo, foto_url: url, status:'approved'};
+    ST.fotosByCodigo[F.selected.codigo] = Object.assign({}, ST.fotosByCodigo[F.selected.codigo]||{}, datos);
+    F.pendingPhotoUrl = null;
+    F.importedFrom = null;
     // Update local state
     F.selected.foto_url = url;
     const localAth = (ST.data||[]).find(a=>a.codigo===F.selected.codigo);
@@ -11492,8 +11564,10 @@ window.borrarFotoAtleta = async function(){
     const docRef = doc(db, 'atleta_fotos', F.selected.codigo);
     await deleteDoc(docRef);
     delete F.selected.foto_url;
+    if(ST.fotosByCodigo) delete ST.fotosByCodigo[F.selected.codigo];
     const localAth = (ST.data||[]).find(a=>a.codigo===F.selected.codigo);
     if(localAth) delete localAth.foto_url;
+    F.pendingPhotoUrl = _fotoPendienteDe(F.selected);   // vuelve a quedar por revisar
     F.status = '✓ Foto borrada';
     F.processing = false;
     render();
