@@ -297,7 +297,7 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
         if(!ath){ath={codigo:d.codigo||('FB_'+d.id),rut:d.rut||'',nombre:d.nombre||'',club:d.club||'',competencias:[]};(DB||[]).push(ath);}
         ath.competencias=ath.competencias||[];
         // Aplicar exclusiones: si el resultado está en la lista de exclusión del atleta, no agregarlo
-        if(ath._excluded_results&&ath._excluded_results.includes(d.id))return;
+        if(ath._excluded_results&&ath._excluded_results.includes(_claveResultado(d)))return;
         const _catPlus2=(c,bw,sx)=>{var s=String(c||'').trim();if(s.indexOf('+')>=0)return s;var m=s.match(/(\d+(?:\.\d+)?)/);if(!m)return s;var n=parseFloat(m[1]);var f=/^(f|muj|w)/i.test(String(sx||''));if(n===84&&f&&(bw||0)>84)return '84+';if(n===120&&!f&&(bw||0)>120)return '120+';return s;};
         const sameIdx=ath.competencias.findIndex(c=>c.evento===d.evento&&c.modalidad===d.modalidad);
         const comp={id:d.id,evento:d.evento,fecha:d.fecha||'',sexo:d.sexo||'',division:d.division||'',categoria:_catPlus2(d.categoria||'',(d.resultado||{}).bw||0,d.sexo||''),modalidad:d.modalidad||'',posicion:((d.posicion!=null&&d.posicion!=='')?parseInt(d.posicion,10):0)||_placeMap[d.id]||null,resultado:d.resultado||{},source:d.source||'yourlift_livecast'};
@@ -402,9 +402,27 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
   if(!window._DB_LISTA)_dbLista();
 })();
 
-// Aplica overrides de competencias (ej: marcar como invitado) al atleta
+// Cómo se nombra un resultado para poder excluirlo.
+//
+// Los que cierra livecast traen `id` propio. Los históricos, que salen de
+// data.json, NO traen ninguno: el botón de "este resultado no me pertenece"
+// guardaba entonces una exclusión vacía y el resultado seguía en la ficha, sin
+// que nada avisara que no se había hecho nada. Por eso el resultado de -66 que
+// era de Nicolás Carrasco volvía a aparecer. A los históricos se los nombra por
+// evento y modalidad, que es lo único estable que tienen.
+function _claveResultado(c){
+  if(c&&c.id)return String(c.id);
+  return 'ev:'+nrm((c&&c.evento)||'')+'|'+nrm((c&&c.modalidad)||'');
+}
+
+// Aplica overrides de competencias (excluidos, invitado) al atleta
 function _aplicarCompetenciasEdits(a){
-  if(!a||!a._competencias_edits||!a.competencias)return;
+  if(!a||!a.competencias)return;
+  // Las exclusiones se miran al mergear los resultados de livecast, pero eso no
+  // alcanza a los de data.json, que ya venían dentro de la ficha.
+  const fuera=a._excluded_results;
+  if(fuera&&fuera.length)a.competencias=a.competencias.filter(c=>!fuera.includes(_claveResultado(c)));
+  if(!a._competencias_edits)return;
   const edits=a._competencias_edits;
   a.competencias.forEach(comp=>{
     const key=nrm(comp.evento||'');
@@ -1015,7 +1033,7 @@ window.showProfile=function(codigo){
                 +(glVal?'<div style="font-size:10px;color:var(--muted)">GL '+glVal+(r.pos?' · #'+r.pos:'')+'</div>':'')
             )
           +'</div>'
-          +'<button data-rut="'+a.rut+'" data-evento="'+c.evento+'" data-result-id="'+(c.id||'')+'" onclick="window._editResultDialog(this.dataset.rut,this.dataset.evento,this.dataset.resultId)" style="background:transparent;border:none;color:var(--muted);font-size:10px;cursor:pointer;padding:2px 6px;text-decoration:underline">Editar</button>'
+          +'<button data-rut="'+a.rut+'" data-evento="'+String(c.evento||'').replace(/"/g,'&quot;')+'" data-clave="'+_claveResultado(c).replace(/"/g,'&quot;')+'" onclick="window._editResultDialog(this.dataset.rut,this.dataset.evento,this.dataset.clave)" style="background:transparent;border:none;color:var(--muted);font-size:10px;cursor:pointer;padding:2px 6px;text-decoration:underline">Editar</button>'
         +'</div>'
       +'</div>';
     });
@@ -1039,6 +1057,23 @@ window.backToSearch=function(){
   history.replaceState(null,'','atleta.html');
 }
 
+// Avisar que las ediciones cambiaron.
+//
+// `olvidarCopia()` solo borra la copia de ESTE navegador. La copia se invalida
+// por VERSIÓN —el documento `athlete_edits/__version`— y eso lo escribía nada
+// más que el panel. Una edición hecha desde acá quedaba guardada en Firestore y
+// se veía en el navegador donde se hizo, pero en cualquier otro la versión no
+// había cambiado: seguían usando su copia vieja y no se enteraban nunca. Así
+// pasó con el resultado que no era de Lucas Montecinos: excluido el mismo día,
+// invisible al día siguiente desde otro equipo.
+async function _avisarEdicionesCambiaron(){
+  try{
+    const edCol=_fbMod.collection(_fbDB,'athlete_edits');
+    await _fbMod.setDoc(_fbMod.doc(edCol,window.YLEdiciones.MARCA),{ts:Date.now()});
+  }catch(e){console.warn('[ediciones] no se pudo marcar la versión:',e.message);}
+  window.YLEdiciones.olvidarCopia();
+}
+
 // Marca un resultado como Invitado en el athlete_edits de Firestore
 window.marcarComoInvitado=async function(rutAthlete,eventoName){
   if(!_fbDB||!_fbMod){console.warn('Firebase not ready');return;}
@@ -1055,7 +1090,11 @@ window.marcarComoInvitado=async function(rutAthlete,eventoName){
     else edits.push({evento:eventoName,invitado:true});
     await _fbMod.setDoc(docRef,{...current,rut:rutNorm,competencias_edits:edits,ts:Date.now()},{merge:true});
     console.log('[invitado] marked:',eventoName);
-    window.YLEdiciones.olvidarCopia();
+    await _avisarEdicionesCambiaron();
+    // Y en el atleta que ya está en memoria, para que se vea sin recargar: el
+    // redibujo sale de DB, no de Firestore.
+    const a=window.YLEdiciones.buscarAtleta(DB,{rut:rutNorm});
+    if(a){a._competencias_edits=edits;_aplicarCompetenciasEdits(a);}
     if(window._curCodigo)showProfile(window._curCodigo);
   }catch(e){console.error('[invitado]',e);}
 }
@@ -1063,6 +1102,7 @@ window.marcarComoInvitado=async function(rutAthlete,eventoName){
 // Excluye un resultado de la lista de competencias de un atleta
 window.excluirResultado=async function(rutAthlete,resultIdToExclude){
   if(!_fbDB||!_fbMod){console.warn('Firebase not ready');return;}
+  if(!resultIdToExclude){console.warn('[excluir] sin clave de resultado');return;}
   try{
     const rutNorm=String(rutAthlete||'').replace(/[^0-9kK]/gi,'').toUpperCase();
     if(!rutNorm){console.warn('RUT required');return;}
@@ -1075,9 +1115,17 @@ window.excluirResultado=async function(rutAthlete,resultIdToExclude){
       excluded.push(resultIdToExclude);
       await _fbMod.setDoc(docRef,{...current,rut:rutNorm,excluded_results:excluded,ts:Date.now()},{merge:true});
       console.log('[excluir] result excluded:',resultIdToExclude);
-      window.YLEdiciones.olvidarCopia();
-      if(window._curCodigo)showProfile(window._curCodigo);
+      await _avisarEdicionesCambiaron();
     }
+    // El resultado ya está pegado en la ficha que hay en memoria: la exclusión
+    // se mira al MERGEAR los resultados, y eso ya pasó. Si no se saca acá, el
+    // resultado sigue a la vista hasta recargar.
+    const a=window.YLEdiciones.buscarAtleta(DB,{rut:rutNorm});
+    if(a){
+      a._excluded_results=excluded;
+      if(a.competencias)a.competencias=a.competencias.filter(c=>_claveResultado(c)!==resultIdToExclude);
+    }
+    if(window._curCodigo)showProfile(window._curCodigo);
   }catch(e){console.error('[excluir]',e);}
 }
 
