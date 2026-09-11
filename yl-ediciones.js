@@ -63,6 +63,70 @@
 
   function rutNorm(s) { return String(s || '').replace(/[^0-9kK]/gi, '').toUpperCase(); }
 
+  function txtNorm(s) {
+    return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  }
+
+  // Cómo se nombra un resultado para poder corregirlo o sacarlo.
+  //
+  // Los que cierra livecast traen `id` propio. Los históricos, los que vienen
+  // dentro de data.json, no traen ninguno: hay que nombrarlos por lo único
+  // estable que tienen, el evento y la modalidad. Van las dos cosas y no solo el
+  // evento porque en un mismo campeonato alguien puede hacer powerlifting Y
+  // banca sola: con el evento solo, corregir una tocaba las dos.
+  function claveResultado(c) {
+    if (c && c.id) return String(c.id);
+    return 'ev:' + txtNorm(c && c.evento) + '|' + txtNorm(c && c.modalidad);
+  }
+
+  // Las correcciones a mano que se hacen desde el panel, encima de las
+  // competencias del atleta. Vive acá y no en la ficha porque el ranking, el
+  // inicio y el propio panel leen los mismos totales: corregido en un lado y no
+  // en los otros, el sitio se contradice solo.
+  //
+  // Es idempotente: se puede llamar de nuevo después de sumar los resultados de
+  // livecast, que llegan más tarde que data.json.
+  var RES = { sq: 1, bp: 1, dl: 1, total: 1 };
+  function aplicarCompetencias(a) {
+    if (!a || !a.competencias) return;
+    var fuera = a._excluded_results;
+    if (fuera && fuera.length) {
+      a.competencias = a.competencias.filter(function (c) {
+        return fuera.indexOf(claveResultado(c)) < 0;
+      });
+    }
+    var edits = a._competencias_edits;
+    if (!edits || !edits.length) return;
+    a.competencias.forEach(function (c) {
+      var k = claveResultado(c);
+      var ovr = null;
+      for (var i = 0; i < edits.length; i++) {
+        var e = edits[i];
+        if (!e) continue;
+        // Las correcciones viejas se guardaron solo con el nombre del evento,
+        // antes de que existiera la clave. Siguen valiendo.
+        if (e.key ? e.key === k : txtNorm(e.evento) === txtNorm(c.evento)) { ovr = e; break; }
+      }
+      if (!ovr) return;
+      ['evento', 'fecha', 'categoria', 'division', 'modalidad'].forEach(function (campo) {
+        if (ovr[campo] !== undefined && ovr[campo] !== null && ovr[campo] !== '') c[campo] = ovr[campo];
+      });
+      Object.keys(RES).forEach(function (campo) {
+        if (ovr[campo] === undefined || ovr[campo] === null || ovr[campo] === '') return;
+        c.resultado = c.resultado || {};
+        c.resultado[campo] = +ovr[campo];
+      });
+      if (ovr.posicion !== undefined && ovr.posicion !== null && ovr.posicion !== '') {
+        // El puesto se lee de los dos lados según la página: los históricos lo
+        // traen dentro de `resultado`, los de livecast al costado.
+        c.posicion = +ovr.posicion;
+        c.resultado = c.resultado || {};
+        c.resultado.pos = +ovr.posicion;
+      }
+      if (ovr.invitado) c.invitado = true;
+    });
+  }
+
   function leerCopia() {
     try { return JSON.parse(localStorage.getItem(LLAVE)); } catch (e) { return null; }
   }
@@ -172,6 +236,9 @@
           toco = true;
         }
       });
+      // Las correcciones a los resultados se pegan acá mismo, para que toda
+      // página que llame a aplicar() vea los totales ya corregidos.
+      if (a._competencias_edits || a._excluded_results) aplicarCompetencias(a);
       if (toco) editados++;
     });
 
@@ -207,6 +274,8 @@
     buscarAtleta: buscarAtleta,
     cargar: cargar,
     aplicar: aplicar,
+    aplicarCompetencias: aplicarCompetencias,
+    claveResultado: claveResultado,
     rutNorm: rutNorm,
     // Para el panel, que escribe: invalida la copia local al toque para no
     // quedarse mirando la anterior después de guardar.

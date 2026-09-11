@@ -9794,6 +9794,7 @@ function renderAthleteProfile(){
           <div class="os" style="font-size:19px;font-weight:700;color:var(--gold)">${r.total} kg</div>
           ${delta!==null?`<div style="font-size:11px;font-weight:700;color:${delta>0?'var(--green)':delta<0?'var(--red)':'var(--muted)'}">${delta>0?'+':''}${delta} kg</div>`:''}
           ${glVal?`<div style="font-size:10px;color:var(--muted)">GL ${glVal}${r.pos?' · #'+r.pos:''}</div>`:''}
+          <button onclick="abrirEdicionResultado('${escapeJsAttr(window.YLEdiciones.claveResultado(c))}')" style="margin-top:6px;background:transparent;border:1px solid var(--border);color:var(--muted);font-size:10px;cursor:pointer;padding:3px 9px;border-radius:5px">Corregir</button>
         </div>
       </div>`;
     });
@@ -9803,6 +9804,152 @@ function renderAthleteProfile(){
   return h;
 }
 
+
+// ═══════════════════════════════════════════════════════════
+// CORREGIR UN RESULTADO A MANO
+//
+// Para los errores que llegan en el dato de origen: campeonatos viejos, previos
+// a YourLift, que entraron desde planillas, y también los que cierra livecast.
+//
+// No se toca el dato original. La corrección se guarda como una CAPA encima, en
+// el mismo athlete_edits que ya usa el panel, y la aplica yl-ediciones.js al
+// cargar cualquier página. Tiene que ser así por dos motivos: los resultados
+// históricos viven en data.json, que es un archivo del repositorio y no se puede
+// reescribir desde el navegador; y los de livecast son la base del acta oficial,
+// que no se toca. Además, hecho así, la corrección se deshace sola borrándola.
+// ═══════════════════════════════════════════════════════════
+function _compDeClave(a,clave){
+  return (a.competencias||[]).find(c=>window.YLEdiciones.claveResultado(c)===clave);
+}
+// La corrección guardada para este resultado, si ya hay una.
+function _ovrDeClave(a,clave){
+  const eds=a._competencias_edits||[];
+  return eds.find(e=>e && (e.key ? e.key===clave : window.YLEdiciones.claveResultado({evento:e.evento})===clave)) || null;
+}
+
+window.abrirEdicionResultado=function(clave){
+  const a=ST.data?.find(x=>x.codigo===ST.athleteProfile);
+  if(!a)return;
+  const c=_compDeClave(a,clave);
+  if(!c){showToast('No se encontró ese resultado',null,true);return;}
+  const r=c.resultado||{};
+  const ovr=_ovrDeClave(a,clave);
+  const campo=(id,lbl,val,tipo)=>`<div><label style="display:block;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:3px">${lbl}</label>`
+    +`<input id="${id}" type="${tipo||'text'}" ${tipo==='number'?'step="0.5"':''} value="${escapeHtml(val==null?'':String(val))}" style="width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px"></div>`;
+  const m=document.createElement('div');
+  m.id='ovrModal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px';
+  m.innerHTML=`<div class="card" style="max-width:640px;width:100%;max-height:90vh;overflow-y:auto;margin:0">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:4px">
+      <div><div class="h2" style="margin:0">Corregir resultado</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">${escapeHtml(a.nombre||'')} · ${escapeHtml(c.evento||'')}</div></div>
+      <button onclick="document.getElementById('ovrModal').remove()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 11px;border-radius:6px;cursor:pointer">✕</button>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin:8px 0 14px;line-height:1.5">Lo que escribas reemplaza al dato original solo para mostrarlo. El resultado de origen y el acta quedan intactos, y borrando la corrección vuelve a como estaba. Deja un campo vacío para no tocarlo.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      ${campo('ovr_evento','CAMPEONATO',ovr?.evento??c.evento)}
+      ${campo('ovr_fecha','FECHA',ovr?.fecha??c.fecha)}
+      ${campo('ovr_division','DIVISIÓN',ovr?.division??c.division)}
+      ${campo('ovr_categoria','CATEGORÍA',ovr?.categoria??c.categoria)}
+      ${campo('ovr_modalidad','MODALIDAD',ovr?.modalidad??c.modalidad)}
+      ${campo('ovr_posicion','POSICIÓN',ovr?.posicion??(c.posicion||r.pos),'number')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+      ${campo('ovr_sq','SENTADILLA',ovr?.sq??r.sq,'number')}
+      ${campo('ovr_bp','PRESS BANCA',ovr?.bp??r.bp,'number')}
+      ${campo('ovr_dl','PESO MUERTO',ovr?.dl??r.dl,'number')}
+      ${campo('ovr_total','TOTAL',ovr?.total??r.total,'number')}
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:12px;cursor:pointer">
+      <input type="checkbox" id="ovr_sumar" checked style="width:16px;height:16px;cursor:pointer"> Recalcular el total sumando los tres movimientos
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;cursor:pointer">
+      <input type="checkbox" id="ovr_invitado" ${(ovr?.invitado||c.invitado)?'checked':''} style="width:16px;height:16px;cursor:pointer"> Marcar como Invitado (no puntúa)
+    </label>
+    <div id="ovr_msg" style="font-size:12px;min-height:16px;margin-top:12px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+      <button onclick="guardarEdicionResultado('${escapeJsAttr(clave)}')" style="padding:9px 18px;background:var(--green);color:#000;border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700">Guardar corrección</button>
+      ${ovr?`<button onclick="borrarEdicionResultado('${escapeJsAttr(clave)}')" style="padding:9px 16px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:7px;cursor:pointer;font-size:12px">Quitar corrección</button>`:''}
+      <button onclick="excluirResultadoAdmin('${escapeJsAttr(clave)}')" style="padding:9px 16px;background:transparent;border:1px solid var(--red);color:var(--red);border-radius:7px;cursor:pointer;font-size:12px;margin-left:auto">Este resultado no es suyo</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+  m.onclick=e=>{if(e.target===m)m.remove();};
+};
+
+// Escribe la capa de correcciones del atleta y avisa que cambió.
+async function _guardarCapa(a,mut,accion,detalle){
+  const eds=(a._competencias_edits||[]).map(e=>({...e}));
+  const fuera=[...(a._excluded_results||[])];
+  mut(eds,fuera);
+  await setDoc(doc(db,'athlete_edits',_editDocId(a)),{
+    rut:a.rut||'', codigo:a.codigo||'', nombre:a.nombre||'',
+    competencias_edits:eds, excluded_results:fuera, ts:Date.now()
+  },{merge:true});
+  await _marcarEdicion();
+  a._competencias_edits=eds;
+  a._excluded_results=fuera;
+  try{ await logAction(accion,a.codigo||a.rut||'',null,detalle); }catch(_){}
+}
+
+window.guardarEdicionResultado=async function(clave){
+  const a=ST.data?.find(x=>x.codigo===ST.athleteProfile);
+  if(!a)return;
+  const g=id=>document.getElementById(id);
+  const txt=id=>(g(id)?.value||'').trim();
+  const num=id=>{const v=txt(id);return v===''?'':(isNaN(+v)?'':+v);};
+  const msg=g('ovr_msg');
+  const ovr={key:clave};
+  ['evento','fecha','division','categoria','modalidad'].forEach(k=>{const v=txt('ovr_'+k);if(v)ovr[k]=v;});
+  ['sq','bp','dl','posicion'].forEach(k=>{const v=num('ovr_'+k);if(v!=='')ovr[k]=v;});
+  // El total: sumado de los tres, o el que se escriba a mano si el acta dice
+  // otra cosa (una banca sola no tiene tres movimientos que sumar).
+  const suma=['sq','bp','dl'].reduce((t,k)=>t+(typeof ovr[k]==='number'?ovr[k]:0),0);
+  if(g('ovr_sumar')?.checked && suma>0) ovr.total=suma;
+  else { const v=num('ovr_total'); if(v!=='') ovr.total=v; }
+  if(g('ovr_invitado')?.checked) ovr.invitado=true;
+  if(Object.keys(ovr).length<2){msg.style.color='var(--red)';msg.textContent='No hay nada que corregir.';return;}
+  msg.style.color='var(--muted)';msg.textContent='Guardando…';
+  try{
+    await _guardarCapa(a,(eds)=>{
+      const i=eds.findIndex(e=>e&&e.key===clave);
+      if(i>=0)eds[i]=ovr; else eds.push(ovr);
+    },'corregir_resultado',(ovr.evento||clave));
+    window.YLEdiciones.aplicarCompetencias(a);
+    document.getElementById('ovrModal')?.remove();
+    showToast('Corrección guardada');
+    render();
+  }catch(e){msg.style.color='var(--red)';msg.textContent='Error: '+e.message;}
+};
+
+window.borrarEdicionResultado=async function(clave){
+  const a=ST.data?.find(x=>x.codigo===ST.athleteProfile);
+  if(!a)return;
+  if(!confirm('¿Quitar la corrección y dejar el resultado como estaba?'))return;
+  try{
+    await _guardarCapa(a,(eds)=>{
+      const i=eds.findIndex(e=>e&&e.key===clave);
+      if(i>=0)eds.splice(i,1);
+    },'quitar_correccion_resultado',clave);
+    document.getElementById('ovrModal')?.remove();
+    showToast('Corrección quitada — recarga para ver el dato original');
+    render();
+  }catch(e){showToast('Error: '+e.message,null,true);}
+};
+
+window.excluirResultadoAdmin=async function(clave){
+  const a=ST.data?.find(x=>x.codigo===ST.athleteProfile);
+  if(!a)return;
+  if(!confirm('¿Sacar este resultado de la ficha de '+(a.nombre||'')+'?\n\nSe usa cuando el resultado es de otra persona y se le asignó por coincidencia de nombre. No se borra de ningún lado: deja de aparecer en esta ficha.'))return;
+  try{
+    await _guardarCapa(a,(eds,fuera)=>{ if(!fuera.includes(clave))fuera.push(clave); },
+                       'excluir_resultado',clave);
+    window.YLEdiciones.aplicarCompetencias(a);
+    document.getElementById('ovrModal')?.remove();
+    showToast('Resultado sacado de la ficha');
+    render();
+  }catch(e){showToast('Error: '+e.message,null,true);}
+};
 
 // ═══════════════════════════════════════════════════════════
 // MERGE RESULTADOS — Procesar competencia → data.json + records.json

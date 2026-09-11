@@ -402,37 +402,14 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
   if(!window._DB_LISTA)_dbLista();
 })();
 
-// Cómo se nombra un resultado para poder excluirlo.
-//
-// Los que cierra livecast traen `id` propio. Los históricos, que salen de
-// data.json, NO traen ninguno: el botón de "este resultado no me pertenece"
-// guardaba entonces una exclusión vacía y el resultado seguía en la ficha, sin
-// que nada avisara que no se había hecho nada. Por eso el resultado de -66 que
-// era de Nicolás Carrasco volvía a aparecer. A los históricos se los nombra por
-// evento y modalidad, que es lo único estable que tienen.
-function _claveResultado(c){
-  if(c&&c.id)return String(c.id);
-  return 'ev:'+nrm((c&&c.evento)||'')+'|'+nrm((c&&c.modalidad)||'');
-}
-
-// Aplica overrides de competencias (excluidos, invitado) al atleta
-function _aplicarCompetenciasEdits(a){
-  if(!a||!a.competencias)return;
-  // Las exclusiones se miran al mergear los resultados de livecast, pero eso no
-  // alcanza a los de data.json, que ya venían dentro de la ficha.
-  const fuera=a._excluded_results;
-  if(fuera&&fuera.length)a.competencias=a.competencias.filter(c=>!fuera.includes(_claveResultado(c)));
-  if(!a._competencias_edits)return;
-  const edits=a._competencias_edits;
-  a.competencias.forEach(comp=>{
-    const key=nrm(comp.evento||'');
-    const ovr=edits.find(e=>nrm(e.evento||'')===key);
-    if(ovr){
-      if(ovr.invitado)comp.invitado=true;
-      if(ovr.categoria)comp.categoria=ovr.categoria;
-    }
-  });
-}
+// Las correcciones hechas desde el panel viven en yl-ediciones.js, que es el
+// módulo que comparten todas las páginas. Acá se vuelve a llamar después de
+// pegar los resultados de livecast: esos llegan más tarde que data.json, así que
+// la pasada que hace `aplicar()` al cargar todavía no los tenía delante.
+// Declaradas como function y no como const: _applyResults las usa y se define
+// más arriba en el archivo, así que con const quedarían en zona muerta.
+function _claveResultado(c){ return window.YLEdiciones.claveResultado(c); }
+function _aplicarCompetenciasEdits(a){ return window.YLEdiciones.aplicarCompetencias(a); }
 
 // ── Helpers ──────────────────────────────────────────────
 function nrm(s){return(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
@@ -1033,7 +1010,7 @@ window.showProfile=function(codigo){
                 +(glVal?'<div style="font-size:10px;color:var(--muted)">GL '+glVal+(r.pos?' · #'+r.pos:'')+'</div>':'')
             )
           +'</div>'
-          +'<button data-rut="'+a.rut+'" data-evento="'+String(c.evento||'').replace(/"/g,'&quot;')+'" data-clave="'+_claveResultado(c).replace(/"/g,'&quot;')+'" onclick="window._editResultDialog(this.dataset.rut,this.dataset.evento,this.dataset.clave)" style="background:transparent;border:none;color:var(--muted);font-size:10px;cursor:pointer;padding:2px 6px;text-decoration:underline">Editar</button>'
+
         +'</div>'
       +'</div>';
     });
@@ -1057,124 +1034,9 @@ window.backToSearch=function(){
   history.replaceState(null,'','atleta.html');
 }
 
-// Avisar que las ediciones cambiaron.
-//
-// `olvidarCopia()` solo borra la copia de ESTE navegador. La copia se invalida
-// por VERSIÓN —el documento `athlete_edits/__version`— y eso lo escribía nada
-// más que el panel. Una edición hecha desde acá quedaba guardada en Firestore y
-// se veía en el navegador donde se hizo, pero en cualquier otro la versión no
-// había cambiado: seguían usando su copia vieja y no se enteraban nunca. Así
-// pasó con el resultado que no era de Lucas Montecinos: excluido el mismo día,
-// invisible al día siguiente desde otro equipo.
-async function _avisarEdicionesCambiaron(){
-  try{
-    const edCol=_fbMod.collection(_fbDB,'athlete_edits');
-    await _fbMod.setDoc(_fbMod.doc(edCol,window.YLEdiciones.MARCA),{ts:Date.now()});
-  }catch(e){console.warn('[ediciones] no se pudo marcar la versión:',e.message);}
-  window.YLEdiciones.olvidarCopia();
-}
 
-// Marca un resultado como Invitado en el athlete_edits de Firestore
-window.marcarComoInvitado=async function(rutAthlete,eventoName){
-  if(!_fbDB||!_fbMod){console.warn('Firebase not ready');return;}
-  try{
-    const rutNorm=String(rutAthlete||'').replace(/[^0-9kK]/gi,'').toUpperCase();
-    if(!rutNorm){console.warn('RUT required');return;}
-    const edCol=_fbMod.collection(_fbDB,'athlete_edits');
-    const docRef=_fbMod.doc(edCol,rutNorm);
-    const snap=await _fbMod.getDoc(docRef);
-    const current=snap.exists()?snap.data():{};
-    const edits=current.competencias_edits||[];
-    const idx=edits.findIndex(e=>nrm(e.evento||'')===nrm(eventoName||''));
-    if(idx>=0)edits[idx].invitado=true;
-    else edits.push({evento:eventoName,invitado:true});
-    await _fbMod.setDoc(docRef,{...current,rut:rutNorm,competencias_edits:edits,ts:Date.now()},{merge:true});
-    console.log('[invitado] marked:',eventoName);
-    await _avisarEdicionesCambiaron();
-    // Y en el atleta que ya está en memoria, para que se vea sin recargar: el
-    // redibujo sale de DB, no de Firestore.
-    const a=window.YLEdiciones.buscarAtleta(DB,{rut:rutNorm});
-    if(a){a._competencias_edits=edits;_aplicarCompetenciasEdits(a);}
-    if(window._curCodigo)showProfile(window._curCodigo);
-  }catch(e){console.error('[invitado]',e);}
-}
 
-// Excluye un resultado de la lista de competencias de un atleta
-window.excluirResultado=async function(rutAthlete,resultIdToExclude){
-  if(!_fbDB||!_fbMod){console.warn('Firebase not ready');return;}
-  if(!resultIdToExclude){console.warn('[excluir] sin clave de resultado');return;}
-  try{
-    const rutNorm=String(rutAthlete||'').replace(/[^0-9kK]/gi,'').toUpperCase();
-    if(!rutNorm){console.warn('RUT required');return;}
-    const edCol=_fbMod.collection(_fbDB,'athlete_edits');
-    const docRef=_fbMod.doc(edCol,rutNorm);
-    const snap=await _fbMod.getDoc(docRef);
-    const current=snap.exists()?snap.data():{};
-    const excluded=current.excluded_results||[];
-    if(!excluded.includes(resultIdToExclude)){
-      excluded.push(resultIdToExclude);
-      await _fbMod.setDoc(docRef,{...current,rut:rutNorm,excluded_results:excluded,ts:Date.now()},{merge:true});
-      console.log('[excluir] result excluded:',resultIdToExclude);
-      await _avisarEdicionesCambiaron();
-    }
-    // El resultado ya está pegado en la ficha que hay en memoria: la exclusión
-    // se mira al MERGEAR los resultados, y eso ya pasó. Si no se saca acá, el
-    // resultado sigue a la vista hasta recargar.
-    const a=window.YLEdiciones.buscarAtleta(DB,{rut:rutNorm});
-    if(a){
-      a._excluded_results=excluded;
-      if(a.competencias)a.competencias=a.competencias.filter(c=>_claveResultado(c)!==resultIdToExclude);
-    }
-    if(window._curCodigo)showProfile(window._curCodigo);
-  }catch(e){console.error('[excluir]',e);}
-}
 
-// Dialog para editar un resultado
-window._editResultDialog=function(rut,evento,resultId){
-  const dialog=document.createElement('div');
-  dialog.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:999';
-  const chkInvitado=document.createElement('input');
-  chkInvitado.type='checkbox';
-  chkInvitado.style.cssText='width:18px;height:18px;cursor:pointer';
-  const chkExcluir=document.createElement('input');
-  chkExcluir.type='checkbox';
-  chkExcluir.style.cssText='width:18px;height:18px;cursor:pointer';
-  const saveBtn=document.createElement('button');
-  saveBtn.style.cssText='padding:8px 14px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;font-weight:600';
-  saveBtn.textContent='Guardar';
-  saveBtn.onclick=async function(){
-    if(chkInvitado.checked){
-      await window.marcarComoInvitado(rut,evento);
-    }
-    if(chkExcluir.checked){
-      await window.excluirResultado(rut,resultId);
-    }
-    dialog.remove();
-  };
-  const cancelBtn=document.createElement('button');
-  cancelBtn.style.cssText='padding:8px 14px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px';
-  cancelBtn.textContent='Cancelar';
-  cancelBtn.onclick=()=>dialog.remove();
-  const inner=document.createElement('div');
-  inner.style.cssText='background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;max-width:400px;color:var(--text)';
-  inner.innerHTML='<h2 style="font-size:16px;margin-bottom:12px;font-weight:600">Editar resultado</h2>'
-    +'<p style="font-size:13px;color:var(--muted);margin-bottom:16px">'+evento+'</p>'
-    +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px;cursor:pointer">'
-      +'<span>Marcar como Invitado</span>'
-    +'</label>'
-    +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px;cursor:pointer;color:var(--muted)">'
-      +'<span style="font-size:11px">Este resultado no me pertenece (excluir)</span>'
-    +'</label>'
-    +'<div style="display:flex;gap:8px;justify-content:flex-end"></div>';
-  inner.querySelector('label:nth-of-type(1)').insertBefore(chkInvitado,inner.querySelector('label:nth-of-type(1)').querySelector('span'));
-  inner.querySelector('label:nth-of-type(2)').insertBefore(chkExcluir,inner.querySelector('label:nth-of-type(2)').querySelector('span'));
-  inner.querySelector('div:last-of-type').appendChild(cancelBtn);
-  inner.querySelector('div:last-of-type').appendChild(saveBtn);
-  dialog.appendChild(inner);
-  document.body.appendChild(dialog);
-  dialog.onclick=function(e){if(e.target===dialog)dialog.remove();}
-  chkInvitado.focus();
-}
 
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
