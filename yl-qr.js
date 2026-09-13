@@ -406,29 +406,44 @@
       blob = aBlob(canvas(url, { px: 1200, ecl: 'Q', margen: 4 }).toDataURL('image/png'));
     } catch (e) { aviso('NO SE PUDO'); return; }
 
+    // El enlace y, si no, abrir la imagen. Va aparte porque también es lo que
+    // corre cuando el menú de compartir falla: antes ese caso se tragaba el
+    // error y no pasaba nada, sin aviso ninguno.
+    var siguiente = function () {
+      var href = URL.createObjectURL(blob);
+      setTimeout(function () { URL.revokeObjectURL(href); }, 20000);
+      var a = document.createElement('a');
+      if ('download' in a) {
+        a.href = href; a.download = archivo; a.rel = 'noopener';
+        document.body.appendChild(a);        // sin esto, Safari no hace nada
+        a.click(); a.remove();
+      }
+      // En el iPad el <a> puede no hacer nada aunque el navegador diga que sabe
+      // descargar. Se abre igual en otra pestaña: ahí la imagen se mantiene
+      // apretada y se guarda, que es el camino que siempre funciona.
+      var w = global.open(href, '_blank');
+      if (!w) aviso('PERMITÍ VENTANAS');
+      else aviso('GUARDÁ LA IMAGEN');
+    };
+
     try {
       if (global.File && navigator.canShare) {
         var f = new File([blob], archivo, { type: 'image/png' });
         if (navigator.canShare({ files: [f] })) {
-          navigator.share({ files: [f], title: titulo || 'QR' }).catch(function () {});
+          navigator.share({ files: [f], title: titulo || 'QR' })
+            .then(function () { aviso('LISTO ✓'); })
+            .catch(function (e) {
+              // Cancelar no es un error: si cerró el menú a propósito, no hay
+              // que insistirle abriéndole una pestaña encima.
+              if (e && e.name === 'AbortError') return;
+              siguiente();
+            });
           return;
         }
       }
     } catch (e) {}
 
-    var href = URL.createObjectURL(blob);
-    var limpiar = function () { setTimeout(function () { URL.revokeObjectURL(href); }, 10000); };
-    var a = document.createElement('a');
-    if ('download' in a) {
-      a.href = href; a.download = archivo; a.rel = 'noopener';
-      document.body.appendChild(a);          // sin esto, Safari no hace nada
-      a.click(); a.remove(); limpiar();
-      return;
-    }
-    var w = global.open(href, '_blank');
-    limpiar();
-    if (!w) aviso('PERMITÍ VENTANAS');
-    else aviso('MANTENÉ APRETADA LA IMAGEN');
+    siguiente();
   }
 
   function panel(opc) {
@@ -455,7 +470,8 @@
       + '<div id="ylqr-caja" style="background:#fff;border-radius:12px;padding:12px;display:inline-block;'
       + 'line-height:0"></div>'
       + '<div style="font-size:12px;color:rgba(190,205,225,.85);margin:14px 0 4px;line-height:1.5">'
-      + 'Apunta la cámara del teléfono y se abre el seguimiento en vivo.</div>'
+      + 'Apunta la cámara del teléfono y se abre el seguimiento en vivo.'
+      + '<span id="ylqr-tip"></span></div>'
       + '<div id="ylqr-url" style="font-size:11px;color:rgba(160,180,205,.75);word-break:break-all;'
       + 'margin-bottom:16px"></div>'
       + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
@@ -474,7 +490,27 @@
     ov.querySelector('#ylqr-url').textContent = url;
     // Nivel Q: aguanta que se ensucie o se arrugue una cuarta parte del cuadro,
     // que es lo que pasa con algo impreso y pegado en una pared.
-    ov.querySelector('#ylqr-caja').innerHTML = svg(url, { escala: 7, ecl: 'Q', margen: 2 });
+    //
+    // Va como PNG dentro de un <img> y no como SVG, aunque el SVG se vea más
+    // nítido: en el teléfono y en el iPad, mantener apretada una imagen ofrece
+    // "Guardar en Fotos", y eso funciona siempre, sin depender de que el botón
+    // de descargar consiga hacer su trabajo. Un SVG no se guarda así.
+    try {
+      var im = document.createElement('img');
+      im.src = canvas(url, { px: 900, ecl: 'Q', margen: 2 }).toDataURL('image/png');
+      im.alt = 'Código QR de ' + titulo;
+      im.style.cssText = 'width:238px;height:238px;display:block;image-rendering:pixelated';
+      ov.querySelector('#ylqr-caja').appendChild(im);
+    } catch (e) {
+      ov.querySelector('#ylqr-caja').innerHTML = svg(url, { escala: 7, ecl: 'Q', margen: 2 });
+    }
+
+    // En pantalla táctil se dice cómo guardarlo sin pasar por el botón: es el
+    // camino que nunca falla, y en el iPad el botón no siempre puede descargar.
+    if (navigator.maxTouchPoints > 0) {
+      ov.querySelector('#ylqr-tip').innerHTML =
+        '<br><b style="color:#D4A843">Para guardarlo:</b> mantené apretada la imagen y elegí "Guardar en Fotos".';
+    }
 
     var cerrar = function () { ov.remove(); document.removeEventListener('keydown', tecla); };
     var tecla = function (e) { if (e.key === 'Escape') cerrar(); };

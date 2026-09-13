@@ -262,13 +262,17 @@ function leerQR(m, ver, ecl, mask) {
       if (!o) return null;
       return { url: o.querySelector('#ylqr-url').textContent,
                tit: o.querySelector('#ylqr-tit').textContent,
-               svg: !!o.querySelector('#ylqr-caja svg'),
+               // El cuadro va como <img> para que en el teléfono se pueda
+               // mantener apretado y guardar; si el canvas fallara, cae al SVG.
+               dibujo: !!o.querySelector('#ylqr-caja img, #ylqr-caja svg'),
+               guardable: !!o.querySelector('#ylqr-caja img'),
                png: !!o.querySelector('#ylqr-png') };
     });
     ok(!!info, 'se abre el panel');
     ok(info && /evento=suda2026$/.test(info.url), 'con el link de esa competencia: ' + (info || {}).url);
     ok(info && info.tit === 'Sudamericano 2026 — Día 1', 'y su nombre: ' + (info || {}).tit);
-    ok(info && info.svg, 'el código dibujado');
+    ok(info && info.dibujo, 'el código dibujado');
+    ok(info && info.guardable, 'y es una imagen: se puede guardar manteniéndola apretada');
     ok(info && info.png, 'y el botón para bajarlo e imprimirlo');
 
     // El PNG tiene que salir de verdad, no ser un botón que no hace nada.
