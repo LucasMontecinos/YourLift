@@ -229,7 +229,9 @@ console.log('\n  Y las páginas buscan la foto así');
 console.log('\nTodas las páginas usan el mismo módulo');
 {
   const paginas = ['index.html', 'atleta.html', 'ranking.html', 'inscripcion.html', 'livecast.html', 'admin.html'];
-  paginas.forEach(p => ok(/<script src="yl-ediciones\.js"><\/script>/.test(R(p)), p + ' lo carga'));
+  // Con o sin ?v=: el número de versión está para saltarse el caché del service
+  // worker, que servía los .js congelados, y no cambia que el módulo sea el mismo.
+  paginas.forEach(p => ok(/<script src="yl-ediciones\.js(\?[^"]*)?"><\/script>/.test(R(p)), p + ' lo carga'));
   paginas.forEach(p => ok(/YLEdiciones\.cargar\(/.test(R(p)), p + ' lo usa para traer las ediciones'));
 
   // Ninguna puede haberse quedado con su caché propia por tiempo: era lo que

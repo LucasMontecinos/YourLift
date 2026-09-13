@@ -292,7 +292,10 @@ function leerQR(m, ver, ecl, mask) {
     ok(!/https?:\/\/(?!\/)[^\s'"]*qr/i.test(qr), 'no se le pide el dibujo a ningún servicio de internet');
     const idx = fs.readFileSync(__dirname + '/../index.html', 'utf8');
     const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
-    ok(/src="yl-qr\.js"/.test(idx) && /src="yl-qr\.js"/.test(adm),
+    // Con o sin ?v=: el número de versión está para saltarse el caché del
+    // service worker, y no cambia que el generador sea el mismo archivo.
+    const cargaQR = t => /src="yl-qr\.js(\?[^"]*)?"/.test(t);
+    ok(cargaQR(idx) && cargaQR(adm),
        'el generador es el mismo en la página y en el panel');
     ok(/window\.pubQR=/.test(adm), 'desde el panel también se saca el QR de un campeonato');
     ok(/todavía no está visible para el público/.test(adm),

@@ -371,6 +371,66 @@
   // El PNG se baja del canvas y no del SVG a propósito: el SVG se ve mejor en
   // pantalla, pero lo que se hace con esto es imprimirlo o mandarlo por
   // WhatsApp, y ahí un PNG grande no falla en ninguna parte.
+  // De data: a Blob, sin pasar por fetch. Tiene que ser SÍNCRONO: el permiso
+  // para abrir el menú de compartir vale solo dentro del toque que lo pidió, y
+  // cualquier espera en el medio lo pierde.
+  function aBlob(d) {
+    var p = d.split(','), bin = atob(p[1]), n = bin.length, u = new Uint8Array(n);
+    while (n--) u[n] = bin.charCodeAt(n);
+    return new Blob([u], { type: (p[0].match(/:(.*?);/) || [, 'image/png'])[1] });
+  }
+
+  // Bajar el PNG.
+  //
+  // Antes esto era un <a> con la imagen metida en una URL `data:`, al que se le
+  // hacía click sin haberlo agregado al documento. En el computador funcionaba;
+  // en el iPad no hacía absolutamente nada, que es donde más falta hace —el QR
+  // se baja ahí mismo, en el recinto, para proyectarlo o mandarlo por mensaje.
+  // Safari ignora el click de un elemento suelto, y encima no baja archivos
+  // servidos como `data:`.
+  //
+  // Ahora va por tres caminos, de mejor a peor: el menú de compartir del
+  // teléfono —que en iPhone y iPad deja "Guardar en Fotos" o mandarlo por
+  // WhatsApp—, si no un <a> con un Blob y agregado al documento como
+  // corresponde, y si tampoco, abrir la imagen en otra pestaña para poder
+  // mantenerla apretada y guardarla.
+  function bajarPNG(url, archivo, titulo, btn) {
+    var aviso = function (t) {
+      if (!btn) return;
+      var antes = btn.textContent;
+      btn.textContent = t;
+      setTimeout(function () { btn.textContent = antes; }, 2200);
+    };
+    var blob;
+    try {
+      blob = aBlob(canvas(url, { px: 1200, ecl: 'Q', margen: 4 }).toDataURL('image/png'));
+    } catch (e) { aviso('NO SE PUDO'); return; }
+
+    try {
+      if (global.File && navigator.canShare) {
+        var f = new File([blob], archivo, { type: 'image/png' });
+        if (navigator.canShare({ files: [f] })) {
+          navigator.share({ files: [f], title: titulo || 'QR' }).catch(function () {});
+          return;
+        }
+      }
+    } catch (e) {}
+
+    var href = URL.createObjectURL(blob);
+    var limpiar = function () { setTimeout(function () { URL.revokeObjectURL(href); }, 10000); };
+    var a = document.createElement('a');
+    if ('download' in a) {
+      a.href = href; a.download = archivo; a.rel = 'noopener';
+      document.body.appendChild(a);          // sin esto, Safari no hace nada
+      a.click(); a.remove(); limpiar();
+      return;
+    }
+    var w = global.open(href, '_blank');
+    limpiar();
+    if (!w) aviso('PERMITÍ VENTANAS');
+    else aviso('MANTENÉ APRETADA LA IMAGEN');
+  }
+
   function panel(opc) {
     opc = opc || {};
     var url = String(opc.url || '');
@@ -421,11 +481,7 @@
     document.addEventListener('keydown', tecla);
     ov.addEventListener('click', function (e) { if (e.target === ov) cerrar(); });
     ov.querySelector('#ylqr-cerrar').onclick = cerrar;
-    ov.querySelector('#ylqr-png').onclick = function () {
-      var a = document.createElement('a');
-      a.href = canvas(url, { px: 1200, ecl: 'Q', margen: 4 }).toDataURL('image/png');
-      a.download = archivo; a.click();
-    };
+    ov.querySelector('#ylqr-png').onclick = function () { bajarPNG(url, archivo, titulo, this); };
     ov.querySelector('#ylqr-copiar').onclick = function () {
       var b = this;
       var listo = function () { b.textContent = 'COPIADO ✓'; setTimeout(function () { b.textContent = 'COPIAR LINK'; }, 1600); };
