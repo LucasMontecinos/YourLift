@@ -9919,11 +9919,15 @@ function _medGrabado(g,premio,i){
   p.push(g.cat,g.div);
   return p.filter(Boolean).join(' ');
 }
+// La división va SOLO en los overall que son de una división. En el absoluto no
+// se nombra ninguna a propósito: compiten todas las edades juntas, y poner una
+// haría pensar que la medalla es de esa.
 function _medGrabadoOvr(o,i){
-  return [MED_PUESTO[i],_medModGrab(o.mod),
-          o.tipo==='abs'?(o.sexo==='F'?'Mejor Mujer':'Mejor Hombre')
-                        :('Overall '+o.div+' '+(o.sexo==='F'?'Damas':'Varones'))
-         ].join(' ');
+  return [MED_PUESTO[i],'Overall',
+          o.sexo==='F'?'Femenino':'Masculino',
+          _medModGrab(o.mod),
+          o.tipo==='div'?o.div:''
+         ].filter(Boolean).join(' ');
 }
 // Todas las medallas, una por línea, en el orden en que se entregan.
 function _medGrabadoLista(P){
