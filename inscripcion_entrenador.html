@@ -169,12 +169,41 @@ function formActual(){ return FORMS.find(f=>f.id===state.form)||null; }
 function esDeCampeonato(f){ return !!(f&&f.tipo!=='acreditacion'&&f.evento); }
 function _limpiaLista(a){ return Array.isArray(a)?a.map(x=>String(x==null?'':x).trim()).filter(Boolean):[]; }
 
+// Un documento puede pedirse SOLO a quien lleva atletas de ciertas modalidades.
+//
+// Olimpiadas Especiales le exige a sus entrenadores cinco certificados de
+// coaching que no tienen nada que ver con el resto del campeonato. Pedírselos a
+// todos sería papeleo que no corresponde; y hacer un formulario aparte obligaría
+// a inscribirse dos veces al que lleva atletas de las dos cosas.
+//
+// La condición vive en el propio documento: d.mods = ['Olimpiadas Especiales'].
+// Vacía o ausente significa "a todos", que es el caso normal y no hay que
+// declararlo.
+function _nrmMod(s){
+  return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+}
+function modsQueLleva(){
+  return ATLETAS.filter(a=>state.atletas.indexOf(a.rut)>=0).map(a=>_nrmMod(a.modalidad));
+}
+function _docEntAplica(d){
+  const mods=_limpiaLista(d&&d.mods);
+  if(!mods.length)return true;
+  const lleva=modsQueLleva();
+  return mods.some(m=>lleva.indexOf(_nrmMod(m))>=0);
+}
+
 // Los documentos que este formulario le pide al entrenador. No hay catálogo
 // fijo: los define entero quien arma el formulario.
+//
+// Se calcula en UN solo lugar y de acá salen los tres que tienen que decir lo
+// mismo: la lista que se dibuja, lo que falta para poder enviar, y lo que se
+// sube al enviar. Si cada uno filtrara por su cuenta, se le pediría un
+// certificado que no se sube, o se subiría uno que ya no corresponde.
 function docsEntrenador(fObj){
   const out={};
   (Array.isArray(fObj&&fObj.documentos)?fObj.documentos:[]).forEach(d=>{
     if(!d||!d.key)return;
+    if(!_docEntAplica(d))return;
     out['e_'+d.key]={
       key:'e_'+d.key, label:d.label||'Documento', desc:d.desc||'',
       plantillaUrl:d.plantillaUrl||'', linkUrl:d.linkUrl||'', linkTexto:d.linkTexto||''

@@ -8793,6 +8793,18 @@ const DOCED = {
   x: {cont:'ef_docsx', pref:'x_', lista:()=>window._efDocsX, quien:'el atleta'},
   e: {cont:'fe_docs', pref:'e_', lista:()=>window._efDocsE, quien:'el entrenador'}
 };
+// Las modalidades que de verdad hay en el campeonato de este formulario. Se
+// ofrecen para copiar porque la condición se compara contra lo que dice la
+// inscripción del atleta: escrita a mano y con una letra distinta, el documento
+// no se le pide a nadie y nadie se entera hasta que es tarde.
+function _feMods(){
+  const ev=(ST.feForm&&ST.feForm.evento)||(document.getElementById('fe_evento')||{}).value||'';
+  if(!ev)return [];
+  return [...new Set((ST.inscripciones||[])
+    .filter(i=>i.evento===ev&&i.status!=='rejected')
+    .map(i=>String(i.modalidad||'').trim()).filter(Boolean))].sort();
+}
+
 function efDocPinta(w){
   const cfg=DOCED[w]; if(!cfg)return;
   const c=document.getElementById(cfg.cont); if(!c)return;
@@ -8811,6 +8823,12 @@ function efDocPinta(w){
       </div>
       <input value="${esc(d.desc||'')}" placeholder="Descripción corta que ve ${cfg.quien}"
         oninput="efDocSet('${w}',${i},'desc',this.value)" style="width:100%;box-sizing:border-box;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px;margin-bottom:8px">
+      ${w==='e'?`<div style="margin-bottom:8px">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Pedirlo solo si lleva atletas de estas modalidades — vacío = a todos</div>
+        <input value="${esc((d.mods||[]).join(', '))}" list="fe_mods_list" placeholder="Ej. Olimpiadas Especiales"
+          oninput="efDocSet('e',${i},'mods',this.value)" style="width:100%;box-sizing:border-box;padding:6px 9px;border-radius:6px;border:1px solid ${(d.mods||[]).length?'var(--gold)':'var(--border)'};background:#0a1628;color:var(--text);font-size:12px">
+        ${_feMods().length?`<div style="font-size:10px;color:var(--muted);margin-top:3px">En este campeonato hay: ${_feMods().map(m=>`<button type="button" onclick="efDocMods(${i},${JSON.stringify(m).replace(/"/g,'&quot;')})" style="background:transparent;border:none;color:var(--gold);cursor:pointer;font-size:10px;text-decoration:underline;padding:0 2px">${esc(m)}</button>`).join(' · ')}</div>`:''}
+      </div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div>
           <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Formulario para descargar (PDF)</div>
@@ -8833,7 +8851,7 @@ function efDocPinta(w){
 window.efDocAgregar=function(w){
   // Clave estable y sin acentos ni espacios: es parte de la ruta del archivo.
   const key='d'+Date.now().toString(36);
-  DOCED[w].lista().push({key,label:'',desc:'',plantillaUrl:'',linkUrl:'',linkTexto:''});
+  DOCED[w].lista().push({key,label:'',desc:'',plantillaUrl:'',linkUrl:'',linkTexto:'',mods:[]});
   // El del atleta se marca solo como requerido: quien agrega un documento lo
   // agrega para pedirlo. Los del entrenador se piden todos, así que no hay lista.
   if(w==='x'){
@@ -8844,10 +8862,25 @@ window.efDocAgregar=function(w){
 };
 window.efDocSet=function(w,i,k,v){
   const L=DOCED[w].lista(); if(!L[i])return;
+  // Las modalidades se escriben separadas por coma y se guardan como lista.
+  // No se repinta: esto corre en cada tecla y volver a dibujar el editor le
+  // saca el foco al campo en mitad de una palabra.
+  if(k==='mods'){
+    L[i].mods=String(v||'').split(',').map(s=>s.trim()).filter(Boolean);
+    return;
+  }
   L[i][k]=v;
   if(k==='plantillaUrl')efDocPinta(w);
   // El nombre se ve también en la lista de arriba, donde se marca y se limita.
   if(k==='label'&&w==='x'){ try{window.renderDocsChecklist()}catch(e){} }
+};
+// Los atajos de modalidad sí repintan: hay que ver qué quedó puesto.
+window.efDocMods=function(i,valor){
+  const L=DOCED.e.lista(); if(!L[i])return;
+  const ya=(L[i].mods||[]).map(String);
+  // Tocar la misma dos veces la saca: sirve de interruptor.
+  L[i].mods = ya.indexOf(valor)>=0 ? ya.filter(x=>x!==valor) : ya.concat([valor]);
+  efDocPinta('e');
 };
 window.efDocBorrar=function(w,i){
   const L=DOCED[w].lista(); const d=L[i]; if(!d)return;
