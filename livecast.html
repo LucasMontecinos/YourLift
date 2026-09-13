@@ -1962,6 +1962,19 @@ function pickEvent(i){
   window._RES_F={sex:'',cat:'',div:'',mod:''};
   window._ACTA_DIA='';
   DATA.event=ev;
+  // Los logos viven en la ficha del campeonato en Firestore, pero el objeto que
+  // se elige acá sale de nominas.json —el Sudamericano y sus ensayos no tienen
+  // inscripciones en Firestore, su nómina es un archivo— y ese objeto no los
+  // trae. Sin esto, elegir el campeonato PISABA los logos ya subidos con un
+  // objeto que no los tiene: se subían, se veían, y al volver a entrar no
+  // estaban. Se recuperan de lo que ya leyó el listener de eventos.
+  (function(){
+    const m=(window.LIVE_EVENT_META||{})[ev.id]||(window.LIVE_EVENT_META||{})[ev.name];
+    if(!m)return;
+    if(!ev.logoUrl&&m.logoUrl)ev.logoUrl=m.logoUrl;
+    if(!ev.logoFedUrl&&m.logoFedUrl)ev.logoFedUrl=m.logoFedUrl;
+    if(!Array.isArray(ev.logosPantalla)&&Array.isArray(m.logosPantalla))ev.logosPantalla=m.logosPantalla;
+  })();
   _ensayoGrant();
   // ¿Tiene este campeonato sus logos en el repo? Se pregunta una vez por
   // campeonato, y solo se usan si la ficha no trae los suyos.
@@ -10369,7 +10382,12 @@ function _evIdActual(){ return (DATA.event&&(DATA.event.id||DATA.event.name))||'
 async function _guardaLogosPantalla(lista){
   const evId=_evIdActual();
   if(!evId)throw new Error('No hay campeonato elegido');
-  await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{logosPantalla:lista});
+  // setDoc con merge y no updateDoc: updateDoc revienta si el campeonato
+  // todavía no tiene ficha en Firestore, que es justo el caso del Sudamericano
+  // y sus ensayos —su nómina viene de un archivo y nunca pasaron por
+  // inscripciones—. Con merge la ficha se crea si falta y no se pisa nada de lo
+  // que ya tenga.
+  await window._fb.setDoc(window._fb.doc(fbDB,'eventos',evId),{logosPantalla:lista},{merge:true});
   DATA.event.logosPantalla=lista;
   const m=(window.LIVE_EVENT_META||{})[evId]; if(m)m.logosPantalla=lista;
   try{ if(typeof syncToFB==='function') await syncToFB(); }catch(e){}
