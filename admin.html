@@ -9894,6 +9894,51 @@ const MED_PRESETS={
 const MED_DIVORD={'Sub-Junior':0,'Subjunior':0,'Junior':1,'Universitario':2,'Open':3,
   'Master I':4,'Master II':5,'Master III':6,'Master IV':7,'Special Olympics':8};
 const MED_MOVN={total:'Total',sq:'Sentadilla',bp:'Press de banca',dl:'Peso muerto'};
+const MED_PUESTO=['Primer Lugar','Segundo Lugar','Tercer Lugar'];
+// Cómo se nombra la modalidad EN LA MEDALLA. En la nómina viene abreviada
+// —"Clásico", "Only Bench Equipado"— y grabado así no se entiende: la medalla la
+// lee alguien que no conoce el sistema. Si el grabador la quiere de otra forma,
+// se cambia acá y cambia en todo el documento.
+const MED_MODGRAB={
+  'Clásico':'Powerlifting Classic',
+  'Equipado':'Powerlifting Equipado',
+  'Only Bench Clásico':'Press Banca Classic',
+  'Only Bench Equipado':'Press Banca Equipado',
+  'Universitario':'Powerlifting Universitario',
+  'Olimpiadas Especiales':'Olimpiadas Especiales'
+};
+const _medModGrab=m=>MED_MODGRAB[m]||m;
+// La línea que va grabada atrás de una medalla.
+//   Primer Lugar · Powerlifting Classic · -76 · Junior
+// Para el movimiento, cuando no es el total, se dice cuál: una medalla de mejor
+// sentadilla que solo diga "Primer Lugar -76 Junior" es indistinguible de la del
+// total, y en la premiación se entregan las dos a personas distintas.
+function _medGrabado(g,premio,i){
+  const p=[MED_PUESTO[i],_medModGrab(g.mod)];
+  if(premio&&premio!=='total'&&premio!=='bp_solo')p.push(MED_MOVN[premio]);
+  p.push(g.cat,g.div);
+  return p.filter(Boolean).join(' ');
+}
+function _medGrabadoOvr(o,i){
+  return [MED_PUESTO[i],_medModGrab(o.mod),
+          o.tipo==='abs'?(o.sexo==='F'?'Mejor Mujer':'Mejor Hombre')
+                        :('Overall '+o.div+' '+(o.sexo==='F'?'Damas':'Varones'))
+         ].join(' ');
+}
+// Todas las medallas, una por línea, en el orden en que se entregan.
+function _medGrabadoLista(P){
+  const out=[];
+  P.grupos.forEach(g=>g.premios.forEach(pr=>{
+    for(let i=0;i<g.cuantos;i++)
+      out.push({texto:_medGrabado(g,g.premios.length>1?pr:null,i),
+                metal:['Oro','Plata','Bronce'][i]});
+  }));
+  P.ovr.forEach(o=>{
+    for(let i=0;i<o.cuantos;i++)
+      out.push({texto:_medGrabadoOvr(o,i),metal:['Oro','Plata','Bronce'][i]});
+  });
+  return out;
+}
 const _medBanca=m=>/only bench|banca/i.test(String(m||''));
 const _medSexo=s=>/^(f|muj|dam)/i.test(String(s||''))?'F':'M';
 const _medCatN=c=>{const s=String(c||'');const n=parseFloat(s.replace(/[^0-9.]/g,''))||999;return n+(s.indexOf('+')>=0?.5:0);};
@@ -9943,20 +9988,36 @@ function _medPlan(){
     (x.mod<y.mod?-1:x.mod>y.mod?1:0)||(x.sexo===y.sexo?0:x.sexo==='F'?-1:1)
     ||((MED_DIVORD[x.div]??9)-(MED_DIVORD[y.div]??9))||_medCatN(x.cat)-_medCatN(y.cat));
 
-  // Overall: uno por modalidad + sexo + división, cruzando las categorías de peso.
+  // Overall, de dos alcances:
+  //
+  //   · POR DIVISIÓN — mejor Junior varón de Classic, mejor Open dama de
+  //     Equipado. Cruza las categorías de peso pero no las edades.
+  //   · ABSOLUTO — mejor varón y mejor dama de cada disciplina, cruzando
+  //     TAMBIÉN las divisiones: entran sub-junior, junior, open y los master
+  //     juntos. Es el "mejor levantador del campeonato" de cada modalidad.
+  //
+  // Los dos se eligen por separado: hay campeonatos que premian uno, otros los
+  // dos, y otros ninguno.
   const ovrTodos=[];
   if(P.ovr){
-    const o=new Map();
+    const porDiv=new Map(), porAbs=new Map();
     usados.forEach(a=>{
-      const k=[a.mod,a.sexo,a.div].join('|');
-      o.set(k,(o.get(k)||0)+1);
+      porDiv.set([a.mod,a.sexo,a.div].join('|'),(porDiv.get([a.mod,a.sexo,a.div].join('|'))||0)+1);
+      porAbs.set([a.mod,a.sexo].join('|'),(porAbs.get([a.mod,a.sexo].join('|'))||0)+1);
     });
-    o.forEach((n,k)=>{
+    porAbs.forEach((n,k)=>{
+      const [mod,sexo]=k.split('|');
+      ovrTodos.push({tipo:'abs',mod,sexo,div:'',n,cuantos:Math.min(3,n),id:'abs|'+k,
+                     etiqueta:(sexo==='F'?'Mejor Mujer':'Mejor Hombre')+' · '+mod});
+    });
+    porDiv.forEach((n,k)=>{
       const [mod,sexo,div]=k.split('|');
-      ovrTodos.push({mod,sexo,div,n,cuantos:Math.min(3,n),id:k});
+      ovrTodos.push({tipo:'div',mod,sexo,div,n,cuantos:Math.min(3,n),id:'div|'+k,
+                     etiqueta:mod+' · '+(sexo==='F'?'Damas':'Varones')+' · '+div});
     });
     ovrTodos.sort((x,y)=>
-      (x.mod<y.mod?-1:x.mod>y.mod?1:0)||(x.sexo===y.sexo?0:x.sexo==='F'?-1:1)
+      (x.tipo===y.tipo?0:x.tipo==='abs'?-1:1)
+      ||(x.mod<y.mod?-1:x.mod>y.mod?1:0)||(x.sexo===y.sexo?0:x.sexo==='F'?-1:1)
       ||((MED_DIVORD[x.div]??9)-(MED_DIVORD[y.div]??9)));
   }
   const ovr=ovrTodos.filter(o=>on(M.ovr,o.id));
@@ -10043,7 +10104,7 @@ function renderMedallero(){
   h+=bloque('SEXO','sexos',P.opciones.sexos,k=>k==='F'?'Damas':'Varones');
   if(P.preset.ovr&&P.ovrTodos.length){
     h+=bloque('OVERALL · cuáles agregar','ovr',P.ovrTodos.map(o=>o.id),
-      k=>{const o=P.ovrTodos.find(x=>x.id===k);return o.mod+' · '+(o.sexo==='F'?'Damas':'Varones')+' · '+o.div;});
+      k=>{const o=P.ovrTodos.find(x=>x.id===k);return o.etiqueta;});
     h+='<div style="font-size:10.5px;color:var(--muted);line-height:1.5;margin-top:-4px">El overall se ordena por GL points, y el GL necesita el peso corporal, que existe recién después del pesaje. Acá va como cupo: tres medallas por cada overall marcado. Quiénes las ganan sale de livecast el día de la competencia.</div>';
   }
   h+='</div>';
@@ -10062,8 +10123,31 @@ function renderMedallero(){
     +Object.entries(P.porMod).sort((a,b)=>b[1]-a[1]).map(([m,n])=>escapeHtml(m)+' <b style="color:var(--text)">'+n+'</b>').join(' · ')+'</div>';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">'
     +'<button onclick="medDoc()" style="padding:10px 18px;background:var(--gold);color:#1a1205;border:none;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:700">Generar documento (PDF)</button>'
-    +'<button onclick="medCSV()" style="padding:10px 18px;background:transparent;border:1px solid var(--green);color:var(--green);border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:700">Descargar planilla</button></div>';
+    +'<button onclick="medCSV()" style="padding:10px 18px;background:transparent;border:1px solid var(--green);color:var(--green);border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:700">Descargar planilla</button>'
+    +'<button onclick="medGrabadoTxt()" title="Solo las líneas del grabado, una por medalla, para pegar en el correo de la cotización" style="padding:10px 18px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:700">Texto de grabado</button></div>';
   h+='</div>';
+  return h;
+}
+
+// La hoja que se le manda al grabador: una línea por medalla, con el texto
+// exacto que va atrás. En página aparte a propósito — se imprime y se manda
+// sola, sin el resto del informe.
+function _medHojaGrabado(P){
+  const e=escapeHtml;
+  const L=_medGrabadoLista(P);
+  if(!L.length)return '';
+  let h='<div class="hoja"><div class="cab" style="margin-bottom:10px"><div><h1>Texto para grabado</h1>'
+    +'<div class="sub">'+e(_medNombreEv())+'<br>'+L.length+' medallas · una línea por medalla</div></div></div>';
+  h+='<div class="nota">Cada línea es lo que va grabado al reverso de una medalla. El orden es el de entrega: '
+    +'dentro de cada categoría van primero, segundo y tercero. Las de movimiento dicen cuál es '
+    +'—una de mejor sentadilla y una de total se entregan a personas distintas y no pueden decir lo mismo.</div>';
+  // En dos columnas: son cientos de líneas y así entran en menos hojas.
+  h+='<div style="column-count:2;column-gap:14mm;margin-top:8px">';
+  h+='<table class="grab">';
+  L.forEach((x,i)=>{
+    h+='<tr><td class="i">'+(i+1)+'</td><td class="m">'+x.metal+'</td><td class="t">'+e(x.texto)+'</td></tr>';
+  });
+  h+='</table></div></div>';
   return h;
 }
 
@@ -10086,9 +10170,9 @@ window.medDoc=function(){
   t+=`<tr class="tot"><td colspan="7">TOTAL · ${P.grupos.length} categorías</td><td class="r">${P.grupos.reduce((n,g)=>n+g.med,0)}</td></tr></table>`;
   let ov='';
   if(P.ovr.length){
-    ov='<h2>Overall</h2><table><tr><th>Modalidad</th><th>Sexo</th><th>División</th><th class="c">Atletas</th><th class="r">Medallas</th></tr>';
-    P.ovr.forEach(o=>{ov+=`<tr><td>${e(o.mod)}</td><td>${sx(o.sexo)}</td><td>${e(o.div)}</td><td class="c">${o.n}</td><td class="r">${o.cuantos}</td></tr>`;});
-    ov+=`<tr class="tot"><td colspan="4">TOTAL · ${P.ovr.length} overall</td><td class="r">${P.ovr.reduce((n,o)=>n+o.cuantos,0)}</td></tr></table>`;
+    ov='<h2>Overall</h2><table><tr><th>Alcance</th><th>Modalidad</th><th>Sexo</th><th>División</th><th class="c">Atletas</th><th class="r">Medallas</th></tr>';
+    P.ovr.forEach(o=>{ov+=`<tr><td>${o.tipo==='abs'?(o.sexo==='F'?'Mejor Mujer':'Mejor Hombre'):'Por división'}</td><td>${e(o.mod)}</td><td>${sx(o.sexo)}</td><td>${e(o.div)||'todas'}</td><td class="c">${o.n}</td><td class="r">${o.cuantos}</td></tr>`;});
+    ov+=`<tr class="tot"><td colspan="5">TOTAL · ${P.ovr.length} overall</td><td class="r">${P.ovr.reduce((n,o)=>n+o.cuantos,0)}</td></tr></table>`;
     ov+='<div class="nota">El overall se ordena por GL points, que necesita el peso corporal del pesaje. Acá va el cupo de medallas; los ganadores salen de livecast.</div>';
   }
   const tiles=[[P.total,'Medallas en total'],[P.oro,'Oro'],[P.plata,'Plata'],[P.bronce,'Bronce'],
@@ -10116,12 +10200,19 @@ tr:nth-child(even) td{background:#F7F9FB}
 .tot td{border-top:2px solid #16202E;border-bottom:none;font-weight:700;background:#fff!important;font-family:Oswald,sans-serif;font-size:10pt;padding-top:6px}
 .nota{font-size:7.5pt;color:#61707F;line-height:1.5;margin-top:8px}
 .pie{margin-top:14px;border-top:1px solid #C9D3DE;padding-top:6px;font-size:7.5pt;color:#8A97A5;display:flex;justify-content:space-between}
-@media print{.noprint{display:none}}</style></head><body>
+@media print{.noprint{display:none}}
+.hoja{page-break-before:always;break-before:page}
+.grab{width:100%;border-collapse:collapse;font-size:9pt}
+.grab td{padding:3px 6px;border-bottom:1px solid #EDF1F5}
+.grab td.m{width:52px;color:#61707F;font-size:7.5pt;text-transform:uppercase;letter-spacing:.5px}
+.grab td.t{font-weight:600}
+.grab td.i{width:34px;color:#8A97A5;text-align:right;font-size:7.5pt}</style></head><body>
 <div class="cab"><div><h1>Medallero</h1><div class="sub">${e(_medNombreEv())}<br>${e(P.preset.n)}</div></div>
 <div style="text-align:right"><div class="marca"><img src="${location.origin}/yourlift_logo_hd.png"></div><div class="sub">yourlift.cl</div></div></div>
 <div class="tiles">${tiles}</div>
 <div class="nota">${e(P.preset.d)} En <b>banca sola</b> el total es la misma marca que la banca, así que va una sola premiación. En categorías de menos de tres atletas se premia a los que haya. El conteo es sobre <b>inscritos</b>: es el techo, porque quien no marque un total válido no sube al podio.</div>
 <h2>Categoría por categoría</h2>${t}${ov}
+${_medHojaGrabado(P)}
 <div class="pie"><span>YourLift SpA · yourlift.cl</span><span>Generado ${new Date().toLocaleDateString('es-CL')}</span></div>
 <div class="noprint" style="margin-top:18px;text-align:center"><button onclick="window.print()" style="padding:10px 22px;font-size:13px;cursor:pointer">Guardar como PDF</button></div>
 </body></html>`;
@@ -10132,19 +10223,36 @@ tr:nth-child(even) td{background:#F7F9FB}
   try{ logAction('medallero_doc',_medNombreEv(),null,P.total+' medallas'); }catch(_){}
 };
 
+// Solo las líneas, en texto pelado: es lo que se pega en el correo al grabador.
+window.medGrabadoTxt=function(){
+  const P=_medPlan();
+  const L=_medGrabadoLista(P);
+  if(!L.length){showToast('No hay medallas con los filtros puestos',null,true);return;}
+  const txt=[_medNombreEv(),L.length+' medallas',''].concat(L.map(x=>x.texto)).join('\r\n');
+  const blob=new Blob(['\ufeff'+txt],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='Grabado_'+String(_medNombreEv()).replace(/[^A-Za-z0-9]+/g,'_')+'.txt';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  showToast('Texto de grabado · '+L.length+' medallas');
+};
 window.medCSV=function(){
   const P=_medPlan();
   const q=s=>'"'+String(s==null?'':s).replace(/"/g,'""')+'"';
   const sx=s=>s==='F'?'Damas':'Varones';
-  const L=[['Tipo','Modalidad','Sexo','Division','Categoria','Atletas','Premio','Puesto','Medalla'].map(q).join(',')];
+  const L=[['Tipo','Modalidad','Sexo','Division','Categoria','Atletas','Premio','Puesto','Medalla','Texto para grabado'].map(q).join(',')];
   const MET=['Oro','Plata','Bronce'];
   P.grupos.forEach(g=>g.premios.forEach(p=>{
     for(let i=0;i<g.cuantos;i++)
-      L.push(['Categoria',g.mod,sx(g.sexo),g.div,g.cat,g.n,MED_MOVN[p],i+1,MET[i]].map(q).join(','));
+      L.push(['Categoria',g.mod,sx(g.sexo),g.div,g.cat,g.n,MED_MOVN[p],i+1,MET[i],
+              _medGrabado(g,g.premios.length>1?p:null,i)].map(q).join(','));
   }));
   P.ovr.forEach(o=>{
     for(let i=0;i<o.cuantos;i++)
-      L.push(['Overall',o.mod,sx(o.sexo),o.div,'—',o.n,'Overall',i+1,MET[i]].map(q).join(','));
+      L.push(['Overall',o.mod,sx(o.sexo),o.div||'todas','—',o.n,
+              o.tipo==='abs'?(o.sexo==='F'?'Mejor Mujer':'Mejor Hombre'):'Overall',
+              i+1,MET[i],_medGrabadoOvr(o,i)].map(q).join(','));
   });
   // BOM para que Excel abra los acentos bien.
   const blob=new Blob(['﻿'+L.join('\r\n')],{type:'text/csv;charset=utf-8'});
