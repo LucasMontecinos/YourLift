@@ -1955,7 +1955,7 @@ function pickEvent(i){
   // evento en el documento del nuevo, y después los reenviaba: así se cruzaron
   // los atletas del Sudamericano de prueba con los del Regional Centro Sur.
   try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
-  window._SR_HOY=null;
+  window._SR_HOY=null;window._NR_HOY=null;
   window._VARIOS_PAISES=undefined;
   // Los filtros de Resultados son de un campeonato: si quedaran puestos al cambiar
   // de evento, la tabla del nuevo abriría vacía sin motivo aparente.
@@ -2369,7 +2369,7 @@ function _srMinRec(b,l,hoy){
 function _srProxMultiplo(kg){ return Math.ceil((kg+0.0001)/2.5)*2.5; }
 function _srSubirDeclarados(hoyAntes){
   if(!_srOn()||!hoyAntes)return [];
-  window._SR_HOY=null;                       // recalcular ya con la marca nueva
+  window._SR_HOY=null;window._NR_HOY=null;                       // recalcular ya con la marca nueva
   const cambios=[];
   (DATA.athletes||[]).forEach(b=>{
     if(b.bombed)return;
@@ -2389,7 +2389,7 @@ function _srSubirDeclarados(hoyAntes){
       });
     });
   });
-  if(cambios.length)window._SR_HOY=null;
+  if(cambios.length)window._SR_HOY=null;window._NR_HOY=null;
   return cambios;
 }
 function _srAvisarSubidas(cs){
@@ -2446,7 +2446,116 @@ function _srPanel(){
       filas.get(k).n++;
     });
   });
+  return _recTabla(filas,{
+    titulo:'🏆 RÉCORDS SUDAMERICANOS',
+    nota:'Cada atleta se mide contra su división y contra el Open. Pasá el mouse por una marca para ver quién la tiene. '+(window._SR_FUENTE?esc(window._SR_FUENTE):'')
+  });
+}
+
+// ── El mismo panel, con los récords NACIONALES ──────────────────────────────
+//
+// Hasta ahora la tabla existía solo en los campeonatos sudamericanos. En un
+// nacional se encendía "detectar récord" y saltaba el aviso al romperlo, pero no
+// había forma de ver ANTES cuánto había que levantar: justo lo que se mira
+// durante la tanda.
+//
+// Los dos archivos guardan distinto. El sudamericano viene indexado por
+// sexo|equipo|división|categoría|movimiento; el nacional es una lista por
+// modalidad y movimiento con la categoría adentro. Por eso acá se arman las
+// filas aparte y la tabla se comparte.
+//
+// El nacional no guarda el sexo, y no hace falta: las categorías no se repiten
+// entre damas y varones —47 a 84+ son de ellas, 53 a 120+ de ellos— así que la
+// categoría sola ya identifica la clase.
+function _nrOn(){
+  if(!RECORDS||!DATA.event)return false;
+  if(_srOn())return false;                                  // el sudamericano tiene el suyo
+  return DATA.event.recordsEnabled!==false;
+}
+function _nrMod(a){
+  const m=String(a&&a.mod||'');
+  if(m.indexOf('oe_')===0||m==='invitado')return null;      // no marcan récord
+  if(/universitar/i.test(String(a&&a.div||''))&&RECORDS.universitario)return 'universitario';
+  // La banca sola se mide contra el récord de banca de su equipamiento: el
+  // archivo nacional no guarda uno aparte como el sudamericano.
+  return (m==='equipped'||m==='equipped_bench')?'equipped':'classic';
+}
+function _nrDivs(a){
+  const d=_normDiv(String(a&&a.div||''));
+  const ok=['Sub-Junior','Junior','Open','Master I','Master II','Master III','Master IV','Universitario'];
+  const out=ok.indexOf(d)>=0?[d]:[];
+  if(out.indexOf('Open')<0&&d!=='Universitario')out.push('Open');
+  return out.length?out:['Open'];
+}
+function _nrBuscar(mod,div,cat,lift){
+  const arr=(RECORDS[mod]&&RECORDS[mod][lift])||[];
+  const c=_normCat(cat), d=_normDiv(div);
+  const m=arr.find(r=>_normCat(r.categoria)===c&&_normDiv(r.division)===d);
+  return m?{kg:m.marca,quien:m.nombre,pais:''}:null;
+}
+// Lo que se rompió HOY, igual que en el sudamericano: el que viene atrás compite
+// contra la marca nueva, no contra la del archivo.
+function _nrHoyCalc(){
+  const out={};
+  if(!_nrOn())return out;
+  const poner=(k,kg,a)=>{ if(!out[k]||kg>out[k].kg)out[k]={kg:kg,quien:a.name}; };
+  (DATA.athletes||[]).forEach(a=>{
+    const mod=_nrMod(a); if(!mod)return;
+    const cat=_normCat(a.cat||''); if(!cat)return;
+    const divs=_nrDivs(a);
+    LIFTS.forEach(l=>{
+      let b=0;(a.att[l]||[]).forEach(x=>{ if(x&&x.r==='g'&&x.w>b)b=x.w; });
+      if(b>0)divs.forEach(dv=>poner([mod,dv,cat,l].join('|'),b,a));
+    });
+    if(!_srSoloBanca(a)){ const t=_srTotal(a);
+      if(t>0)divs.forEach(dv=>poner([mod,dv,cat,'total'].join('|'),t,a)); }
+  });
+  return out;
+}
+function _nrHoyMap(){ if(!window._NR_HOY)window._NR_HOY=_nrHoyCalc(); return window._NR_HOY; }
+function _nrPanel(){
+  if(!_nrOn())return '';
+  const pool=DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed&&_inTarima(a.flight));
+  const base=pool.length?pool:DATA.athletes.filter(a=>!a.bombed&&_inTarima(a.flight));
+  if(!base.length)return '';
+  const MOVS=['sq','bp','dl','total'];
+  const hoy=_nrHoyMap();
+  const filas=new Map();
+  base.forEach(a=>{
+    const mod=_nrMod(a); if(!mod)return;
+    const cat=_srCat(a); if(!cat)return;                     // para mostrar: -83, +120
+    const solo=_srSoloBanca(a)&&!_isPlusBench(a);
+    _nrDivs(a).forEach(dv=>{
+      const k=[mod,dv,cat,solo?'ob':'pl'].join('|');
+      if(!filas.has(k)){
+        const f={sexo:_srSexo(a),eq:mod,div:dv,cat,solo,n:0,r:{}};
+        MOVS.forEach(l=>{
+          if(solo&&l!=='bp'){f.r[l]=null;return;}
+          const base_=_nrBuscar(mod,dv,cat,l);
+          const h=hoy[[mod,dv,_normCat(cat),l].join('|')];
+          if(h&&(!base_||h.kg>base_.kg)) f.r[l]={kg:h.kg,quien:h.quien,pais:'',hoy:true};
+          else if(base_) f.r[l]={kg:base_.kg,quien:base_.quien,pais:'',hoy:false};
+          else f.r[l]={kg:0,vacio:true};
+        });
+        filas.set(k,f);
+      }
+      filas.get(k).n++;
+    });
+  });
+  return _recTabla(filas,{
+    titulo:'🏆 RÉCORDS NACIONALES',
+    nota:'Cada atleta se mide contra su división y contra el Open. Pasá el mouse por una marca para ver quién la tiene. La banca sola se compara contra el récord de banca de su equipamiento: el archivo nacional no guarda uno aparte.'
+  });
+}
+
+// La tabla del panel de récords. La usan el sudamericano y el nacional: los dos
+// muestran lo mismo —una fila por categoría, división y modalidad de la tanda,
+// con los cuatro movimientos— y lo único que cambia es de dónde salen las
+// marcas. Tenerla escrita dos veces terminaría en dos tablas que no dicen lo
+// mismo, que es como ya se desfasaron el acta y el medallero.
+function _recTabla(filas,opc){
   if(!filas.size)return '';
+  const MOVS=['sq','bp','dl','total'];
   const CATN=c=>(parseFloat(String(c).replace(/[^0-9.]/g,''))||999)+(c[0]==='+'?0.5:0);
   const DVO={'Sub-Junior':0,'Junior':1,'Open':2,'Master I':3,'Master II':4,'Master III':5,'Master IV':6};
   const rows=[...filas.values()].sort((x,y)=>
@@ -2465,7 +2574,7 @@ function _srPanel(){
   };
   let h='<div class="card" style="margin-bottom:10px;padding:0;overflow:hidden;border:1px solid rgba(242,194,48,.45)">';
   h+='<button onclick="window._SR_PANEL_OPEN=!window._SR_PANEL_OPEN;R()" style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 13px;border:none;background:rgba(242,194,48,.10);color:#F2C230;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;text-align:left">'
-    +'<span>🏆 RÉCORDS SUDAMERICANOS</span>'
+    +'<span>'+opc.titulo+'</span>'
     +'<span style="font-size:10px;color:var(--muted);font-weight:400;letter-spacing:0">sentadilla · banca · peso muerto · total, de las categorías que están en la tanda '+(DATA.flight||'—')+'</span>'
     +'<span style="flex:1"></span><span style="font-size:13px">'+(ab?'▾':'▸')+'</span></button>';
   if(ab){
@@ -2484,7 +2593,7 @@ function _srPanel(){
       +'</tr>';
     });
     h+='</table></div>';
-    h+='<div style="padding:6px 13px;font-size:10px;color:var(--muted);border-top:1px solid var(--border)">Cada atleta se mide contra su división y contra el Open. Pasá el mouse por una marca para ver quién la tiene. '+(window._SR_FUENTE?esc(window._SR_FUENTE):'')+'</div>';
+    h+='<div style="padding:6px 13px;font-size:10px;color:var(--muted);border-top:1px solid var(--border)">'+opc.nota+'</div>';
   }
   h+='</div>';
   return h;
@@ -9840,7 +9949,7 @@ function R(){
   // Los récords logrados hoy se recalculan una vez por dibujado: los consulta cada
   // casilla de la tabla, pero tienen que reflejar lo último (incluido lo que
   // acaba de llegar de otro controlador).
-  window._SR_HOY=null;
+  window._SR_HOY=null;window._NR_HOY=null;
   // Paracaídas de render: un error al dibujar NUNCA debe dejar la pantalla en
   // blanco/congelada (crítico con mucha gente operando en vivo). Para los widgets
   // de OBS/pantalla, si falla se conserva lo anterior. Para el admin, se muestra un
@@ -12151,6 +12260,7 @@ function renderCompete(){
   // Los récords van DEBAJO del atleta en tarima / del aviso de ronda completada:
   // arriba tiene que estar lo que se juzga ahora.
   h+=_srPanel();
+  h+=_nrPanel();          // solo uno de los dos devuelve algo
   // Active change timers
   const activeCTs=Object.keys(DATA.changeTimers).filter(k=>{const ct=DATA.changeTimers[k];return ct&&!ct.expired&&ct.remaining>0});
   if(activeCTs.length){
