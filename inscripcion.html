@@ -327,24 +327,64 @@ window.DOC_TYPES = DOC_TYPES; // exponer para admin.html
 // la casilla, guardar el archivo, exigirlo antes de enviar— siga siendo un solo
 // camino. Un documento propio no es un caso especial: es una entrada más del
 // catálogo, con la clave prefijada para no chocar nunca con las fijas.
-function docsDelEvento(evObj){
+function _montaDocPropio(out, d){
+  const k = String(d && d.key || '').trim();
+  if (!k) return;
+  out['x_' + k] = {
+    label: d.label || 'Documento',
+    icon: d.icon || '\u{1F4CE}',
+    desc: d.desc || 'Sube el documento',
+    accept: d.accept || 'image/*,.pdf',
+    stateKey: 'xf_' + k, nameKey: 'xn_' + k, urlKey: 'xu_' + k,
+    storagePath: 'x_' + k,
+    plantillaUrl: d.plantillaUrl || '',
+    linkUrl: d.linkUrl || '', linkTexto: d.linkTexto || '',
+    propio: true,
+    oe: !!d.oe
+  };
+}
+
+// ── Lo que Olimpiadas Especiales le exige a cada atleta suyo ──────────────
+//
+// Estos cuatro antecedentes no los pide el campeonato: los pide Olimpiadas
+// Especiales, y son los mismos en toda fecha donde compitan. Por eso no viven
+// en la configuración del evento —donde habría que volver a escribirlos en cada
+// campeonato, y basta que alguien se olvide una vez para que un atleta llegue
+// sin papeles— sino acá, y se suman solos a lo que el campeonato ya pida en
+// cuanto la modalidad elegida es Olimpiadas Especiales.
+//
+// La cédula de identidad de su lista es el carnet que el formulario ya pide
+// siempre, así que no se duplica.
+const DOCS_OE_DEF = [
+  { key:'oe_ficha', oe:true, icon:'\u{1FA7A}',
+    label:'Ficha médica · Olimpiadas Especiales',
+    desc:'Formulario de ficha médica de Olimpiadas Especiales, completado y firmado',
+    linkUrl:'https://docs.google.com/forms/d/e/1FAIpQLSdOhb4H-1WeYmK19dQlPNewQFlQYa98Gv-B4NafjmD2QfOHbQ/viewform',
+    linkTexto:'La ficha médica se completa en el formulario de Olimpiadas Especiales. Al terminarlo, sube acá el comprobante o la copia de la ficha.' },
+  { key:'oe_exoneracion', oe:true, icon:'\u{1F4CB}',
+    label:'Exoneración · Olimpiadas Especiales',
+    desc:'Exoneración de atleta y compañeros unificados y uso de imagen, firmada',
+    plantillaUrl:'exoneracion_olimpiadas_especiales_2026.pdf' },
+  { key:'oe_di', oe:true, icon:'\u{1F4C4}',
+    label:'Certificado de DI o documento de acreditación',
+    desc:'Copia del certificado de discapacidad intelectual o del documento de acreditación' }
+];
+const DOCS_OE_KEYS = DOCS_OE_DEF.map(d => 'x_' + d.key);
+function esModalidadOE(m){
+  return /olimpiada/i.test(String(m == null ? '' : m).normalize('NFD').replace(/[̀-ͯ]/g, ''));
+}
+// La modalidad que el formulario está usando ahora. Se lee en un solo lugar
+// para que el catálogo, la lista de requeridos y la subida vean lo mismo.
+function _modalidadActual(mod){
+  if (mod !== undefined) return mod;
+  try { return state.form.modalidad; } catch (e) { return ''; }
+}
+
+function docsDelEvento(evObj, modalidad){
   const extra = (evObj && Array.isArray(evObj.docsExtra)) ? evObj.docsExtra : [];
   const out = Object.assign({}, DOC_TYPES);
-  extra.forEach(d => {
-    const k = String(d && d.key || '').trim();
-    if (!k) return;
-    out['x_' + k] = {
-      label: d.label || 'Documento',
-      icon: d.icon || '\u{1F4CE}',
-      desc: d.desc || 'Sube el documento',
-      accept: d.accept || 'image/*,.pdf',
-      stateKey: 'xf_' + k, nameKey: 'xn_' + k, urlKey: 'xu_' + k,
-      storagePath: 'x_' + k,
-      plantillaUrl: d.plantillaUrl || '',
-      linkUrl: d.linkUrl || '', linkTexto: d.linkTexto || '',
-      propio: true
-    };
-  });
+  extra.forEach(d => _montaDocPropio(out, d));
+  if (esModalidadOE(_modalidadActual(modalidad))) DOCS_OE_DEF.forEach(d => _montaDocPropio(out, d));
   return out;
 }
 
@@ -1139,34 +1179,7 @@ function renderForm() {
     // ─── SISTEMA NUEVO: requiredDocs explícito en el evento ───
     if (_hasNewDocs) {
       _docsPedidos.forEach(docKey => {
-        const meta = _CAT[docKey];
-        if (!meta) return;
-        const stName = state[meta.nameKey] || '';
-        const dlUrl = _docTemplates[docKey] || meta.plantillaUrl || meta.defaultPdfUrl || null;
-        h += `<div class="field">`;
-        // El formulario para descargar y el link a otra página van en UNA sola
-        // tarjeta, con el nombre del documento arriba. Separados, el link quedaba
-        // suelto y no se entendía a cuál de los documentos correspondía.
-        if (dlUrl || meta.linkUrl) {
-          h += `<div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.4);border-radius:10px;padding:14px 16px;margin-bottom:12px">
-            <div style="font-size:13px;font-weight:600;color:#60a5fa;margin-bottom:4px">${meta.icon} ${meta.label}</div>
-            <div style="font-size:12px;color:var(--muted);line-height:1.5">${meta.desc}${dlUrl?'. Descarga el formulario, complétalo y sube el documento firmado':''}.</div>
-            ${meta.linkUrl?`<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px">${meta.linkTexto||'Este documento se obtiene en otra página.'}</div>`:''}
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-              ${dlUrl?`<a href="${dlUrl}" download style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.5);border-radius:6px;color:#60a5fa;font-size:12px;font-weight:600;text-decoration:none;font-family:Oswald,sans-serif;letter-spacing:1px">\u2B07 DESCARGAR FORMULARIO</a>`:''}
-              ${meta.linkUrl?`<a href="${meta.linkUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(212,168,67,.15);border:1px solid rgba(212,168,67,.5);border-radius:6px;color:var(--gold);font-size:12px;font-weight:600;text-decoration:none;font-family:Oswald,sans-serif;letter-spacing:1px">\u2197 IR A LA PÁGINA</a>`:''}
-            </div>
-          </div>`;
-        }
-        h += `<label>${meta.icon} ${meta.label} <span class="req">*</span></label>
-        <div class="upload-zone ${stName?'done':''}" id="zone_${docKey}">
-          <input type="file" accept="${meta.accept}" onchange="handleFile(this,'${meta.storagePath}')">
-          ${stName
-            ? `<div class="icon">✅</div><div class="fname">${stName}</div><div class="txt">Click para cambiar</div>`
-            : `<div class="icon">${meta.icon}</div><div class="txt">${meta.desc}</div><div style="font-size:10px;color:var(--muted);margin-top:4px">Máx 10MB</div>`}
-        </div>
-        ${docKey==='menorConsent' ? _declaraMayorHtml() : ''}
-        </div>`;
+        h += _docCampoHtml(docKey, _CAT[docKey], _docTemplates[docKey]);
       });
       // Si ya declaró ser mayor, el consentimiento salió de la lista y con él se
       // iría la casilla: hay que dejarla a la vista para poder desmarcarla.
@@ -1230,6 +1243,7 @@ function renderForm() {
         ${state.wadeName ? `<div class="icon">✅</div><div class="fname">${state.wadeName}</div><div class="txt">Click para cambiar</div>` : `<div class="icon">📄</div><div class="txt">${isIPFWorld?'Certificación WADA internacional vigente':'Certificado ADEL/WADA (internacional) · Carnet SENADIS (OE)'}</div><div style="font-size:10px;color:var(--muted);margin-top:4px">JPG, PNG o PDF · Máx 10MB</div>`}
       </div>
     </div>
+    ${_oeBloqueHtml(_evObj)}
     ${isIPFWorld?`
     <div class="field">
       <label>Foto oficial — fondo blanco, sin accesorios <span class="req">*</span></label>
@@ -1330,6 +1344,7 @@ function renderForm() {
         <div><span style="color:var(--muted)">Modalidad:</span> ${f.modalidad}</div>
         <div><span style="color:var(--muted)">${isIPFWorld?'Pasaporte':'Carnet'}:</span> ${state.carnetName?'✅':'❌ Falta'}</div>
         <div><span style="color:var(--muted)">${isIPFWorld?'WADA Internacional':'WADA/ADEL'}:</span> ${state.wadeName?'✅':'❌ Falta'}</div>
+        ${_oeDocsAparte(_evObj).map(d=>`<div><span style="color:var(--muted)">${d.meta.label}:</span> ${state[d.meta.nameKey]?'✅':'❌ Falta'}</div>`).join('')}
         ${isIPFWorld?`
           <div><span style="color:var(--muted)">Foto fondo blanco:</span> ${state.carnetPhotoName?'✅':'❌ Falta'}</div>
           <div><span style="color:var(--muted)">IPF Consentimiento:</span> ${state.ipfConsentName?'✅':'❌ Falta'}</div>
@@ -1359,6 +1374,7 @@ function renderForm() {
         if(!state.carnetName) return 'disabled';
         if(!state.wadeName) return 'disabled';
         if(state.submitting) return 'disabled';
+        if(_oeFaltan(_evObj).length) return 'disabled';
         if(isIPFWorld){
           if(!state.carnetPhotoName) return 'disabled';
           if(!state.ipfConsentName) return 'disabled';
@@ -1967,15 +1983,80 @@ function _docAplica(evObj, docKey, modalidad, division) {
   if (divs.length && divs.indexOf(String(division || '').trim()) < 0) return false;
   return true;
 }
+
+// Los papeles de Olimpiadas Especiales para el camino ANTIGUO del paso de
+// documentos, el que tiene el carnet y el WADA escritos a mano. El camino nuevo
+// los recibe en su lista —docsRequeridos ya se los suma— y no pasa por acá.
+function _oeDocsAparte(evObj){
+  if (!esModalidadOE(_modalidadActual())) return [];
+  const cat = docsDelEvento(evObj);
+  const tmpl = (evObj && evObj.docTemplates) || {};
+  return DOCS_OE_KEYS.map(k => ({ key:k, meta:cat[k], tmpl:tmpl[k] })).filter(x => x.meta);
+}
+function _oeBloqueHtml(evObj){
+  const docs = _oeDocsAparte(evObj);
+  if (!docs.length) return '';
+  return `<div style="background:rgba(212,168,67,.08);border:1px solid rgba(212,168,67,.4);border-radius:10px;padding:14px 16px;margin:20px 0 12px">
+      <div style="font-size:13px;font-weight:600;color:var(--gold);margin-bottom:4px">Olimpiadas Especiales</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5">Estos antecedentes los exige Olimpiadas Especiales a todos sus atletas. Van además de los documentos que pide el campeonato.</div>
+    </div>` + docs.map(d => _docCampoHtml(d.key, d.meta, d.tmpl)).join('');
+}
+function _oeFaltan(evObj){
+  return _oeDocsAparte(evObj).filter(d => !state[d.meta.nameKey]).map(d => d.meta.label);
+}
+
+// La tarjeta de UN documento: el recuadro azul con el formulario para descargar
+// o el link a otra página, y debajo la zona para subir el archivo.
+//
+// La dibujan los dos caminos del paso de documentos —el del campeonato que trae
+// su lista configurada y el antiguo, que tiene el carnet y el WADA escritos a
+// mano— porque los papeles de Olimpiadas Especiales salen en los dos. Con el
+// molde repetido, una de las dos quedaba sin el botón de descargar o sin el link.
+function _docCampoHtml(docKey, meta, plantillaEvento){
+  if (!meta) return '';
+  const stName = state[meta.nameKey] || '';
+  let h = '';
+  const dlUrl = plantillaEvento || meta.plantillaUrl || meta.defaultPdfUrl || null;
+    h += `<div class="field">`;
+    // El formulario para descargar y el link a otra página van en UNA sola
+    // tarjeta, con el nombre del documento arriba. Separados, el link quedaba
+    // suelto y no se entendía a cuál de los documentos correspondía.
+    if (dlUrl || meta.linkUrl) {
+      h += `<div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.4);border-radius:10px;padding:14px 16px;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:600;color:#60a5fa;margin-bottom:4px">${meta.icon} ${meta.label}</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.5">${meta.desc}${dlUrl?'. Descarga el formulario, complétalo y sube el documento firmado':''}.</div>
+        ${meta.linkUrl?`<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px">${meta.linkTexto||'Este documento se obtiene en otra página.'}</div>`:''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          ${dlUrl?`<a href="${dlUrl}" download style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.5);border-radius:6px;color:#60a5fa;font-size:12px;font-weight:600;text-decoration:none;font-family:Oswald,sans-serif;letter-spacing:1px">\u2B07 DESCARGAR FORMULARIO</a>`:''}
+          ${meta.linkUrl?`<a href="${meta.linkUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(212,168,67,.15);border:1px solid rgba(212,168,67,.5);border-radius:6px;color:var(--gold);font-size:12px;font-weight:600;text-decoration:none;font-family:Oswald,sans-serif;letter-spacing:1px">\u2197 IR A LA PÁGINA</a>`:''}
+        </div>
+      </div>`;
+    }
+    h += `<label>${meta.icon} ${meta.label} <span class="req">*</span></label>
+    <div class="upload-zone ${stName?'done':''}" id="zone_${docKey}">
+      <input type="file" accept="${meta.accept}" onchange="handleFile(this,'${meta.storagePath}')">
+      ${stName
+        ? `<div class="icon">✅</div><div class="fname">${stName}</div><div class="txt">Click para cambiar</div>`
+        : `<div class="icon">${meta.icon}</div><div class="txt">${meta.desc}</div><div style="font-size:10px;color:var(--muted);margin-top:4px">Máx 10MB</div>`}
+    </div>
+    ${docKey==='menorConsent' ? _declaraMayorHtml() : ''}
+    </div>`;
+  return h;
+}
+
 function docsRequeridos(evObj, fechaNac, modalidad, division) {
   const lista = (evObj && Array.isArray(evObj.requiredDocs)) ? evObj.requiredDocs : [];
   // Sin modalidad explícita se usa la que está eligiendo el formulario. Así las
   // cuatro llamadas —el formulario, el resumen, el botón de enviar y la
   // validación final— ven siempre lo mismo sin tener que pasarla cada una.
-  let mod = modalidad, div = division;
-  if (mod === undefined) { try { mod = state.form.modalidad; } catch (e) { mod = ''; } }
+  let mod = _modalidadActual(modalidad), div = division;
   if (div === undefined) { try { div = state.form.division; } catch (e) { div = ''; } }
-  const porModalidad = lista.filter(k => _docAplica(evObj, k, mod, div));
+  let porModalidad = lista.filter(k => _docAplica(evObj, k, mod, div));
+  // Los de Olimpiadas Especiales se suman SIEMPRE, y sin repetir si el
+  // campeonato además los tenía marcados a mano.
+  if (esModalidadOE(mod)) {
+    porModalidad = porModalidad.concat(DOCS_OE_KEYS.filter(k => porModalidad.indexOf(k) < 0));
+  }
   if (requiereConsentimientoMenor(fechaNac)) return porModalidad;
   return porModalidad.filter(k => k !== 'menorConsent');
 }
@@ -2029,6 +2110,21 @@ async function submitForm() {
       state.submitting = false; render();
       document.getElementById('wadeZone')?.scrollIntoView({behavior:'smooth',block:'center'});
       return;
+    }
+    // ── Los antecedentes de Olimpiadas Especiales ───────
+    // El botón ya viene desactivado sin ellos, pero se comprueba igual: si un
+    // atleta de OE se enviara sin estos papeles, la nómina llegaría incompleta
+    // a Olimpiadas Especiales y el que tiene que perseguirlo es el organizador.
+    {
+      const _evOE = EVENTS.find(e => e.id === f.evento);
+      const _faltanOE = _oeDocsAparte(_evOE).filter(d => !state[d.meta.stateKey]);
+      if (_faltanOE.length) {
+        state.error = 'Para competir en Olimpiadas Especiales falta adjuntar: '
+          + _faltanOE.map(d => d.meta.label).join(', ') + '.';
+        state.submitting = false; render();
+        document.getElementById('zone_' + _faltanOE[0].key)?.scrollIntoView({behavior:'smooth',block:'center'});
+        return;
+      }
     }
 
     // ── Duplicate check ─────────────────────────────────

@@ -8561,6 +8561,25 @@ window.DOC_TYPES_CATALOG = {
   notas:         { label: 'Concentración de Notas', icon: '', desc: 'Certificado académico' }
 };
 
+// Los antecedentes de Olimpiadas Especiales. No se marcan por campeonato: el
+// formulario se los pide solo a quien elige esa modalidad, en toda fecha. Están
+// acá para que la revisión y el ZIP de documentos los muestren con su nombre y
+// no con la clave cruda, y para poder avisarlo en la lista de más abajo.
+window.DOCS_OE_ATLETA = {
+  x_oe_ficha:       { label: 'Ficha médica · Olimpiadas Especiales', icon: '', desc: 'Formulario de OE, completado y firmado' },
+  x_oe_exoneracion: { label: 'Exoneración · Olimpiadas Especiales', icon: '', desc: 'Atleta y compañeros unificados · uso de imagen' },
+  x_oe_di:          { label: 'Certificado de DI o acreditación', icon: '', desc: 'Discapacidad intelectual o documento de acreditación' }
+};
+// Y los cinco del entrenador que declara a un atleta de Olimpiadas Especiales.
+window.DOCS_OE_ENTRENADOR = {
+  e_oe_salvaguarda: { label: 'Entrenamiento de Operación Salvaguarda', icon: '', desc: 'Certificado del curso' },
+  e_oe_lvl1:        { label: 'Coaching Level 1 — Sport Assistant', icon: '', desc: 'Certificado del curso' },
+  e_oe_lvl2:        { label: 'Coaching Level 2 — Coaching Assistant', icon: '', desc: 'Certificado del curso' },
+  e_oe_lvl3:        { label: 'Coaching Level 3 — Coach Online Module', icon: '', desc: 'Certificado del curso' },
+  e_oe_unified:     { label: 'Unified Sports Coaching Course', icon: '', desc: 'Certificado del curso' }
+};
+Object.assign(window.DOC_TYPES_CATALOG, window.DOCS_OE_ATLETA, window.DOCS_OE_ENTRENADOR);
+
 // Las modalidades y divisiones de la federación (espejo de inscripcion.html).
 // Sirven para elegir a quién se le pide cada documento.
 window.MODALIDADES_BASE = ['Powerlifting Classic','Only Bench Classic',
@@ -8606,7 +8625,12 @@ window.renderDocsChecklist = function(){
   const cont = document.getElementById('ef_docs_container');
   if(!cont || !ST.eventoForm) return;
   const current = Array.isArray(ST.eventoForm.requiredDocs) ? ST.eventoForm.requiredDocs : [];
+  // Los de Olimpiadas Especiales no se marcan acá: el formulario se los pide
+  // solo a quien elige esa modalidad, en cualquier campeonato. Salen abajo como
+  // aviso, para que no se agreguen otra vez a mano y terminen pidiéndose doble.
   const TIPOS = Object.assign({}, window.DOC_TYPES_CATALOG);
+  Object.keys(window.DOCS_OE_ATLETA||{}).forEach(k=>{ delete TIPOS[k]; });
+  Object.keys(window.DOCS_OE_ENTRENADOR||{}).forEach(k=>{ delete TIPOS[k]; });
   (window._efDocsX||[]).forEach(d=>{
     if(d && d.key) TIPOS['x_'+d.key] = {label:d.label||'(documento sin nombre)', icon:'',
       desc:(d.desc||'')+' · propio de este campeonato'};
@@ -8651,6 +8675,20 @@ window.renderDocsChecklist = function(){
       </div>
     </label>`;
   });
+  // El aviso va al final, y sin casilla: no hay nada que decidir acá.
+  const _oeA = Object.values(window.DOCS_OE_ATLETA||{}).map(m=>m.label);
+  const _oeE = Object.values(window.DOCS_OE_ENTRENADOR||{}).map(m=>m.label);
+  if(_oeA.length){
+    h += `<div style="padding:10px 12px;border:1px dashed rgba(212,168,67,.5);border-radius:6px;background:rgba(212,168,67,.06)">
+      <div style="font-weight:600;font-size:13px;color:var(--gold)">Olimpiadas Especiales · se piden solos</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.5">
+        No hay que marcarlos ni agregarlos: en cuanto alguien elige la modalidad <b>Olimpiadas Especiales</b>,
+        el formulario le suma estos a lo que ya pida este campeonato.<br>
+        <b>Al atleta:</b> ${_oeA.map(esc).join(' · ')}. La cédula de identidad de su lista es el carnet que ya se pide.<br>
+        <b>Al entrenador</b> que declare a uno de ellos: ${_oeE.map(esc).join(' · ')}.
+      </div>
+    </div>`;
+  }
   cont.innerHTML = h;
 };
 // Marcar o desmarcar tiene que quedar en ST antes de volver a dibujar: el

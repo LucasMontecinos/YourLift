@@ -199,16 +199,42 @@ function _docEntAplica(d){
 // mismo: la lista que se dibuja, lo que falta para poder enviar, y lo que se
 // sube al enviar. Si cada uno filtrara por su cuenta, se le pediría un
 // certificado que no se sube, o se subiría uno que ya no corresponde.
+// Lo que Olimpiadas Especiales le exige a un entrenador suyo. No lo pide el
+// campeonato: lo pide Olimpiadas Especiales, y es lo mismo en toda fecha donde
+// compitan. Por eso no vive en la configuración del formulario —donde habría
+// que volver a escribir los cinco certificados cada vez— sino acá, y se suma
+// solo en cuanto el entrenador declara a un atleta de esa modalidad.
+const DOCS_ENT_OE=[
+  {key:'oe_salvaguarda', label:'Entrenamiento de Operación Salvaguarda',
+   desc:'Certificado del curso de Operación Salvaguarda'},
+  {key:'oe_lvl1', label:'Coaching Level 1 — Sport Assistant',
+   desc:'Certificado del curso'},
+  {key:'oe_lvl2', label:'Coaching Level 2 — Coaching Assistant',
+   desc:'Certificado del curso'},
+  {key:'oe_lvl3', label:'Coaching Level 3 — Coach Online Module',
+   desc:'Certificado del curso'},
+  {key:'oe_unified', label:'Unified Sports Coaching Course',
+   desc:'Certificado del curso'}
+];
+function llevaOE(){
+  return modsQueLleva().some(m=>/olimpiada/.test(m));
+}
+
 function docsEntrenador(fObj){
   const out={};
-  (Array.isArray(fObj&&fObj.documentos)?fObj.documentos:[]).forEach(d=>{
+  const mete=(d,oe)=>{
     if(!d||!d.key)return;
-    if(!_docEntAplica(d))return;
     out['e_'+d.key]={
       key:'e_'+d.key, label:d.label||'Documento', desc:d.desc||'',
-      plantillaUrl:d.plantillaUrl||'', linkUrl:d.linkUrl||'', linkTexto:d.linkTexto||''
+      plantillaUrl:d.plantillaUrl||'', linkUrl:d.linkUrl||'', linkTexto:d.linkTexto||'',
+      oe:!!oe
     };
+  };
+  (Array.isArray(fObj&&fObj.documentos)?fObj.documentos:[]).forEach(d=>{
+    if(!_docEntAplica(d))return;
+    mete(d,false);
   });
+  if(llevaOE())DOCS_ENT_OE.forEach(d=>{ if(!out['e_'+d.key])mete(d,true); });
   return out;
 }
 function faltantes(){
@@ -706,8 +732,19 @@ function pasoDocs(){
     h+=`<div class="alert alert-info">Este formulario no pide documentos. Puedes continuar.</div>`;
   }else{
     h+=`<p class="muted" style="margin-bottom:16px">Son los que este campeonato le pide al entrenador. Máximo 10 MB cada uno.</p>`;
+    let _tituloOE=false;
     lista.forEach(m=>{
       const nom=state.nombres[m.key]||'';
+      // Los cinco certificados de coaching aparecen porque declaró a un atleta
+      // de Olimpiadas Especiales. Sin decirlo, se leen como papeleo del
+      // campeonato y no se entiende por qué a unos entrenadores sí y a otros no.
+      if(m.oe&&!_tituloOE){
+        _tituloOE=true;
+        h+=`<div style="background:rgba(212,168,67,.08);border:1px solid rgba(212,168,67,.4);border-radius:10px;padding:14px 16px;margin:20px 0 12px">
+          <div style="font-size:13px;font-weight:600;color:var(--gold);margin-bottom:4px">Olimpiadas Especiales</div>
+          <div class="muted">Llevas al menos un atleta de Olimpiadas Especiales, y ellos le piden estos cinco certificados a cada entrenador. Van además de los documentos del campeonato.</div>
+        </div>`;
+      }
       h+=`<div class="field">`;
       if(m.plantillaUrl||m.linkUrl){
         h+=`<div style="background:rgba(30,91,168,.08);border:1px solid rgba(30,91,168,.4);border-radius:10px;padding:14px 16px;margin-bottom:12px">
