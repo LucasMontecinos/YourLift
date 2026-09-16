@@ -3830,6 +3830,111 @@ function resetLiveData(){
   },1200);
 }
 
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// VOLVER A CARGAR LA N\u00d3MINA
+//
+// Una n\u00f3mina cambia despu\u00e9s de cargada: una federaci\u00f3n manda su lista final y
+// entra uno, salen cuatro, a otro le corrigen el lote. Hasta ac\u00e1 eso no ten\u00eda
+// arreglo: la n\u00f3mina se lee de nominas.json UNA sola vez, al elegir el
+// campeonato, y de ah\u00ed en adelante manda el documento de Firestore. Volver a
+// elegir el campeonato tampoco serv\u00eda \u2014 el primer snapshot del servidor rearma
+// el roster con el viejo, porque el merge se construye sobre el remoto.
+// Quedaba editar a mano, de a uno, sobre cuatrocientos atletas.
+//
+// Esto vuelve a leer el archivo y reemplaza el roster, pero NO pisa lo que ya
+// se hizo en tarima: a quien sigue en la n\u00f3mina se le conservan el peso
+// corporal, los racks, los intentos y el bombed. La tanda y el lote s\u00ed salen
+// del archivo, que es justamente lo que se viene a corregir.
+//
+// Se avisa qui\u00e9n entra y qui\u00e9n sale ANTES de tocar nada, y si alguno de los que
+// salen ya tiene algo cargado se dice aparte: sacar a alguien que ya compiti\u00f3
+// casi siempre es un error de quien manda la lista, y conviene mirarlo dos veces.
+function _nomAplica(){
+  return !!(DATA.event && (DATA.event.id || DATA.event.name));
+}
+window.recargarNomina=async function(){
+  if(!isAdmin){alert('Solo un admin puede volver a cargar la n\u00f3mina');return}
+  if(!DATA.event){alert('No hay campeonato activo');return}
+  if(!fbReady){
+    alert('\u26a0 Sin conexi\u00f3n con el servidor.\n\nNo se carg\u00f3 nada: si cambiara la n\u00f3mina solo en esta pantalla, quedar\u00eda distinta del resto.');
+    return;
+  }
+  if(!window.IS_CONTROLLER){
+    if(!confirm('\u26a0 Esta pantalla est\u00e1 en modo ESPECTADOR: no puede guardar en el servidor.\n\n\u00bfCambiarla a CONTROLADOR y continuar?'))return;
+    setSyncMode(true);
+  }
+  let ev;
+  try{
+    const j=await fetch('nominas.json',{cache:'no-cache'}).then(r=>r.json());
+    const le=DATA.event;
+    ev=(j.events||[]).find(e=>(le.id&&String(e.id)===String(le.id))||(le.name&&e.name===le.name));
+  }catch(e){ alert('No se pudo leer la n\u00f3mina: '+(e.message||e)); return; }
+  if(!ev||!Array.isArray(ev.athletes)||!ev.athletes.length){
+    alert('Este campeonato no tiene su n\u00f3mina en el archivo.\n\nLos que se arman con inscripciones se actualizan solos desde el panel; esto es para los que traen la n\u00f3mina en nominas.json, como el Sudamericano.');
+    return;
+  }
+  const cronoKey='fechipo_crono_'+(ev.name||'').replace(/\s+/g,'_');
+  let flightMap=null;
+  try{const s=localStorage.getItem(cronoKey);if(s){const dd=JSON.parse(s);if(dd.map)flightMap=dd.map}}catch(e){}
+  const nuevos=ev.athletes.map((a,j)=>_evAthlete(a,j,flightMap));
+
+  // El cruce va por nombre: el lote puede haber cambiado, y el id se reparte al
+  // leer el archivo, as\u00ed que ninguno de los dos identifica a una persona.
+  const viejosPorN={}; (DATA.athletes||[]).forEach(a=>{ viejosPorN[_nnCrono(a.name)]=a; });
+  const nuevosN=new Set(nuevos.map(a=>_nnCrono(a.name)));
+  const cargado=a=>!!(a.bw||a.bombed||['sq','bp','dl'].some(l=>(a.att&&a.att[l]||[]).some(x=>x&&x.w)));
+  const entran=nuevos.filter(a=>!viejosPorN[_nnCrono(a.name)]);
+  const salen=(DATA.athletes||[]).filter(a=>!nuevosN.has(_nnCrono(a.name)));
+  const salenConDatos=salen.filter(cargado);
+  if(!entran.length&&!salen.length){
+    if(!confirm('La n\u00f3mina del archivo tiene a los mismos '+nuevos.length+' atletas.\n\nIgual se vuelven a leer tandas y lotes, por si alguno cambi\u00f3. \u00bfContinuar?'))return;
+  }else{
+    const lista=(t,arr)=>arr.length?('\n'+t+' ('+arr.length+'):\n'+arr.slice(0,12).map(a=>'  \u2022 '+a.name+(a.lot?' \u00b7 lote '+a.lot:'')).join('\n')+(arr.length>12?'\n  \u2026 y '+(arr.length-12)+' m\u00e1s':'')+'\n'):'';
+    let msg='VOLVER A CARGAR LA N\u00d3MINA de:\n"'+(ev.name||'')+'"\n'
+      +'\nQuedan '+nuevos.length+' atletas (ahora hay '+(DATA.athletes||[]).length+').\n'
+      +lista('ENTRAN',entran)+lista('SALEN',salen)
+      +'\nSE CONSERVA de los que siguen: peso corporal, racks, intentos y bombed.'
+      +'\nSE VUELVE A LEER del archivo: tanda, lote, categor\u00eda, divisi\u00f3n y club.'
+      +'\n\nEsto sobreescribe el servidor para todos los dispositivos y widgets.';
+    if(salenConDatos.length){
+      msg+='\n\n\u26a0 OJO: '+salenConDatos.length+' de los que salen YA TIENEN datos cargados ('
+        +salenConDatos.slice(0,5).map(a=>a.name).join(', ')+(salenConDatos.length>5?'\u2026':'')
+        +'). Si sacarlos no es lo que quieres, cancela.';
+    }
+    if(!confirm(msg))return;
+  }
+  const CONSERVAR=['bw','rackSQ','rackBP','bombed','att'];
+  let heredados=0;
+  nuevos.forEach(a=>{
+    const v=viejosPorN[_nnCrono(a.name)];
+    if(!v)return;
+    if(cargado(v))heredados++;
+    CONSERVAR.forEach(f=>{ if(v[f]!==undefined) a[f]=JSON.parse(JSON.stringify(v[f])); });
+  });
+  DATA.athletes=nuevos;
+  // Los ids se reparten de nuevo, as\u00ed que cualquier marca de "edit\u00e9 esto reci\u00e9n"
+  // apuntar\u00eda a otra persona.
+  try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
+  const flAct=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort(_cmpFl);
+  if(flAct.length&&flAct.indexOf(DATA.flight)<0)DATA.flight=flAct[0];
+  // Escritura autoritativa: reemplaza el documento remoto. Con un merge normal,
+  // el servidor devolver\u00eda a los que acaban de salir.
+  window._forceFullWrite=true;
+  saveNow();
+  R();
+  const _okAntes=_fbLastOk;
+  setTimeout(()=>{
+    if(_fbLastOk===_okAntes){
+      alert('\u26a0 La n\u00f3mina se carg\u00f3 en ESTA pantalla pero NO se pudo guardar en el servidor.\n\nEl p\u00fablico y los widgets siguen con la anterior. Revisa el indicador SYNC y vuelve a intentar.');
+    }else{
+      alert('\u2713 N\u00f3mina al d\u00eda: '+DATA.athletes.length+' atletas'
+        +(entran.length?' \u00b7 '+entran.length+' entran':'')
+        +(salen.length?' \u00b7 '+salen.length+' salen':'')
+        +(heredados?'\n\nSe conservaron los datos de tarima de '+heredados+' atleta'+(heredados>1?'s':'')+'.':''));
+    }
+  },1200);
+};
+
 const ctIntervals={};
 function startCT(key){/* just mark it active, master tick handles updates */}
 
@@ -10096,6 +10201,7 @@ function renderShell(){
    try{ const m=window._cronoFlightMap;
      if(m&&Object.keys(m).length)_aj=DATA.athletes.filter(a=>!_cronoLookup(m,a.name)).length; }catch(e){}
    if(_aj)h+='<button class="side-btn" onclick="limpiarAtletasAjenos()" style="color:#f59e0b;border:1px solid rgba(245,158,11,.5)" title="Saca a los atletas que no figuran en el Cronograma de este campeonato"><span class="icon">\u26A0</span>'+_aj+' atleta'+(_aj>1?'s':'')+' de otro campeonato</button>';}
+  if(_nomAplica())h+='<button class="side-btn" onclick="recargarNomina()" title="Vuelve a leer la nómina del archivo: entran los que se agregaron, salen los que se dieron de baja y se corrigen tandas y lotes. Conserva pesaje e intentos de los que siguen."><span class="icon">↻</span>Volver a cargar la nómina</button>';
   h+='<button class="side-btn" onclick="resetLiveData()" style="color:#ff8a8a"><span class="icon"></span>Reiniciar datos en vivo</button>';
   }
   h+='<button class="side-btn" onclick="doLogout()"><span class="icon">\uD83D\uDD12</span>Cerrar sesi\u00f3n</button>';
