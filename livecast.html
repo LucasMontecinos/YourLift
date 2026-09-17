@@ -513,18 +513,31 @@ async function initFB(){
         // por archivado, porque si no un campeonato archivado pero publicado (el
         // Sudamericano es justo eso) dejaba al público sin nada que ver.
         if(e.publicoVisible===true){window.LIVE_EVENT_PUB.add(d.id);if(e.name)window.LIVE_EVENT_PUB.add(e.name);}
-        if(e.status==='archived'||e.livecastVisible===false){
+        const _oculto=(e.status==='archived'||e.livecastVisible===false);
+        if(_oculto){
           window.LIVE_EVENT_HIDDEN.add(d.id);
           if(e.name)window.LIVE_EVENT_HIDDEN_NAMES.add(e.name);
-          return;
         }
-        evs[d.id]=e.name;
-        activeIds.push(d.id);
+        // Archivado = fuera de la lista del operador y de los conteos.
+        if(!_oculto){ evs[d.id]=e.name; activeIds.push(d.id); }
         const recordsEnabled=(typeof e.recordsEnabled==='boolean')
           ? e.recordsEnabled
           : !/universitar/i.test(e.name||'');
-        window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0,logoUrl:e.logoUrl||'',logoFedUrl:e.logoFedUrl||'',logosPantalla:Array.isArray(e.logosPantalla)?e.logosPantalla:[]};
-        if(DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
+        // Pero archivado Y publicado para el público es un caso real —el
+        // Sudamericano es justo eso— y sus datos SÍ se registran acá.
+        //
+        // Antes salía de esta función antes de llegar a este punto, y por eso un
+        // link ?evento=<id> a un campeonato archivado solo se podía resolver si
+        // nominas.json llegaba a tiempo: si el teléfono andaba lento, se acababa
+        // la espera y la persona terminaba en la lista —donde tampoco aparece,
+        // por archivado— viendo "NO HAY COMPETENCIAS EN VIVO" con el campeonato
+        // a tres días de correrse. De acá salen además los logos de la pantalla
+        // de tarima y el detector de récords, que por lo mismo tampoco le
+        // llegaban.
+        if(!_oculto||e.publicoVisible===true){
+          window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0,logoUrl:e.logoUrl||'',logoFedUrl:e.logoFedUrl||'',logosPantalla:Array.isArray(e.logosPantalla)?e.logosPantalla:[]};
+        }
+        if((!_oculto||e.publicoVisible===true)&&DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
           DATA.event.recordsEnabled=recordsEnabled;
           // El logo se BORRA solo si viene del documento exacto de este
           // campeonato. Por nombre pueden calzar dos documentos —el del
@@ -10103,7 +10116,12 @@ function renderSetup(){
     // se llene de cosas viejas, no para esconder las jornadas del campeonato al
     // que se entró a propósito. Si no, marcar un día como oculto (para que no
     // apareciera en Nóminas, por ejemplo) lo borraba también de acá.
-    if(!_flt&&_hidden&&(_hidden.has(ev.id)||_hiddenN?.has(ev.name)))return false;
+    // "Archivado" es para que la lista del OPERADOR no se llene de cosas viejas.
+    // Al público no le aplica si además está publicado: un campeonato archivado
+    // en su ficha pero habilitado en YourLift Público es el caso del
+    // Sudamericano, y esconderlo dejaba a la gente con "NO HAY COMPETENCIAS EN
+    // VIVO" tres días antes de que se corriera.
+    if(!_flt&&_hidden&&(_hidden.has(ev.id)||_hiddenN?.has(ev.name))&&!(_soloPub&&_esPub(ev)))return false;
     if(_flt&&ev.parent!==_flt.parent)return false;
     if(_soloPub&&!_esPub(ev))return false;
     return true;
