@@ -669,6 +669,40 @@ function generateCode(rut, nombre) {
   return prefix + initials + '-' + year;
 }
 
+// El atleta cambió el nombre que la federación tiene para su RUT.
+//
+// La base arrastra muchos nombres incompletos —falta el segundo nombre, falta
+// un apellido— y al completarlos pasaba esto: el atleta escribía, salía del
+// campo, la pantalla parpadeaba y volvía el nombre corto. Sin explicación y sin
+// forma de insistir.
+//
+// Ahora se le pregunta una vez. Si confirma, su nombre queda: es el que va a la
+// inscripción y el que sale en la nómina. Si no, vuelve el de la base.
+function revisarNombre() {
+  const f = state.form;
+  const base = (f._nombreBase || '').trim();
+  const ahora = (f.nombre || '').trim();
+  // Atleta nuevo, campo vacío o sin cambios: el flujo de siempre.
+  if (!base || !ahora || ahora === base) { autoFillCode(); return; }
+  // Ya lo confirmó y no lo volvió a tocar: no se le pregunta en cada salida del campo.
+  if (f._nombreCorregido && ahora === f._nombreCorregidoA) { autoFillCode(); return; }
+  const ok = confirm(
+    'La federación te tiene registrado como:\n\n    ' + base +
+    '\n\nY tú escribiste:\n\n    ' + ahora +
+    '\n\n¿Es este tu nombre completo?\n\n' +
+    'Si aceptas, se usa el tuyo en la inscripción y en la nómina, y le queda avisado ' +
+    'a la federación para que corrija tu ficha.');
+  if (ok) {
+    f._nombreCorregido = true;
+    f._nombreCorregidoA = ahora;
+  } else {
+    f.nombre = base;
+    f._nombreCorregido = false;
+    f._nombreCorregidoA = '';
+  }
+  render();
+}
+
 function autoFillCode() {
   const f = state.form;
   const rut = formatRut(f.rut);
@@ -678,17 +712,29 @@ function autoFillCode() {
   const found = findAthleteByRut(rut);
   if (found && found.codigo) {
     // ATLETA EXISTENTE → autocompletar nombre completo, sexo, fecha de nacimiento
-    const nameChanged = (found.nombre || '').trim() && (found.nombre || '').trim() !== (f.nombre || '').trim();
     f.codigo = found.codigo;
     f._codigoSource = 'db';
-    // Nombre completo de la base (sobreescribe el que el atleta haya tipeado mal)
-    if (found.nombre && found.nombre.trim()) {
-      f.nombre = found.nombre.trim();
-    }
-    // Avisar al atleta que se autocompletó
-    if (nameChanged) {
-      state.success = '✓ Atleta encontrado — autocompletamos tu nombre completo, fecha y sexo';
-      setTimeout(() => { if (state.success.includes('autocompletamos')) { state.success = ''; render(); } }, 4000);
+    // El nombre que tiene la federación para este RUT. Se guarda aparte para
+    // poder distinguir "todavía no lo ha tocado" de "lo corrigió a propósito".
+    const nombreBase = (found.nombre || '').trim();
+    const tipeado = (f.nombre || '').trim();
+    if (nombreBase) {
+      f._nombreBase = nombreBase;
+      // El nombre de la base rellena el campo vacío y corrige lo que el atleta
+      // haya tipeado ANTES de que se lo reconociéramos. Lo que NO hace es pisar
+      // una corrección hecha a conciencia: la base tiene muchos nombres
+      // incompletos —falta el segundo nombre, falta un apellido— y el atleta los
+      // completaba, salía del campo y se le volvía atrás, sin explicación.
+      if (!f._nombreCorregido) {
+        if (!tipeado || tipeado !== nombreBase) {
+          const avisar = !!tipeado && tipeado !== nombreBase;
+          f.nombre = nombreBase;
+          if (avisar) {
+            state.success = '✓ Atleta encontrado — autocompletamos tu nombre completo, fecha y sexo';
+            setTimeout(() => { if (state.success.includes('autocompletamos')) { state.success = ''; render(); } }, 4000);
+          }
+        }
+      }
     }
     // Fecha de nacimiento (formato: yyyy-mm-dd para input[type=date])
     if (found.fechaNac && !f.fechaNac) {
@@ -1021,7 +1067,7 @@ function renderForm() {
       ${/* La gente escribe un solo nombre y un solo apellido, y después hay que
             perseguirla para completar la ficha. Diciéndole exactamente qué va en
             cada lugar se corrige en el momento, que es cuando cuesta menos. */''}
-      <input class="input ${f.nombre?'ok':''}" type="text" placeholder="Nombre Nombre Apellido Apellido" value="${f.nombre}" oninput="upd('nombre',this.value)" onblur="upd('nombre',formatName(this.value));autoFillCode();this.value=state.form.nombre">
+      <input class="input ${f.nombre?'ok':''}" type="text" placeholder="Nombre Nombre Apellido Apellido" value="${f.nombre}" oninput="upd('nombre',this.value)" onblur="upd('nombre',formatName(this.value));revisarNombre();this.value=state.form.nombre">
       <div style="font-size:11px;color:var(--muted);margin-top:5px;line-height:1.6">
         Nombre <span style="opacity:.75">(primer nombre)</span> ·
         Nombre <span style="opacity:.75">(segundo nombre)</span> ·
@@ -2155,6 +2201,12 @@ async function submitForm() {
     const publicEntry = {
       evento: f.evento,
       nombre: sanitizeInput(f.nombre),
+      // El atleta corrigió el nombre que la federación tenía para su RUT. Viaja
+      // con la inscripción para que el panel pueda ofrecer arreglar la ficha:
+      // si no, la corrección vale solo para este campeonato y el nombre corto
+      // vuelve a salir en el siguiente.
+      ...(f._nombreCorregido && f._nombreBase
+          ? { nombreAnterior: sanitizeInput(f._nombreBase) } : {}),
       rut: sanitizeInput(f.rut),
       codigo: sanitizeInput(f.codigo),
       sexo: f.sexo,
