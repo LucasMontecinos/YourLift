@@ -3818,17 +3818,32 @@ function resetLiveData(){
   saveNow();
   R();
   // Confirmar que realmente se propagó (si no escribe, el público no se entera)
-  const _okAntes=_fbLastOk;
-  setTimeout(()=>{
-    if(_fbLastOk===_okAntes){   // no hubo ninguna escritura exitosa después del reinicio
-      alert('\u26A0 El reinicio se aplicó en ESTA pantalla pero NO se pudo guardar en el servidor'
-        +(window.IS_CONTROLLER?'.':' porque está en modo ESPECTADOR.')
-        +'\n\nEl público sigue viendo los datos anteriores. Revisa el indicador SYNC y vuelve a intentar.');
-    }else{
-      alert('\u2713 Datos en vivo reiniciados y propagados a todos los dispositivos y widgets.');
-    }
-  },1200);
+  _confirmarPublicado(
+    ()=>alert('\u2713 Datos en vivo reiniciados y propagados a todos los dispositivos y widgets.'),
+    ()=>alert('\u26A0 El reinicio se aplic\u00f3 en ESTA pantalla pero NO se pudo guardar en el servidor'
+        +(window.IS_CONTROLLER?'.':' porque est\u00e1 en modo ESPECTADOR.')
+        +'\n\nEl p\u00fablico sigue viendo los datos anteriores. Revisa el indicador SYNC y vuelve a intentar.'));
 }
+
+// ¿Salió de verdad la escritura al servidor?
+//
+// Esto se miraba UNA vez, 1,2 segundos después de mandar. El documento del
+// Sudamericano pesa un mega —cuatrocientos y tantos atletas con sus nueve
+// intentos cada uno—, así que desde un iPad tarda bastante más que eso en
+// subir: el aviso de "NO se pudo guardar" salía mientras la escritura iba en
+// camino, y era mentira. En el peor momento posible, además, porque manda a
+// repetir una operación que ya estaba hecha.
+//
+// Ahora se espera a que confirme —hasta veinte segundos— y recién ahí se avisa.
+function _confirmarPublicado(ok, falla){
+  const okAntes=_fbLastOk, t0=Date.now();
+  (function mirar(){
+    if(_fbLastOk!==okAntes){ ok(); return; }
+    if(Date.now()-t0>20000){ falla(); return; }
+    setTimeout(mirar,400);
+  })();
+}
+
 
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 // VOLVER A CARGAR LA N\u00d3MINA
@@ -3922,17 +3937,12 @@ window.recargarNomina=async function(){
   window._forceFullWrite=true;
   saveNow();
   R();
-  const _okAntes=_fbLastOk;
-  setTimeout(()=>{
-    if(_fbLastOk===_okAntes){
-      alert('\u26a0 La n\u00f3mina se carg\u00f3 en ESTA pantalla pero NO se pudo guardar en el servidor.\n\nEl p\u00fablico y los widgets siguen con la anterior. Revisa el indicador SYNC y vuelve a intentar.');
-    }else{
-      alert('\u2713 N\u00f3mina al d\u00eda: '+DATA.athletes.length+' atletas'
+  _confirmarPublicado(
+    ()=>alert('\u2713 N\u00f3mina al d\u00eda: '+DATA.athletes.length+' atletas'
         +(entran.length?' \u00b7 '+entran.length+' entran':'')
         +(salen.length?' \u00b7 '+salen.length+' salen':'')
-        +(heredados?'\n\nSe conservaron los datos de tarima de '+heredados+' atleta'+(heredados>1?'s':'')+'.':''));
-    }
-  },1200);
+        +(heredados?'\n\nSe conservaron los datos de tarima de '+heredados+' atleta'+(heredados>1?'s':'')+'.':'')),
+    ()=>alert('\u26a0 La n\u00f3mina se carg\u00f3 en ESTA pantalla pero NO se pudo guardar en el servidor.\n\nEl p\u00fablico y los widgets siguen con la anterior. Revisa el indicador SYNC y vuelve a intentar.'));
 };
 
 const ctIntervals={};
