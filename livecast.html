@@ -9964,6 +9964,25 @@ function R(){
     // El Scoreboard salió del menú: si alguien tenía esa pantalla guardada de antes,
     // se lo lleva a Resultados en vez de dejarlo en una pantalla sin salida.
     if(DATA.phase==='scoreboard'){DATA.phase='results';}
+    // El link pide un campeonato y todavía no se resolvió cuál es.
+    //
+    // Acá quedaba en pantalla el que este equipo tuviera guardado de una visita
+    // anterior: alguien que había mirado el Regional Norte escaneaba el QR del
+    // Sudamericano y veía el Regional Norte. Después se corregía solo, pero
+    // quien miraba la pantalla en ese momento ya se había llevado la idea de
+    // que el QR estaba malo — y si la resolución fallaba, no se corregía nunca.
+    //
+    // No se borra nada: solo no se dibuja el campeonato viejo mientras se
+    // resuelve el del link. De la decisión se encarga applyEventURLParam, que
+    // es el único que sabe si son el mismo o no. Al admin no se le tapa la
+    // pantalla: puede estar operando y necesita verla.
+    if(window._EV_ESPERANDO&&!isAdmin&&DATA.phase!=='setup'){
+      el.innerHTML='<div style="max-width:620px;margin:60px auto;padding:0 16px">'
+        +'<div class="card" style="padding:34px 22px;text-align:center">'
+        +'<div class="os" style="font-size:15px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">ENTRANDO A LA COMPETENCIA</div>'
+        +'<div style="color:var(--muted);font-size:13px">Un segundo…</div></div></div>';
+      return;
+    }
     if(DATA.phase==='transmision'){el.innerHTML=renderTransmision();setTimeout(initTxWidgets,0);return}
     if(DATA.phase==='setup'){
       // El selector se vuelve a dibujar varias veces mientras cargan los datos
@@ -13933,8 +13952,14 @@ function applyEventURLParam(){
       }
       console.warn('[LC] No pude encontrar evento "'+want+'" después de 5s. Verifica nombre/id.');
       // Se acabó la espera: ahora sí corresponde mostrar la lista, porque el link
-      // no llevaba a ninguna parte.
+      // no llevaba a ninguna parte. Y si en pantalla quedó la competencia de una
+      // visita anterior, se saca: dejarla puesta es peor que mostrar la lista,
+      // porque la persona cree que el QR la llevó ahí.
       window._EV_ESPERANDO=false;
+      if(!TX_MODE&&!isAdmin&&DATA.phase!=='setup'&&DATA.athletes?.length){
+        DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};
+        try{localStorage.removeItem(SAVE_KEY)}catch(e){}
+      }
       if(!TX_MODE){R();return;}
       // Último recurso, SOLO para widgets TX de un evento que realmente no está en la
       // lista (ej. una sub-tarima generada sin doc propio en "eventos"): usar el slug
@@ -13970,11 +13995,23 @@ function applyEventURLParam(){
     }
     // If already on this event with an active session, keep it.
     if(DATA.event&&(DATA.event.id===wanted.id||DATA.event.name===wanted.name)){_ensayoGrant();R();return}
-    // If there is an active session for a different event, do NOT auto-wipe it.
+    // Quedó cargado OTRO campeonato y el link pide este.
+    //
+    // Manda el link: quien escanea el QR del Sudamericano quiere el
+    // Sudamericano. Antes esto borraba lo guardado y dejaba a la persona en la
+    // LISTA de campeonatos —no entraba nunca al del link—, así que el QR
+    // parecía roto. Ahora se descarta lo viejo y se entra al que pide.
+    //
+    // Al que está OPERANDO se le pregunta primero: puede tener pesaje o
+    // intentos cargados que todavía no salieron de este equipo.
     if(DATA.phase!=='setup'&&DATA.athletes?.length){
+      const _suyo=(DATA.event&&(DATA.event.name||DATA.event.id))||'otro campeonato';
+      if(isAdmin&&!confirm('Este link lleva a "'+(wanted.name||wanted.id)+'".\n\nEn esta pantalla está cargado "'+_suyo+'".\n\n¿Cambiar de campeonato? Se descarta lo de ESTE equipo; lo que ya se guardó en el servidor no se toca.')){
+        R();return;
+      }
       DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};
       try{localStorage.removeItem(SAVE_KEY)}catch(e){}
-      R();return;
+      try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
     }
     // Un campeonato que se corre en varios días (ej. el Sudamericano) no tiene
     // atletas propios: sus nueve días son eventos aparte con parent=<id>. Entrar
