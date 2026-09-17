@@ -1541,7 +1541,26 @@ let _syncTimer=null;
 // _syncInFlight/_syncPending ya impide que se pisen) pero deja de notarse.
 function debouncedSync(){if(_syncTimer)clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>{syncToFB();_syncTimer=null},150)}
 function saveNow(){if(PRACTICE_VIEWER)return;if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}syncToFB()}
-function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);_normExtraAtts(DATA.athletes);return true}}}catch(e){}return false}
+// Si la dirección nombra un campeonato (?evento=…), esta pantalla arranca
+// LIMPIA: no se restaura lo que quedó guardado de una visita anterior.
+//
+// Es el caso del QR del público. Antes se restauraba primero y se resolvía el
+// link después, y de esa carrera salían todas las formas de terminar en el
+// campeonato equivocado: verlo un rato y que cambiara, quedarse en él si el
+// link tardaba, o terminar en una lista que no llevaba a ninguna parte. Y para
+// decidir si lo guardado era "el mismo campeonato" había que comparar nombres
+// contra ids, que es justo lo que no se puede hacer bien.
+//
+// Arrancando limpia no hay nada que comparar: manda el link. No se pierde
+// trabajo, porque lo que está cargado en una competencia vive en el servidor y
+// vuelve solo al entrar —es lo mismo que pasa hoy al cambiar de campeonato
+// desde la lista—. Sin ?evento= todo sigue igual que siempre.
+function _linkPideCampeonato(){
+  try{ return !!TX_URL.get('evento'); }catch(e){ return false; }
+}
+function load(){
+  if(_linkPideCampeonato()&&!TX_MODE)return false;
+  try{const s=localStorage.getItem(SAVE_KEY);if(s){const d=JSON.parse(s);if(d.phase&&d.phase!=='setup'){d.timerOn=false;d.timer=60;Object.assign(DATA,d);_normExtraAtts(DATA.athletes);return true}}}catch(e){}return false}
 // Un 4º intento puede llegar SIN la marca `extra`: lo guardó una versión anterior,
 // o entró desde otro control. Sin esa marca la fila del intento extra no se dibujaba
 // en Control en Vivo, así que el intento quedaba colgado — se veía en Resultados
@@ -9997,9 +10016,13 @@ function R(){
     //
     // No se borra nada: solo no se dibuja el campeonato viejo mientras se
     // resuelve el del link. De la decisión se encarga applyEventURLParam, que
-    // es el único que sabe si son el mismo o no. Al admin no se le tapa la
-    // pantalla: puede estar operando y necesita verla.
-    if(window._EV_ESPERANDO&&!isAdmin&&DATA.phase!=='setup'){
+    // es el único que sabe si son el mismo o no.
+    //
+    // Vale también para el admin. Antes se lo saltaba —"puede estar operando"—
+    // pero el resultado era peor: en un teléfono con sesión de admin el QR
+    // dejaba el campeonato viejo en pantalla y ahí se quedaba. Si el link pide
+    // el mismo que ya tiene cargado, esto dura lo que tarda en resolverse.
+    if(window._EV_ESPERANDO&&DATA.phase!=='setup'){
       el.innerHTML='<div style="max-width:620px;margin:60px auto;padding:0 16px">'
         +'<div class="card" style="padding:34px 22px;text-align:center">'
         +'<div class="os" style="font-size:15px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">ENTRANDO A LA COMPETENCIA</div>'
@@ -14030,13 +14053,13 @@ function applyEventURLParam(){
     // LISTA de campeonatos —no entraba nunca al del link—, así que el QR
     // parecía roto. Ahora se descarta lo viejo y se entra al que pide.
     //
-    // Al que está OPERANDO se le pregunta primero: puede tener pesaje o
-    // intentos cargados que todavía no salieron de este equipo.
+    // Sin preguntar, tampoco al admin. Se probó preguntarle —por si estaba
+    // operando— y salía peor: en un teléfono con sesión de admin, con el
+    // diálogo descartado o sin contestar, el QR dejaba a la persona en el
+    // campeonato viejo. Además no se pierde nada: lo de este equipo está
+    // guardado en el servidor y vuelve al elegir ese campeonato de nuevo, que
+    // es exactamente lo que ya pasa al cambiar de competencia desde la lista.
     if(DATA.phase!=='setup'&&DATA.athletes?.length){
-      const _suyo=(DATA.event&&(DATA.event.name||DATA.event.id))||'otro campeonato';
-      if(isAdmin&&!confirm('Este link lleva a "'+(wanted.name||wanted.id)+'".\n\nEn esta pantalla está cargado "'+_suyo+'".\n\n¿Cambiar de campeonato? Se descarta lo de ESTE equipo; lo que ya se guardó en el servidor no se toca.')){
-        R();return;
-      }
       DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};
       try{localStorage.removeItem(SAVE_KEY)}catch(e){}
       try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
