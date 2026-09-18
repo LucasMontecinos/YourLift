@@ -60,7 +60,22 @@ service cloud.firestore {
     // escribir a cualquiera para que varias personas prueben a la vez sobre el
     // mismo tablero y vean los cambios en el momento. Son datos descartables:
     // ahí no hay ninguna competencia real, y todo lo demás sigue pidiendo admin.
-    function esEnsayo(doc) { return doc.matches('ENSAYO_.*'); }
+    //
+    // Dos formas de id, porque no todas las colecciones lo arman igual:
+    //   livecast_sync / livecast_screen  →  'ENSAYO_Sudamericano_2026'
+    //   livecast_director / _record      →  'current__ENSAYO_Sudamericano_2026'
+    // Con solo la primera forma, en un ensayo el Control TX no podía escribir y
+    // los gráficos de transmisión no se movían: se apretaba el botón, quedaba
+    // verde, y a la pantalla no llegaba nada. Que es justo lo que se va a probar
+    // en un ensayo.
+    //
+    // judge_decisions y timer_control quedan afuera a propósito: sus ids son
+    // 'current' / 'current_T1' y no dicen de qué evento son, así que no hay forma
+    // de distinguir el ensayo de la competencia de verdad. Los jueces igual
+    // escriben ahí con su cuenta (esJuez), que es como se usa en el campeonato.
+    function esEnsayo(doc) {
+      return doc.matches('ENSAYO_.*') || doc.matches('.*__ENSAYO_.*');
+    }
 
     // ── Livecast (sync + widgets de transmisión) ───────────────
     // Un solo bloque por colección: si se repite el match más abajo, las reglas
