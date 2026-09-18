@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Capacitación Jueces · Sudamericano 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   Material de capacitación para los jueces del Sudamericano 2026.
+
+   Se ve de dos formas y las dos importan:
+     · EN PANTALLA   una lámina a la vez, se pasa con las flechas o tocando.
+     · IMPRESO/PDF   todas las láminas seguidas, una por página (Ctrl+P).
+
+   Los colores son los mismos del livecast y del panel del juez a propósito:
+   lo que se ve acá tiene que ser reconocible cuando lo tengan en la mano.
+   ═══════════════════════════════════════════════════════════════════ */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0A1628; --card:#0F1E35; --card2:#132743; --border:#1E3A5F;
+  --text:#D4E1F0; --muted:#7A8FA6; --gold:#D4A843; --accent:#C41E3A;
+  --red:#ef4444; --blue:#3b82f6; --yellow:#eab308; --white:#f0f0f0; --green:#22c55e;
+  --purple:#a855f7;
+}
+html,body{background:#060D18;color:var(--text);font-family:'DM Sans',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+
+/* ── La lámina ─────────────────────────────────────────────── */
+/* 16:9 clavado: es la forma del proyector y la del PDF, así lo que se ve al
+   preparar la charla es exactamente lo que se ve al darla. */
+.dia{width:1280px;height:720px;background:var(--bg);position:relative;overflow:hidden;
+  padding:54px 68px 62px;display:none;flex-direction:column;
+  background-image:radial-gradient(120% 80% at 88% -10%,rgba(212,168,67,.07) 0%,rgba(10,22,40,0) 60%)}
+.dia.on{display:flex}
+.escenario{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.marco{transform-origin:center center}
+
+/* ── Tipografía ────────────────────────────────────────────── */
+.eyebrow{font-family:'Oswald',sans-serif;font-size:12px;font-weight:600;letter-spacing:3.5px;
+  text-transform:uppercase;color:var(--gold);text-indent:3.5px;margin-bottom:10px}
+h1{font-family:'Oswald',sans-serif;font-weight:700;font-size:82px;line-height:.95;letter-spacing:.5px;
+  text-transform:uppercase;text-wrap:balance}
+h2{font-family:'Oswald',sans-serif;font-weight:600;font-size:40px;line-height:1.05;letter-spacing:.5px;
+  text-transform:uppercase;margin-bottom:6px;text-wrap:balance}
+h2 small{display:block;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:400;
+  letter-spacing:0;text-transform:none;color:var(--muted);margin-top:8px;line-height:1.5;max-width:70ch}
+h3{font-family:'Oswald',sans-serif;font-weight:600;font-size:16px;letter-spacing:1.6px;
+  text-transform:uppercase;color:var(--gold);margin-bottom:9px}
+p{font-size:16px;line-height:1.6;color:var(--text)}
+b{font-weight:700}
+.muted{color:var(--muted)}
+.cuerpo{flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px;min-height:0}
+.cuerpo.arriba{justify-content:flex-start;padding-top:20px}
+
+/* ── Piezas ────────────────────────────────────────────────── */
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:1fr 1fr}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.caja{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px}
+.caja.oro{border-color:rgba(212,168,67,.55);background:rgba(212,168,67,.07)}
+.caja.rojo{border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.07)}
+.caja.verde{border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.07)}
+.caja p{font-size:14.5px;line-height:1.55}
+.caja .titulillo{font-family:'Oswald',sans-serif;font-size:14px;font-weight:600;letter-spacing:1.4px;
+  text-transform:uppercase;margin-bottom:7px}
+
+/* Listas: la viñeta es una barrita, no un punto — se lee a distancia. */
+ul{list-style:none;display:flex;flex-direction:column;gap:9px}
+li{position:relative;padding-left:20px;font-size:16px;line-height:1.5}
+li::before{content:'';position:absolute;left:0;top:.62em;width:9px;height:2px;background:var(--gold)}
+ul.chica li{font-size:14.5px;line-height:1.45;padding-left:17px}
+ul.chica li::before{width:7px;top:.6em}
+
+/* Pasos numerados: acá el número SÍ dice algo, es el orden en que se hace. */
+.pasos{display:flex;flex-direction:column;gap:12px}
+.paso{display:flex;gap:16px;align-items:flex-start}
+.paso .n{flex:0 0 38px;height:38px;border-radius:50%;border:2px solid var(--gold);color:var(--gold);
+  font-family:'Oswald',sans-serif;font-size:18px;font-weight:700;display:flex;align-items:center;
+  justify-content:center}
+.paso .qué{flex:1;padding-top:6px}
+.paso .qué b{font-family:'Oswald',sans-serif;font-size:18px;font-weight:600;letter-spacing:.8px;
+  text-transform:uppercase;display:block;margin-bottom:3px}
+.paso .qué span{font-size:14.5px;color:var(--muted);line-height:1.5}
+
+/* Botón de voto, dibujado igual que en el teléfono del juez. */
+.votos{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.voto{background:var(--card);border:3px solid;border-radius:16px;padding:18px 12px 16px;text-align:center}
+.voto .luz{width:52px;height:52px;border-radius:50%;margin:0 auto 7px}
+.voto .tarjeta{width:18px;height:18px;border-radius:50%;margin:0 auto 9px}
+.voto .lbl{font-family:'Oswald',sans-serif;font-size:17px;font-weight:700;letter-spacing:2px}
+.voto .sig{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.4}
+
+/* Motivo de nulo: los dos puntitos del panel + el texto, tal cual. */
+.motivo{display:flex;gap:14px;align-items:flex-start;background:var(--card);border:1px solid var(--border);
+  border-radius:11px;padding:15px 18px}
+.motivo .puntos{display:flex;gap:5px;align-items:center;flex-shrink:0;padding-top:3px}
+.motivo .puntos i{display:block;border-radius:50%}
+.motivo .puntos i.g{width:20px;height:20px;background:var(--red)}
+.motivo .puntos i.c{width:13px;height:13px}
+.motivo .txt{font-size:16px;line-height:1.5}
+.motivo .txt em{display:block;font-family:'Oswald',sans-serif;font-style:normal;font-size:12px;
+  letter-spacing:2px;color:var(--muted);margin-bottom:3px}
+
+/* Tabla — se usa para las descargas y para el medallero. */
+table{width:100%;border-collapse:collapse;font-size:14.5px}
+th{font-family:'Oswald',sans-serif;font-size:11px;letter-spacing:1.6px;text-transform:uppercase;
+  color:var(--muted);text-align:left;padding:0 12px 9px;border-bottom:1px solid var(--border);font-weight:600}
+td{padding:11px 12px;border-bottom:1px solid rgba(30,58,95,.5);vertical-align:top;line-height:1.45}
+tr:last-child td{border-bottom:none}
+td.doc{font-family:'Oswald',sans-serif;font-weight:600;letter-spacing:.7px;white-space:nowrap}
+.tabnum{font-variant-numeric:tabular-nums}
+
+/* Etiquetas de color, para decir de un vistazo dónde está cada cosa. */
+.chip{display:inline-block;font-family:'Oswald',sans-serif;font-size:11px;font-weight:600;
+  letter-spacing:1.4px;text-transform:uppercase;padding:4px 9px;border-radius:6px;
+  border:1px solid var(--border);color:var(--muted)}
+.chip.oro{border-color:rgba(212,168,67,.6);color:var(--gold);background:rgba(212,168,67,.1)}
+.chip.verde{border-color:rgba(34,197,94,.55);color:var(--green);background:rgba(34,197,94,.1)}
+.chip.azul{border-color:rgba(59,130,246,.55);color:var(--blue);background:rgba(59,130,246,.1)}
+.chip.rojo{border-color:rgba(239,68,68,.55);color:var(--red);background:rgba(239,68,68,.1)}
+
+/* Cómo se lee una casilla del acta: se muestra la casilla, no se describe. */
+.muestra{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.celda{font-family:'Oswald',sans-serif;font-size:21px;font-weight:700;padding:7px 15px;border-radius:7px;
+  background:#fff;color:#111;border:1px solid #bbb}
+.celda.nulo{color:#999;text-decoration:line-through;font-weight:400}
+.celda.rec{background:#FFE68A;color:#111}
+.celda.bst sup{font-size:12px;color:#666;font-weight:600}
+
+/* ── Encabezado y pie de cada lámina ───────────────────────── */
+.pie{position:absolute;left:68px;right:68px;bottom:24px;display:flex;justify-content:space-between;
+  align-items:center;font-family:'Oswald',sans-serif;font-size:10.5px;letter-spacing:2.2px;
+  text-transform:uppercase;color:rgba(122,143,166,.75);border-top:1px solid rgba(30,58,95,.7);padding-top:13px}
+.pie .np{color:var(--gold);font-weight:600}
+
+/* ── Portada ───────────────────────────────────────────────── */
+.portada{justify-content:space-between;
+  background-image:radial-gradient(90% 70% at 15% 0%,rgba(196,30,58,.16) 0%,rgba(10,22,40,0) 55%),
+                   radial-gradient(80% 70% at 95% 100%,rgba(212,168,67,.12) 0%,rgba(10,22,40,0) 55%)}
+.portada .logos{display:flex;align-items:center;gap:26px}
+.portada .logos img.yl{height:46px}
+.portada .logos img.fe{height:52px}
+.portada .logos .sep{width:1px;height:42px;background:rgba(255,255,255,.22)}
+.portada h1{font-size:96px}
+.portada .sub{font-family:'Oswald',sans-serif;font-size:25px;font-weight:500;letter-spacing:4px;
+  text-transform:uppercase;color:var(--gold);margin-top:16px;text-indent:4px}
+.portada .datos{font-size:16px;color:var(--muted);margin-top:16px;line-height:1.7}
+
+/* ── Divisores de parte ────────────────────────────────────── */
+.parte{justify-content:center;align-items:flex-start;
+  background-image:linear-gradient(100deg,rgba(196,30,58,.14) 0%,rgba(10,22,40,0) 55%)}
+.parte .num{font-family:'Oswald',sans-serif;font-size:150px;font-weight:700;line-height:.8;
+  color:rgba(212,168,67,.22)}
+.parte h1{font-size:74px;margin-top:6px}
+.parte p{font-size:19px;color:var(--muted);margin-top:18px;max-width:62ch}
+
+/* ── Navegación (solo en pantalla) ─────────────────────────── */
+.nav{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:8px;
+  align-items:center;background:rgba(10,22,40,.92);border:1px solid var(--border);border-radius:30px;
+  padding:7px 9px;z-index:50;backdrop-filter:blur(6px)}
+.nav button{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:transparent;
+  color:var(--text);font-size:14px;cursor:pointer;font-family:'Oswald',sans-serif}
+.nav button:hover{border-color:var(--gold);color:var(--gold)}
+.nav button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.nav .cnt{font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:1.5px;color:var(--muted);
+  padding:0 10px;font-variant-numeric:tabular-nums}
+
+/* ── Impresión / PDF ───────────────────────────────────────── */
+@page{size:1280px 720px;margin:0}
+@media print{
+  html,body{background:#fff}
+  .escenario{display:block;min-height:0;padding:0}
+  .marco{transform:none!important}
+  .nav{display:none}
+  .dia{display:flex!important;break-after:page;page-break-after:always;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .dia:last-child{break-after:auto;page-break-after:auto}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="escenario"><div class="marco" id="marco">
+
+<!-- ══ 1 · PORTADA ═══════════════════════════════════════════════ -->
+<section class="dia portada on">
+  <div class="logos">
+    <img class="fe" src="fechipo_logo_blanco.png" alt="FECHIPO" onerror="this.remove()">
+    <span class="sep"></span>
+    <img class="yl" src="YourLift_logo.png" alt="YourLift" onerror="this.remove()">
+  </div>
+  <div>
+    <div class="eyebrow">Capacitación · 19 de septiembre de 2026</div>
+    <h1>Jueces y<br>mesa técnica</h1>
+    <div class="sub">Panel de jueces + Livecast</div>
+    <div class="datos">
+      Campeonato Sudamericano de Powerlifting 2026 · Estadio Nacional, Ñuñoa<br>
+      20 al 27 de septiembre · 8 días · 462 inscripciones · 10 países
+    </div>
+  </div>
+  <div class="pie"><span>YourLift SpA · yourlift.cl</span><span class="np">1</span></div>
+</section>
+
+<!-- ══ 2 · QUÉ VAMOS A VER ═══════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">De qué se trata esta charla</div>
+  <h2>Dos herramientas, dos manos distintas</h2>
+  <div class="cuerpo">
+    <div class="grid g2">
+      <div class="caja oro">
+        <div class="titulillo" style="color:var(--gold)">Parte 1 · El teléfono del juez</div>
+        <p>Lo que usan ustedes en la tarima: entrar, elegir la posición, votar y los motivos de nulo
+        de los tres movimientos.</p>
+        <p class="muted" style="margin-top:9px;font-size:13.5px">yourlift.cl/jueces · 6 láminas</p>
+      </div>
+      <div class="caja">
+        <div class="titulillo" style="color:var(--blue)">Parte 2 · El livecast</div>
+        <p>Lo que usa la mesa: cargar la competencia, las pantallas de la tarima y todos los papeles
+        que salen de ahí —hojas de pesaje, papeletas, actas, medallas— día por día.</p>
+        <p class="muted" style="margin-top:9px;font-size:13.5px">yourlift.cl/livecast · 13 láminas</p>
+      </div>
+    </div>
+    <div class="caja verde">
+      <p><b>La frase que hay que llevarse de toda la charla:</b> el sistema no juzga. Muestra, ordena,
+      cuenta y archiva. El válido y el nulo salen del criterio del juez, siempre, y ningún botón
+      cambia eso.</p>
+    </div>
+  </div>
+  <div class="pie"><span>Capacitación Jueces · Sudamericano 2026</span><span class="np">2</span></div>
+</section>
+
+<!-- ══ 3 · PARTE 1 ═══════════════════════════════════════════════ -->
+<section class="dia parte">
+  <div class="num">1</div>
+  <h1>El panel<br>del juez</h1>
+  <p>Un teléfono por juez. No reemplaza las luces ni el criterio: es el que las enciende en la
+  pantalla grande y el que deja anotado, en el acta, qué luces recibió cada intento.</p>
+  <div class="pie"><span>Parte 1 · yourlift.cl/jueces</span><span class="np">3</span></div>
+</section>
+
+<!-- ══ 4 · QUÉ ES Y QUÉ NO ES ════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Antes de tocar nada</div>
+  <h2>Qué hace el panel — y qué no hace<small>Es la confusión más común y conviene despejarla de entrada.</small></h2>
+  <div class="cuerpo">
+    <div class="grid g2">
+      <div class="caja verde">
+        <div class="titulillo" style="color:var(--green)">Sí hace</div>
+        <ul class="chica">
+          <li>Enciende las tres luces en la pantalla de la tarima y en la transmisión.</li>
+          <li>Deja <b>anotado en ese intento</b> qué luces recibió: después se ven bajo el peso en la
+          tabla de la jornada.</li>
+          <li>Le muestra a cada juez quién está en la barra, con qué peso y en qué intento.</li>
+          <li>Le da al juez central el botón para arrancar el reloj.</li>
+        </ul>
+      </div>
+      <div class="caja rojo">
+        <div class="titulillo" style="color:var(--red)">No hace</div>
+        <ul class="chica">
+          <li><b>No marca el válido ni el nulo en el acta.</b> Eso lo carga la mesa en el Control en
+          Vivo, mirando las luces.</li>
+          <li>No decide por mayoría ni corrige a nadie.</li>
+          <li>No borra ni cambia un intento ya cargado.</li>
+        </ul>
+        <p style="margin-top:11px;font-size:13.5px;color:var(--muted)">Dicho de otra forma: si el
+        teléfono de un juez se queda sin batería, la competencia sigue igual. Se pierden las luces
+        en pantalla, no el resultado.</p>
+      </div>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 1 · El panel del juez</span><span class="np">4</span></div>
+</section>
+
+<!-- ══ 5 · CÓMO SE ENTRA ═════════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Paso a paso</div>
+  <h2>Cómo se entra<small>Se hace una vez al empezar la sesión. Toma menos de un minuto.</small></h2>
+  <div class="cuerpo">
+    <div class="pasos">
+      <div class="paso"><div class="n">1</div><div class="qué"><b>Abrir yourlift.cl/jueces</b>
+        <span>En el navegador del teléfono. No se instala nada. Si hay dos tarimas, el link lleva
+        <b>?tarima=1</b> o <b>?tarima=2</b> y lo entrega la mesa desde el panel de Transmisión —
+        el link equivocado manda las luces a la otra pantalla.</span></div></div>
+      <div class="paso"><div class="n">2</div><div class="qué"><b>Iniciar sesión</b>
+        <span>Correo y clave de la cuenta del evento, la misma para los tres jueces. Si alguien
+        aprieta un voto sin sesión, el panel avisa «Sin permiso» y abre el login ahí mismo.</span></div></div>
+      <div class="paso"><div class="n">3</div><div class="qué"><b>Elegir la posición</b>
+        <span>◀ JUEZ IZQ · ● JUEZ CENTRAL · JUEZ DER ▶. Tiene que coincidir con dónde está sentado:
+        de ahí sale el orden de las luces en pantalla.</span></div></div>
+      <div class="paso"><div class="n">4</div><div class="qué"><b>Dejar el teléfono despierto</b>
+        <span>La sesión <b>vive lo que vive la pestaña</b>: al cerrar la página hay que volver a
+        entrar, y se cierra sola a las 4 horas. Es a propósito — en un teléfono prestado, nadie
+        queda con la sesión de otro.</span></div></div>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 1 · El panel del juez</span><span class="np">5</span></div>
+</section>
+
+<!-- ══ 6 · LA PANTALLA ═══════════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Lo que se ve mientras se juzga</div>
+  <h2>La pantalla del juez<small>Todo lo de arriba llega solo desde el Control en Vivo. El juez no escribe nada.</small></h2>
+  <div class="cuerpo">
+    <div class="grid g3">
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Arriba</div>
+        <ul class="chica">
+          <li>Tu posición y, si corresponde, <b>TARIMA 1 / 2</b>.</li>
+          <li>El movimiento y el número de intento.</li>
+          <li>El puntito de conexión: <span style="color:var(--green)">verde</span> conectado,
+          <span style="color:var(--red)">rojo</span> sin conexión.</li>
+        </ul></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Al centro</div>
+        <ul class="chica">
+          <li>El atleta en la barra y el <b>peso en grande</b>.</li>
+          <li>La vista previa de tu voto: el círculo grande y la tarjeta chica.</li>
+          <li>Mientras no votes dice <b>SIN VOTO</b>.</li>
+        </ul></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Abajo</div>
+        <ul class="chica">
+          <li>Los <b>motivos de nulo</b> de los tres movimientos, siempre a la vista. Se deslizan
+          con el dedo y el del movimiento en tarima viene solo al frente.</li>
+          <li>Los cuatro botones de voto.</li>
+          <li><b>▶ INICIAR TIMER</b> (solo el central) y <b>✕ LIMPIAR</b>.</li>
+        </ul></div>
+    </div>
+    <div class="caja oro">
+      <p><b>Los motivos se pueden plegar</b> tocando el título, y esa decisión queda guardada en ese
+      teléfono. Para la primera jornada conviene dejarlos abiertos.</p>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 1 · El panel del juez</span><span class="np">6</span></div>
+</section>
+
+<!-- ══ 7 · LOS CUATRO BOTONES ════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">El voto</div>
+  <h2>Cuatro botones, dos resultados<small>Uno es válido. Los otros tres son nulo: la luz grande es roja en los tres y lo que cambia es la tarjeta, que dice POR QUÉ.</small></h2>
+  <div class="cuerpo">
+    <div class="votos">
+      <div class="voto" style="border-color:var(--white)">
+        <div class="luz" style="background:var(--white)"></div>
+        <div class="tarjeta" style="background:var(--white)"></div>
+        <div class="lbl" style="color:var(--white)">BLANCO</div>
+        <div class="sig">Válido<br>BUENO ✓</div>
+      </div>
+      <div class="voto" style="border-color:var(--red)">
+        <div class="luz" style="background:var(--red)"></div>
+        <div class="tarjeta" style="background:var(--red)"></div>
+        <div class="lbl" style="color:var(--red)">ROJO</div>
+        <div class="sig">Nulo por<br><b>profundidad o bloqueo</b></div>
+      </div>
+      <div class="voto" style="border-color:var(--blue)">
+        <div class="luz" style="background:var(--red)"></div>
+        <div class="tarjeta" style="background:var(--blue)"></div>
+        <div class="lbl" style="color:var(--blue)">AZUL</div>
+        <div class="sig">Nulo por<br><b>ejecución de la barra</b></div>
+      </div>
+      <div class="voto" style="border-color:var(--yellow)">
+        <div class="luz" style="background:var(--red)"></div>
+        <div class="tarjeta" style="background:var(--yellow)"></div>
+        <div class="lbl" style="color:var(--yellow)">AMARILLO</div>
+        <div class="sig">Nulo por<br><b>comandos y posición</b></div>
+      </div>
+    </div>
+    <div class="grid g2">
+      <div class="caja">
+        <div class="titulillo" style="color:var(--gold)">Se puede cambiar</div>
+        <p><b>✕ LIMPIAR</b> borra tu voto y puedes votar de nuevo. Tocar otro color también lo
+        reemplaza. Vale mientras no hayan votado los tres.</p>
+      </div>
+      <div class="caja">
+        <div class="titulillo" style="color:var(--gold)">Se apagan solas</div>
+        <p>Cuando los tres votaron, las luces quedan <b>5 segundos</b> a la vista y se apagan solas.
+        Los tres teléfonos quedan en blanco, listos para el intento siguiente.</p>
+      </div>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 1 · El panel del juez</span><span class="np">7</span></div>
+</section>
+
+<!-- ══ 8 · MOTIVOS SENTADILLA ════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Motivos de nulo · 1 de 3</div>
+  <h2>Sentadilla<small>Estos son, palabra por palabra, los textos que cada juez tiene en su teléfono mientras juzga.</small></h2>
+  <div class="cuerpo">
+    <div class="motivo"><div class="puntos"><i class="g"></i><i class="c" style="background:var(--red)"></i></div>
+      <div class="txt"><em>Rojo</em>Profundidad: no alcanza la paralela.</div></div>
+    <div class="motivo"><div class="puntos"><i class="g"></i><i class="c" style="background:var(--blue)"></i></div>
+      <div class="txt"><em>Azul</em>Descenso de la barra · doble rebote · rodillas no bloqueadas.</div></div>
+    <div class="motivo"><div class="puntos"><i class="g"></i><i class="c" style="background:var(--yellow)"></i></div>
+      <div class="txt"><em>Amarillo</em>Se salta el comando · cambia la posición inicial · no termina el movimiento.</div></div>
+  </div>
+  <div class="pie"><span>Parte 1 · Motivos de nulo</span><span class="np">8</span></div>
+</section>
+
+<!-- ══ 9 · MOTIVOS BANCA ═════════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Motivos de nulo · 2 de 3</div>
+  <h2>Press de banca<small>El juez que está en banca puede igual deslizar y consultar la guía de otro movimiento antes de que empiece.</small></h2>
+  <div class="cuerpo">
+    <div class="motivo"><div class="puntos"><i class="g"></i><i class="c" style="background:var(--red)"></i></div>
+      <div class="txt"><em>Rojo</em>No toca el pecho · no da la profundidad de codos.</div></div>
+    <div class="motivo"><div class="puntos"><i class="g"></i><i class="c" style="background:var(--blue)"></i></div>
+      <div class="txt"><em>Azul</em>Descenso de la barra · codos no bloqueados al inicio o al término del movimiento.</div></div>
+    <div class="motivo"><div class="puntos"><i class="g"></i><i class="c" style="background:var(--yellow)"></i></div>
+      <div class="txt"><em>Amarillo</em>Se salta el comando · cambia la postura inicial · levanta glúteo, cabeza o pies · sube la barra con el pecho.</div></div>
+  </div>
+  <div class="pie"><span>Parte 1 · Motivos de nulo</span><span class="np">9</span></div>
+</section>
+
+<!-- ══ 10 · MOTIVOS PESO MUERTO ══════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Motivos de nulo · 3 de 3</div>
+  <h2>Peso muerto<small>Los puntitos de arriba del bloque dicen en cuál de las tres guías está parado el dedo.</small></h2>
+  <div class="cuerpo">
+    <div class="motivo"><div class="puntos"><i class="g"></i><i class="c" style="background:var(--red)"></i></div>
+      <div class="txt"><em>Rojo</em>Hombros no bloqueados o por delante de la línea de la barra.</div></div>
+    <div class="motivo"><div class="puntos"><i class="g"></i><i class="c" style="background:var(--blue)"></i></div>
+      <div class="txt"><em>Azul</em>Tirones en la barra al subir · apoya la barra en las piernas o la sube contra los muslos.</div></div>
+    <div class="motivo"><div class="puntos"><i class="g"></i><i class="c" style="background:var(--yellow)"></i></div>
+      <div class="txt"><em>Amarillo</em>Se salta el comando · cambia la posición inicial · no termina el movimiento.</div></div>
+  </div>
+  <div class="pie"><span>Parte 1 · Motivos de nulo</span><span class="np">10</span></div>
+</section>
+
+<!-- ══ 11 · SI ALGO FALLA ════════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Cuando algo no sale como debe</div>
+  <h2>Los cuatro problemas de verdad<small>Ninguno detiene la competencia. Todos tienen la misma salida: avisarle a la mesa.</small></h2>
+  <div class="cuerpo">
+    <div class="grid g2">
+      <div class="caja"><div class="titulillo" style="color:var(--red)">Dice «Sin permiso»</div>
+        <p>La sesión se cerró. El panel abre el login solo: correo y clave otra vez y sigue. El voto
+        que se apretó no llegó — hay que volver a apretarlo.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--red)">El puntito está rojo</div>
+        <p>Sin conexión. El voto queda solo en tu teléfono y <b>no enciende la luz</b>. Avisar a la
+        mesa: ellos cargan el resultado igual, mirando.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Dice «Esperando…»</div>
+        <p>La mesa todavía no puso a nadie en la barra, o el Control en Vivo cambió de tanda.
+        No es un error del teléfono.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Se cerró la página</div>
+        <p>Volver a entrar y elegir la posición de nuevo. No se pierde nada de lo ya votado: eso
+        quedó en el sistema, no en el teléfono.</p></div>
+    </div>
+    <div class="caja verde">
+      <p><b>Regla práctica:</b> el teléfono es un accesorio. Si falla, se juzga como siempre y la mesa
+      carga a mano. Lo único que no se puede hacer es quedarse esperando que el teléfono se arregle
+      con el atleta bajo la barra.</p>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 1 · El panel del juez</span><span class="np">11</span></div>
+</section>
+
+<!-- ══ 12 · PARTE 2 ══════════════════════════════════════════════ -->
+<section class="dia parte">
+  <div class="num">2</div>
+  <h1>El livecast</h1>
+  <p>La pantalla de la mesa técnica. Lleva la competencia, alimenta la tarima y la transmisión, y
+  de ella salen todos los papeles: las hojas del pesaje, las papeletas, las actas y las medallas.</p>
+  <div class="pie"><span>Parte 2 · yourlift.cl/livecast</span><span class="np">12</span></div>
+</section>
+
+<!-- ══ 13 · CÓMO FUNCIONA ════════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">La idea de fondo</div>
+  <h2>Se escribe una vez, aparece en todas partes<small>No hay que copiar nada de una pantalla a otra. Nunca.</small></h2>
+  <div class="cuerpo">
+    <div class="caja oro">
+      <p style="font-size:19px">El operador escribe un peso en el Control en Vivo y ese mismo dato
+      aparece, al instante, en la <b>pantalla de la tarima</b>, en los <b>gráficos de la
+      transmisión</b>, en el <b>teléfono de los jueces</b> y en lo que ve el <b>público</b> desde
+      su celular.</p>
+    </div>
+    <div class="grid g3">
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Funciona sin internet</div>
+        <p>Si se corta la conexión, el sistema sigue trabajando en el computador y guarda todo.
+        Cuando vuelve, sincroniza solo.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">El indicador SYNC</div>
+        <p><b>EN LÍNEA</b> se está guardando · <b>HACE Xs</b> revisar la conexión ·
+        <b>NO GUARDA</b> esta pantalla solo mira.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Un solo responsable</div>
+        <p>Varios pueden mirar a la vez, pero conviene que <b>uno solo</b> cargue. Los demás,
+        en modo espectador.</p></div>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 2 · El livecast</span><span class="np">13</span></div>
+</section>
+
+<!-- ══ 14 · EL MENÚ ══════════════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Dónde está cada cosa</div>
+  <h2>El menú ☰<small>Arriba a la izquierda. Es el mapa completo del sistema; lo que cada uno ve depende de su cuenta.</small></h2>
+  <div class="cuerpo">
+    <div class="grid g3">
+      <div class="caja"><div class="titulillo" style="color:var(--blue)">Gestión</div>
+        <ul class="chica"><li><b>Atletas &amp; Pesaje</b></li><li><b>Documentos</b></li></ul>
+        <p class="muted" style="margin-top:9px;font-size:13px">Antes de competir.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--accent)">Competencia</div>
+        <ul class="chica"><li><b>Control en Vivo</b></li><li>Transmisión</li><li>Widgets OBS</li>
+        <li>Control TX</li><li>Control Remoto</li><li>Pantalla Tarima</li></ul></div>
+      <div class="caja"><div class="titulillo" style="color:var(--green)">Público</div>
+        <ul class="chica"><li><b>Resultados</b></li><li>Atletas</li></ul>
+        <p class="muted" style="margin-top:9px;font-size:13px">Lo ve cualquiera desde su teléfono,
+        sin sesión. Las descargas, no.</p></div>
+    </div>
+    <div class="grid g2">
+      <div class="caja">
+        <div class="titulillo" style="color:var(--gold)">Abajo del menú</div>
+        <p>El selector de <b>vuelo activo</b> —primero se elige el día y quedan las tandas de ese
+        día— y el estado de la conexión. Elegir el día <b>no mueve la tarima</b>: solo filtra los
+        botones.</p>
+      </div>
+      <div class="caja">
+        <div class="titulillo" style="color:var(--gold)">Espectador o controlador</div>
+        <p>Sin sesión iniciada se mira y nada más. Con la cuenta del evento se carga, se juzga y se
+        descarga. Es la misma página: cambia lo que aparece.</p>
+      </div>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 2 · El livecast</span><span class="np">14</span></div>
+</section>
+
+<!-- ══ 15 · ATLETAS & PESAJE ═════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Menú ☰ → Gestión</div>
+  <h2>Atletas &amp; Pesaje<small>Las dos horas de pesaje, antes de cada sesión. Todo lo que el atleta declara entra acá.</small></h2>
+  <div class="cuerpo">
+    <div class="grid g2">
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">La ficha de cada atleta</div>
+        <ul class="chica">
+          <li><b>Peso corporal</b>, con aviso si se pasa del límite de su categoría.</li>
+          <li><b>Altura de rack de sentadilla</b> y, si pide abatible: izquierda, derecha o ambos.</li>
+          <li><b>Altura de banca</b>, altura de los seguros y cantidad de palmetas.</li>
+          <li><b>Las tres aperturas</b>: sentadilla, banca y peso muerto.</li>
+        </ul>
+        <p class="muted" style="margin-top:10px;font-size:13.5px">Todo esto viaja solo a la Pantalla
+        de Tarima: el equipo que monta la barra ve la altura y los pedidos sin preguntar nada.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Lo que muestra la tabla</div>
+        <ul class="chica">
+          <li>Una fila por atleta: lote, nombre, bandera, división, categoría, tanda, peso corporal
+          y los nueve intentos.</li>
+          <li>Arriba, cuántos van pesados: <b>«34/85 pesados»</b>.</li>
+          <li>El que compite en Powerlifting <b>y</b> en Only Bench aparece una sola vez, con una
+          línea extra marcada ONLY BENCH. Sube una vez y esa banca cuenta para los dos rankings.</li>
+        </ul>
+        <p style="margin-top:10px;font-size:13.5px"><b>Generar Lotes</b> sortea los números ·
+        <b>Re-sincronizar</b> trae cambios de la nómina · <b>Iniciar Competencia →</b> pasa al
+        Control en Vivo.</p></div>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 2 · El livecast</span><span class="np">15</span></div>
+</section>
+
+<!-- ══ 16 · CONTROL EN VIVO ══════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Menú ☰ → Competencia</div>
+  <h2>Control en Vivo<small>La pantalla que lleva la competencia. Desde acá se carga y se marca.</small></h2>
+  <div class="cuerpo">
+    <div class="grid g2">
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">El orden se arma solo</div>
+        <p>Levanta primero quien declaró menos peso; a igual peso manda el <b>número de lote</b>.
+        Al terminar una ronda pasa sola a la siguiente, y al terminar el movimiento, a la tanda que
+        sigue.</p>
+        <p style="margin-top:9px">La tarjeta del atleta en tarima trae el peso y el montaje que
+        pidió: <b>RACK 14 · ABATIBLE AMBOS</b>, o <b>RACK 7 · SEGUROS 3 · PALMETAS 2</b>.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Cómo se marca</div>
+        <p><b style="color:var(--green)">✓ verde</b> válido · <b style="color:var(--red)">✗ rojo</b>
+        nulo. Al marcar, sale al instante en todas las pantallas.</p>
+        <p style="margin-top:9px">Para corregir: los botones chicos ✓ / ✗ de esa casilla; tocar el
+        mismo botón otra vez revoca la decisión. <b>Ctrl+Z</b> deshace las últimas 10 acciones,
+        <b>Ctrl+Y</b> rehace.</p>
+        <p style="margin-top:9px">El menú <b>⋮</b> de cada casilla: marcar como actual (si se saltó a
+        un atleta), conceder <b>intento extra / 4º</b>, corregir válido o nulo.</p></div>
+    </div>
+    <div class="grid g2">
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">El reloj de 1:00</div>
+        <p>Para declarar el próximo intento. <b>Es privado</b>: solo lo ve quien opera. Corregir una
+        decisión lo vuelve a arrancar, a propósito.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Todas las tandas</div>
+        <p>La planilla completa con la columna <b>POSICIÓN</b>, que dice en qué puesto está y en cuál
+        quedaría si el intento en curso es válido: <b>«2° → 1°»</b>.</p></div>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 2 · El livecast</span><span class="np">16</span></div>
+</section>
+
+<!-- ══ 17 · RÉCORDS ══════════════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Mientras se juzga</div>
+  <h2>Récords sudamericanos<small>Cargados los 997 récords oficiales de FESUPO: Classic de junio 2026 y Equipado de diciembre 2025.</small></h2>
+  <div class="cuerpo">
+    <div class="caja oro">
+      <p>Cada atleta se mide contra <b>dos</b> récords: el de su propia división y el del <b>Open</b>,
+      porque el Open está abierto a todas las edades. Los de Only Bench se miden contra el récord de
+      <b>bench press single lift</b>, que es distinto del de banca dentro del powerlifting.</p>
+    </div>
+    <div class="grid g4">
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Control en Vivo</div>
+        <p>La casilla se pinta de amarillo y dice <b>RÉCORD</b> arriba del número. Al darlo por
+        válido queda amarillo lleno con una estrella.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Pantalla de tarima</div>
+        <p>Aparece el cartel <b>INTENTO DE RÉCORD SUDAMERICANO</b>.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Vista del público</div>
+        <p>La misma casilla amarilla en el teléfono de quien esté mirando.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Acta y Excel</div>
+        <p>La celda queda con fondo amarillo, y el Excel dice además <b>qué récord</b> se batió.</p></div>
+    </div>
+    <p class="muted" style="font-size:14px">El panel de récords de las categorías que están en la
+    tanda está siempre a la vista en el Control en Vivo, con las cuatro marcas: sentadilla, banca,
+    peso muerto y total.</p>
+  </div>
+  <div class="pie"><span>Parte 2 · El livecast</span><span class="np">17</span></div>
+</section>
+
+<!-- ══ 18 · PANTALLAS DE APOYO ═══════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Menú ☰ → Competencia</div>
+  <h2>Las pantallas de apoyo<small>Se abren en otro computador o en otra pestaña y se actualizan solas. No hay que operar nada en ellas.</small></h2>
+  <div class="cuerpo">
+    <div class="grid g3">
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Pantalla de Tarima</div>
+        <p>Para el monitor grande del lugar. Cinco escenas, que se cambian desde el Control TX:</p>
+        <ul class="chica" style="margin-top:8px">
+          <li><b>Perfil</b> — el atleta en tarima</li>
+          <li><b>Barra</b> — el peso y los discos que hay que poner</li>
+          <li><b>Intentos</b> — el peso en grande</li>
+          <li><b>Luces</b> — las tres luces de los jueces</li>
+          <li><b>Tabla jornada</b> — la clasificación de la sesión, estilo IPF</li>
+        </ul></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Control TX</div>
+        <p>El panel que prende y apaga cada gráfico de la transmisión: perfil, marcador, tabla
+        actual, reloj, <b>medallero</b> y luces. Se conectan a OBS como fuente de navegador.</p>
+        <p class="muted" style="margin-top:9px;font-size:13.5px">Los logos del campeonato se suben
+        una vez y salen en todas las escenas.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Control Remoto</div>
+        <p>La versión para teléfono: permite manejar el overlay y marcar desde la tarima misma, sin
+        estar frente al computador.</p>
+        <p class="muted" style="margin-top:9px;font-size:13.5px">Con dos tarimas, cada link lleva
+        <b>tarima=1</b> o <b>tarima=2</b>.</p></div>
+    </div>
+    <div class="caja">
+      <p><b>De dónde salen los links:</b> menú ☰ → <b>Transmisión</b>. Ahí están, listos para copiar,
+      el del panel de jueces, el del control remoto y el de cada widget de OBS — ya con la tarima
+      que corresponde.</p>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 2 · El livecast</span><span class="np">18</span></div>
+</section>
+
+<!-- ══ 19 · DOCUMENTOS ═══════════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Menú ☰ → Gestión → Documentos</div>
+  <h2>Los papeles de la mesa<small>Cinco documentos, todos en PDF, todos listos para imprimir. Están juntos en una sola pantalla.</small></h2>
+  <div class="cuerpo arriba">
+    <table>
+      <tr><th style="width:24%">Documento</th><th>Qué trae</th><th style="width:22%">Para quién</th></tr>
+      <tr><td class="doc" style="color:var(--blue)">Hoja de Pesaje</td>
+        <td>Para anotar a mano peso corporal, aperturas y altura de rack durante el pesaje.</td>
+        <td class="muted">Mesa de pesaje</td></tr>
+      <tr><td class="doc" style="color:var(--green)">Altura de Rack</td>
+        <td>Las alturas de sentadilla y banca de cada atleta, ya cargadas.</td>
+        <td class="muted">Equipo de tarima</td></tr>
+      <tr><td class="doc" style="color:var(--purple)">Revisión de Equipo</td>
+        <td>La lista para ir marcando el equipamiento revisado a cada atleta.</td>
+        <td class="muted">Control de indumentaria</td></tr>
+      <tr><td class="doc" style="color:var(--yellow)">Papeletas con nombre</td>
+        <td>Una papeleta por atleta con el nombre ya impreso, tal como está en la nómina.</td>
+        <td class="muted">Mesa · coaches</td></tr>
+      <tr><td class="doc" style="color:var(--yellow)">Papeletas en blanco</td>
+        <td>Las mismas, sin el nombre escrito, para llenar a mano.</td>
+        <td class="muted">Mesa · coaches</td></tr>
+    </table>
+    <div class="caja oro">
+      <p><b>Sale una papeleta por atleta, no una por movimiento.</b> Las copias las saca la impresora.
+      Con 462 inscripciones, escribir el nombre a mano en cada una no es una opción.</p>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 2 · Documentos</span><span class="np">19</span></div>
+</section>
+
+<!-- ══ 20 · POR DÍA ══════════════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Ocho días, ocho juegos de papeles</div>
+  <h2>Todo se pide por día<small>A la mesa del día 3 se llevan los papeles del día 3, no los ocho días completos.</small></h2>
+  <div class="cuerpo">
+    <div class="grid g2">
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Cómo se ve</div>
+        <p>Cada documento tiene <b>un botón por día</b>, y cada botón dice cuántos atletas compiten
+        ese día: <span class="chip oro">Día 1 · 54</span> <span class="chip oro">Día 2 · 61</span>
+        … y al final <b>«Todo el campeonato»</b>.</p>
+        <p style="margin-top:10px">El día sale del <b>Cronograma</b> del admin. Es el mismo dato que
+        arma las tandas: no hay que cargarlo dos veces.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">El archivo lo dice</div>
+        <p>El día va en el nombre del archivo —<b>Papeletas_con_nombre_Dia_3_SUDA2026.pdf</b>— para
+        no terminar con ocho «Papeletas.pdf» en la carpeta de descargas sin saber cuál es cuál.</p></div>
+    </div>
+    <div class="caja rojo">
+      <div class="titulillo" style="color:var(--red)">El aviso que hay que leer</div>
+      <p>Si algún atleta <b>no tiene día asignado en el Cronograma</b>, la pantalla lo dice con
+      nombre y apellido: ese atleta no cae en ningún botón por día y su papel no se imprime nunca.
+      Sí entra en el de todo el campeonato. Es el único error silencioso que puede pasar acá, y por
+      eso está avisado arriba.</p>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 2 · Documentos por día</span><span class="np">20</span></div>
+</section>
+
+<!-- ══ 21 · RESULTADOS ═══════════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Menú ☰ → Público → Resultados</div>
+  <h2>Resultados y descargas<small>La pantalla la ve todo el mundo. Los botones de descarga, solo quien entró con la cuenta del evento.</small></h2>
+  <div class="cuerpo arriba">
+    <table>
+      <tr><th style="width:23%">Botón</th><th>Qué es</th></tr>
+      <tr><td class="doc" style="color:#fff">Acta FESUPO (PDF)</td>
+        <td><b>El acta oficial</b>, fondo blanco, lista para publicar o imprimir. Una tabla por
+        modalidad + sexo + división + categoría.</td></tr>
+      <tr><td class="doc" style="color:var(--green)">Excel</td>
+        <td>La misma acta en planilla, con el mismo formato y una columna final que dice qué récord
+        se batió. Es la que sirve para seguir trabajando los datos.</td></tr>
+      <tr><td class="doc" style="color:var(--gold)">Medallas</td>
+        <td>Los podios de todas las categorías, cuántas medallas hay que entregar y el medallero.
+        Se descarga en Excel y en PDF.</td></tr>
+      <tr><td class="doc" style="color:var(--accent)">Generar Acta PDF</td>
+        <td>El acta en el diseño oscuro de YourLift, para redes y pantallas. Para lo oficial, la de
+        arriba.</td></tr>
+      <tr><td class="doc muted">Exportar</td>
+        <td>Un archivo de datos (JSON) con el ranking completo, para quien quiera procesarlo por su
+        cuenta.</td></tr>
+      <tr><td class="doc" style="color:var(--purple)">Cerrar competencia</td>
+        <td>Publica los resultados definitivos: quedan en el perfil de cada atleta y en el ranking
+        del sitio. <b>Se hace una sola vez</b>, con los resultados ya revisados.</td></tr>
+    </table>
+  </div>
+  <div class="pie"><span>Parte 2 · Resultados</span><span class="np">21</span></div>
+</section>
+
+<!-- ══ 22 · CÓMO SE LEE EL ACTA ══════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Para leerla y para revisarla</div>
+  <h2>Cómo se lee el acta<small>Dentro de cada tabla los atletas van de mayor a menor por total. A igual total gana el más liviano, criterio IPF.</small></h2>
+  <div class="cuerpo">
+    <div class="grid g2">
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Las casillas</div>
+        <div class="muestra" style="margin-bottom:12px">
+          <span class="celda">140</span><span style="font-size:14px">intento <b>válido</b></span>
+        </div>
+        <div class="muestra" style="margin-bottom:12px">
+          <span class="celda nulo">140</span><span style="font-size:14px">intento <b>nulo</b></span>
+        </div>
+        <div class="muestra" style="margin-bottom:12px">
+          <span class="celda rec">140</span><span style="font-size:14px"><b>récord sudamericano</b></span>
+        </div>
+        <div class="muestra">
+          <span class="celda bst">195 <sup>[1]</sup></span>
+          <span style="font-size:14px">columna <b>BST</b>: la mejor marca del movimiento, y entre
+          corchetes el puesto que ocupa <b>esa marca</b> en la tabla</span>
+        </div>
+      </div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">Las columnas</div>
+        <p>Lugar · nombre · país · peso corporal · año de nacimiento · los tres intentos de cada
+        movimiento · la mejor marca de cada uno · el total · los puntos IPF GL.</p>
+        <p style="margin-top:10px"><b>SQ4 / BP4 / DL4</b> aparecen únicamente en las tablas donde
+        algún atleta tuvo un intento extra.</p>
+        <p style="margin-top:10px">Los corchetes de la columna BST son los que sirven para premiar
+        <b>mejor sentadilla, mejor banca y mejor peso muerto</b>: el <b>[1]</b> es el que sube al
+        podio de ese movimiento.</p></div>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 2 · Resultados</span><span class="np">22</span></div>
+</section>
+
+<!-- ══ 23 · ACTA POR DÍA ═════════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Lo que hace falta para premiar cada noche</div>
+  <h2>El acta de un solo día<small>Un campeonato de ocho días premia al final de cada uno. El acta tiene que salir con los atletas de ESE día.</small></h2>
+  <div class="cuerpo">
+    <div class="caja oro">
+      <p style="font-size:18px">Arriba de Resultados hay un selector:
+      <span class="chip oro" style="font-size:13px">Acta: todo el campeonato (462)</span>
+      <span class="chip oro" style="font-size:13px">Acta: solo Día 3 (58)</span></p>
+      <p style="margin-top:10px">Lo que se elija ahí manda sobre <b>las cuatro descargas de abajo</b>:
+      el Acta FESUPO, el Excel, el acta de YourLift y también el <b>detalle de medallas</b>. El día
+      queda escrito en el encabezado del acta y en el nombre del archivo.</p>
+    </div>
+    <div class="grid g2">
+      <div class="caja rojo"><div class="titulillo" style="color:var(--red)">El aviso de categorías partidas</div>
+        <p>Si una categoría quedó repartida entre dos días, ese podio sale <b>incompleto</b> en el
+        acta de hoy. El sistema lo dice antes de generarla y <b>nombra las categorías</b>. Es el
+        momento de decidir si se premia igual o se espera.</p></div>
+      <div class="caja verde"><div class="titulillo" style="color:var(--green)">Cuando no hay problema</div>
+        <p>Si ninguna categoría queda partida, el aviso también lo dice, en dorado: «Ninguna
+        categoría queda partida entre días». Ahí se premia tranquilo.</p></div>
+    </div>
+  </div>
+  <div class="pie"><span>Parte 2 · Actas por día</span><span class="np">23</span></div>
+</section>
+
+<!-- ══ 24 · MEDALLAS ═════════════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Resultados → botón Medallas</div>
+  <h2>Cuántas medallas y de quién<small>La cuenta sale de la misma tabla que el acta, con el mismo desempate. No hay dos versiones de la regla.</small></h2>
+  <div class="cuerpo">
+    <div class="caja oro">
+      <p style="font-size:18px"><b>Cuatro premios en cada división y categoría:</b> los tres mejores
+      <b>totales</b>, las tres mejores <b>sentadillas</b>, las tres mejores <b>bancas</b> y los tres
+      mejores <b>pesos muertos</b>. En Only Bench el total <b>es</b> la banca: una sola premiación,
+      no dos medallas por la misma marca.</p>
+    </div>
+    <div class="grid g3">
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">El resumen</div>
+        <p>Cuántos <b style="color:#D4A843">oros</b>, <b style="color:#C0C0C0">platas</b> y
+        <b style="color:#CD7F32">bronces</b> hay que tener listos, y el total. Es lo que se manda a
+        grabar.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">El medallero</div>
+        <p>Por <b>país</b> en un internacional, por club en un nacional. Ordenado por oros, después
+        platas, después bronces.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">El listado</div>
+        <p>Categoría por categoría, quién sube al podio en cada premio y con qué marca.
+        <b>Es la hoja de la premiación.</b></p></div>
+    </div>
+    <div class="grid g2">
+      <div class="caja verde"><div class="titulillo" style="color:var(--green)">Excel</div>
+        <p>Una fila por medalla: se puede filtrar y contar. <b>Medallas_…​.xlsx</b></p></div>
+      <div class="caja"><div class="titulillo" style="color:#fff">PDF</div>
+        <p>El mismo detalle en fondo blanco, para imprimir y llevar a la premiación.</p></div>
+    </div>
+    <p class="muted" style="font-size:14px">En categorías de menos de tres atletas se premia a los
+    que haya: uno solo se lleva el oro y nada más.</p>
+  </div>
+  <div class="pie"><span>Parte 2 · Medallas</span><span class="np">24</span></div>
+</section>
+
+<!-- ══ 25 · LA RUTINA DEL DÍA ════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Para pegar en la mesa</div>
+  <h2>La rutina de cada jornada<small>Ocho días seguidos. Lo que se hace siempre igual no se olvida.</small></h2>
+  <div class="cuerpo">
+    <div class="pasos">
+      <div class="paso"><div class="n">1</div><div class="qué"><b>La noche anterior</b>
+        <span>Documentos → bajar del día siguiente: hoja de pesaje, altura de rack, revisión de
+        equipo y las papeletas. Revisar que no haya nadie sin día asignado.</span></div></div>
+      <div class="paso"><div class="n">2</div><div class="qué"><b>En el pesaje</b>
+        <span>Atletas &amp; Pesaje: peso corporal, alturas de rack y las tres aperturas. Mirar que el
+        contador «X/Y pesados» llegue a completo antes de empezar.</span></div></div>
+      <div class="paso"><div class="n">3</div><div class="qué"><b>Antes de la primera barra</b>
+        <span>Los tres jueces entran a yourlift.cl/jueces y eligen posición. La mesa confirma que las
+        tres luces se ven en la pantalla de tarima.</span></div></div>
+      <div class="paso"><div class="n">4</div><div class="qué"><b>Al terminar la sesión</b>
+        <span>Resultados → elegir el día en el selector → bajar <b>Acta FESUPO en PDF y en Excel</b>,
+        y el <b>detalle de medallas</b>. No esperar al último día.</span></div></div>
+      <div class="paso"><div class="n">5</div><div class="qué"><b>Al terminar el campeonato</b>
+        <span>Con todo revisado, <b>Cerrar competencia</b> una sola vez. Ahí los resultados quedan en
+        el perfil de cada atleta y en el ranking del sitio.</span></div></div>
+    </div>
+  </div>
+  <div class="pie"><span>Capacitación Jueces · Sudamericano 2026</span><span class="np">25</span></div>
+</section>
+
+<!-- ══ 26 · CIERRE ═══════════════════════════════════════════════ -->
+<section class="dia">
+  <div class="eyebrow">Preguntas que siempre aparecen</div>
+  <h2>Lo último<small>Las cuatro que se repiten en cada campeonato.</small></h2>
+  <div class="cuerpo">
+    <div class="grid g2">
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">¿Se puede corregir algo ya marcado?</div>
+        <p>Sí. Los botones chicos ✓ / ✗ de cada casilla, y Ctrl+Z para las últimas 10 acciones.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">¿Se cortó internet?</div>
+        <p>No se pierde nada. El sistema guarda en el computador y sincroniza solo cuando vuelve.
+        Mirar el indicador SYNC.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">¿Y si cierro el navegador?</div>
+        <p>Al volver a entrar, la competencia sigue donde estaba.</p></div>
+      <div class="caja"><div class="titulillo" style="color:var(--gold)">¿El sistema controla los tiempos?</div>
+        <p>El reloj de 1:00 y el tiempo compensatorio del intento extra, sí. El válido y el nulo
+        siempre los decide el jurado.</p></div>
+    </div>
+    <div class="caja oro" style="text-align:center;padding:24px">
+      <p style="font-size:19px"><b>Cualquier duda durante el campeonato:</b> la mesa técnica tiene el
+      contacto directo. No hay pregunta chica cuando hay un atleta bajo la barra.</p>
+    </div>
+  </div>
+  <div class="pie"><span>YourLift SpA · yourlift.cl</span><span class="np">26</span></div>
+</section>
+
+</div></div>
+
+<div class="nav">
+  <button onclick="ir(-1)" aria-label="Lámina anterior">‹</button>
+  <span class="cnt" id="cnt">1 / 26</span>
+  <button onclick="ir(1)" aria-label="Lámina siguiente">›</button>
+</div>
+
+<script>
+// Pasar láminas: flechas, espacio, o los botones de abajo. Nada más — esto se
+// usa proyectado y con el computador lejos.
+const laminas=[...document.querySelectorAll('.dia')];
+let i=0;
+function mostrar(n){
+  i=Math.max(0,Math.min(laminas.length-1,n));
+  laminas.forEach((s,k)=>s.classList.toggle('on',k===i));
+  document.getElementById('cnt').textContent=(i+1)+' / '+laminas.length;
+  try{location.hash=i+1;}catch(e){}
+}
+function ir(d){mostrar(i+d);}
+window.ir=ir;
+addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' ')  {e.preventDefault();ir(1);}
+  if(e.key==='ArrowLeft' ||e.key==='PageUp')                 {e.preventDefault();ir(-1);}
+  if(e.key==='Home')mostrar(0);
+  if(e.key==='End')mostrar(laminas.length-1);
+});
+// En un notebook la lámina de 1280 px no entra entera: se achica para que quepa
+// sin recortarla. Al imprimir esto no corre —el PDF va a tamaño completo.
+function encajar(){
+  const m=document.getElementById('marco');
+  const k=Math.min(1,(innerWidth-40)/1280,(innerHeight-40)/720);
+  m.style.transform='scale('+k.toFixed(4)+')';
+}
+addEventListener('resize',encajar);
+encajar();
+// Volver atrás en el navegador, o abrir el link con #14, tiene que llevar a esa
+// lámina: si no, el link que se comparte para retomar la charla no sirve.
+function delHash(){
+  const n=parseInt(location.hash.slice(1),10);
+  if(n>0&&n-1!==i)mostrar(n-1);
+}
+addEventListener('hashchange',delHash);
+delHash();
+</script>
+</body>
+</html>
