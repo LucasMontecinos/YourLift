@@ -2499,16 +2499,10 @@ function _srTotal(a){
 // categorías que están levantando, del movimiento en curso. Se arma solo con los
 // atletas de la tanda activa, agrupado por categoría + división.
 // El panel de récords. Se usa igual en el Control en Vivo y en la vista del
-// público: no depende de tener sesión, porque solo lee.
-//
-// opts.abreDefault  — en el control arranca abierto (pedido de FESUPO: los
-//                     récords tienen que estar a la vista mientras se juzga).
-//                     En la vista del público arranca plegado, porque ahí
-//                     arriba ya está la transmisión y la tabla quedaría a tres
-//                     pantallas de distancia. A cambio, el título avisa cuántos
-//                     récords nuevos hay, que es el gancho para abrirlo.
-function _srPanel(opts){
-  opts=opts||{};
+// público: no depende de tener sesión, porque solo lee, y arranca ABIERTO en
+// las dos. Los récords tienen que estar a la vista —pedido de FESUPO para la
+// mesa, y de la misma mesa para el público—, no escondidos detrás de un click.
+function _srPanel(){
   if(!_srOn())return '';
   const pool=DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed&&_inTarima(a.flight));
   const base=pool.length?pool:DATA.athletes.filter(a=>!a.bombed&&_inTarima(a.flight));
@@ -2542,7 +2536,7 @@ function _srPanel(opts){
   const rows=[...filas.values()].sort((x,y)=>
     (x.sexo===y.sexo?0:x.sexo==='F'?-1:1)||(x.eq===y.eq?0:x.eq==='classic'?-1:1)
     ||CATN(x.cat)-CATN(y.cat)||(DVO[x.div]-DVO[y.div])||(x.solo?1:0)-(y.solo?1:0));
-  if(window._SR_PANEL_OPEN===undefined)window._SR_PANEL_OPEN=(opts.abreDefault!==false);
+  if(window._SR_PANEL_OPEN===undefined)window._SR_PANEL_OPEN=true;
   const ab=!!window._SR_PANEL_OPEN;
   // Cuántas marcas de esta tanda ya se batieron hoy. Va en el título para que,
   // aunque el panel esté plegado, se vea que pasó algo.
@@ -14486,9 +14480,10 @@ function renderLiveView(){
   const totalCols=2+(maxAtts.sq+1)+(maxAtts.bp+1)+(maxAtts.dl+1)+1+1; // +1 = columna POSICIÓN
 
   // Los récords de las categorías que están en la tanda, con los que ya se
-  // batieron hoy marcados. Es el mismo panel del Control en Vivo: acá arranca
-  // plegado y con el aviso de cuántos hay nuevos.
-  h += _srPanel({abreDefault:false});
+  // batieron hoy marcados. Es el mismo panel del Control en Vivo, abierto: se
+  // probó plegado para no empujar la tabla hacia abajo, y desde la mesa
+  // pidieron verlo sin tener que abrirlo.
+  h += _srPanel();
 
   // ── Tabla completa de resultados ─────────────────────────────
   // El puesto virtual de cada uno, calculado una vez para toda la tabla.
