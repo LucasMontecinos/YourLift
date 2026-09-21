@@ -12777,11 +12777,24 @@ function renderResults(){
   // número contra el otro no dice nada. Agrupando solo por división, el Top 3
   // del Open mezclaba a unas y otros y mostraba un podio que no existe. El mejor
   // levantador se premia igual que acá: uno por sexo.
-  const divGroups={};
+  // …y POR MODALIDAD. Classic, Equipado y Only Bench son rankings distintos: un
+  // equipado levanta más por el traje, y la banca sola no se compara contra un
+  // total de tres movimientos. Mezclados en una sola lista el podio no
+  // significaba nada. Universitario y Olimpiadas Especiales ya quedaban aparte
+  // porque son divisiones, no modalidades.
+  //
+  // La modalidad sale de la LÍNEA (Classic / Equipado) más si la entrada es de
+  // banca sola. Se mira `view` y no la modalidad del atleta a propósito: el que
+  // compite en powerlifting Y en Only Bench entra dos veces —una por cada
+  // ranking, que es lo correcto— y así cada una cae en su tarjeta en vez de
+  // ocuparle dos lugares al mismo podio.
+  const divGroups={}, divLbl={};
   allEntries.forEach(e=>{
     const t=totalOf(e.a,e.view);if(t<=0)return;
-    const k=_normSex(e.a.sex)+'|'+(e.a.div||'Sin División');
-    if(!divGroups[k])divGroups[k]=[];
+    const linea=_nomLineMod(e.a)[0];               // CLASSIC | EQUIPADO
+    const soloBanca=e.view==='bench';
+    const k=_normSex(e.a.sex)+'|'+(e.a.div||'Sin División')+'|'+linea+'|'+(soloBanca?'BP':'PL');
+    if(!divGroups[k]){divGroups[k]=[];divLbl[k]=linea+(soloBanca?' · ONLY BENCH':'');}
     divGroups[k].push({...e.a,total:t,gl:calcGL(t,e.a.bw,e.a.sex,_glMod(e.a),e.view),_view:e.view});
   });
   Object.values(divGroups).forEach(arr=>arr.sort((a,b)=>b.gl-a.gl));
@@ -12880,12 +12893,14 @@ function renderResults(){
   // Junior, Open, Master I…), no por orden alfabético, que las dejaba en
   // Junior · Master · Open · Sub-Junior.
   const divKeys=Object.keys(divGroups).sort((x,y)=>{
-    const [sx,dx]=x.split('|'), [sy,dy]=y.split('|');
+    const [sx,dx,lx,bx]=x.split('|'), [sy,dy,ly,by]=y.split('|');
     if(sx!==sy)return sx==='F'?-1:sy==='F'?1:sx.localeCompare(sy);
+    if(lx!==ly)return lx==='CLASSIC'?-1:ly==='CLASSIC'?1:lx.localeCompare(ly);
+    if(bx!==by)return bx==='PL'?-1:1;               // el powerlifting antes que la banca sola
     return (_DIV_ORDER(dx)-_DIV_ORDER(dy))||dx.localeCompare(dy);
   });
   if(divKeys.length>0){
-    h+='<div class="card" style="margin-bottom:16px"><h3 class="os" style="font-size:14px;letter-spacing:1px;margin-bottom:12px;color:var(--gold)">TOP 3 GL POINTS POR DIVISIÓN Y SEXO (todas las modalidades)</h3>';
+    h+='<div class="card" style="margin-bottom:16px"><h3 class="os" style="font-size:14px;letter-spacing:1px;margin-bottom:12px;color:var(--gold)">TOP 3 GL POINTS POR MODALIDAD, DIVISIÓN Y SEXO</h3>';
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
     divKeys.forEach(d=>{
       const top3=divGroups[d].slice(0,3);
@@ -12893,10 +12908,13 @@ function renderResults(){
       const _sxL=_sx==='F'?'DAMAS':_sx==='M'?'CABALLEROS':_sx;
       h+='<div style="background:var(--bg);border-radius:8px;padding:12px;border:1px solid var(--border)">'
         +'<div class="os" style="font-size:13px;letter-spacing:1px;color:var(--accent);margin-bottom:8px">'+_dv
-        +' <span style="color:var(--muted);font-size:11px">· '+_sxL+'</span></div>';
+        +' <span style="color:var(--muted);font-size:11px">· '+_sxL+'</span>'
+        +'<div style="font-size:10px;letter-spacing:.8px;color:var(--muted);margin-top:2px">'+divLbl[d]+'</div></div>';
       const medals=['1°','2°','3°'];
       top3.forEach((a,i)=>{
-        const tag=a._view==='bench'?'<span style="font-size:8px;background:#D4A843;color:#0A1628;padding:1px 4px;border-radius:3px;margin-left:4px;font-family:Oswald;font-weight:700">BENCH</span>':'';
+        // El cartelito BENCH por fila ya no hace falta: la tarjeta entera es de
+        // banca sola y lo dice en el título.
+        const tag='';
         h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;'+(i<2?'border-bottom:1px solid rgba(30,58,95,.2)':'')+'"><div style="display:flex;align-items:center;gap:6px"><span style="font-size:14px">'+medals[i]+'</span><div><span style="font-weight:600;font-size:12px">'+a.name+'</span>'+tag+'<span style="font-size:9px;color:var(--muted);margin-left:4px">'+_normCat(a.cat)+' kg</span></div></div><div style="text-align:right"><span class="os" style="font-size:15px;font-weight:700;color:var(--gold)">'+a.gl+'</span><span style="font-size:9px;color:var(--muted);margin-left:4px">'+a.total+'kg</span></div></div>';
       });
       h+='</div>';
