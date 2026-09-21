@@ -2482,7 +2482,17 @@ function _srTotal(a){
 // Lo pidió FESUPO: durante la tanda hay que tener a la vista los récords de las
 // categorías que están levantando, del movimiento en curso. Se arma solo con los
 // atletas de la tanda activa, agrupado por categoría + división.
-function _srPanel(){
+// El panel de récords. Se usa igual en el Control en Vivo y en la vista del
+// público: no depende de tener sesión, porque solo lee.
+//
+// opts.abreDefault  — en el control arranca abierto (pedido de FESUPO: los
+//                     récords tienen que estar a la vista mientras se juzga).
+//                     En la vista del público arranca plegado, porque ahí
+//                     arriba ya está la transmisión y la tabla quedaría a tres
+//                     pantallas de distancia. A cambio, el título avisa cuántos
+//                     récords nuevos hay, que es el gancho para abrirlo.
+function _srPanel(opts){
+  opts=opts||{};
   if(!_srOn())return '';
   const pool=DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed&&_inTarima(a.flight));
   const base=pool.length?pool:DATA.athletes.filter(a=>!a.bombed&&_inTarima(a.flight));
@@ -2516,10 +2526,12 @@ function _srPanel(){
   const rows=[...filas.values()].sort((x,y)=>
     (x.sexo===y.sexo?0:x.sexo==='F'?-1:1)||(x.eq===y.eq?0:x.eq==='classic'?-1:1)
     ||CATN(x.cat)-CATN(y.cat)||(DVO[x.div]-DVO[y.div])||(x.solo?1:0)-(y.solo?1:0));
-  // Arranca ABIERTO: los récords tienen que estar a la vista durante la tanda,
-  // no escondidos detrás de un click (pedido de FESUPO).
-  if(window._SR_PANEL_OPEN===undefined)window._SR_PANEL_OPEN=true;
+  if(window._SR_PANEL_OPEN===undefined)window._SR_PANEL_OPEN=(opts.abreDefault!==false);
   const ab=!!window._SR_PANEL_OPEN;
+  // Cuántas marcas de esta tanda ya se batieron hoy. Va en el título para que,
+  // aunque el panel esté plegado, se vea que pasó algo.
+  let nuevos=0;
+  rows.forEach(r=>MOVS.forEach(l=>{ if(r.r[l]&&r.r[l].hoy)nuevos++; }));
   const celda=r=>{
     if(!r)return '<td style="padding:4px 6px;text-align:center;color:rgba(150,170,200,.25)">—</td>';
     if(r.vacio)return '<td style="padding:4px 6px;text-align:center;color:var(--muted);font-size:10px">sin récord</td>';
@@ -2530,6 +2542,8 @@ function _srPanel(){
   let h='<div class="card" style="margin-bottom:10px;padding:0;overflow:hidden;border:1px solid rgba(242,194,48,.45)">';
   h+='<button onclick="window._SR_PANEL_OPEN=!window._SR_PANEL_OPEN;R()" style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 13px;border:none;background:rgba(242,194,48,.10);color:#F2C230;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;text-align:left">'
     +'<span>🏆 RÉCORDS SUDAMERICANOS</span>'
+    +(nuevos?'<span style="background:#F2C230;color:#0f1a10;font-size:10px;font-weight:800;letter-spacing:.5px;padding:2px 7px;border-radius:4px;white-space:nowrap">'
+        +nuevos+(nuevos>1?' NUEVOS':' NUEVO')+'</span>':'')
     +'<span style="font-size:10px;color:var(--muted);font-weight:400;letter-spacing:0">sentadilla · banca · peso muerto · total, de las categorías que están en la tanda '+(DATA.flight||'—')+'</span>'
     +'<span style="flex:1"></span><span style="font-size:13px">'+(ab?'▾':'▸')+'</span></button>';
   if(ab){
@@ -2548,7 +2562,14 @@ function _srPanel(){
       +'</tr>';
     });
     h+='</table></div>';
-    h+='<div style="padding:6px 13px;font-size:10px;color:var(--muted);border-top:1px solid var(--border)">Cada atleta se mide contra su división y contra el Open. Pasá el mouse por una marca para ver quién la tiene. '+(window._SR_FUENTE?esc(window._SR_FUENTE):'')+'</div>';
+    // El "pasá el mouse" se decía como si todos estuvieran en un computador, y
+    // esto ahora lo ve el público desde el teléfono, donde no hay mouse ni sale
+    // el globito. Se dice dónde funciona en vez de prometerlo a todos.
+    h+='<div style="padding:6px 13px;font-size:10px;color:var(--muted);border-top:1px solid var(--border)">'
+      +'Cada atleta se mide contra su división y contra el Open. '
+      +'<span style="color:#F2C230">NUEVO</span> = récord batido en esta competencia. '
+      +'Desde un computador, pasando el mouse por una marca se ve quién la tiene. '
+      +(window._SR_FUENTE?esc(window._SR_FUENTE):'')+'</div>';
   }
   h+='</div>';
   return h;
@@ -14430,6 +14451,11 @@ function renderLiveView(){
   const _tieneExtra=(a,l)=>{const x=(a.att[l]||[])[3];return !!(x&&(x.w>0||x.r));};
   const maxAtts={};['sq','bp','dl'].forEach(l=>{maxAtts[l]=_liveReal.some(a=>_tieneExtra(a,l))?4:3;});
   const totalCols=2+(maxAtts.sq+1)+(maxAtts.bp+1)+(maxAtts.dl+1)+1+1; // +1 = columna POSICIÓN
+
+  // Los récords de las categorías que están en la tanda, con los que ya se
+  // batieron hoy marcados. Es el mismo panel del Control en Vivo: acá arranca
+  // plegado y con el aviso de cuántos hay nuevos.
+  h += _srPanel({abreDefault:false});
 
   // ── Tabla completa de resultados ─────────────────────────────
   // El puesto virtual de cada uno, calculado una vez para toda la tabla.
