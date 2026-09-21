@@ -12761,12 +12761,18 @@ function renderResults(){
     ...equippedAthletes.map(a=>({a,view:'meet'})),
     ...benchAthletes.map(a=>({a,view:'bench'}))
   ];
+  // SEPARADO POR SEXO, no solo por división. Los puntos GL se calculan con
+  // coeficientes distintos para damas y caballeros —esa es toda la gracia de la
+  // fórmula: comparar dentro de un sexo, no entre los dos—, así que poner un
+  // número contra el otro no dice nada. Agrupando solo por división, el Top 3
+  // del Open mezclaba a unas y otros y mostraba un podio que no existe. El mejor
+  // levantador se premia igual que acá: uno por sexo.
   const divGroups={};
   allEntries.forEach(e=>{
     const t=totalOf(e.a,e.view);if(t<=0)return;
-    const d=e.a.div||'Sin División';
-    if(!divGroups[d])divGroups[d]=[];
-    divGroups[d].push({...e.a,total:t,gl:calcGL(t,e.a.bw,e.a.sex,_glMod(e.a),e.view),_view:e.view});
+    const k=_normSex(e.a.sex)+'|'+(e.a.div||'Sin División');
+    if(!divGroups[k])divGroups[k]=[];
+    divGroups[k].push({...e.a,total:t,gl:calcGL(t,e.a.bw,e.a.sex,_glMod(e.a),e.view),_view:e.view});
   });
   Object.values(divGroups).forEach(arr=>arr.sort((a,b)=>b.gl-a.gl));
 
@@ -12860,13 +12866,24 @@ function renderResults(){
   h+='</div>';
 
   // Top 3 GL by Division
-  const divKeys=Object.keys(divGroups).sort();
+  // Damas primero y las divisiones en su orden de competencia (Sub-Junior,
+  // Junior, Open, Master I…), no por orden alfabético, que las dejaba en
+  // Junior · Master · Open · Sub-Junior.
+  const divKeys=Object.keys(divGroups).sort((x,y)=>{
+    const [sx,dx]=x.split('|'), [sy,dy]=y.split('|');
+    if(sx!==sy)return sx==='F'?-1:sy==='F'?1:sx.localeCompare(sy);
+    return (_DIV_ORDER(dx)-_DIV_ORDER(dy))||dx.localeCompare(dy);
+  });
   if(divKeys.length>0){
-    h+='<div class="card" style="margin-bottom:16px"><h3 class="os" style="font-size:14px;letter-spacing:1px;margin-bottom:12px;color:var(--gold)">TOP 3 GL POINTS POR DIVISIÓN (todas las modalidades)</h3>';
+    h+='<div class="card" style="margin-bottom:16px"><h3 class="os" style="font-size:14px;letter-spacing:1px;margin-bottom:12px;color:var(--gold)">TOP 3 GL POINTS POR DIVISIÓN Y SEXO (todas las modalidades)</h3>';
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
     divKeys.forEach(d=>{
       const top3=divGroups[d].slice(0,3);
-      h+='<div style="background:var(--bg);border-radius:8px;padding:12px;border:1px solid var(--border)"><div class="os" style="font-size:13px;letter-spacing:1px;color:var(--accent);margin-bottom:8px">'+d+'</div>';
+      const _sx=d.split('|')[0], _dv=d.split('|')[1];
+      const _sxL=_sx==='F'?'DAMAS':_sx==='M'?'CABALLEROS':_sx;
+      h+='<div style="background:var(--bg);border-radius:8px;padding:12px;border:1px solid var(--border)">'
+        +'<div class="os" style="font-size:13px;letter-spacing:1px;color:var(--accent);margin-bottom:8px">'+_dv
+        +' <span style="color:var(--muted);font-size:11px">· '+_sxL+'</span></div>';
       const medals=['1°','2°','3°'];
       top3.forEach((a,i)=>{
         const tag=a._view==='bench'?'<span style="font-size:8px;background:#D4A843;color:#0A1628;padding:1px 4px;border-radius:3px;margin-left:4px;font-family:Oswald;font-weight:700">BENCH</span>':'';
