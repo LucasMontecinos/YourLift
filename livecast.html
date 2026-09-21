@@ -1772,7 +1772,23 @@ function _mergeAthletes(localArr, remoteArr){
       const maxLen=Math.max(lLocal.length,lRemote.length);
       const arr=[];
       for(let r=0;r<maxLen;r++){
-        const heldR=held[ra.id+'|att_'+l+'_'+r];
+        const kCel=ra.id+'|att_'+l+'_'+r;
+        // Mi versión manda en dos casos:
+        //
+        //   1. La acabo de tocar (held: ventana de 4 s).
+        //   2. Todavía NO me consta que el servidor haya aceptado esa edición
+        //      (pend: se limpia recién cuando la escritura sale bien).
+        //
+        // El caso 2 faltaba acá y ahí estaba la pérdida de pesos. Se consultaba
+        // solo más abajo, para cuando el remoto venía más corto; si la casilla
+        // existía en el remoto —lo normal: está creada con el peso viejo o
+        // vacía— lo único que protegía al peso recién escrito eran esos 4
+        // segundos. El documento del Sudamericano pesa cerca de un mega con sus
+        // 429 atletas: en la red del recinto la escritura tarda más que eso, y
+        // cualquier eco que llegara con el estado anterior borraba el peso. El
+        // operador lo volvía a escribir y a veces se perdía otra vez, hasta que
+        // una escritura ganaba la carrera.
+        const heldR=held[kCel]||pend.has(kCel);
         if(heldR){
           // Yo toqué esta celda hace poco → mi versión manda. Si la BORRÉ (ej.
           // eliminé el 4º intento: lLocal[r] ya no existe) NO la re-agrego desde el
