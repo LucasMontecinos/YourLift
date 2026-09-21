@@ -12953,6 +12953,81 @@ function _posCellHtml(a,opts){
   h+='</td>';
   return h;
 }
+// ── EL VIRTUAL, EN LA VISTA DEL PÚBLICO ────────────────────────────────────
+// El puesto que tiene cada uno con lo que lleva levantado MÁS lo que tiene
+// declarado y todavía no levanta. Es el número que el entrenador necesita entre
+// intento e intento: si pide 180, ¿en qué lugar queda?
+//
+// Ya existía, pero en dos lugares donde no se alcanzaba a mirar durante la
+// competencia: en Resultados —a dos toques de distancia— y en la última columna
+// de esta misma tabla, que en un teléfono queda fuera de pantalla y hay que
+// arrastrar pasando los nueve intentos para llegar a ella. Acá se pone al lado
+// del nombre, que es lo único que siempre se ve sin arrastrar nada.
+//
+// LA CUENTA NO SE REESCRIBE: sale de _proyTotal y se ordena con el mismo criterio
+// que _renderResultsTable —proyectado, después total, y a igual marca el más
+// liviano, como manda la IPF—. Tener dos versiones de la misma regla es como la
+// tabla y el acta terminan diciendo cosas distintas.
+//
+// Sin memoria intermedia a propósito: son cuatro cuentas por atleta y esta tabla
+// se redibuja con cada peso que se carga. Guardar el resultado obligaría a
+// acertar cuándo invalidarlo, y equivocarse ahí significa mostrarle al
+// entrenador un puesto viejo, que es peor que no mostrarle ninguno.
+function _virtualPuestos(){
+  const grupos={};
+  DATA.athletes.forEach(a=>{
+    if(a.__is4||a.bombed||_esInvitado(a))return;
+    // El que hace banca sola se mide contra su banca; el resto, contra el total.
+    const view=a.mod==='onlybench'?'bench':'meet';
+    const k=_catGroupKey(a);
+    (grupos[k]||(grupos[k]=[])).push({
+      id:a.id, proy:_proyTotal(a,view), total:totalOf(a,view),
+      bw:a.bw||999, dq:view==='meet'&&isDQ(a),
+    });
+  });
+  const out={};
+  Object.values(grupos).forEach(arr=>{
+    arr.sort((x,y)=>(x.dq===y.dq?0:(x.dq?1:-1))||(y.proy-x.proy)||(y.total-x.total)||(x.bw-y.bw));
+    let p=0, previo=null;
+    const delGrupo=[];
+    arr.forEach(x=>{
+      if(!(x.proy>0)||x.dq)return;
+      p++;
+      // Cuánto le falta para alcanzar al de arriba: el número que el entrenador
+      // saca a mano entre intento e intento. Solo si es mayor que cero —
+      // empatados en proyectado el puesto lo decide el peso corporal, y decir
+      // "te falta 0" confundiría más de lo que ayuda.
+      const falta=previo?(previo.proy-x.proy):0;
+      out[x.id]={pos:p, proy:x.proy, faltan:falta>0?falta:0};
+      delGrupo.push(x.id);
+      previo=x;
+    });
+    delGrupo.forEach(id=>{ out[id].of=p; });
+  });
+  return out;
+}
+// La línea que se dibuja al lado del nombre.
+function _virtualHtml(v){
+  if(!v)return '';
+  const col=v.pos===1?'var(--gold)':v.pos<=3?'#60a5fa':'rgba(255,255,255,.75)';
+  // El peso proyectado sin decimales de relleno: 512.5 queda 512.5, 510 queda 510.
+  const kg=Math.round(v.proy*10)/10;
+  // Todo en UNA línea que no se parte. En un teléfono la columna del atleta mide
+  // unos 300 px: con el recuadro flexible, "de 8" y "+3.5 al 1°" se cortaban por
+  // la mitad y quedaban tres renglones de pedazos sueltos.
+  const deN=(v.of&&v.of>1)?'<span style="color:rgba(255,255,255,.5)">/'+v.of+'</span>':'';
+  let h='<div style="margin-top:3px;font-family:Oswald;font-size:9.5px;letter-spacing:.4px;'
+    +'display:inline-block;white-space:nowrap;padding:2px 7px;border-radius:5px;'
+    +'background:rgba(212,168,67,.10);border:1px solid rgba(212,168,67,.35)">'
+    +'<span style="color:rgba(212,168,67,.85)">VIRTUAL</span>&nbsp;'
+    +'<b style="color:'+col+';font-size:11.5px">'+v.pos+'°</b>'+deN
+    +'<span style="color:rgba(255,255,255,.3)">&nbsp;·&nbsp;</span>'
+    +'<span style="color:rgba(255,255,255,.8)">'+kg+'</span>';
+  if(v.faltan)h+='<span style="color:rgba(255,255,255,.3)">&nbsp;·&nbsp;</span>'
+    +'<span style="color:#60a5fa" title="Lo que le falta al total proyectado para alcanzar al de arriba">+'
+    +(Math.round(v.faltan*10)/10)+'&nbsp;al&nbsp;'+(v.pos-1)+'°</span>';
+  return h+'</div>';
+}
 function catRankBySub(athlete){
   // Ranking dentro del mismo sexo + categoría + división (no mezcla divisiones de edad)
   if(_esInvitado(athlete))return{pos:0,of:0};
@@ -14357,6 +14432,17 @@ function renderLiveView(){
   const totalCols=2+(maxAtts.sq+1)+(maxAtts.bp+1)+(maxAtts.dl+1)+1+1; // +1 = columna POSICIÓN
 
   // ── Tabla completa de resultados ─────────────────────────────
+  // El puesto virtual de cada uno, calculado una vez para toda la tabla.
+  const VIRT = _virtualPuestos();
+  // Qué significa ese número, dicho una vez. Un entrenador que lo ve por primera
+  // vez no tiene por qué adivinar si es el puesto de ahora o el proyectado.
+  h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;'
+    +'font-size:11px;color:var(--muted);line-height:1.5">'
+    +'<span style="font-family:Oswald;font-size:9px;letter-spacing:.5px;padding:2px 7px;border-radius:5px;'
+    +'background:rgba(212,168,67,.10);border:1px solid rgba(212,168,67,.35);color:rgba(212,168,67,.85)">VIRTUAL</span>'
+    +'<span>El puesto de cada uno <b style="color:var(--text)">si todos levantan lo que tienen declarado</b>, '
+    +'dentro de su categoría y división. Al lado va el total proyectado y cuánto falta para el puesto de arriba.</span>'
+    +'</div>';
   h += '<div class="card" style="padding:0;overflow-x:auto">';
   h += '<table style="width:100%;border-collapse:collapse;font-size:11px;min-width:780px">';
 
@@ -14437,6 +14523,10 @@ function renderLiveView(){
     // proyección) y los mismos chips de nominación del Control en Vivo:
     // división (OE/UNI destacados) · categoría · línea competitiva · modalidad.
     h += '<div style="font-size:9px;color:rgba(255,255,255,.9);margin-top:1px">'+a.club+' · '+(a.bw?a.bw+'kg':'—')+'</div>';
+    // El puesto virtual, pegado al nombre. Va acá y no en una columna porque la
+    // columna quedaría a la derecha del todo, fuera de la pantalla del teléfono.
+    // El clon del 4º intento no tiene puesto propio: se busca el del atleta real.
+    h += _virtualHtml(VIRT[_realAth(a).id]);
     h += _nomChips(a,1);
     h += '</td>';
 
