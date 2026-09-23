@@ -10315,10 +10315,7 @@ function R(){
       // síncrono—, así que cualquier diferencia la puso el navegador, no él.
       const _sy=_mismaPant?(window.scrollY||window.pageYOffset||0):0;
       el.innerHTML=_nuevo;
-      if(_sy&&(window.scrollY||window.pageYOffset||0)!==_sy){
-        window._scrollAuto=Date.now()+400;
-        window.scrollTo(0,_sy);
-      }
+      if(_sy&&(window.scrollY||window.pageYOffset||0)!==_sy)window.scrollTo(0,_sy);
     }
   }catch(e){ console.error('[R] render error',e); _renderRecovery(e); }
 }
@@ -14698,32 +14695,49 @@ function _filaDias(zona, tandas, diaEnTarima){
 window.verDia=function(zona,d){ window._DIA_SEL[zona]=d; try{R();}catch(e){} };
 
 window.liveVerTanda=function(f){
-  if(!f){ setNavLibre(false); }
+  // AUTOMÁTICO (o IR A LA TARIMA) también vuelve a seguir al que está levantando.
+  if(!f){ setNavLibre(false); window._siguiendoTarima=true; window._liveLastKey=null; }
   else { window.setNavLibre(true); DATA.flight=f; }
   try{ R(); }catch(e){}
 };
 
 
 
-// ¿El que mira movió la pantalla hace poco? Entonces está leyendo algo a
-// propósito y no se le arrebata la vista. Los desplazamientos que provoca la
-// página sola se marcan de antemano en _scrollAuto, para no confundirlos con los
-// del espectador.
-function _scrollManualReciente(){
+// Seguir a la tarima. La vista del público acompaña sola al atleta que está
+// levantando —es lo que necesita un televisor que nadie toca— hasta que el que
+// mira mueve la pantalla. Desde ese momento queda LIBRE: cargar un peso o dar un
+// válido ya no la mueve, se puede subir y bajar a gusto. Vuelve a seguir cuando
+// toca AUTOMÁTICO o el botón "AL QUE ESTÁ EN TARIMA".
+//
+// Antes se soltaba solo 20 segundos: si uno llevaba más rato leyendo y en la mesa
+// cargaban un peso, la pantalla igual lo subía al de tarima.
+//
+// Solo cuentan gestos de la persona (rueda, dedo, teclas, barra de scroll). El
+// evento 'scroll' no sirve para esto: también lo disparan los desplazamientos que
+// hace la propia página.
+function _seguirTarima(){
   if(!window._scrollWatch){
     window._scrollWatch=true;
-    window._scrollManual=window._scrollManual||0;
-    window._scrollAuto=window._scrollAuto||0;
-    addEventListener('scroll',function(){
-      if(Date.now()<window._scrollAuto)return;
-      window._scrollManual=Date.now();
-    },{passive:true});
-    ['wheel','touchmove'].forEach(function(ev){
-      addEventListener(ev,function(){window._scrollManual=Date.now();},{passive:true});
-    });
+    if(window._siguiendoTarima===undefined)window._siguiendoTarima=true;
+    const soltar=function(){
+      if(DATA.phase!=='liveView'||window._siguiendoTarima===false)return;
+      window._siguiendoTarima=false;
+      const b=document.getElementById('btnSeguirTarima');
+      if(b&&!window.NAV_LIBRE)b.style.display='';
+    };
+    addEventListener('wheel',soltar,{passive:true});
+    addEventListener('touchmove',soltar,{passive:true});
+    addEventListener('keydown',function(e){ if(/^(ArrowUp|ArrowDown|PageUp|PageDown|Home|End| )$/.test(e.key||''))soltar(); });
+    // Arrastrar la barra de scroll: ese clic cae en el <html>, fuera del contenido.
+    addEventListener('pointerdown',function(e){ if(e.target===document.documentElement)soltar(); });
   }
-  return Date.now()-window._scrollManual < 20000;
+  return window._siguiendoTarima!==false;
 }
+window.liveSeguirTarima=function(){
+  window._siguiendoTarima=true; window._liveLastKey=null;
+  if(window.NAV_LIBRE){ window.liveVerTanda(null); return; }
+  try{ R(); }catch(e){}
+};
 
 // La ficha del atleta en una sola línea pide unos 1400 px de tabla. Por encima de
 // este ancho —televisores de tarima, monitores de 25-26", cualquier computador—
@@ -15052,6 +15066,16 @@ function renderLiveView(){
   });
 
   h += '</tbody></table></div>';
+  // Para volver a seguir a la tarima después de haberse movido. Aparece solo
+  // cuando la pantalla quedó libre; con una tanda elegida a mano ya está el
+  // aviso de arriba con su propio botón.
+  _seguirTarima();
+  h += '<button id="btnSeguirTarima" onclick="liveSeguirTarima()" style="'
+    +((window._siguiendoTarima===false&&!libre)?'':'display:none;')
+    +'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom, 0px));z-index:60;'
+    +'padding:9px 16px;border-radius:999px;border:1px solid rgba(34,197,94,.6);background:rgba(10,22,40,.92);color:#4ade80;'
+    +'font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.45);white-space:nowrap">'
+    +'↓ AL QUE ESTÁ EN TARIMA</button>';
   h += '</div>';
 
   // Auto-scroll al atleta actual solo cuando cambia
@@ -15066,11 +15090,9 @@ function renderLiveView(){
     const key = currentFlight+'_'+DATA.lift+'_'+DATA.round+'_'+(curId||'');
     if(window._liveLastKey !== key){
       window._liveLastKey = key;
-      // Si el espectador acaba de desplazar la pantalla, está mirando a otro
-      // atleta a propósito: cargar un peso en la mesa no se la puede arrebatar.
-      // Cuando deje de tocarla, la pantalla vuelve a seguir sola a la tarima.
-      if(_scrollManualReciente()) return;
-      window._scrollAuto = Date.now()+1600;
+      // Si el espectador movió la pantalla, está mirando otra cosa a propósito:
+      // ni un peso nuevo ni un válido se la pueden arrebatar (ver _seguirTarima).
+      if(!_seguirTarima()) return;
       el.scrollIntoView({behavior:'smooth',block:'center'});
     }
   }, 200);
