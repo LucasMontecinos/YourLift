@@ -10117,10 +10117,25 @@ function R(){
     // dibujar es igual a lo que ya está, no se toca: reescribir de gusto pierde
     // el scroll y el foco de la casilla que se está tecleando.
     const _pant=DATA.phase+'|'+(TARIMA||'');
-    el.classList.toggle('sin-anim', window._ultPantalla===_pant);
+    const _mismaPant=(window._ultPantalla===_pant);
+    el.classList.toggle('sin-anim', _mismaPant);
     window._ultPantalla=_pant;
     const _nuevo=renderShell();
-    if(el.innerHTML!==_nuevo)el.innerHTML=_nuevo;
+    if(el.innerHTML!==_nuevo){
+      // Rehacer la pantalla de golpe la tira al principio: mientras el navegador
+      // reconstruye el contenido el documento mide menos, y el scroll se recorta
+      // a lo que queda. Al espectador se le iba la vista para arriba cada vez que
+      // en la mesa cargaban un peso. Se anota dónde estaba y se lo devuelve ahí.
+      //
+      // Entre las dos líneas no cabe un gesto del usuario —asignar innerHTML es
+      // síncrono—, así que cualquier diferencia la puso el navegador, no él.
+      const _sy=_mismaPant?(window.scrollY||window.pageYOffset||0):0;
+      el.innerHTML=_nuevo;
+      if(_sy&&(window.scrollY||window.pageYOffset||0)!==_sy){
+        window._scrollAuto=Date.now()+400;
+        window.scrollTo(0,_sy);
+      }
+    }
   }catch(e){ console.error('[R] render error',e); _renderRecovery(e); }
 }
 function _renderRecovery(e){
@@ -12103,7 +12118,10 @@ function _nomLineMod(a){
   if(mod==='onlybench'||mod==='oe_bench'||mod==='equipped_bench')return [linea,'ONLY BENCH'];
   return [linea,'PL'];                                       // classic, equipped y oe_classic
 }
-function _nomChips(a,sc){
+// `linea` dibuja los chips al lado del nombre en vez de debajo: mismo contenido,
+// pero sin abrir un renglón nuevo ni partirse en dos. Lo usa la tabla del público,
+// donde cada renglón de más es un atleta menos que entra en el televisor.
+function _nomChips(a,sc,enLinea){
   sc=sc||1;
   const fs=Math.max(7,Math.round(8.5*sc));
   const chip=(txt,col,bg,bd,title)=>'<span'+(title?' title="'+title+'"':'')+' style="display:inline-block;padding:0 '+Math.round(5*sc)+'px;border-radius:4px;font-family:Oswald;font-size:'+fs+'px;font-weight:700;letter-spacing:.4px;line-height:'+Math.round(14*sc)+'px;color:'+col+';background:'+bg+';border:1px solid '+bd+'">'+txt+'</span>';
@@ -12112,20 +12130,22 @@ function _nomChips(a,sc){
   const [linea,modal]=_nomLineMod(a);
   const eq=(linea==='EQUIPADO');
   const bench=/BENCH/.test(modal);
-  let h='<div style="display:flex;flex-wrap:wrap;gap:'+Math.round(3*sc)+'px;margin-top:'+Math.round(2*sc)+'px">';
+  let h=enLinea
+    ? '<span style="display:inline-flex;flex-wrap:nowrap;gap:'+Math.round(3*sc)+'px;flex-shrink:0">'
+    : '<div style="display:flex;flex-wrap:wrap;gap:'+Math.round(3*sc)+'px;margin-top:'+Math.round(2*sc)+'px">';
+  const cierra=enLinea?'</span>':'</div>';
   // Invitado/a: un solo chip, para que se lea de una que no está compitiendo por
   // el lugar. Su división y categoría ya no significan nada en el ranking.
   if(_esInvitado(a)){
     h+=chip('INVITADO/A','#0A1628','#f59e0b','#f59e0b','Fuera de competencia: levanta pero no entra al ranking');
     h+=chip(txCatLabel(a.cat)||'—','var(--muted)','rgba(30,58,95,.55)','var(--border)','Categoría de peso');
-    return h+'</div>';
+    return h+cierra;
   }
   h+=chip(dv, esp?'#0A1628':'var(--muted)', esp?'var(--gold)':'rgba(30,58,95,.55)', esp?'var(--gold)':'var(--border)', 'División: '+(a.div||'—'));
   h+=chip(txCatLabel(a.cat)||'—','var(--gold)','rgba(212,168,67,.12)','rgba(212,168,67,.35)','Categoría de peso');
   h+=chip(linea, eq?'#f59e0b':'#60a5fa', eq?'rgba(245,158,11,.12)':'rgba(96,165,250,.12)', eq?'rgba(245,158,11,.4)':'rgba(96,165,250,.4)','Línea competitiva');
   h+=chip(modal, bench?'#a78bfa':'var(--green)', bench?'rgba(167,139,250,.12)':'rgba(34,197,94,.12)', bench?'rgba(167,139,250,.4)':'rgba(34,197,94,.4)','Modalidad');
-  h+='</div>';
-  return h;
+  return h+cierra;
 }
 function _attCellCompete(a,l,j,isCurrentCell){
   const sc=window._CT_CELL_SCALE||1;
@@ -13079,7 +13099,7 @@ function _virtualPuestos(){
   return out;
 }
 // La línea que se dibuja al lado del nombre.
-function _virtualHtml(v){
+function _virtualHtml(v,linea){
   if(!v)return '';
   const col=v.pos===1?'var(--gold)':v.pos<=3?'#60a5fa':'rgba(255,255,255,.75)';
   // El peso proyectado sin decimales de relleno: 512.5 queda 512.5, 510 queda 510.
@@ -13088,7 +13108,7 @@ function _virtualHtml(v){
   // unos 300 px: con el recuadro flexible, "de 8" y "+3.5 al 1°" se cortaban por
   // la mitad y quedaban tres renglones de pedazos sueltos.
   const deN=(v.of&&v.of>1)?'<span style="color:rgba(255,255,255,.5)">/'+v.of+'</span>':'';
-  let h='<div style="margin-top:3px;font-family:Oswald;font-size:9.5px;letter-spacing:.4px;'
+  let h='<span style="'+(linea?'flex-shrink:0;':'margin-top:3px;')+'font-family:Oswald;font-size:9.5px;letter-spacing:.4px;'
     +'display:inline-block;white-space:nowrap;padding:2px 7px;border-radius:5px;'
     +'background:rgba(212,168,67,.10);border:1px solid rgba(212,168,67,.35)">'
     +'<span style="color:rgba(212,168,67,.85)">VIRTUAL</span>&nbsp;'
@@ -13098,7 +13118,7 @@ function _virtualHtml(v){
   if(v.faltan)h+='<span style="color:rgba(255,255,255,.3)">&nbsp;·&nbsp;</span>'
     +'<span style="color:#60a5fa" title="Lo que le falta al total proyectado para alcanzar al de arriba">+'
     +(Math.round(v.faltan*10)/10)+'&nbsp;al&nbsp;'+(v.pos-1)+'°</span>';
-  return h+'</div>';
+  return h+'</span>';
 }
 function catRankBySub(athlete){
   // Ranking dentro del mismo sexo + categoría + división (no mezcla divisiones de edad)
@@ -14407,7 +14427,45 @@ window.liveVerTanda=function(f){
 
 
 
+// ¿El que mira movió la pantalla hace poco? Entonces está leyendo algo a
+// propósito y no se le arrebata la vista. Los desplazamientos que provoca la
+// página sola se marcan de antemano en _scrollAuto, para no confundirlos con los
+// del espectador.
+function _scrollManualReciente(){
+  if(!window._scrollWatch){
+    window._scrollWatch=true;
+    window._scrollManual=window._scrollManual||0;
+    window._scrollAuto=window._scrollAuto||0;
+    addEventListener('scroll',function(){
+      if(Date.now()<window._scrollAuto)return;
+      window._scrollManual=Date.now();
+    },{passive:true});
+    ['wheel','touchmove'].forEach(function(ev){
+      addEventListener(ev,function(){window._scrollManual=Date.now();},{passive:true});
+    });
+  }
+  return Date.now()-window._scrollManual < 20000;
+}
+
+// La ficha del atleta en una sola línea pide unos 1400 px de tabla. Por encima de
+// este ancho —televisores de tarima, monitores de 25-26", cualquier computador—
+// conviene a lo largo: la tanda entra completa. Por debajo —teléfono, tablet de
+// pie— conviene apilada, que es donde sobra alto y falta ancho.
+const _ANCHO_LINEA = 1280;
+function _anchoDaParaLinea(){ return (window.innerWidth||1400) >= _ANCHO_LINEA; }
+// Girar el tablet cruza el umbral: se redibuja una sola vez, y solo si de verdad
+// cambió de lado. Sin esto la vista se queda con el formato del ancho anterior.
+addEventListener('resize',function(){
+  const ahora=_anchoDaParaLinea();
+  if(window._ultLinea===ahora)return;
+  window._ultLinea=ahora;
+  clearTimeout(window._tLinea);
+  window._tLinea=setTimeout(function(){ try{R();}catch(e){} },180);
+},{passive:true});
+
 function renderLiveView(){
+  const _enLinea = _anchoDaParaLinea();
+  window._ultLinea = _enLinea;
   const currentFlight = DATA.flight;
   const liftColor = LIFT_C[DATA.lift];
   // Vista libre: el espectador eligió una tanda y la pantalla se queda ahí aunque
@@ -14433,32 +14491,57 @@ function renderLiveView(){
   // AUTOMÁTICO sigue a la tarima, como siempre. Si el espectador elige una tanda,
   // se queda ahí: cargar un peso en la tanda que está compitiendo ya no lo devuelve
   // de un salto. Es la misma vista libre que usa el operador, expuesta acá.
+  const tandas=[...new Set(DATA.athletes.map(a=>a.flight).filter(Boolean))].sort(_cmpFl);
+  const _fd=_filaDias('publico',tandas,_tandaEnTarima?_diaDeTanda(_tandaEnTarima):null);
+  const tandasVer=_fd.tandas;
   {
-    const tandas=[...new Set(DATA.athletes.map(a=>a.flight).filter(Boolean))].sort(_cmpFl);
-
-    const _fd=_filaDias('publico',tandas,_tandaEnTarima?_diaDeTanda(_tandaEnTarima):null);
-    h+=_fd.html;
-    const tandasVer=_fd.tandas;
-
-
-    if(tandas.length>1){
-      h += '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:12px">';
-      h += '<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-right:2px">VER TANDA</span>';
-      h += '<button onclick="liveVerTanda(null)" style="padding:5px 12px;border-radius:6px;border:2px solid '
-        +(libre?'var(--border)':'var(--green)')+';background:'+(libre?'transparent':'rgba(34,197,94,.12)')
-        +';color:'+(libre?'var(--muted)':'var(--green)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer" '
-        +'title="Sigue sola a la tanda que está en tarima">AUTOMÁTICO</button>';
-      tandasVer.forEach(f=>{
-        const on=libre&&f===currentFlight, enTarima=f===_tandaEnTarima;
-        const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;
-        h += '<button onclick="liveVerTanda(\''+f+'\')" style="padding:5px 12px;border-radius:6px;border:2px solid '
-          +(on?(FL_C[f]||'var(--gold)'):'var(--border)')+';background:'+(on?(FL_C[f]||'#666')+'22':'transparent')
-          +';color:'+(on?(FL_C[f]||'#fff'):'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'
-          +f+'<span style="font-size:9px;opacity:.65;margin-left:4px">'+n+'</span>'
-          +(enTarima?'<span style="font-size:8px;color:var(--green);margin-left:5px">EN TARIMA</span>':'')+'</button>';
-      });
+    // Día y tanda se pliegan, como el panel de récords. En los televisores de
+    // atrás de tarima nadie toca la pantalla: esas dos filas de botones son alto
+    // gastado que se le quita a los atletas. La elección queda guardada en el
+    // equipo, así que el televisor no vuelve a abrirlas solo al recargar.
+    if(window._NAV_PANEL_OPEN===undefined){
+      let g=null; try{g=localStorage.getItem('yl_navPanel');}catch(e){}
+      window._NAV_PANEL_OPEN=(g!=='0');
+    }
+    const abN=!!window._NAV_PANEL_OPEN;
+    const diaSel=window._DIA_SEL?window._DIA_SEL['publico']:null;
+    const hayTandas=tandas.length>1;
+    if(_fd.html||hayTandas){
+      h += '<div class="card" style="margin-bottom:10px;padding:0;overflow:hidden">';
+      h += '<button onclick="window._NAV_PANEL_OPEN=!window._NAV_PANEL_OPEN;try{localStorage.setItem(\'yl_navPanel\',window._NAV_PANEL_OPEN?\'1\':\'0\')}catch(e){};R()" '
+        +'style="width:100%;display:flex;align-items:center;gap:9px;padding:7px 12px;border:none;background:rgba(30,58,95,.35);'
+        +'color:var(--muted);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;text-align:left">'
+        +'<span>VER DÍA Y TANDA</span>'
+        +'<span style="color:var(--gold);letter-spacing:.5px">'
+          +(diaSel?'DÍA '+diaSel:'')+(diaSel&&currentFlight?' · ':'')+(currentFlight?'TANDA '+currentFlight:'')+'</span>'
+        +'<span style="flex:1"></span><span style="font-size:13px">'+(abN?'▾':'▸')+'</span></button>';
+      if(abN){
+        h += '<div style="padding:10px 12px 3px">';
+        h += _fd.html;
+        if(hayTandas){
+          h += '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:7px">';
+          h += '<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-right:2px">VER TANDA</span>';
+          h += '<button onclick="liveVerTanda(null)" style="padding:5px 12px;border-radius:6px;border:2px solid '
+            +(libre?'var(--border)':'var(--green)')+';background:'+(libre?'transparent':'rgba(34,197,94,.12)')
+            +';color:'+(libre?'var(--muted)':'var(--green)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer" '
+            +'title="Sigue sola a la tanda que está en tarima">AUTOMÁTICO</button>';
+          tandasVer.forEach(f=>{
+            const on=libre&&f===currentFlight, enTarima=f===_tandaEnTarima;
+            const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;
+            h += '<button onclick="liveVerTanda(\''+f+'\')" style="padding:5px 12px;border-radius:6px;border:2px solid '
+              +(on?(FL_C[f]||'var(--gold)'):'var(--border)')+';background:'+(on?(FL_C[f]||'#666')+'22':'transparent')
+              +';color:'+(on?(FL_C[f]||'#fff'):'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'
+              +f+'<span style="font-size:9px;opacity:.65;margin-left:4px">'+n+'</span>'
+              +(enTarima?'<span style="font-size:8px;color:var(--green);margin-left:5px">EN TARIMA</span>':'')+'</button>';
+          });
+          h += '</div>';
+        }
+        h += '</div>';
+      }
       h += '</div>';
     }
+    // El aviso de "estás mirando otra tanda" queda FUERA del panel: es lo único
+    // de acá que hay que ver sí o sí, aunque los botones estén plegados.
     if(libre&&_tandaEnTarima&&_tandaEnTarima!==currentFlight){
       h += '<div style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.45);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#9dc4f5;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
         +'<span>Estás mirando la tanda '+currentFlight+'. En tarima está compitiendo la '+_tandaEnTarima+'.</span>'
@@ -14471,7 +14554,14 @@ function renderLiveView(){
   const flQueue = liftQueue();
   const queueIds = new Set(flQueue.map(a=>a.id));
   const curFlightAll  = DATA.athletes.filter(a=>a.flight===currentFlight);
-  const otherAthletes = DATA.athletes.filter(a=>a.flight!==currentFlight);
+  // Las otras tandas que se listan debajo son las DEL DÍA ELEGIDO arriba, no las
+  // del campeonato entero. Antes la tabla dibujaba los 429 atletas del
+  // Sudamericano en cada intento: el selector de día movía los botones pero no la
+  // tabla, y rehacer ocho mil casillas a cada peso es lo que hacía pestañear la
+  // pantalla. Si el campeonato es de un solo día, el conjunto son todas y no
+  // cambia nada.
+  const _delDia = new Set(tandasVer||tandas);
+  const otherAthletes = DATA.athletes.filter(a=>a.flight!==currentFlight&&_delDia.has(a.flight));
 
   const sortedAthletes = [
     // Primero los que todavía deben el intento de la ronda: esos ya vienen de
@@ -14593,25 +14683,44 @@ function renderLiveView(){
     }
     h += '</td>';
 
-    // Atleta
-    h += '<td style="padding:5px 8px;border-right:1px solid var(--border)">';
-    if(isOnPlatform) h += '<span style="background:'+liftColor+';color:#fff;padding:1px 6px;border-radius:3px;font-size:8px;font-family:Oswald;letter-spacing:1px;display:inline-block;margin-bottom:2px">▶ EN TARIMA</span><br>';
+    // Atleta — TODO a lo largo, en un solo renglón, cuando la pantalla da el ancho.
+    //
+    // Antes iba el nombre y debajo, uno bajo otro, el club, el peso corporal, el
+    // puesto virtual y los chips de nominación: cinco renglones por atleta. En los
+    // televisores de atrás de tarima —que muestran esta misma vista del público—
+    // una tanda de doce no entraba ni a la mitad. Puesto a lo largo, la fila mide
+    // un tercio y la tanda entra completa.
+    //
+    // En un teléfono o un tablet de pie no: todo en fila pide unos 1400 px, y
+    // debajo de eso el que mira tendría que arrastrar la tabla a lo ancho para
+    // llegar al peso muerto. Ahí se queda apilado, que es lo que conviene cuando
+    // lo que sobra es alto y lo que falta es ancho.
+    h += '<td style="padding:'+(_enLinea?'3px':'5px')+' 8px;border-right:1px solid var(--border)">';
+    if(_enLinea) h += '<div style="display:flex;align-items:center;gap:6px;white-space:nowrap">';
+    if(isOnPlatform) h += '<span style="background:'+liftColor+';color:#fff;padding:1px 6px;border-radius:3px;font-size:8px;font-family:Oswald;letter-spacing:1px;'+(_enLinea?'flex-shrink:0':'display:inline-block;margin-bottom:2px')+'">▶ EN TARIMA</span>'+(_enLinea?'':'<br>');
     // La bandera del país, al lado del nombre, como en las tablas de Resultados
     // y en el medallero. Solo si el campeonato tiene más de un país: en un
     // nacional serían cuatrocientas banderas chilenas iguales, que no informan
     // nada y le quitan lugar al nombre. Es la misma condición que usa Resultados.
     if(_variosPaises()) h += _flagImg(_ctry(a),isOnPlatform?15:12,true);
     h += '<span style="font-weight:'+(isOnPlatform?700:500)+';font-size:'+(isOnPlatform?13:11)+'px;color:'+(isOnPlatform?'#fff':'var(--text)')+'">'+a.name+'</span>';
-    // Club/país + peso corporal en BLANCO (antes gris apagado: no se leía en la
-    // proyección) y los mismos chips de nominación del Control en Vivo:
-    // división (OE/UNI destacados) · categoría · línea competitiva · modalidad.
-    h += '<div style="font-size:9px;color:rgba(255,255,255,.9);margin-top:1px">'+a.club+' · '+(a.bw?a.bw+'kg':'—')+'</div>';
+    // Club/país + peso corporal. El club se omite cuando repite lo que ya dice la
+    // bandera: en un sudamericano, "Brasil" al lado de la bandera brasileña gasta
+    // ancho sin agregar nada. En un nacional el club sí dice algo y se muestra.
+    {
+      const _cl=String(a.club||'').trim();
+      const _pn=String(_ctryName(_ctry(a))||'').trim();
+      const _clV=(_cl&&_variosPaises()&&_cl.toLowerCase()===_pn.toLowerCase())?'':(_cl?_cl+' · ':'');
+      h += _enLinea
+        ? '<span style="font-size:9px;color:rgba(255,255,255,.75);flex-shrink:0">'+_clV+(a.bw?a.bw+'kg':'—')+'</span>'
+        : '<div style="font-size:9px;color:rgba(255,255,255,.9);margin-top:1px">'+_clV+(a.bw?a.bw+'kg':'—')+'</div>';
+    }
     // El puesto virtual, pegado al nombre. Va acá y no en una columna porque la
     // columna quedaría a la derecha del todo, fuera de la pantalla del teléfono.
     // El clon del 4º intento no tiene puesto propio: se busca el del atleta real.
-    h += _virtualHtml(VIRT[_realAth(a).id]);
-    h += _nomChips(a,1);
-    h += '</td>';
+    h += _virtualHtml(VIRT[_realAth(a).id],_enLinea);
+    h += _nomChips(a,_enLinea?.92:1,_enLinea);
+    h += (_enLinea?'</div>':'')+'</td>';
 
     // Atleta REAL detrás de la entrada (el clon del 4º redirige su att) + índice
     // del intento actual (3 si está en su intento extra, si no la ronda activa).
@@ -14677,6 +14786,11 @@ function renderLiveView(){
     const key = currentFlight+'_'+DATA.lift+'_'+DATA.round+'_'+(curId||'');
     if(window._liveLastKey !== key){
       window._liveLastKey = key;
+      // Si el espectador acaba de desplazar la pantalla, está mirando a otro
+      // atleta a propósito: cargar un peso en la mesa no se la puede arrebatar.
+      // Cuando deje de tocarla, la pantalla vuelve a seguir sola a la tarima.
+      if(_scrollManualReciente()) return;
+      window._scrollAuto = Date.now()+1600;
       el.scrollIntoView({behavior:'smooth',block:'center'});
     }
   }, 200);
