@@ -9985,7 +9985,10 @@ function renderScreenIntentos(cur,nxt){
   const piSet=window._piSettings||(window._piSettings=_piLoadSettings());
   const accentColor=piSet.accentColor||PI_DEFAULT_SETTINGS.accentColor;
   const textColor=piSet.textColor||PI_DEFAULT_SETTINGS.textColor;
-  const liftLabelHtml=`<div style="font-family:Oswald;font-size:22px;letter-spacing:4px;color:rgba(212,225,245,.6);white-space:nowrap">${liftName} · ${roundLabel}${_setup?` · ${_setup}`:''}</div>`;
+  // Las letras chicas de esta pantalla van en BLANCO, no en el gris claro de
+  // antes: la mesa pidió que se lean de lejos (encabezado, categoría, SIGUIENTE).
+  // La jerarquía la dan el tamaño y el peso de la letra, no el color.
+  const liftLabelHtml=`<div style="font-family:Oswald;font-size:22px;letter-spacing:4px;color:#fff;white-space:nowrap">${liftName} · ${roundLabel}${_setup?` · ${_setup}`:''}</div>`;
   // ── INTENTO DE RÉCORD SUDAMERICANO ──────────────────────────────
   // Si el peso cargado supera el récord vigente de su división (o del Open), la
   // pantalla de tarima lo canta: es lo que mira el público y la mesa técnica.
@@ -9994,9 +9997,9 @@ function renderScreenIntentos(cur,nxt){
       <div style="display:inline-block;background:#F2C230;color:#1a1200;padding:8px 26px;border-radius:10px;font-size:30px;font-weight:900;letter-spacing:4px;box-shadow:0 0 34px rgba(242,194,48,.55)">INTENTO DE RÉCORD SUDAMERICANO</div>
       <div style="font-size:17px;letter-spacing:2px;color:#F2C230;margin-top:6px">${_srCur.map(r=>(r.div+' '+r.cat+' · '+(r.vacio?'SIN RÉCORD PREVIO':'ACTUAL '+r.kg+' KG')).toUpperCase()).join('   ·   ')}</div>
     </div>`:'';
-  const weightHtml=`<div style="font-family:Oswald;font-size:120px;font-weight:900;color:${textColor};line-height:1;letter-spacing:2px;white-space:nowrap">${weight}<span style="font-size:0.32em;color:rgba(212,225,245,.55);margin-left:10px">KG</span></div>`;
+  const weightHtml=`<div style="font-family:Oswald;font-size:120px;font-weight:900;color:${textColor};line-height:1;letter-spacing:2px;white-space:nowrap">${weight}<span style="font-size:0.32em;color:#fff;margin-left:10px">KG</span></div>`;
   const nameHtml=`<div style="font-family:Oswald;font-size:56px;font-weight:700;letter-spacing:1px;color:${textColor};line-height:1.15;white-space:nowrap">${cur.name||''}</div>`;
-  const subtitleHtml=`<div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:rgba(212,225,245,.5);white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
+  const subtitleHtml=`<div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:#fff;white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
   const positionHtml=posTxt?`<div style="font-family:Oswald;font-size:22px;letter-spacing:1px;color:${accentColor};white-space:nowrap">${posTxt}</div>`:'';
   // Quién viene después — para que los cargadores/spotters se vayan preparando.
   // Si el actual es el último de su ronda, el de al lado NO es null: se sigue
@@ -10007,12 +10010,12 @@ function renderScreenIntentos(cur,nxt){
   let nextHtml='';
   if(_sig&&_sig.a){
     const s=_sig;
-    // Va en el MISMO gris del encabezado (movimiento · intento · rack), no en el
-    // blanco del nombre de quien está en tarima: la del que viene tiene que
-    // leerse pero sin competirle a la de arriba. Lleva su altura de rack y, según
-    // el movimiento, si el rack va abatible (sentadilla) o cuántas palmetas y
-    // seguros usa (banca) — es lo que necesitan los cargadores para ir armando.
-    const gris='rgba(212,225,245,.6)';
+    // En blanco, como el encabezado: los cargadores la leen desde la tarima y en
+    // gris claro no se distinguía. No le compite al nombre de arriba porque va a
+    // la mitad de tamaño. Lleva su altura de rack y, según el movimiento, si el
+    // rack va abatible (sentadilla) o cuántas palmetas y seguros usa (banca) —
+    // es lo que necesitan los cargadores para ir armando.
+    const gris='#fff';
     const ns=_rackSetup(_realAth(s.a),s.lift||DATA.lift);
     nextHtml=`<div style="font-family:Oswald;font-size:22px;letter-spacing:3px;color:${gris};white-space:nowrap">`
       +`SIGUIENTE${s.nota?' · '+s.nota:''} · `
