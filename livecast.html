@@ -9368,8 +9368,9 @@ function renderTxBarbell(cur,lifterChanged){
   const leftColX=shaftCX-shaftHalf-collarW;
   let s=[];
   // Sleeves
-  s.push(`<rect x="${barL+8}" y="${cy-sleeveThick/2}" width="${leftColX-barL-8}" height="${sleeveThick}" fill="#71717A" rx="2"/>`);
-  s.push(`<rect x="${rightColX+collarW}" y="${cy-sleeveThick/2}" width="${barR-8-(rightColX+collarW)}" height="${sleeveThick}" fill="#71717A" rx="2"/>`);
+  // Las mangas llegan hasta el eje: ahí ya no hay collar, solo el tope fijo.
+  s.push(`<rect x="${barL+8}" y="${cy-sleeveThick/2}" width="${leftColX+collarW-barL-8}" height="${sleeveThick}" fill="#71717A" rx="2"/>`);
+  s.push(`<rect x="${rightColX}" y="${cy-sleeveThick/2}" width="${barR-8-rightColX}" height="${sleeveThick}" fill="#71717A" rx="2"/>`);
   // Central shaft
   s.push(`<rect x="${shaftCX-shaftHalf}" y="${cy-shaftThick/2}" width="${shaftHalf*2}" height="${shaftThick}" fill="#D4D4D8" rx="2"/>`);
   // Knurling
@@ -9377,11 +9378,12 @@ function renderTxBarbell(cur,lifterChanged){
   // End caps
   s.push(`<rect x="${barL}" y="${cy-collarH/2}" width="10" height="${collarH}" fill="#27272A" rx="2"/>`);
   s.push(`<rect x="${barR-10}" y="${cy-collarH/2}" width="10" height="${collarH}" fill="#27272A" rx="2"/>`);
-  // Collars
-  s.push(`<rect x="${leftColX}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="2"/>`);
-  s.push(`<rect x="${rightColX}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="2"/>`);
+  // Topes fijos de las mangas, pegados al eje. Los collares van al final, por
+  // fuera del último disco (se dibujan después de los discos).
+  s.push(`<rect x="${leftColX+collarW-6}" y="${cy-collarH/2+4}" width="6" height="${collarH-8}" fill="#3F3F46" rx="2"/>`);
+  s.push(`<rect x="${rightColX}" y="${cy-collarH/2+4}" width="6" height="${collarH-8}" fill="#3F3F46" rx="2"/>`);
   // Plates
-  let rxR=rightColX+collarW+2,rxL=leftColX-2;
+  let rxR=rightColX+8,rxL=leftColX+collarW-8;
   plates.forEach(kg=>{
     const p=pp(kg);const py=cy-p.h/2;
     s.push(`<rect x="${rxR}" y="${py}" width="${p.w}" height="${p.h}" fill="${p.fill}" rx="2" stroke="${p.stroke}" stroke-width="1.5"/>`);
@@ -9393,6 +9395,9 @@ function renderTxBarbell(cur,lifterChanged){
     s.push(`<rect x="${rxL-brillo-1}" y="${py+2}" width="${brillo}" height="${p.h-4}" fill="rgba(255,255,255,0.2)" rx="1"/>`);
     rxR+=p.w+1;rxL-=p.w+1;
   });
+  // Collars, por fuera del disco más chico de cada lado.
+  s.push(`<rect x="${rxR+1}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="2"/>`);
+  s.push(`<rect x="${rxL-1-collarW}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="2"/>`);
   const bbSvg=`<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:${VH}px;display:block">${s.join('')}</svg>`;
   const anim=lifterChanged?'animation:txSlideInBottom .7s cubic-bezier(.2,.8,.2,1) both':'';
   const rackH=DATA.lift==='sq'?cur.rackSQ:DATA.lift==='bp'?cur.rackBP:'';
@@ -10073,17 +10078,22 @@ function renderScreenIntentos(cur,nxt){
     if(kg>=0.25)return{h:46, w:8, fill:'#4B5563',stroke:'#1F2937',round:false};
                 return{h:38, w:8, fill:'#374151',stroke:'#111827',round:false};
   }
-  // Solo LA MITAD de la barra (un lado): un tramo corto de eje representando el resto de
-  // la barra fuera de pantalla, el collar (con el peso fijo "barra+collares"), y los
-  // discos de mayor a menor saliendo hacia afuera — igual que la vista de LiftingCast.
-  const VH=440,cy=VH/2,shaftThick=26,collarH=90,collarW=34,stubW=90;
+  // Solo LA MITAD de la barra (un lado), en el orden en que se carga de verdad:
+  // un tramo de eje (el resto de la barra, fuera de pantalla), el tope fijo de la
+  // manga, los discos de mayor a menor saliendo hacia afuera, y AL FINAL el collar
+  // que los aprieta, con el peso fijo "barra+collares". Antes el collar iba pegado
+  // al eje, antes de los discos: la mesa lo marcó, porque así no se carga.
+  const VH=440,cy=VH/2,shaftThick=26,sleeveThick=36,collarH=90,collarW=34,stubW=90,topeW=12,topeH=60,puntaW=28;
   let x=20,s=[];
   s.push(`<rect x="0" y="${cy-shaftThick/2}" width="${x+stubW}" height="${shaftThick}" fill="#71717A" rx="3"/>`);
   x+=stubW;
   for(let xi=20;xi<x-6;xi+=16)s.push(`<line x1="${xi}" y1="${cy-shaftThick/2-3}" x2="${xi}" y2="${cy+shaftThick/2+3}" stroke="#A1A1AA" stroke-width="2" opacity="0.5"/>`);
-  s.push(`<rect x="${x}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="4" stroke="#27272A" stroke-width="2"/>`);
-  s.push(`<text x="${x+collarW/2}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="#F4F4F5" stroke="rgba(0,0,0,.7)" stroke-width="2" paint-order="stroke" stroke-linejoin="round" font-family="Oswald" font-weight="700" font-size="16" transform="rotate(-90 ${x+collarW/2} ${cy})">BAR+COL ${barW}</text>`);
-  x+=collarW+6;
+  // La manga va detrás de todo: se dibuja cuando ya se sabe dónde termina.
+  const _mangaIdx=s.length; s.push('');
+  const _mangaX=x;
+  // Tope fijo de la manga (parte de la barra, no pesa aparte).
+  s.push(`<rect x="${x}" y="${cy-topeH/2}" width="${topeW}" height="${topeH}" fill="#3F3F46" rx="3" stroke="#27272A" stroke-width="2"/>`);
+  x+=topeW+5;
   plates.forEach(kg=>{
     const p=pp(kg);const py=cy-p.h/2;
     const label=(kg%1===0)?String(kg):String(kg);
@@ -10109,6 +10119,13 @@ function renderScreenIntentos(cur,nxt){
     }
     x+=p.w+5;
   });
+  // El collar, por fuera del disco más chico.
+  s.push(`<rect x="${x}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="4" stroke="#27272A" stroke-width="2"/>`);
+  s.push(`<text x="${x+collarW/2}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="#F4F4F5" stroke="rgba(0,0,0,.7)" stroke-width="2" paint-order="stroke" stroke-linejoin="round" font-family="Oswald" font-weight="700" font-size="16" transform="rotate(-90 ${x+collarW/2} ${cy})">BAR+COL ${barW}</text>`);
+  x+=collarW;
+  // Y la punta de la manga que asoma después del collar.
+  s[_mangaIdx]=`<rect x="${_mangaX}" y="${cy-sleeveThick/2}" width="${x+puntaW-_mangaX}" height="${sleeveThick}" fill="#8A8A93" rx="4"/>`;
+  x+=puntaW;
   const VW=x+20;
   const bbSvg=`<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" style="height:${Math.round(VH*0.85)}px;width:auto;max-width:none;display:block">${s.join('')}</svg>`;
   // Pronóstico de posición (idéntico criterio al del widget de OBS)
