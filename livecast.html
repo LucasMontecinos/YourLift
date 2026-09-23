@@ -2512,6 +2512,35 @@ function _srRompe(a,l,w){
   w=parseFloat(w)||0; if(w<=0)return [];
   return _srRecords(a,l).filter(r=>w>r.kg||(r.hoy&&r.hoyId===a.id&&w>=r.kg));
 }
+// ¿Este intento de peso muerto, si es válido, deja un TOTAL de récord?
+// El total que cuenta es el que quedaría: mejor sentadilla + mejor banca + este
+// peso muerto. Solo si el intento SUBE el total (supera su mejor peso muerto
+// hasta ahora) y ya tiene sentadilla y banca válidas: sin eso no hay total.
+// Antes la pantalla solo cantaba el récord del movimiento, y un tercer peso
+// muerto que batía el récord de total salía a la tarima sin aviso.
+function _srRompeTotal(a,w){
+  w=parseFloat(w)||0; if(w<=0||!a||_srSoloBanca(a))return [];
+  const mejor=l=>{ let b=0; ((a.att||{})[l]||[]).forEach(x=>{ if(x&&x.r==='g'&&x.w>b)b=x.w; }); return b; };
+  const sq=mejor('sq'), bp=mejor('bp'), dl=mejor('dl');
+  if(!sq||!bp||w<=dl)return [];
+  const tot=Math.round((sq+bp+w)*100)/100;
+  return _srRecords(a,'total').filter(r=>tot>r.kg).map(r=>Object.assign({},r,{total:tot}));
+}
+// Todo lo que rompería un intento: el récord del movimiento y, en peso muerto,
+// también el de total. {mov:[…], tot:[…], total:kg, hay:bool}
+function _srIntento(a,l,w){
+  const mov=_srRompe(a,l,w);
+  const tot=(l==='dl')?_srRompeTotal(a,w):[];
+  return {mov:mov,tot:tot,total:tot.length?tot[0].total:0,hay:!!(mov.length||tot.length)};
+}
+// El cartel. Se nombra el total cuando está en juego, para que la tarima, el
+// público y la transmisión sepan que lo que se persigue es el récord de total.
+function _srIntentoTexto(x){
+  if(!x||!x.hay)return '';
+  if(x.mov.length&&x.tot.length)return 'INTENTO DE RÉCORD SUDAMERICANO + TOTAL';
+  if(x.tot.length)return 'INTENTO DE RÉCORD SUDAMERICANO DE TOTAL';
+  return 'INTENTO DE RÉCORD SUDAMERICANO';
+}
 // ── Al romperse un récord, subir a los que quedaron cortos ─────────
 // Récord en 102.5, uno tira 103 y queda en 103: el que venía atrás con 103
 // declarado YA NO rompe nada (hay que superarlo, no igualarlo). Se le sube al
@@ -7178,9 +7207,10 @@ function _renderTxCerScoreboardBL(cur,opts){
         // Si el peso que va a levantar supera el récord de su división (o el Open),
         // se canta acá al lado de la categoría, en blanco para que resalte.
         +(function(){
+          // En peso muerto también canta el récord de TOTAL que dejaría el intento.
           const w=(cur.att[DATA.lift][DATA.round]||{}).w;
-          const rr=(typeof _srRompe==='function')?_srRompe(_realAth(cur),DATA.lift,w):[];
-          return rr.length?'<span class="sr-parpadea" style="background:#F2C230;color:#fff;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:1.5px;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.55);box-shadow:0 0 14px rgba(242,194,48,.6)">INTENTO DE RÉCORD SUDAMERICANO</span>':'';
+          const x=(typeof _srIntento==='function')?_srIntento(_realAth(cur),DATA.lift,w):{hay:false};
+          return x.hay?'<span class="sr-parpadea" style="background:#F2C230;color:#fff;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:1.5px;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.55);box-shadow:0 0 14px rgba(242,194,48,.6)">'+_srIntentoTexto(x)+'</span>':'';
         })()
       +'</div>'
       +'<div style="font-family:Oswald;font-size:18px;font-weight:800;color:'+_forecastColor+';letter-spacing:2px">'+_forecastTxt+'</div>'
@@ -9407,23 +9437,25 @@ const _LIFT_SIGLA={sq:'SQ',bp:'BP',dl:'DL'};
 // Qué tabla de récords rige este campeonato. Hoy solo está cargada la
 // sudamericana; cuando se cargue la nacional, el evento dirá records:'nacional'
 // y el cartel cambia solo, sin tocar esta pantalla.
-function _recordEtiqueta(){
+function _recordEtiqueta(a){
   const r=String((DATA.event&&DATA.event.records)||'');
   if(r==='nacional')return 'INTENTO DE RÉCORD NACIONAL';
-  if(_srOn())return 'INTENTO DE RÉCORD SUDAMERICANO';
+  if(_srOn()){ const x=a?_srIntentoDe(a):null; return (x&&x.hay)?_srIntentoTexto(x):'INTENTO DE RÉCORD SUDAMERICANO'; }
   return '';
 }
-// ¿El peso que va a levantar sería récord? Usa la misma detección que la tabla.
-function _esIntentoRecord(a){
-  if(!a||typeof _srRompe!=='function')return false;
+// Lo que rompería el intento que va a levantar: movimiento y, en peso muerto,
+// total. Usa la misma detección que la tabla.
+function _srIntentoDe(a){
+  if(!a||typeof _srIntento!=='function')return null;
   try{
     const l=DATA.lift, r=(typeof curAtt==='function')?curAtt(a):DATA.round;
     const at=(a.att&&a.att[l])?a.att[l][r]:null;
     const w=(at&&at.w)||0;
-    if(!(w>0)||at.r)return false;              // ya juzgado: no es "intento"
-    return _srRompe(a,l,w).length>0;
-  }catch(e){ return false; }
+    if(!(w>0)||at.r)return null;               // ya juzgado: no es "intento"
+    return _srIntento(a,l,w);
+  }catch(e){ return null; }
 }
+function _esIntentoRecord(a){ const x=_srIntentoDe(a); return !!(x&&x.hay); }
 function renderScreenBarra(a){
   if(!a)return '';
   const l=DATA.lift, r=(typeof curAtt==='function')?curAtt(a):DATA.round;
@@ -9440,7 +9472,7 @@ function renderScreenBarra(a){
   const divS=(typeof txDivShort==='function')?txDivShort(a.div):(a.div||'');
   const modS=(typeof _txModLabel==='function')?_txModLabel(a.mod):'';
   const esRec=_esIntentoRecord(a);
-  const etiqRec=_recordEtiqueta();
+  const etiqRec=_recordEtiqueta(a);
   // Cada cosa es un bloque que se puede mover y agrandar: click para elegirlo,
   // arrastrar para moverlo, la manija de la esquina para el tamaño. Click en el
   // fondo deselecciona y la pantalla queda limpia para la competencia.
@@ -10118,10 +10150,16 @@ function renderScreenIntentos(cur,nxt){
   // ── INTENTO DE RÉCORD SUDAMERICANO ──────────────────────────────
   // Si el peso cargado supera el récord vigente de su división (o del Open), la
   // pantalla de tarima lo canta: es lo que mira el público y la mesa técnica.
-  const _srCur=(typeof _srRompe==='function')?_srRompe(_realAth(cur),DATA.lift,weight):[];
-  const recordHtml=_srCur.length?`<div class="sr-parpadea" style="font-family:Oswald;white-space:nowrap;text-align:center">
-      <div style="display:inline-block;background:#F2C230;color:#1a1200;padding:8px 26px;border-radius:10px;font-size:30px;font-weight:900;letter-spacing:4px;box-shadow:0 0 34px rgba(242,194,48,.55)">INTENTO DE RÉCORD SUDAMERICANO</div>
-      <div style="font-size:17px;letter-spacing:2px;color:#F2C230;margin-top:6px">${_srCur.map(r=>(r.div+' '+r.cat+' · '+(r.vacio?'SIN RÉCORD PREVIO':'ACTUAL '+r.kg+' KG')).toUpperCase()).join('   ·   ')}</div>
+  // Y en peso muerto, también el récord de TOTAL que dejaría este intento.
+  const _srX=(typeof _srIntento==='function')?_srIntento(_realAth(cur),DATA.lift,weight):{hay:false,mov:[],tot:[]};
+  const _srDet=r=>(r.div+' '+r.cat+' · '+(r.vacio?'SIN RÉCORD PREVIO':'ACTUAL '+r.kg+' KG')).toUpperCase();
+  const _srLineas=[];
+  // Con los dos en juego, cada línea dice de cuál habla.
+  if(_srX.mov.length)_srLineas.push((_srX.tot.length?liftName+' · ':'')+_srX.mov.map(_srDet).join('   ·   '));
+  if(_srX.tot.length)_srLineas.push('TOTAL '+_srX.total+' KG · '+_srX.tot.map(_srDet).join('   ·   '));
+  const recordHtml=_srX.hay?`<div class="sr-parpadea" style="font-family:Oswald;white-space:nowrap;text-align:center">
+      <div style="display:inline-block;background:#F2C230;color:#1a1200;padding:8px 26px;border-radius:10px;font-size:30px;font-weight:900;letter-spacing:4px;box-shadow:0 0 34px rgba(242,194,48,.55)">${_srIntentoTexto(_srX)}</div>
+      ${_srLineas.map(t=>`<div style="font-size:17px;letter-spacing:2px;color:#F2C230;margin-top:6px">${t}</div>`).join('')}
     </div>`:'';
   const weightHtml=`<div style="font-family:Oswald;font-size:120px;font-weight:900;color:${textColor};line-height:1;letter-spacing:2px;white-space:nowrap">${weight}<span style="font-size:0.32em;color:#fff;margin-left:10px">KG</span></div>`;
   const nameHtml=`<div style="font-family:Oswald;font-size:56px;font-weight:700;letter-spacing:1px;color:${textColor};line-height:1.15;white-space:nowrap">${cur.name||''}</div>`;
