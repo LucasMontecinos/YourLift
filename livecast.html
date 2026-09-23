@@ -838,7 +838,7 @@ async function syncToFB(){
           changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,
           timer:DATA.timer,timerOn:DATA.timerOn,timerStartedAt:DATA.timerStartedAt||0,
           forcedCurrent:_nv?(_nv.forcedCurrent||null):(DATA.forcedCurrent||null),
-          compTimer:DATA.compTimer||null,ts:Date.now(),writer:window._WRITER_ID});
+          compTimer:DATA.compTimer||null,ts:Date.now(),tsAth:Date.now(),writer:window._WRITER_ID});
         // Huella de lo que se va a escribir, sin la hora ni el firmante: si es
         // idéntica a la última confirmada, no se escribe. Cada escritura le
         // reparte el documento ENTERO a todas las pantallas, así que repetir una
@@ -853,7 +853,7 @@ async function syncToFB(){
         // `timerStartedAt` SÍ entra: reiniciar el reloj para el atleta siguiente
         // no cambia nada más, y si se saltea esa escritura las otras pantallas
         // siguen descontando desde el arranque viejo.
-        const _huella=(p)=>{const {ts,writer,timer,...r}=p;return JSON.stringify(r);};
+        const _huella=(p)=>{const {ts,tsAth,writer,timer,...r}=p;return JSON.stringify(r);};
         // Ediciones que estoy por confirmar (se limpian solo si la escritura sale bien)
         const sent=[...(window._pendingEdits||[])];
         // Lo que se va a mandar, CONGELADO acá.
@@ -1065,6 +1065,15 @@ function startFBSync(){
       // de timer, que viaja con su copia de athletes) borra el peso recién ingresado
       // ("pongo el número y no sale nada") o me devuelve a SQ / Intento 1 / Tanda A.
       const _localFresh = (Date.now()-(window._lastLocalAction||0))<2500;
+      // ¿Esto ya llegó antes, y más nuevo, por el canal local? Pasa en la pantalla
+      // de tarima que sale del mismo computador de la planilla: el válido le llega
+      // al instante por el canal, y segundos después Firestore le devuelve una
+      // escritura ANTERIOR de esa misma planilla. Aplicarla haría ir y volver la
+      // pantalla. Se compara contra la hora de los atletas (tsAth), no contra `ts`,
+      // porque el latido del reloj actualiza `ts` sin tocar a los atletas.
+      // Solo cuenta si es del mismo escritor: mismo reloj, orden garantizado.
+      const _lu=window._localUlt;
+      const _viejoLocal=!!(_lu&&d.writer&&d.writer===_lu.w&&typeof d.tsAth==='number'&&d.tsAth<_lu.t);
       // Los ATLETAS siempre se mergean por-celda: absorbo los cambios del otro
       // escritor (pesos/resultados en otras casillas) pero conservo las celdas que
       // yo toqué hace <4s. Así varios controladores pueden cargar a la vez sin
@@ -1082,7 +1091,9 @@ function startFBSync(){
           return String(re.id||'')===String(le.id||'') || String(re.name||'')===String(le.name||'');
         }catch(e){ return true; }
       })();
-      if(!_mismoEv){
+      if(_viejoLocal){
+        // Nada: ya tiene algo más nuevo de este mismo escritor.
+      }else if(!_mismoEv){
         console.warn('[FB] El roster local es de otro campeonato — se toma el del servidor sin mezclar');
         DATA.athletes=_remoteAth;
         try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(_){}
@@ -1099,11 +1110,11 @@ function startFBSync(){
       }
       // El cursor de la tarima se anota SIEMPRE — aunque esta pantalla ande por su
       // cuenta — para poder volver a él y para no pisarlo al escribir.
-      window._NAV_REMOTA={lift:d.lift||null,
+      if(!_viejoLocal)window._NAV_REMOTA={lift:d.lift||null,
         round:(typeof d.round==='number')?d.round:null,
         flight:d.flight||null,
         forcedCurrent:(typeof d.forcedCurrent!=='undefined')?d.forcedCurrent:null};
-      if(!_localFresh){
+      if(!_localFresh&&!_viejoLocal){
         DATA.changeTimers=JSON.parse(d.changeTimers||'{}');
         DATA.compTimer=typeof d.compTimer!=='undefined'?d.compTimer:null;
         // Con vista libre, el movimiento/ronda/tanda de esta pantalla no se toca.
@@ -1565,14 +1576,86 @@ function _ultimoEnTarima(){
   }
   return null;
 }
-function save(){if(PRACTICE_VIEWER)return;if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}if(!_fbSyncing)debouncedSync()}
+// ── Pantallas en el MISMO computador ─────────────────────────────────────
+// La pantalla de tarima (?tx=screen) suele salir del mismo computador de la
+// planilla, por cable al televisor. Hasta ahora igual esperaba el viaje completo
+// a Firestore: escribir el documento con la nómina entera, confirmarlo, y bajarlo
+// de vuelta — cinco o seis segundos entre marcar un válido y verlo en la tele.
+//
+// Entre ventanas del mismo navegador no hace falta ir a ningún lado: la planilla
+// avisa cada cambio por un BroadcastChannel y las otras ventanas lo aplican al
+// instante. Firestore sigue siendo la fuente de verdad y sigue llegando igual;
+// esto solo llega antes. Las pantallas de otros equipos no se enteran de este
+// canal y funcionan exactamente como siempre.
+function _canalLocal(){
+  if(window._ylCanal===undefined){
+    try{ window._ylCanal=(!PRACTICE_MODE&&typeof BroadcastChannel==='function')?new BroadcastChannel('yl_livecast_local'):null; }
+    catch(e){ window._ylCanal=null; }
+  }
+  return window._ylCanal;
+}
+function _avisoLocal(){
+  const c=_canalLocal();
+  // Una pantalla de tarima nunca avisa: solo escucha. Ojo que en el computador
+  // de la planilla también se cree controladora —la marca vive en localStorage,
+  // que comparten todas las pestañas—, así que no alcanza con mirar esa marca.
+  if(!c||TX_MODE||!isAdmin||!window.IS_CONTROLLER||!DATA.event)return;
+  // Mismo cursor que se manda a Firestore: con vista libre, el de la tarima y
+  // no el de lo que esta pantalla está mirando.
+  const nv=(window.NAV_LIBRE&&window._NAV_REMOTA)||null;
+  try{
+    c.postMessage({t:Date.now(),w:window._WRITER_ID,doc:fbDocId(),
+      athletes:DATA.athletes,
+      lift:(nv&&nv.lift)||DATA.lift,
+      round:(nv&&typeof nv.round==='number')?nv.round:DATA.round,
+      flight:(nv&&nv.flight)||DATA.flight,
+      forcedCurrent:nv?(nv.forcedCurrent||null):(DATA.forcedCurrent||null),
+      changeTimers:DATA.changeTimers||{},compTimer:DATA.compTimer||null,
+      lotsGenerated:!!DATA.lotsGenerated});
+  }catch(e){ console.warn('[local] aviso',e); }
+}
+// Del lado de la pantalla: escuchan las de tarima (?tx=…) siempre, y las demás
+// solo si no operan. Un segundo operador en el mismo equipo tiene su propio
+// estado y su propio camino a Firestore: no se le pisa nada.
+(function(){
+  const c=_canalLocal(); if(!c)return;
+  c.onmessage=function(ev){
+    const m=ev&&ev.data;
+    if(!m||!m.doc||!DATA.event)return;
+    if(!TX_MODE&&isAdmin&&window.IS_CONTROLLER)return;
+    if(m.w===window._WRITER_ID)return;
+    if(m.doc!==fbDocId())return;                 // otro campeonato u otra tarima
+    const firma=()=>JSON.stringify(DATA.athletes||[])+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
+      +'|'+(DATA.forcedCurrent==null?'':DATA.forcedCurrent)+'|'+JSON.stringify(DATA.compTimer||null);
+    const antes=firma();
+    // Se anota qué se aplicó y de quién: un snapshot de Firestore de ESE mismo
+    // escritor con datos más viejos que esto no lo tiene que deshacer.
+    window._localUlt={t:m.t,w:m.w};
+    try{ DATA.athletes=_normExtraAtts(m.athletes||[]); }catch(e){ return; }
+    window._NAV_REMOTA={lift:m.lift,round:m.round,flight:m.flight,forcedCurrent:m.forcedCurrent};
+    if(!window.NAV_LIBRE){
+      DATA.lift=m.lift||DATA.lift;
+      DATA.round=(typeof m.round==='number')?m.round:DATA.round;
+      DATA.flight=m.flight||DATA.flight;
+      DATA.forcedCurrent=m.forcedCurrent||null;
+    }
+    DATA.changeTimers=m.changeTimers||{};
+    DATA.compTimer=m.compTimer||null;
+    DATA.lotsGenerated=!!m.lotsGenerated;
+    if(firma()===antes)return;
+    const f=document.activeElement;
+    if(f&&(f.tagName==='INPUT'||f.tagName==='SELECT'||f.tagName==='TEXTAREA')){ window._renderPendiente=true; return; }
+    try{ R(); }catch(e){}
+  };
+})();
+function save(){if(PRACTICE_VIEWER)return;if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}if(!_fbSyncing)_avisoLocal();if(!_fbSyncing)debouncedSync()}
 let _syncTimer=null;
 // 800 ms era mucho: en competencia cada cambio esperaba casi un segundo antes de
 // salir del equipo, y recién ahí viajaba a la tarima y al público. Se baja a 150,
 // que sigue juntando ráfagas de cambios en una sola escritura (el guard de
 // _syncInFlight/_syncPending ya impide que se pisen) pero deja de notarse.
 function debouncedSync(){if(_syncTimer)clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>{syncToFB();_syncTimer=null},150)}
-function saveNow(){if(PRACTICE_VIEWER)return;if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}syncToFB()}
+function saveNow(){if(PRACTICE_VIEWER)return;if(!_fbSyncing)window._lastLocalAction=Date.now();try{localStorage.setItem(SAVE_KEY,JSON.stringify({phase:DATA.phase,event:DATA.event,athletes:DATA.athletes,lift:DATA.lift,round:DATA.round,flight:DATA.flight,changeTimers:DATA.changeTimers,lotsGenerated:DATA.lotsGenerated,forcedCurrent:DATA.forcedCurrent||null,compTimer:DATA.compTimer||null}))}catch(e){}try{_histCommit()}catch(e){}if(!_fbSyncing)_avisoLocal();syncToFB()}
 // Si la dirección nombra un campeonato (?evento=…), esta pantalla arranca
 // LIMPIA: no se restaura lo que quedó guardado de una visita anterior.
 //
@@ -2758,8 +2841,10 @@ function setResult(id,l,r,res){
   // Auto-advance: if liftQueue is now empty, round is done
   const snapLift=DATA.lift,snapRound=DATA.round;
   if(liftQueue().length===0){
-    showToastLC('Ronda completada — avanzando en 3s…');
-    setTimeout(()=>{if(DATA.lift===snapLift&&DATA.round===snapRound)advanceLift();},3000);
+    // 1,5 s: alcanza para ver el aviso y corregir un toque equivocado. Antes eran
+    // 3, y la mesa los sentía en cada cambio de ronda.
+    showToastLC('Ronda completada — avanzando…');
+    setTimeout(()=>{if(DATA.lift===snapLift&&DATA.round===snapRound)advanceLift();},1500);
   }
 }
 
@@ -3820,10 +3905,14 @@ function overrideResult(id,l,r,res){
   if(!wasSame && res){
     const snapLift=DATA.lift, snapRound=DATA.round;
     if(liftQueue().length===0){
-      showToastLC('Ronda completada — avanzando automáticamente en 3s…');
+      // 1,5 s: alcanza para ver el aviso y corregir un toque equivocado. Antes
+      // eran 3, y la mesa los sentía en cada cambio de ronda. La pantalla de
+      // barra ya no espera este avance: muestra la barra que viene apenas se
+      // cierra la ronda (ver _conCursorQueViene).
+      showToastLC('Ronda completada — avanzando…');
       setTimeout(()=>{
         if(DATA.lift===snapLift && DATA.round===snapRound) advanceLift();
-      }, 3000);
+      }, 1500);
     }
   }
 }
@@ -4250,11 +4339,6 @@ function _extrasPendientes(l){
   })());
 }
 function advanceLift(){
-  // Solo las tandas de ESTA sesión: la mañana no salta a la tarde a mitad de un
-  // movimiento. Con jornadas cargadas queda sentadilla A-B-C, banca A-B-C, peso
-  // muerto A-B-C, y recién ahí empieza la tarde con la D y la E.
-  const flights=_flightsDeJornada(DATA.flight);
-  const li=LIFTS.indexOf(DATA.lift);
   // El extra "al final de la ronda" se toma al cerrar SU ronda: no se puede
   // pasar de largo sin avisar.
   {const pend=_extrasPendientes(DATA.lift);
@@ -4265,22 +4349,33 @@ function advanceLift(){
      if(!confirm('Queda intento extra sin levantar en '+(LIFT_N[DATA.lift]||DATA.lift)+', tanda '+DATA.flight+':\n\n'+det
        +'\n\nSe toma al final de la ronda, antes de seguir.\n\n¿Avanzar igual?'))return;
    }}
-  if(DATA.round<2){DATA.round++;saveNow();R();return;}
+  const c=_cursorSiguiente();
+  if(!c){go('results');return;}
+  DATA.flight=c.flight;DATA.lift=c.lift;DATA.round=c.round;
+  saveNow();R();
+  if(c.jornada!==undefined)showToastLC('Empieza la jornada '+(c.jornada||'siguiente')+' — tanda '+c.flight);
+}
+// A dónde avanza la competencia cuando se cierra la ronda actual, SIN moverla.
+// Es la única regla de avance: la usa advanceLift() para avanzar y la pantalla
+// de barra para mostrar, mientras tanto, la barra que viene. Por eso las dos no
+// pueden discrepar. Devuelve {flight,lift,round} (+ jornada si cambia de sesión)
+// o null si ya no queda nada: terminó el campeonato.
+function _cursorSiguiente(){
+  // Solo las tandas de ESTA sesión: la mañana no salta a la tarde a mitad de un
+  // movimiento. Con jornadas cargadas queda sentadilla A-B-C, banca A-B-C, peso
+  // muerto A-B-C, y recién ahí empieza la tarde con la D y la E.
+  const flights=_flightsDeJornada(DATA.flight);
+  const li=LIFTS.indexOf(DATA.lift);
+  if(DATA.round<2)return {flight:DATA.flight,lift:DATA.lift,round:DATA.round+1};
   const pending=flights.filter(fl=>fl!==DATA.flight&&!_flightDoneWithLift(fl,DATA.lift));
   if(pending.length){
     const idx=flights.indexOf(DATA.flight);
     const rotated=[...flights.slice(idx+1),...flights.slice(0,idx)];
-    DATA.flight=rotated.find(fl=>pending.includes(fl))||pending[0];
-    DATA.round=0;
-    saveNow();R();
-    return;
+    return {flight:rotated.find(fl=>pending.includes(fl))||pending[0],lift:DATA.lift,round:0};
   }
   if(li<2){
     const nextLift=LIFTS[li+1];
-    DATA.flight=flights.find(fl=>!_flightDoneWithLift(fl,nextLift))||flights[0]||DATA.flight;
-    DATA.lift=nextLift;DATA.round=0;
-    saveNow();R();
-    return;
+    return {flight:flights.find(fl=>!_flightDoneWithLift(fl,nextLift))||flights[0]||DATA.flight,lift:nextLift,round:0};
   }
   // Terminó el peso muerto de toda la sesión → arranca la sesión siguiente
   // (la tarde) por su primera tanda y de nuevo en sentadilla, intento 1.
@@ -4289,14 +4384,38 @@ function advanceLift(){
   if(sig!==undefined){
     const fs=_allFlightsSorted().filter(f=>_jornadaDeFlight(f)===sig)
       .filter(f=>LIFTS.some(l=>!_flightDoneWithLift(f,l)));
-    if(fs.length){
-      DATA.flight=fs[0];DATA.lift='sq';DATA.round=0;
-      saveNow();R();
-      showToastLC('Empieza la jornada '+(sig||'siguiente')+' — tanda '+fs[0]);
-      return;
-    }
+    if(fs.length)return {flight:fs[0],lift:'sq',round:0,jornada:sig};
   }
-  go('results');
+  return null;
+}
+// ¿La ronda que se está corriendo ya terminó y la competencia está por avanzar?
+// Cola vacía no alcanza: al arrancar una tanda la cola también está vacía, porque
+// nadie declaró todavía. Tiene que haber al menos un intento juzgado en la ronda,
+// y ningún extra pendiente (esos se levantan antes de avanzar).
+function _rondaCerrada(){
+  if(liftQueue().length)return false;
+  if(_extrasPendientes(DATA.lift).length)return false;
+  return DATA.athletes.some(a=>{
+    if(a.flight!==DATA.flight||a.bombed)return false;
+    const t=(a.att[DATA.lift]||[])[DATA.round];
+    return !!(t&&t.r!==null);
+  });
+}
+// Dibuja con el cursor de lo que viene si la ronda está cerrada; si no, con el de
+// siempre. Es para las pantallas de tarima: entre que se juzga el último intento
+// de la ronda y que la competencia avanza, la cola queda vacía y la pantalla de
+// barra caía a "el primer atleta de la tanda" —cualquiera, con el peso de la
+// ronda que ya terminó—. Los cargadores armaban esa barra y después había que
+// desarmarla: diez, quince segundos perdidos en cada cambio de ronda. Ahora
+// muestra de una la barra del que abre la ronda siguiente.
+function _conCursorQueViene(fn){
+  let c=null;
+  try{ if(_rondaCerrada())c=_cursorSiguiente(); }catch(e){ c=null; }
+  if(!c)return fn();
+  const g={flight:DATA.flight,lift:DATA.lift,round:DATA.round,fc:DATA.forcedCurrent};
+  DATA.flight=c.flight;DATA.lift=c.lift;DATA.round=c.round;DATA.forcedCurrent=null;
+  try{ return fn(); }
+  finally{ DATA.flight=g.flight;DATA.lift=g.lift;DATA.round=g.round;DATA.forcedCurrent=g.fc; }
 }
 // Fuerza un intento específico como "el actual" en Control en Vivo, saltándose el orden
 // automático de la cola — para corregir cuando se pasó por alto a un atleta. Cambia
@@ -8705,6 +8824,22 @@ function renderTxScreen(c){
   window._JORNADA_FLIGHTS=st.flights;
   window._JORNADA_NAMESCALE=typeof st.nameScale==='number'?st.nameScale:1;
   if(st.mode==='off'){c.innerHTML='';return;}
+  // Perfil, barra e intentos muestran al que está por levantar. Con la ronda
+  // recién cerrada, ese es el que abre la siguiente — no el que ya terminó.
+  if(st.mode==='profile'||st.mode==='barra'||st.mode==='intentos'){
+    return _conCursorQueViene(()=>_renderTxAtletaEnBarra(c,st));
+  }
+  if(st.mode==='luces'){
+    const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
+    document.body.classList.add('tx-opaque');
+    c.innerHTML=renderScreenLuces(cur||null)+_descCapaHtml()+_descGearHtml();
+    return;
+  }
+  // jornada (default)
+  document.body.classList.add('tx-opaque');
+  c.innerHTML=renderTxJornada()+_descCapaHtml()+_descGearHtml();
+}
+function _renderTxAtletaEnBarra(c,st){
   if(st.mode==='profile'){
     const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
     document.body.classList.add('tx-opaque');
@@ -8728,15 +8863,6 @@ function renderTxScreen(c){
       +(_lucesEnTarima()?renderLucesTarima():'')+_descCapaHtml();
     return;
   }
-  if(st.mode==='luces'){
-    const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
-    document.body.classList.add('tx-opaque');
-    c.innerHTML=renderScreenLuces(cur||null)+_descCapaHtml()+_descGearHtml();
-    return;
-  }
-  // jornada (default)
-  document.body.classList.add('tx-opaque');
-  c.innerHTML=renderTxJornada()+_descCapaHtml()+_descGearHtml();
 }
 
 // ════════════════════════════════════════════════════════════════
