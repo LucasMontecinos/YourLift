@@ -58,7 +58,7 @@ body.nav-open .hamb{opacity:0;pointer-events:none}
 /* Sidebar como cajón deslizante (off-canvas) */
 .side{background:var(--side);border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;width:248px;overflow-y:auto;z-index:1000;transform:translateX(-106%);transition:transform .24s cubic-bezier(.4,0,.2,1)}
 body.nav-open .side{transform:translateX(0);box-shadow:0 0 44px rgba(0,0,0,.6)}
-.nav-backdrop{position:fixed;inset:0;background:rgba(2,8,20,.55);opacity:0;pointer-events:none;transition:opacity .24s;z-index:999}
+.nav-backdrop{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(2,8,20,.55);opacity:0;pointer-events:none;transition:opacity .24s;z-index:999}
 body.nav-open .nav-backdrop{opacity:1;pointer-events:auto}
 .main{padding:20px;padding-top:70px;min-height:100vh;overflow-y:auto}
 /* ── La transmisión en vivo (público) ──────────────────────────────────
@@ -230,7 +230,7 @@ if(TX_MODE){
     html,body{background:transparent!important;overflow:hidden!important;margin:0}
     body.tx-opaque{background:linear-gradient(135deg,#0A1628 0%,#0E1F3A 50%,#0A1628 100%)!important}
     #R{display:none!important}
-    #txWidget{position:fixed;inset:0;font-family:'Oswald',sans-serif;color:#fff;z-index:2}
+    #txWidget{position:fixed;top:0;right:0;bottom:0;left:0;font-family:'Oswald',sans-serif;color:#fff;z-index:2}
     /* Capa del timer de descanso: cubre toda la pantalla para que el bloque se
        pueda arrastrar a cualquier lado, pero deja pasar los clicks — si no, se
        come la selección de todos los demás bloques que hay debajo. */
@@ -609,7 +609,7 @@ async function initFB(){
         fb.getDoc(fb.doc(fbDB,'admins',u.uid)).then(snap=>{
           if(snap.exists()){
             isAdmin=true;
-            window.ADMIN_ROLE=snap.data()?.role||'admin';
+            window.ADMIN_ROLE=(__o=>__o==null?void 0:__o.role)(snap.data())||'admin';
             // Auto-controller SOLO la primera vez (sin preferencia guardada). Si el
             // usuario eligió "Espectador" (yl_controller='0'), se respeta — así un 2º
             // PC puede ser solo lectura y espejar al controlador.
@@ -1223,8 +1223,8 @@ document.addEventListener('visibilitychange',()=>{
 // toda escritura). El espectador de práctica lee del localStorage, no necesita FB.
 if(!PRACTICE_MODE || (PRACTICE_REAL && !PRACTICE_VIEWER))initFB();
 async function doLogin(){
-  const em=(document.getElementById('adminEmail')?.value||'').trim().toLowerCase();
-  const pw=document.getElementById('adminPass')?.value||'';
+  const em=((__o=>__o==null?void 0:__o.value)(document.getElementById('adminEmail'))||'').trim().toLowerCase();
+  const pw=(__o=>__o==null?void 0:__o.value)(document.getElementById('adminPass'))||'';
   if(!em||!pw){alert('Completa email y contraseña');return}
   if(!fbReady||!fbAuth){alert('Firebase no está listo, espera unos segundos');return}
   try{
@@ -2035,7 +2035,7 @@ function _ensayoGrant(){
 window.openLoginModal=function(){
   const ex=document.getElementById('lcLogin'); if(ex)ex.remove();
   const m=document.createElement('div'); m.id='lcLogin';
-  m.style.cssText='position:fixed;inset:0;background:rgba(4,10,20,.85);display:flex;align-items:center;justify-content:center;z-index:100001;padding:16px';
+  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(4,10,20,.85);display:flex;align-items:center;justify-content:center;z-index:100001;padding:16px';
   m.innerHTML='<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:24px;width:min(360px,94vw)">'
     +'<div style="font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:4px">\uD83D\uDD10 INICIAR SESI\u00d3N</div>'
     +'<div style="font-size:11px;color:var(--muted);margin-bottom:14px">Cuenta de administrador / juez (la misma del panel admin).</div>'
@@ -2704,7 +2704,7 @@ function checkRecord(athlete,lift,round){
   const cat=_normCat(athlete.cat||'');
   const div=_normDiv(athlete.div||'');
   // Competencia universitaria → todo buen intento es primer récord (modalidad nueva)
-  const isUniv=(DATA.event?.name||'').toLowerCase().includes('universitario');
+  const isUniv=((DATA.event==null?void 0:DATA.event.name)||'').toLowerCase().includes('universitario');
   if(isUniv){
     showRecordAlert(athlete.name,lift,round,weight,0,'Sin récord previo',cat,div,'universitario');
     pushRecordToFB({athName:athlete.name,lift,round,newMark:weight,oldMark:0,holder:'Sin récord previo',cat,div,mod:'universitario',ts:Date.now()});
@@ -2855,7 +2855,7 @@ function setResult(id,l,r,res){
   // Y corregir una decisión —de válido a nulo, o al revés— lo vuelve a arrancar:
   // la mesa acaba de decidir de nuevo, así que el minuto para declarar el
   // intento siguiente empieza desde ahí. Es a propósito.
-  if(r===3) _armarChangeTimer(a,l,((a.att[l][3]||{}).grantedRound??DATA.round)+1,_corrige);
+  if(r===3) _armarChangeTimer(a,l,((__n=>__n!=null?__n:(DATA.round))((a.att[l][3]||{}).grantedRound))+1,_corrige);
   else if(r<2) _armarChangeTimer(a,l,r+1,_corrige);
   // NOTA: si falla los 3 intentos de un lift, queda DQ para el total
   // pero NO bombed (sigue compitiendo en los lifts siguientes).
@@ -3346,7 +3346,7 @@ async function removeAthleteMedia(id){
     const key=_mediaKey(a);
     await window._fb.setDoc(window._fb.doc(fbDB,'atleta_fotos',key),{foto_url:'',gif_url:'',ts:Date.now()},{merge:true});
     delete window._LC_MEDIA[key];
-    document.getElementById('athMediaModal')?.remove();
+    (__o=>__o==null?void 0:__o.remove())(document.getElementById('athMediaModal'));
     showToastLC('Foto/gif quitada de '+a.name);R();
   }catch(e){alert('Error: '+e.message);}
 }
@@ -3360,9 +3360,9 @@ function openWeighIn(id){
   const ex=document.getElementById('weighInModal');if(ex)ex.remove();
   const m=document.createElement('div');m.id='weighInModal';
   m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:9999';
-  const sq1 = a.att?.sq?.[0]?.w || '';
-  const bp1 = a.att?.bp?.[0]?.w || '';
-  const dl1 = a.att?.dl?.[0]?.w || '';
+  const sq1 = (a.att==null?void 0:(a.att.sq==null?void 0:(a.att.sq[0]==null?void 0:a.att.sq[0].w))) || '';
+  const bp1 = (a.att==null?void 0:(a.att.bp==null?void 0:(a.att.bp[0]==null?void 0:a.att.bp[0].w))) || '';
+  const dl1 = (a.att==null?void 0:(a.att.dl==null?void 0:(a.att.dl[0]==null?void 0:a.att.dl[0].w))) || '';
   m.innerHTML=`
   <div style="background:#0D1F38;border:2px solid var(--border);border-radius:16px;padding:24px 28px;width:min(560px,94vw);max-height:92vh;overflow-y:auto">
     <div style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:4px">PESAJE</div>
@@ -3527,10 +3527,10 @@ function confirmWeighIn(id,catKg,limit){
   const bpSeg=_v('wi_bpSeg');                         // altura de los seguros de banca
   const bpPalm=(parseInt(_v('wi_bpPalm'),10)||0)||''; // 0 → vacío (no se muestra)
   const mod=document.getElementById('wi_mod').value;
-  const country=(document.getElementById('wi_country')?.value||'CHI');
-  const sq1=parseWeight(document.getElementById('wi_sq1')?.value);
-  const bp1=parseWeight(document.getElementById('wi_bp1')?.value);
-  const dl1=parseWeight(document.getElementById('wi_dl1')?.value);
+  const country=((__o=>__o==null?void 0:__o.value)(document.getElementById('wi_country'))||'CHI');
+  const sq1=parseWeight((__o=>__o==null?void 0:__o.value)(document.getElementById('wi_sq1')));
+  const bp1=parseWeight((__o=>__o==null?void 0:__o.value)(document.getElementById('wi_bp1')));
+  const dl1=parseWeight((__o=>__o==null?void 0:__o.value)(document.getElementById('wi_dl1')));
   const alertEl=document.getElementById('wi_alert');
   // Validate BW > 0
   if(!bw){alertEl.style.display='block';alertEl.textContent='Ingresa el peso corporal';return;}
@@ -3818,7 +3818,7 @@ function _mergeFirebaseAthletes(fbAthletes){
   const stale=DATA.athletes.filter(local=>!fbAthletes.some(fa=>matches(local,fa)));
   if(stale.length){
     // Atletas con datos ya cargados (peso, intentos, resultados) — no auto-borrar
-    const hasData=a=>a.bw>0||['sq','bp','dl'].some(l=>(a.att?.[l]||[]).some(x=>x.w>0||x.r));
+    const hasData=a=>a.bw>0||['sq','bp','dl'].some(l=>((a.att==null?void 0:a.att[l])||[]).some(x=>x.w>0||x.r));
     const safeToRemove=stale.filter(a=>!hasData(a));
     const withData=stale.filter(hasData);
     // Borrado automático de los que no tienen datos
@@ -3924,7 +3924,7 @@ function overrideResult(id,l,r,res){
   if(!wasSame && res){
     // Igual que en setResult: al juzgar el EXTRA arranca el minuto del siguiente,
     // y mientras el extra siga pendiente no arranca ninguno.
-    if(r===3) _armarChangeTimer(a,l,((a.att[l][3]||{}).grantedRound??DATA.round)+1,_corrige);
+    if(r===3) _armarChangeTimer(a,l,((__n=>__n!=null?__n:(DATA.round))((a.att[l][3]||{}).grantedRound))+1,_corrige);
     else if(l===DATA.lift && r===DATA.round && r<2) _armarChangeTimer(a,l,r+1,_corrige);
     DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);mainTI=null;
     setTimeout(()=>{if(typeof startTimer==='function')startTimer();},150);
@@ -3980,7 +3980,7 @@ function recoverBackup(){
     d.timerOn=false;d.timer=60;
     Object.assign(DATA,d);
     save();
-    showToastLC('\u2705 Sesión recuperada: '+d.athletes.length+' atletas, '+DATA.event?.name);
+    showToastLC('\u2705 Sesión recuperada: '+d.athletes.length+' atletas, '+(DATA.event==null?void 0:DATA.event.name));
     R();
   }catch(e){showToastLC('Error al recuperar: '+e.message);}
 }
@@ -4212,7 +4212,7 @@ setInterval(()=>{
           next.w=prev.r==='n'?prev.w:Math.round((prev.w+2.5)*2)/2;
           changed=true;
           needsRerender=true;
-          showToastLC?.(''+a.name+' — '+LIFT_S[lift]+(rnd+1)+' auto-rellenado: '+next.w+'kg');
+          (showToastLC==null?void 0:showToastLC(''+a.name+' — '+LIFT_S[lift]+(rnd+1)+' auto-rellenado: '+next.w+'kg'));
         }
       }
     }
@@ -4508,7 +4508,7 @@ window._openCompModal=function(id,l,mode){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   const ex=document.getElementById('compModal');if(ex)ex.remove();
   const m=document.createElement('div');m.id='compModal';
-  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100000;padding:16px';
+  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100000;padding:16px';
   // Nombre según la ronda en que se concede: 3ª ronda = "4º intento"; 1ª/2ª = "intento extra".
   const grNow=(l===DATA.lift)?DATA.round:2;
   const nom=(grNow>=2)?'4º INTENTO':'INTENTO EXTRA';
@@ -4576,7 +4576,7 @@ window.openManualComp=function(){
   if(!who){showToastLC('No hay atleta en tarima para asignarle tiempo');return;}
   const ex=document.getElementById('compModal');if(ex)ex.remove();
   const m=document.createElement('div');m.id='compModal';
-  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100000;padding:16px';
+  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100000;padding:16px';
   let h='<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:22px 24px;width:min(440px,95vw)">';
   h+='<div style="font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:1px;color:var(--gold)">🕒 TIEMPO COMPENSATORIO MANUAL</div>';
   h+='<div style="font-size:12px;color:var(--muted);margin:6px 0 14px;line-height:1.5"><b style="color:var(--text)">'+esc(who.name)+'</b> — para cuando le corresponde descanso extra sin ser un 4º intento (ej. abre dos intentos seguidos).</div>';
@@ -4833,7 +4833,7 @@ async function generateHojaRack(dia,idBoton){
         doc.text('FECHIPO',8,9.5);
       }
       doc.setFont('helvetica','normal');doc.setFontSize(9);
-      doc.text(strip(DATA.event?.name||'Campeonato').toUpperCase(),PW/2,9.5,{align:'center'});
+      doc.text(strip((DATA.event==null?void 0:DATA.event.name)||'Campeonato').toUpperCase(),PW/2,9.5,{align:'center'});
       doc.setFontSize(8);doc.text(new Date().toLocaleDateString('es-CL'),PW-8,9.5,{align:'right'});
       doc.setFillColor(...C.sub);doc.rect(0,14,PW,8,'F');
       doc.setTextColor(...C.subTx);doc.setFont('helvetica','bold');doc.setFontSize(9);
@@ -4925,7 +4925,7 @@ async function generateHojaRack(dia,idBoton){
       doc.text('Pag. '+i+'/'+total,PW-8,PH-3,{align:'right'});
     }
 
-    const evShort=strip(DATA.event?.short||DATA.event?.name||'campeonato').replace(/\s+/g,'_');
+    const evShort=strip((DATA.event==null?void 0:DATA.event.short)||(DATA.event==null?void 0:DATA.event.name)||'campeonato').replace(/\s+/g,'_');
     doc.save('AlturaRack'+_sufDiaArchivo(dia,strip)+'_'+evShort+'.pdf');
   }catch(err){
     console.error('HojaRack error',err);
@@ -5013,7 +5013,7 @@ async function generateHojaEquipo(dia,idBoton){
         doc.text('FECHIPO',8,8.5);
       }
       doc.setFont('helvetica','normal');doc.setFontSize(9);
-      doc.text(strip(DATA.event?.name||'Campeonato').toUpperCase(),PW/2,8.5,{align:'center'});
+      doc.text(strip((DATA.event==null?void 0:DATA.event.name)||'Campeonato').toUpperCase(),PW/2,8.5,{align:'center'});
       doc.setFontSize(8);doc.text(new Date().toLocaleDateString('es-CL'),PW-8,8.5,{align:'right'});
       doc.setFillColor(...C.sub);doc.rect(0,12,PW,7,'F');
       doc.setTextColor(...C.subTx);doc.setFont('helvetica','bold');doc.setFontSize(8.5);
@@ -5111,7 +5111,7 @@ async function generateHojaEquipo(dia,idBoton){
       doc.text('Pag. '+i+'/'+total,PW-8,PH-2.5,{align:'right'});
     }
 
-    const evShort=strip(DATA.event?.short||DATA.event?.name||'campeonato').replace(/\s+/g,'_');
+    const evShort=strip((DATA.event==null?void 0:DATA.event.short)||(DATA.event==null?void 0:DATA.event.name)||'campeonato').replace(/\s+/g,'_');
     doc.save('RevisionEquipo'+_sufDiaArchivo(dia,strip)+'_'+evShort+'.pdf');
   }catch(err){
     console.error('HojaEquipo error',err);
@@ -5408,7 +5408,7 @@ async function generatePapeletas(conNombre,dia,idBoton){
       doc.setLineDashPattern([],0);
     }
 
-    const evShort=strip(DATA.event?.short||DATA.event?.name||'campeonato').replace(/\s+/g,'_');
+    const evShort=strip((DATA.event==null?void 0:DATA.event.short)||(DATA.event==null?void 0:DATA.event.name)||'campeonato').replace(/\s+/g,'_');
     doc.save('Papeletas'+(conNombre?'_con_nombre':'')+_sufDiaArchivo(dia,strip)+'_'+evShort+'.pdf');
   }catch(err){
     console.error('Papeletas error',err);
@@ -5473,7 +5473,7 @@ async function generateHojaPesaje(dia,idBoton){
         doc.text('FECHIPO',8,9.5);
       }
       doc.setFont('helvetica','normal');doc.setFontSize(9);
-      doc.text(strip(DATA.event?.name||'Campeonato').toUpperCase(),PW/2,9.5,{align:'center'});
+      doc.text(strip((DATA.event==null?void 0:DATA.event.name)||'Campeonato').toUpperCase(),PW/2,9.5,{align:'center'});
       doc.setFontSize(8);doc.text(new Date().toLocaleDateString('es-CL'),PW-8,9.5,{align:'right'});
       doc.setFillColor(...C.sub);doc.rect(0,14,PW,8,'F');
       doc.setTextColor(...C.subTx);doc.setFont('helvetica','bold');doc.setFontSize(9);
@@ -5517,9 +5517,9 @@ async function generateHojaPesaje(dia,idBoton){
           {t:String(a.lot||'—'), bold:true},
           {t:strip(a.name||''), bold:false, align:'left'},
           {t:a.bw>0?String(a.bw):'', bold:a.bw>0},
-          {t:a.att?.sq?.[0]?.w>0?String(a.att.sq[0].w):'', bold:false},
-          {t:a.att?.bp?.[0]?.w>0?String(a.att.bp[0].w):'', bold:false},
-          {t:a.att?.dl?.[0]?.w>0?String(a.att.dl[0].w):'', bold:false},
+          {t:(a.att==null?void 0:(a.att.sq==null?void 0:(a.att.sq[0]==null?void 0:a.att.sq[0].w)))>0?String(a.att.sq[0].w):'', bold:false},
+          {t:(a.att==null?void 0:(a.att.bp==null?void 0:(a.att.bp[0]==null?void 0:a.att.bp[0].w)))>0?String(a.att.bp[0].w):'', bold:false},
+          {t:(a.att==null?void 0:(a.att.dl==null?void 0:(a.att.dl[0]==null?void 0:a.att.dl[0].w)))>0?String(a.att.dl[0].w):'', bold:false},
           {t:'', bold:false},
           {t:'', bold:false},
         ];
@@ -5570,7 +5570,7 @@ async function generateHojaPesaje(dia,idBoton){
       doc.text('Pag. '+i+'/'+total,PW-8,PH-3,{align:'right'});
     }
 
-    const evShort=strip(DATA.event?.short||DATA.event?.name||'campeonato').replace(/\s+/g,'_');
+    const evShort=strip((DATA.event==null?void 0:DATA.event.short)||(DATA.event==null?void 0:DATA.event.name)||'campeonato').replace(/\s+/g,'_');
     doc.save('HojaPesaje'+_sufDiaArchivo(dia,strip)+'_'+evShort+'.pdf');
   }catch(err){
     console.error('HojaPesaje error',err);
@@ -5902,7 +5902,7 @@ function _actaAtts(a,l){
   return out;
 }
 function _actaNombreArchivo(ext){
-  const ev=_stripAccentsForPdf(DATA.event?.short||DATA.event?.name||'competencia').replace(/[^A-Za-z0-9]+/g,'_');
+  const ev=_stripAccentsForPdf((DATA.event==null?void 0:DATA.event.short)||(DATA.event==null?void 0:DATA.event.name)||'competencia').replace(/[^A-Za-z0-9]+/g,'_');
   // El acta de un día lleva el día en el nombre: si no, la del sábado y la del
   // domingo se pisan en la carpeta de descargas.
   const dia=window._ACTA_DIA?('_'+_stripAccentsForPdf(window._ACTA_DIA).replace(/[^A-Za-z0-9]+/g,'_')):'';
@@ -6043,7 +6043,7 @@ window.mostrarMedallas=function(){
 
   const m=document.createElement('div');
   m.id='medModal';
-  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:99999;overflow-y:auto;padding:24px';
+  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.8);z-index:99999;overflow-y:auto;padding:24px';
   m.innerHTML='<div style="max-width:1000px;margin:0 auto;background:var(--card,#0F1D33);border:1px solid var(--border);border-radius:14px;padding:20px">'+h+'</div>';
   document.body.appendChild(m);
   m.onclick=e=>{if(e.target===m)m.remove();};
@@ -6091,7 +6091,7 @@ window.exportMedallasPDF=async function(){
     doc.setFont('helvetica','bold');doc.setFontSize(13);
     doc.text(_stripAccentsForPdf('DETALLE DE MEDALLAS'+_actaSufijoDia()),PW/2,15,{align:'center'});
     doc.setFont('helvetica','normal');doc.setFontSize(9);
-    doc.text(_stripAccentsForPdf(DATA.event?.name||''),PW/2,21,{align:'center'});
+    doc.text(_stripAccentsForPdf((DATA.event==null?void 0:DATA.event.name)||''),PW/2,21,{align:'center'});
     doc.text('Oro '+d.oro+'  ·  Plata '+d.plata+'  ·  Bronce '+d.bronce+'  ·  Total '+d.total,PW/2,26,{align:'center'});
     const cuerpo=filas.slice(1).map(f=>f.map(c=>_stripAccentsForPdf(String(c&&c.v!==undefined?c.v:''))));
     doc.autoTable({
@@ -6115,7 +6115,7 @@ async function exportActaFesupoPDF(){
   DATA.athletes.forEach(a=>{a.name=_stripAccentsForPdf(a.name);a.club=_stripAccentsForPdf(a.club);});
   try{
     if(!window.jspdf)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
-    if(!window.jspdf?.jsPDF?.prototype?.autoTable)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    if(!(window.jspdf==null?void 0:(window.jspdf.jsPDF==null?void 0:(window.jspdf.jsPDF.prototype==null?void 0:window.jspdf.jsPDF.prototype.autoTable))))await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
     const {jsPDF}=window.jspdf;
     const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
     const AMARILLO=[247,214,58], NEGRO=[0,0,0], GRIS=[130,130,130];
@@ -6131,9 +6131,9 @@ async function exportActaFesupoPDF(){
     const titulo=()=>{
       doc.setTextColor(...NEGRO);
       doc.setFont('helvetica','bold');doc.setFontSize(13);
-      doc.text(_stripAccentsForPdf(DATA.event?.name||'Competencia'),148.5,y,{align:'center'});
+      doc.text(_stripAccentsForPdf((DATA.event==null?void 0:DATA.event.name)||'Competencia'),148.5,y,{align:'center'});
       doc.setFont('helvetica','normal');doc.setFontSize(8);
-      doc.text(_stripAccentsForPdf([DATA.event?.location||'',DATA.event?.date||'',window._ACTA_DIA||''].filter(Boolean).join(' - ')),148.5,y+4.5,{align:'center'});
+      doc.text(_stripAccentsForPdf([(DATA.event==null?void 0:DATA.event.location)||'',(DATA.event==null?void 0:DATA.event.date)||'',window._ACTA_DIA||''].filter(Boolean).join(' - ')),148.5,y+4.5,{align:'center'});
       y+=10;
     };
     titulo();
@@ -6230,8 +6230,8 @@ async function exportActaFesupoXLS(){
   try{
     const F=[];                                   // filas: [{v,s}, …]
     const T=(v,st)=>({v:v,s:st||XL_NORMAL});
-    F.push([T(DATA.event?.name||'Competencia',XL_TITULO)]);
-    F.push([T([DATA.event?.location||'',DATA.event?.date||'',window._ACTA_DIA||''].filter(Boolean).join(' · '))]);
+    F.push([T((DATA.event==null?void 0:DATA.event.name)||'Competencia',XL_TITULO)]);
+    F.push([T([(DATA.event==null?void 0:DATA.event.location)||'',(DATA.event==null?void 0:DATA.event.date)||'',window._ACTA_DIA||''].filter(Boolean).join(' · '))]);
     F.push([T('Negrita = intento válido · gris tachado = intento nulo · amarillo = récord sudamericano · [n] = puesto en ese movimiento')]);
     F.push([]);
     _actaGrupos().forEach(gr=>{
@@ -6296,7 +6296,7 @@ async function generateActaPDF(){
         s.onload=res;s.onerror=rej;document.head.appendChild(s);
       });
     }
-    if(!window.jspdf?.jsPDF?.prototype?.autoTable){
+    if(!(window.jspdf==null?void 0:(window.jspdf.jsPDF==null?void 0:(window.jspdf.jsPDF.prototype==null?void 0:window.jspdf.jsPDF.prototype.autoTable)))){
       await new Promise((res,rej)=>{
         const s=document.createElement('script');
         s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
@@ -6416,7 +6416,7 @@ async function generateActaPDF(){
       doc.text('FECHIPO',8,8.5);
       doc.setFont('helvetica','normal');
       doc.setFontSize(9);
-      const evName=(DATA.event?.name||'Campeonato FECHIPO').toUpperCase();
+      const evName=((DATA.event==null?void 0:DATA.event.name)||'Campeonato FECHIPO').toUpperCase();
       doc.text(_stripAccentsForPdf(evName),PW/2,8.5,{align:'center'});
       doc.setFontSize(8);
       doc.text(new Date().toLocaleDateString('es-CL'),PW-8,8.5,{align:'right'});
@@ -6597,8 +6597,8 @@ function exportJSON(){const r=rankings();const blob=new Blob([JSON.stringify(r.m
 // global sin necesidad de re-deployar.
 // ═══════════════════════════════════════════════════════════════
 async function cerrarCompetenciaConfirm(){
-  const evName = DATA.event?.name || '';
-  const evId   = DATA.event?.id || (window.LIVE_EVENTS ? Object.keys(window.LIVE_EVENTS).find(k=>window.LIVE_EVENTS[k]===evName) : '') || evName.replace(/[^a-zA-Z0-9]+/g,'_').toLowerCase();
+  const evName = (DATA.event==null?void 0:DATA.event.name) || '';
+  const evId   = (DATA.event==null?void 0:DATA.event.id) || (window.LIVE_EVENTS ? Object.keys(window.LIVE_EVENTS).find(k=>window.LIVE_EVENTS[k]===evName) : '') || evName.replace(/[^a-zA-Z0-9]+/g,'_').toLowerCase();
   if(!evName){ alert('No hay evento cargado.'); return; }
   const ath = DATA.athletes || [];
   const counts = {meet:0, bench:0, dq:0};
@@ -6697,14 +6697,14 @@ async function cerrarCompetencia(evId, evName){
 }
 
 function exportCompetenciasParaPerfiles(){
-  const evName=DATA.event?.name||'Campeonato sin nombre';
+  const evName=(DATA.event==null?void 0:DATA.event.name)||'Campeonato sin nombre';
   const today=new Date().toISOString().slice(0,10);
   // Incluimos también atletas DQ (3 fallos en algún lift) y los que tienen
   // al menos un intento registrado (aunque su total sea 0).
   const flightAth=DATA.athletes.filter(a=>{
     if(a.bombed && totalOf(a)<=0 && bestOf(a,'bp')<=0)return false;
     // Incluir si tiene al menos un peso registrado o intento marcado
-    const hasAnyAttempt=['sq','bp','dl'].some(l=>(a.att?.[l]||[]).some(at=>at.w>0||at.r));
+    const hasAnyAttempt=['sq','bp','dl'].some(l=>((a.att==null?void 0:a.att[l])||[]).some(at=>at.w>0||at.r));
     return hasAnyAttempt;
   });
   const out=[];
@@ -6750,13 +6750,13 @@ function exportCompetenciasParaPerfiles(){
   const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
   const u=URL.createObjectURL(blob);
   const l=document.createElement('a');
-  const evShort=(DATA.event?.short||evName).replace(/[^a-zA-Z0-9]+/g,'_');
+  const evShort=((DATA.event==null?void 0:DATA.event.short)||evName).replace(/[^a-zA-Z0-9]+/g,'_');
   l.href=u;l.download='competencias_'+evShort+'_'+today+'.json';l.click();
   alert('Exportadas '+out.length+' competencias listas para mergear a data.json');
 }
 
 function renderObsTx(){
-  const evId=DATA.event?.id||DATA.event?.name||'';
+  const evId=(DATA.event==null?void 0:DATA.event.id)||(DATA.event==null?void 0:DATA.event.name)||'';
   const base=location.origin+location.pathname.replace(/[^/]+$/,'');
   const enc=encodeURIComponent(evId);
   const widgets=[
@@ -6778,7 +6778,7 @@ function renderObsTx(){
     return h;
   }
   h+='<div class="card" style="margin-bottom:14px;padding:12px 16px;background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.3);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
-  h+='<div><span style="font-size:10px;color:var(--green);letter-spacing:1px;font-family:Oswald">CAMPEONATO ACTIVO</span><div style="font-family:Oswald;font-size:15px;font-weight:700;margin-top:2px">'+(DATA.event?.name||evId)+'</div></div>';
+  h+='<div><span style="font-size:10px;color:var(--green);letter-spacing:1px;font-family:Oswald">CAMPEONATO ACTIVO</span><div style="font-family:Oswald;font-size:15px;font-weight:700;margin-top:2px">'+((DATA.event==null?void 0:DATA.event.name)||evId)+'</div></div>';
   h+='</div>';
   // ── Selector de TARIMA: vincula esta página de control y TODOS los links de abajo
   //    a los datos de SU tarima. Sin esto, dos PCs (2 tarimas) leen el mismo doc y se cruzan.
@@ -6855,7 +6855,7 @@ function renderObsTx(){
 // TRANSMISSION WIDGET RENDERERS
 // ══════════════════════════════════════════════
 function txLookupFull(a){
-  if(!a||!DB_FULL?.length)return null;
+  if(!a||!(DB_FULL==null?void 0:DB_FULL.length))return null;
   const r=(a.rut||'').replace(/[.\s]/g,'');
   if(r)return DB_FULL.find(x=>(x.rut||'').replace(/[.\s]/g,'')===r)||null;
   const nrm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -6873,7 +6873,7 @@ function txAge(dob){
   return age>0&&age<100?age:null;
 }
 function txYearsCompeting(full){
-  if(!full?.competencias?.length)return null;
+  if(!(full==null?void 0:(full.competencias==null?void 0:full.competencias.length)))return null;
   const years=full.competencias.map(c=>{
     const f=c.fecha||c.evento||'';
     const m=f.match(/20\d{2}/);return m?+m[0]:null;
@@ -6884,10 +6884,10 @@ function txYearsCompeting(full){
   return Math.max(1,cur-min+1);
 }
 function txPB(full,lift){
-  if(!full?.competencias?.length)return null;
+  if(!(full==null?void 0:(full.competencias==null?void 0:full.competencias.length)))return null;
   const key=lift==='sq'?'sq':lift==='bp'?'bp':lift==='dl'?'dl':'total';
   let best=0;
-  full.competencias.forEach(c=>{const v=+(c.resultado?.[key]||0);if(v>best)best=v});
+  full.competencias.forEach(c=>{const v=+((c.resultado==null?void 0:c.resultado[key])||0);if(v>best)best=v});
   return best||null;
 }
 function txDivShort(div){return(div||'').replace('Sub Junior','SJR').replace('Sub-Junior','SJR').replace('Subjunior','SJR').replace('Junior','JR').replace('Open','OPN').replace('Master I','M1').replace('Master II','M2').replace('Master III','M3').replace('Master IV','M4')}
@@ -6924,8 +6924,8 @@ function renderTxWidget(){
     c.innerHTML='';
     return true;
   }
-  const lifterChanged=(cur?.id||null)!==_txLastLifter;
-  _txLastLifter=cur?.id||null;
+  const lifterChanged=((cur==null?void 0:cur.id)||null)!==_txLastLifter;
+  _txLastLifter=(cur==null?void 0:cur.id)||null;
   let html='';
   if(TX_MODE==='profile')html=renderTxProfile(cur);
   else if(TX_MODE==='scoreboard')html=renderTxScoreboard(cur,lifterChanged);
@@ -6969,7 +6969,7 @@ function renderTxLbAuto(){
   const cur=liftQueue()[0];
   const inner=renderTxLeaderboard(cur,false);
   if(!inner)return '';
-  return '<div style="position:fixed;inset:0;animation:txLbCycle '+(TX_LBAUTO_DURATION/1000)+'s ease-in-out forwards">'+inner+'</div>';
+  return '<div style="position:fixed;top:0;right:0;bottom:0;left:0;animation:txLbCycle '+(TX_LBAUTO_DURATION/1000)+'s ease-in-out forwards">'+inner+'</div>';
 }
 
 // ─── CEREMONY (widget orquestador todo-en-uno) ─────────────────
@@ -7076,7 +7076,7 @@ function renderTxCeremony(container){
   // El timer se actualiza in-place via #cerTimer, NO disparar re-render por DATA.timer.
   const slamActive=Date.now()<_txCerSlamUntil;
   const recordActive=Date.now()<_txCerRecordUntil&&_txCerRecordData;
-  const sig=_txCerState+'|'+(cur?cur.id+'|'+cur.cat+'|'+(cur.att?.[DATA.lift]||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
+  const sig=_txCerState+'|'+(cur?cur.id+'|'+cur.cat+'|'+((cur.att==null?void 0:cur.att[DATA.lift])||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
     +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
     +'|'+(slamActive?_txCerSlamType+'-'+_txCerSlamUntil:'_')
     +'|'+(recordActive?'rec-'+_txCerRecordUntil:'_');
@@ -7089,7 +7089,7 @@ function renderTxCeremony(container){
   // ── Build HTML según estado ───────────────────────────────
   let html='';
   if(_txCerState==='profile'&&cur){
-    html+='<div style="position:fixed;inset:0">'+renderTxProfile(cur)+'</div>';
+    html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0">'+renderTxProfile(cur)+'</div>';
   } else if(_txCerState==='scoreboard'&&cur){
     html+=_renderTxCerScoreboardBL(cur);
     html+=_renderTxCerTimerCorner();
@@ -7112,7 +7112,7 @@ function _renderTxCerRecordBadge(d){
   // El wrapper externo controla in/out; el círculo interno gira continuamente.
   return '<div style="position:fixed;top:120px;left:24px;z-index:60;animation:txRecordIn .65s cubic-bezier(.2,.9,.2,1) backwards,txRecordOut .45s ease-in '+((TX_CEREMONY.recordMs-450)/1000)+'s forwards">'
     +'<div style="position:relative;width:clamp(160px,16vw,220px);height:clamp(160px,16vw,220px)">'
-      +'<div style="position:absolute;inset:0;animation:txRecordSpin 5s linear infinite">'
+      +'<div style="position:absolute;top:0;right:0;bottom:0;left:0;animation:txRecordSpin 5s linear infinite">'
         +'<svg viewBox="0 0 200 200" style="width:100%;height:100%;display:block;filter:drop-shadow(0 6px 24px rgba(212,168,67,.6))">'
           +'<defs><path id="txRecCircle" d="M100,100 m-78,0 a78,78 0 1,1 156,0 a78,78 0 1,1 -156,0"/></defs>'
           +'<circle cx="100" cy="100" r="92" fill="#0A1628" stroke="#D4A843" stroke-width="3"/>'
@@ -7122,7 +7122,7 @@ function _renderTxCerRecordBadge(d){
           +'</text>'
         +'</svg>'
       +'</div>'
-      +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none">'
+      +'<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none">'
         +'<div style="font-family:Oswald,sans-serif;font-size:11px;letter-spacing:3px;color:rgba(212,168,67,.85);margin-bottom:2px">'+liftName+'</div>'
         +'<div style="font-family:Oswald,sans-serif;font-size:clamp(34px,3.6vw,52px);font-weight:900;color:#D4A843;line-height:1">'+(d.newMark||'')+'</div>'
         +'<div style="font-family:Oswald,sans-serif;font-size:11px;color:rgba(255,255,255,.6);margin-top:2px">kg</div>'
@@ -7199,7 +7199,7 @@ function _renderTxCerScoreboardBL(cur,opts){
   const animOrTx=noAnimate
     ? (scale!==1?'transform:scale('+scale+');transform-origin:bottom left;':'')
     : 'animation:txScoreboardCycle '+(TX_CEREMONY.scoreboardMs/1000)+'s ease-in-out forwards;';
-  const champLogo=DATA.event?.logoUrl||'';
+  const champLogo=(DATA.event==null?void 0:DATA.event.logoUrl)||'';
   const champLogoHtml=champLogo?'<img src="'+champLogo+'" alt="" class="sb-logo-anim" style="height:46px;width:46px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 6px rgba(0,0,0,.7))" onerror="this.style.display=\'none\'">':'';
   return '<div class="sb-card-explode" style="position:fixed;bottom:24px;left:24px;width:min(640px,55vw);'+animOrTx+'border-radius:8px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.6)">'
     +'<div style="'+_sbRowAnim(animDir,0)+'display:flex;justify-content:space-between;align-items:center;background:'+_txC('headerBg')+';border-top:2px solid '+_txC('accent')+';padding:6px 14px;gap:12px">'
@@ -7365,7 +7365,7 @@ function _widgetHandleDirectObsEvent(d){
     const m=d.minutes||10, s=d.seconds||0;
     const durationSec=m*60+s;
     if(durationSec<=0)return;
-    _txDirState.breakTimer={active:true,startedAt:Date.now(),durationSec,label:d.label||'',pausedAt:0,videos:d.videos||[],movement:d.movement||'',style:d.style||_txDirState.breakTimer?.style||{}};
+    _txDirState.breakTimer={active:true,startedAt:Date.now(),durationSec,label:d.label||'',pausedAt:0,videos:d.videos||[],movement:d.movement||'',style:d.style||(_txDirState.breakTimer==null?void 0:_txDirState.breakTimer.style)||{}};
     mark();return;
   }
   if(action==='breakStop'){
@@ -7481,7 +7481,7 @@ function _btVideoSetup(videos){
   const key=JSON.stringify(videos);
   if(!_btVideoBgEl){
     _btVideoBgEl=document.createElement('video');
-    _btVideoBgEl.style.cssText='position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;pointer-events:none;filter:blur(24px) brightness(.28);transform:scale(1.12)';
+    _btVideoBgEl.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;z-index:1;pointer-events:none;filter:blur(24px) brightness(.28);transform:scale(1.12)';
     _btVideoBgEl.muted=true;_btVideoBgEl.playsInline=true;
     document.body.appendChild(_btVideoBgEl);
   }
@@ -7663,7 +7663,7 @@ function _barridoLogoImg(){
 function _startBarrido(dir){
   if(_txBarridoEl&&_txBarridoEl.parentNode)_txBarridoEl.parentNode.removeChild(_txBarridoEl);
   _txBarridoEl=document.createElement('div');
-  _txBarridoEl.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:200;overflow:hidden';
+  _txBarridoEl.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;pointer-events:none;z-index:200;overflow:hidden';
   const fwd=dir!=='out';
   const ks=fwd?'txStripeFwd':'txStripeBack';
   const dur=(TX_ANIM_MS.fullscreen/1000).toFixed(2);
@@ -7671,7 +7671,7 @@ function _startBarrido(dir){
     '<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#c41e3a;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) forwards"></div>'
     +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#ffffff;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .08s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
     +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#0a1f44;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .16s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
-    +'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;animation:txLogoBeat '+dur+'s ease-out forwards;opacity:0">'
+    +'<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;animation:txLogoBeat '+dur+'s ease-out forwards;opacity:0">'
       +_barridoLogoImg()
     +'</div>';
   document.body.appendChild(_txBarridoEl);
@@ -7777,13 +7777,13 @@ function renderTxDirector(container){
   const md=_txDirState.medals||{};
   const sig=[showProf,showSb,showLb,showTm,showSlam,showBreak,_txDirActive('tablaActual'),showMedals,_txDirActive('luces')].join('|')
     +'|luz-'+(_txLights.izq||'')+(_txLights.central||'')+(_txLights.der||'')
-    +'|'+(cur?cur.id+'|'+(cur.att?.[DATA.lift]||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
+    +'|'+(cur?cur.id+'|'+((cur.att==null?void 0:cur.att[DATA.lift])||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
     +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
-    +'|'+(_txDirState.leaderboard?.cat||'')+'|'+(_txDirState.slam?.type||'')
+    +'|'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.cat)||'')+'|'+((_txDirState.slam==null?void 0:_txDirState.slam.type)||'')
     +'|md-'+(md.mod||'')+'-'+(md.sex||'')+'-'+(md.div||'')+'-'+(md.cat||'')+'-'+(md.tipo||'')+'-'+(md.until||0)
-    +'|'+(_txDirState.profile?.until||0)+'|'+(_txDirState.scoreboard?.until||0)+'|'+(_txDirState.leaderboard?.until||0)+'|'+(_txDirState.slam?.until||0)
+    +'|'+((_txDirState.profile==null?void 0:_txDirState.profile.until)||0)+'|'+((_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.until)||0)+'|'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.until)||0)+'|'+((_txDirState.slam==null?void 0:_txDirState.slam.until)||0)
     +'|bt-'+(bt.startedAt||0)+'-'+(bt.durationSec||0)+'-'+(bt.pausedAt||0)+'-'+(bt.label||'')+'-'+(bt.videos||[]).length+'-'+(bt.movement||'')+'-'+JSON.stringify(bt.style||{})
-    +'|sc-'+(_txDirState.profile?.scale||1)+'-'+(_txDirState.scoreboard?.scale||1)+'-'+(_txDirState.leaderboard?.scale||1)+'-'+(_txDirState.timer?.scale||1)+'-'+(_txDirState.slam?.scale||1)+'-'+(_txDirState.breakTimer?.scale||1)+'-'+(_txDirState.tablaActual?.scale||1)+'-'+(_txDirState.medals?.scale||1)+'-'+(_txDirState.luces?.scale||1)
+    +'|sc-'+((_txDirState.profile==null?void 0:_txDirState.profile.scale)||1)+'-'+((_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.scale)||1)+'-'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.scale)||1)+'-'+((_txDirState.timer==null?void 0:_txDirState.timer.scale)||1)+'-'+((_txDirState.slam==null?void 0:_txDirState.slam.scale)||1)+'-'+((_txDirState.breakTimer==null?void 0:_txDirState.breakTimer.scale)||1)+'-'+((_txDirState.tablaActual==null?void 0:_txDirState.tablaActual.scale)||1)+'-'+((_txDirState.medals==null?void 0:_txDirState.medals.scale)||1)+'-'+((_txDirState.luces==null?void 0:_txDirState.luces.scale)||1)
     +'|col-'+JSON.stringify(_txDirState.colors||{});
   if(sig===_txDirLastSig){
     // Updates in-place sin re-render para evitar flicker
@@ -7855,22 +7855,22 @@ function renderTxDirector(container){
   // Break timer (fullscreen, prioridad alta)
   if(showBreak||(animBt&&animBt.dir==='out')){
     const fade=animBt?(animBt.dir==='in'?'animation:txContentFadeIn 1.2s ease forwards;':'animation:txContentFadeOut 1.2s ease forwards;'):'';
-    html+='<div style="position:fixed;inset:0;'+fade+'">'+_renderTxBreakTimer(bt,_txDirState.breakTimer?.scale||1)+'</div>';
+    html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;'+fade+'">'+_renderTxBreakTimer(bt,(_txDirState.breakTimer==null?void 0:_txDirState.breakTimer.scale)||1)+'</div>';
   } else if(showLb||(animLb&&animLb.dir==='out')){
     const cat=_txDirState.leaderboard.cat;
     const ref=cat?DATA.athletes.find(a=>a.cat===cat&&!a.bombed):cur;
-    const lbScale=_txDirState.leaderboard?.scale||1;
+    const lbScale=(_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.scale)||1;
     if(ref){
       const fade=animLb?(animLb.dir==='in'?'animation:txContentFadeIn 1.2s ease forwards;':'animation:txContentFadeOut 1.2s ease forwards;'):'';
-      html+='<div style="position:fixed;inset:0;'+(lbScale!==1?'transform:scale('+lbScale+');transform-origin:center center;':'')+fade+'">'+renderTxLeaderboard(ref,false,{allFlights:true})+'</div>';
+      html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;'+(lbScale!==1?'transform:scale('+lbScale+');transform-origin:center center;':'')+fade+'">'+renderTxLeaderboard(ref,false,{allFlights:true})+'</div>';
     }
   } else if(showProf||(animProf&&animProf.dir==='out')){
     const fade=animProf?(animProf.dir==='in'?'animation:txContentFadeIn 1.2s ease forwards;':'animation:txContentFadeOut 1.2s ease forwards;'):'';
     if(cur){
-      const pfScale=_txDirState.profile?.scale||1;
-      html+='<div style="position:fixed;inset:0;'+(pfScale!==1?'transform:scale('+pfScale+');transform-origin:center center;':'')+fade+'">'+renderTxProfile(cur)+'</div>';
+      const pfScale=(_txDirState.profile==null?void 0:_txDirState.profile.scale)||1;
+      html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;'+(pfScale!==1?'transform:scale('+pfScale+');transform-origin:center center;':'')+fade+'">'+renderTxProfile(cur)+'</div>';
     } else if(showProf){
-      html+='<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;font-family:Oswald,sans-serif;'+fade+'">'
+      html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;font-family:Oswald,sans-serif;'+fade+'">'
         +'<div style="font-size:clamp(28px,3vw,42px);color:#D4A843;letter-spacing:4px;margin-bottom:16px">SIN LEVANTADOR ACTUAL</div>'
         +'<div style="font-size:clamp(14px,1.4vw,18px);color:rgba(220,230,245,.7);max-width:600px;line-height:1.6">El widget no encontró un atleta con peso cargado en el intento actual del flight '+(DATA.flight||'?')+'. Anda a Atletas &amp; Pesaje en YourLift y carga pesos de apertura para que aparezca.</div>'
       +'</div>';
@@ -7878,8 +7878,8 @@ function renderTxDirector(container){
   }
   // Scoreboard (corner) — anim "explode from logo" si HAY logo, cascade original si no.
   if((showSb||(animSb&&animSb.dir==='out'))&&cur){
-    const hasLogoSb = !!(DATA.event?.logoUrl);
-    const sbHtml=_renderTxCerScoreboardBL(cur,{noAnimate:true,scale:_txDirState.scoreboard?.scale||1,animDir:animSb?.dir||null});
+    const hasLogoSb = !!((DATA.event==null?void 0:DATA.event.logoUrl));
+    const sbHtml=_renderTxCerScoreboardBL(cur,{noAnimate:true,scale:(_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.scale)||1,animDir:(animSb==null?void 0:animSb.dir)||null});
     const isSbEnter = animSb && animSb.dir==='in';
     // Sin logo: usar el HTML directo (la cascada _sbRowAnim ya viene del render con animDir)
     // Con logo: envolvemos para gatear logo zoom + explode, sin replay en updates
@@ -7888,14 +7888,14 @@ function renderTxDirector(container){
   // Timer (corner) — slide-in/out desde la derecha
   if(showTm||(animTm&&animTm.dir==='out')){
     const tmAnim=animTm?(animTm.dir==='in'?'animation:txSlideInRight .65s cubic-bezier(.2,.85,.3,1) forwards;':'animation:txSlideOutRight .55s cubic-bezier(.5,0,.7,.5) forwards;'):'';
-    const tmHtml=_renderTxCerTimerCorner(_txDirState.timer?.scale||1);
+    const tmHtml=_renderTxCerTimerCorner((_txDirState.timer==null?void 0:_txDirState.timer.scale)||1);
     html+=tmAnim?'<div style="'+tmAnim+'">'+tmHtml+'</div>':tmHtml;
   }
   // Tabla Actual (corner inferior derecha) — anim "explode from logo" si HAY logo, slide-up si no.
   const showTabla=_txDirActive('tablaActual');
   const animTabla=_txAnimActive('tablaActual');
   if((showTabla||(animTabla&&animTabla.dir==='out'))&&cur){
-    const hasLogo = !!(DATA.event?.logoUrl);
+    const hasLogo = !!((DATA.event==null?void 0:DATA.event.logoUrl));
     const isEntering = animTabla && animTabla.dir==='in';
     const isExiting  = animTabla && animTabla.dir==='out';
     let wrapClass = '';
@@ -7909,14 +7909,14 @@ function renderTxDirector(container){
         ? 'animation:txSlideInBottom .75s cubic-bezier(.2,.85,.3,1.05) forwards;'
         : (isExiting ? 'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;' : '');
     }
-    const taScale=_txDirState.tablaActual?.scale||1;
+    const taScale=(_txDirState.tablaActual==null?void 0:_txDirState.tablaActual.scale)||1;
     const taHtml=renderTxTablaActual(cur);
     // La escala va en una capa APARTE de la animación. Iban las dos en el mismo
     // elemento, y como los fotogramas animan transform y terminan con
     // "forwards", el último fotograma pisaba la escala: cambiar el tamaño no
     // hacía nada. Separadas, cada transform es de una capa distinta.
-    const wrap='<div class="'+wrapClass+'" style="position:fixed;inset:0;pointer-events:none;'+taAnim+'">'
-      +(taScale!==1?'<div style="position:absolute;inset:0;transform:scale('+taScale+');transform-origin:bottom right">'+taHtml+'</div>':taHtml)
+    const wrap='<div class="'+wrapClass+'" style="position:fixed;top:0;right:0;bottom:0;left:0;pointer-events:none;'+taAnim+'">'
+      +(taScale!==1?'<div style="position:absolute;top:0;right:0;bottom:0;left:0;transform:scale('+taScale+');transform-origin:bottom right">'+taHtml+'</div>':taHtml)
       +'</div>';
     html+=wrap;
   }
@@ -7941,9 +7941,9 @@ function renderTxDirector(container){
           :'';
         // La escala, en su propia capa: si va en el mismo elemento que la
         // animación, el transform de los fotogramas la pisa y no cambia nada.
-        const lzScale=_txDirState.luces?.scale||1;
-        html+='<div style="position:fixed;inset:0;pointer-events:none;'+lzAnim+'">'
-          +(lzScale!==1?'<div style="position:absolute;inset:0;transform:scale('+lzScale+');transform-origin:bottom left">'+lzHtml+'</div>':lzHtml)
+        const lzScale=(_txDirState.luces==null?void 0:_txDirState.luces.scale)||1;
+        html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;pointer-events:none;'+lzAnim+'">'
+          +(lzScale!==1?'<div style="position:absolute;top:0;right:0;bottom:0;left:0;transform:scale('+lzScale+');transform-origin:bottom left">'+lzHtml+'</div>':lzHtml)
           +'</div>';
       }
     }
@@ -7956,8 +7956,8 @@ function renderTxDirector(container){
     const mdHtml=renderTxMedals(md);
     // Misma separación que en la Tabla Actual: la animación en una capa, la
     // escala en otra, si no el transform de los fotogramas pisa el de la escala.
-    if(mdHtml)html+='<div style="position:fixed;inset:0;pointer-events:none;'+mdAnim+'">'
-      +(mdScale!==1?'<div style="position:absolute;inset:0;transform:scale('+mdScale+');transform-origin:bottom center">'+mdHtml+'</div>':mdHtml)
+    if(mdHtml)html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;pointer-events:none;'+mdAnim+'">'
+      +(mdScale!==1?'<div style="position:absolute;top:0;right:0;bottom:0;left:0;transform:scale('+mdScale+');transform-origin:bottom center">'+mdHtml+'</div>':mdHtml)
       +'</div>';
   }
   if(showSlam){
@@ -7967,7 +7967,7 @@ function renderTxDirector(container){
     // Si el botón fue disparado con type explícito (legacy), respetamos eso también.
     _txSlamScan();
     let slamType=null, slamUntil=0;
-    if(_txDirState.slam?.type&&(_txDirState.slam?.until||0)>Date.now()){
+    if((_txDirState.slam==null?void 0:_txDirState.slam.type)&&((_txDirState.slam==null?void 0:_txDirState.slam.until)||0)>Date.now()){
       // Modo manual legacy (action:slam type:g/n)
       slamType=_txDirState.slam.type;
       slamUntil=_txDirState.slam.until;
@@ -7977,7 +7977,7 @@ function renderTxDirector(container){
       slamUntil=_txSlamUntil;
     }
     if(slamType){
-      html+=_renderTxCerSlamCorner(slamType,_txDirState.slam?.scale||1);
+      html+=_renderTxCerSlamCorner(slamType,(_txDirState.slam==null?void 0:_txDirState.slam.scale)||1);
       setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},Math.max(50,slamUntil-Date.now()+50));
     }
   }
@@ -8040,11 +8040,11 @@ function _renderTxBreakTimer(bt,scale){
   if(hasVideo){
     // fades que cubren los bordes del video (z:3, encima del _btVideoFgEl en z:2)
     const vl=videoX,vt=videoY,vw=videoW,vh=videoH;
-    const colorOv='<div style="position:absolute;inset:0;background:'+overlayRgba+';pointer-events:none"></div>';
+    const colorOv='<div style="position:absolute;top:0;right:0;bottom:0;left:0;background:'+overlayRgba+';pointer-events:none"></div>';
     const fadeR='<div style="position:absolute;left:'+vl+'%;top:'+vt+'%;width:'+vw+'%;height:'+vh+'%;pointer-events:none;background:linear-gradient(to right,transparent 52%,'+overlayRgba+' 94%)"></div>';
     const fadeT='<div style="position:absolute;left:'+vl+'%;top:'+vt+'%;width:'+vw+'%;height:22%;pointer-events:none;background:linear-gradient(to bottom,'+overlayRgba+' 0%,transparent 100%)"></div>';
     const fadeB='<div style="position:absolute;left:'+vl+'%;top:'+(vt+vh-22)+'%;width:'+vw+'%;height:22%;pointer-events:none;background:linear-gradient(to top,'+overlayRgba+' 0%,transparent 100%)"></div>';
-    return '<div style="position:fixed;inset:0;z-index:3;overflow:hidden;background:transparent;'+scStyle+'">'
+    return '<div style="position:fixed;top:0;right:0;bottom:0;left:0;z-index:3;overflow:hidden;background:transparent;'+scStyle+'">'
       +colorOv+fadeR+fadeT+fadeB
       // Bloque de texto — posicionado absolutamente
       +'<div style="position:absolute;left:'+textX+'%;top:'+textY+'%;z-index:5;display:flex;flex-direction:column;align-items:flex-start;max-width:'+(100-textX-2)+'%">'
@@ -8059,8 +8059,8 @@ function _renderTxBreakTimer(bt,scale){
     +'</div>';
   }
 
-  return '<div style="position:fixed;inset:0;z-index:3;overflow:hidden;background:'+bgColor+';'+scStyle+'">'
-    +'<div style="position:absolute;inset:0;bottom:'+barH+';display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;padding:'+titleTop+'vh 4vw 3vh">'
+  return '<div style="position:fixed;top:0;right:0;bottom:0;left:0;z-index:3;overflow:hidden;background:'+bgColor+';'+scStyle+'">'
+    +'<div style="position:absolute;top:0;right:0;bottom:0;left:0;bottom:'+barH+';display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;padding:'+titleTop+'vh 4vw 3vh">'
       +''
       +'<div style="font-family:Oswald,Impact,sans-serif;font-size:'+titleSize+'vw;font-weight:900;color:#ffffff;line-height:.88;letter-spacing:2px;text-transform:uppercase;text-shadow:0 4px 24px rgba(0,0,0,.9)">YA VOLVEMOS</div>'
       +'<div style="width:clamp(50px,6vw,110px);height:3px;background:'+accentColor+';margin:clamp(8px,1.2vh,18px) auto;box-shadow:0 0 10px '+accentColor+'99"></div>'
@@ -8113,7 +8113,7 @@ function renderTxSlam(){
   const text=isGood?'GOOD LIFT':'NO LIFT';
   const color=isGood?'#22c55e':'#ef4444';
   const glow=isGood?'rgba(34,197,94,.85)':'rgba(239,68,68,.85)';
-  return '<div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;animation:txSlamFlash 2.1s ease-in-out forwards">'
+  return '<div style="position:fixed;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;align-items:center;justify-content:center;animation:txSlamFlash 2.1s ease-in-out forwards">'
     +'<div style="font-family:Oswald,sans-serif;font-size:clamp(80px,14vw,200px);font-weight:900;letter-spacing:8px;color:'+color+';text-shadow:0 0 60px '+glow+',0 0 120px '+glow+',0 8px 30px rgba(0,0,0,.9);animation:txSlamIn .55s cubic-bezier(.2,.9,.2,1) backwards,txSlamOut .35s ease-in 1.75s forwards;-webkit-text-stroke:3px rgba(0,0,0,.4)">'+text+'</div>'
     +(_txSlamLifterName?'<div style="margin-top:18px;font-family:Oswald,sans-serif;font-size:clamp(18px,2vw,28px);letter-spacing:6px;color:#fff;text-shadow:0 4px 16px rgba(0,0,0,.9);animation:txFade .8s ease .35s backwards">'+_txSlamLifterName.toUpperCase()+'</div>':'')
     +'</div>';
@@ -8198,7 +8198,7 @@ function renderTxLucesBanda(){
       +'<div style="font-size:22px;font-weight:800;letter-spacing:.04em;line-height:1.1">'+esc(cur.name||'')+'</div>'
       +'<div style="font-size:14px;font-weight:600;letter-spacing:.12em;color:#D4A843;margin-top:3px">'
         +(LIFT_S[DATA.lift]||'')+' '+(DATA.round+1)
-        +((cur.att?.[DATA.lift]?.[DATA.round]?.w)?' · '+cur.att[DATA.lift][DATA.round].w+' KG':'')+'</div></div>'
+        +(((cur.att==null?void 0:(__o=>__o==null?void 0:(__o=>__o==null?void 0:__o.w)(__o[DATA.round]))(cur.att[DATA.lift])))?' · '+cur.att[DATA.lift][DATA.round].w+' KG':'')+'</div></div>'
     :'';
   // Abajo a la IZQUIERDA: es la esquina que queda libre — el scoreboard ocupa el
   // ancho de abajo, la tabla actual va a la derecha y el medallero al centro.
@@ -8215,7 +8215,7 @@ function renderTxLucesBanda(){
 function renderTxLights(){
   if(TX_MODE==='lights')_txStartLightsListener();
   const order=['izq','central','der'];
-  let h='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;gap:clamp(20px,3vw,60px)">';
+  let h='<div style="position:fixed;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;gap:clamp(20px,3vw,60px)">';
   order.forEach((j,i)=>{
     const v=_txLights[j];
     const e=_luzEstilo(v);
@@ -8300,7 +8300,7 @@ function renderScreenLuces(a){
   // Los logos, abajo, como en el resto de las escenas de la pantalla: esta era
   // la única que no los mostraba.
   const tira=_tiraLogosPantalla(['fed','camp'],'clamp(38px,6vh,92px)','clamp(14px,2vw,32px)');
-  return '<div style="position:absolute;inset:0;background:linear-gradient(160deg,#0d2141,#0A1628 55%,#060d1a);'
+  return '<div style="position:absolute;top:0;right:0;bottom:0;left:0;background:linear-gradient(160deg,#0d2141,#0A1628 55%,#060d1a);'
     +'display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Oswald,sans-serif">'
     +cab+luces
     +(tira?'<div style="position:absolute;left:0;right:0;bottom:clamp(14px,3vh,40px);display:flex;justify-content:center">'+tira+'</div>':'')
@@ -8329,10 +8329,10 @@ function renderTxProfile(cur){
   // apellidos solo cuando hay más de dos palabras.
   const firstName=(parts.length>2?parts.slice(0,-2):parts.slice(0,-1)).join(' ').toUpperCase();
   const lastName=(parts.length>2?parts.slice(-2):parts.slice(-1)).join(' ').toUpperCase();
-  const club=cur.club||full?.club||'';
+  const club=cur.club||(full==null?void 0:full.club)||'';
   const cat=txCatLabel(cur.cat)||(txCatNum(cur.cat)+'kg');
   const divS=txDivShort(cur.div);
-  const age=txAge(full?.fechaNac);
+  const age=txAge((full==null?void 0:full.fechaNac));
   const years=txYearsCompeting(full);
   const liftKey=DATA.lift;
   const pb=txPB(full,liftKey);
@@ -8352,17 +8352,17 @@ function renderTxProfile(cur){
   const gifBlend=useGif?(media.gif_blend||'screen'):'normal';
   const mediaBg=useGif?'#000':(media.foto_url?'#fff':'linear-gradient(135deg,#1a2e4f,#0e1f3a)');
   return `
-    <div style="position:absolute;inset:0">
-    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;overflow:hidden">
+    <div style="position:absolute;top:0;right:0;bottom:0;left:0">
+    <div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;pointer-events:none;overflow:hidden">
       <img src="YourLift_logo.png" alt="" style="width:52%;opacity:0.07;filter:blur(18px);transform:scale(1.15);user-select:none" onerror="this.style.display='none'">
     </div>
-    <div style="position:absolute;inset:0;padding:clamp(40px,5vw,80px);display:flex;flex-direction:column">
+    <div style="position:absolute;top:0;right:0;bottom:0;left:0;padding:clamp(40px,5vw,80px);display:flex;flex-direction:column">
       <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(8px,1.5vh,22px);max-width:1400px;width:100%;margin:auto">
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:clamp(6px,1vh,16px)">
           <div style="background:${_txC('nameBg')};padding:clamp(10px,1.6vw,18px) clamp(18px,2.2vw,28px);border-radius:6px;display:flex;align-items:center;gap:clamp(10px,1.5vw,18px);box-shadow:0 4px 20px rgba(212,168,67,.35)">
             <div style="background:rgba(0,0,0,.2);padding:clamp(6px,0.7vw,10px) clamp(10px,1.2vw,16px);border-radius:5px;display:flex;align-items:center;gap:clamp(8px,0.9vw,14px)">
               <div style="width:clamp(44px,5vw,72px);height:clamp(30px,3.3vw,48px);position:relative;overflow:hidden;border-radius:2px;flex-shrink:0;box-shadow:0 1px 8px rgba(0,0,0,.5);background:#0a1628">
-                ${FLAG_SVG[_ctry(cur)]?`<svg viewBox="0 0 30 20" preserveAspectRatio="none" role="img" aria-label="${_ctry(cur)}" style="position:absolute;inset:0;width:100%;height:100%">${FLAG_SVG[_ctry(cur)]}</svg>`:''}
+                ${FLAG_SVG[_ctry(cur)]?`<svg viewBox="0 0 30 20" preserveAspectRatio="none" role="img" aria-label="${_ctry(cur)}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%">${FLAG_SVG[_ctry(cur)]}</svg>`:''}
               </div>
               <span style="font-family:Oswald;font-weight:700;font-size:clamp(13px,1.4vw,22px);color:${_txC('nameText')};letter-spacing:2px">${_ctry(cur)}</span>
             </div>
@@ -8375,8 +8375,8 @@ function renderTxProfile(cur){
           <div style="width:clamp(180px,18vw,280px);aspect-ratio:3/4;background:${mediaBg};border:3px solid ${_txC('accent')};border-radius:4px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(0,0,0,.5);position:relative;overflow:hidden">
             ${useGif
               ? (gifIsImg
-                  ? `<img src="${media.gif_url}" alt="${cur.name||''}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center">`
-                  : `<video src="${media.gif_url}" autoplay loop muted playsinline data-gif-trim="1" data-gif-start="${media.gif_start||0}" data-gif-end="${media.gif_end??''}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center"></video>`)
+                  ? `<img src="${media.gif_url}" alt="${cur.name||''}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center">`
+                  : `<video src="${media.gif_url}" autoplay loop muted playsinline data-gif-trim="1" data-gif-start="${media.gif_start||0}" data-gif-end="${(media.gif_end!=null?media.gif_end:(''))}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center"></video>`)
               : media.foto_url
                 ? `<img src="${media.foto_url}" alt="${cur.name||''}" style="width:100%;height:100%;object-fit:cover" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px\\'>${initials}</span>'">`
                 : `<span style="font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px">${initials}</span>`
@@ -8613,7 +8613,7 @@ function renderScreenControl(){
   const sel=window._SCREEN_LOCAL.flights;
   const mode=window._SCREEN_LOCAL.mode;
   const base=location.origin+location.pathname.replace(/[^/]*$/,'');
-  const enc=encodeURIComponent(DATA.event?.name||'');
+  const enc=encodeURIComponent((DATA.event==null?void 0:DATA.event.name)||'');
   const screenUrl=base+'livecast.html?tx=screen&evento='+enc+PRACTICE_Q;
   const jornadaUrl=base+'livecast.html?tx=jornada&evento='+enc+PRACTICE_Q;
   let h='<div style="max-width:920px">';
@@ -8873,7 +8873,7 @@ function _renderTxAtletaEnBarra(c,st){
   if(st.mode==='profile'){
     const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
     document.body.classList.add('tx-opaque');
-    c.innerHTML=(cur?renderTxProfile(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')+_descCapaHtml()+_descGearHtml();
+    c.innerHTML=(cur?renderTxProfile(cur):'<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')+_descCapaHtml()+_descGearHtml();
     return;
   }
   if(st.mode==='barra'){
@@ -8881,7 +8881,7 @@ function _renderTxAtletaEnBarra(c,st){
     document.body.classList.add('tx-opaque');
     // Las luces van adentro de renderScreenBarra, como un bloque más que se puede
     // mover; por eso acá no se agregan aparte.
-    c.innerHTML=(cur?renderScreenBarra(cur):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')+_descCapaHtml()+_descGearHtml();
+    c.innerHTML=(cur?renderScreenBarra(cur):'<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')+_descCapaHtml()+_descGearHtml();
     return;
   }
   if(st.mode==='intentos'){
@@ -8889,7 +8889,7 @@ function _renderTxAtletaEnBarra(c,st){
     const cur=_piQ[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
     const nxt=_piQ[1]||null;
     document.body.classList.add('tx-opaque');
-    c.innerHTML=(cur?renderScreenIntentos(cur,nxt):'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')
+    c.innerHTML=(cur?renderScreenIntentos(cur,nxt):'<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')
       +(_lucesEnTarima()?renderLucesTarima():'')+_descCapaHtml();
     return;
   }
@@ -8937,7 +8937,7 @@ function renderTxJornada(){
   let flights=window._JORNADA_FLIGHTS;
   if(!flights||!flights.length) flights=[DATA.flight];
   const pool=DATA.athletes.filter(a=>flights.includes(a.flight)&&!a.bombed);
-  if(!pool.length) return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;color:rgba(220,230,245,.6);font-size:24px;letter-spacing:3px">SIN ATLETAS EN LAS TANDAS SELECCIONADAS</div>';
+  if(!pool.length) return '<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;color:rgba(220,230,245,.6);font-size:24px;letter-spacing:3px">SIN ATLETAS EN LAS TANDAS SELECCIONADAS</div>';
   // Agrupar por categoría (sexo|cat|div)
   const groups={};
   pool.forEach(a=>{const k=_catGroupKey(a);(groups[k]=groups[k]||[]).push(a);});
@@ -8949,7 +8949,7 @@ function renderTxJornada(){
     const a=A.split('|'),b=B.split('|');
     if(sexO(a[0])!==sexO(b[0]))return sexO(a[0])-sexO(b[0]);
     if(catNum(a[1])!==catNum(b[1]))return catNum(a[1])-catNum(b[1]);
-    return (DIVO[a[2]]??9)-(DIVO[b[2]]??9);
+    return ((__n=>__n!=null?__n:(9))(DIVO[a[2]]))-((__n=>__n!=null?__n:(9))(DIVO[b[2]]));
   });
 
   // ── Escalado dinámico: la tabla SIEMPRE llena toda la pantalla ──
@@ -9061,7 +9061,7 @@ function renderTxJornada(){
 
   const evName=(DATA.event&&DATA.event.name)||'';
   const flLabel=flights.join(' · ');
-  return '<div style="position:absolute;inset:0;background:linear-gradient(135deg,#0A1628 0%,#0E1F3A 55%,#0A1628 100%);display:flex;flex-direction:column;overflow:hidden">'
+  return '<div style="position:absolute;top:0;right:0;bottom:0;left:0;background:linear-gradient(135deg,#0A1628 0%,#0E1F3A 55%,#0A1628 100%);display:flex;flex-direction:column;overflow:hidden">'
     +'<div style="height:'+topBarH+'px;box-sizing:border-box;padding:0 26px;background:rgba(10,22,40,.6);border-bottom:2px solid #D4A843;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">'
       +'<div><div style="font-family:Oswald;font-size:'+Math.round(VH*0.013)+'px;letter-spacing:4px;color:rgba(212,168,67,.85)">TABLA DE CLASIFICACIÓN · JORNADA</div>'
       +'<div style="font-family:Oswald;font-size:'+Math.round(VH*0.024)+'px;font-weight:700;letter-spacing:1px;color:#fff;margin-top:2px">'+evName+' <span style="font-size:'+Math.round(VH*0.015)+'px;color:rgba(212,168,67,.8);margin-left:8px">Tandas: '+flLabel+(nPag>1?'  ·  Página '+(iPag+1)+' de '+nPag:'')+'</span></div></div>'
@@ -9109,7 +9109,7 @@ function renderTxLeaderboard(cur,lifterChanged,opts){
   const sexLabel=(ref.sex==='Femenino'||ref.sex==='Mujer'||ref.sex==='F')?'Mujer':'Hombre';
   const curBest={sq:bestOf(ref,'sq'),bp:bestOf(ref,'bp'),dl:bestOf(ref,'dl')};
   return `
-    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:clamp(30px,5vh,80px)">
+    <div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;padding:clamp(30px,5vh,80px)">
       <div class="txCascade" style="width:min(1100px,95%);background:${_txC('cardBg')};backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);border:1px solid rgba(212,168,67,.4);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45)">
         <div style="padding:clamp(14px,2vh,22px) clamp(20px,2.5vw,32px);background:${_txC('headerBg')};border-bottom:2px solid ${_txC('accent')};display:flex;justify-content:space-between;align-items:center">
           <div>
@@ -9172,7 +9172,7 @@ function renderTxTablaActual(cur,opts){
   const fcPos=curRow?curRow.fPos:0;
   const arrow=curPos===fcPos?'=':(fcPos<curPos?'▲':'▼');
   const arrowColor=fcPos<curPos?'#22c55e':(fcPos>curPos?'#ef4444':'#D4A843');
-  const pendingW=(ref.att?.[DATA.lift]?.[DATA.round]?.w)||0;
+  const pendingW=((ref.att==null?void 0:(__o=>__o==null?void 0:(__o=>__o==null?void 0:__o.w)(__o[DATA.round]))(ref.att[DATA.lift])))||0;
   const liftN=LIFT_N[DATA.lift]||DATA.lift;
   return `
     <div style="position:fixed;bottom:30px;right:30px;width:min(520px,38vw);z-index:50;font-family:'Inter',sans-serif">
@@ -9310,7 +9310,7 @@ function _txModLabel(mod){
 function renderTxBarbell(cur,lifterChanged){
   if(!cur)return'';
   const att=cur.att[DATA.lift][DATA.round];
-  const weight=att?.w||0;
+  const weight=(att==null?void 0:att.w)||0;
   if(!weight)return'';
   const isMale=cur.sex==='Hombre'||cur.sex==='M'||cur.sex==='Masculino';
   const barKg=20; // barra de 20kg para todos (según la foto de referencia de LiftingCast, incluso en Women's)
@@ -9477,7 +9477,7 @@ function renderScreenBarra(a){
   // arrastrar para moverlo, la manija de la esquina para el tamaño. Click en el
   // fondo deselecciona y la pantalla queda limpia para la competencia.
   const B=_piBlock;
-  return `<div class="pi-canvas" style="position:absolute;inset:0;background:${fondo};font-family:Oswald,sans-serif;color:#fff;overflow:hidden">
+  return `<div class="pi-canvas" style="position:absolute;top:0;right:0;bottom:0;left:0;background:${fondo};font-family:Oswald,sans-serif;color:#fff;overflow:hidden">
     ${B('bSigla',`<div style="font-size:clamp(28px,5.4vw,86px);font-weight:700;letter-spacing:.06em;color:#D4A843;line-height:1;white-space:nowrap">${_LIFT_SIGLA[l]||''} ${r+1}</div>`)}
 
     ${B('bPeso',`<div style="line-height:1;white-space:nowrap;font-size:clamp(46px,10vw,150px);font-weight:800;letter-spacing:-.01em">
@@ -9869,7 +9869,7 @@ function _descCapaHtml(){
     +'<div id="descRel" style="font-size:clamp(46px,9vw,150px);font-weight:900;line-height:1.05;color:'+col+'">'+d.mmss+'</div>'
     +'<div id="descPausa" style="font-size:clamp(11px,1.3vw,20px);letter-spacing:.3em;color:#f59e0b;height:1.2em">'+(d.pausado?'&#9208; PAUSADO':'')+'</div>'
     +'</div>';
-  return '<div class="pi-canvas pi-desc-capa" style="position:fixed;inset:0;z-index:40">'
+  return '<div class="pi-canvas pi-desc-capa" style="position:fixed;top:0;right:0;bottom:0;left:0;z-index:40">'
     +_piBlock('descanso',inner)+'</div>';
 }
 // ── Ponerlo, pausarlo, sacarlo ────────────────────────────────────────────
@@ -10041,7 +10041,7 @@ function _piQuienSigue(nxt){
 }
 function renderScreenIntentos(cur,nxt){
   const att=cur.att[DATA.lift][DATA.round];
-  const weight=att?.w||0;
+  const weight=(att==null?void 0:att.w)||0;
   const isMale=cur.sex==='Hombre'||cur.sex==='M'||cur.sex==='Masculino';
   const barKg=20; // barra de 20kg para todos (según la foto de referencia de LiftingCast, incluso en Women's)
   const collarsKg=5; // 2 collares × 2.5kg
@@ -10201,7 +10201,7 @@ function renderScreenIntentos(cur,nxt){
   const _fondoPant=(piSet.fondoBandera!==false)
     ? _fondoBarra(cur,'bandera',piSet.bgColor||'')
     : (piSet.bgColor||'');
-  return `<div class="pi-canvas" style="position:fixed;inset:0;overflow:hidden${_fondoPant?';background:'+_fondoPant:''}" id="pantIntentosBox">
+  return `<div class="pi-canvas" style="position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden${_fondoPant?';background:'+_fondoPant:''}" id="pantIntentosBox">
     ${compHtml}
     ${piSet.showTimer===true?`<div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`:''}
     ${_piBlock('liftLabel',liftLabelHtml)}
@@ -10332,7 +10332,7 @@ function renderSetup(){
         const elapsed=Math.round((Date.now()-d.ts)/60000);
         backupInfo='<div style="background:rgba(212,168,67,.1);border:1px solid var(--gold);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">'
           +'<div><div style="font-family:Oswald;font-size:13px;color:var(--gold);letter-spacing:1px">RESPALDO AUTOMÁTICO DISPONIBLE</div>'
-          +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+(d.event?.name||'Competencia')+' · '+d.athletes.length+' atletas · hace '+elapsed+'m ('+d.tsLabel+')</div></div>'
+          +'<div style="font-size:11px;color:var(--muted);margin-top:3px">'+((d.event==null?void 0:d.event.name)||'Competencia')+' · '+d.athletes.length+' atletas · hace '+elapsed+'m ('+d.tsLabel+')</div></div>'
           +'<button onclick="recoverBackup()" style="padding:8px 18px;border-radius:8px;border:2px solid var(--gold);background:rgba(212,168,67,.1);color:var(--gold);font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:1px">RECUPERAR →</button>'
           +'</div>';
       }
@@ -10399,7 +10399,7 @@ function renderSetup(){
     // en su ficha pero habilitado en YourLift Público es el caso del
     // Sudamericano, y esconderlo dejaba a la gente con "NO HAY COMPETENCIAS EN
     // VIVO" tres días antes de que se corriera.
-    if(!_flt&&_hidden&&(_hidden.has(ev.id)||_hiddenN?.has(ev.name))&&!(_soloPub&&_esPub(ev)))return false;
+    if(!_flt&&_hidden&&(_hidden.has(ev.id)||(_hiddenN==null?void 0:_hiddenN.has(ev.name)))&&!(_soloPub&&_esPub(ev)))return false;
     if(_flt&&ev.parent!==_flt.parent)return false;
     if(_soloPub&&!_esPub(ev))return false;
     return true;
@@ -10455,7 +10455,7 @@ function renderShell(){
   h+='<div class="shell"><div class="side">';
   h+='<button class="nav-close" onclick="toggleNav(false)" aria-label="Cerrar menú">✕</button>';
   h+='<a href="index.html" class="side-back-yl" style="display:flex;align-items:center;gap:6px;padding:8px 12px;margin-bottom:12px;margin-right:42px;background:rgba(10,22,40,.6);border:1px solid rgba(212,168,67,.4);border-radius:8px;color:rgba(220,230,245,.85);font-family:Oswald,sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-decoration:none;cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap" onmouseenter="this.style.borderColor=\'#D4A843\';this.style.color=\'#D4A843\'" onmouseleave="this.style.borderColor=\'rgba(212,168,67,.4)\';this.style.color=\'rgba(220,230,245,.85)\'">← YourLift</a>';
-  h+='<div class="logo"><img src="YourLift_logo.png" style="height:28px" onerror="this.remove()"> YourLift</div><div class="event-name-side" style="font-size:11px;color:var(--muted);margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(DATA.event?.short||DATA.event?.name||'')+'</div>';
+  h+='<div class="logo"><img src="YourLift_logo.png" style="height:28px" onerror="this.remove()"> YourLift</div><div class="event-name-side" style="font-size:11px;color:var(--muted);margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+((DATA.event==null?void 0:DATA.event.short)||(DATA.event==null?void 0:DATA.event.name)||'')+'</div>';
   if(isAdmin){
   if(window._canAccess('manage'))h+='<div class="side-label">Gesti\u00f3n</div><button class="side-btn '+(p==='manage'?'active':'')+'" onclick="go(\'manage\')"><span class="icon">\uD83D\uDCCB</span>Atletas & Pesaje</button>';
   // Todo lo que se imprime para la mesa. Sali\u00f3 de Atletas & Pesaje, donde eran
@@ -10590,7 +10590,7 @@ window.resyncFromAdmin=async function(){
     const flightMap=await _loadCronoFlightMap(evId);
     const fbAthletes=snap.docs
       .map(d=>({...d.data(),id:d.id}))
-      .sort((a,b)=>(a.timestamp?.seconds||0)-(b.timestamp?.seconds||0))
+      .sort((a,b)=>((a.timestamp==null?void 0:a.timestamp.seconds)||0)-((b.timestamp==null?void 0:b.timestamp.seconds)||0))
       .map((ins,j)=>_inscToAthlete(ins,j,flightMap));
     if(!fbAthletes.length){alert('No hay inscripciones aprobadas/pendientes en Firestore para este campeonato.');return}
     _mergeFirebaseAthletes(fbAthletes);
@@ -10685,10 +10685,10 @@ function handleObsCustomEvent(data){
 }
 window.obsWsSaveAndConnect=function(){
   _obsWsSettings={
-    host:document.getElementById('obsWsHost')?.value||'localhost',
-    port:parseInt(document.getElementById('obsWsPort')?.value,10)||4455,
-    password:document.getElementById('obsWsPass')?.value||'',
-    autoConnect:document.getElementById('obsWsAuto')?.checked||false
+    host:(__o=>__o==null?void 0:__o.value)(document.getElementById('obsWsHost'))||'localhost',
+    port:parseInt((__o=>__o==null?void 0:__o.value)(document.getElementById('obsWsPort')),10)||4455,
+    password:(__o=>__o==null?void 0:__o.value)(document.getElementById('obsWsPass'))||'',
+    autoConnect:(__o=>__o==null?void 0:__o.checked)(document.getElementById('obsWsAuto'))||false
   };
   try{localStorage.setItem('obs_ws_settings',JSON.stringify(_obsWsSettings))}catch(e){}
   obsWsConnect();
@@ -10979,7 +10979,7 @@ window.dirBtUploadEventLogo=async function(){
   inp.click();
 };
 window.dirBtClearEventLogo=async function(){
-  if(!_dirState?.breakTimer?.style)return;
+  if(!(_dirState==null?void 0:(_dirState.breakTimer==null?void 0:_dirState.breakTimer.style)))return;
   _dirState.breakTimer.style.eventLogoUrl='';
   await _dirPush();R();
 };
@@ -11122,7 +11122,7 @@ window.dirToggleLb=async function(){
   if(isOn) await window.dirHide('leaderboard');
   else {
     // Usa la categoría seleccionada en el dropdown (vacía = auto = cat del lifter actual)
-    const cat=document.getElementById('dirLbCat')?.value||'';
+    const cat=(__o=>__o==null?void 0:__o.value)(document.getElementById('dirLbCat'))||'';
     await window.dirShowLb(cat,0);
   }
 };
@@ -11176,8 +11176,8 @@ window.dirToggleBreak=async function(){
   // Si los inputs existen y tienen valor los usa; si no, default 10 min
   const mEl=document.getElementById('dirBreakMin');
   const sEl=document.getElementById('dirBreakSec');
-  const m=parseInt(mEl?.value||'0',10)||10;
-  const s=parseInt(sEl?.value||'0',10)||0;
+  const m=parseInt((mEl==null?void 0:mEl.value)||'0',10)||10;
+  const s=parseInt((sEl==null?void 0:sEl.value)||'0',10)||0;
   if(mEl)mEl.value=m;
   if(sEl)sEl.value=s;
   await window.dirBreakStart();
@@ -11190,7 +11190,7 @@ window._dirKeyHandler=function(e){
   // operás la competencia. Requiere ser admin y NO tener foco en un input.
   if(!isAdmin)return;
   // Ignorar si hay foco en un input/textarea/select (no pisar la edición de pesos)
-  const tag=(document.activeElement?.tagName||'').toUpperCase();
+  const tag=((document.activeElement==null?void 0:document.activeElement.tagName)||'').toUpperCase();
   if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;
   // Solo teclas simples sin modificadores (evita pisar atajos del navegador/SO)
   if(e.ctrlKey||e.altKey||e.metaKey)return;
@@ -11212,28 +11212,28 @@ if(typeof window!=='undefined'&&!window._dirKeyBound){
 }
 // ── Break timer (descanso configurable) ─────────────────────
 window.dirBreakStart=async function(){
-  const m=parseInt(document.getElementById('dirBreakMin')?.value||'0',10)||0;
-  const s=parseInt(document.getElementById('dirBreakSec')?.value||'0',10)||0;
-  const label=(document.getElementById('dirBreakLabel')?.value||'').trim();
-  const movement=(document.getElementById('dirBreakMovement')?.value||'').trim();
+  const m=parseInt((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakMin'))||'0',10)||0;
+  const s=parseInt((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakSec'))||'0',10)||0;
+  const label=((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakLabel'))||'').trim();
+  const movement=((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakMovement'))||'').trim();
   // Videos seleccionados en la lista dinámica
-  const videos=(_dirBtVideoList||[]).filter((_,i)=>document.getElementById('dirBtVid_'+i)?.checked).map(v=>v.url);
+  const videos=(_dirBtVideoList||[]).filter((_,i)=>(__o=>__o==null?void 0:__o.checked)(document.getElementById('dirBtVid_'+i))).map(v=>v.url);
   const durationSec=m*60+s;
   if(durationSec<=0){alert('Ingresa al menos 1 segundo');return}
   if(!_dirState)_dirState={};
-  const currentStyle=_dirState?.breakTimer?.style||{};
+  const currentStyle=(_dirState==null?void 0:(_dirState.breakTimer==null?void 0:_dirState.breakTimer.style))||{};
   _dirState.breakTimer={active:true,startedAt:Date.now(),durationSec,label,pausedAt:0,videos,movement,style:currentStyle};
   await _dirPush();R();
 };
 window.dirBreakPause=async function(){
-  if(!_dirState?.breakTimer?.active)return;
+  if(!(_dirState==null?void 0:(_dirState.breakTimer==null?void 0:_dirState.breakTimer.active)))return;
   if(_dirState.breakTimer.pausedAt)return; // ya pausado
   _dirState.breakTimer.pausedAt=Date.now();
   await _dirPush();R();
 };
 window.dirBreakResume=async function(){
-  const bt=_dirState?.breakTimer;
-  if(!bt?.active||!bt.pausedAt)return;
+  const bt=(_dirState==null?void 0:_dirState.breakTimer);
+  if(!(bt==null?void 0:bt.active)||!bt.pausedAt)return;
   // Compensar el tiempo de pausa: empujar startedAt por el tiempo pausado
   bt.startedAt+=Date.now()-bt.pausedAt;
   bt.pausedAt=0;
@@ -11241,7 +11241,7 @@ window.dirBreakResume=async function(){
 };
 window.dirBreakHide=async function(){
   if(!_dirState)return;
-  const prevStyle=_dirState.breakTimer?.style||{};
+  const prevStyle=(_dirState.breakTimer==null?void 0:_dirState.breakTimer.style)||{};
   _dirState.breakTimer={active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,videos:[],movement:'',style:prevStyle};
   await _dirPush();R();
 };
@@ -11250,7 +11250,7 @@ window.dirBtDown=function(e,type){
   e.preventDefault();
   const cv=document.getElementById('dirBtCanvas');if(!cv)return;
   const r=cv.getBoundingClientRect();
-  const stl=(_dirState?.breakTimer?.style)||{};
+  const stl=((_dirState==null?void 0:(_dirState.breakTimer==null?void 0:_dirState.breakTimer.style)))||{};
   _dirBtDrag={type,
     mx0:(e.clientX-r.left)/r.width*100,
     my0:(e.clientY-r.top)/r.height*100,
@@ -11270,7 +11270,7 @@ window.dirBtMove=function(e){
   const my=(e.clientY-r.top)/r.height*100;
   const dx=mx-_dirBtDrag.mx0,dy=my-_dirBtDrag.my0;
   const sv=_dirBtDrag.sv;
-  if(!_dirState?.breakTimer)return;
+  if(!(_dirState==null?void 0:_dirState.breakTimer))return;
   const s=(_dirState.breakTimer.style=(_dirState.breakTimer.style||{}));
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
   if(_dirBtDrag.type==='vid'){s.videoX=clamp(sv.videoX+dx,0,80);s.videoY=clamp(sv.videoY+dy,0,80);}
@@ -11294,21 +11294,21 @@ window.dirBtApplyStyle=async function(){
   const s=_dirState.breakTimer.style||{};
   _dirState.breakTimer.style={
     ...s,
-    bgColor:document.getElementById('dirBtBgColor')?.value||s.bgColor||'#0A1628',
-    accentColor:document.getElementById('dirBtAccent')?.value||s.accentColor||'#C41E3A',
-    titleSize:Number(document.getElementById('dirBtTS')?.value||s.titleSize||8),
-    movSize:Number(document.getElementById('dirBtMS')?.value||s.movSize||5),
-    timerSize:Number(document.getElementById('dirBtTmr')?.value||s.timerSize||12),
-    blurAmount:Number(document.getElementById('dirBtBlur')?.value??s.blurAmount??24),
-    overlayOpacity:Number(document.getElementById('dirBtOv')?.value??s.overlayOpacity??0.65),
-    showLogos:document.getElementById('dirBtShowLogos')?.checked!==false,
-    eventLogoUrl:document.getElementById('dirBtEvLogo')?.dataset.url??s.eventLogoUrl??'',
+    bgColor:(__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtBgColor'))||s.bgColor||'#0A1628',
+    accentColor:(__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtAccent'))||s.accentColor||'#C41E3A',
+    titleSize:Number((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtTS'))||s.titleSize||8),
+    movSize:Number((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtMS'))||s.movSize||5),
+    timerSize:Number((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtTmr'))||s.timerSize||12),
+    blurAmount:Number((__n=>__n!=null?__n:(24))((__n=>__n!=null?__n:(s.blurAmount))((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtBlur'))))),
+    overlayOpacity:Number((__n=>__n!=null?__n:(0.65))((__n=>__n!=null?__n:(s.overlayOpacity))((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtOv'))))),
+    showLogos:(__o=>__o==null?void 0:__o.checked)(document.getElementById('dirBtShowLogos'))!==false,
+    eventLogoUrl:(__n=>__n!=null?__n:(''))((__n=>__n!=null?__n:(s.eventLogoUrl))((__o=>__o==null?void 0:__o.dataset.url)(document.getElementById('dirBtEvLogo')))),
   };
   await _dirPush();R();
 };
 window.dirBreakAdd=async function(secs){
-  const bt=_dirState?.breakTimer;
-  if(!bt?.active)return;
+  const bt=(_dirState==null?void 0:_dirState.breakTimer);
+  if(!(bt==null?void 0:bt.active))return;
   bt.durationSec=Math.max(1,(bt.durationSec||0)+secs);
   await _dirPush();R();
 };
@@ -11433,7 +11433,7 @@ function renderRemote(){
   if(!_dirState){_dirState={profile:{active:false,until:0},scoreboard:{active:false,until:0},leaderboard:{active:false,until:0,cat:''},tablaActual:{active:false,until:0},timer:{active:false,until:0},slam:{active:false,until:0,type:'g'}};}
   const on=(k)=>{const c=_dirState[k]||{};return c.active&&(!c.until||c.until>Date.now());};
   const cur=liftQueue()[0];
-  const evName=DATA.event?.short||DATA.event?.name||'—';
+  const evName=(DATA.event==null?void 0:DATA.event.short)||(DATA.event==null?void 0:DATA.event.name)||'—';
   // Botón grande touch. col: cuántas columnas ocupa (por defecto 1).
   const bigBtn=(label,sub,active,onClick,col)=>{
     const bg=active?'linear-gradient(180deg,rgba(34,197,94,.28),rgba(34,197,94,.12))':'rgba(10,22,40,.55)';
@@ -11503,7 +11503,7 @@ function renderRemote(){
   // Esconder todo — ancho completo
   h+='<button onclick="dirHideAll()" style="width:100%;margin-top:10px;min-height:64px;border-radius:14px;border:2px solid var(--red);background:rgba(239,68,68,.1);color:#f87171;font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">⨯ ESCONDER TODO</button>';
   // Ayuda / enlace del browser source para OBS
-  const widgetUrl=location.origin+location.pathname.replace(/[^/]+$/,'')+'livecast.html?tx=director&evento='+encodeURIComponent(DATA.event?.id||DATA.event?.name||'')+(TARIMA?'&tarima='+TARIMA:'');
+  const widgetUrl=location.origin+location.pathname.replace(/[^/]+$/,'')+'livecast.html?tx=director&evento='+encodeURIComponent((DATA.event==null?void 0:DATA.event.id)||(DATA.event==null?void 0:DATA.event.name)||'')+(TARIMA?'&tarima='+TARIMA:'');
   h+='<div style="margin-top:18px;padding:12px 14px;background:rgba(10,22,40,.4);border:1px solid var(--border);border-radius:10px">'
     +'<div style="font-size:11px;color:var(--muted);line-height:1.6">En OBS agrega <b style="color:var(--text)">un solo Browser Source</b> con esta URL (cámara de fondo + este overlay encima). No hace falta OBS WebSocket ni Stream Deck — este control empuja todo por internet.</div>'
     +'<div style="display:flex;gap:6px;align-items:center;margin-top:8px"><input readonly value="'+esc(widgetUrl)+'" onclick="this.select()" style="flex:1;min-width:0;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-family:monospace;font-size:11px"><button onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+widgetUrl.replace(/'/g,"\\'")+'\');showToastLC(\'URL del overlay copiada\')" style="padding:8px 12px;border-radius:8px;border:1px solid var(--gold);background:rgba(212,168,67,.12);color:var(--gold);font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">COPIAR</button></div>'
@@ -11519,11 +11519,11 @@ function renderDirector(){
   const cur=liftQueue()[0];
   const cats=[...new Set(DATA.athletes.filter(a=>!a.bombed).map(a=>a.cat))].filter(Boolean).sort((a,b)=>(parseFloat(a)||999)-(parseFloat(b)||999));
   const fmtTime=t=>{if(!t||t<=Date.now())return '';const s=Math.ceil((t-Date.now())/1000);return s+'s restantes'};
-  const _wsParam=_obsWsConnected&&_obsWsSettings?.host
+  const _wsParam=_obsWsConnected&&(_obsWsSettings==null?void 0:_obsWsSettings.host)
     ?'&obsWs='+encodeURIComponent(_obsWsSettings.host+':'+(_obsWsSettings.port||4455))
       +(_obsWsSettings.password?'&obsPwd='+encodeURIComponent(_obsWsSettings.password):'')
     :'';
-  const widgetUrl=location.origin+location.pathname.replace(/[^/]+$/,'')+'livecast.html?tx=director&evento='+encodeURIComponent(DATA.event?.id||DATA.event?.name||'')+(TARIMA?'&tarima='+TARIMA:'')+_wsParam;
+  const widgetUrl=location.origin+location.pathname.replace(/[^/]+$/,'')+'livecast.html?tx=director&evento='+encodeURIComponent((DATA.event==null?void 0:DATA.event.id)||(DATA.event==null?void 0:DATA.event.name)||'')+(TARIMA?'&tarima='+TARIMA:'')+_wsParam;
   const kbd=(k)=>'<kbd style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:32px;padding:0 10px;background:#0a1628;border:2px solid #D4A843;border-radius:6px;font-family:Oswald;font-size:16px;font-weight:700;color:#D4A843;letter-spacing:1px;box-shadow:0 2px 0 #D4A84355">'+k+'</kbd>';
   const scaleSlider=(key)=>{
     const c=_dirState[key]||{};
@@ -11627,7 +11627,7 @@ function renderDirector(){
   }
   // ── Logo del campeonato (se muestra en perfil/scoreboard/tabla actual)
   {
-    const champLogo=DATA.event?.logoUrl||'';
+    const champLogo=(DATA.event==null?void 0:DATA.event.logoUrl)||'';
     h+='<div class="card" style="padding:14px 18px;border-left:4px solid var(--gold);background:rgba(212,168,67,.06);margin-bottom:12px">';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">';
     h+='<div style="flex:1;min-width:200px;display:flex;align-items:center;gap:14px">';
@@ -11676,7 +11676,7 @@ function renderDirector(){
   h+='<button onclick="setTxProfileMedia(\'gif\')" style="padding:5px 16px;border-radius:6px;border:2px solid '+(_isGif?'#a78bfa':'var(--border)')+';background:'+(_isGif?'rgba(139,92,246,.15)':'transparent')+';color:'+(_isGif?'#a78bfa':'var(--muted)')+';font-family:Oswald;font-size:11px;cursor:pointer;font-weight:700;letter-spacing:1px;transition:all .15s">GIF</button>';
   if(_isGif){
     const _curFull=liftQueue()[0]?txLookupFull(liftQueue()[0]):null;
-    if(_curFull?.gif_url){
+    if((_curFull==null?void 0:_curFull.gif_url)){
       h+='<span style="font-size:10px;color:#a78bfa;font-family:Oswald">✓ GIF disponible para este atleta</span>';
     } else {
       h+='<span style="font-size:10px;color:var(--red);font-family:Oswald">Sin GIF — se mostrará foto/iniciales</span>';
@@ -11685,8 +11685,8 @@ function renderDirector(){
   h+='</div>';
   h+=compToggle('scoreboard','','Marcador (lower-third)','Barra inferior izquierda con nombre, categoría e intentos cargados.','S','dirToggle(\'scoreboard\')');
   // Leaderboard: selector de cat + toggle
-  const curCat=_dirState.leaderboard?.cat||'';
-  const lbActive=_dirState.leaderboard?.active&&(!_dirState.leaderboard?.until||_dirState.leaderboard.until>Date.now());
+  const curCat=(_dirState.leaderboard==null?void 0:_dirState.leaderboard.cat)||'';
+  const lbActive=(_dirState.leaderboard==null?void 0:_dirState.leaderboard.active)&&(!(_dirState.leaderboard==null?void 0:_dirState.leaderboard.until)||_dirState.leaderboard.until>Date.now());
   h+='<div class="card" style="padding:14px 18px;border-left:4px solid '+(lbActive?'var(--green)':'var(--border)')+';background:'+(lbActive?'rgba(34,197,94,.04)':'transparent')+'">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">';
   h+='<div style="flex:1;min-width:200px">';
@@ -11704,7 +11704,7 @@ function renderDirector(){
   // Medallero (Top 3) — selects en cascada: modalidad → sexo → división → categoría.
   // Todo se calcula desde DATA.athletes (ya cargado local): cero lecturas nuevas a Firestore.
   {
-    const mdActive=_dirState.medals?.active&&(!_dirState.medals?.until||_dirState.medals.until>Date.now());
+    const mdActive=(_dirState.medals==null?void 0:_dirState.medals.active)&&(!(_dirState.medals==null?void 0:_dirState.medals.until)||_dirState.medals.until>Date.now());
     const MOD_LABEL={classic:'Classic',equipped:'Equipado',oe_classic:'Olimpiadas Especiales',universitario:'Universitario',onlybench:'Only Bench',classic_bench:'Classic + Bench',equipped_bench:'Equipado + Bench'};
     const sel=window._mdSel||{mod:'',sex:'',div:'',cat:'',tipo:'total'};
     const byMod=DATA.athletes.filter(a=>!sel.mod||a.mod===sel.mod);
@@ -11851,7 +11851,7 @@ function renderDirector(){
   // Bloque VIDEO (arrastrable + redimensionable)
   h+='<div id="dirBtVid" style="position:absolute;left:'+_vx+'%;top:'+_vy+'%;width:'+_vw+'%;height:'+_vh+'%;background:rgba(30,90,180,.25);border:2px solid rgba(80,150,255,.6);box-sizing:border-box;cursor:grab"'
     +' onmousedown="window.dirBtDown(event,\'vid\')">'
-    +'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:10px;color:rgba(255,255,255,.5);pointer-events:none;text-align:center"><br>VIDEO<br><span style="font-size:8px;opacity:.6">arrastra</span></div>'
+    +'<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:10px;color:rgba(255,255,255,.5);pointer-events:none;text-align:center"><br>VIDEO<br><span style="font-size:8px;opacity:.6">arrastra</span></div>'
     // Handle resize esquina inferior-derecha
     +'<div style="position:absolute;right:-1px;bottom:-1px;width:14px;height:14px;background:rgba(80,150,255,.8);cursor:se-resize;border-radius:2px 0 0 0" onmousedown="window.dirBtDown(event,\'vid-resize\');event.stopPropagation()"></div>'
     // Handle resize borde derecho (ancho)
@@ -12067,7 +12067,7 @@ function renderDocs(){
   const nTot=_docsAtletas('').length;
   let h='<div class="fade"><div style="margin-bottom:16px">'
     +'<h2 class="os" style="font-size:22px;letter-spacing:1px">DOCUMENTOS</h2>'
-    +'<p style="color:var(--muted);font-size:12px">'+esc(DATA.event?.name||'')+' · '+nTot+' atletas'
+    +'<p style="color:var(--muted);font-size:12px">'+esc((DATA.event==null?void 0:DATA.event.name)||'')+' · '+nTot+' atletas'
     +(dias.length>1?(' · '+dias.length+' días'):'')+'</p></div>';
 
   h+='<div style="display:grid;gap:10px;max-width:900px">';
@@ -13035,7 +13035,7 @@ function renderResults(){
         +'</div>';
     }
   }
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:24px;letter-spacing:2px">RESULTADOS</h2><p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+' · '+flightAth.length+' atletas · todas las tandas</p></div>'+adminButtons+'</div>'+avisoDia;
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:24px;letter-spacing:2px">RESULTADOS</h2><p style="color:var(--muted);font-size:12px">'+((DATA.event==null?void 0:DATA.event.name)||'')+' · '+flightAth.length+' atletas · todas las tandas</p></div>'+adminButtons+'</div>'+avisoDia;
 
   // ── Barra de filtros ──────────────────────────────────────────────────────
   // Las opciones se arman con lo que hay EN ESTE campeonato, así que no aparecen
@@ -13144,7 +13144,7 @@ function renderSB(){
   const queue=liftQueue(),cur=queue[0],nxt=queue[1],rk=rankings();
   const rack=cur?(DATA.lift==='sq'?cur.rackSQ:DATA.lift==='bp'?cur.rackBP:''):'';
   const cw=cur?cur.att[DATA.lift][DATA.round].w:0;
-  let h='<div class="sb-wrap"><div class="sb-top"><div class="os" style="font-size:22px;font-weight:700;letter-spacing:3px">FECHIPO · YOURLIFT</div><div class="os" style="font-size:15px">'+(DATA.event?.short||'')+'</div><div style="display:flex;gap:6px;align-items:center"><span class="os" style="font-size:13px;background:'+LIFT_C[DATA.lift]+';padding:3px 14px;border-radius:5px;font-weight:700">VLO '+DATA.flight+' \u2014 '+LIFT_N[DATA.lift]+' \u2014 INT '+(DATA.round+1)+'</span><button onclick="go(\'compete\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:10px;font-family:Oswald">\u2699</button></div></div><div class="sb-body"><div style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:30px">';
+  let h='<div class="sb-wrap"><div class="sb-top"><div class="os" style="font-size:22px;font-weight:700;letter-spacing:3px">FECHIPO · YOURLIFT</div><div class="os" style="font-size:15px">'+((DATA.event==null?void 0:DATA.event.short)||'')+'</div><div style="display:flex;gap:6px;align-items:center"><span class="os" style="font-size:13px;background:'+LIFT_C[DATA.lift]+';padding:3px 14px;border-radius:5px;font-weight:700">VLO '+DATA.flight+' \u2014 '+LIFT_N[DATA.lift]+' \u2014 INT '+(DATA.round+1)+'</span><button onclick="go(\'compete\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:10px;font-family:Oswald">\u2699</button></div></div><div class="sb-body"><div style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:30px">';
   if(cur){
     h+='<div class="os" style="font-size:clamp(28px,5vw,48px);font-weight:700;letter-spacing:2px;text-align:center;margin-bottom:6px">'+cur.name+'</div>';
     h+='<div style="color:var(--muted);font-size:14px;margin-bottom:20px">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+(rack?' \u00b7 \uD83D\uDD27 '+rack:'')+'</div>';
@@ -13408,7 +13408,7 @@ function forecastTotal(a){
 }
 function renderTransmision(){
   const queue=liftQueue(),cur=queue[0];
-  const evName=DATA.event?.name||DATA.event?.short||'Campeonato';
+  const evName=(DATA.event==null?void 0:DATA.event.name)||(DATA.event==null?void 0:DATA.event.short)||'Campeonato';
   let h=`<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:${txChroma};display:flex;flex-direction:column;z-index:999">`;
   // Controls bar
   h+='<div style="position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:center;z-index:1000;flex-wrap:wrap;gap:6px">';
@@ -14025,7 +14025,7 @@ function exportBackupJSON(){
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const u=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=u;a.download='backup_livecast_'+(DATA.event?.short||'compe').replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,16).replace(/:/g,'-')+'.json';
+  a.href=u;a.download='backup_livecast_'+((DATA.event==null?void 0:DATA.event.short)||'compe').replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,16).replace(/:/g,'-')+'.json';
   a.click();
 }
 function nrm(s){return(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
@@ -14087,7 +14087,7 @@ function _setupFotoListener(){
           if(d2.gif_offset_x!=null)ath.gif_offset_x=d2.gif_offset_x;
           if(d2.gif_offset_y!=null)ath.gif_offset_y=d2.gif_offset_y;
           if(d2.gif_start!=null)ath.gif_start=d2.gif_start;
-          ath.gif_end=d2.gif_end??null;
+          ath.gif_end=(d2.gif_end!=null?d2.gif_end:(null));
         }
       });
       if(typeof renderTxWidget==='function')renderTxWidget();
@@ -14377,7 +14377,7 @@ function applyEventURLParam(){
       // visita anterior, se saca: dejarla puesta es peor que mostrar la lista,
       // porque la persona cree que el QR la llevó ahí.
       window._EV_ESPERANDO=false;
-      if(!TX_MODE&&!isAdmin&&DATA.phase!=='setup'&&DATA.athletes?.length){
+      if(!TX_MODE&&!isAdmin&&DATA.phase!=='setup'&&(DATA.athletes==null?void 0:DATA.athletes.length)){
         DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};
         try{localStorage.removeItem(SAVE_KEY)}catch(e){}
       }
@@ -14429,7 +14429,7 @@ function applyEventURLParam(){
     // campeonato viejo. Además no se pierde nada: lo de este equipo está
     // guardado en el servidor y vuelve al elegir ese campeonato de nuevo, que
     // es exactamente lo que ya pasa al cambiar de competencia desde la lista.
-    if(DATA.phase!=='setup'&&DATA.athletes?.length){
+    if(DATA.phase!=='setup'&&(DATA.athletes==null?void 0:DATA.athletes.length)){
       DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};
       try{localStorage.removeItem(SAVE_KEY)}catch(e){}
       try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
@@ -14648,7 +14648,7 @@ function renderLiveView(){
   // ── Header ──────────────────────────────────────────────────
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">';
   h += '<div><h2 class="os" style="font-size:22px;letter-spacing:2px">COMPETENCIA EN VIVO</h2>';
-  h += '<p style="color:var(--muted);font-size:12px">'+(DATA.event?.name||'')+'</p></div>';
+  h += '<p style="color:var(--muted);font-size:12px">'+((DATA.event==null?void 0:DATA.event.name)||'')+'</p></div>';
   h += '<div style="display:flex;gap:6px;align-items:center">';
   h += '<span style="font-size:11px;color:var(--muted)">'+(libre?'Estás mirando:':'Tanda activa:')+'</span>';
   h += '<span style="background:'+(FL_C[currentFlight]||'#666')+';color:#fff;padding:4px 12px;border-radius:6px;font-family:Oswald;font-weight:700">'+(currentFlight||'—')+'</span>';
@@ -14949,7 +14949,7 @@ function renderLiveView(){
     // está mirando ahí a propósito.
     if(window.NAV_LIBRE) return;
     const flQ = liftQueue();
-    const curId = flQ[0]?.id;
+    const curId = (flQ[0]==null?void 0:flQ[0].id);
     const key = currentFlight+'_'+DATA.lift+'_'+DATA.round+'_'+(curId||'');
     if(window._liveLastKey !== key){
       window._liveLastKey = key;
@@ -14974,10 +14974,10 @@ function renderAtletaInfo(){
   ath.forEach(a=>{
     // Cross-reference with data.json
     const db=findInDB(a.name,a.rut,a);
-    const bl=db?.bestLifts||{};
-    const comps=db?.competencias||[];
-    const debut=db?.debut||'';
-    const codigo=db?.codigo||'';
+    const bl=(db==null?void 0:db.bestLifts)||{};
+    const comps=(db==null?void 0:db.competencias)||[];
+    const debut=(db==null?void 0:db.debut)||'';
+    const codigo=(db==null?void 0:db.codigo)||'';
     const compCount=comps.length;
     const compWithResults=comps.filter(c=>c.resultado).length;
     
@@ -14999,11 +14999,11 @@ function renderAtletaInfo(){
     // nulo y quedaban con las iniciales aunque su foto estuviera cargada: vive en
     // la nómina del Sudamericano, que se busca por nombre. De los 416 atletas,
     // 231 tienen foto ahí.
-    const fotoUrl=db?.foto_url||(_fotoSudaFor(a)||{}).foto_url||'';
+    const fotoUrl=(db==null?void 0:db.foto_url)||(_fotoSudaFor(a)||{}).foto_url||'';
     h+='<div style="width:64px;height:64px;border-radius:12px;background:var(--bg);border:2px solid '+(fotoUrl?'rgba(212,168,67,.5)':'var(--border)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;overflow:hidden">';
     h+='<span style="font-family:Oswald;font-size:22px;font-weight:700;color:var(--border);position:absolute">'+initials+'</span>';
     if(fotoUrl){
-      h+='<img src="'+fotoUrl+'" alt="" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0" onerror="this.remove()">';
+      h+='<img src="'+fotoUrl+'" alt="" style="width:100%;height:100%;object-fit:cover;position:absolute;top:0;right:0;bottom:0;left:0" onerror="this.remove()">';
     }
     h+='</div>';
     h+='<div style="flex:1;min-width:0">';
