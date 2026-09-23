@@ -1116,11 +1116,38 @@ function gall(){
 }
 function setGalleryFilter(e){GALLERY_FILTER=e;render()}
 
+// Una tarjeta por TRANSMISIÓN, no por campeonato. En uno de varios días el link
+// se cambia cada mañana y los de los días anteriores quedan en youtubeDias (los
+// guarda el admin). Cada tarjeta lleva el campeonato y, si tiene fecha, el día.
+function _transPorDia(ev){
+  const vid=u=>{const m=String(u||'').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|live\/|embed\/|shorts\/))([A-Za-z0-9_-]{11})/);return m?m[1]:String(u||'').trim();};
+  const lista=[].concat(Array.isArray(ev.youtubeDias)?ev.youtubeDias:[]);
+  if(ev.youtubeUrl)lista.push({url:ev.youtubeUrl,fecha:ev.youtubeDesde||''});
+  const vistos=new Set(), out=[];
+  lista.forEach(d=>{
+    if(!d||!d.url)return;
+    const k=vid(d.url); if(vistos.has(k))return; vistos.add(k);
+    out.push({url:d.url,fecha:d.fecha||''});
+  });
+  if(out.length<2)return out.map(d=>Object.assign({},ev,{youtubeUrl:d.url,_orden:ev.date||''}));
+  const ini=ev.date?new Date(ev.date+'T00:00:00'):null;
+  return out.map(d=>{
+    let etiqueta='';
+    if(d.fecha){
+      const f=new Date(d.fecha+'T00:00:00');
+      const n=(ini&&!isNaN(ini)&&!isNaN(f))?Math.round((f-ini)/864e5)+1:0;
+      etiqueta=(n>=1?'Día '+n+' · ':'')+d.fecha.slice(8,10)+'/'+d.fecha.slice(5,7);
+    }
+    return Object.assign({},ev,{youtubeUrl:d.url,_dia:etiqueta,_orden:d.fecha||ev.date||''});
+  });
+}
 function trans(){
-  // Lista de eventos con transmisión YouTube — incluye archivados
-  const all=(window.ALL_EVENTS||NM.events||[]).filter(ev=>ev.youtubeUrl);
+  // Lista de transmisiones YouTube — incluye archivados, una por día
+  const all=[];
+  (window.ALL_EVENTS||NM.events||[]).filter(ev=>ev.youtubeUrl||(Array.isArray(ev.youtubeDias)&&ev.youtubeDias.length))
+    .forEach(ev=>_transPorDia(ev).forEach(t=>all.push(t)));
   // Ordenar por fecha descendente (más reciente primero)
-  const sorted=all.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const sorted=all.slice().sort((a,b)=>(b._orden||'').localeCompare(a._orden||''));
   let h=liveEmbed();
   h+=`<div class="cd2"><div class="ct"><h2 style="color:var(--gold)">Transmisiones pasadas</h2><span class="bg" style="background:var(--gold);color:var(--bg)">${sorted.length}</span></div>`;
   h+=`<p style="font-size:12px;color:var(--muted);margin-bottom:16px">Archivo de transmisiones desde la implementación de YourLift en FECHIPO</p>`;
@@ -1138,7 +1165,7 @@ function trans(){
       if(ev.streamLogoUrl)h+=`<div style="position:absolute;right:8px;bottom:8px;width:58px;height:58px;display:flex;align-items:center;justify-content:center;pointer-events:none"><img src="${ev.streamLogoUrl}" style="max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.7))"></div>`;
       h+=`</div>`;
     }
-    h+=`<div style="padding:14px"><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:.5px;color:var(--text);margin-bottom:6px;text-transform:uppercase">${ev.name}</div>`;
+    h+=`<div style="padding:14px"><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:.5px;color:var(--text);margin-bottom:6px;text-transform:uppercase">${ev.name}${ev._dia?` <span style="color:var(--gold)">· ${ev._dia}</span>`:''}</div>`;
     h+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px">${ev.organizer||ev.org||'FECHIPO'} · ${ev.location||''} · ${ev.days||ev.date||''}</div>`;
     h+=`<a href="${ev.youtubeUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#FF0000;color:#fff;padding:6px 12px;border-radius:6px;font-family:Oswald;font-size:11px;font-weight:600;letter-spacing:1px;text-decoration:none">▶ VER EN YOUTUBE</a>`;
     const igRaw=(ev.streamInstagram||ev.instagram||'').trim();

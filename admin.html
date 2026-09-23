@@ -8425,9 +8425,24 @@ function renderCampeonatos(){
         <!-- ──────────────────────────────────────────────────────────────────────── -->
         <label class="field" style="grid-column:span 2">
           <span>▶ URL YouTube en vivo <span style="font-weight:400;color:var(--muted)">(opcional)</span></span>
-          <input class="inp" id="ef_youtubeUrl" value="${editing.youtubeUrl||''}" placeholder="ej: https://www.youtube.com/live/abc123xyz">
+          <input class="inp" id="ef_youtubeUrl" value="${editing.youtubeUrl||''}" data-orig="${editing.youtubeUrl||''}" onchange="efYtCambio(this)" placeholder="ej: https://www.youtube.com/live/abc123xyz">
           <span style="font-size:10px;color:var(--muted);margin-top:2px">Cuando hay URL, se muestra un reproductor embebido en el livecast público y en la página principal — las visitas desde YourLift se suman al contador de YouTube.</span>
         </label>
+        <!-- Transmisiones de cada día. En un campeonato de varios días el link de
+             arriba se cambia cada mañana; sin esto, el del día anterior se perdía y
+             en "Transmisiones pasadas" quedaba solo el último. -->
+        <div style="grid-column:span 2;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:rgba(10,22,40,.35)">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+            <span style="font-family:Oswald;font-size:12px;letter-spacing:1px;color:var(--gold)">TRANSMISIONES DE CADA DÍA</span>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)">Fecha del link de arriba
+              <input type="date" id="ef_youtubeDesde" value="${editing.youtubeDesde||''}" style="padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px"></label>
+          </div>
+          <div id="ef_ytDias">${(editing.youtubeDias||[]).map(efYtFila).join('')}</div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px">
+            <button type="button" class="btn" onclick="efYtAgregar()">+ Agregar día</button>
+            <span style="font-size:10px;color:var(--muted);line-height:1.5;flex:1;min-width:220px">Cada día queda como una tarjeta en yourlift.cl → Transmisiones pasadas. Al cambiar el link de arriba, el anterior baja solo a esta lista con su fecha: revísala antes de guardar. Los días cuyo link ya se reemplazó se agregan a mano con + Agregar día.</span>
+          </div>
+        </div>
         <div style="grid-column:span 2;border-top:1px solid var(--border);padding-top:12px;margin-top:2px">
           <div style="font-family:Oswald;font-size:12px;letter-spacing:1px;color:var(--gold);margin-bottom:8px">EXTRAS DE TRANSMISIÓN <span style="font-weight:400;color:var(--muted);letter-spacing:0">(se muestran en la tarjeta de Transmisiones del sitio)</span></div>
           <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
@@ -8974,6 +8989,46 @@ function efDocXPinta(){ return efDocPinta('x'); }
 function efDocXLeer(){ return efDocLeer('x'); }
 window.efDocXAgregar=function(){ return window.efDocAgregar('x'); };
 
+// ── Transmisiones de cada día ─────────────────────────────────────────────
+function efYtFila(d){
+  d=d||{};
+  const q=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  return '<div class="ef-yt-fila" style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">'
+    +'<input type="date" class="ef-yt-fecha" value="'+q(d.fecha)+'" style="padding:6px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px">'
+    +'<input class="inp ef-yt-url" value="'+q(d.url)+'" placeholder="https://www.youtube.com/live/…" style="flex:1;min-width:220px">'
+    +'<button type="button" onclick="this.parentNode.remove()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer">Quitar</button></div>';
+}
+window.efYtFila=efYtFila;
+function _efHoy(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _efYtId(u){ const m=String(u||'').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|live\/|embed\/|shorts\/))([A-Za-z0-9_-]{11})/); return m?m[1]:String(u||'').trim(); }
+function efYtLeer(){
+  const out=[], vistos=new Set();
+  document.querySelectorAll('#ef_ytDias .ef-yt-fila').forEach(r=>{
+    const url=(r.querySelector('.ef-yt-url').value||'').trim();
+    const fecha=(r.querySelector('.ef-yt-fecha').value||'').trim();
+    if(!url)return;
+    const k=_efYtId(url); if(vistos.has(k))return; vistos.add(k);
+    out.push({url,fecha});
+  });
+  return out;
+}
+window.efYtAgregar=function(d){
+  const box=document.getElementById('ef_ytDias'); if(!box)return;
+  box.insertAdjacentHTML('beforeend',efYtFila(d||{}));
+};
+// Se cambió el link de arriba: el anterior baja a la lista con la fecha que
+// tenía, y la fecha de arriba pasa a ser hoy. Queda a la vista para corregirla.
+window.efYtCambio=function(inp){
+  const antes=(inp.dataset.orig||'').trim(), ahora=(inp.value||'').trim();
+  if(!antes||_efYtId(antes)===_efYtId(ahora))return;
+  const ya=efYtLeer().some(d=>_efYtId(d.url)===_efYtId(antes));
+  const fd=document.getElementById('ef_youtubeDesde');
+  if(!ya)window.efYtAgregar({url:antes,fecha:(fd&&fd.value)||''});
+  if(fd)fd.value=_efHoy();
+  inp.dataset.orig=ahora;
+  showToast(ya?'Link cambiado':'El link anterior pasó a "Transmisiones de cada día" — revisa su fecha');
+};
+
 window.saveEvento = async function(){
   const isNew = ST.eventoFormMode === 'create';
   const id  = isNew ? (document.getElementById('ef_id').value||'').trim().replace(/\s+/g,'_') : ST.eventoForm.id;
@@ -9001,6 +9056,20 @@ window.saveEvento = async function(){
   const livecastVisible = document.getElementById('ef_livecastVisible')?.checked !== false;
   const posNac2026 = !!document.getElementById('ef_posNac2026')?.checked;
   const youtubeUrl = (document.getElementById('ef_youtubeUrl')?.value||'').trim();
+  let youtubeDesde = (document.getElementById('ef_youtubeDesde')?.value||'').trim();
+  const youtubeDias = efYtLeer();
+  // Red de seguridad: si el link cambió y el anterior no quedó en la lista (por
+  // ejemplo, se guardó sin salir del campo), se agrega igual. No se pierde nunca.
+  {
+    const prev=((ST.eventoForm&&ST.eventoForm.youtubeUrl)||'').trim();
+    if(prev&&_efYtId(prev)!==_efYtId(youtubeUrl)&&!youtubeDias.some(d=>_efYtId(d.url)===_efYtId(prev))){
+      youtubeDias.push({url:prev,fecha:((ST.eventoForm&&ST.eventoForm.youtubeDesde)||'')});
+      if(!youtubeDesde||youtubeDesde===((ST.eventoForm&&ST.eventoForm.youtubeDesde)||''))youtubeDesde=_efHoy();
+    }
+  }
+  // El link de arriba no se repite en la lista de días anteriores.
+  const _ytAct=_efYtId(youtubeUrl);
+  const youtubeDiasOk=youtubeDias.filter(d=>_efYtId(d.url)!==_ytAct).sort((x,y)=>String(x.fecha).localeCompare(String(y.fecha)));
   const logoUrl = (document.getElementById('ef_logoUrl')?.value||'').trim();
   const logoFedUrl = (document.getElementById('ef_logoFedUrl')?.value||'').trim();
   const instagram = organizers[0]?.instagram || '';   // compat: IG del primer organizador
@@ -9033,6 +9102,7 @@ window.saveEvento = async function(){
     .map(cb=>cb.getAttribute('data-clave'));
   const data = {id, name, date, closeDate, preNominaCloseAt, nominaCloseAt, location, org, days, status, bloqueaClaves,
     extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, posNac2026, youtubeUrl,
+    youtubeDesde, youtubeDias: youtubeDiasOk,   // fecha del link actual + los de los días anteriores
     organizers, logoUrl, logoFedUrl, instagram,    // organizadores (con IG) + logo del campeonato y de la federación
     streamLogoUrl, streamInstagram,    // logo de productora + IG para la tarjeta de Transmisiones
     requiredDocs,    // array de docKeys requeridos
