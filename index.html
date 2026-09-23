@@ -1130,7 +1130,11 @@ function _transPorDia(ev){
     out.push({url:d.url,fecha:d.fecha||''});
   });
   if(out.length<2)return out.map(d=>Object.assign({},ev,{youtubeUrl:d.url,_orden:ev.date||''}));
-  const ini=ev.date?new Date(ev.date+'T00:00:00'):null;
+  // El día se cuenta desde el inicio del campeonato. Si no tiene fecha cargada
+  // (el Sudamericano no la tiene), desde el día más temprano de la lista.
+  const _fechas=out.map(d=>d.fecha).filter(Boolean).sort();
+  const _base=ev.date||_fechas[0]||'';
+  const ini=_base?new Date(_base+'T00:00:00'):null;
   return out.map(d=>{
     let etiqueta='';
     if(d.fecha){
