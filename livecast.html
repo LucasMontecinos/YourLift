@@ -12742,6 +12742,9 @@ function renderCompete(){
     // dibujan al final de la tanda, en el lugar en que van a subir a tarima. El
     // "se sigue a sí mismo" repite enseguida, así que ese sí queda pegado abajo.
     const _filasAlFinal=[];
+    // Peso corporal y chips a la derecha del nombre, como en la vista del público,
+    // cuando la pantalla da el ancho. En una pantalla angosta siguen debajo.
+    const _ctLinea=_anchoDaParaLinea();
     rows.forEach(a=>{
       const isCurrentAthlete = fl===DATA.flight && cur && a.id===cur.id;
       const curOnExtra = isCurrentAthlete && curAtt(cur)===3; // el actual está en su intento extra
@@ -12751,7 +12754,16 @@ function renderCompete(){
       // Fila principal (1º/2º/3º). Marca de auto-scroll cuando es el actual (en intento normal).
       h+='<tr '+(hiMain?'id="ctCurrentLifter" ':'')+'style="border-bottom:1px solid rgba(30,58,95,.18);'+(hiMain?'background:linear-gradient(90deg,'+LIFT_C[DATA.lift]+'30,'+LIFT_C[DATA.lift]+'10);box-shadow:inset 3px 0 0 '+LIFT_C[DATA.lift]+';':'')+'">';
       h+='<td style="text-align:center;padding:6px 4px"><span class="os" style="color:'+(hiMain?'#fff':'var(--muted)')+';font-weight:700;font-size:'+Math.round(12*rsc)+'px">'+(a.lot||'·')+'</span></td>';
-      h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:'+Math.round(12*rsc)+'px;font-weight:'+(hiMain?800:500)+';color:'+(hiMain?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px">'+(hiMain?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">▶</span>':'')+'<span>'+a.name+'</span></div><div style="font-size:'+Math.round(8*rsc)+'px;color:var(--muted)">'+(a.bw>0?a.bw+'kg':'sin BW')+'</div>'+_nomChips(a,rsc)+'</td>';
+      if(_ctLinea){
+        h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="display:flex;align-items:center;gap:7px;white-space:nowrap">'
+          +(hiMain?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px;flex-shrink:0">▶</span>':'')
+          +'<span style="font-size:'+Math.round(12*rsc)+'px;font-weight:'+(hiMain?800:500)+';color:'+(hiMain?'#fff':'var(--text)')+'">'+a.name+'</span>'
+          +'<span style="font-size:'+Math.round(9*rsc)+'px;color:var(--muted);flex-shrink:0">'+(a.bw>0?a.bw+'kg':'sin BW')+'</span>'
+          +_nomChips(a,rsc,true)
+          +'</div></td>';
+      }else{
+        h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:'+Math.round(12*rsc)+'px;font-weight:'+(hiMain?800:500)+';color:'+(hiMain?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px">'+(hiMain?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">▶</span>':'')+'<span>'+a.name+'</span></div><div style="font-size:'+Math.round(8*rsc)+'px;color:var(--muted)">'+(a.bw>0?a.bw+'kg':'sin BW')+'</div>'+_nomChips(a,rsc)+'</td>';
+      }
       LIFTS.forEach(l=>{
         for(let j=0;j<3;j++){
           const isCurrentCell = hiMain && l===DATA.lift && j===DATA.round;
@@ -14717,8 +14729,10 @@ function _scrollManualReciente(){
 // este ancho —televisores de tarima, monitores de 25-26", cualquier computador—
 // conviene a lo largo: la tanda entra completa. Por debajo —teléfono, tablet de
 // pie— conviene apilada, que es donde sobra alto y falta ancho.
-const _ANCHO_LINEA = 1280;
-function _anchoDaParaLinea(){ return (window.innerWidth||1400) >= _ANCHO_LINEA; }
+// El número va adentro de la función y no en una constante suelta: esta se
+// declara muy abajo en el archivo, y una pantalla que se dibuja durante la carga
+// la leería antes de que exista.
+function _anchoDaParaLinea(){ return (window.innerWidth||1400) >= 1280; }
 // Girar el tablet cruza el umbral: se redibuja una sola vez, y solo si de verdad
 // cambió de lado. Sin esto la vista se queda con el formato del ancho anterior.
 addEventListener('resize',function(){
