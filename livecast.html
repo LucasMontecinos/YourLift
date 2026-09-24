@@ -7034,11 +7034,130 @@ async function cerrarCompetencia(evId, evName){
   if(errors===0){
     showToastLC(`Competencia cerrada: ${written} resultados publicados`);
     alert(`Competencia "${evName}" cerrada.\n\n${written} resultados publicados.\n\nYa son visibles en yourlift.cl/atleta y en el ranking.`);
+    // Récords nacionales: en nacionales e internacionales, no en un regional.
+    if(!/regional/i.test(evName)){ try{ await window.mostrarRecordsNac(true); }catch(e){ console.warn('[récords nac]',e); } }
   } else {
     showToastLC(`Publicados ${written}, errores ${errors}`);
     alert(`Se publicaron ${written} resultados.\n${errors} fallaron — revisa la consola (F12).`);
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// RÉCORDS NACIONALES — detección al cerrar (ver RECORDS_NACIONALES.md)
+//
+// Solo los CHILENOS. Cada uno se compara contra la tabla nacional de su
+// modalidad: classic contra classic, equipado contra equipado, universitario
+// contra universitario. Compite por el récord de su división y, si no es Open,
+// también por el Open (un Junior que supera el Open se lleva los dos).
+// Pueden romper récord los campeonatos nacionales e internacionales.
+//
+// No escribe nada por su cuenta: arma la lista, se revisa, y recién con
+// "Guardar en la tabla de récords" se escribe records/data —el mismo documento
+// que edita Admin → Récords y que lee el sitio—. Un casillero sin récord previo
+// viene desmarcado: la tabla puede no tener esa categoría a propósito.
+// Only Bench no se compara: la tabla nacional no tiene récords de banca sola.
+// ═══════════════════════════════════════════════════════════════
+function _rnTipo(a){
+  const m=String(a.mod||'');
+  if(m.indexOf('oe_')===0||m==='invitado'||m==='onlybench'||m==='classic_bench'&&!_isPlusBench(a))return null;
+  if(/univ/i.test(String(a.div||'')))return 'universitario';
+  if(m==='equipped'||m==='equipped_bench')return 'equipped';
+  return 'classic';
+}
+function _rnCat(a){ const c=_srCat(a); if(!c)return ''; return c[0]==='+'?c.slice(1)+'+':c.slice(1); }
+async function _rnCargarTabla(){
+  try{
+    const snap=await window._fb.getDoc(window._fb.doc(fbDB,'records','data'));
+    if(snap.exists()&&(snap.data().classic||snap.data().equipped))return JSON.parse(JSON.stringify(snap.data()));
+  }catch(e){ console.warn('[récords nac] firestore',e); }
+  return fetch('records.json',{cache:'no-store'}).then(r=>r.json());
+}
+function _rnDetectar(tabla){
+  const LBL={sq:'SENTADILLA',bp:'PRESS DE BANCA',dl:'PESO MUERTO',total:'TOTAL'};
+  const mejor=new Map();       // un casillero, un récord: el más alto de esta competencia
+  _cierreAtletas().filter(a=>!a.__is4).forEach(a=>{
+    const tipo=_rnTipo(a); if(!tipo)return;
+    const cat=_rnCat(a); if(!cat)return;
+    const sx=_srSexo(a)==='F'?'Mujer':'Hombre';
+    const divPropia=tipo==='universitario'?'Universitario':_normDiv(a.div||'');
+    const divs=tipo==='universitario'?['Universitario']:[divPropia].concat(divPropia==='Open'?[]:['Open']);
+    const marcas={sq:bestOf(a,'sq'),bp:bestOf(a,'bp'),dl:bestOf(a,'dl'),total:totalOf(a,'meet')};
+    Object.keys(marcas).forEach(l=>{
+      const w=+marcas[l]||0; if(w<=0)return;
+      divs.forEach(dv=>{
+        const lista=((tabla[tipo]||{})[l])||[];
+        const act=lista.filter(x=>_normDiv(String(x.division||''))===dv&&String(x.categoria)===cat
+          &&(!x.sexo||x.sexo===sx)).sort((x,y)=>(+y.marca||0)-(+x.marca||0))[0]||null;
+        if(act&&!(w>(+act.marca||0)))return;
+        const k=[tipo,l,dv,cat].join('|');
+        const prev=mejor.get(k);
+        if(prev&&prev.w>=w)return;
+        mejor.set(k,{k,tipo,l,lbl:LBL[l],div:dv,cat,sexo:sx,w,a,act,marcado:!!act});
+      });
+    });
+  });
+  const ORD={classic:0,equipped:1,universitario:2}, LO={sq:0,bp:1,dl:2,total:3};
+  return [...mejor.values()].sort((x,y)=>(ORD[x.tipo]-ORD[y.tipo])||(x.sexo<y.sexo?-1:x.sexo>y.sexo?1:0)
+    ||(_actaCatN(x.cat)-_actaCatN(y.cat))||String(x.div).localeCompare(String(y.div))||(LO[x.l]-LO[y.l]));
+}
+window.mostrarRecordsNac=async function(trasCerrar){
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  showToastLC('Comparando con la tabla de récords nacionales…');
+  let tabla; try{ tabla=await _rnCargarTabla(); }catch(e){ alert('No se pudo leer la tabla de récords: '+e.message); return; }
+  const lista=_rnDetectar(tabla);
+  window._RN={lista,tabla};
+  if(!lista.length){ if(!trasCerrar)alert('Ningún chileno superó un récord nacional en esta competencia.'); return; }
+  const TN={classic:'Classic',equipped:'Equipado',universitario:'Universitario'};
+  let h='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:10px">'
+    +'<div><div class="os" style="font-size:22px;font-weight:700">Récords nacionales</div>'
+    +'<div style="font-size:12px;color:var(--muted);max-width:620px;line-height:1.5">Marcas de atletas chilenos que superan la tabla nacional. Revisa, desmarca lo que no corresponda y guarda. '
+    +'Los casilleros sin récord previo vienen desmarcados.</div></div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button class="btn" onclick="guardarRecordsNac()" style="background:rgba(34,197,94,.14);border:1px solid var(--green);color:var(--green);font-weight:700">Guardar en la tabla de récords</button>'
+    +'<button class="btn" onclick="document.getElementById(\'rnModal\').remove()">Cerrar</button></div></div>';
+  h+='<div style="overflow-x:auto"><table class="tbl" style="width:100%;font-size:12px"><tr><th></th><th style="text-align:left">Modalidad</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Movimiento</th>'
+    +'<th style="text-align:left">Récord actual</th><th style="text-align:left">Nuevo récord</th></tr>';
+  lista.forEach((r,i)=>{
+    h+='<tr><td><input type="checkbox" '+(r.marcado?'checked':'')+' onchange="window._RN.lista['+i+'].marcado=this.checked"></td>'
+      +'<td style="text-align:left">'+TN[r.tipo]+'</td><td>'+(r.sexo==='Mujer'?'F':'M')+'</td><td>'+esc(r.div)+'</td><td>'+esc(r.cat)+'</td><td>'+r.lbl+'</td>'
+      +'<td style="text-align:left">'+(r.act?'<b>'+r.act.marca+'</b> · '+esc(r.act.nombre||''):'<span style="color:var(--orange)">sin récord previo</span>')+'</td>'
+      +'<td style="text-align:left"><b style="color:#F2C230">'+r.w+'</b> · '+esc(r.a.name)+'</td></tr>';
+  });
+  h+='</table></div>';
+  const v=document.getElementById('rnModal'); if(v)v.remove();
+  const m=document.createElement('div'); m.id='rnModal';
+  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.8);z-index:99999;overflow-y:auto;padding:24px';
+  m.innerHTML='<div style="max-width:1100px;margin:0 auto;background:var(--card,#0F1D33);border:1px solid var(--border);border-radius:14px;padding:20px">'+h+'</div>';
+  m.onclick=e=>{if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+};
+window.guardarRecordsNac=async function(){
+  const rn=window._RN; if(!rn)return;
+  const elegidos=rn.lista.filter(r=>r.marcado);
+  if(!elegidos.length){ alert('No hay ningún récord marcado.'); return; }
+  if(!confirm('Se actualizarán '+elegidos.length+' récords nacionales en la tabla que publica yourlift.cl.\n\n¿Confirmar?'))return;
+  // Se relee la tabla justo antes de escribir: si alguien la editó desde el admin
+  // mientras tanto, no se le pisa el cambio.
+  let tabla; try{ tabla=await _rnCargarTabla(); }catch(e){ alert('No se pudo leer la tabla: '+e.message); return; }
+  const ev=(DATA.event&&DATA.event.name)||'';
+  const hoy=new Date().toISOString().slice(0,10);
+  let hechos=0;
+  elegidos.forEach(r=>{
+    tabla[r.tipo]=tabla[r.tipo]||{}; const lista=tabla[r.tipo][r.l]=tabla[r.tipo][r.l]||[];
+    const mismo=x=>_normDiv(String(x.division||''))===r.div&&String(x.categoria)===r.cat&&(!x.sexo||x.sexo===r.sexo);
+    const act=lista.filter(mismo).sort((x,y)=>(+y.marca||0)-(+x.marca||0))[0];
+    if(act&&!(r.w>(+act.marca||0)))return;          // alguien ya lo había subido más
+    const nuevo={nombre:r.a.name,division:r.div,categoria:r.cat,campeonato:ev,marca:r.w,fecha:hoy};
+    if(r.tipo==='universitario'){nuevo.sexo=r.sexo;nuevo.evento=ev;}
+    tabla[r.tipo][r.l]=lista.filter(x=>!mismo(x)).concat([nuevo]);
+    hechos++;
+  });
+  try{
+    await window._fb.setDoc(window._fb.doc(fbDB,'records','data'),tabla);
+    alert(hechos+' récords nacionales actualizados. Ya se ven en yourlift.cl.');
+    const m=document.getElementById('rnModal'); if(m)m.remove();
+  }catch(e){ alert('No se pudo guardar: '+(e.code||e.message)); }
+};
 
 function exportCompetenciasParaPerfiles(){
   const evName=(DATA.event==null?void 0:DATA.event.name)||'Campeonato sin nombre';
@@ -13462,7 +13581,9 @@ function renderResults(){
       +'<button id="btnMedallas" class="btn" onclick="mostrarMedallas()" style="background:rgba(212,168,67,.15);border:1px solid var(--gold);color:var(--gold);font-weight:700" title="Podios de todas las categorías (total, sentadilla, banca y peso muerto), cuántas medallas hay que entregar y el medallero por país o club">Medallas</button>'
       // Ranking por GL de cada división y modalidad, y la clasificación de países
       // con los puntos del reglamento IPF.
-      +'<button id="btnOverall" class="btn" onclick="mostrarOverall()" style="background:rgba(96,165,250,.12);border:1px solid #60a5fa;color:#60a5fa;font-weight:700" title="Overall por GL Points de cada división y modalidad, y la clasificación de países según el reglamento IPF">Overall y países</button>';
+      +'<button id="btnOverall" class="btn" onclick="mostrarOverall()" style="background:rgba(96,165,250,.12);border:1px solid #60a5fa;color:#60a5fa;font-weight:700" title="Overall por GL Points de cada división y modalidad, y la clasificación de países según el reglamento IPF">Overall y países</button>'
+      // Qué récords nacionales rompieron los chilenos, para revisar y guardar.
+      +(window._esStreaming()?'':'<button class="btn" onclick="mostrarRecordsNac()" style="background:rgba(242,194,48,.12);border:1px solid #F2C230;color:#F2C230;font-weight:700" title="Marcas de atletas chilenos que superan la tabla de récords nacionales: revisar y guardar">Récords nacionales</button>');
   }
   // ── Actas por día ─────────────────────────────────────────────────────────
   // En un campeonato de dos días la premiación es al final de cada uno, así que
