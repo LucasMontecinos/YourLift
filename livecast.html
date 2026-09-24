@@ -13503,8 +13503,20 @@ function renderResults(){
     return (_DIV_ORDER(dx)-_DIV_ORDER(dy))||dx.localeCompare(dy);
   });
   if(divKeys.length>0){
-    h+='<div class="card" style="margin-bottom:16px"><h3 class="os" style="font-size:14px;letter-spacing:1px;margin-bottom:12px;color:var(--gold)">TOP 3 GL POINTS POR MODALIDAD, DIVISIÓN Y SEXO</h3>';
-    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
+    // Plegable y cerrado por defecto, como el panel de día y tanda: empujaba las
+    // tablas de resultados muy abajo. Si alguien lo abre, queda abierto en ese equipo.
+    if(window._TOP3GL_OPEN===undefined){
+      let g=null; try{g=localStorage.getItem('yl_top3gl');}catch(e){}
+      window._TOP3GL_OPEN=(g==='1');
+    }
+    const _t3=!!window._TOP3GL_OPEN;
+    h+='<div class="card" style="margin-bottom:16px;padding:0;overflow:hidden">'
+      +'<button onclick="window._TOP3GL_OPEN=!window._TOP3GL_OPEN;try{localStorage.setItem(\'yl_top3gl\',window._TOP3GL_OPEN?\'1\':\'0\')}catch(e){};R()" '
+      +'style="width:100%;display:flex;align-items:center;gap:9px;padding:11px 14px;border:none;background:transparent;cursor:pointer;text-align:left">'
+      +'<span class="os" style="font-size:14px;letter-spacing:1px;color:var(--gold);font-weight:700">TOP 3 GL POINTS POR MODALIDAD, DIVISIÓN Y SEXO</span>'
+      +'<span style="flex:1"></span><span style="font-size:13px;color:var(--gold)">'+(_t3?'▾':'▸')+'</span></button>';
+    if(_t3){
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;padding:0 14px 14px">';
     divKeys.forEach(d=>{
       const top3=divGroups[d].slice(0,3);
       const _sx=d.split('|')[0], _dv=d.split('|')[1];
@@ -13522,7 +13534,9 @@ function renderResults(){
       });
       h+='</div>';
     });
-    h+='</div></div>';
+    h+='</div>';
+    }
+    h+='</div>';
   }
 
   h+='<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5">'
