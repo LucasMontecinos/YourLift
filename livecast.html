@@ -7446,7 +7446,9 @@ function _renderTxCerScoreboardBL(cur,opts){
   const champLogoHtml=champLogo?'<img src="'+champLogo+'" alt="" class="sb-logo-anim" style="height:46px;width:46px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 6px rgba(0,0,0,.7))" onerror="this.style.display=\'none\'">':'';
   return '<div class="sb-card-explode" style="position:fixed;bottom:24px;left:24px;width:min(640px,55vw);'+animOrTx+'border-radius:8px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.6)">'
     +'<div style="'+_sbRowAnim(animDir,0)+'display:flex;justify-content:space-between;align-items:center;background:'+_txC('headerBg')+';border-top:2px solid '+_txC('accent')+';padding:6px 14px;gap:12px">'
-      +'<div style="display:flex;align-items:center;gap:12px;font-family:Oswald;font-size:12px;color:rgba(200,215,240,.85);letter-spacing:1px">'+champLogoHtml+'<span>'+catLabel+'</span>'
+      +'<div style="display:flex;align-items:center;gap:12px;font-family:Oswald;font-size:12px;color:rgba(200,215,240,.85);letter-spacing:1px">'+champLogoHtml
+        // La categoría se pidió más grande: a 12 px no se leía en la transmisión.
+        +'<span style="font-size:19px;font-weight:700;color:#fff;letter-spacing:1.5px;white-space:nowrap">'+catLabel+'</span>'
         // Si el peso que va a levantar supera el récord de su división (o el Open),
         // se canta acá al lado de la categoría, en blanco para que resalte.
         +(function(){
@@ -7478,13 +7480,13 @@ function _renderTxCerScoreboardBL(cur,opts){
         else if(j===DATA.round&&at.w>0){bg=_txC('curAttempt');clr='#fff'}
         else{bg='rgba(30,48,78,.3)';clr='rgba(140,160,190,.45)'}
         const isCur=j===DATA.round&&at.r===null&&at.w>0;
-        return '<div style="padding:7px 10px;text-align:center;background:'+bg+';border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:18px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+(isCur?'box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';':'')+'">'+(at.w||'—')+'</div>';
+        return '<div style="padding:1px 6px;line-height:1.2;text-align:center;background:'+bg+';border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:28px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+(isCur?'box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';':'')+'">'+(at.w||'—')+'</div>';
       }).join('')
       // El subtotal va sobre el MISMO fondo que los intentos: usaba el color de
       // acento de fondo y en las paletas claras salía un cuadro blanco al final
       // de la fila, como si faltara algo. El acento pasa al número, que es lo
       // que tiene que resaltar. El DQ sigue en rojo, que ahí sí es un aviso.
-      +'<div style="padding:7px 10px;text-align:center;background:'+(isDQ(cur)?_txC('noLift'):_txC('gridBg'))+';color:'+(isDQ(cur)?'#fff':_txC('accent'))+';font-family:Oswald;font-size:20px;font-weight:700;letter-spacing:1px">'+(isDQ(cur)?'DQ':(subTotal(cur,DATA.lift)||0).toFixed(1))+'</div>'
+      +'<div style="padding:1px 6px;line-height:1.2;text-align:center;background:'+(isDQ(cur)?_txC('noLift'):_txC('gridBg'))+';color:'+(isDQ(cur)?'#fff':_txC('accent'))+';font-family:Oswald;font-size:28px;font-weight:700;letter-spacing:1px">'+(isDQ(cur)?'DQ':(subTotal(cur,DATA.lift)||0).toFixed(1))+'</div>'
     +'</div>'
   +'</div>';
 }
