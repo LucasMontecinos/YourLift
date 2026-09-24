@@ -5958,9 +5958,37 @@ function _medallasGrupos(){
         podios.push({tipo:l,label:_MED_LBL[l],top});
       });
     }
-    return Object.assign({},gr,{podios,titulo:_actaTitulo(gr)});
+    // En qué tanda compitió la categoría: la premiación se hace al terminar cada
+    // tanda. Si una categoría quedó repartida en dos, lleva las dos ("M / N") y se
+    // premia al terminar la última.
+    const tandas=[...new Set(gr.filas.map(f=>f.a.flight).filter(Boolean))].sort(_cmpFl);
+    return Object.assign({},gr,{podios,titulo:_actaTitulo(gr),tandas,tanda:tandas.join(' / ')||'—'});
   }).filter(gr=>gr.podios.some(p=>p.top.length));
 }
+// Las categorías juntas por tanda, en el orden en que se corren las tandas.
+// Una categoría repartida va con la ÚLTIMA de sus tandas: recién ahí se premia.
+function _medallasPorTanda(grupos){
+  const m=new Map();
+  grupos.forEach(gr=>{
+    const k=gr.tandas.length?gr.tandas[gr.tandas.length-1]:'—';
+    if(!m.has(k))m.set(k,[]);
+    m.get(k).push(gr);
+  });
+  return [...m.entries()].sort((x,y)=>_cmpFl(x[0],y[0])).map(([tanda,gs])=>{
+    let oro=0,plata=0,bronce=0;
+    gs.forEach(g=>g.podios.forEach(p=>p.top.forEach((x,i)=>{ if(i===0)oro++; else if(i===1)plata++; else bronce++; })));
+    const dia=(typeof _diaDeTanda==='function')?_diaDeTanda(tanda):'';
+    return {tanda,grupos:gs,oro,plata,bronce,total:oro+plata+bronce,dia};
+  });
+}
+window._MED_POR_TANDA=window._MED_POR_TANDA||false;
+window.medPorTanda=function(v){
+  window._MED_POR_TANDA=!!v;
+  const m=document.getElementById('medModal'); const y=m?m.scrollTop:0;
+  if(m)m.remove();
+  window.mostrarMedallas();
+  const n=document.getElementById('medModal'); if(n)n.scrollTop=y;
+};
 
 // Cuántas medallas y de quiénes. `porQuien` agrupa por país en un internacional
 // y por club en un nacional: en un nacional todos son de Chile y la tabla por
@@ -6027,11 +6055,27 @@ window.mostrarMedallas=function(){
   });
   h+='</table></div>';
 
-  // Listado por categoría, para la premiación.
-  h+='<div class="os" style="font-size:15px;font-weight:700;margin:22px 0 6px">Por categoría</div>';
-  d.grupos.forEach(gr=>{
+  // Listado para la premiación: por categoría, o agrupado por tanda (se premia al
+  // terminar cada una).
+  const _pt=!!window._MED_POR_TANDA;
+  const _btn=(on,txt,v)=>'<button onclick="medPorTanda('+v+')" style="padding:5px 12px;border-radius:999px;border:1px solid '+(on?'var(--gold)':'var(--border)')
+    +';background:'+(on?'rgba(212,168,67,.16)':'transparent')+';color:'+(on?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">'+txt+'</button>';
+  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:22px 0 6px">'
+    +'<div class="os" style="font-size:15px;font-weight:700;margin-right:6px">Premiación</div>'
+    +_btn(!_pt,'POR CATEGORÍA',0)+_btn(_pt,'POR TANDA',1)+'</div>';
+  const _secciones=_pt?_medallasPorTanda(d.grupos):[{tanda:null,grupos:d.grupos}];
+  _secciones.forEach(sec=>{
+  if(sec.tanda!==null){
+    h+='<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:18px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--gold)">'
+      +'<span class="os" style="font-size:18px;font-weight:800;color:var(--gold);letter-spacing:1px">TANDA '+esc(sec.tanda)+'</span>'
+      +(sec.dia?'<span style="font-size:11px;color:var(--muted)">Día '+esc(sec.dia)+'</span>':'')
+      +'<span style="font-size:12px;color:var(--muted)">'+sec.grupos.length+' categorías · '
+      +'<b style="color:'+_MED_COL[0]+'">'+sec.oro+' oro</b> · <b style="color:'+_MED_COL[1]+'">'+sec.plata+' plata</b> · <b style="color:'+_MED_COL[2]+'">'+sec.bronce+' bronce</b></span></div>';
+  }
+  sec.grupos.forEach(gr=>{
     h+='<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'
-      +'<div class="os" style="font-size:13px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:8px">'+esc(gr.titulo)+'</div>'
+      +'<div class="os" style="font-size:13px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:8px">'+esc(gr.titulo)
+        +(sec.tanda===null?' <span style="color:var(--muted);font-weight:400;font-size:11px">· tanda '+esc(gr.tanda)+'</span>':'')+'</div>'
       +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px">';
     gr.podios.forEach(p=>{
       if(!p.top.length)return;
@@ -6050,7 +6094,9 @@ window.mostrarMedallas=function(){
     });
     h+='</div></div>';
   });
+  });
 
+  const _vieja=document.getElementById('medModal'); if(_vieja)_vieja.remove();
   const m=document.createElement('div');
   m.id='medModal';
   m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.8);z-index:99999;overflow-y:auto;padding:24px';
@@ -6062,13 +6108,21 @@ window.mostrarMedallas=function(){
 // Una fila por medalla: así se puede filtrar y contar en la planilla.
 function _medallasFilas(){
   const d=_medallasDetalle();
-  const filas=[[{v:'Categoría',s:1},{v:'Premio',s:1},{v:'Puesto',s:1},{v:'Medalla',s:1},
+  const filas=[[{v:'Tanda',s:1},{v:'Categoría',s:1},{v:'Premio',s:1},{v:'Puesto',s:1},{v:'Medalla',s:1},
                 {v:'Atleta',s:1},{v:d.porPais?'País':'Club',s:1},{v:'Marca',s:1}]];
-  d.grupos.forEach(gr=>gr.podios.forEach(p=>p.top.forEach((x,i)=>{
-    filas.push([{v:gr.titulo},{v:p.label},{v:i+1},{v:_MED_MET[i]},
+  // Por tanda: en el orden en que se premia. Por categoría: como siempre.
+  const orden=window._MED_POR_TANDA?[].concat(..._medallasPorTanda(d.grupos).map(s=>s.grupos)):d.grupos;
+  orden.forEach(gr=>gr.podios.forEach(p=>p.top.forEach((x,i)=>{
+    filas.push([{v:gr.tanda},{v:gr.titulo},{v:p.label},{v:i+1},{v:_MED_MET[i]},
                 {v:x.a.name||''},{v:d.porPais?_ctryName(_ctry(x.a)):(x.a.club||'')},
                 {v:+(+x.valor).toFixed(1)}]);
   })));
+  if(window._MED_POR_TANDA){
+    filas.push([]);
+    filas.push([{v:'MEDALLAS POR TANDA',s:1}]);
+    filas.push([{v:'Tanda',s:1},{v:'Categorías',s:1},{v:'Oro',s:1},{v:'Plata',s:1},{v:'Bronce',s:1},{v:'Total',s:1}]);
+    _medallasPorTanda(d.grupos).forEach(t=>filas.push([{v:t.tanda},{v:t.grupos.length},{v:t.oro},{v:t.plata},{v:t.bronce},{v:t.total}]));
+  }
   filas.push([]);
   filas.push([{v:'RESUMEN',s:1}]);
   filas.push([{v:'Oro'},{v:d.oro}],[{v:'Plata'},{v:d.plata}],[{v:'Bronce'},{v:d.bronce}],
@@ -6083,7 +6137,7 @@ function _medallasFilas(){
 window.exportMedallasXLS=function(){
   const {filas}=_medallasFilas();
   _xlsxDescargar(_actaNombreArchivo('xlsx').replace(/^Acta_/,'Medallas_'),
-                 'Medallas',filas,[38,16,8,10,30,18,10]);
+                 'Medallas',filas,[9,38,16,8,10,30,18,10]);
   showToastLC('✓ Medallas en Excel');
 };
 
