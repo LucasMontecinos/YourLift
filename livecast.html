@@ -6167,20 +6167,31 @@ function _ovDatos(){
     b.filas.sort((x,y)=>((y.total>0)-(x.total>0))||(y.gl-x.gl)||((x.a.bw||0)-(y.a.bw||0)));
     let n=0; b.filas.forEach(f=>{ f.lugar=f.total>0?++n:0; });
     // Países (reglamento IPF): los 5 que más puntos suman de cada uno.
-    const porQ={};
-    b.filas.forEach(f=>{ (porQ[f.quien]=porQ[f.quien]||[]).push(f); });
-    b.equipos=Object.entries(porQ).map(([q,fs])=>{
-      const cuentan=fs.filter(f=>f.pts>0).sort((x,y)=>(y.pts-x.pts)||(x.lugarCat-y.lugarCat)).slice(0,5);
-      const lugares=Array(10).fill(0);   // cuántos 1°, 2°, … 9°, y del 10° para abajo
-      cuentan.forEach(f=>{ lugares[Math.min(f.lugarCat,10)-1]++; });
-      return {quien:q,cod:varios?q:'',puntos:cuentan.reduce((t,f)=>t+f.pts,0),lugares,
-              suman:cuentan.length,atletas:fs.length};
-    }).sort((x,y)=>(y.puntos-x.puntos)||(()=>{for(let i=0;i<10;i++){const d=y.lugares[i]-x.lugares[i];if(d)return d;}return 0;})()
-      ||x.quien.localeCompare(y.quien));
-    let p=0; b.equipos.forEach(e=>{ e.puesto=e.puntos>0?++p:0; });
+    b.equipos=_ovEquipos(b.filas,f=>f.quien,varios);
+    // En Universitario, además, por universidad: es lo que se premia ahí.
+    if(/univ/i.test(b.div)){
+      b.unis=_ovEquipos(b.filas,f=>String(f.a.uni||'').trim()||('Sin universidad ('+(varios?_ctry(f.a):(f.a.club||'—'))+')'),false);
+    }
     b.titulo=(_ACTA_MOD_N[b.mod]||b.mod)+'  ·  '+(o.sexo==='F'?'DAMAS':'CABALLEROS')+'  ·  '+b.div;
   });
   return {bloques:out,porPais:varios};
+}
+// Clasificación por equipos (IPF) agrupando por lo que diga `clave`: país,
+// club o universidad. Desempate IPF: más 1°, luego más 2°, etc. Si aun así
+// siguen empatados (el reglamento no dice más), la mejor marca GL del equipo.
+function _ovEquipos(filas,clave,conBandera){
+  const porQ={};
+  filas.forEach(f=>{ const q=clave(f); (porQ[q]=porQ[q]||[]).push(f); });
+  const eq=Object.entries(porQ).map(([q,fs])=>{
+    const cuentan=fs.filter(f=>f.pts>0).sort((x,y)=>(y.pts-x.pts)||(x.lugarCat-y.lugarCat)).slice(0,5);
+    const lugares=Array(10).fill(0);
+    cuentan.forEach(f=>{ lugares[Math.min(f.lugarCat,10)-1]++; });
+    return {quien:q,cod:conBandera?q:'',puntos:cuentan.reduce((t,f)=>t+f.pts,0),lugares,
+            suman:cuentan.length,atletas:fs.length,pais:_ctry(fs[0].a),mejorGL:Math.max(0,...fs.filter(f=>f.total>0).map(f=>+f.gl||0))};
+  }).sort((x,y)=>(y.puntos-x.puntos)||(()=>{for(let i=0;i<10;i++){const d=y.lugares[i]-x.lugares[i];if(d)return d;}return 0;})()
+    ||(y.mejorGL-x.mejorGL)||x.quien.localeCompare(y.quien));
+  let p=0; eq.forEach(e=>{ e.puesto=e.puntos>0?++p:0; });
+  return eq;
 }
 window.ovSet=function(campo,valor){
   const o=window._OV, op=_ovOpciones();
@@ -6239,9 +6250,20 @@ window.mostrarOverall=function(){
         +'<td style="color:var(--gold);font-weight:800">'+e.puntos+'</td><td>'+e.lugares[0]+'</td><td>'+e.lugares[1]+'</td><td>'+e.lugares[2]+'</td>'
         +'<td>'+e.suman+'/'+e.atletas+'</td></tr>';
     });
-    h+='</table></div></div></div>';
+    h+='</table></div></div>';
+    if(b.unis){
+      h+='<div style="overflow-x:auto;margin-top:12px"><div style="font-size:10px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">UNIVERSIDADES · PUNTOS IPF</div>'
+        +'<table class="tbl" style="width:100%;font-size:12px"><tr><th>#</th><th style="text-align:left">Universidad</th><th>País</th><th>Pts</th><th>1°</th><th>2°</th><th>3°</th><th>Mejor GL</th><th>Suman</th></tr>';
+      b.unis.forEach(e=>{
+        h+='<tr><td>'+(e.puesto||'—')+'</td><td style="text-align:left">'+esc(e.quien)+'</td><td>'+(e.pais?_flagImg(e.pais,12,true)+esc(e.pais):'')+'</td>'
+          +'<td style="color:var(--gold);font-weight:800">'+e.puntos+'</td><td>'+e.lugares[0]+'</td><td>'+e.lugares[1]+'</td><td>'+e.lugares[2]+'</td>'
+          +'<td>'+(e.mejorGL?e.mejorGL.toFixed(2):'—')+'</td><td>'+e.suman+'/'+e.atletas+'</td></tr>';
+      });
+      h+='</table></div>';
+    }
+    h+='</div>';
   });
-  h+='<div style="font-size:10px;color:var(--muted);line-height:1.6;margin-top:6px">Puntos por equipo (Reglamento Técnico IPF): 12, 9, 8, 7, 6, 5, 4, 3 y 2 del 1° al 9° de cada categoría de peso; 1 punto a cada atleta que haga total después del 9°. Cuentan los cinco mejores de cada '+(d.porPais?'país':'club')+'. Empate: más primeros lugares, luego más segundos, y así.</div>';
+  h+='<div style="font-size:10px;color:var(--muted);line-height:1.6;margin-top:6px">Puntos por equipo (Reglamento Técnico IPF): 12, 9, 8, 7, 6, 5, 4, 3 y 2 del 1° al 9° de cada categoría de peso; 1 punto a cada atleta que haga total después del 9°. Cuentan los cinco mejores de cada '+(d.porPais?'país':'club')+'. Empate: más primeros lugares, luego más segundos, y así; si aun así siguen empatados, la mejor marca GL del equipo. En Universitario se clasifica además por universidad.</div>';
   let m=document.getElementById('ovModal');
   const y=m?m.scrollTop:0;
   if(!m){ m=document.createElement('div'); m.id='ovModal';
@@ -6264,6 +6286,13 @@ function _ovFilas(){
     filas.push(['#',d.porPais?'País':'Club','Puntos','1°','2°','3°','Suman','Atletas'].map(v=>({v,s:8})));
     b.equipos.forEach(e=>filas.push([{v:e.puesto||'—',s:6},{v:e.cod?_ctryName(e.cod):e.quien,s:6},{v:e.puntos,s:7},
       {v:e.lugares[0],s:6},{v:e.lugares[1],s:6},{v:e.lugares[2],s:6},{v:e.suman,s:6},{v:e.atletas,s:6}]));
+    if(b.unis){
+      filas.push([]);
+      filas.push([{v:'UNIVERSIDADES · PUNTOS IPF',s:1}]);
+      filas.push(['#','Universidad','País','Puntos','1°','2°','3°','Mejor GL','Suman'].map(v=>({v,s:8})));
+      b.unis.forEach(e=>filas.push([{v:e.puesto||'—',s:6},{v:e.quien,s:6},{v:e.pais?_ctryName(e.pais):'',s:6},{v:e.puntos,s:7},
+        {v:e.lugares[0],s:6},{v:e.lugares[1],s:6},{v:e.lugares[2],s:6},{v:e.mejorGL?+e.mejorGL.toFixed(2):'—',s:6},{v:e.suman,s:6}]));
+    }
     filas.push([]);filas.push([]);
   });
   return {filas,d};
@@ -6306,10 +6335,16 @@ window.exportOverallPDF=async function(){
       doc.autoTable({startY:y,margin:{left:8,right:PW/2},theme:'grid',styles:_OV_PDF_EST.styles,headStyles:_OV_PDF_EST.head,bodyStyles:{fillColor:[255,255,255]},alternateRowStyles:{fillColor:[248,248,248]},
         head:[['#',d.porPais?'Pais':'Club','Pts','1ro','2do','3ro','Suman']],
         body:b.equipos.map(e=>[e.puesto||'-',T(e.cod?_ctryName(e.cod):e.quien),e.puntos,e.lugares[0],e.lugares[1],e.lugares[2],e.suman+'/'+e.atletas])});
+      if(b.unis){
+        y=doc.lastAutoTable.finalY+3;
+        doc.autoTable({startY:y,margin:{left:8,right:8},theme:'grid',styles:_OV_PDF_EST.styles,headStyles:_OV_PDF_EST.head,bodyStyles:{fillColor:[255,255,255]},alternateRowStyles:{fillColor:[248,248,248]},
+          head:[['#','Universidad','Pais','Pts','1ro','2do','3ro','Mejor GL','Suman']],
+          body:b.unis.map(e=>[e.puesto||'-',T(e.quien),T(e.pais),e.puntos,e.lugares[0],e.lugares[1],e.lugares[2],e.mejorGL?e.mejorGL.toFixed(2):'-',e.suman+'/'+e.atletas])});
+      }
       y=doc.lastAutoTable.finalY+9;
     });
     doc.setFontSize(6.5);doc.setTextColor(110);
-    doc.text(T('Puntos por equipo (Reglamento Tecnico IPF): 12-9-8-7-6-5-4-3-2 del 1 al 9 de cada categoria; 1 punto a cada atleta con total despues del 9. Cuentan los 5 mejores. Empate: mas primeros lugares, luego segundos, etc.'),8,Math.min(y,288),{maxWidth:PW-16});
+    doc.text(T('Puntos por equipo (Reglamento Tecnico IPF): 12-9-8-7-6-5-4-3-2 del 1 al 9 de cada categoria; 1 punto a cada atleta con total despues del 9. Cuentan los 5 mejores. Empate: mas primeros lugares, luego segundos, etc.; luego la mejor marca GL. En Universitario tambien por universidad.'),8,Math.min(y,288),{maxWidth:PW-16});
     doc.save(_ovNombre('pdf'));
     showToastLC('✓ Overall en PDF');
   }catch(e){ console.error('[overall] pdf',e); showToastLC('No se pudo generar el PDF: '+e.message); }
