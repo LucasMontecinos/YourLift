@@ -6893,11 +6893,18 @@ function exportJSON(){const r=rankings();const blob=new Blob([JSON.stringify(r.m
 // Los atletas los ven en sus perfiles y aparecen en el ranking
 // global sin necesidad de re-deployar.
 // ═══════════════════════════════════════════════════════════════
+// Quiénes se publican al cerrar: solo los chilenos. El ranking nacional y los
+// perfiles de yourlift.cl muestran todo lo que llega a competition_results, sin
+// mirar el país, así que cerrar un internacional (el Sudamericano) metía a los
+// extranjeros en el ranking de Chile. Un atleta sin país cargado cuenta como
+// chileno (_ctry devuelve CHI), que es lo que son en un campeonato nacional.
+function _cierreAtletas(){ return (DATA.athletes||[]).filter(a=>_ctry(a)==='CHI'); }
 async function cerrarCompetenciaConfirm(){
   const evName = (DATA.event==null?void 0:DATA.event.name) || '';
   const evId   = (DATA.event==null?void 0:DATA.event.id) || (window.LIVE_EVENTS ? Object.keys(window.LIVE_EVENTS).find(k=>window.LIVE_EVENTS[k]===evName) : '') || evName.replace(/[^a-zA-Z0-9]+/g,'_').toLowerCase();
   if(!evName){ alert('No hay evento cargado.'); return; }
-  const ath = DATA.athletes || [];
+  const ath = _cierreAtletas();
+  const fuera = (DATA.athletes||[]).filter(a=>!a.__is4).length - ath.filter(a=>!a.__is4).length;
   const counts = {meet:0, bench:0, dq:0};
   ath.forEach(a=>{
     if(isMeetClassic(a)||isMeetEquipped(a)){
@@ -6906,7 +6913,9 @@ async function cerrarCompetenciaConfirm(){
     }
     if(inBenchRanking(a) && bestOf(a,'bp')>0) counts.bench++;
   });
-  const msg = `CERRAR COMPETENCIA\n\nEvento: ${evName}\n\nSe publicarán los resultados en Firestore:\n  • ${counts.meet} con total válido\n  • ${counts.dq} marcados como DQ\n  • ${counts.bench} en ranking Only Bench\n\nApareceran inmediatamente en los perfiles de cada atleta y en el ranking general.\n\n¿Confirmar?`;
+  const msg = `CERRAR COMPETENCIA\n\nEvento: ${evName}\n\nSe publicarán los resultados en Firestore:\n  • ${counts.meet} con total válido\n  • ${counts.dq} marcados como DQ\n  • ${counts.bench} en ranking Only Bench\n`
+    +(fuera>0?`\nSolo se publican los CHILENOS: ${fuera} atletas de otros países quedan fuera (no van al ranking nacional).\n`:'')
+    +`\nApareceran inmediatamente en los perfiles de cada atleta y en el ranking general.\n\n¿Confirmar?`;
   if(!confirm(msg)) return;
   await cerrarCompetencia(evId, evName);
 }
@@ -6915,7 +6924,7 @@ async function cerrarCompetencia(evId, evName){
   const fb = window._fb;
   if(!fb || !fbDB){ alert('Firebase no está listo. Vuelve a intentar en 5 segundos.'); return; }
   const today = new Date().toISOString().slice(0,10);
-  const ath = DATA.athletes || [];
+  const ath = _cierreAtletas();
 
   // Toast de progreso
   showToastLC('Publicando resultados...');
