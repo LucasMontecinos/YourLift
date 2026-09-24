@@ -6950,7 +6950,15 @@ async function cerrarCompetenciaConfirm(){
   const msg = `CERRAR COMPETENCIA\n\nEvento: ${evName}\n\nSe publicarán los resultados en Firestore:\n  • ${counts.meet} con total válido\n  • ${counts.dq} marcados como DQ\n  • ${counts.bench} en ranking Only Bench\n`
     +(fuera>0?`\nSolo se publican los CHILENOS: ${fuera} atletas de otros países quedan fuera (no van al ranking nacional).\n`:'')
     +`\nApareceran inmediatamente en los perfiles de cada atleta y en el ranking general.\n\n¿Confirmar?`;
-  if(!confirm(msg)) return;
+  // Récords nacionales que rompieron los chilenos: se dicen ANTES de confirmar,
+  // porque al cerrar se actualizan solos. En un regional no se rompen récords.
+  let rompen=[];
+  if(!/regional/i.test(evName)){
+    try{ rompen=_rnDetectar(await _rnCargarTabla()).filter(r=>r.act); }catch(e){ console.warn('[récords nac]',e); }
+  }
+  window._RN_CIERRE=rompen;
+  if(!confirm(msg.replace('\n\n¿Confirmar?',
+      (rompen.length?`\n\nRÉCORDS NACIONALES: se actualizarán ${rompen.length} récords rotos por chilenos.`:'')+'\n\n¿Confirmar?'))) return;
   await cerrarCompetencia(evId, evName);
 }
 
@@ -7034,8 +7042,15 @@ async function cerrarCompetencia(evId, evName){
   if(errors===0){
     showToastLC(`Competencia cerrada: ${written} resultados publicados`);
     alert(`Competencia "${evName}" cerrada.\n\n${written} resultados publicados.\n\nYa son visibles en yourlift.cl/atleta y en el ranking.`);
-    // Récords nacionales: en nacionales e internacionales, no en un regional.
-    if(!/regional/i.test(evName)){ try{ await window.mostrarRecordsNac(true); }catch(e){ console.warn('[récords nac]',e); } }
+    // Récords nacionales rotos por chilenos: se actualizan solos (los mismos que
+    // se anunciaron en la confirmación).
+    const rompen=window._RN_CIERRE||[]; window._RN_CIERRE=null;
+    if(rompen.length){
+      try{
+        const hechos=await _rnAplicar(rompen);
+        alert(hechos.length+' récords nacionales actualizados:\n\n'+_rnResumen(hechos)+'\n\nYa se ven en yourlift.cl → Récords.');
+      }catch(e){ alert('Los resultados se publicaron, pero NO se pudieron actualizar los récords nacionales: '+(e.code||e.message)+'\n\nPuedes hacerlo con el botón "Récords nacionales".'); }
+    }
   } else {
     showToastLC(`Publicados ${written}, errores ${errors}`);
     alert(`Se publicaron ${written} resultados.\n${errors} fallaron — revisa la consola (F12).`);
@@ -7131,30 +7146,40 @@ window.mostrarRecordsNac=async function(trasCerrar){
   m.onclick=e=>{if(e.target===m)m.remove();};
   document.body.appendChild(m);
 };
+// Escribe en records/data los récords elegidos. Relee la tabla justo antes: si
+// alguien la editó desde el admin mientras tanto, no se le pisa el cambio.
+// Devuelve la lista de los que de verdad se actualizaron.
+async function _rnAplicar(elegidos){
+  const tabla=await _rnCargarTabla();
+  const ev=(DATA.event&&DATA.event.name)||'';
+  const hoy=new Date().toISOString().slice(0,10);
+  const hechos=[];
+  elegidos.forEach(r=>{
+    tabla[r.tipo]=tabla[r.tipo]||{}; const lista=tabla[r.tipo][r.l]=tabla[r.tipo][r.l]||[];
+    const mismo=x=>_normDiv(String(x.division||''))===r.div&&String(x.categoria)===r.cat&&(!x.sexo||x.sexo===r.sexo);
+    const act=lista.filter(mismo).sort((x,y)=>(+y.marca||0)-(+x.marca||0))[0];
+    if(act&&!(r.w>(+act.marca||0)))return;          // ya estaba igual o más alto
+    const nuevo={nombre:r.a.name,division:r.div,categoria:r.cat,campeonato:ev,marca:r.w,fecha:hoy};
+    if(r.tipo==='universitario'){nuevo.sexo=r.sexo;nuevo.evento=ev;}
+    tabla[r.tipo][r.l]=lista.filter(x=>!mismo(x)).concat([nuevo]);
+    hechos.push(r);
+  });
+  if(hechos.length)await window._fb.setDoc(window._fb.doc(fbDB,'records','data'),tabla);
+  return hechos;
+}
+function _rnResumen(hechos){
+  const TN={classic:'Classic',equipped:'Equipado',universitario:'Universitario'};
+  return hechos.map(r=>'• '+TN[r.tipo]+' '+(r.sexo==='Mujer'?'F':'M')+' '+r.div+' '+r.cat+' '+r.lbl+': '+r.w+' — '+r.a.name
+    +(r.act?' (antes '+r.act.marca+')':'')).join('\n');
+}
 window.guardarRecordsNac=async function(){
   const rn=window._RN; if(!rn)return;
   const elegidos=rn.lista.filter(r=>r.marcado);
   if(!elegidos.length){ alert('No hay ningún récord marcado.'); return; }
   if(!confirm('Se actualizarán '+elegidos.length+' récords nacionales en la tabla que publica yourlift.cl.\n\n¿Confirmar?'))return;
-  // Se relee la tabla justo antes de escribir: si alguien la editó desde el admin
-  // mientras tanto, no se le pisa el cambio.
-  let tabla; try{ tabla=await _rnCargarTabla(); }catch(e){ alert('No se pudo leer la tabla: '+e.message); return; }
-  const ev=(DATA.event&&DATA.event.name)||'';
-  const hoy=new Date().toISOString().slice(0,10);
-  let hechos=0;
-  elegidos.forEach(r=>{
-    tabla[r.tipo]=tabla[r.tipo]||{}; const lista=tabla[r.tipo][r.l]=tabla[r.tipo][r.l]||[];
-    const mismo=x=>_normDiv(String(x.division||''))===r.div&&String(x.categoria)===r.cat&&(!x.sexo||x.sexo===r.sexo);
-    const act=lista.filter(mismo).sort((x,y)=>(+y.marca||0)-(+x.marca||0))[0];
-    if(act&&!(r.w>(+act.marca||0)))return;          // alguien ya lo había subido más
-    const nuevo={nombre:r.a.name,division:r.div,categoria:r.cat,campeonato:ev,marca:r.w,fecha:hoy};
-    if(r.tipo==='universitario'){nuevo.sexo=r.sexo;nuevo.evento=ev;}
-    tabla[r.tipo][r.l]=lista.filter(x=>!mismo(x)).concat([nuevo]);
-    hechos++;
-  });
   try{
-    await window._fb.setDoc(window._fb.doc(fbDB,'records','data'),tabla);
-    alert(hechos+' récords nacionales actualizados. Ya se ven en yourlift.cl.');
+    const hechos=await _rnAplicar(elegidos);
+    alert(hechos.length+' récords nacionales actualizados. Ya se ven en yourlift.cl.');
     const m=document.getElementById('rnModal'); if(m)m.remove();
   }catch(e){ alert('No se pudo guardar: '+(e.code||e.message)); }
 };
