@@ -5939,7 +5939,9 @@ const _MED_LBL={total:'TOTAL',sq:'SENTADILLA',bp:'PRESS DE BANCA',dl:'PESO MUERT
 const _MED_MET=['Oro','Plata','Bronce'];
 
 function _medallasGrupos(){
-  return _actaGrupos().map(gr=>{
+  // Los invitados compiten fuera de competencia: salen en el acta, en su cuadro
+  // aparte, pero no reciben medalla ni cuentan en el medallero.
+  return _actaGrupos().filter(gr=>gr.mod!=='invitado').map(gr=>{
     const podios=[];
     const conTotal=gr.filas.filter(f=>f.total>0);
     if(gr.view==='bench'){
@@ -6899,6 +6901,38 @@ function exportJSON(){const r=rankings();const blob=new Blob([JSON.stringify(r.m
 // extranjeros en el ranking de Chile. Un atleta sin país cargado cuenta como
 // chileno (_ctry devuelve CHI), que es lo que son en un campeonato nacional.
 function _cierreAtletas(){ return (DATA.athletes||[]).filter(a=>_ctry(a)==='CHI'); }
+// La ficha del atleta en la base (data.json), para publicar el resultado con su
+// código y su RUT. La nómina del Sudamericano viene de FESUPO sin RUT ni código:
+// sin esto el perfil se busca por nombre exacto, y si la base lo tiene escrito
+// con una letra distinta ("Ecobar" / "Escobar") se le creaba un perfil nuevo.
+// Primero findInDB (RUT, nombre exacto, todas las palabras); si no, se acepta que
+// UNA palabra difiera en UNA letra, siempre que haya un solo candidato.
+function _cierreFicha(a){
+  let f=null;
+  try{ f=findInDB(a.name,a.rut,a); }catch(e){}
+  if(f||typeof DB_FULL==='undefined'||!DB_FULL)return f;
+  const pal=nrm(a.name).split(/\s+/).filter(Boolean);
+  if(pal.length<2)return null;
+  const unaLetra=(x,y)=>{
+    if(x===y)return true;
+    if(Math.abs(x.length-y.length)>1)return false;
+    let i=0,j=0,dif=0;
+    while(i<x.length&&j<y.length){
+      if(x[i]===y[j]){i++;j++;continue;}
+      if(++dif>1)return false;
+      if(x.length>y.length)i++; else if(y.length>x.length)j++; else{i++;j++;}
+    }
+    return dif+(x.length-i)+(y.length-j)<=1;
+  };
+  const cand=DB_FULL.filter(d=>{
+    const q=nrm(d.nombre).split(/\s+/).filter(Boolean);
+    if(q.length!==pal.length)return false;
+    let malas=0;
+    for(let k=0;k<q.length;k++){ if(q[k]!==pal[k]){ if(!unaLetra(q[k],pal[k]))return false; if(++malas>1)return false; } }
+    return true;
+  });
+  return cand.length===1?cand[0]:null;
+}
 async function cerrarCompetenciaConfirm(){
   const evName = (DATA.event==null?void 0:DATA.event.name) || '';
   const evId   = (DATA.event==null?void 0:DATA.event.id) || (window.LIVE_EVENTS ? Object.keys(window.LIVE_EVENTS).find(k=>window.LIVE_EVENTS[k]===evName) : '') || evName.replace(/[^a-zA-Z0-9]+/g,'_').toLowerCase();
@@ -6950,16 +6984,20 @@ async function cerrarCompetencia(evId, evName){
       else if(view==='bench') modLabel = isEq ? 'Only Bench Equipado' : 'Only Bench Classic';
       else modLabel = isEq ? 'Powerlifting Equipado' : 'Powerlifting Classic';
 
+      // Código y RUT: los del atleta, o los de su ficha en la base si no los trae.
+      const ficha = (a.codigo&&a.rut) ? null : _cierreFicha(a);
+      const codigo = a.codigo || (ficha&&ficha.codigo) || '';
+      const rut = a.rut || (ficha&&ficha.rut) || '';
       // Doc ID determinístico: {eventoId}_{codigo o rut}_{view}
-      const codeKey = (a.codigo || a.rut || a.id || 'unknown').toString().replace(/[^a-zA-Z0-9_-]/g,'_');
+      const codeKey = (codigo || rut || a.id || 'unknown').toString().replace(/[^a-zA-Z0-9_-]/g,'_');
       const docId = `${evId}_${codeKey}_${view}`;
 
       const payload = {
         evento: evName,
         evento_id: evId,
         fecha: today,
-        codigo: a.codigo || '',
-        rut: a.rut || '',
+        codigo: codigo,
+        rut: rut,
         nombre: a.name || '',
         club: a.club || '',
         sexo: a.sex || '',
