@@ -967,7 +967,14 @@ async function syncTimerOnlyToFB(forzar){
   if(!window._iOwnTimer)return;    // Solo QUIEN inició el reloj lo refresca.
   // Los demás controladores lo muestran localmente (startTimer(false)) sin escribir
   // → evita 5 escrituras/seg sobre el mismo doc (contención Firestore).
-  if(!forzar&&Date.now()-_ultLatidoTimer<_TIMER_LATIDO_MS)return;
+  // El latido cada 10 s ya no se escribe. Cada escritura, aunque cambie solo el
+  // reloj, le baja el documento ENTERO de la competencia a cada pantalla abierta
+  // —con los 429 atletas del Sudamericano son cientos de KB— y el cronómetro corre
+  // casi toda la jornada: era la mayor parte de lo que se pagaba en Firebase.
+  // No hace falta: al iniciar, pausar, reiniciar o llegar a cero se escribe con
+  // el estado completo (syncToFB), y cada pantalla descuenta sola desde
+  // timerStartedAt. Queda solo el camino forzado, por si algún día se necesita.
+  if(!forzar)return;
   _ultLatidoTimer=Date.now();
   const id=fbDocId();if(!id)return;
   _fbLastWrite=Date.now();
