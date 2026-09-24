@@ -5690,15 +5690,18 @@ function _xlsxDescargar(nombreArchivo, hoja, filas, cols){
 <fill><patternFill patternType="solid"><fgColor rgb="FFF7D63A"/><bgColor indexed="64"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFEDEDED"/><bgColor indexed="64"/></patternFill></fill>
 </fills>
-<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFAAAAAA"/></left><right style="thin"><color rgb="FFAAAAAA"/></right><top style="thin"><color rgb="FFAAAAAA"/></top><bottom style="thin"><color rgb="FFAAAAAA"/></bottom><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="6">
+<cellXfs count="9">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 <xf numFmtId="0" fontId="3" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
 <xf numFmtId="0" fontId="4" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
 <xf numFmtId="0" fontId="5" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>
+<xf numFmtId="0" fontId="4" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -6105,6 +6108,204 @@ window.exportMedallasPDF=async function(){
     doc.save(_actaNombreArchivo('pdf').replace(/^Acta_/,'Medallas_'));
     showToastLC('✓ Medallas en PDF');
   }catch(e){ console.error('[medallas] pdf',e); showToastLC('No se pudo generar el PDF: '+e.message); }
+};
+
+// ════════════════════════════════════════════════════════════════
+// OVERALL Y PAÍSES
+//
+// Para cada DIVISIÓN + MODALIDAD del sexo elegido, dos tablas:
+//  · Overall: todos los atletas de esa división y modalidad, de todas las
+//    categorías de peso, ordenados por GL Points, del primero al último.
+//  · Países: la clasificación por equipos del Reglamento Técnico IPF.
+//      - En cada categoría de peso: 12, 9, 8, 7, 6, 5, 4, 3 y 2 puntos del 1° al
+//        9°, y 1 punto a cada uno que después haga total.
+//      - Cuentan los CINCO mejores de cada país.
+//      - Empate: más primeros lugares; si sigue, más segundos, y así.
+//    En un campeonato de un solo país la tabla va por club.
+//
+// Se arma con _actaGrupos(), la misma que usan el acta y las medallas, así los
+// lugares por categoría son exactamente los mismos. No lee nada de Firestore:
+// trabaja con los atletas que el livecast ya tiene cargados.
+// ════════════════════════════════════════════════════════════════
+const _OV_PTS=[12,9,8,7,6,5,4,3,2];
+function _ovPuntos(lugar,total){ if(!(total>0)||!lugar)return 0; return lugar<=9?_OV_PTS[lugar-1]:1; }
+function _ovDivOrd(d){ return _ACTA_DIVORD[d]===undefined?9:_ACTA_DIVORD[d]; }
+const _OV_MODORD=['classic','equipped','ob_classic','ob_equipped','oe'];
+window._OV=window._OV||{sexo:'F',divs:null,mods:null};
+// Qué hay para elegir, sacado de los resultados.
+function _ovOpciones(){
+  const divs=new Set(), mods=new Set(), sexos=new Set();
+  _actaGrupos().forEach(g=>{ if(g.mod==='invitado')return; divs.add(g.div); mods.add(g.mod); sexos.add(g.sexo); });
+  return {divs:[...divs].sort((a,b)=>_ovDivOrd(a)-_ovDivOrd(b)),
+          mods:[...mods].sort((a,b)=>_OV_MODORD.indexOf(a)-_OV_MODORD.indexOf(b)),sexos:[...sexos]};
+}
+function _ovDatos(){
+  const o=window._OV;
+  const varios=new Set(_actaAthletes().map(a=>_ctry(a))).size>1;
+  const quien=a=>varios?_ctry(a):(String(a.club||'').trim()||'Sin club');
+  const bloques=new Map();
+  _actaGrupos().forEach(g=>{
+    if(g.mod==='invitado'||g.sexo!==o.sexo)return;
+    if(o.divs&&o.divs.indexOf(g.div)<0)return;
+    if(o.mods&&o.mods.indexOf(g.mod)<0)return;
+    const k=g.div+'|'+g.mod;
+    if(!bloques.has(k))bloques.set(k,{div:g.div,mod:g.mod,view:g.view,filas:[]});
+    g.filas.forEach(f=>bloques.get(k).filas.push({a:f.a,cat:g.cat,total:f.total,gl:f.gl||0,
+      lugarCat:f.lugar,pts:_ovPuntos(f.lugar,f.total),quien:quien(f.a)}));
+  });
+  const out=[...bloques.values()].sort((x,y)=>(_ovDivOrd(x.div)-_ovDivOrd(y.div))
+    ||(_OV_MODORD.indexOf(x.mod)-_OV_MODORD.indexOf(y.mod)));
+  out.forEach(b=>{
+    // Overall: por GL; a igual GL, el más liviano. Los que no hicieron total, al final.
+    b.filas.sort((x,y)=>((y.total>0)-(x.total>0))||(y.gl-x.gl)||((x.a.bw||0)-(y.a.bw||0)));
+    let n=0; b.filas.forEach(f=>{ f.lugar=f.total>0?++n:0; });
+    // Países (reglamento IPF): los 5 que más puntos suman de cada uno.
+    const porQ={};
+    b.filas.forEach(f=>{ (porQ[f.quien]=porQ[f.quien]||[]).push(f); });
+    b.equipos=Object.entries(porQ).map(([q,fs])=>{
+      const cuentan=fs.filter(f=>f.pts>0).sort((x,y)=>(y.pts-x.pts)||(x.lugarCat-y.lugarCat)).slice(0,5);
+      const lugares=Array(10).fill(0);   // cuántos 1°, 2°, … 9°, y del 10° para abajo
+      cuentan.forEach(f=>{ lugares[Math.min(f.lugarCat,10)-1]++; });
+      return {quien:q,cod:varios?q:'',puntos:cuentan.reduce((t,f)=>t+f.pts,0),lugares,
+              suman:cuentan.length,atletas:fs.length};
+    }).sort((x,y)=>(y.puntos-x.puntos)||(()=>{for(let i=0;i<10;i++){const d=y.lugares[i]-x.lugares[i];if(d)return d;}return 0;})()
+      ||x.quien.localeCompare(y.quien));
+    let p=0; b.equipos.forEach(e=>{ e.puesto=e.puntos>0?++p:0; });
+    b.titulo=(_ACTA_MOD_N[b.mod]||b.mod)+'  ·  '+(o.sexo==='F'?'DAMAS':'CABALLEROS')+'  ·  '+b.div;
+  });
+  return {bloques:out,porPais:varios};
+}
+window.ovSet=function(campo,valor){
+  const o=window._OV, op=_ovOpciones();
+  if(campo==='sexo')o.sexo=valor;
+  else{
+    const todos=campo==='divs'?op.divs:op.mods;
+    if(valor==='*')o[campo]=null;
+    else{
+      let sel=o[campo]?o[campo].slice():todos.slice();
+      sel=sel.indexOf(valor)>=0?sel.filter(x=>x!==valor):sel.concat([valor]);
+      o[campo]=(sel.length===todos.length||!sel.length)?null:sel;
+    }
+  }
+  window.mostrarOverall();
+};
+window.mostrarOverall=function(){
+  const op=_ovOpciones();
+  if(!op.divs.length){showToastLC('Todavía no hay resultados');return;}
+  const o=window._OV;
+  if(op.sexos.indexOf(o.sexo)<0)o.sexo=op.sexos[0];
+  const d=_ovDatos();
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const pill=(on,txt,oc)=>'<button onclick="'+oc+'" style="padding:5px 11px;border-radius:999px;border:1px solid '+(on?'var(--gold)':'var(--border)')
+    +';background:'+(on?'rgba(212,168,67,.16)':'transparent')+';color:'+(on?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">'+txt+'</button>';
+  const fila=(lbl,cont)=>'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;min-width:78px">'+lbl+'</span>'+cont+'</div>';
+  let h='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">'
+    +'<div><div class="os" style="font-size:22px;font-weight:700">Overall y países</div>'
+    +'<div style="font-size:12px;color:var(--muted)">GL Points por división y modalidad · clasificación por '+(d.porPais?'país':'club')+' según el reglamento IPF'+esc(_actaSufijoDia())+'</div></div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button class="btn" onclick="exportOverallXLS()" style="background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);font-weight:700">Excel</button>'
+    +'<button class="btn" onclick="exportOverallPDF()" style="background:#fff;border:1px solid #999;color:#111;font-weight:700">PDF</button>'
+    +'<button class="btn" onclick="document.getElementById(\'ovModal\').remove()">Cerrar</button></div></div>';
+  h+=fila('SEXO',op.sexos.slice().sort().map(sx=>pill(o.sexo===sx,sx==='F'?'MUJERES':'HOMBRES',"ovSet('sexo','"+sx+"')")).join(''));
+  h+=fila('DIVISIÓN',pill(!o.divs,'TODAS',"ovSet('divs','*')")+op.divs.map(v=>pill(!!o.divs&&o.divs.indexOf(v)>=0,esc(v).toUpperCase(),"ovSet('divs','"+esc(v)+"')")).join(''));
+  h+=fila('MODALIDAD',pill(!o.mods,'TODAS',"ovSet('mods','*')")+op.mods.map(v=>pill(!!o.mods&&o.mods.indexOf(v)>=0,esc(_ACTA_MOD_N[v]||v),"ovSet('mods','"+v+"')")).join(''));
+  if(!d.bloques.length)h+='<div style="padding:20px;color:var(--muted);text-align:center">No hay resultados con esa selección.</div>';
+  d.bloques.forEach(b=>{
+    h+='<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin:14px 0">'
+      +'<div class="os" style="font-size:14px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:8px">'+esc(b.titulo)+'</div>'
+      +'<div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:14px">';
+    // Overall
+    h+='<div style="overflow-x:auto"><div style="font-size:10px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">OVERALL · GL POINTS</div>'
+      +'<table class="tbl" style="width:100%;font-size:12px"><tr><th>#</th><th style="text-align:left">Atleta</th><th>Cat.</th><th>PC</th><th>Total</th><th>GL</th><th title="Puntos por equipo según su lugar en la categoría">Pts</th></tr>';
+    b.filas.forEach(f=>{
+      h+='<tr><td>'+(f.lugar||'—')+'</td><td style="text-align:left;white-space:nowrap">'+(d.porPais?_flagImg(_ctry(f.a),12,true):'')+esc(f.a.name||'')
+        +(d.porPais?'':' <span style="color:var(--muted);font-size:10px">'+esc(f.quien)+'</span>')+'</td>'
+        +'<td>'+esc(f.cat)+'</td><td>'+(f.a.bw||'—')+'</td><td style="font-weight:700">'+(f.total>0?f.total:'—')+'</td>'
+        +'<td style="color:var(--gold);font-weight:700">'+(f.total>0?(+f.gl).toFixed(2):'—')+'</td><td>'+(f.pts||'')+'</td></tr>';
+    });
+    h+='</table></div>';
+    // Países
+    h+='<div style="overflow-x:auto"><div style="font-size:10px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">'+(d.porPais?'PAÍSES':'CLUBES')+' · PUNTOS IPF</div>'
+      +'<table class="tbl" style="width:100%;font-size:12px"><tr><th>#</th><th style="text-align:left">'+(d.porPais?'País':'Club')+'</th><th>Pts</th><th>1°</th><th>2°</th><th>3°</th><th title="Atletas que suman (máx. 5) / atletas del país">Suman</th></tr>';
+    b.equipos.forEach(e=>{
+      h+='<tr><td>'+(e.puesto||'—')+'</td><td style="text-align:left;white-space:nowrap">'+(e.cod?_flagImg(e.cod,12,true)+esc(_ctryName(e.cod)):esc(e.quien))+'</td>'
+        +'<td style="color:var(--gold);font-weight:800">'+e.puntos+'</td><td>'+e.lugares[0]+'</td><td>'+e.lugares[1]+'</td><td>'+e.lugares[2]+'</td>'
+        +'<td>'+e.suman+'/'+e.atletas+'</td></tr>';
+    });
+    h+='</table></div></div></div>';
+  });
+  h+='<div style="font-size:10px;color:var(--muted);line-height:1.6;margin-top:6px">Puntos por equipo (Reglamento Técnico IPF): 12, 9, 8, 7, 6, 5, 4, 3 y 2 del 1° al 9° de cada categoría de peso; 1 punto a cada atleta que haga total después del 9°. Cuentan los cinco mejores de cada '+(d.porPais?'país':'club')+'. Empate: más primeros lugares, luego más segundos, y así.</div>';
+  let m=document.getElementById('ovModal');
+  const y=m?m.scrollTop:0;
+  if(!m){ m=document.createElement('div'); m.id='ovModal';
+    m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.8);z-index:99999;overflow-y:auto;padding:24px';
+    m.onclick=e=>{if(e.target===m)m.remove();}; document.body.appendChild(m); }
+  m.innerHTML='<div style="max-width:1150px;margin:0 auto;background:var(--card,#0F1D33);border:1px solid var(--border);border-radius:14px;padding:20px">'+h+'</div>';
+  m.scrollTop=y;
+};
+// Filas para Excel/PDF: por cada bloque, su overall y su tabla de países.
+function _ovFilas(){
+  const d=_ovDatos(), filas=[];
+  d.bloques.forEach(b=>{
+    filas.push([{v:b.titulo,s:5}]);
+    filas.push([{v:'OVERALL · GL POINTS',s:1}]);
+    filas.push(['#','Atleta',d.porPais?'País':'Club','Cat.','PC','Total','GL','Pts equipo'].map(v=>({v,s:8})));
+    b.filas.forEach(f=>filas.push([{v:f.lugar||'—',s:6},{v:f.a.name||'',s:6},{v:d.porPais?_ctryName(_ctry(f.a)):f.quien,s:6},{v:f.cat,s:6},
+      {v:f.a.bw||'',s:6},{v:f.total>0?f.total:'—',s:7},{v:f.total>0?+(+f.gl).toFixed(2):'—',s:7},{v:f.pts||'',s:6}]));
+    filas.push([]);
+    filas.push([{v:(d.porPais?'PAÍSES':'CLUBES')+' · PUNTOS IPF',s:1}]);
+    filas.push(['#',d.porPais?'País':'Club','Puntos','1°','2°','3°','Suman','Atletas'].map(v=>({v,s:8})));
+    b.equipos.forEach(e=>filas.push([{v:e.puesto||'—',s:6},{v:e.cod?_ctryName(e.cod):e.quien,s:6},{v:e.puntos,s:7},
+      {v:e.lugares[0],s:6},{v:e.lugares[1],s:6},{v:e.lugares[2],s:6},{v:e.suman,s:6},{v:e.atletas,s:6}]));
+    filas.push([]);filas.push([]);
+  });
+  return {filas,d};
+}
+function _ovNombre(ext){
+  const o=window._OV;
+  return _actaNombreArchivo(ext).replace(/^Acta_/,'Overall_'+(o.sexo==='F'?'Mujeres':'Hombres')+'_');
+}
+window.exportOverallXLS=function(){
+  const {filas,d}=_ovFilas();
+  if(!d.bloques.length){showToastLC('No hay resultados con esa selección');return;}
+  _xlsxDescargar(_ovNombre('xlsx'),'Overall',filas,[8,34,20,10,8,10,10,11]);
+  showToastLC('✓ Overall en Excel');
+};
+// Fondo blanco y cuadrícula gris, igual que el Acta FESUPO.
+const _OV_PDF_EST={styles:{fontSize:7,cellPadding:1.1,textColor:[0,0,0],lineColor:[170,170,170],lineWidth:.15,fillColor:[255,255,255]},
+  head:{fillColor:[235,235,235],textColor:[0,0,0],fontStyle:'bold',halign:'center'}};
+window.exportOverallPDF=async function(){
+  try{
+    const {d}=_ovFilas();
+    if(!d.bloques.length){showToastLC('No hay resultados con esa selección');return;}
+    if(!window.jspdf)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    if(!window.jspdf.jsPDF.API.autoTable)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    const T=x=>_stripAccentsForPdf(String(x==null?'':x));
+    const doc=new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const PW=doc.internal.pageSize.getWidth();
+    doc.setFont('helvetica','bold');doc.setFontSize(13);
+    doc.text(T('OVERALL Y '+(d.porPais?'PAISES':'CLUBES')+' - '+(window._OV.sexo==='F'?'MUJERES':'HOMBRES')+_actaSufijoDia()),PW/2,14,{align:'center'});
+    doc.setFont('helvetica','normal');doc.setFontSize(9);
+    doc.text(T((DATA.event&&DATA.event.name)||''),PW/2,20,{align:'center'});
+    doc.setTextColor(0);
+    let y=26;
+    d.bloques.forEach((b,i)=>{
+      if(i>0&&y>235){doc.addPage();y=14;}
+      doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text(T(b.titulo),8,y);y+=2;
+      doc.autoTable({startY:y,margin:{left:8,right:8},theme:'grid',styles:_OV_PDF_EST.styles,headStyles:_OV_PDF_EST.head,bodyStyles:{fillColor:[255,255,255]},alternateRowStyles:{fillColor:[248,248,248]},
+        head:[['#','Atleta',d.porPais?'Pais':'Club','Cat.','PC','Total','GL','Pts']],
+        body:b.filas.map(f=>[f.lugar||'-',T(f.a.name),T(d.porPais?_ctry(f.a):f.quien),T(f.cat),f.a.bw||'',f.total>0?f.total:'-',f.total>0?(+f.gl).toFixed(2):'-',f.pts||''])});
+      y=doc.lastAutoTable.finalY+3;
+      doc.autoTable({startY:y,margin:{left:8,right:PW/2},theme:'grid',styles:_OV_PDF_EST.styles,headStyles:_OV_PDF_EST.head,bodyStyles:{fillColor:[255,255,255]},alternateRowStyles:{fillColor:[248,248,248]},
+        head:[['#',d.porPais?'Pais':'Club','Pts','1ro','2do','3ro','Suman']],
+        body:b.equipos.map(e=>[e.puesto||'-',T(e.cod?_ctryName(e.cod):e.quien),e.puntos,e.lugares[0],e.lugares[1],e.lugares[2],e.suman+'/'+e.atletas])});
+      y=doc.lastAutoTable.finalY+9;
+    });
+    doc.setFontSize(6.5);doc.setTextColor(110);
+    doc.text(T('Puntos por equipo (Reglamento Tecnico IPF): 12-9-8-7-6-5-4-3-2 del 1 al 9 de cada categoria; 1 punto a cada atleta con total despues del 9. Cuentan los 5 mejores. Empate: mas primeros lugares, luego segundos, etc.'),8,Math.min(y,288),{maxWidth:PW-16});
+    doc.save(_ovNombre('pdf'));
+    showToastLC('✓ Overall en PDF');
+  }catch(e){ console.error('[overall] pdf',e); showToastLC('No se pudo generar el PDF: '+e.message); }
 };
 
 // ── PDF blanco ────────────────────────────────────────────────────
@@ -13113,7 +13314,10 @@ function renderResults(){
       +'<button id="btnActaXls" class="btn" onclick="exportActaFesupoXLS()" style="background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);font-weight:700" title="La misma acta en Excel, con los récords marcados">Excel</button>'
       // Quiénes suben al podio en cada categoría, contando los cuatro premios:
       // total, sentadilla, banca y peso muerto.
-      +'<button id="btnMedallas" class="btn" onclick="mostrarMedallas()" style="background:rgba(212,168,67,.15);border:1px solid var(--gold);color:var(--gold);font-weight:700" title="Podios de todas las categorías (total, sentadilla, banca y peso muerto), cuántas medallas hay que entregar y el medallero por país o club">Medallas</button>';
+      +'<button id="btnMedallas" class="btn" onclick="mostrarMedallas()" style="background:rgba(212,168,67,.15);border:1px solid var(--gold);color:var(--gold);font-weight:700" title="Podios de todas las categorías (total, sentadilla, banca y peso muerto), cuántas medallas hay que entregar y el medallero por país o club">Medallas</button>'
+      // Ranking por GL de cada división y modalidad, y la clasificación de países
+      // con los puntos del reglamento IPF.
+      +'<button id="btnOverall" class="btn" onclick="mostrarOverall()" style="background:rgba(96,165,250,.12);border:1px solid #60a5fa;color:#60a5fa;font-weight:700" title="Overall por GL Points de cada división y modalidad, y la clasificación de países según el reglamento IPF">Overall y países</button>';
   }
   // ── Actas por día ─────────────────────────────────────────────────────────
   // En un campeonato de dos días la premiación es al final de cada uno, así que
