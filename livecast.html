@@ -15394,7 +15394,9 @@ function renderLiveView(){
   // todos, que es lo que se veía en la pantalla del público.
   const _tieneExtra=(a,l)=>{const x=(a.att[l]||[])[3];return !!(x&&(x.w>0||x.r));};
   const maxAtts={};['sq','bp','dl'].forEach(l=>{maxAtts[l]=_liveReal.some(a=>_tieneExtra(a,l))?4:3;});
-  const totalCols=2+(maxAtts.sq+1)+(maxAtts.bp+1)+(maxAtts.dl+1)+1+1; // +1 = columna POSICIÓN
+  // Peso muerto sin columna de subtotal: al final van los tres totales (actual,
+  // proyectado y final). +1 GL, +1 POSICIÓN.
+  const totalCols=2+(maxAtts.sq+1)+(maxAtts.bp+1)+maxAtts.dl+3+1+1;
 
   // Los récords de las categorías que están en la tanda, con los que ya se
   // batieron hoy marcados. Es el mismo panel del Control en Vivo, abierto: se
@@ -15424,8 +15426,9 @@ function renderLiveView(){
   ['sq','bp','dl'].forEach(l=>{
     const isCur = l===DATA.lift;
     const c = LIFT_C[l];
-    h += '<th colspan="'+(maxAtts[l]+1)+'" style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:12px;letter-spacing:2px;color:'+c+';border-right:1px solid var(--border);background:'+(isCur?c+'18':'transparent')+'">'+LIFT_N[l]+(isCur?' ▶':'')+'</th>';
+    h += '<th colspan="'+(maxAtts[l]+(l==='dl'?0:1))+'" style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:12px;letter-spacing:2px;color:'+c+';border-right:1px solid var(--border);background:'+(isCur?c+'18':'transparent')+'">'+LIFT_N[l]+(isCur?' ▶':'')+'</th>';
   });
+  h += '<th colspan="3" style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);border-right:1px solid var(--border)">TOTALES</th>';
   h += '<th style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:10px;color:var(--gold)">GLP</th>';
   h += '</tr>';
 
@@ -15440,9 +15443,14 @@ function renderLiveView(){
       const is4=r===4;
       h += '<th style="padding:5px 2px;text-align:center;color:'+(is4?'#60a5fa':LIFT_C[l])+';font-size:9px;width:56px;background:'+bg+'"'+(is4?' title="Intento extra / 4º"':'')+'>'+(is4?'EXTRA':'INT '+r)+'</th>';
     }
-    const subLabel = l==='dl'?'TOTAL':'SUB-TOTAL';
-    h += '<th style="padding:5px 3px;text-align:center;color:var(--gold);font-size:8px;width:54px;border-right:1px solid var(--border)">'+subLabel+'</th>';
+    if(l!=='dl')h += '<th style="padding:5px 3px;text-align:center;color:var(--gold);font-size:8px;width:54px;border-right:1px solid var(--border)">SUB-TOTAL</th>';
   });
+  // Los tres totales. Actual: lo válido hasta ahora, aunque falten movimientos.
+  // Proyectado: lo válido más los intentos declarados que todavía no tienen
+  // decisión. Final: el total de verdad, cuando ya hay válidos en los tres.
+  h += '<th style="padding:5px 3px;text-align:center;color:#e5e7eb;font-size:8px;width:54px" title="Suma de lo válido hasta ahora">ACTUAL</th>';
+  h += '<th style="padding:5px 3px;text-align:center;color:#f59e0b;font-size:8px;width:54px" title="Lo válido más los intentos declarados que todavía no tienen decisión">PROYECT.</th>';
+  h += '<th style="padding:5px 3px;text-align:center;color:var(--gold);font-size:8px;width:54px;border-right:1px solid var(--border)" title="Total oficial: válidos en los tres movimientos">FINAL</th>';
   h += '<th style="padding:5px 4px;text-align:center;color:var(--gold);font-size:9px;width:52px">GL PTS</th>';
   h += '<th style="padding:5px 4px;text-align:center;color:#60a5fa;font-size:9px;width:74px" title="Posición actual → posición si el intento es válido">POSICIÓN</th>';
   h += '</tr></thead><tbody>';
@@ -15557,12 +15565,25 @@ function renderLiveView(){
       const bSQ=bestOf(ra,'sq')||0, bBP=bestOf(ra,'bp')||0, bDL=bestOf(ra,'dl')||0;
       if(l==='sq')      sub = bSQ||null;
       else if(l==='bp') sub = (bSQ||bBP) ? (bSQ+bBP)||null : null;
-      else              sub = (bSQ&&bBP&&bDL) ? bSQ+bBP+bDL : null;
-      const subColor = l==='dl'?'var(--gold)':'var(--muted)';
+      else              return;               // el peso muerto no lleva subtotal: van los tres totales
       h += '<td style="text-align:center;padding:3px;border-right:1px solid var(--border)">';
-      h += '<span style="font-family:Oswald;font-size:'+(sub?13:10)+'px;font-weight:700;color:'+(sub?(l==='dl'?'var(--gold)':'#ccc'):'rgba(100,120,150,.5)')+';">'+(sub||'—')+'</span>';
+      h += '<span style="font-family:Oswald;font-size:'+(sub?13:10)+'px;font-weight:700;color:'+(sub?'#ccc':'rgba(100,120,150,.5)')+';">'+(sub||'—')+'</span>';
       h += '</td>';
     });
+
+    // Los tres totales
+    {
+      const bSQ=bestOf(ra,'sq')||0, bBP=bestOf(ra,'bp')||0, bDL=bestOf(ra,'dl')||0;
+      const actual=bSQ+bBP+bDL;
+      const dq=isDQ(ra);
+      const proy=dq?0:(_proyLift(ra,'sq')||0)+(_proyLift(ra,'bp')||0)+(_proyLift(ra,'dl')||0);
+      const fin=(bSQ&&bBP&&bDL)?actual:0;
+      const celda=(v,col,grande,borde)=>'<td style="text-align:center;padding:3px;'+(borde?'border-right:1px solid var(--border)':'')+'">'
+        +'<span style="font-family:Oswald;font-size:'+(v?(grande?14:13):10)+'px;font-weight:700;color:'+(v?col:'rgba(100,120,150,.5)')+'">'+(v?(Math.round(v*10)/10):'—')+'</span></td>';
+      h += celda(actual,'#e5e7eb',false,false);
+      h += celda(proy,'#f59e0b',false,false);
+      h += celda(fin,'var(--gold)',true,true);
+    }
 
     // GLP
     const tot = totalOf(ra);
