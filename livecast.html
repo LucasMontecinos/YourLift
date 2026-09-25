@@ -1787,7 +1787,10 @@ const _MERGE_HOLD_MS = 4000;
 // hecha desde una pantalla se perdía sola: el merge partía del remoto y esos
 // campos no estaban en la lista, así que el primer snapshot los devolvía.
 const _MERGE_META_FIELDS=['bw','rackSQ','rackBP','sqAbat','bpSeg','bpPalm','mod','country',
-  'flight','lot','bombed','weighedIn','jornada','name','div','cat','sex','club','uni'];
+  'flight','lot','bombed','weighedIn','jornada','name','div','cat','sex','club','uni',
+  // Las banderas de las modalidades combinadas: sin ellas, cambiar a "Classic +
+  // Only Bench" o "Classic + Universitario" desde el pesaje no llegaba al resto.
+  'plusBench','plusUni'];
 // Ediciones locales todavía NO confirmadas en Firebase. A diferencia de
 // _recentAtt (ventana de 4s para el merge de LECTURA), estas se conservan hasta
 // que una escritura sale bien: así, con varios PCs operando, una edición mía
@@ -3157,6 +3160,7 @@ function openAddAthlete(){
       <label style="${lbl}">MODALIDAD<select id="aa_mod" style="${inp}">
         <option value="classic">Classic (Raw)</option><option value="equipped">Equipado</option>
         <option value="oe_classic">Olimpiadas Especiales (OE)</option><option value="universitario">Universitario</option>
+        <option value="classic_uni">Classic + Universitario</option>
         <option value="onlybench">Only Bench</option><option value="classic_bench">Classic + Only Bench</option>
         <option value="equipped_bench">Equipado + Only Bench</option></select></label>
       <label style="${lbl}">CLUB / EQUIPO<input id="aa_club" type="text" placeholder="Club" style="${inp}"></label>
@@ -3186,6 +3190,7 @@ function confirmAddAthlete(){
     bw:0, flight:g('aa_flight').value, rackSQ:'', rackBP:'', bombed:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],dl:[{w:0,r:null},{w:0,r:null},{w:0,r:null}]}
   });
+  _aplicarModalidad(DATA.athletes[DATA.athletes.length-1],g('aa_mod').value);
   saveNow();
   document.getElementById('addAthModal').remove();
   showToastLC('✓ '+name+' agregado · '+_ctryName(country));
@@ -3423,10 +3428,11 @@ function openWeighIn(id){
       <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)">
         EQUIPO / MODALIDAD
         <select id="wi_mod" style="padding:9px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:13px">
-          <option value="classic" ${a.mod==='classic'?'selected':''}>Classic (Raw)</option>
+          <option value="classic" ${a.mod==='classic'&&!_isPlusUni(a)&&!/univ/i.test(a.div||'')?'selected':''}>Classic (Raw)</option>
+          <option value="classic_uni" ${_isPlusUni(a)?'selected':''}>Classic + Universitario</option>
           <option value="equipped" ${a.mod==='equipped'?'selected':''}>Equipado</option>
           <option value="oe_classic" ${a.mod==='oe_classic'?'selected':''}>Olimpiadas Especiales (OE)</option>
-          <option value="universitario" ${a.mod==='universitario'?'selected':''}>Universitario</option>
+          <option value="universitario" ${a.mod==='universitario'||(a.mod==='classic'&&/univ/i.test(a.div||''))?'selected':''}>Universitario</option>
           <option value="onlybench" ${a.mod==='onlybench'?'selected':''}>Only Bench</option>
           <option value="classic_bench" ${a.mod==='classic_bench'?'selected':''}>Classic + Only Bench</option>
           <option value="equipped_bench" ${a.mod==='equipped_bench'?'selected':''}>Equipado + Only Bench</option>
@@ -3591,7 +3597,8 @@ function confirmWeighIn(id,catKg,limit){
   }
   // Save
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  a.bw=bw;a.rackSQ=rSQ;a.rackBP=rBP;a.sqAbat=sqAbat;a.bpSeg=bpSeg;a.bpPalm=bpPalm;a.mod=mod;a.country=country;
+  a.bw=bw;a.rackSQ=rSQ;a.rackBP=rBP;a.sqAbat=sqAbat;a.bpSeg=bpSeg;a.bpPalm=bpPalm;a.country=country;
+  _aplicarModalidad(a,mod);
   _markAtt(id,'meta');
   a.weighedIn=true;
   // Guardar primeros intentos (apertura) si vinieron en el modal.
@@ -5864,7 +5871,7 @@ window.setActaDia=function(d){
 // Los atletas que entran al acta.
 function _actaAthletes(){
   const d=window._ACTA_DIA||'';
-  return DATA.athletes.filter(a=>!a.__is4&&(!d||_diaDeAtleta(a)===d));
+  return _conUni(DATA.athletes.filter(a=>!a.__is4&&(!d||_diaDeAtleta(a)===d)));
 }
 // Para el título y el nombre del archivo.
 function _actaSufijoDia(){ return window._ACTA_DIA?(' · '+window._ACTA_DIA.toUpperCase()):''; }
@@ -7088,7 +7095,7 @@ function exportJSON(){const r=rankings();const blob=new Blob([JSON.stringify(r.m
 // mirar el país, así que cerrar un internacional (el Sudamericano) metía a los
 // extranjeros en el ranking de Chile. Un atleta sin país cargado cuenta como
 // chileno (_ctry devuelve CHI), que es lo que son en un campeonato nacional.
-function _cierreAtletas(){ return (DATA.athletes||[]).filter(a=>_ctry(a)==='CHI'); }
+function _cierreAtletas(){ return _conUni((DATA.athletes||[]).filter(a=>!a.__is4&&_ctry(a)==='CHI')); }
 // La ficha del atleta en la base (data.json), para publicar el resultado con su
 // código y su RUT. La nómina del Sudamericano viene de FESUPO sin RUT ni código:
 // sin esto el perfil se busca por nombre exacto, y si la base lo tiene escrito
@@ -7191,6 +7198,11 @@ async function cerrarCompetencia(evId, evName){
       if(isOE) modLabel = 'Powerlifting Classic Special Olympics';
       else if(view==='bench') modLabel = isEq ? 'Only Bench Equipado' : 'Only Bench Classic';
       else modLabel = isEq ? 'Powerlifting Equipado' : 'Powerlifting Classic';
+      // Universitario va como modalidad propia: el perfil junta por evento +
+      // modalidad, y con el mismo rótulo el resultado de su división de edad y el
+      // universitario se pisaban (quedaba uno solo).
+      const esUni=/univ/i.test(String(a.div||''));
+      if(esUni&&view==='meet'&&!isOE) modLabel = 'Powerlifting Classic Universitario';
 
       // Código y RUT: los del atleta, o los de su ficha en la base si no los trae.
       const ficha = (a.codigo&&a.rut) ? null : _cierreFicha(a);
@@ -7198,7 +7210,7 @@ async function cerrarCompetencia(evId, evName){
       const rut = a.rut || (ficha&&ficha.rut) || '';
       // Doc ID determinístico: {eventoId}_{codigo o rut}_{view}
       const codeKey = (codigo || rut || a.id || 'unknown').toString().replace(/[^a-zA-Z0-9_-]/g,'_');
-      const docId = `${evId}_${codeKey}_${view}`;
+      const docId = `${evId}_${codeKey}_${view}${esUni?'_uni':''}`;
 
       const payload = {
         evento: evName,
@@ -9649,7 +9661,7 @@ function renderTxJornada(){
   // Determinar qué tandas mostrar: las seleccionadas, o la actual si no hay set.
   let flights=window._JORNADA_FLIGHTS;
   if(!flights||!flights.length) flights=[DATA.flight];
-  const pool=DATA.athletes.filter(a=>flights.includes(a.flight)&&!a.bombed);
+  const pool=_conUni(DATA.athletes.filter(a=>flights.includes(a.flight)&&!a.bombed&&!a.__is4));
   if(!pool.length) return '<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;color:rgba(220,230,245,.6);font-size:24px;letter-spacing:3px">SIN ATLETAS EN LAS TANDAS SELECCIONADAS</div>';
   // Agrupar por categoría (sexo|cat|div)
   const groups={};
@@ -13057,6 +13069,40 @@ window.toggleCtAutoScroll=function(){
 // La bandera la pone la conversión cuando la modalidad trae "+" (PL + Only Bench).
 // Antes se deducía del mod, pero 'equipped_bench' también le toca al Only Bench
 // Equipado PURO, así que a esos les salía una fila espejo que no correspondía.
+// Lo que elige el selector de modalidad (pesaje y alta de atleta), traducido a
+// los campos de verdad. Así un cambio de modalidad deja al atleta exactamente
+// como si se hubiera inscrito así: en sus tablas, sus chips, su acta y su ranking.
+//   classic_uni   → classic + plusUni, en su división de edad
+//   universitario → classic en la división Universitario (solo universitario)
+//   classic_bench / equipped_bench → combinado con Only Bench (plusBench)
+// Salir de Universitario devuelve al atleta a su división de edad.
+function _aplicarModalidad(a,v){
+  const divEdad=()=>_divPorEdad(a)||'Open';
+  const eraUni=/univ/i.test(String(a.div||''));
+  if(v==='classic_uni'){ a.mod='classic'; a.plusUni=true; a.plusBench=false; if(eraUni)a.div=divEdad(); }
+  else if(v==='universitario'){ a.mod='classic'; a.plusUni=false; a.plusBench=false; a.div='Universitario'; }
+  else{
+    a.mod=v; a.plusUni=false;
+    a.plusBench=(v==='classic_bench'||v==='equipped_bench');
+    if(eraUni&&v!=='invitado')a.div=divEdad();
+  }
+}
+// CLASSIC + UNIVERSITARIO: un solo atleta, que levanta una vez, y compite en dos
+// clasificaciones: classic en su división de edad y Universitario. Es el mismo
+// modelo que PL+BP. Antes se cargaba dos veces —una fila por división, con los
+// mismos intentos— y había que llevar las dos a mano.
+function _isPlusUni(a){ return !!(a&&a.plusUni&&!/univ/i.test(String(a.div||''))); }
+// Para armar tablas: cada atleta Classic + Universitario aparece además como
+// Universitario. Es una vista: comparte los intentos con el atleta real (no se
+// copian) y no entra a DATA.athletes, así que la tarima lo llama una sola vez.
+function _conUni(list){
+  const out=[];
+  (list||[]).forEach(a=>{
+    out.push(a);
+    if(_isPlusUni(a))out.push(Object.assign({},a,{div:'Universitario',plusUni:false,id:'U'+a.id,__uniDe:a.id}));
+  });
+  return out;
+}
 function _isPlusBench(a){
   if(a&&a.plusBench!==undefined)return !!a.plusBench;
   const m=String(a&&a.mod||'');return m==='classic_bench'||m==='equipped_bench';   // estado viejo
@@ -13090,6 +13136,8 @@ function _nomLineMod(a){
   const linea=(mod==='equipped'||mod==='equipped_bench')?'EQUIPADO':'CLASSIC';
   // 'equipped_bench' le toca al combinado equipado Y al Only Bench Equipado puro,
   // así que quién compite en las dos lo dice la bandera, no el código.
+  if(_isPlusBench(a)&&_isPlusUni(a))return [linea,'PL+BP+UNI'];
+  if(_isPlusUni(a))return [linea,'PL+UNI'];
   if(_isPlusBench(a))return [linea,'PL+BP'];
   if(mod==='onlybench'||mod==='oe_bench'||mod==='equipped_bench')return [linea,'ONLY BENCH'];
   return [linea,'PL'];                                       // classic, equipped y oe_classic
@@ -13469,7 +13517,8 @@ function renderCompete(){
       const rsc=window._CT_CELL_SCALE||1;
       // Fila principal (1º/2º/3º). Marca de auto-scroll cuando es el actual (en intento normal).
       h+='<tr '+(hiMain?'id="ctCurrentLifter" ':'')+'style="border-bottom:1px solid rgba(30,58,95,.18);'+(hiMain?'background:linear-gradient(90deg,'+LIFT_C[DATA.lift]+'30,'+LIFT_C[DATA.lift]+'10);box-shadow:inset 3px 0 0 '+LIFT_C[DATA.lift]+';':'')+'">';
-      h+='<td style="text-align:center;padding:6px 4px"><span class="os" style="color:'+(hiMain?'#fff':'var(--muted)')+';font-weight:700;font-size:'+Math.round(12*rsc)+'px">'+(a.lot||'·')+'</span></td>';
+      // El lote en blanco y 50% más grande, igual que en la vista del público.
+      h+='<td style="text-align:center;padding:6px 4px"><span class="os" style="color:#fff;font-weight:700;font-size:'+Math.round(18*rsc)+'px">'+(a.lot||'·')+'</span></td>';
       if(_ctLinea){
         h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="display:flex;align-items:center;gap:7px;white-space:nowrap">'
           +(hiMain?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px;flex-shrink:0">▶</span>':'')
@@ -13769,7 +13818,7 @@ function renderResults(){
   // Todas las tandas, no solo la que está en tarima. Una categoría se reparte entre
   // varias tandas, así que filtrando por la tanda nunca se veía cómo va la categoría
   // completa — que es justamente lo que se viene a mirar acá.
-  const flightAth=DATA.athletes.filter(a=>!a.__is4);
+  const flightAth=_conUni(DATA.athletes.filter(a=>!a.__is4));
   // Filtros de la vista. Género, categoría y división son justo las tres cosas por
   // las que ya se agrupa la tabla, así que filtrar saca GRUPOS ENTEROS: la posición
   // de los que quedan no se mueve ni un lugar. La modalidad elige qué tabla se
