@@ -7127,6 +7127,18 @@ async function cerrarCompetencia(evId, evName){
   const today = new Date().toISOString().slice(0,10);
   const ath = _cierreAtletas();
 
+  // Puesto de cada uno en el CAMPEONATO, contra todos los países: el acta lo
+  // calcula así (modalidad + sexo + división + categoría, desempate por peso
+  // corporal). Se sube con el resultado porque el perfil, si no lo trae, lo saca
+  // comparando solo lo publicado — y como se publican solo los chilenos, un
+  // segundo detrás de un extranjero aparecía primero (Martín Gamboa, Sub-Junior -83).
+  const _lugares={};
+  { const diaAntes=window._ACTA_DIA; window._ACTA_DIA='';     // el campeonato entero, no el día elegido
+    try{
+      _actaGrupos().forEach(gr=>{ if(gr.mod==='invitado')return;
+        gr.filas.forEach(f=>{ if(f.lugar>0)_lugares[f.a.id+'|'+(gr.view==='bench'?'bench':'meet')]=f.lugar; }); });
+    }finally{ window._ACTA_DIA=diaAntes; } }
+
   // Toast de progreso
   showToastLC('Publicando resultados...');
   let written = 0;
@@ -7188,6 +7200,7 @@ async function cerrarCompetencia(evId, evName){
         published_at: fb.serverTimestamp(),
         source: 'yourlift_livecast'
       };
+      if(_lugares[a.id+'|'+view])payload.posicion=_lugares[a.id+'|'+view];
       try{
         await fb.setDoc(fb.doc(fbDB, 'competition_results', docId), payload);
         written++;
