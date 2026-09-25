@@ -2449,12 +2449,38 @@ function _srClaseExiste(sx,eq,dv,cat){
 }
 // Divisiones contra las que se mide este atleta: la suya y el Open — descartando
 // aquellas en las que su categoría no se compite.
+// La división que le corresponde por EDAD, sacada del año de nacimiento con la
+// regla de yl-divisiones.js (se cuenta por año calendario): 14-18 Sub-Junior,
+// 19-23 Junior, 40 Master I, 50 Master II, 60 Master III, 70 Master IV. Entre 24
+// y 39 no hay división de edad: es Open. '' si no se sabe.
+//
+// Sirve para los récords: un atleta en edad Junior que se inscribe en Open
+// compite en Open, pero la marca que hace también es suya como Junior, y si
+// supera ese récord, lo rompe. Pasó con Cedeno Diego (2007) en el Sudamericano.
+function _divPorEdad(a){
+  const m=String((a&&(a.born||a.anioNac))||'').match(/(19|20)\d{2}/);
+  const nac=m?parseInt(m[0],10):0;
+  if(!nac)return '';
+  const ref=parseInt(String((DATA.event&&DATA.event.date)||'').slice(0,4),10)||new Date().getFullYear();
+  const e=ref-nac;
+  if(e<14||e>100)return '';
+  if(e<=18)return 'Sub-Junior';
+  if(e<=23)return 'Junior';
+  if(e<40)return '';
+  if(e<50)return 'Master I';
+  if(e<60)return 'Master II';
+  if(e<70)return 'Master III';
+  return 'Master IV';
+}
 function _srDivs(a){
   const d=_normDiv(String(a&&a.div||''));
   const ok=['Sub-Junior','Junior','Open','Master I','Master II','Master III','Master IV'];
   const out=[];
   if(ok.indexOf(d)>=0)out.push(d);
   if(out.indexOf('Open')<0)out.push('Open');
+  // Y la de su edad, si es otra (un Junior inscrito en Open).
+  const de=_divPorEdad(a);
+  if(de&&out.indexOf(de)<0)out.push(de);
   const eq=_srEquip(a), cat=_srCat(a), sx=_srSexo(a);
   if(!eq||!cat)return out;
   const hay=out.filter(dv=>_srClaseExiste(sx,eq,dv,cat));
@@ -7096,6 +7122,8 @@ function _rnDetectar(tabla){
     const sx=_srSexo(a)==='F'?'Mujer':'Hombre';
     const divPropia=tipo==='universitario'?'Universitario':_normDiv(a.div||'');
     const divs=tipo==='universitario'?['Universitario']:[divPropia].concat(divPropia==='Open'?[]:['Open']);
+    // La división de su edad también: un Junior inscrito en Open rompe el Junior.
+    { const de=_divPorEdad(a); if(tipo!=='universitario'&&de&&divs.indexOf(de)<0)divs.push(de); }
     const marcas={sq:bestOf(a,'sq'),bp:bestOf(a,'bp'),dl:bestOf(a,'dl'),total:totalOf(a,'meet')};
     Object.keys(marcas).forEach(l=>{
       const w=+marcas[l]||0; if(w<=0)return;
