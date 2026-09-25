@@ -8990,9 +8990,14 @@ function renderTxProfile(cur){
   const pbLabel={sq:'MEJOR MARCA SENTADILLA',bp:'MEJOR MARCA PRESS BANCA',dl:'MEJOR MARCA PESO MUERTO'}[liftKey]||'MEJOR MARCA';
   const clubLogoHtml=(window.clubLogoImg?window.clubLogoImg(club,52,'background:rgba(10,22,40,.6);padding:3px;margin-right:18px;vertical-align:middle;'):'');
   const clubCell=clubLogoHtml?('<span style="display:inline-flex;align-items:center;gap:0;justify-content:flex-end">'+clubLogoHtml+'<span>'+(club||'—')+'</span></span>'):(club||'—');
+  // En un internacional lo que se muestra es el PAÍS (con su bandera), no el club:
+  // en la nómina de FESUPO el "club" es el país escrito a mano, y la fila decía
+  // "CLUB · Ecuador". En un nacional sigue el club con su logo.
   const rows=[
     ['CATEGORÍA',cat+' '+divS],
-    ['CLUB',clubCell],
+    _variosPaises()
+      ?['PAÍS','<span style="display:inline-flex;align-items:center;justify-content:flex-end">'+_flagImg(_ctry(cur),34,true)+'<span>'+_ctryName(_ctry(cur))+'</span></span>']
+      :['CLUB',clubCell],
   ];
   if(age!==null)rows.push(['EDAD',age+'']);
   if(years!==null)rows.push(['AÑOS COMPITIENDO',years+'']);
