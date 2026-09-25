@@ -7588,7 +7588,15 @@ function txPB(full,lift){
   full.competencias.forEach(c=>{const v=+((c.resultado==null?void 0:c.resultado[key])||0);if(v>best)best=v});
   return best||null;
 }
-function txDivShort(div){return(div||'').replace('Sub Junior','SJR').replace('Sub-Junior','SJR').replace('Subjunior','SJR').replace('Junior','JR').replace('Open','OPN').replace('Master I','M1').replace('Master II','M2').replace('Master III','M3').replace('Master IV','M4')}
+// Sigla de la división. Los Master se resuelven del más largo al más corto: antes
+// se reemplazaba "Master I" primero, y "Master II" quedaba "M1I" y "Master III"
+// "M1II" en la planilla, la tarima y la transmisión.
+function txDivShort(div){
+  return String(div||'')
+    .replace(/Master\s*(IV|4)\b/i,'M4').replace(/Master\s*(III|3)\b/i,'M3')
+    .replace(/Master\s*(II|2)\b/i,'M2').replace(/Master\s*(I|1)\b/i,'M1')
+    .replace(/Sub[\s-]?Junior/i,'SJR').replace(/Junior/i,'JR').replace(/Open/i,'OPN');
+}
 function txCatNum(cat){const m=(cat||'').match(/([+\-]?\d+\.?\d*)/);return m?m[1]:''}
 // Etiqueta de categoría con el signo CORRECTO: '-120kg' para el límite, '+120kg'
 // para superpesados (acepta '+120 kg', '120+ kg' o '-120 kg' como entrada).
@@ -14343,7 +14351,7 @@ function txMarcadorIPF(cur,evName){
     const simRanked=sameCat.map(a=>{if(a.id===cur.id)return{id:a.id,sub:newSub};return{id:a.id,sub:subTotal(a,DATA.lift)}}).filter(x=>x.sub>0).sort((a,b)=>b.sub-a.sub);
     simPos=simRanked.findIndex(x=>x.id===cur.id)+1;}
   const parts=cur.name.split(' ');const lastName=parts.length>2?parts.slice(-2).join(' '):parts[parts.length-1];const firstName=parts.length>2?parts.slice(0,-2).join(' '):parts.slice(0,-1).join(' ');
-  const divShort=(cur.div||'').replace('Sub Junior','SJR').replace('Junior','JR').replace('Open','OPN').replace('Master I','M1').replace('Master II','M2').replace('Master III','M3').replace('Master IV','M4');
+  const divShort=txDivShort(cur.div);
   const catDiv=(cur.cat?'-'+cur.cat+'kg ':'')+divShort;
   const rankStr=rk.pos?(simPos&&simPos!==rk.pos?rk.pos+' to '+simPos:'to '+rk.pos):'-';
   let h='<div style="max-width:100%">';
@@ -14377,7 +14385,7 @@ function txLeaderboardCompact(cur,evName){
   const ranked=sameCat.map(a=>({...a,total:totalOf(a),fTotal:forecastTotal(a),fPlace:0}));
   ranked.sort((a,b)=>b.fTotal-a.fTotal);
   ranked.forEach((a,i)=>a.fPlace=i+1);
-  const divShort=(cur.div||'').replace('Sub Junior','SJR').replace('Junior','JR').replace('Open','OPN').replace('Master I','M1').replace('Master II','M2');
+  const divShort=txDivShort(cur.div);
   let h='<div style="background:linear-gradient(135deg,rgba(20,35,62,.96),rgba(26,42,72,.96));border:1px solid rgba(60,90,140,.3);border-radius:10px;overflow:hidden">';
   h+='<div style="padding:8px 14px;background:rgba(25,42,72,.96);border-bottom:1px solid rgba(60,90,140,.3);display:flex;justify-content:space-between;align-items:center">';
   h+='<div><div style="font-family:Oswald;font-size:9px;color:rgba(160,180,210,.5);letter-spacing:1px">LEADERBOARD</div><div style="font-family:Oswald;font-size:13px;color:#fff;letter-spacing:1px">'+divShort+' • '+cur.cat+'</div></div></div>';
@@ -14457,7 +14465,7 @@ function txMarcador(cur,evName){
   const parts=cur.name.split(' ');
   const lastName=parts.length>2?parts.slice(-2).join(' '):parts[parts.length-1];
   const firstName=parts.length>2?parts.slice(0,-2).join(' '):parts.slice(0,-1).join(' ');
-  const divShort=(cur.div||'').replace('Sub Junior','SJR').replace('Junior','JR').replace('Open','OPN').replace('Master I','M1').replace('Master II','M2').replace('Master III','M3').replace('Master IV','M4');
+  const divShort=txDivShort(cur.div);
   const catDiv=(cur.cat?'-'+cur.cat+'kg ':'')+divShort;
   h+='<div style="margin:0 30px 50px;max-width:760px">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 18px;background:linear-gradient(90deg,rgba(30,50,85,.94),rgba(35,55,95,.94));border-radius:7px 7px 0 0;border-bottom:1px solid rgba(80,120,180,.25)">';
@@ -14494,7 +14502,7 @@ function txLeaderboard(cur,evName){
   });
   ranked.sort((a,b)=>b.fTotal-a.fTotal);
   ranked.forEach((a,i)=>a.fPlace=i+1);
-  const divShort=(cur.div||'').replace('Sub Junior','SJR').replace('Junior','JR').replace('Open','OPN').replace('Master I','M1').replace('Master II','M2');
+  const divShort=txDivShort(cur.div);
   h+='<div style="margin:60px 30px 40px;max-width:700px;width:100%">';
   h+='<div style="padding:10px 18px;background:linear-gradient(90deg,rgba(25,42,72,.96),rgba(30,48,82,.96));border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center">';
   h+='<div><div style="font-family:Oswald;font-size:11px;color:rgba(160,180,210,.5);letter-spacing:1px">LEADERBOARD</div><div style="font-family:Oswald;font-size:16px;color:#fff;letter-spacing:1px">'+((cur.sex==='Femenino'||cur.sex==='Mujer'||cur.sex==='F')?'WOMEN\'S':'MEN\'S')+' '+divShort+' • '+cur.cat+'</div></div>';

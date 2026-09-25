@@ -2083,7 +2083,13 @@ window.exportOPL=function(eventoId){
     const catKg=parseFloat((i.categoria||'').replace(/[^0-9.+]/g,''))||'';
     let age='';
     if(i.fechaNac){try{const b=new Date(i.fechaNac);age=Math.floor((new Date()-b)/365.25/86400000);}catch(e){}}
-    const div=(i.division||'Open').replace('Sub-Junior','Sub-Juniors').replace('Junior','Juniors').replace('Open','Open').replace('Master I','Masters 1').replace('Master II','Masters 2').replace('Master III','Masters 3').replace('Master IV','Masters 4');
+    // Una sola traducción por división, los Master del más largo al más corto:
+    // encadenando replace, "Master II" salía "Masters 1I" y "Sub-Junior"
+    // "Sub-Juniorss" (el replace de "Junior" volvía a pegarle).
+    const _d=String(i.division||'Open');
+    const div=/master\s*(iv|4)\b/i.test(_d)?'Masters 4':/master\s*(iii|3)\b/i.test(_d)?'Masters 3'
+      :/master\s*(ii|2)\b/i.test(_d)?'Masters 2':/master/i.test(_d)?'Masters 1'
+      :/sub[\s-]?junior/i.test(_d)?'Sub-Juniors':/junior/i.test(_d)?'Juniors':_d;
     return [i.nombre,'',sex,event,equip,age||'','','',div,'',catKg,'','','','','','','','','','','','','CHL','RM','',evName].join(',');
   });
   const csv=[header,...rows].join('\n');
