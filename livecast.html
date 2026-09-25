@@ -6476,10 +6476,38 @@ async function _rbNac(){
   const ev=(DATA.event&&DATA.event.name)||'';
   if(/regional/i.test(ev))return [];
   const TN={classic:'Classic',equipped:'Equipado',universitario:'Universitario'};
+  const FEM=['43','47','52','57','63','69','76','84','84+'];
   try{
-    // Solo los ROTOS (había marca previa): lo mismo que actualiza Cerrar competencia.
-    return _rnDetectar(await _rnCargarTabla()).filter(r=>r.act).map(r=>({sexo:r.sexo==='Mujer'?'Damas':'Caballeros',mod:TN[r.tipo],div:r.div,cat:r.cat,
-      mov:_RB_MOV[r.l]||r.l,nuevo:r.w,atleta:r.a.name,pais:'CHI',antes:r.act?(+r.act.marca):null,antesQuien:r.act?(r.act.nombre||''):'',antesPais:''}));
+    const tabla=await _rnCargarTabla();
+    // records.json es la copia de la tabla de antes del campeonato. Sirve de
+    // respaldo para "la marca anterior" de los récords que se guardaron antes de
+    // que se empezara a anotar (los primeros cierres del Sudamericano 2026).
+    let base=null; try{ base=await fetch('records.json',{cache:'no-store'}).then(r=>r.json()); }catch(e){}
+    const antesDeBase=(tipo,l,dv,cat,sexoR,marca)=>{
+      const xs=(((base||{})[tipo]||{})[l]||[]).filter(y=>_normDiv(String(y.division||''))===dv&&String(y.categoria)===cat&&(!y.sexo||y.sexo===sexoR));
+      const y=xs.sort((p,q)=>(+q.marca||0)-(+p.marca||0))[0];
+      return (y&&(+y.marca||0)<marca)?{marca:+y.marca,nombre:y.nombre||'',campeonato:y.campeonato||y.evento||''}:null;
+    };
+    const m=new Map();
+    // Los que ya quedaron guardados con este campeonato: después de Cerrar
+    // competencia la tabla ya tiene la marca nueva y la comparación de abajo no
+    // los vería como "batidos". Se leen de la tabla, con la marca que reemplazaron.
+    Object.keys(TN).forEach(tipo=>['sq','bp','dl','total'].forEach(l=>(((tabla[tipo]||{})[l])||[]).forEach(x=>{
+      if((x.campeonato||x.evento)!==ev)return;
+      const cat=String(x.categoria), dv=tipo==='universitario'?'Universitario':_normDiv(String(x.division||''));
+      const sexo=x.sexo?(x.sexo==='Mujer'?'Damas':'Caballeros'):(FEM.indexOf(cat)>=0?'Damas':'Caballeros');
+      const ant=x.anterior||antesDeBase(tipo,l,dv,cat,x.sexo||(FEM.indexOf(cat)>=0?'Mujer':'Hombre'),+x.marca||0);
+      m.set([tipo,l,dv,cat].join('|'),{sexo,mod:TN[tipo],div:dv,cat,mov:_RB_MOV[l]||l,nuevo:+x.marca,atleta:x.nombre,pais:'CHI',
+        antes:ant?ant.marca:null,antesQuien:ant?(ant.nombre||''):'(no registrado)',antesPais:'',guardado:true});
+    })));
+    // Y los que todavía no se guardan.
+    _rnDetectar(tabla).filter(r=>r.act).forEach(r=>{
+      m.set([r.tipo,r.l,r.div,r.cat].join('|'),{sexo:r.sexo==='Mujer'?'Damas':'Caballeros',mod:TN[r.tipo],div:r.div,cat:r.cat,
+        mov:_RB_MOV[r.l]||r.l,nuevo:r.w,atleta:r.a.name,pais:'CHI',antes:+r.act.marca,antesQuien:r.act.nombre||'',antesPais:'',guardado:false});
+    });
+    const ORD={Classic:0,Equipado:1,Universitario:2}, LO={Sentadilla:0,'Press de banca':1,'Peso muerto':2,Total:3};
+    return [...m.values()].sort((x,y)=>(ORD[x.mod]-ORD[y.mod])||(x.sexo<y.sexo?1:x.sexo>y.sexo?-1:0)
+      ||(_actaCatN(x.cat)-_actaCatN(y.cat))||String(x.div).localeCompare(String(y.div))||((LO[x.mov]||0)-(LO[y.mov]||0)));
   }catch(e){ console.warn('[récords batidos] nac',e); return null; }
 }
 window.mostrarRecordsBatidos=async function(){
@@ -6497,7 +6525,8 @@ window.mostrarRecordsBatidos=async function(){
       h+='<tr><td>'+r.sexo+'</td><td>'+r.mod+'</td><td>'+esc(r.div)+'</td><td>'+esc(r.cat)+'</td><td style="text-align:left">'+r.mov+'</td>'
         +'<td style="color:#F2C230;font-weight:800">'+r.nuevo+'</td><td style="text-align:left">'+(conPais?_flagImg(r.pais,12,true):'')+esc(r.atleta)+'</td>'
         +(conPais?'<td>'+esc(r.pais)+'</td>':'')
-        +'<td>'+(r.antes!=null?r.antes:'—')+'</td><td style="text-align:left;color:var(--muted)">'+(r.antes!=null?esc(r.antesQuien)+(r.antesPais?' · '+esc(r.antesPais):''):'sin récord previo')+'</td></tr>';
+        +'<td>'+(r.antes!=null?r.antes:'—')+'</td><td style="text-align:left;color:var(--muted)">'+(r.antes!=null?esc(r.antesQuien)+(r.antesPais?' · '+esc(r.antesPais):''):(r.antesQuien||'sin récord previo'))
+        +(r.guardado===false?' <span style="color:var(--orange);font-size:10px">· falta guardar</span>':'')+'</td></tr>';
     });
     return h+'</table></div>';
   };
@@ -7335,6 +7364,13 @@ async function _rnAplicar(elegidos){
     if(act&&!(r.w>(+act.marca||0)))return;          // ya estaba igual o más alto
     const nuevo={nombre:r.a.name,division:r.div,categoria:r.cat,campeonato:ev,marca:r.w,fecha:hoy};
     if(r.tipo==='universitario'){nuevo.sexo=r.sexo;nuevo.evento=ev;}
+    // La marca que se reemplaza queda anotada, para poder decir después "antes
+    // era X de Fulano". Si el récord ya lo había subido este mismo campeonato,
+    // se conserva el anterior de ANTES del campeonato, no el intermedio.
+    if(act){
+      nuevo.anterior=(act.campeonato===ev&&act.anterior)?act.anterior
+        :{marca:+act.marca||0,nombre:act.nombre||'',campeonato:act.campeonato||act.evento||''};
+    }
     tabla[r.tipo][r.l]=lista.filter(x=>!mismo(x)).concat([nuevo]);
     hechos.push(r);
   });
