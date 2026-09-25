@@ -2561,6 +2561,19 @@ function _srRompeTotal(a,w){
 }
 // Todo lo que rompería un intento: el récord del movimiento y, en peso muerto,
 // también el de total. {mov:[…], tot:[…], total:kg, hay:bool}
+// Récord de TOTAL que marca una casilla de peso muerto de la planilla. Si todavía
+// no se levanta: el que dejaría si sale válido (_srRompeTotal). Si ya fue
+// válido y es su mejor peso muerto: el que dejó — y se sigue viendo, igual que
+// la marca del movimiento, que sigue a la vista después de conseguida.
+function _srTotalCelda(a,l,at){
+  if(l!=='dl'||!at||!(+at.w>0)||at.r==='n')return [];
+  if(at.r===null)return _srRompeTotal(a,at.w);
+  if(_srSoloBanca(a))return [];
+  const sq=bestOf(a,'sq'), bp=bestOf(a,'bp'), dl=bestOf(a,'dl');
+  if(!sq||!bp||+at.w!==dl)return [];
+  const tot=Math.round((sq+bp+dl)*100)/100;
+  return _srRecords(a,'total').filter(r=>tot>r.kg||(r.hoy&&r.hoyId===a.id&&tot>=r.kg)).map(r=>Object.assign({},r,{total:tot}));
+}
 function _srIntento(a,l,w){
   const mov=_srRompe(a,l,w);
   const tot=(l==='dl')?_srRompeTotal(a,w):[];
@@ -13066,7 +13079,11 @@ function _attCellCompete(a,l,j,isCurrentCell){
     // Récord sudamericano: si el peso declarado supera el récord de su división
     // (o del Open), la celda se marca en amarillo — igual que en las planillas de
     // FESUPO. Se pone más fuerte cuando el intento ya se dio por válido.
-    const srR=_srRompe(a,l,at.w), srHecho=srR.length&&at.r==='g';
+    const srR=_srRompe(a,l,at.w);
+    // Y en peso muerto, el récord de TOTAL que deja (o dejó) este intento.
+    const srT=_srTotalCelda(a,l,at);
+    const srAny=srR.length||srT.length, srHecho=srAny&&at.r==='g';
+    const srTxt=(srR.length&&srT.length)?'RÉC+TOTAL':srT.length?'RÉC. TOTAL':'RÉCORD';
     // El relleno es SIEMPRE el del intento: verde si fue válido, rojo tachado si
     // fue nulo. Lo que marca el récord es el borde rojo que late, y sigue latiendo
     // después de conseguido — es el momento que hay que mirar, no uno que ya pasó.
@@ -13076,10 +13093,12 @@ function _attCellCompete(a,l,j,isCurrentCell){
     // Letra blanca y la misma tipografía de los nombres de la tabla (la del
     // cuerpo, DM Sans): la palabra tiene que leerse como parte de la planilla,
     // no como un cartel pegado encima. El rojo queda en el borde, no en el texto.
-    if(srR.length)cell+='<div class="rec-caja"><div class="'+(srHecho?'':'rec-tag')+'" style="font-size:'
-      +Math.round(9*sc)+'px;font-weight:800;letter-spacing:.6px;line-height:1;margin-bottom:2px;'
-      +'text-align:center;color:#fff">'+(srHecho?'★ RÉCORD':'RÉCORD')+'</div>';
-    cell+='<div class="'+c+' att'+(srR.length?' rec-borde':'')+'" onclick="editAtt('+a.id+',\''+l+'\','+j+')"'+(srR.length?' title="'+_srBadge(srR).replace(/"/g,'&quot;')+' — supera '+srR.map(function(x){return x.div+' '+(x.vacio?'(sin récord)':x.kg+'kg')}).join(', ')+'"':'')+' style="font-size:'+Math.round((isCurrentCell?15:12)*sc)+'px;font-weight:700;padding:'+Math.round((isCurrentCell?10:8)*sc)+'px 4px;'+srCss+(isCurrentCell?'box-shadow:inset 0 0 0 3px '+LIFT_C[l]+';':'')+'">'+(at.w||'—')+'</div>'+(srR.length?'</div>':'');
+    if(srAny)cell+='<div class="rec-caja"><div class="'+(srHecho?'':'rec-tag')+'" style="font-size:'
+      +Math.round(9*sc)+'px;font-weight:800;letter-spacing:.6px;line-height:1;margin-bottom:2px;white-space:nowrap;'
+      +'text-align:center;color:#fff">'+(srHecho?'★ ':'')+srTxt+'</div>';
+    const srTit=[srR.length?_srBadge(srR)+' — supera '+srR.map(function(x){return x.div+' '+(x.vacio?'(sin récord)':x.kg+'kg')}).join(', '):'',
+      srT.length?'RÉCORD DE TOTAL '+srT[0].total+' kg — supera '+srT.map(function(x){return x.div+' '+(x.vacio?'(sin récord)':x.kg+'kg')}).join(', '):''].filter(Boolean).join(' · ');
+    cell+='<div class="'+c+' att'+(srAny?' rec-borde':'')+'" onclick="editAtt('+a.id+',\''+l+'\','+j+')"'+(srAny?' title="'+srTit.replace(/"/g,'&quot;')+'"':'')+' style="font-size:'+Math.round((isCurrentCell?15:12)*sc)+'px;font-weight:700;padding:'+Math.round((isCurrentCell?10:8)*sc)+'px 4px;'+srCss+(isCurrentCell?'box-shadow:inset 0 0 0 3px '+LIFT_C[l]+';':'')+'">'+(at.w||'—')+'</div>'+(srR.length?'</div>':'');
   }
   if(isCurrentCell){
     cell+='<div style="display:flex;gap:2px;margin-top:3px">'
