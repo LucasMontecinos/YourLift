@@ -428,6 +428,11 @@ function divisionesDe(evObj){
   if (!x.length) return DIVISIONS.slice();
   return (evObj && evObj.divsSolo) ? x.slice() : DIVISIONS.concat(x);
 }
+// Lo que se lee en la lista de divisiones: los Master llevan su rango de edad
+// (se cuenta por el año en que se cumplen, ver yl-divisiones.js). El valor que
+// se guarda sigue siendo el nombre solo.
+const _RANGO_MASTER={"Master I":"40 a 49 años","Master II":"50 a 59 años","Master III":"60 a 69 años","Master IV":"70 años o más"};
+function _divEtiqueta(d){ return _RANGO_MASTER[d] ? d+' ('+_RANGO_MASTER[d]+')' : d; }
 // El campeonato que se está inscribiendo, para las dos de arriba.
 function _evActual(){ try{ return EVENTS.find(e=>e.id===state.form.evento)||null; }catch(e){ return null; } }
 
@@ -1176,7 +1181,7 @@ function renderForm() {
         <label>División de Edad <span class="req">*</span></label>
         <select class="input ${f.division?'ok':''}" onchange="updR('division',this.value)">
           <option value="">Seleccionar...</option>
-          ${divisionesDe(_evActual()).map(d => `<option ${f.division===d?'selected':''}>${d}</option>`).join('')}
+          ${divisionesDe(_evActual()).map(d => `<option value="${d}" ${f.division===d?'selected':''}>${_divEtiqueta(d)}</option>`).join('')}
           ${isUni?'<option '+(f.division==='Universitario'?'selected':'')+'>Universitario</option>':''}
         </select>
       </div>
@@ -1632,7 +1637,7 @@ function renderEdit() {
           <label>División</label>
           <select class="input" onchange="updR('division',this.value)">
             <option value="">Seleccionar...</option>
-            ${divisionesDe(_evActual()).map(d => `<option ${f.division===d?'selected':''}>${d}</option>`).join('')}
+            ${divisionesDe(_evActual()).map(d => `<option value="${d}" ${f.division===d?'selected':''}>${_divEtiqueta(d)}</option>`).join('')}
             ${isUni?`<option ${f.division==='Universitario'?'selected':''}>Universitario</option>`:''}
           </select>
         </div>
