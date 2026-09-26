@@ -3558,7 +3558,7 @@ const _MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto',
 const _certFechaLarga=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||'');return m?(+m[3])+' de '+_MESES[+m[2]-1]+' de '+m[1]:(s||'');};
 function _certNuevoForm(){
   return {nombre:'',rut:'',correo:'',rol:'juez',comp:CERT_ROLES.juez.comp.slice(),
-    curso:'Capacitación de Jueces '+new Date().getFullYear(),fecha:_certHoy(),vigencia:'',
+    curso:'Capacitación de Jueces '+new Date().getFullYear(),fecha:_certHoy(),
     lugar:'Santiago',firma:ST.adminInfo?.name||ST.adminInfo?.nombre||''};
 }
 async function certCargar(){
@@ -3575,7 +3575,7 @@ async function certGuardarLista(){
 function _certLeerForm(){
   const f=ST.certForm||(ST.certForm=_certNuevoForm());
   const v=id=>{const el=document.getElementById(id);return el?el.value.trim():null;};
-  [['nombre','cf_nombre'],['rut','cf_rut'],['correo','cf_correo'],['curso','cf_curso'],['fecha','cf_fecha'],['vigencia','cf_vig'],['lugar','cf_lugar'],['firma','cf_firma']]
+  [['nombre','cf_nombre'],['rut','cf_rut'],['correo','cf_correo'],['curso','cf_curso'],['fecha','cf_fecha'],['lugar','cf_lugar'],['firma','cf_firma']]
     .forEach(([k,id])=>{const x=v(id);if(x!==null)f[k]=x;});
   const comp=CERT_COMP.map(c=>c[0]).filter(k=>{const el=document.getElementById('cf_c_'+k);return el?el.checked:f.comp.includes(k);});
   f.comp=comp;
@@ -3651,7 +3651,6 @@ async function certPDF(c){
   const yb=172;
   pdf.setFont('helvetica','normal'); pdf.setFontSize(10.5); pdf.setTextColor(...TXT);
   pdf.text((c.lugar?c.lugar+', ':'')+_certFechaLarga(c.fecha),40,yb,{align:'left'});
-  if(c.vigencia){pdf.setTextColor(...GRIS);pdf.text('Válido hasta el '+_certFechaLarga(c.vigencia),40,yb+6);}
   pdf.setDrawColor(...NAVY); pdf.setLineWidth(0.4); pdf.line(W-110,yb-2,W-40,yb-2);
   pdf.setFont('helvetica','bold'); pdf.setFontSize(11); pdf.setTextColor(...NAVY);
   pdf.text(c.firma||'YourLift',W-75,yb+4,{align:'center'});
@@ -3727,12 +3726,11 @@ function renderCertificados(){
   const lista=(ST.certs||[]).map((c,i)=>({c,i})).sort((a,b)=>(b.c.creado||0)-(a.c.creado||0));
   const filas=lista.map(({c,i})=>{
     const rol=(CERT_ROLES[c.rol]||{}).t||c.rol||'';
-    const vencido=c.vigencia&&c.vigencia<_certHoy();
     return `<tr>
       <td style="padding:8px 10px;font-family:Oswald;color:var(--gold);white-space:nowrap">${esc(c.codigo)}</td>
       <td style="padding:8px 10px"><div style="font-weight:600">${esc(c.nombre)}</div><div style="font-size:11px;color:var(--muted)">${esc(c.rut||'')}${c.correo?' · '+esc(c.correo):''}</div></td>
       <td style="padding:8px 10px;font-size:12px">${esc(rol)}<div style="font-size:10.5px;color:var(--muted)">${CERT_COMP.filter(k=>(c.comp||[]).includes(k[0])).map(k=>k[1]).join(' · ')}</div></td>
-      <td style="padding:8px 10px;font-size:12px;white-space:nowrap">${esc(c.fecha||'')}${c.vigencia?`<div style="font-size:10.5px;color:${vencido?'var(--red)':'var(--muted)'}">${vencido?'venció':'hasta'} ${esc(c.vigencia)}</div>`:''}</td>
+      <td style="padding:8px 10px;font-size:12px;white-space:nowrap">${esc(c.fecha||'')}</td>
       <td style="padding:8px 10px;white-space:nowrap;text-align:right">
         <button class="btn" style="font-size:11px;padding:5px 10px" onclick="certDescargar(${i})">PDF</button>
         <button class="btn" style="font-size:11px;padding:5px 10px" onclick="certEnviar(${i})">Enviar</button>
@@ -3758,7 +3756,6 @@ function renderCertificados(){
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
         ${campo('INSTANCIA / CURSO','cf_curso',f.curso)}
         ${campo('FECHA DE EMISIÓN','cf_fecha',f.fecha,'type="date"')}
-        ${campo('VÁLIDO HASTA (opcional)','cf_vig',f.vigencia,'type="date"')}
         ${campo('LUGAR','cf_lugar',f.lugar)}
         ${campo('FIRMA (nombre)','cf_firma',f.firma)}
       </div>
