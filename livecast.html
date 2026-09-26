@@ -813,6 +813,8 @@ async function syncToFB(){
   // cambio se perdía para siempre — cargando pesos rápido, o con la red lenta,
   // el espectador se quedaba sin ver lo último.) El payload se arma de cero en
   // cada intento, así una sola escritura final ya lleva todo el estado al día.
+  // Canal rápido: sale YA, aunque la escritura completa anterior siga viajando.
+  _flashEscribir();
   if(_syncInFlight){_syncPending=true;return;}
   const id=fbDocId();if(!id)return;
   _fbLastWrite=Date.now();
@@ -870,6 +872,7 @@ async function syncToFB(){
         // se escribió, y cualquier cambio posterior tiene una huella distinta:
         // el reintento lo ve y lo manda.
         const _pay=_mkPayload();
+        let _athJson=_pay.athletes;   // lo que queda en el servidor, para el canal rápido
         const _huellaEsta=_huella(_pay);
         const _sigEsta=_dataSig();
         // Operaciones AUTORITATIVAS (reiniciar datos, borrar atletas, regenerar
@@ -901,7 +904,8 @@ async function syncToFB(){
             // Los atletas van mergeados con lo remoto, pero el resto del payload
             // es el congelado: el cursor y el reloj que se mandan son los del
             // momento en que se decidió escribir.
-            tx.set(ref,Object.assign({},_pay,{athletes:JSON.stringify(ath)}));
+            _athJson=JSON.stringify(ath);
+            tx.set(ref,Object.assign({},_pay,{athletes:_athJson}));
           });
         }else{
           await window._fb.setDoc(ref,_pay);
@@ -909,6 +913,7 @@ async function syncToFB(){
         sent.forEach(k=>{ try{window._pendingEdits.delete(k)}catch(_){} });
         window._lastSyncedSig=_sigEsta;
         window._ultHuella=_huellaEsta;
+        try{ _flashFijarBase(JSON.parse(_athJson)); }catch(_){}
         _fbLastOk=Date.now();
         // Escrito y aceptado, pero todavía no consta que haya salido publicado:
         // eso lo dice el eco cuando el servidor devuelve este mismo documento.
@@ -984,6 +989,133 @@ async function syncTimerOnlyToFB(forzar){
       timerStartedAt:DATA.timerStartedAt||0,ts:Date.now(),writer:window._WRITER_ID});
   }catch(e){/* silencioso: si el doc no existe el setDoc completo lo crea */}
 }
+// ── Canal rápido (livecast_flash) ───────────────────────────────────────────
+//
+// El documento de livecast_sync lleva la nómina ENTERA (cientos de KB con el
+// Sudamericano) y se escribe con una transacción que primero lo baja completo.
+// En el wifi del recinto eso son 5 a 10 segundos entre cargar un peso en la
+// planilla y verlo en el control remoto, en la transmisión o en las pantallas
+// del público.
+//
+// Al lado va un documento chico con SOLO lo que cambió: los atletas distintos de
+// lo último que quedó en el servidor, más el cursor (movimiento, ronda, tanda) y
+// el reloj. Pesa unos pocos KB y llega en menos de un segundo. El documento
+// completo se sigue escribiendo igual que siempre y sigue siendo la fuente de
+// verdad: si el canal rápido falla o se pierde, todo llega como antes.
+window._flashBase=null;   // id → JSON del atleta tal como está en el servidor
+let _flashUltHuella='', fbFlashUnsub=null;
+function _flashFijarBase(arr){
+  const b={}; (arr||[]).forEach(a=>{ if(a&&a.id!=null) b[a.id]=JSON.stringify(a); });
+  window._flashBase=b;
+}
+function _flashEscribir(){
+  try{
+    if(PRACTICE_MODE||!fbReady||!window._fb||!fbDB||!isAdmin||!window.IS_CONTROLLER||_fbSyncing||!DATA.event)return;
+    const id=fbDocId(); if(!id)return;
+    const base=window._flashBase, lista=DATA.athletes||[];
+    let cambios=base?lista.filter(a=>a&&base[a.id]!==JSON.stringify(a)):null;
+    // Sin base todavía, o demasiados cambios juntos (ej. se regeneró la nómina):
+    // se manda la tanda en tarima, que es lo que está mirando todo el mundo.
+    if(!cambios||cambios.length>60){
+      const nv0=window.NAV_LIBRE&&window._NAV_REMOTA;
+      const fl=(nv0&&nv0.flight)||DATA.flight;
+      cambios=lista.filter(a=>a&&a.flight===fl);
+      if(cambios.length>80)return;
+    }
+    const nv=(window.NAV_LIBRE&&window._NAV_REMOTA)||null;
+    const p={ev:{id:String(DATA.event.id||''),name:String(DATA.event.name||'')},
+      ath:JSON.stringify(cambios),
+      lift:(nv&&nv.lift)||DATA.lift||null,
+      round:(nv&&typeof nv.round==='number')?nv.round:(typeof DATA.round==='number'?DATA.round:0),
+      flight:(nv&&nv.flight)||DATA.flight||null,
+      forcedCurrent:nv?(nv.forcedCurrent||null):(DATA.forcedCurrent||null),
+      changeTimers:JSON.stringify(DATA.changeTimers||{}),compTimer:DATA.compTimer||null,
+      timer:typeof DATA.timer==='number'?DATA.timer:0,timerOn:!!DATA.timerOn,timerStartedAt:DATA.timerStartedAt||0,
+      lotsGenerated:!!DATA.lotsGenerated};
+    const h=JSON.stringify(p);
+    if(h===_flashUltHuella)return;       // igual a lo último mandado: no se repite
+    _flashUltHuella=h;
+    p.ts=Date.now(); p.writer=window._WRITER_ID;
+    window._fb.setDoc(window._fb.doc(fbDB,'livecast_flash',id),p)
+      .catch(e=>{ _flashUltHuella=''; console.warn('[flash] escritura',e&&e.code); });
+  }catch(e){ console.warn('[flash]',e); }
+}
+// Pone lo que trae el canal rápido sobre lo que hay. No dibuja.
+function _flashAplicarDatos(d){
+  let patch; try{ patch=_normExtraAtts(JSON.parse(d.ath||'[]')); }catch(e){ return; }
+  const pm={}, vistos={};
+  patch.forEach(a=>{ if(a&&a.id!=null) pm[a.id]=a; });
+  const remoto=(DATA.athletes||[]).map(a=>{ if(a&&pm[a.id]){ vistos[a.id]=1; return pm[a.id]; } return a; });
+  patch.forEach(a=>{ if(a&&a.id!=null&&!vistos[a.id]) remoto.push(a); });
+  // Quien opera conserva las casillas que acaba de tocar (mismo merge que el
+  // documento completo); el resto de las pantallas toma lo que llega.
+  if(isAdmin&&window.IS_CONTROLLER&&!TX_MODE){
+    try{ DATA.athletes=_mergeAthletes(DATA.athletes,remoto); }catch(e){ return; }
+  }else DATA.athletes=remoto;
+  window._NAV_REMOTA={lift:d.lift||null,round:(typeof d.round==='number')?d.round:null,
+    flight:d.flight||null,forcedCurrent:(typeof d.forcedCurrent!=='undefined')?d.forcedCurrent:null};
+  const localFresh=(Date.now()-(window._lastLocalAction||0))<2500;
+  if(!localFresh){
+    try{ DATA.changeTimers=JSON.parse(d.changeTimers||'{}'); }catch(e){}
+    DATA.compTimer=typeof d.compTimer!=='undefined'?d.compTimer:null;
+    if(!window.NAV_LIBRE){
+      DATA.lift=d.lift||DATA.lift;
+      DATA.round=typeof d.round==='number'?d.round:DATA.round;
+      DATA.flight=d.flight||DATA.flight;
+      DATA.forcedCurrent=typeof d.forcedCurrent!=='undefined'?d.forcedCurrent:null;
+    }
+  }
+  DATA.lotsGenerated=!!d.lotsGenerated;
+  if(typeof d.timer==='number'){
+    DATA.timerOn=d.timerOn||false;
+    if(DATA.timerOn&&d.timerStartedAt){
+      DATA.timerStartedAt=d.timerStartedAt;
+      DATA.timer=Math.max(0,60-Math.floor((_ahora()-DATA.timerStartedAt)/1000));
+    }else DATA.timer=d.timer;
+    if(DATA.timerOn&&!mainTI)startTimer(false);
+    if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}
+  }
+}
+function _flashEscuchar(id){
+  if(fbFlashUnsub){ try{fbFlashUnsub()}catch(_){} fbFlashUnsub=null; }
+  window._flashUlt=null; window._fullUlt=null;
+  let primero=true;
+  fbFlashUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_flash',id),(snap)=>{
+    // El primer envío es lo que quedó guardado de antes (puede ser de hace
+    // horas): no se usa. Solo lo que llega en vivo.
+    if(primero){ primero=false; return; }
+    if(!snap.exists())return;
+    const d=snap.data();
+    if(!d||!d.writer||d.writer===window._WRITER_ID||typeof d.ts!=='number')return;
+    // Hasta que no llegue el documento completo no hay sobre qué aplicarlo.
+    const uf=window._fullUlt; if(!uf)return;
+    const re=d.ev||{}, le=DATA.event||{};
+    const mismo=(re.id&&String(re.id)===String(le.id||''))||(re.name&&String(re.name)===String(le.name||''));
+    if(!mismo)return;
+    // Ya llegó algo más nuevo del mismo equipo (documento completo o canal local).
+    if(uf.w===d.writer&&d.ts<=uf.t)return;
+    const lu=window._localUlt; if(lu&&lu.w===d.writer&&d.ts<lu.t)return;
+    window._flashUlt=d;
+    const firma=()=>JSON.stringify(DATA.athletes||[])+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
+      +'|'+(DATA.forcedCurrent==null?'':DATA.forcedCurrent)+'|'+JSON.stringify(DATA.compTimer||null);
+    _fbSyncing=true;
+    try{
+      const antes=firma();
+      _flashAplicarDatos(d);
+      // Lo que llegó no es una edición de esta pantalla: que no la dé por pendiente.
+      try{
+        const limpio=!_syncInFlight&&!_syncPending&&!(window._pendingEdits&&window._pendingEdits.size);
+        if(limpio)window._lastSyncedSig=_dataSig();
+      }catch(e){}
+      if(firma()!==antes){
+        const f=document.activeElement;
+        if(f&&(f.tagName==='INPUT'||f.tagName==='SELECT'||f.tagName==='TEXTAREA')) window._renderPendiente=true;
+        else R();
+      }
+    }catch(e){ console.warn('[flash] lectura',e); }
+    _fbSyncing=false;
+  },(err)=>{ console.warn('[flash] listener',err&&err.code); fbFlashUnsub=null; });
+}
 // Redibujado que quedó esperando porque el operador estaba escribiendo un peso.
 // Se hace apenas suelta el campo: así la pantalla se pone al día con lo que
 // llegó mientras tanto, sin haberle borrado lo que estaba tecleando.
@@ -1018,6 +1150,7 @@ function startFBSync(){
   if(fbUnsub){fbUnsub();fbUnsub=null}
   const id=fbDocId();if(!id)return;
   const ref=window._fb.doc(fbDB,'livecast_sync',id);
+  try{ _flashEscuchar(id); }catch(e){ console.warn('[flash]',e); }
   fbUnsub=window._fb.onSnapshot(ref,(snap)=>{
     if(!snap.exists())return;
     _lastFbUpdate=Date.now();
@@ -1098,6 +1231,11 @@ function startFBSync(){
           return String(re.id||'')===String(le.id||'') || String(re.name||'')===String(le.name||'');
         }catch(e){ return true; }
       })();
+      if(_mismoEv){
+        // Lo que hay en el servidor: el canal rápido manda lo que difiere de esto.
+        try{ _flashFijarBase(_remoteAth); }catch(_){}
+        window._fullUlt={w:d.writer||'',t:(typeof d.tsAth==='number'?d.tsAth:(d.ts||0))};
+      }
       if(_viejoLocal){
         // Nada: ya tiene algo más nuevo de este mismo escritor.
       }else if(!_mismoEv){
@@ -1157,6 +1295,13 @@ function startFBSync(){
         if(DATA.timerOn&&!mainTI)startTimer(false);
         if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}
       }
+      // Si el canal rápido ya trajo algo MÁS NUEVO de este mismo equipo, este
+      // documento completo viene atrasado: se vuelve a poner lo rápido encima para
+      // que la pantalla no vaya y vuelva.
+      try{
+        const fu=window._flashUlt;
+        if(!_viejoLocal&&_mismoEv&&fu&&fu.writer===d.writer&&fu.ts>window._fullUlt.t) _flashAplicarDatos(fu);
+      }catch(_){}
       const newSig = _firma();
       const structuralChange = prevSig !== newSig;
       // Solo re-renderizar si hubo cambio estructural (no solo timer) — evita flicker en vista pública
@@ -1989,6 +2134,7 @@ async function tryLoadFromFB(){
     if(!snap.exists())return false;
     const d=snap.data();
     DATA.athletes=_normExtraAtts(JSON.parse(d.athletes||'[]'));
+    try{ _flashFijarBase(JSON.parse(d.athletes||'[]')); }catch(_){}
     if((Date.now()-(window._lastLocalAction||0))>=2500){
       DATA.lift=d.lift||DATA.lift;
       DATA.round=typeof d.round==='number'?d.round:DATA.round;
