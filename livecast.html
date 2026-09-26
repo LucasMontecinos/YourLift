@@ -1041,8 +1041,8 @@ function _flashEscribir(){
   }catch(e){ console.warn('[flash]',e); }
 }
 // Pone lo que trae el canal rápido sobre lo que hay. No dibuja.
-function _flashAplicarDatos(d){
-  let patch; try{ patch=_normExtraAtts(JSON.parse(d.ath||'[]')); }catch(e){ return; }
+function _flashAplicarDatos(d,sinCursor){
+  let patch; try{ patch=Array.isArray(d.ath)?d.ath:_normExtraAtts(JSON.parse(d.ath||'[]')); }catch(e){ return; }
   const pm={}, vistos={};
   patch.forEach(a=>{ if(a&&a.id!=null) pm[a.id]=a; });
   const remoto=(DATA.athletes||[]).map(a=>{ if(a&&pm[a.id]){ vistos[a.id]=1; return pm[a.id]; } return a; });
@@ -1052,6 +1052,7 @@ function _flashAplicarDatos(d){
   if(isAdmin&&window.IS_CONTROLLER&&!TX_MODE){
     try{ DATA.athletes=_mergeAthletes(DATA.athletes,remoto); }catch(e){ return; }
   }else DATA.athletes=remoto;
+  if(sinCursor)return;
   window._NAV_REMOTA={lift:d.lift||null,round:(typeof d.round==='number')?d.round:null,
     flight:d.flight||null,forcedCurrent:(typeof d.forcedCurrent!=='undefined')?d.forcedCurrent:null};
   const localFresh=(Date.now()-(window._lastLocalAction||0))<2500;
@@ -1076,9 +1077,31 @@ function _flashAplicarDatos(d){
     if(!DATA.timerOn&&mainTI){clearInterval(mainTI);mainTI=null}
   }
 }
+// Lo que llegó por el canal rápido y todavía no consta en un documento completo.
+// Por atleta, gana lo último que llegó. Hace falta porque el documento completo
+// llega varios segundos atrasado: si al llegar pisara todo, un válido que ya se
+// veía desaparecería hasta que llegara el documento siguiente.
+window._flashPend={ath:{},cur:null};
+function _flashAnotar(d,patch){
+  const now=Date.now(), P=window._flashPend;
+  patch.forEach(a=>{ if(a&&a.id!=null) P.ath[a.id]={a:a,w:d.writer,ts:d.ts,llego:now}; });
+  P.cur={d:d,w:d.writer,ts:d.ts,llego:now};
+}
+// Tras aplicar un documento completo de `w` escrito en `t`: se olvida lo que ese
+// documento ya trae y se vuelve a poner encima lo que es más nuevo que él.
+function _flashReaplicar(w,t){
+  const P=window._flashPend, now=Date.now();
+  const vale=e=>e.w===w ? e.ts>t : (now-e.llego)<30000;
+  const lista=[];
+  Object.keys(P.ath).forEach(k=>{ const e=P.ath[k]; if(vale(e))lista.push(e.a); else delete P.ath[k]; });
+  const cur=P.cur&&vale(P.cur)?P.cur.d:null; if(!cur)P.cur=null;
+  if(!lista.length&&!cur)return;
+  if(cur)_flashAplicarDatos(Object.assign({},cur,{ath:lista}));
+  else _flashAplicarDatos({ath:lista},true);
+}
 function _flashEscuchar(id){
   if(fbFlashUnsub){ try{fbFlashUnsub()}catch(_){} fbFlashUnsub=null; }
-  window._flashUlt=null; window._fullUlt=null;
+  window._flashUlt=null; window._fullUlt=null; window._flashPend={ath:{},cur:null};
   let primero=true;
   fbFlashUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_flash',id),(snap)=>{
     // El primer envío es lo que quedó guardado de antes (puede ser de hace
@@ -1101,7 +1124,8 @@ function _flashEscuchar(id){
     _fbSyncing=true;
     try{
       const antes=firma();
-      _flashAplicarDatos(d);
+      let patch; try{ patch=_normExtraAtts(JSON.parse(d.ath||'[]')); }catch(e){ patch=null; }
+      if(patch){ _flashAnotar(d,patch); _flashAplicarDatos(Object.assign({},d,{ath:patch})); }
       // Lo que llegó no es una edición de esta pantalla: que no la dé por pendiente.
       try{
         const limpio=!_syncInFlight&&!_syncPending&&!(window._pendingEdits&&window._pendingEdits.size);
@@ -1299,8 +1323,7 @@ function startFBSync(){
       // documento completo viene atrasado: se vuelve a poner lo rápido encima para
       // que la pantalla no vaya y vuelva.
       try{
-        const fu=window._flashUlt;
-        if(!_viejoLocal&&_mismoEv&&fu&&fu.writer===d.writer&&fu.ts>window._fullUlt.t) _flashAplicarDatos(fu);
+        if(!_viejoLocal&&_mismoEv) _flashReaplicar(d.writer||'',window._fullUlt.t);
       }catch(_){}
       const newSig = _firma();
       const structuralChange = prevSig !== newSig;
