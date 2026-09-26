@@ -2762,12 +2762,47 @@ function _srTotalCelda(a,l,at){
 function _srIntento(a,l,w){
   const mov=_srRompe(a,l,w);
   const tot=(l==='dl')?_srRompeTotal(a,w):[];
-  return {mov:mov,tot:tot,total:tot.length?tot[0].total:0,hay:!!(mov.length||tot.length)};
+  const x={mov:mov,tot:tot,total:tot.length?tot[0].total:0,hay:!!(mov.length||tot.length)};
+  x.mundial=_wrIntento(a,l,w,x);
+  return x;
+}
+// ── Récords MUNDIALES (IPF) ─────────────────────────────────────────
+// Una capa ENCIMA de la sudamericana, que no la toca: records_mundiales.json
+// (build_records_mundiales.py, desde los PDF de goodlift.info) tiene la misma
+// clave que records_suda.json. Solo se mira cuando el intento ya es récord
+// sudamericano —una marca mundial siempre lo es— y lo único que cambia es que el
+// cartel dice MUNDIAL. Si el archivo no está o no trae la categoría (hoy tiene
+// solo hombres classic), todo queda exactamente como antes.
+let RECMUNDIAL=null;
+function _wrRecords(a,l){
+  if(!RECMUNDIAL)return [];
+  const eq=_srEquip(a), cat=_srCat(a); if(!eq||!cat)return [];
+  const key=_srLiftKey(a,l), sx=_srSexo(a);
+  return _srDivs(a).map(dv=>{
+    const r=RECMUNDIAL[[sx,eq,dv,cat,key].join('|')];
+    return r?{div:dv,cat:cat,kg:r.kg,quien:r.quien,pais:r.pais}:null;
+  }).filter(Boolean);
+}
+function _wrIntento(a,l,w,x){
+  const nada={mov:[],tot:[],hay:false};
+  try{
+    if(!RECMUNDIAL||!x||!x.hay)return nada;
+    w=parseFloat(w)||0;
+    const mov=x.mov.length?_wrRecords(a,l).filter(r=>w>r.kg):[];
+    const tot=x.tot.length?_wrRecords(a,'total').filter(r=>x.total>r.kg):[];
+    return {mov:mov,tot:tot,hay:!!(mov.length||tot.length)};
+  }catch(e){ return nada; }
 }
 // El cartel. Se nombra el total cuando está en juego, para que la tarima, el
 // público y la transmisión sepan que lo que se persigue es el récord de total.
 function _srIntentoTexto(x){
   if(!x||!x.hay)return '';
+  const wr=x.mundial;
+  if(wr&&wr.hay){
+    if(wr.mov.length&&wr.tot.length)return 'INTENTO DE RÉCORD MUNDIAL + TOTAL';
+    if(wr.tot.length)return 'INTENTO DE RÉCORD MUNDIAL DE TOTAL';
+    return 'INTENTO DE RÉCORD MUNDIAL';
+  }
   if(x.mov.length&&x.tot.length)return 'INTENTO DE RÉCORD SUDAMERICANO + TOTAL';
   if(x.tot.length)return 'INTENTO DE RÉCORD SUDAMERICANO DE TOTAL';
   return 'INTENTO DE RÉCORD SUDAMERICANO';
@@ -11069,6 +11104,13 @@ function renderScreenIntentos(cur,nxt){
   const _srX=(typeof _srIntento==='function')?_srIntento(_realAth(cur),DATA.lift,weight):{hay:false,mov:[],tot:[]};
   const _srDet=r=>(r.div+' '+r.cat+' · '+(r.vacio?'SIN RÉCORD PREVIO':'ACTUAL '+r.kg+' KG')).toUpperCase();
   const _srLineas=[];
+  // Si además es récord mundial, primero la marca mundial que se persigue.
+  const _wr=_srX.mundial;
+  if(_wr&&_wr.hay){
+    const d=r=>('MUNDIAL '+r.div+' '+r.cat+' · ACTUAL '+r.kg+' KG').toUpperCase();
+    if(_wr.mov.length)_srLineas.push((_wr.tot.length?liftName+' · ':'')+_wr.mov.map(d).join('   ·   '));
+    if(_wr.tot.length)_srLineas.push('TOTAL '+_srX.total+' KG · '+_wr.tot.map(d).join('   ·   '));
+  }
   // Con los dos en juego, cada línea dice de cuál habla.
   if(_srX.mov.length)_srLineas.push((_srX.tot.length?liftName+' · ':'')+_srX.mov.map(_srDet).join('   ·   '));
   if(_srX.tot.length)_srLineas.push('TOTAL '+_srX.total+' KG · '+_srX.tot.map(_srDet).join('   ·   '));
@@ -15204,6 +15246,9 @@ fetch(_STOR+'public%2Frecords.json?alt=media',{cache:'no-cache'})
 fetch('records_suda.json',{cache:'no-cache'}).then(r=>r.ok?r.json():null)
   .then(d=>{ if(d&&d.records){RECSUDA=d.records;_SR_CLASES=null;window._SR_FUENTE=d.fuente||'';window.RECSUDA=d.records;if(DATA.phase==='compete'||DATA.phase==='liveView')R();} })
   .catch(()=>console.warn('[FECHIPO] records_suda.json no cargado'));
+fetch('records_mundiales.json',{cache:'no-cache'}).then(r=>r.ok?r.json():null)
+  .then(d=>{ if(d&&d.records){RECMUNDIAL=d.records;if(DATA.phase==='compete'||DATA.phase==='liveView')R();} })
+  .catch(()=>console.warn('[FECHIPO] records_mundiales.json no cargado'));
 // DATA.events se construye desde Firestore (LIVE_EVENT_META en renderSetup) MÁS
 // los eventos con nómina propia de nominas.json (ej. Sudamericano Día 1..9, que
 // no tienen inscripciones en Firestore: su roster viene del archivo). renderSetup
