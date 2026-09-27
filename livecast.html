@@ -9368,17 +9368,18 @@ function renderTxScoreboard(cur,lifterChanged){
   const st=subTotal(ra,DATA.lift);
   const cw=(ra.att[DATA.lift][ci]&&ra.att[DATA.lift][ci].w)||0;
   const simBest=Math.max(bestOf(ra,DATA.lift),cw);
+  const _pool=_sbPool(ra);
   let newSub;
-  if(DATA.lift==='sq')newSub=simBest;
+  if(_pool.solo)newSub=(DATA.lift==='bp')?simBest:bestOf(ra,'bp');       // Only Bench: solo cuenta la banca
+  else if(DATA.lift==='sq')newSub=simBest;
   else if(DATA.lift==='bp')newSub=bestOf(ra,'sq')+simBest;
   else newSub=bestOf(ra,'sq')+bestOf(ra,'bp')+simBest;
-  // Mismo sexo + cat + div (separar divisiones de edad)
-  const sameCat=DATA.athletes.filter(a=>a.cat===cur.cat&&a.div===cur.div&&a.sex===cur.sex&&a.flight===DATA.flight&&!a.bombed);
-  const simRanked=sameCat.map(a=>{
-    if(a.id===cur.id)return{id:a.id,sub:newSub};
-    return{id:a.id,sub:subTotal(a,DATA.lift)};
+  // Mismo sexo + cat + div (separar divisiones de edad) y misma competencia
+  const simRanked=_pool.peers.map(a=>{
+    if(a.id===ra.id)return{id:a.id,sub:newSub};
+    return{id:a.id,sub:_pool.val(a)};
   }).filter(x=>x.sub>0).sort((a,b)=>b.sub-a.sub);
-  const simPos=simRanked.findIndex(x=>x.id===cur.id)+1;
+  const simPos=simRanked.findIndex(x=>x.id===ra.id)+1;
   const totalAth=simRanked.length;
   // Forecast mejorado: muestra cambio de posición si corresponde
   const forecastPos=simPos||rk.pos||0;
@@ -10348,7 +10349,7 @@ function renderTxBarbell(cur,lifterChanged){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
       <div>
         <div style="font-family:Oswald;font-size:34px;font-weight:700;letter-spacing:1px;color:#fff;line-height:1">${cur.name||''}</div>
-        <div style="font-family:Oswald;font-size:12px;letter-spacing:2.5px;color:rgba(212,225,245,.45);margin-top:5px">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>
+        <div style="font-family:Oswald;font-size:12px;letter-spacing:2.5px;color:rgba(212,225,245,.45);margin-top:5px">${[sexLbl,cur.club,cur.cat,cur.div,_modTarima(cur)].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>
       </div>
       ${posHtml}
     </div>
@@ -11120,7 +11121,7 @@ function renderScreenIntentos(cur,nxt){
     </div>`:'';
   const weightHtml=`<div style="font-family:Oswald;font-size:120px;font-weight:900;color:${textColor};line-height:1;letter-spacing:2px;white-space:nowrap">${weight}<span style="font-size:0.32em;color:#fff;margin-left:10px">KG</span></div>`;
   const nameHtml=`<div style="font-family:Oswald;font-size:56px;font-weight:700;letter-spacing:1px;color:${textColor};line-height:1.15;white-space:nowrap">${cur.name||''}</div>`;
-  const subtitleHtml=`<div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:#fff;white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
+  const subtitleHtml=`<div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:#fff;white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div,_modTarima(cur)].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
   const positionHtml=posTxt?`<div style="font-family:Oswald;font-size:22px;letter-spacing:1px;color:${accentColor};white-space:nowrap">${posTxt}</div>`:'';
   // Quién viene después — para que los cargadores/spotters se vayan preparando.
   // Si el actual es el último de su ronda, el de al lado NO es null: se sigue
@@ -14399,11 +14400,50 @@ function _virtualHtml(v,linea){
     +(Math.round(v.faltan*10)/10)+'&nbsp;al&nbsp;'+(v.pos-1)+'°</span>';
   return h+'</span>';
 }
+// ── Con quién compite en el marcador ─────────────────────────────────
+// El Only Bench puro compite en banca contra los otros Only Bench (y contra los
+// PL+BP, que también están en esa competencia) por su mejor banca. Antes entraba
+// a la tabla del powerlifting con el subtotal —cero de sentadilla más su banca—
+// y el marcador lo ponía último entre los classic. Tampoco se mezclan classic y
+// equipado: son competencias distintas.
+function _sbSoloBanca(a){
+  const m=String(a&&a.mod||'');
+  return (m==='onlybench'||m==='oe_bench'||m==='equipped_bench')&&!_isPlusBench(a);
+}
+function _sbEquipo(a){ const m=String(a&&a.mod||''); return (m==='equipped'||m==='equipped_bench')?'eq':'cl'; }
+function _sbPool(ath){
+  const solo=_sbSoloBanca(ath), eq=_sbEquipo(ath);
+  const peers=DATA.athletes.filter(a=>a.cat===ath.cat&&a.div===ath.div&&a.sex===ath.sex&&a.flight===DATA.flight
+    &&!a.bombed&&!_esInvitado(a)&&_sbEquipo(a)===eq
+    &&(solo?(_sbSoloBanca(a)||_isPlusBench(a)):!_sbSoloBanca(a)));
+  const val=solo?(a=>DATA.lift==='sq'?0:bestOf(a,'bp')):(a=>subTotal(a,DATA.lift));
+  return {peers:peers,val:val,solo:solo};
+}
+// La modalidad en que compite, para las pantallas de tarima: CLASSIC, EQUIPADO,
+// ONLY BENCH o la mezcla (CLASSIC + ONLY BENCH, CLASSIC + UNIVERSITARIO…). Si la
+// misma persona está inscrita dos veces, una en classic y otra en equipado, se
+// dicen las dos: CLASSIC + EQUIPADO.
+function _modTarima(a){
+  const r=(typeof _realAth==='function')?_realAth(a):a;
+  const m=String(r&&r.mod||'');
+  if(m==='invitado')return 'INVITADO';
+  if(m.indexOf('oe_')===0)return 'OLIMPIADAS ESPECIALES';
+  const eq=_sbEquipo(r)==='eq'?'EQUIPADO':'CLASSIC';
+  if(_sbSoloBanca(r))return eq==='EQUIPADO'?'ONLY BENCH EQUIPADO':'ONLY BENCH';
+  const nn=_nnCrono(r.name);
+  const otro=(DATA.athletes||[]).some(x=>x&&x.id!==r.id&&!x.__is4&&_nnCrono(x.name)===nn
+    &&String(x.mod||'')!=='invitado'&&_sbEquipo(x)!==_sbEquipo(r));
+  const partes=otro?['CLASSIC','EQUIPADO']:[eq];     // siempre en el mismo orden
+  if(_isPlusBench(r))partes.push('ONLY BENCH');
+  if(typeof _isPlusUni==='function'&&_isPlusUni(r))partes.push('UNIVERSITARIO');
+  return partes.join(' + ');
+}
 function catRankBySub(athlete){
-  // Ranking dentro del mismo sexo + categoría + división (no mezcla divisiones de edad)
+  // Ranking dentro del mismo sexo + categoría + división (no mezcla divisiones de
+  // edad) y de la misma competencia: powerlifting o Only Bench, classic o equipado.
   if(_esInvitado(athlete))return{pos:0,of:0};
-  const sameCat=DATA.athletes.filter(a=>a.cat===athlete.cat&&a.div===athlete.div&&a.sex===athlete.sex&&a.flight===DATA.flight&&!a.bombed&&!_esInvitado(a));
-  const withSub=sameCat.map(a=>({id:a.id,sub:subTotal(a,DATA.lift)})).filter(x=>x.sub>0).sort((a,b)=>b.sub-a.sub);
+  const pool=_sbPool(athlete);
+  const withSub=pool.peers.map(a=>({id:a.id,sub:pool.val(a)})).filter(x=>x.sub>0).sort((a,b)=>b.sub-a.sub);
   const idx=withSub.findIndex(x=>x.id===athlete.id);
   return{pos:idx>=0?idx+1:0,of:withSub.length};
 }
