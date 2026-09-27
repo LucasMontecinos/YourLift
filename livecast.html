@@ -1955,7 +1955,7 @@ const _MERGE_HOLD_MS = 4000;
 // hecha desde una pantalla se perdía sola: el merge partía del remoto y esos
 // campos no estaban en la lista, así que el primer snapshot los devolvía.
 const _MERGE_META_FIELDS=['bw','rackSQ','rackBP','sqAbat','bpSeg','bpPalm','mod','country',
-  'flight','lot','bombed','weighedIn','jornada','name','div','cat','sex','club','uni',
+  'flight','lot','bombed','weighedIn','jornada','name','nombreOrig','div','cat','sex','club','uni',
   // Las banderas de las modalidades combinadas: sin ellas, cambiar a "Classic +
   // Only Bench" o "Classic + Universitario" desde el pesaje no llegaba al resto.
   'plusBench','plusUni'];
@@ -1971,6 +1971,17 @@ function _markAtt(id, field){
 // controladores) y encima aplica solo MIS ediciones pendientes. Así dos PCs que
 // tocan atletas distintos no se pisan nunca — antes, cada escritura mandaba el
 // documento completo y la última en llegar borraba lo del otro.
+// ¿Es la misma persona? El guardia contra mezclar campeonatos compara nombres,
+// pero un nombre corregido en vivo tiene que seguir siendo la misma persona:
+// se acepta el nombre actual o el original de cualquiera de los dos lados, o
+// una edición mía todavía sin confirmar.
+function _mismaPersona(la,ra,pend){
+  if(!la||!ra)return false;
+  if(pend&&pend.has&&pend.has(ra.id+'|meta'))return true;
+  const n=x=>_nnCrono(x||'');
+  const A=[n(la.name),n(la.nombreOrig)].filter(Boolean), B=[n(ra.name),n(ra.nombreOrig)].filter(Boolean);
+  return A.some(x=>B.indexOf(x)>=0);
+}
 function _mergeForWrite(localArr, remoteArr){
   if(!remoteArr||!remoteArr.length)return localArr;
   const pend=window._pendingEdits||new Set();
@@ -1979,7 +1990,7 @@ function _mergeForWrite(localArr, remoteArr){
   const out=(remoteArr||[]).map(ra=>{
     const la=byId[ra.id];
     // Mismo id pero otra persona → roster de otro campeonato: manda el remoto.
-    if(!la || _nnCrono(la.name||'')!==_nnCrono(ra.name||''))return ra;
+    if(!la || !_mismaPersona(la,ra,pend))return ra;
     const m=JSON.parse(JSON.stringify(ra));
     if(pend.has(ra.id+'|meta'))META.forEach(f=>{ if(la[f]!==undefined)m[f]=la[f]; });
     ['sq','bp','dl'].forEach(l=>{
@@ -2021,7 +2032,7 @@ function _mergeAthletes(localArr, remoteArr){
     // mezcla nada: manda el del servidor. Los ids se reparten por evento, así
     // que sin este control las ediciones de un campeonato le caían encima a
     // otro atleta en el otro.
-    if(!la || _nnCrono(la.name||'')!==_nnCrono(ra.name||'')) return ra;
+    if(!la || !_mismaPersona(la,ra,held[ra.id+'|meta']?{has:()=>true}:pend)) return ra;
     const m=JSON.parse(JSON.stringify(ra));
     if(held[ra.id+'|meta']){
       _MERGE_META_FIELDS.forEach(f=>{ if(la[f]!==undefined) m[f]=la[f]; });
@@ -3980,7 +3991,7 @@ function _applyCronoFlightsToAthletes(map){
   let tandas=0,datos=0;
   const armando=(DATA.phase==='setup'||DATA.phase==='manage');
   DATA.athletes.forEach(a=>{
-    const entry=_cronoLookup(map,a.name);
+    const entry=_cronoLookup(map,a.name)||(a.nombreOrig?_cronoLookup(map,a.nombreOrig):null);
     if(!entry)return;
     if(entry.flight && a.flight!==entry.flight){a.flight=entry.flight;tandas++;if(_reubicarLote(a))tandas++;}
     if(typeof entry.jornada==='string' && a.jornada!==entry.jornada){a.jornada=entry.jornada;tandas++;}
@@ -4048,7 +4059,8 @@ function _mergeFirebaseAthletes(fbAthletes){
     for(const t of chico){ if(!grande.has(t))return false; }
     return true;
   };
-  const matches=(local,fa)=>(_r(fa.rut)&&_r(local.rut)&&_r(local.rut)===_r(fa.rut))||_mismoNombre(local.name,fa.name);
+  const matches=(local,fa)=>(_r(fa.rut)&&_r(local.rut)&&_r(local.rut)===_r(fa.rut))||_mismoNombre(local.name,fa.name)
+    ||(!!local.nombreOrig&&_mismoNombre(local.nombreOrig,fa.name));   // nombre corregido en vivo
 
   fbAthletes.forEach((fa,j)=>{
     const existing=DATA.athletes.find(a=>matches(a,fa));
@@ -4740,8 +4752,13 @@ window.renameAthlete=function(id){
   if(!nuevo){showToastLC('El nombre no puede quedar vacío');return;}
   if(nuevo===a.name)return;
   const antes=a.name;
+  // El nombre con el que vino queda guardado: la sincronización reconoce a la
+  // persona por su nombre, y sin esto la corrección parecía "otro atleta" y el
+  // servidor le devolvía el nombre viejo en la siguiente escritura.
+  if(!a.nombreOrig)a.nombreOrig=antes;
   a.name=nuevo;
   if('nombre' in a)a.nombre=nuevo;          // el campo con el que vino de la inscripción
+  _markAtt(id,'meta');                      // edición mía: que el merge la respete
   saveNow();R();
   showToastLC('Nombre corregido: '+antes+' → '+nuevo);
 };
