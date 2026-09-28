@@ -6472,13 +6472,17 @@ window.exportMedallasPDF=async function(){
 // ════════════════════════════════════════════════════════════════
 const _OV_PTS=[12,9,8,7,6,5,4,3,2];
 function _ovPuntos(lugar,total){ if(!(total>0)||!lugar)return 0; return lugar<=9?_OV_PTS[lugar-1]:1; }
-function _ovDivOrd(d){ return _ACTA_DIVORD[d]===undefined?9:_ACTA_DIVORD[d]; }
+function _ovDivOrd(d){ if(d==='Master')d='Master I'; return _ACTA_DIVORD[d]===undefined?9:_ACTA_DIVORD[d]; }
+// Masters juntos: en el Sudamericano 2026 el overall y la clasificación por
+// países juntaron Master I, II, III y IV en una sola división "Master". Es lo
+// que viene marcado; "Por división" las vuelve a separar.
+function _ovDiv(d){ return (window._OV.masters!=='sep'&&/^master/i.test(String(d||'')))?'Master':d; }
 const _OV_MODORD=['classic','equipped','ob_classic','ob_equipped','oe'];
 window._OV=window._OV||{sexo:'F',divs:null,mods:null};
 // Qué hay para elegir, sacado de los resultados.
 function _ovOpciones(){
   const divs=new Set(), mods=new Set(), sexos=new Set();
-  _actaGrupos().forEach(g=>{ if(g.mod==='invitado')return; divs.add(g.div); mods.add(g.mod); sexos.add(g.sexo); });
+  _actaGrupos().forEach(g=>{ if(g.mod==='invitado')return; divs.add(_ovDiv(g.div)); mods.add(g.mod); sexos.add(g.sexo); });
   return {divs:[...divs].sort((a,b)=>_ovDivOrd(a)-_ovDivOrd(b)),
           mods:[...mods].sort((a,b)=>_OV_MODORD.indexOf(a)-_OV_MODORD.indexOf(b)),sexos:[...sexos]};
 }
@@ -6489,16 +6493,29 @@ function _ovDatos(){
   const bloques=new Map();
   _actaGrupos().forEach(g=>{
     if(g.mod==='invitado'||g.sexo!==o.sexo)return;
-    if(o.divs&&o.divs.indexOf(g.div)<0)return;
+    const dv=_ovDiv(g.div);
+    if(o.divs&&o.divs.indexOf(dv)<0)return;
     if(o.mods&&o.mods.indexOf(g.mod)<0)return;
-    const k=g.div+'|'+g.mod;
-    if(!bloques.has(k))bloques.set(k,{div:g.div,mod:g.mod,view:g.view,filas:[]});
+    const k=dv+'|'+g.mod;
+    if(!bloques.has(k))bloques.set(k,{div:dv,mod:g.mod,view:g.view,filas:[]});
     g.filas.forEach(f=>bloques.get(k).filas.push({a:f.a,cat:g.cat,total:f.total,gl:f.gl||0,
       lugarCat:f.lugar,pts:_ovPuntos(f.lugar,f.total),quien:quien(f.a)}));
   });
   const out=[...bloques.values()].sort((x,y)=>(_ovDivOrd(x.div)-_ovDivOrd(y.div))
     ||(_OV_MODORD.indexOf(x.mod)-_OV_MODORD.indexOf(y.mod)));
   out.forEach(b=>{
+    // Con los masters juntos, el lugar en cada categoría —que da los puntos por
+    // país— se vuelve a sacar entre todos los masters de esa categoría, con la
+    // misma regla del acta: más total, y a igual total el más liviano.
+    if(b.div==='Master'){
+      const porCat={};
+      b.filas.forEach(f=>{ (porCat[f.cat]=porCat[f.cat]||[]).push(f); });
+      Object.keys(porCat).forEach(c=>{
+        let n=0;
+        porCat[c].slice().sort((x,y)=>(y.total-x.total)||((x.a.bw||0)-(y.a.bw||0)))
+          .forEach(f=>{ f.lugarCat=f.total>0?++n:0; f.pts=_ovPuntos(f.lugarCat,f.total); });
+      });
+    }
     // Overall: por GL; a igual GL, el más liviano. Los que no hicieron total, al final.
     b.filas.sort((x,y)=>((y.total>0)-(x.total>0))||(y.gl-x.gl)||((x.a.bw||0)-(y.a.bw||0)));
     let n=0; b.filas.forEach(f=>{ f.lugar=f.total>0?++n:0; });
@@ -6532,6 +6549,7 @@ function _ovEquipos(filas,clave,conBandera){
 window.ovSet=function(campo,valor){
   const o=window._OV, op=_ovOpciones();
   if(campo==='sexo')o.sexo=valor;
+  else if(campo==='masters'){ o.masters=valor; o.divs=null; }   // las divisiones elegidas cambian de nombre
   else{
     const todos=campo==='divs'?op.divs:op.mods;
     if(valor==='*')o[campo]=null;
@@ -6562,6 +6580,7 @@ window.mostrarOverall=function(){
     +'<button class="btn" onclick="document.getElementById(\'ovModal\').remove()">Cerrar</button></div></div>';
   h+=fila('SEXO',op.sexos.slice().sort().map(sx=>pill(o.sexo===sx,sx==='F'?'MUJERES':'HOMBRES',"ovSet('sexo','"+sx+"')")).join(''));
   h+=fila('DIVISIÓN',pill(!o.divs,'TODAS',"ovSet('divs','*')")+op.divs.map(v=>pill(!!o.divs&&o.divs.indexOf(v)>=0,esc(v).toUpperCase(),"ovSet('divs','"+esc(v)+"')")).join(''));
+  h+=fila('MASTERS',pill(o.masters!=='sep','JUNTOS',"ovSet('masters','juntos')")+pill(o.masters==='sep','POR DIVISIÓN',"ovSet('masters','sep')"));
   h+=fila('MODALIDAD',pill(!o.mods,'TODAS',"ovSet('mods','*')")+op.mods.map(v=>pill(!!o.mods&&o.mods.indexOf(v)>=0,esc(_ACTA_MOD_N[v]||v),"ovSet('mods','"+v+"')")).join(''));
   if(!d.bloques.length)h+='<div style="padding:20px;color:var(--muted);text-align:center">No hay resultados con esa selección.</div>';
   d.bloques.forEach(b=>{
