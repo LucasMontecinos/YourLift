@@ -316,12 +316,34 @@ var ANIO_RANKING=new Date().getFullYear();
 // El año real, para poder volver. ANIO_RANKING se mueve cuando alguien mira la
 // temporada siguiente; este no.
 var ANIO_HOY=ANIO_RANKING;
+// Año de nacimiento por nombre. Primero exacto; si no, el mismo criterio del
+// livecast: los nombres calzan si todas las palabras del más corto (al menos
+// dos) están en el más largo —"Lukas Valdés Palazuelos" y "Lukas Benjamín Valdés
+// Palazuelos"—. Solo vale si apunta a UN año: con dos candidatos distintos no se
+// adivina y queda la división del resultado.
+var _NAC_TOK=null, _NAC_CACHE={};
+function _anioPorNombre(n){
+  var T=window.YL_NAC; if(!T)return 0;
+  var k=_normName(n); if(!k)return 0;
+  if(T[k])return T[k];
+  if(k in _NAC_CACHE)return _NAC_CACHE[k];
+  if(!_NAC_TOK){ _NAC_TOK=Object.keys(T).map(function(x){return {k:x,t:x.split(' ')};}); }
+  var t=k.split(' '), anios={};
+  _NAC_TOK.forEach(function(c){
+    var chico=c.t.length<=t.length?c.t:t, grande=c.t.length<=t.length?t:c.t;
+    if(chico.length<2)return;
+    for(var i=0;i<chico.length;i++){ if(grande.indexOf(chico[i])<0)return; }
+    anios[T[c.k]]=1;
+  });
+  var ks=Object.keys(anios);
+  return (_NAC_CACHE[k]=ks.length===1?parseInt(ks[0],10):0);
+}
 function _divVigente(e){
   var guardada=_normDiv(e&&e.d);
   if(!e||guardada==='Universitario')return guardada;
   if(typeof ylDivisionPorAnio!=='function')return guardada;   // si no cargó el script, todo sigue como antes
   var an=e.an||0;
-  if(!an&&window.YL_NAC)an=window.YL_NAC[_normName(e.n)]||0;
+  if(!an)an=_anioPorNombre(e.n);
   if(!an)return guardada;
   return ylDivisionPorAnio(an,ANIO_RANKING)||guardada;
 }
@@ -341,7 +363,10 @@ function _getTab(sex,modalidad,view,divOrEvento){
   if(view==='bench'||isBenchOnly) return (isEq?'bench_eq_':'bench_cl_')+s;
   return (isEq?'eq_':'cl_')+s;
 }
-function _normName(n){return String(n||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim()}
+// Sin tildes ni mayúsculas, y con los espacios dobles colapsados: varios nombres
+// vienen de las actas con dos espacios ("Romero  Diaz") y así no calzaban con la
+// tabla de años de nacimiento.
+function _normName(n){return String(n||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim()}
 
 function _rebuildPositions(){
   // Recalcular posiciones dentro de cada (tab,cat,div) por tt desc
