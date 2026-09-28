@@ -434,6 +434,13 @@ function applyEdit(o){
       _rebuildPositions();
       if(typeof R==='function')R();
     }
+    // Nombres mal escritos en resultados ya publicados (vienen así de una nómina
+    // ajena, como la de FESUPO) → el nombre correcto. Sin esto la misma persona
+    // sale dos veces en su categoría. La clave va normalizada (_normName).
+    var ALIAS_NOMBRES={
+      'yohan alejando perez coninir':'Yohan Alejandro Perez Coñuñir'
+    };
+    function _aliasNombre(n){ return ALIAS_NOMBRES[_normName(n)]||n; }
     function _applyCompRes(docs){
       var liveEntries=[];
       docs.forEach(function(data){
@@ -454,7 +461,7 @@ function applyEdit(o){
         // El glp que viene del resultado se usa solo si no hay peso corporal: si
         // lo hay, el GL se calcula con los coeficientes de ESTA tabla, que es lo
         // único que garantiza que un equipado no quede medido como clásico.
-        liveEntries.push(glNormalizar(applyEdit({n:data.nombre||'',t:data.club||'',rut:data.rut||'',codigo:data.codigo||'',c:cat,d:data.division||'Open',bw:_bwC,sq:isBench?0:(r.sq||0),bp:r.bp||0,dl:isBench?0:(r.dl||0),tt:r.total||0,dt:glp,tab:tab,p:99,fecha:data.fecha||'',an:_an,_live:true})));
+        liveEntries.push(glNormalizar(applyEdit({n:_aliasNombre(data.nombre||''),t:data.club||'',rut:data.rut||'',codigo:data.codigo||'',c:cat,d:data.division||'Open',bw:_bwC,sq:isBench?0:(r.sq||0),bp:r.bp||0,dl:isBench?0:(r.dl||0),tt:r.total||0,dt:glp,tab:tab,p:99,fecha:data.fecha||'',an:_an,_live:true})));
       });
       liveEntries.forEach(function(le){
         var nName=_normName(le.n);
