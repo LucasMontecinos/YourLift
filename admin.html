@@ -1857,11 +1857,20 @@ window.viewInsDocs = function(sid){
 
   const isImg = url => /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(url);
 
-  let body = '';
+  // Para agregar un documento que falta (o todos, en una inscripción hecha a
+  // mano desde el panel): los tipos del catálogo, los de Olimpiadas Especiales y
+  // los propios de este campeonato.
+  const _tipos = Object.assign({}, NEW_MAP, window.DOCS_OE_ATLETA||{}, XTRA);
+  const agregar = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--border)">
+      <span style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:var(--gold)">AGREGAR DOCUMENTO</span>
+      <select id="docAddTipo" class="inp" style="flex:1;min-width:220px">${Object.entries(_tipos).map(([k,v])=>`<option value="${esc(k)}">${esc(v.label||k)}</option>`).join('')}</select>
+      <button onclick="replaceInsDocFile('${sid}',document.getElementById('docAddTipo').value)" style="padding:8px 14px;background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);border-radius:6px;cursor:pointer;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px">⬆ SUBIR ARCHIVO</button>
+    </div>`;
+  let body = agregar;
   if(docs.length===0){
-    body = `<div style="padding:40px;text-align:center;color:var(--muted)">Este atleta no tiene documentos subidos.</div>`;
+    body += `<div style="padding:40px;text-align:center;color:var(--muted)">Este atleta no tiene documentos subidos.</div>`;
   } else {
-    body = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;padding:18px">
+    body += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;padding:18px">
       ${docs.map(d => `
         <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden">
           <div style="aspect-ratio:4/5;background:#0a1628;display:flex;align-items:center;justify-content:center;position:relative">
@@ -1934,7 +1943,9 @@ window.replaceInsDocFile = function(sid, docKey){
     const insId=decodeURIComponent(sid);
     const i=ST.inscripciones.find(x=>x.id===insId);
     if(!i){showToast('Inscripción no encontrada',null,true);return;}
-    const map=DOC_STORAGE_MAP[docKey];
+    // Los documentos propios del campeonato y los de Olimpiadas Especiales (x_…)
+    // no tienen campo viejo: van solo al mapa docs.
+    const map=DOC_STORAGE_MAP[docKey]||(/^x_/.test(docKey)?{legacy:null,path:docKey}:null);
     if(!map){showToast('Tipo de documento desconocido: '+docKey,null,true);return;}
     const rutClean=String(i.rut||'').replace(/[^0-9kK]/g,'').toUpperCase();
     if(!rutClean){showToast('Esta inscripción no tiene RUT',null,true);return;}
@@ -1948,18 +1959,29 @@ window.replaceInsDocFile = function(sid, docKey){
       await uploadBytes(sref,file,{contentType:file.type||'application/octet-stream'});
       const url=await getDownloadURL(sref);
       // Actualizar AMBOS: campo legacy y el mapa docs (nuevo sistema)
-      const update={[map.legacy]:url};
+      const update={};
+      if(map.legacy)update[map.legacy]=url;
       const newKey=map.newKey||docKey;
       // si DOC_TYPES_CATALOG tiene newKey, escribir también en docs.{newKey}
       update['docs.'+newKey]=url;
-      await updateDoc(doc(db,'inscripciones_private',insId),update);
+      try{
+        await updateDoc(doc(db,'inscripciones_private',insId),update);
+      }catch(err){
+        // Una inscripción agregada a mano desde el panel no tiene registro privado
+        // (no pasó por el formulario). Se crea acá, con la forma que exigen las
+        // reglas: un PIN de 4 dígitos, el RUT y los documentos.
+        if(!(err&&(err.code==='not-found'||/No document to update/i.test(err.message||''))))throw err;
+        const nuevo={pin:String(Math.floor(1000+Math.random()*9000)),rut:String(i.rut||''),ts:Date.now(),docs:{[newKey]:url}};
+        if(map.legacy)nuevo[map.legacy]=url;
+        await setDoc(doc(db,'inscripciones_private',insId),nuevo);
+      }
       // refrescar estado local
       if(!ST.inscripcionesPrivate[insId])ST.inscripcionesPrivate[insId]={};
-      ST.inscripcionesPrivate[insId][map.legacy]=url;
+      if(map.legacy)ST.inscripcionesPrivate[insId][map.legacy]=url;
       if(!ST.inscripcionesPrivate[insId].docs)ST.inscripcionesPrivate[insId].docs={};
       ST.inscripcionesPrivate[insId].docs[newKey]=url;
       await logAction('replace_doc',insId,docKey,'(nuevo archivo)',{nombre:i.nombre});
-      showToast('Documento reemplazado');
+      showToast('Documento guardado');
       // re-abrir el modal con los datos frescos
       document.getElementById('docsModal')?.remove();
       viewInsDocs(sid);
@@ -6100,7 +6122,9 @@ function renderNominas(){
           }
           const docsCell = docCount>0
             ? `<button onclick="viewInsDocs('${sid}')" title="Ver todos los documentos subidos" style="display:inline-block;padding:4px 10px;background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;font-family:Oswald">Ver (${docCount})</button>`
-            : `<span style="color:var(--muted);font-size:11px;opacity:.5">—</span>`;
+            : (editable
+              ? `<button onclick="viewInsDocs('${sid}')" title="Agregar documentos" style="display:inline-block;padding:4px 10px;background:transparent;border:1px dashed var(--border);color:var(--muted);border-radius:5px;cursor:pointer;font-family:Oswald;font-size:11px">+ Agregar</button>`
+              : `<span style="color:var(--muted);font-size:11px;opacity:.5">—</span>`);
           return `<tr>
             <td style="color:var(--muted);font-family:Oswald">${idx+1}</td>
             <td>${esc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${esc(i.rut||'')}</span></td>
@@ -6794,6 +6818,11 @@ window.insGuardar=async function(){
       // el que la revise después tiene que poder saber por qué.
       origen:'panel', creadaPor:ST.user?.email||'admin',
     });
+    // Registro privado, para poder subirle documentos desde el panel. Con la
+    // forma que piden las reglas (PIN de 4 dígitos); si falla, no se pierde la
+    // inscripción: se crea solo al subir el primer documento.
+    try{ await setDoc(doc(db,'inscripciones_private',id),{pin:String(Math.floor(1000+Math.random()*9000)),rut:String(a.rut||''),ts:Date.now(),docs:{}}); }
+    catch(e){ console.warn('[insGuardar] registro privado',e); }
     await logAction('crear_inscripcion',id,null,'aceptada',{nombre:a.nombre,evento:_insWork.evento});
     showToast('✓ '+a.nombre+' agregado a '+_insWork.evento);
     const ov=document.getElementById('insModal'); if(ov)ov.remove();
