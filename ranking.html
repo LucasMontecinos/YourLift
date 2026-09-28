@@ -459,7 +459,11 @@ function applyEdit(o){
       liveEntries.forEach(function(le){
         var nName=_normName(le.n);
         var idx=D.findIndex(function(e){return _normName(e.n)===nName&&e.tab===le.tab&&e.c===le.c&&e.d===le.d;});
-        if(idx<0){D.push(le);}else if((le.dt||0)>(D[idx].dt||0)){D[idx]=le;}
+        // Gana la mejor marca con el mismo criterio con que se ordena el ranking:
+        // primero el total, y a igual total el GL. Antes se comparaba solo el GL,
+        // y un total mejor hecho con más peso corporal —GL más bajo— se perdía.
+        if(idx<0){D.push(le);}
+        else if((le.tt||0)>(D[idx].tt||0)||((le.tt||0)===(D[idx].tt||0)&&(le.dt||0)>(D[idx].dt||0))){D[idx]=le;}
       });
       _rebuildPositions();
       if(typeof R==='function')R();
