@@ -63,7 +63,7 @@ async function abrir(b, haySesion) {
     r.fulfill({ status: 200, contentType: 'text/javascript', body: STUB_FS }));
   await p.route('**/firebase-auth.js', r =>
     r.fulfill({ status: 200, contentType: 'text/javascript', body: stubs(haySesion) }));
-  await p.goto('http://localhost:8972/jueces.html', { waitUntil: 'domcontentloaded' });
+  await p.goto('http://localhost:8972/jueces.html?canal=Regional_Noviembre', { waitUntil: 'domcontentloaded' });
   await p.waitForFunction(() => typeof abrirLogin === 'function', null, { timeout: 20000 });
   await p.waitForTimeout(400); // que corra onAuthStateChanged
   return { p, ctx, errs };

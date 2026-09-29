@@ -12,6 +12,7 @@
 <meta property="og:image" content="https://yourlift.cl/icon-512.png">
 <link rel="stylesheet" href="compartido/paleta.css?v=1">
 <link rel="stylesheet" href="compartido/iconos.css?v=1">
+<script src="compartido/canales.js?v=1"></script>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -151,6 +152,14 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 .btn-clear{flex:1;padding:14px;border-radius:12px;border:2px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:1px;cursor:pointer;transition:all .15s}
 .btn-clear:active{transform:scale(.97);border-color:var(--accent);color:var(--accent)}
 .btn-clear.has-vote{border-color:#ef4444;color:#ef4444}
+
+/* ── Campeonato (link sin canal) ──────────────────── */
+.camp-lista{display:flex;flex-direction:column;gap:10px;width:min(340px,90vw);max-height:52dvh;overflow-y:auto}
+.camp-lista .pick-btn{width:100%;font-size:16px;letter-spacing:1px;padding:16px 18px;text-align:left}
+.camp-tarima{display:flex;gap:6px;width:min(340px,90vw)}
+.camp-tarima button{flex:1;padding:9px 6px;border-radius:10px;border:2px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer}
+.camp-tarima button.on{border-color:var(--gold);color:var(--gold);background:rgba(212,168,67,.1)}
+.ev-nombre{flex-shrink:0;font-size:11px;color:var(--muted);letter-spacing:1px;text-align:center;max-width:360px;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 </head>
 <body>
@@ -178,6 +187,20 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
   </p>
 </div>
 
+<!-- ══ CAMPEONATO ═══════════════════════════════════════════
+     Solo aparece si el link no dice de qué campeonato es: los links viejos, o
+     jueces.html escrito a mano. Con dos campeonatos a la misma hora cada juez
+     tiene que mandar sus luces al suyo, así que no se adivina: se pregunta. -->
+<div id="camp" class="screen">
+  <div>
+    <div class="logo">YOUR<span>LIFT</span></div>
+    <div class="subtitle">Panel de Jueces</div>
+  </div>
+  <p style="font-size:13px;color:var(--muted);text-align:center;max-width:320px;line-height:1.5">¿En qué campeonato juzgas?</p>
+  <div class="camp-tarima" id="campTarima"></div>
+  <div class="camp-lista" id="campLista"><p style="color:var(--muted);font-size:13px;text-align:center">Cargando campeonatos…</p></div>
+</div>
+
 <!-- ══ PICK SCREEN ══════════════════════════════════════════ -->
 <div id="pick" class="screen">
   <div>
@@ -202,6 +225,7 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
       <div class="fb-dot" id="fbDot"></div><span id="fbLabel">Conectando</span>
     </div>
   </div>
+  <div class="ev-nombre" id="evNombre"></div>
 
   <!-- Athlete info -->
   <div class="athlete-info">
@@ -276,8 +300,13 @@ let fbDB=null,fbReady=false,fbSesion=false;
 // luces. Sin esto, los tres jueces de la tarima 1 y los tres de la tarima 2
 // escribirían el mismo documento: se pisarían el voto y las luces saldrían
 // cruzadas en las dos pantallas. El link lo entrega el panel de Transmisión.
-const TARIMA=(()=>{try{return new URLSearchParams(location.search).get('tarima')||null}catch(e){return null}})();
-const JUEZ_DOC=TARIMA?'current_T'+TARIMA:'current';
+let TARIMA=(()=>{try{return new URLSearchParams(location.search).get('tarima')||null}catch(e){return null}})();
+// …y en qué campeonato. El link que entrega Control en Vivo trae el canal del
+// campeonato (?canal=…): con dos campeonatos a la misma hora, las luces de este
+// juez van solo al suyo. Si el link no lo trae, se pregunta (pantalla "camp").
+// La regla del canal es la misma del livecast: compartido/canales.js.
+let CANAL=(()=>{try{const c=new URLSearchParams(location.search).get('canal');return YLCanal.valido(c)?c:null}catch(e){return null}})();
+let JUEZ_DOC=CANAL?YLCanal.jueces(CANAL,TARIMA):null;
 
 (async()=>{
   try{
@@ -295,6 +324,7 @@ const JUEZ_DOC=TARIMA?'current_T'+TARIMA:'current';
     fbReady=true;
     setFBStatus(true);
     startAthleteListener();
+    if(!JUEZ_DOC)_cargarCampeonatos();
     // …y si ese navegador NO tiene sesión, se inicia acá mismo. Antes había que
     // ir a entrar al admin o al livecast en el mismo navegador y recién volver:
     // en la tablet donde ya se había entrado funcionaba, en el teléfono del juez
@@ -396,13 +426,14 @@ window.abrirLogin=function(msg){
   document.getElementById('login').classList.add('active');
   document.getElementById('panel').classList.remove('active');
   document.getElementById('pick').classList.remove('active');
+  document.getElementById('camp').classList.remove('active');
 };
 function cerrarLogin(){
   document.getElementById('login').classList.remove('active');
   // Si ya había elegido posición antes de que se venciera la sesión, vuelve
   // directo a juzgar. Hacerlo elegir de nuevo en medio de una tanda es perder
   // tiempo de tarima por nada.
-  document.getElementById(myPos?'panel':'pick').classList.add('active');
+  document.getElementById(!JUEZ_DOC?'camp':(myPos?'panel':'pick')).classList.add('active');
 }
 window.salir=async function(){
   if(!confirm('¿Cerrar la sesión en este teléfono?\nTus luces dejan de llegar a la tarima hasta que vuelvas a entrar.'))return;
@@ -567,13 +598,69 @@ window.selectPos=function(pos){
   if(btn)btn.style.display=pos==='central'?'block':'none';
 };
 
+// ══ Campeonato (cuando el link no lo trae) ══════════════════
+// Se listan los campeonatos en curso: los mismos que ve el operador en su lista
+// (ni archivados ni ocultos del livecast). Con dos tarimas se elige además cuál.
+let _campTarima=TARIMA||'';
+async function _cargarCampeonatos(){
+  const cont=document.getElementById('campLista');
+  _pintarTarimas();
+  try{
+    const snap=await window._fb.getDocs(window._fb.collection(fbDB,'eventos'));
+    const evs=[];
+    snap.forEach(d=>{const e=d.data()||{};
+      if(e.status==='archived'||e.livecastVisible===false||!e.name)return;
+      evs.push(e.name);});
+    evs.sort((a,b)=>a.localeCompare(b));
+    if(!evs.length){cont.innerHTML='<p style="color:var(--muted);font-size:13px;text-align:center;line-height:1.5">No hay campeonatos en curso. Pídele el link de jueces a quien opera Control en Vivo.</p>';return;}
+    cont.innerHTML='';
+    evs.forEach(n=>{
+      const b=document.createElement('button');
+      b.className='pick-btn cen';
+      b.textContent=n;
+      b.onclick=()=>elegirCampeonato(n);
+      cont.appendChild(b);
+    });
+  }catch(e){
+    console.error(e);
+    cont.innerHTML='<p style="color:#ef4444;font-size:13px;text-align:center">No se pudo cargar la lista. Revisa la conexión y recarga.</p>';
+  }
+}
+function _pintarTarimas(){
+  const c=document.getElementById('campTarima'); if(!c)return;
+  c.innerHTML='';
+  [['','UNA TARIMA'],['1','TARIMA 1'],['2','TARIMA 2']].forEach(([t,l])=>{
+    const b=document.createElement('button');
+    b.textContent=l; if(t===_campTarima)b.className='on';
+    b.onclick=()=>{_campTarima=t;_pintarTarimas();};
+    c.appendChild(b);
+  });
+}
+window.elegirCampeonato=function(nombre){
+  TARIMA=_campTarima||null;
+  CANAL=YLCanal.deEvento(nombre,TARIMA);
+  JUEZ_DOC=YLCanal.jueces(CANAL,TARIMA);
+  // Queda en la dirección: si se recarga la página, sigue en el mismo campeonato.
+  try{
+    const u=new URL(location.href);
+    u.searchParams.set('canal',CANAL);
+    if(TARIMA)u.searchParams.set('tarima',TARIMA); else u.searchParams.delete('tarima');
+    history.replaceState(null,'',u.href);
+  }catch(e){}
+  document.getElementById('evNombre').textContent=nombre;
+  startAthleteListener();
+  document.getElementById('camp').classList.remove('active');
+  document.getElementById(fbSesion?(myPos?'panel':'pick'):'login').classList.add('active');
+};
+
 // ══ Athlete listener (shows current athlete from Firebase) ═
 function startAthleteListener(){
-  if(!fbReady)return;
-  // Listen to judge_decisions/current for athlete info
+  if(!fbReady||!JUEZ_DOC)return;
+  // Listen to judge_decisions/<canal> for athlete info
   window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',JUEZ_DOC),(snap)=>{
     if(!snap.exists())return;
     const d=snap.data();
+    if(d.evento)document.getElementById('evNombre').textContent=d.evento;
     // If reset signal, clear local vote UI
     if(d.reset_ts&&d.reset_ts>(_lastReset||0)){
       _lastReset=d.reset_ts;

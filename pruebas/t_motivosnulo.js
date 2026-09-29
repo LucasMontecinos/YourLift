@@ -42,7 +42,7 @@ const DONDE = () => {
   p.on('pageerror', e => errs.push(e.message));
   // La página importa Firebase; sin red esos import fallan y el resto igual corre.
   await p.route('**/firebasejs/**', r => r.abort());
-  await p.goto('http://localhost:8972/jueces.html', { waitUntil: 'domcontentloaded' });
+  await p.goto('http://localhost:8972/jueces.html?canal=Regional_Noviembre', { waitUntil: 'domcontentloaded' });
   await p.waitForFunction(() => typeof pintarMotivos === 'function', null, { timeout: 20000 });
   await p.evaluate(() => selectPos('central'));
 

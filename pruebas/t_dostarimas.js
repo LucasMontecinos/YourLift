@@ -10,6 +10,10 @@
 //   · livecast_screen → cambiar la pantalla en una se la cambiaba a la otra.
 //
 // Nada de eso se nota probando con una sola tarima, que es como se probó siempre.
+//
+// Desde septiembre de 2026 las luces van además por campeonato (dos campeonatos
+// a la misma hora tampoco comparten jueces): 'current__<campeonato>_T1'. Eso se
+// prueba entero en t_doscampeonatos.js; acá, que las tarimas sigan separadas.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_dostarimas.js
 const fs = require('fs');
 const { chromium } = require('playwright');
@@ -53,34 +57,48 @@ async function abrir(b, tarima) {
   }
 
   console.log('\n  Las luces y el cronómetro, que era lo que faltaba');
-  ok(t1.ids.jueces === 'current_T1' && t2.ids.jueces === 'current_T2',
+  ok(t1.ids.jueces === 'current__Regional_Noviembre_T1' && t2.ids.jueces === 'current__Regional_Noviembre_T2',
      'un documento de luces por tarima (' + t1.ids.jueces + ' / ' + t2.ids.jueces + ')');
-  ok(/function juezDocId\(\)\{return TARIMA\?'current_T'\+TARIMA:'current';\}/.test(src),
-     'sale de un solo lugar');
+  ok(/function juezDocId\(\)\{return YLCanal\.jueces\(fbDocId\(\),TARIMA\);\}/.test(src),
+     'sale de un solo lugar (la regla compartida de compartido/canales.js)');
   // Lo que importa no es cuántos accesos hay —eso cambia cada vez que se agrega
   // uno— sino que TODOS pasen por juezDocId(). Antes esto era un número fijo y se
   // rompía al sumar un acceso nuevo, aunque estuviera bien escrito.
+  //
+  // Los oyentes guardan el canal en que quedaron escuchando (_judgeDoc,
+  // _lucesHistDoc, _txLightsDoc) para volver a engancharse si cambia el
+  // campeonato: valen si esas variables salen también de juezDocId().
+  const VARS = ['_judgeDoc', '_lucesHistDoc', '_txLightsDoc'];
   const todos = (src.match(/'judge_decisions',|'timer_control',/g) || []).length;
-  const conId = (src.match(/'judge_decisions',juezDocId\(\)|'timer_control',juezDocId\(\)/g) || []).length;
+  const conId = (src.match(/'(judge_decisions|timer_control)',(juezDocId\(\)|_judgeDoc|_lucesHistDoc|_txLightsDoc)\)/g) || []).length;
   ok(todos > 0 && todos === conId,
      'y todos los accesos del livecast pasan por ahí (' + conId + ' de ' + todos + ')');
+  const asignaciones = VARS.map(v => (src.match(new RegExp(v + '=([^;,]+)', 'g')) || []))
+    .reduce((a, b) => a.concat(b), []).filter(x => !/=null$|===/.test(x));
+  ok(asignaciones.length >= 3 && asignaciones.every(x => /=juezDocId\(\)$/.test(x)),
+     'y los canales guardados salen de juezDocId(): ' + asignaciones.join(' · '));
   ok(!/'judge_decisions','current'/.test(src) && !/'timer_control','current'/.test(src),
      'no quedó ningún acceso con el id fijo');
 
   console.log('\n  Y la pantalla de tarima');
-  ok(/TARIMA\?base\+'_T'\+TARIMA:base/.test(src), 'el canal de la pantalla también se separa');
+  ok(t1.ids.screen === t1.ids.sync && t2.ids.screen === t2.ids.sync,
+     'el canal de la pantalla es el de la tarima: ' + t1.ids.screen + ' / ' + t2.ids.screen);
+  // Antes el control escribía el modo de la pantalla en otro documento —60 letras
+  // y sin la tarima— y con dos tarimas no le llegaba a la pantalla.
+  ok(!/'livecast_screen',\s*\(DATA\.event/.test(src) && !/substring\(0,60\)/.test(src),
+     'y el control escribe en ese mismo canal, no en uno armado aparte');
 
   console.log('\nCon UNA sola tarima, todo sigue como estaba');
-  ok(solo.ids.jueces === 'current', 'las luces siguen en "current" — no se rompe lo que funciona hoy');
+  ok(solo.ids.jueces === 'current__Regional_Noviembre', 'las luces van al canal del campeonato, sin tarima: ' + solo.ids.jueces);
   ok(solo.ids.screen.indexOf('_T') < 0, 'y la pantalla tampoco cambia de canal');
   ok(solo.ids.sync.indexOf('_T') < 0, 'ni el documento de la competencia');
 
   console.log('\nEl panel de jueces sabe en qué tarima está');
   {
-    ok(/const TARIMA=\(\(\)=>\{try\{return new URLSearchParams\(location\.search\)\.get\('tarima'\)/.test(jue),
+    ok(/let TARIMA=\(\(\)=>\{try\{return new URLSearchParams\(location\.search\)\.get\('tarima'\)/.test(jue),
        'lee la tarima del link');
-    ok(/const JUEZ_DOC=TARIMA\?'current_T'\+TARIMA:'current';/.test(jue),
-       'y arma el mismo id que el livecast');
+    ok(/JUEZ_DOC=CANAL\?YLCanal\.jueces\(CANAL,TARIMA\):null;/.test(jue),
+       'y arma el id con la misma regla que el livecast');
     ok(!/'judge_decisions','current'/.test(jue), 'ningún acceso quedó con el id fijo');
     const ctx = await b.newContext({ viewport: { width: 412, height: 915 } });
     const p = await ctx.newPage();
@@ -109,9 +127,9 @@ async function abrir(b, tarima) {
       return document.body.innerText + '||' + [...document.querySelectorAll('input[readonly]')].map(i => i.value).join(' ');
     });
     ok(/LINKS PARA LOS TEL/.test(r), 'hay una sección para los teléfonos');
-    ok(/jueces\.html\?tarima=1/.test(r), 'el del juez lleva tarima=1');
+    ok(/jueces\.html\?canal=Regional_Noviembre_T1&tarima=1/.test(r), 'el del juez lleva el canal de la tarima 1');
     ok(/remote=1&tarima=1/.test(r), 'y el del control remoto también');
-    ok(/manda las luces a la otra pantalla/.test(r),
+    ok(/de este campeonato y de la tarima 1/.test(r),
        'con el aviso de por qué importa el link correcto');
   }
 

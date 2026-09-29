@@ -89,7 +89,7 @@ async function abrir(b, pos) {
   await p.route('**/firebase-app.js', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: STUB_APP }));
   await p.route('**/firebase-firestore.js', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: STUB_FS }));
   await p.route('**/firebase-auth.js', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: STUB_AUTH }));
-  await p.goto('http://localhost:8972/jueces.html', { waitUntil: 'domcontentloaded' });
+  await p.goto('http://localhost:8972/jueces.html?canal=Regional_Noviembre', { waitUntil: 'domcontentloaded' });
   await p.waitForFunction(() => typeof selectPos === 'function' && window.__doc, null, { timeout: 20000 });
   await p.evaluate(x => selectPos(x), pos);
   await p.waitForTimeout(120);

@@ -131,6 +131,7 @@ body.yt-on .main{padding-top:14px}
 <div id="ytLive"><div id="ytBox"></div><div id="ytBar"></div></div>
 <div id="R"></div>
 <script src="clubs.js?v=2"></script>
+<script src="compartido/canales.js?v=1"></script>
 <script src="yl-ediciones.js?v=2"></script>
 <script src="https://cdn.jsdelivr.net/npm/obs-websocket-js@5/dist/obs-ws.min.js" integrity="sha384-Vce9u7FN5Pbapc8dhpMdg2EjTels5H1cGOVLAe7THp3fEtfb89nD6YOIaf8781ay" crossorigin="anonymous"></script>
 <script>
@@ -547,7 +548,16 @@ async function initFB(){
         const _oculto=(e.status==='archived'||e.livecastVisible===false);
         if(_oculto){
           window.LIVE_EVENT_HIDDEN.add(d.id);
-          if(e.name)window.LIVE_EVENT_HIDDEN_NAMES.add(e.name);
+          if(e.name){
+            window.LIVE_EVENT_HIDDEN_NAMES.add(e.name);
+            // Un campeonato que se corrió en dos tarimas quedó en Firestore como
+            // "<nombre> - Tarima 1" y "- Tarima 2", pero en nominas.json sigue con
+            // el nombre solo. Sin esto ese nombre suelto no calzaba con nada y
+            // aparecía en la lista como si estuviera activo (le pasó al de
+            // Debutantes, ya archivado).
+            const _base=String(e.name).replace(/\s*[—–-]\s*Tarima\s*\d+\s*$/i,'');
+            if(_base&&_base!==e.name)window.LIVE_EVENT_HIDDEN_NAMES.add(_base);
+          }
         }
         // Archivado = fuera de la lista del operador y de los conteos.
         if(!_oculto){ evs[d.id]=e.name; activeIds.push(d.id); }
@@ -593,8 +603,15 @@ async function initFB(){
         const _yt=_ytLinkActual();
         if(_yt!==window._ytUltLink){ window._ytUltLink=_yt; R(); }
       }catch(e){}
+      window._EVENTOS_LISTA=true;
       if(DATA.phase==='setup'&&DATA.events.length>0)R();
-      if(!window._autoEvtTried){window._autoEvtTried=true;try{applyEventURLParam()}catch(e){console.warn('[LC] auto-pick',e)}}
+      // El link (?evento=…) se resuelve apenas llega la lista de campeonatos,
+      // también si ya se había dado por perdido: en un teléfono lento Firestore
+      // puede tardar más que la espera, y la persona quedaba en la lista.
+      if(!window._autoEvtTried||(window._EV_URL_PEND&&(window._EV_ESPERANDO||_evUrlPendiente()))){
+        window._autoEvtTried=true;_applyEvtRetries=0;
+        try{applyEventURLParam()}catch(e){console.warn('[LC] auto-pick',e)}
+      }
       // Cuántos atletas tiene cada campeonato, para la lista de elección.
       //
       // Antes se bajaban TODAS las inscripciones de cada campeonato activo —cientos
@@ -608,10 +625,14 @@ async function initFB(){
       if(!TX_MODE)_contarAtletasEventos(fb,activeIds);
     });
     // Check if already logged in (session persists)
+    // _AUTH_LISTO: ya se sabe si quien abrió la página es admin o público. El
+    // link de un campeonato (?evento=…) espera a saberlo antes de entrar: si no,
+    // el admin entraba como espectador (ver applyEventURLParam).
     authMod.onAuthStateChanged(fbAuth,(u)=>{
       if(u){
         // Verify this user is an admin in Firestore
         fb.getDoc(fb.doc(fbDB,'admins',u.uid)).then(snap=>{
+          window._AUTH_LISTO=true;
           if(snap.exists()){
             isAdmin=true;
             window.ADMIN_ROLE=(__o=>__o==null?void 0:__o.role)(snap.data())||'admin';
@@ -643,6 +664,7 @@ async function initFB(){
           // dejan leer admins/{uid} a un admin, así que una cuenta de juez rebotaba
           // acá y salía con acceso completo — al revés de lo que se buscaba.
           const negado=err&&(err.code==='permission-denied'||/permission/i.test(err.message||''));
+          window._AUTH_LISTO=true;
           if(negado){
             isAdmin=false; window.ADMIN_ROLE=null;
             console.log('[LiveCast] Sesión sin permisos de admin (¿cuenta de juez?)');
@@ -653,6 +675,7 @@ async function initFB(){
           R();
         });
       } else {
+        window._AUTH_LISTO=true;
         if(isAdmin&&!window._ensayoFree){isAdmin=false;DATA.phase='liveView';R();}
       }
     });
@@ -663,24 +686,29 @@ async function initFB(){
     if(sessionStorage.getItem('livecast_return')){
       sessionStorage.removeItem('livecast_return');
     }
-  }catch(e){console.warn('[FB] Init failed',e)}
+  }catch(e){
+    console.warn('[FB] Init failed',e);
+    // Sin Firebase no va a llegar la lista de campeonatos ni la sesión: el link
+    // (?evento=…) no tiene nada más que esperar y se resuelve con lo que haya.
+    window._EVENTOS_LISTA=true; window._AUTH_LISTO=true;
+  }
 }
 function fbDocId(){
   if(!DATA.event)return null;
-  const base=(DATA.event.name||'comp').replace(/[^a-zA-Z0-9]/g,'_').substring(0,55);
-  // Si está en modo 2 tarimas (?tarima=1 o ?tarima=2), cada tarima usa su propio doc
-  // Así dos PCs (uno por tarima) escriben a docs separados y NO se pisan datos.
-  return TARIMA?`${base}_T${TARIMA}`:base;
+  // Sale del nombre del campeonato (compartido/canales.js): dos campeonatos a la
+  // misma hora escriben documentos distintos. Si está en modo 2 tarimas
+  // (?tarima=1 o ?tarima=2), cada tarima usa además su propio doc.
+  return YLCanal.deEvento(DATA.event.name,TARIMA);
 }
 // Sufijo para docs auxiliares (record alerts, director scene) cuando hay 2 tarimas
 // → cada tarima maneja sus widgets sin pisar a la otra.
 function txDocId(base){return TARIMA?`${base}_T${TARIMA}`:base;}
-// Las luces de los jueces y la señal del cronómetro viven en un documento de id
-// FIJO ('current'). Con una tarima está bien, pero en noviembre hay dos: sin esto,
-// el juez de la tarima 1 encendería también las luces de la tarima 2, y el
-// cronómetro de una arrancaría el de la otra. Cada tarima usa el suyo.
-// Sin ?tarima= sigue siendo 'current', para no romper lo que hay hoy.
-function juezDocId(){return TARIMA?'current_T'+TARIMA:'current';}
+// Las luces de los jueces y la señal del cronómetro. Antes el id era FIJO
+// ('current', o 'current_T1' con dos tarimas): dos campeonatos corriendo a la
+// misma hora compartían las luces, y el juez de uno encendía la pantalla del
+// otro. Ahora va por campeonato (y por tarima), igual que el director y los
+// récords: 'current__<campeonato>'. El link de los jueces lleva ese canal.
+function juezDocId(){return YLCanal.jueces(fbDocId(),TARIMA);}
 // Id de los docs de ESTADO de transmisión (director, record) — separado POR EVENTO
 // (y por tarima si aplica). Así dos competencias DISTINTAS y simultáneas no se pisan:
 // cada evento tiene su propio director/record. Control y widget calculan el mismo id
@@ -2264,8 +2292,8 @@ window.doLcLogin=async function(){
   const err=document.getElementById('lcLoginErr');
   const email=((document.getElementById('lcLoginEmail')||{}).value||'').trim();
   const pass=(document.getElementById('lcLoginPass')||{}).value||'';
-  if(!email||!pass){if(err)err.textContent='Complet\u00e1 email y contrase\u00f1a';return;}
-  if(!fbReady||!window._fbAuth||!window._fbAuth.signInWithEmailAndPassword){if(err)err.textContent='Conectando con el servidor\u2026 prob\u00e1 de nuevo en unos segundos';return;}
+  if(!email||!pass){if(err)err.textContent='Completa el correo y la contrase\u00f1a';return;}
+  if(!fbReady||!window._fbAuth||!window._fbAuth.signInWithEmailAndPassword){if(err)err.textContent='Conectando con el servidor\u2026 prueba de nuevo en unos segundos';return;}
   try{
     if(err)err.textContent='';
     await window._fbAuth.signInWithEmailAndPassword(fbAuth,email,pass);
@@ -3224,6 +3252,7 @@ async function toggleJudgeMode(){
     }
   }else{
     if(judgeUnsub){judgeUnsub();judgeUnsub=null}
+    if(_timerUnsub){try{_timerUnsub()}catch(e){} _timerUnsub=null;}
     showToastLC('Modo Jueces DESACTIVADO — decisiones manuales');
   }
   R();
@@ -3261,12 +3290,19 @@ function showToastLC(msg){
   const t=document.createElement('div');t.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--green);color:var(--text);padding:12px 20px;border-radius:10px;z-index:9999;font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,.4)';
   t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);
 }
+// Canal en que se está escuchando a los jueces. Si cambia el campeonato cambia
+// el canal, y hay que volver a engancharse (ver R()).
+let _judgeDoc=null,_timerUnsub=null;
 function startJudgeListener(){
   if(!fbReady)return;
   if(judgeUnsub){judgeUnsub();judgeUnsub=null}
+  // Antes el oyente del cronómetro no se soltaba nunca: cada vez que se
+  // encendía el modo jueces se sumaba otro, y quedaban escuchando el canal viejo.
+  if(_timerUnsub){try{_timerUnsub()}catch(e){} _timerUnsub=null;}
+  _judgeDoc=juezDocId();
   // Also listen for timer-start signals from judge panel
   let _timerListenerFirst=true;
-  window._fb.onSnapshot(window._fb.doc(fbDB,'timer_control',juezDocId()),(snap)=>{
+  _timerUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'timer_control',_judgeDoc),(snap)=>{
     if(!snap.exists())return;
     const d=snap.data();
     // First snapshot: just record current ts to ignore stale signals already in Firestore
@@ -3280,7 +3316,7 @@ function startJudgeListener(){
       if(!DATA.timerOn)startTimer();
     }
   });
-  judgeUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',juezDocId()),(snap)=>{
+  judgeUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',_judgeDoc),(snap)=>{
     if(!snap.exists())return;
     const d=snap.data();
     judgeLights={izq:d.izq||null,central:d.central||null,der:d.der||null};
@@ -3316,11 +3352,16 @@ function startJudgeListener(){
 // El atleta al que se le anotan se fija con la PRIMERA luz, no con la tercera.
 // Si no, alcanzaba con que el operador marcara el resultado antes de que votara
 // el tercer juez para que las luces terminaran anotadas en el atleta siguiente.
-let _lucesHistUnsub=null,_lucesHistDestino=null,_lucesHistUlt='';
+let _lucesHistUnsub=null,_lucesHistDestino=null,_lucesHistUlt='',_lucesHistDoc=null;
 function _escucharLucesHistorial(){
-  if(_lucesHistUnsub||!fbReady||!window._fb||!fbDB)return;
+  if(!fbReady||!window._fb||!fbDB)return;
+  // Ya escuchando el canal de este campeonato: nada que hacer. Si se cambió de
+  // campeonato, se suelta el canal del anterior.
+  if(_lucesHistUnsub&&_lucesHistDoc===juezDocId())return;
+  if(_lucesHistUnsub){try{_lucesHistUnsub()}catch(e){} _lucesHistUnsub=null;_lucesHistDestino=null;}
+  _lucesHistDoc=juezDocId();
   try{
-    _lucesHistUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',juezDocId()),(snap)=>{
+    _lucesHistUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',_lucesHistDoc),(snap)=>{
       if(!snap.exists())return;
       const d=snap.data();
       const L={izq:d.izq||null,central:d.central||null,der:d.der||null};
@@ -3382,10 +3423,13 @@ async function _avisarAtletaAJueces(){
   try{
     const cur=liftQueue()[0];
     const lift=LIFT_S[DATA.lift]||'';
-    const firma=(cur?cur.name:'')+'|'+lift+'|'+DATA.round;
+    const firma=juezDocId()+'|'+(cur?cur.name:'')+'|'+lift+'|'+DATA.round;
     if(firma===_juezUltAtleta)return;
     _juezUltAtleta=firma;
     await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions',juezDocId()),{
+      // El panel de los jueces muestra de qué campeonato es: con dos a la misma
+      // hora, el juez ve que abrió el link correcto.
+      evento:(DATA.event&&DATA.event.name)||'',
       athlete_name:cur?cur.name:'',
       athlete_weight:cur?(cur.att[DATA.lift][DATA.round]||{}).w||0:0,
       athlete_lift:lift,
@@ -3403,6 +3447,7 @@ async function resetJudgeLights(){
     await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions',juezDocId()),{
       izq:null,central:null,der:null,
       reset_ts:Date.now(),
+      evento:(DATA.event&&DATA.event.name)||'',
       athlete_name:cur?cur.name:'',
       athlete_weight:cur?cur.att[DATA.lift][DATA.round].w:0,
       athlete_lift:LIFT_S[DATA.lift]||'',
@@ -7847,7 +7892,9 @@ function renderObsTx(){
     : '<div style="margin-top:8px;font-size:11px;color:var(--muted)">Modo "una sola tarima". Si van a transmitir 2 tarimas en paralelo, cada equipo debe elegir Tarima 1 o 2 aquí.</div>';
   h+='</div>';
   {
-    const juezUrl=base+'jueces.html'+(TARIMA?'?tarima='+TARIMA:'');
+    // El link lleva el canal del campeonato: con dos campeonatos a la misma hora,
+    // cada juez manda sus luces solo al suyo.
+    const juezUrl=base+'jueces.html?canal='+encodeURIComponent(fbDocId()||'')+(TARIMA?'&tarima='+TARIMA:'');
     const remoteUrl=base+'livecast.html?evento='+enc+'&remote=1'+(TARIMA?'&tarima='+TARIMA:'')+PRACTICE_Q;
     const linkFila=(titulo,nota,url)=>'<div style="padding:10px 0;border-top:1px solid rgba(29,49,80,.35)">'
       +'<div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px">'+titulo+'</div>'
@@ -7856,7 +7903,7 @@ function renderObsTx(){
       +'<button onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+url.replace(/'/g,"\\'")+'\');showToastLC(\'Link copiado\')" style="padding:8px 12px;border-radius:8px;border:1px solid var(--gold);background:rgba(212,168,67,.12);color:var(--gold);font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">COPIAR</button></div></div>';
     h+='<div class="card" style="padding:14px 18px;margin-bottom:14px">';
     h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold)">LINKS PARA LOS TELÉFONOS</div>';
-    h+=linkFila('Panel de jueces','Uno por cada juez.'+(TARIMA?' Ya lleva <b>tarima='+TARIMA+'</b>: con dos tarimas, el link equivocado manda las luces a la otra pantalla.':''),juezUrl);
+    h+=linkFila('Panel de jueces','Uno por cada juez. Es de este campeonato'+(TARIMA?' y de la tarima '+TARIMA:'')+': si hay otro corriendo a la misma hora, sus jueces usan el link de ese.',juezUrl);
     h+=linkFila('Control remoto','Para manejar el overlay desde el teléfono.'+(TARIMA?' Con <b>tarima='+TARIMA+'</b>, así controla ESTA tarima y no la otra.':''),remoteUrl);
     h+='</div>';
   }
@@ -9190,12 +9237,15 @@ function renderTxTimer(){
 }
 
 // ─── LIGHTS (3 luces de jueces) ────────────────────────────────
-let _txLightsUnsub=null;
+let _txLightsUnsub=null,_txLightsDoc=null;
 let _txLights={izq:null,central:null,der:null};
 let _txLightsResetTs=0;
 let _txLightsPoll=null;
 function _txStartLightsListener(){
-  if(_txLightsUnsub)return;
+  // El widget arranca antes de saber de qué campeonato es (el link se resuelve
+  // después): si el canal cambió, se suelta el que tenía y se toma el bueno.
+  if(_txLightsUnsub&&_txLightsDoc===juezDocId())return;
+  if(_txLightsUnsub){try{_txLightsUnsub()}catch(e){} _txLightsUnsub=null;}
   if(!fbReady||!window._fb){
     if(!_txLightsPoll){
       _txLightsPoll=setInterval(()=>{
@@ -9205,7 +9255,8 @@ function _txStartLightsListener(){
     return;
   }
   try{
-    _txLightsUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',juezDocId()),(snap)=>{
+    _txLightsDoc=juezDocId();
+    _txLightsUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',_txLightsDoc),(snap)=>{
       if(!snap.exists())return;
       const d=snap.data();
       _txLights={izq:d.izq||null,central:d.central||null,der:d.der||null};
@@ -9625,7 +9676,7 @@ async function _screenPush(){
     return;
   }
   if(!fbReady||!DATA.event){showToastLC('Sin evento activo');return;}
-  const id=(DATA.event.name||'comp').replace(/[^a-zA-Z0-9]/g,'_').substring(0,60);
+  const id=_screenDocId();
   try{
     await window._fb.setDoc(window._fb.doc(fbDB,'livecast_screen',id),{
       mode:window._SCREEN_LOCAL.mode,
@@ -9901,8 +9952,10 @@ function _screenDocId(){
   if(!DATA.event)return null;
   // Con dos tarimas, cada una maneja SU pantalla: si compartieran el canal,
   // cambiar el modo en una le cambiaría la pantalla a la otra en el acto.
-  const base=(DATA.event.name||'comp').replace(/[^a-zA-Z0-9]/g,'_').substring(0,55);
-  return TARIMA?base+'_T'+TARIMA:base;
+  // Es el mismo canal del campeonato (fbDocId). Antes el control escribía en
+  // uno armado aparte —60 letras y sin la tarima— y la pantalla escuchaba este:
+  // con dos tarimas, o con un nombre largo, el modo elegido no le llegaba.
+  return fbDocId();
 }
 let _screenUnsub=null, _screenFirstSnap=true;
 function subscribeScreenChannel(){
@@ -11349,6 +11402,8 @@ function R(){
     // Y se anotan las luces en cada intento, para poder mostrarlas después.
     try{_escucharLucesHistorial();}catch(e){}
   }
+  // Con el modo jueces encendido y otro campeonato elegido, el canal cambió.
+  if(judgeMode&&judgeUnsub&&_judgeDoc!==juezDocId()){try{startJudgeListener();}catch(e){}}
   try{
     const el=document.getElementById('R');if(!el)return;
     // El Scoreboard salió del menú: si alguien tenía esa pantalla guardada de antes,
@@ -15498,14 +15553,17 @@ if(!DEMO_MODE&&!(PRACTICE_MODE&&!PRACTICE_REAL)){
       if(DATA.events.some(e=>e.name===ev.name))return;
       DATA.events.push(ev);
     });
+    window._NOMINAS_LISTA=true;
     if(DATA.phase==='setup'&&DATA.events.length)R();
     // por si vino ?evento= apuntando a un evento de nominas.json. Se llama DIRECTO
     // (sin el guard _autoEvtTried): los eventos recién llegaron, y si otro caller
     // temprano ya agotó sus reintentos esperándolos, este es el que resuelve.
     // applyEventURLParam es idempotente (si el evento ya está elegido, no hace nada).
-    try{window._autoEvtTried=true;_applyEvtRetries=0;applyEventURLParam();}catch(e){}
-  }).catch(e=>console.warn('[LC] nominas.json no cargado',e));
-}
+    if(window._EV_URL_PEND&&(window._EV_ESPERANDO||_evUrlPendiente())){
+      try{window._autoEvtTried=true;_applyEvtRetries=0;applyEventURLParam();}catch(e){}
+    }
+  }).catch(e=>{window._NOMINAS_LISTA=true;console.warn('[LC] nominas.json no cargado',e);});
+}else window._NOMINAS_LISTA=true;
 if(!loaded)R();
 
 // ════════════════════════════════════════════════════════════════
@@ -15628,6 +15686,26 @@ if(DEMO_MODE){
 // If the URL asks for a specific event and it differs from the saved session,
 // force phase back to 'setup' so the user picks again (or auto-pick if match).
 let _applyEvtRetries=0;
+// ¿Cuánto esperar al evento del link?
+//
+// Antes se esperaban unos 8 segundos contados en reintentos, y después se
+// mostraba la lista. En el teléfono, con Firestore lento, eso no alcanzaba: la
+// persona tocaba "VER EN VIVO" en el sitio y caía en la lista de campeonatos,
+// y cuando los datos llegaban ya nadie volvía a buscar el del link. Además cada
+// llamada (el temporizador de arranque, nominas.json) abría su propia cadena de
+// reintentos sobre el mismo contador, y la espera real era la mitad.
+//
+// Ahora se espera a lo que puede decir dónde está el evento —nominas.json y la
+// primera lista de campeonatos de Firestore—, con un tope de 30 segundos por si
+// Firebase no carga nunca. Y si igual se agota, el listener de campeonatos lo
+// vuelve a buscar cuando llega (ver _evUrlPendiente).
+const _EV_ESPERA_MAX=30000;
+let _applyEvtT0=0,_applyEvtTimer=null;
+window._EV_URL_PEND=window._EV_ESPERANDO;
+function _evUrlListo(){ window._EV_ESPERANDO=false; window._EV_URL_PEND=false; }
+// El link todavía no llevó a ninguna parte y la persona sigue en la lista sin
+// haber elegido nada: todavía vale entrar al campeonato del link.
+function _evUrlPendiente(){ return !!window._EV_URL_PEND&&DATA.phase==='setup'&&!DATA.event; }
 // Nombre lindo del campeonato padre: el que tenga Firestore, si no el nombre de
 // los días sin el " — Día N".
 function _evParentName(id,hijos){
@@ -15637,9 +15715,12 @@ function _evParentName(id,hijos){
   return n.replace(/\s*[—-]\s*D[íi]a\s*\d+.*$/i,'').trim()||id;
 }
 function applyEventURLParam(){
+  // Una sola espera a la vez: quien llame corta la que estaba en curso.
+  clearTimeout(_applyEvtTimer);_applyEvtTimer=null;
   try{
     const p=new URLSearchParams(location.search).get('evento');
-    if(!p){window._EV_ESPERANDO=false;return;}
+    if(!p){_evUrlListo();return;}
+    if(!_applyEvtT0)_applyEvtT0=Date.now();
     const want=decodeURIComponent(p);
     // NOTA: acá ANTES había un atajo que, para widgets TX, armaba DATA.event usando
     // el slug crudo de la URL (ej. "regionalcentrosur") como name, sin buscar el
@@ -15662,7 +15743,7 @@ function applyEventURLParam(){
           window._EV_FILTER={parent:want,name:(hijos0[0].parentName||_evParentName(want,hijos0))};
           // Elegir la jornada SÍ es lo que corresponde mostrar: el campeonato de
           // varios días no tiene atletas propios.
-          window._EV_ESPERANDO=false;
+          _evUrlListo();
           _applyEvtRetries=0; DATA.phase='setup'; DATA.event=null; R(); return;
         }
       }
@@ -15712,22 +15793,28 @@ function applyEventURLParam(){
         }
       }
     }
-    // 3) Si todavía no se encontró, retry hasta 10 veces (espera a que Firestore listener cargue)
+    // 3) Si todavía no se encontró, se espera a que lleguen nominas.json y la
+    //    lista de campeonatos de Firestore (ver _EV_ESPERA_MAX).
     if(!wanted){
       _applyEvtRetries++;
-      if(_applyEvtRetries<=20){ // hasta 10s: nominas.json puede tardar en conexiones lentas
+      const _todoLlego=!!(window._NOMINAS_LISTA&&window._EVENTOS_LISTA);
+      if(!_todoLlego&&(Date.now()-_applyEvtT0)<_EV_ESPERA_MAX){
         // Los primeros intentos van seguidos: con buena conexión los datos llegan
         // en menos de medio segundo, y esperar 500 ms igual era medio segundo de
         // pantalla quieta que se podía ahorrar.
-        setTimeout(applyEventURLParam,_applyEvtRetries<=6?150:500);
+        _applyEvtTimer=setTimeout(applyEventURLParam,_applyEvtRetries<=6?150:500);
         if(_applyEvtRetries===1)console.log('[LC] Esperando que Firestore cargue el evento "'+want+'"...');
         return;
       }
-      console.warn('[LC] No pude encontrar evento "'+want+'" después de 5s. Verifica nombre/id.');
+      console.warn('[LC] No pude encontrar evento "'+want+'"'+(_todoLlego?'':' (Firestore no respondió)')+'. Verifica nombre/id.');
       // Se acabó la espera: ahora sí corresponde mostrar la lista, porque el link
       // no llevaba a ninguna parte. Y si en pantalla quedó la competencia de una
       // visita anterior, se saca: dejarla puesta es peor que mostrar la lista,
       // porque la persona cree que el QR la llevó ahí.
+      //
+      // _EV_URL_PEND queda encendido: si Firestore aparece más tarde con el
+      // campeonato, el listener lo encuentra y entra (mientras la persona siga
+      // en la lista sin haber elegido otro).
       window._EV_ESPERANDO=false;
       if(!TX_MODE&&!isAdmin&&DATA.phase!=='setup'&&(DATA.athletes==null?void 0:DATA.athletes.length)){
         DATA.phase='setup';DATA.event=null;DATA.athletes=[];DATA.changeTimers={};
@@ -15741,8 +15828,17 @@ function applyEventURLParam(){
       // llegar hasta acá.
       wanted={id:want,name:want,athletes:[],_fromUrl:true};
     }
+    // El campeonato apareció, pero todavía no se sabe si quien entra es admin:
+    // Firebase contesta la sesión un momento después de la lista de campeonatos.
+    // Entrar ya lo metía como público, y el admin que abría el link de su
+    // campeonato caía en la vista del espectador. Se espera esa respuesta (con
+    // el mismo tope de siempre, por si nunca llega).
+    if(!TX_MODE&&fbReady&&!window._AUTH_LISTO&&(Date.now()-_applyEvtT0)<_EV_ESPERA_MAX){
+      _applyEvtTimer=setTimeout(applyEventURLParam,150);
+      return;
+    }
     _applyEvtRetries=0;
-    window._EV_ESPERANDO=false;      // el evento del link quedó resuelto
+    _evUrlListo();                   // el evento del link quedó resuelto
     // TX widget mode: read-only. Just set DATA.event y suscribir a livecast_sync.
     if(TX_MODE){
       DATA.event=wanted;
