@@ -11,7 +11,7 @@ const fs = require('fs');
 globalThis.window = globalThis.window || globalThis;
 require('../compartido/dias.js');
 const { chromium } = require('playwright');
-const idx = fs.readFileSync(__dirname + '/../index.html', 'utf8');
+const idx = require('./apoyo/fuente').pagina('index.html');
 const adm = require('./apoyo/fuente').admin();
 const pub = fs.readFileSync(__dirname + '/../cronograma.html', 'utf8');
 

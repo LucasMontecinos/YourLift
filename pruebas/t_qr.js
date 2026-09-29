@@ -294,7 +294,7 @@ function leerQR(m, ver, ecl, mask) {
   {
     const qr = fs.readFileSync(__dirname + '/../compartido/qr.js', 'utf8');
     ok(!/https?:\/\/(?!\/)[^\s'"]*qr/i.test(qr), 'no se le pide el dibujo a ningún servicio de internet');
-    const idx = fs.readFileSync(__dirname + '/../index.html', 'utf8');
+    const idx = require('./apoyo/fuente').pagina('index.html');
     const adm = require('./apoyo/fuente').admin();
     // Con o sin ?v=: el número de versión está para saltarse el caché del
     // service worker, y no cambia que el generador sea el mismo archivo.

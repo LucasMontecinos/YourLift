@@ -26,7 +26,7 @@ let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };
 
 const adm = require('./apoyo/fuente').admin();
-const ins = fs.readFileSync(__dirname + '/../inscripcion.html', 'utf8');
+const ins = require('./apoyo/fuente').pagina('inscripcion.html');
 
 // Las mismas reglas que usa el panel, para poder ejercitarlas acá.
 const clubDeInscripcion = i => {

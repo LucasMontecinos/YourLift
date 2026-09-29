@@ -10,7 +10,7 @@ function pagina(nombre) {
   const html = fs.readFileSync(path.join(RAIZ, nombre), 'utf8');
   const propios = [];
   // livecast/*.js (scripts normales) y admin/panel.js (el módulo armado del panel)
-  const re = /<script(?: type="module")? src="((?:livecast|admin)\/[^"?]+)(?:\?[^"]*)?"><\/script>/g;
+  const re = /<script(?: type="module")? src="((?:livecast|admin|sitio|inscripcion)\/[^"?]+)(?:\?[^"]*)?"><\/script>/g;
   let m;
   while ((m = re.exec(html))) propios.push(fs.readFileSync(path.join(RAIZ, m[1]), 'utf8'));
   return [html].concat(propios).join('\n');

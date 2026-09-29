@@ -127,7 +127,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     ok(!/localStorage\.setItem\('yl_nav_libre'/.test(lc), 'y ya no se guarda en ninguna parte');
 
     // Voseo: el usuario es chileno y no habla así.
-    const ix = fs.readFileSync(__dirname + '/../index.html', 'utf8');
+    const ix = require('./apoyo/fuente').pagina('index.html');
     const ad = require('./apoyo/fuente').admin();
     const VOSEO = /\b(movés|arrastrás|cargás|activás|subís|Confirmás|Asegurate|editás|scrolleás|dejás|podés|tenés|querés|sabés|para vos|ves vos)\b/;
     ok(!VOSEO.test(lc), 'sin voseo en el livecast');

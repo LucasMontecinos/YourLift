@@ -237,7 +237,7 @@ const EVENTO = {
     const permitidos = m ? m[1].split(',').map(s => s.trim().replace(/^'|'$/g, '')) : [];
     ok(permitidos.includes('docs'), 'las reglas permiten el mapa docs');
 
-    const ins = fs.readFileSync('/home/user/YourLift/inscripcion.html', 'utf8');
+    const ins = require('./apoyo/fuente').pagina('inscripcion.html');
     const escritos = new Set();
     for (const mm of ins.matchAll(/privateEntry\.([A-Za-z_$][\w$]*)\s*=/g)) escritos.add(mm[1]);
     for (const mm of ins.matchAll(/privateEntry\[\s*'([^']+)'\s*\]\s*=/g)) escritos.add(mm[1]);

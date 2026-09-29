@@ -28,7 +28,7 @@ const paginas = fs.readdirSync(raiz).filter(f => f.endsWith('.html'));
 // Las colecciones que el código toca, sacadas de las llamadas a Firestore.
 const usadas = new Map();          // colección → páginas donde aparece
 for (const f of paginas) {
-  const s = fs.readFileSync(raiz + '/' + f, 'utf8');
+  const s = require('./apoyo/fuente').pagina(f);   // la página y sus archivos (livecast/, admin/…)
   const pats = [
     /collection\((?:db|fbDB|window\.fbDB)\s*,\s*'([^']+)'/g,
     /doc\((?:db|fbDB|window\.fbDB)\s*,\s*'([^']+)'/g,

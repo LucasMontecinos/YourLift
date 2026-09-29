@@ -246,7 +246,7 @@ const MODULOS = {
     ok(/window\.clubRenombrar=/.test(adm), 'el panel sabe renombrar un club');
     ok(/clubRenombrar\(/.test(adm.slice(adm.indexOf('function renderClubs'))),
        'y el botón está en la tarjeta del club');
-    const ins = fs.readFileSync(__dirname + '/../inscripcion.html', 'utf8');
+    const ins = require('./apoyo/fuente').pagina('inscripcion.html');
     ok(/function clubsParaElegir/.test(ins), 'una sola forma de armar la lista');
     ok(!/\$\{CLUBS\.map/.test(ins), 'y ningún desplegable quedó con la lista fija');
     // Si el padrón llega después de dibujar, hay que redibujar o se queda el respaldo.

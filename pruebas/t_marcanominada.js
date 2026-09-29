@@ -64,7 +64,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
   ok(r.vacio === 0, 'un valor vacío da cero');
 
   // La misma regla tiene que estar en el sitio público, que es donde se ve la nómina.
-  const idx = await (await fetch(`http://localhost:${PUERTO}/index.html`)).text();
+  const idx = require('./apoyo/fuente').pagina('index.html');
   ok(/function _marcaSana\(/.test(idx), 'el sitio público tiene la misma regla');
   ok(/sq:_marcaSana\(a\.sq,a\.total\)/.test(idx), 'y la aplica al armar la fila de la nómina');
   ok(!errs.length, 'sin errores de JavaScript' + (errs.length ? ': ' + errs[0] : ''));

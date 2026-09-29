@@ -19,7 +19,7 @@
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_gafoto.js
 const fs = require('fs');
 const adm = require('./apoyo/fuente').admin();
-const idx = fs.readFileSync(__dirname + '/../index.html', 'utf8');
+const idx = require('./apoyo/fuente').pagina('index.html');
 
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };

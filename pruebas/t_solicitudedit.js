@@ -140,7 +140,7 @@ async function preparar(p, cambios) {
 
   console.log('\n  Queda escrito en el código');
   {
-    const ins = fs.readFileSync(__dirname + '/../inscripcion.html', 'utf8');
+    const ins = require('./apoyo/fuente').pagina('inscripcion.html');
     ok(/const antes = state\.editDoc/.test(ins), 'se compara contra la inscripción original');
     ok(/if \(!Object\.keys\(changes\)\.length\)/.test(ins), 'y sin diferencias no se envía');
     ok(/const LIMPIEZA = \{/.test(ins), 'con la misma limpieza en los dos lados');

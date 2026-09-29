@@ -18,7 +18,7 @@ const fs = require('fs');
 // La regla vive en compartido/campeonatos.js: se carga acá igual que en la página.
 globalThis.window = globalThis.window || globalThis;
 require('../compartido/campeonatos.js');
-const src = fs.readFileSync(__dirname + '/../inscripcion.html', 'utf8');
+const src = require('./apoyo/fuente').pagina('inscripcion.html');
 const adm = require('./apoyo/fuente').admin();
 
 let fallas = 0;

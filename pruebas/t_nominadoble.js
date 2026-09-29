@@ -108,7 +108,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
 
   console.log('\n  Queda escrito en el código');
   {
-    const ix = fs.readFileSync(__dirname + '/../index.html', 'utf8');
+    const ix = require('./apoyo/fuente').pagina('index.html');
     ok(/function _nsudaMismoEvento\(/.test(ix), 'hay una sola forma de saber cuál es el mismo campeonato');
     // Se empareja por id y por nombre: el panel puede tener escrito cualquiera.
     ok(/j\.eventoId,j\.evento,j\.eventoCorto/.test(ix), 'empareja por id y por nombre');

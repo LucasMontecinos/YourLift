@@ -219,7 +219,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
 
   console.log('\n  Queda escrito en el código');
   {
-    const ix = fs.readFileSync(__dirname + '/../index.html', 'utf8');
+    const ix = require('./apoyo/fuente').pagina('index.html');
     ok(/function cronoSuda\(\)/.test(ix), 'el cronograma del Sudamericano tiene su propia vista');
     ok(/a\.jornada!=null/.test(ix), 'y el día de cada inscripción se LEE, ya no se deduce');
     // Esta zona del archivo no corre en el ámbito global: una constante declarada

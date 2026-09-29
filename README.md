@@ -14,8 +14,8 @@ los QR, los links de OBS). Moverlas rompería esos links.
 
 | Página | Para qué |
 |---|---|
-| `index.html` | El sitio público: nóminas, récords, cronograma, Competencia en Vivo |
-| `inscripcion.html`, `inscripcion_entrenador.html` | Formularios de inscripción |
+| `index.html` | El sitio público: nóminas, récords, cronograma, Competencia en Vivo (código en `sitio/`) |
+| `inscripcion.html`, `inscripcion_entrenador.html` | Formularios de inscripción (el de atletas, con su código en `inscripcion/`) |
 | `atleta.html`, `ranking.html`, `resultados.html` | Fichas, ranking y resultados |
 | `cronograma.html`, `documentos.html` | Cronograma y documentos de cada campeonato |
 | `livecast.html` | Competencia en vivo: Control en Vivo, Control TX, pantalla de tarima, widgets de OBS y la vista del público (su código está en `livecast/`) |
@@ -68,6 +68,19 @@ Temas: `sesion`, `datos`, `interfaz`, `atletas`, `inscripciones`,
 `estadisticas`, `resultados`, `fotos`, `medallero`, `records`, `publicaciones`,
 `certificados`, `sitio`, `administradores`, y `arranque.js` con los import y lo
 que corre al abrir el panel.
+
+### El inicio y la inscripción: `sitio/` e `inscripcion/`
+
+Igual que el livecast: `index.html` carga su código desde `sitio/` y
+`inscripcion.html` desde `inscripcion/`, un archivo por tema más `arranque.js`
+al final.
+
+- `sitio/`: `interfaz` (el dibujo de cada pestaña y la conexión), `visitas`,
+  `atletas`, `nominas`, `entrenadores`, `records`, `medios` (galería y
+  transmisiones), `inicio`.
+- `inscripcion/`: `datos`, `interfaz`, `reglas` (clubes, modalidades, RUT),
+  `documentos`, `atleta` (código, datos y bloqueo por regional), `formulario`,
+  `edicion`, `envio`, `admin`.
 
 ### Código compartido: `compartido/`
 

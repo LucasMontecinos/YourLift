@@ -70,7 +70,7 @@ ARCHIVOS.forEach(f => {
 
 console.log('\n  Y las frases que ya se corrigieron siguen corregidas');
 {
-  const idx = fs.readFileSync(__dirname + '/../index.html', 'utf8');
+  const idx = require('./apoyo/fuente').pagina('index.html');
   ok(/Sigue la competencia en tiempo real/.test(idx),
      'la portada de Competencia en Vivo dice "Sigue", no "Seguí"');
 }
