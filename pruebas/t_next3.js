@@ -45,7 +45,7 @@ const {chromium}=require('playwright');
  console.log('4) no queda nadie          →', await leer());
  await p.evaluate(()=>{const O=DATA.athletes.find(a=>/Ojeda/i.test(a.name));O.flight='B';O.att.bp=[{w:57.5,r:null},{w:0,r:null},{w:0,r:null}];R();});
  await p.waitForTimeout(300);
- await p.screenshot({path:'pant_next3.png'});
+ await p.screenshot({path:require('os').tmpdir()+'/pant_next3.png'});   // fuera del repo: se rehace en cada corrida
  console.log('errores:',errs.length?errs.slice(0,3):'ninguno');
  await b.close();
 })();

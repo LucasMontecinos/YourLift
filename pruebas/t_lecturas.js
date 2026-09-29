@@ -260,6 +260,34 @@ const suma = (l, f) => l.filter(f).reduce((n, x) => n + x.n, 0);
     await ctx.close();
   }
 
+  console.log('\nEl formulario de inscripción pide solo lo del RUT que se inscribe');
+  {
+    const { p, ctx, errs } = await abrir(b, `http://localhost:${PUERTO}/inscripcion.html`);
+    await p.evaluate(() => {
+      window.__FAKE.inscripciones.push({ id: 'previa', evento: 'regional_sur_austral_2026', status: 'approved', rut: '22334174-8' });
+      window.__FAKE.atleta_fotos.push({ id: 'X1', rut: '22334174-8', foto_url: 'foto.jpg' });
+    });
+    await p.waitForFunction(() => typeof firebaseReady !== 'undefined' && firebaseReady, null, { timeout: 20000 });
+    await p.waitForTimeout(1500);
+    let l = await lecturas(p);
+    ok(!l.some(x => (x.col === 'inscripciones' || x.col === 'atleta_fotos')),
+       'al abrir no baja inscripciones ni fotos de nadie');
+    await p.evaluate(() => { globalThis.__LEC = []; upd('rut', '22334174-8'); });
+    await p.waitForTimeout(700);
+    l = await lecturas(p);
+    const suyas = l.filter(x => x.col === 'inscripciones' || x.col === 'atleta_fotos');
+    ok(suyas.length === 2 && suyas.every(x => (x.filtros || []).some(f => f.op === 'in')),
+       'con el RUT completo pide sus inscripciones y su foto, filtradas por RUT');
+    ok(suma(suyas, () => true) === 2, 'y lee solo lo suyo (' + suma(suyas, () => true) + ')');
+    const r = await p.evaluate(() => ({ insc: insActDB.length, foto: atletaTieneFoto('22334174-8') }));
+    ok(r.insc === 1 && r.foto, 'y el aviso y la foto quedan con sus datos');
+    await p.evaluate(() => { globalThis.__LEC = []; upd('rut', '22334174-8'); upd('rut', '2233'); });
+    await p.waitForTimeout(400);
+    ok(!(await lecturas(p)).length, 'escribir el mismo RUT, o uno a medias, no vuelve a leer');
+    ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.join(' | ') : ''));
+    await ctx.close();
+  }
+
   console.log(fallas ? `\n${fallas} FALLA(S)` : '\nTodo OK');
   await b.close();
   process.exit(fallas ? 1 : 0);

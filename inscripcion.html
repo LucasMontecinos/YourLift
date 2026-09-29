@@ -870,19 +870,37 @@ async function cargarCompRes(){
 // del campeonato sin resultado— pero solo el que participó conserva su
 // inscripción. Es lo mismo que muestra el perfil del atleta como "inscripciones
 // activas". Una inscripción rechazada no cuenta.
-async function cargarInscripcionesActivas(){
+//
+// Solo importan las del RUT que se está inscribiendo, así que se piden esas,
+// recién cuando el RUT está completo. Antes cada visita al formulario bajaba las
+// 712 inscripciones y las ~500 fotos de todos.
+// Las formas de escribir un RUT que se encuentran guardadas: 12345678-9 casi
+// siempre, pero hay alguna con puntos o sin guion.
+function _formasRutIns(r){
+  const n=String(r||'').replace(/[^0-9kK]/g,'').toUpperCase();
+  if(n.length<2)return [];
+  const c=n.slice(0,-1), dv=n.slice(-1), p=c.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+  return [...new Set([c+'-'+dv, p+'-'+dv, n, c+'-'+dv.toLowerCase(), p+'-'+dv.toLowerCase(), n.toLowerCase()])];
+}
+let _rutConDatos='';
+async function cargarDatosDeRut(rut){
+  const n=String(rut||'').replace(/[^0-9kK]/g,'').toUpperCase();
+  if(n.length<7||n===_rutConDatos||!firebaseReady||!window.FB||!window.FB.where)return;
+  if(typeof validateRut==='function'&&!validateRut(formatRut(n)).valid)return;
+  _rutConDatos=n;
+  const F=window.FB, formas=_formasRutIns(n);
+  const q=col=>F.getDocs(F.query(F.collection(db,col),F.where('rut','in',formas))).catch(()=>null);
   try{
-    const c=_ifsCache('ins_activas', 10*60*1000);
-    if(c){ insActDB=c; return; }
-    if(!firebaseReady||!window.FB)return;
-    const snap=await window.FB.getDocs(window.FB.collection(db,'inscripciones'));
-    // Solo lo necesario para cruzar: esta es una página pública.
-    insActDB=snap.docs.map(d=>{const x=d.data();
+    const [si,sf]=await Promise.all([q('inscripciones'),q('atleta_fotos')]);
+    if(_rutConDatos!==n)return;                     // escribió otro RUT mientras tanto
+    if(si)insActDB=si.docs.map(d=>{const x=d.data();
       return {rut:x.rut||'',evento:x.evento||'',status:x.status||''};})
       .filter(x=>x.status!=='rejected');
-    _ifsSetCache('ins_activas', insActDB);
+    window.FOTOS_BY_RUT=window.FOTOS_BY_RUT||{};
+    if(sf)sf.docs.forEach(d=>{const x=d.data();
+      if(x.foto_url&&x.status!=='rejected')window.FOTOS_BY_RUT[n.toLowerCase()]=x.foto_url;});
     _redibujarPorAviso();
-  }catch(e){ console.warn('[aviso] no se pudieron cargar las inscripciones',e); }
+  }catch(e){ console.warn('[aviso] no se pudieron cargar los datos del RUT',e); }
 }
 
 // Si el atleta ya había escrito su RUT antes de que esto llegara, se vuelve a
@@ -912,24 +930,10 @@ async function loadEventos() {
       render();
     }
     cargarCompRes();   // lo cerrado hace poco, que todavía no está en data.json
-    cargarInscripcionesActivas();   // quién sigue inscrito de verdad
-    // Fotos aprobadas: getDocs + caché 30min
+    // Las inscripciones vigentes y la foto del atleta se piden por su RUT, apenas
+    // lo escribe entero (cargarDatosDeRut). Si ya venía escrito, de una vez.
     window.FOTOS_BY_RUT = window.FOTOS_BY_RUT || {};
-    const cf = _ifsCache('ins_fotos', 30*60*1000);
-    if (cf) { window.FOTOS_BY_RUT = cf; }
-    else {
-      window.FB.getDocs(window.FB.collection(db, 'atleta_fotos')).then(snap => {
-        window.FOTOS_BY_RUT = {};
-        snap.docs.forEach(d => {
-          const data = d.data();
-          if (data.foto_url && data.status !== 'rejected' && data.rut) {
-            const key = String(data.rut).replace(/[^0-9kK]/g,'').toLowerCase();
-            if (key) window.FOTOS_BY_RUT[key] = data.foto_url;
-          }
-        });
-        _ifsSetCache('ins_fotos', window.FOTOS_BY_RUT);
-      });
-    }
+    try{ if(state&&state.form&&state.form.rut)cargarDatosDeRut(state.form.rut); }catch(e){}
     // Edits de atletas: getDocs una vez para pre-llenar club actualizado
     window._INS_EDITS_RUT = window._INS_EDITS_RUT || {};
     window._INS_EDITS_COD = window._INS_EDITS_COD || {};
@@ -1885,6 +1889,7 @@ async function saveEdit() {
 // ══════════════════════════════════════════════
 function upd(key, val) {
   state.form[key] = val;
+  if (key === 'rut') cargarDatosDeRut(val);
   // Actualiza el botón Siguiente sin re-renderizar (evita perder foco)
   _refreshStep1Btn();
 }
