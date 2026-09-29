@@ -525,7 +525,7 @@ function renderTxJornada(){
       +'<table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed">'
       // Anchos explícitos: ATLETA bien ancha para que el nombre completo entre
       +'<colgroup>'
-        +'<col style="width:3%"><col style="width:24%"><col style="width:3.4%"><col style="width:3.4%"><col style="width:4.4%">'
+        +'<col style="width:3%"><col style="width:21.8%"><col style="width:5.6%"><col style="width:3.4%"><col style="width:4.4%">'
         +'<col style="width:4.6%"><col style="width:4.6%"><col style="width:4.6%"><col style="width:4.8%">'
         +'<col style="width:4.6%"><col style="width:4.6%"><col style="width:4.6%"><col style="width:4.8%">'
         +'<col style="width:4.6%"><col style="width:4.6%"><col style="width:4.6%">'
