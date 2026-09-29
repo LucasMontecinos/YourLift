@@ -117,7 +117,7 @@ function _renderResultsTable(opts){
       if(at.r==='g')st='background:rgba(34,197,94,.88);color:#06210f;font-weight:700';
       else if(at.r==='n')st='background:rgba(220,38,38,.85);color:#fff;font-weight:700;text-decoration:line-through;text-decoration-thickness:2px';
       else if(at.w>0)st='color:#fff;font-weight:600';else st='color:rgba(150,170,200,.35)';
-      return '<td style="padding:7px 2px;text-align:center;'+st+';font-family:Oswald;font-size:13px;border-left:1px solid rgba(10,22,40,.55)">'+tx+'</td>';
+      return '<td style="padding:7px 2px;text-align:center;'+st+';font-family:Oswald;font-size:15px;border-left:1px solid rgba(10,22,40,.55)">'+tx+'</td>';
     };
     if(isBench){
       for(let j=0;j<maxAtts.bp;j++)h+=_attTd(a.att.bp[j]);
