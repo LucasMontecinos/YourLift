@@ -6488,9 +6488,20 @@ function _ovOpciones(){
   return {divs:[...divs].sort((a,b)=>_ovDivOrd(a)-_ovDivOrd(b)),
           mods:[...mods].sort((a,b)=>_OV_MODORD.indexOf(a)-_OV_MODORD.indexOf(b)),sexos:[...sexos]};
 }
+// ¿La clasificación por equipos va por país o por club? Por país solo en un
+// campeonato internacional: con atletas de más de un país en competencia. Los
+// invitados no cuentan —un extranjero invitado a un Nacional no lo vuelve
+// internacional—. El panel deja cambiarlo a mano (EQUIPOS: POR CLUB / POR PAÍS).
+function _ovPorPaisAuto(){
+  return new Set(_actaAthletes().filter(a=>String(a.mod||'')!=='invitado').map(a=>_ctry(a))).size>1;
+}
+function _ovPorPais(){
+  const e=window._OV.equipos;
+  return e==='pais'?true:e==='club'?false:_ovPorPaisAuto();
+}
 function _ovDatos(){
   const o=window._OV;
-  const varios=new Set(_actaAthletes().map(a=>_ctry(a))).size>1;
+  const varios=_ovPorPais();
   const quien=a=>varios?_ctry(a):(String(a.club||'').trim()||'Sin club');
   const bloques=new Map();
   _actaGrupos().forEach(g=>{
@@ -6552,6 +6563,7 @@ window.ovSet=function(campo,valor){
   const o=window._OV, op=_ovOpciones();
   if(campo==='sexo')o.sexo=valor;
   else if(campo==='masters'){ o.masters=valor; o.divs=null; }   // las divisiones elegidas cambian de nombre
+  else if(campo==='equipos'){ o.equipos=valor; }
   else{
     const todos=campo==='divs'?op.divs:op.mods;
     if(valor==='*')o[campo]=null;
@@ -6574,7 +6586,7 @@ window.mostrarOverall=function(){
     +';background:'+(on?'rgba(212,168,67,.16)':'transparent')+';color:'+(on?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">'+txt+'</button>';
   const fila=(lbl,cont)=>'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;min-width:78px">'+lbl+'</span>'+cont+'</div>';
   let h='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">'
-    +'<div><div class="os" style="font-size:22px;font-weight:700">Overall y países</div>'
+    +'<div><div class="os" style="font-size:22px;font-weight:700">Overall y '+(d.porPais?'países':'clubes')+'</div>'
     +'<div style="font-size:12px;color:var(--muted)">GL Points por división y modalidad · clasificación por '+(d.porPais?'país':'club')+' según el reglamento IPF'+esc(_actaSufijoDia())+'</div></div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
     +'<button class="btn" onclick="exportOverallXLS()" style="background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);font-weight:700">Excel</button>'
@@ -6582,6 +6594,7 @@ window.mostrarOverall=function(){
     +'<button class="btn" onclick="document.getElementById(\'ovModal\').remove()">Cerrar</button></div></div>';
   h+=fila('SEXO',op.sexos.slice().sort().map(sx=>pill(o.sexo===sx,sx==='F'?'MUJERES':'HOMBRES',"ovSet('sexo','"+sx+"')")).join(''));
   h+=fila('DIVISIÓN',pill(!o.divs,'TODAS',"ovSet('divs','*')")+op.divs.map(v=>pill(!!o.divs&&o.divs.indexOf(v)>=0,esc(v).toUpperCase(),"ovSet('divs','"+esc(v)+"')")).join(''));
+  h+=fila('EQUIPOS',pill(!d.porPais,'POR CLUB',"ovSet('equipos','club')")+pill(d.porPais,'POR PAÍS',"ovSet('equipos','pais')"));
   h+=fila('MASTERS',pill(o.masters!=='sep','JUNTOS',"ovSet('masters','juntos')")+pill(o.masters==='sep','POR DIVISIÓN',"ovSet('masters','sep')"));
   h+=fila('MODALIDAD',pill(!o.mods,'TODAS',"ovSet('mods','*')")+op.mods.map(v=>pill(!!o.mods&&o.mods.indexOf(v)>=0,esc(_ACTA_MOD_N[v]||v),"ovSet('mods','"+v+"')")).join(''));
   if(!d.bloques.length)h+='<div style="padding:20px;color:var(--muted);text-align:center">No hay resultados con esa selección.</div>';
@@ -6656,7 +6669,7 @@ function _ovFilas(){
 }
 function _ovNombre(ext){
   const o=window._OV;
-  return _actaNombreArchivo(ext).replace(/^Acta_/,'Overall_'+(o.sexo==='F'?'Mujeres':'Hombres')+'_');
+  return _actaNombreArchivo(ext).replace(/^Acta_/,'Overall_'+(_ovPorPais()?'Paises_':'Clubes_')+(o.sexo==='F'?'Mujeres':'Hombres')+'_');
 }
 window.exportOverallXLS=function(){
   const {filas,d}=_ovFilas();
@@ -14139,9 +14152,11 @@ function renderResults(){
       // Quiénes suben al podio en cada categoría, contando los cuatro premios:
       // total, sentadilla, banca y peso muerto.
       +'<button id="btnMedallas" class="btn" onclick="mostrarMedallas()" style="background:rgba(212,168,67,.15);border:1px solid var(--gold);color:var(--gold);font-weight:700" title="Podios de todas las categorías (total, sentadilla, banca y peso muerto), cuántas medallas hay que entregar y el medallero por país o club">Medallas</button>'
-      // Ranking por GL de cada división y modalidad, y la clasificación de países
-      // con los puntos del reglamento IPF.
-      +'<button id="btnOverall" class="btn" onclick="mostrarOverall()" style="background:rgba(96,165,250,.12);border:1px solid #60a5fa;color:#60a5fa;font-weight:700" title="Overall por GL Points de cada división y modalidad, y la clasificación de países según el reglamento IPF">Overall y países</button>'
+      // Ranking por GL de cada división y modalidad, y la clasificación por
+      // equipos con los puntos del reglamento IPF: por club en un campeonato
+      // nacional, por país en uno internacional.
+      +(()=>{ let pp=false; try{ pp=_ovPorPais(); }catch(e){}
+        return '<button id="btnOverall" class="btn" onclick="mostrarOverall()" style="background:rgba(96,165,250,.12);border:1px solid #60a5fa;color:#60a5fa;font-weight:700" title="Overall por GL Points de cada división y modalidad, y la clasificación por '+(pp?'países':'clubes')+' según el reglamento IPF">Overall y '+(pp?'países':'clubes')+'</button>'; })()
       // Qué récords nacionales rompieron los chilenos, para revisar y guardar.
       +(window._esStreaming()?'':'<button class="btn" onclick="mostrarRecordsNac()" style="background:rgba(242,194,48,.12);border:1px solid #F2C230;color:#F2C230;font-weight:700" title="Marcas de atletas chilenos que superan la tabla de récords nacionales: revisar y guardar">Récords nacionales</button>');
       // Lista de récords batidos en el campeonato (sudamericanos y/o nacionales), para descargar.
