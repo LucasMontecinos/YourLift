@@ -214,7 +214,8 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
     const cuerpo = src.slice(i, src.indexOf('\n}', i));
     ok(!/REGIONAL/.test(cuerpo), 'el ✓ no lleva la etiqueta REGIONAL');
     ok(!/var\(--red\)|var\(--green\)/.test(cuerpo), 'ni colores que separen unos de otros');
-    ok(/✓/.test(cuerpo) && /✗/.test(cuerpo), 'solo un ✓ o una ✗');
+    // (dibujados con los íconos del sitio: yl-i-check y yl-i-cruz)
+    ok(/✓|yl-i-check/.test(cuerpo) && /✗|yl-i-cruz/.test(cuerpo), 'solo un ✓ o una ✗');
     const j = src.indexOf('function _detalleHist');
     const det = src.slice(j, src.indexOf('\n}', j));
     ok(!/REGIONAL/.test(det), 'y en el detalle tampoco se resalta ningún campeonato');
@@ -354,7 +355,7 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
   console.log('\nLa columna está en la pantalla de revisión');
   ok(/<th title="Si ya compitió este año/.test(src), 'hay una columna con su encabezado');
   ok(/window\.apprToggleHist=function/.test(src), 'el ✓ se puede abrir para ver en qué compitió');
-  ok(/✗<\/span>/.test(src), 'y el que no compitió lleva una ✗');
+  ok(/(?:✗|<i class=yl-i-cruz><\/i>)<\/span>/.test(src), 'y el que no compitió lleva una ✗');
   ok(/apprToggleHist\('\$\{esc\(id\|\|''\)\}'\)/.test(src), 'cada fila abre la suya');
   ok(/COMPITIÓ EN \$\{anio\}/.test(src), 'el detalle dice el año');
   ok(/Un campeonato que no se cerró desde acá no aparece/.test(src),

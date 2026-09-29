@@ -95,8 +95,10 @@ const EVENTO = {
       // El carnet fijo también, que es el otro requerido.
       state.carnetFile = new File(['x'], 'c.jpg', { type: 'image/jpeg' }); state.carnetName = 'c.jpg';
       render();
-      const listo = document.body.innerText;
-      return { bloqueado, faltaEnResumen, ok: /Certificado médico OE:\s*✅/.test(listo) };
+      // En el resumen la marca es un ícono (ya no un emoji): se mira la fila.
+      const fila = [...document.querySelectorAll('div')].find(d => /^Certificado médico OE:/.test(d.textContent.trim()) && d.children.length <= 3);
+      const ok = !!fila && !!fila.querySelector('.yl-i-check') && !/Falta/.test(fila.textContent);
+      return { bloqueado, faltaEnResumen, ok };
     }, EVENTO);
     ok(r.bloqueado, 'sin el documento propio no se puede enviar');
     ok(r.faltaEnResumen, 'y el resumen dice que falta');

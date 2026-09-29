@@ -10,6 +10,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta property="og:site_name" content="YourLift">
 <meta property="og:image" content="https://yourlift.cl/icon-512.png">
+<link rel="stylesheet" href="compartido/iconos.css?v=1">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -702,7 +703,7 @@ function _spectatorEditAlert(){
     el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:100000;background:#b45309;color:#fff;padding:9px 14px;font-family:Oswald,sans-serif;font-size:13px;letter-spacing:.5px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.5)';
     document.body.appendChild(el);
   }
-  el.innerHTML='\uD83D\uDC41 EST\u00c1S EN MODO ESPECTADOR \u2014 lo que carg\u00e1s NO se guarda ni lo ve nadie. '
+  el.innerHTML='EST\u00c1S EN MODO ESPECTADOR \u2014 lo que cargas NO se guarda ni lo ve nadie. '
     +'<button onclick="setSyncMode(true)" style="margin-left:8px;padding:4px 14px;border-radius:6px;border:none;background:#fff;color:#b45309;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">CAMBIAR A CONTROLADOR</button>';
 }
 function _spectatorEditOk(){ const el=document.getElementById('spectModeBanner'); if(el)el.remove(); }
@@ -718,7 +719,7 @@ function _syncWriteAlert(e){
     el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:100000;background:#C41E3A;color:#fff;padding:8px 14px;font-family:Oswald,sans-serif;font-size:13px;letter-spacing:.5px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.5)';
     document.body.appendChild(el);
   }
-  el.innerHTML='\u26A0 LOS CAMBIOS NO SE ESTÁN GUARDANDO — el espectador y OBS no ven lo que cargas.'
+  el.innerHTML='LOS CAMBIOS NO SE ESTÁN GUARDANDO — el espectador y OBS no ven lo que cargas.'
     +(perm?' <b>Inicia sesión con tu cuenta de administrador.</b>':' Revisa la conexión a internet.')
     +' <span style="opacity:.85;font-size:11px">(se reintenta solo)</span>';
 }
@@ -2245,7 +2246,7 @@ window.openLoginModal=function(){
   const m=document.createElement('div'); m.id='lcLogin';
   m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(4,10,20,.85);display:flex;align-items:center;justify-content:center;z-index:100001;padding:16px';
   m.innerHTML='<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:24px;width:min(360px,94vw)">'
-    +'<div style="font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:4px">\uD83D\uDD10 INICIAR SESI\u00d3N</div>'
+    +'<div style="font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:4px"><i class=yl-i-candado></i> INICIAR SESI\u00d3N</div>'
     +'<div style="font-size:11px;color:var(--muted);margin-bottom:14px">Cuenta de administrador / juez (la misma del panel admin).</div>'
     +'<input id="lcLoginEmail" type="email" autocomplete="username" placeholder="Email" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:13px;margin-bottom:8px">'
     +'<input id="lcLoginPass" type="password" autocomplete="current-password" placeholder="Contrase\u00f1a" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:13px;margin-bottom:6px">'
@@ -2268,7 +2269,7 @@ window.doLcLogin=async function(){
     if(err)err.textContent='';
     await window._fbAuth.signInWithEmailAndPassword(fbAuth,email,pass);
     const m=document.getElementById('lcLogin'); if(m)m.remove();
-    showToastLC('\u2713 Sesi\u00f3n iniciada');
+    showToastLC('Sesi\u00f3n iniciada');
   }catch(e){
     const code=(e&&e.code)||'';
     if(err)err.textContent=/invalid-credential|wrong-password|user-not-found|invalid-email/.test(code)?'Email o contrase\u00f1a incorrectos':'Error: '+(code||e.message);
@@ -2912,7 +2913,7 @@ function _srSubirDeclarados(hoyAntes){
 }
 function _srAvisarSubidas(cs){
   if(!cs||!cs.length)return;
-  showToastLC('🏆 Récord nuevo — '+cs.map(c=>c.n+' '+LIFT_S[c.l]+(c.j+1)+': '+c.de+' → '+c.a+' kg').join(' · ')
+  showToastLC('Récord nuevo — '+cs.map(c=>c.n+' '+LIFT_S[c.l]+(c.j+1)+': '+c.de+' → '+c.a+' kg').join(' · ')
     +'  (con el peso anterior ya no era récord)');
 }
 // Etiqueta corta para el badge: "SUD" o "SUD OPEN+JR"
@@ -2989,7 +2990,7 @@ function _srPanel(){
   };
   let h='<div class="card" style="margin-bottom:10px;padding:0;overflow:hidden;border:1px solid rgba(242,194,48,.45)">';
   h+='<button onclick="window._SR_PANEL_OPEN=!window._SR_PANEL_OPEN;R()" style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 13px;border:none;background:rgba(242,194,48,.10);color:#F2C230;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;text-align:left">'
-    +'<span>🏆 RÉCORDS SUDAMERICANOS</span>'
+    +'<span><i class=yl-i-trofeo></i> RÉCORDS SUDAMERICANOS</span>'
     +(nuevos?'<span style="background:#F2C230;color:#0f1a10;font-size:10px;font-weight:800;letter-spacing:.5px;padding:2px 7px;border-radius:4px;white-space:nowrap">'
         +nuevos+(nuevos>1?' NUEVOS':' NUEVO')+'</span>':'')
     +'<span style="font-size:10px;color:var(--muted);font-weight:400;letter-spacing:0">sentadilla · banca · peso muerto · total, de las categorías que están en la tanda '+(DATA.flight||'—')+'</span>'
@@ -3002,7 +3003,7 @@ function _srPanel(){
       +'<th style="border-bottom:1px solid var(--border)"></th></tr>';
     rows.forEach(r=>{
       h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3)">'
-        +'<td style="padding:4px 9px;white-space:nowrap"><b>'+r.cat+'</b> <span style="color:var(--muted)">'+(r.sexo==='F'?'♀':'♂')+'</span></td>'
+        +'<td style="padding:4px 9px;white-space:nowrap"><b>'+r.cat+'</b> <span style="color:var(--muted)">'+(r.sexo==='F'?'F':'M')+'</span></td>'
         +'<td style="padding:4px 9px;white-space:nowrap">'+r.div+'</td>'
         +'<td style="padding:4px 9px;color:var(--muted);white-space:nowrap">'+(r.eq==='classic'?'Classic':'Equipado')+(r.solo?' · Only Bench':'')+'</td>'
         +MOVS.map(l=>celda(r.r[l])).join('')
@@ -3089,14 +3090,14 @@ function setAtt(id,l,r,val){
   const key=id+'_'+l+'_'+r;
   const ct=DATA.changeTimers[key];
   if(ct&&ct.expired){
-    showToastLC('\u23F0 Timer expirado — peso ingresado igual');
+    showToastLC('Timer expirado — peso ingresado igual');
   }
   if(w>0){
     // Rule: each attempt must be ≥ all previous attempts (successful or not)
     for(let prev=r-1;prev>=0;prev--){
       const p=a.att[l][prev];
       if(p.w>0&&w<p.w){
-        showToastLC('\u26A0\uFE0F '+a.name+': intento '+(r+1)+' ('+w+'kg) menor al intento '+(prev+1)+' ('+p.w+'kg) — bloqueado');
+        showToastLC(a.name+': intento '+(r+1)+' ('+w+'kg) menor al intento '+(prev+1)+' ('+p.w+'kg) — bloqueado');
         const el=document.getElementById('ct_'+key);
         if(el)el.value=a.att[l][r].w||'';
         return;
@@ -3105,7 +3106,7 @@ function setAtt(id,l,r,val){
     // Warn if weight seems unusually small vs category (< 50% of cat number)
     const catKg=parseFloat((a.cat||'').replace(/[^0-9.]/g,''))||0;
     if(catKg>0&&w<catKg*0.3){
-      if(!confirm('\u26A0\uFE0F El peso '+w+'kg parece muy bajo para la categoría '+a.cat+'. ¿Confirmar igualmente?')){
+      if(!confirm('El peso '+w+'kg parece muy bajo para la categoría '+a.cat+'. ¿Confirmar igualmente?')){
         const el=document.getElementById('ct_'+key);
         if(el)el.value=a.att[l][r].w||'';
         return;
@@ -3446,7 +3447,7 @@ function openAddAthlete(){
     <div id="aa_alert" style="display:none;background:rgba(196,30,58,.15);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--accent);font-family:Oswald"></div>
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button onclick="document.getElementById('addAthModal').remove()" style="padding:8px 20px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;cursor:pointer">CANCELAR</button>
-      <button onclick="confirmAddAthlete()" style="padding:10px 24px;border-radius:8px;border:none;background:var(--green);color:#000;font-family:Oswald;font-size:13px;font-weight:700;cursor:pointer">✓ AGREGAR</button>
+      <button onclick="confirmAddAthlete()" style="padding:10px 24px;border-radius:8px;border:none;background:var(--green);color:#000;font-family:Oswald;font-size:13px;font-weight:700;cursor:pointer"><i class=yl-i-check></i> AGREGAR</button>
     </div>
   </div>`;
   document.body.appendChild(m);
@@ -3470,7 +3471,7 @@ function confirmAddAthlete(){
   _aplicarModalidad(DATA.athletes[DATA.athletes.length-1],g('aa_mod').value);
   saveNow();
   document.getElementById('addAthModal').remove();
-  showToastLC('✓ '+name+' agregado · '+_ctryName(country));
+  showToastLC(name+' agregado · '+_ctryName(country));
   R();
 }
 
@@ -3662,7 +3663,7 @@ async function uploadAthleteMedia(id,kind,file){
     const patch=kind==='foto'?{foto_url:url}:{gif_url:url};
     await window._fb.setDoc(window._fb.doc(fbDB,'atleta_fotos',key),Object.assign({codigo:key,name:a.name,country:_ctry(a),ts:Date.now()},patch),{merge:true});
     window._LC_MEDIA[key]=Object.assign({},window._LC_MEDIA[key]||{},patch);
-    if(st)st.textContent='✓ Guardado';
+    if(st)st.textContent='Guardado';
     // refrescar preview
     const isVid=kind==='gif'&&!String(url).toLowerCase().endsWith('.gif');
     const pv=document.getElementById(kind==='foto'?'amPrevFoto':'amPrevGif');
@@ -3780,7 +3781,7 @@ function openWeighIn(id){
       ${a.weighedIn||a.bw>0?`<button onclick="clearWeighIn(${id})" style="padding:8px 14px;border-radius:8px;border:1px solid var(--red);background:transparent;color:var(--red);font-family:Oswald;font-size:11px;cursor:pointer" title="Borrar BW + racks + intentos">BORRAR PESAJE</button>`:'<span></span>'}
       <div style="display:flex;gap:10px">
         <button onclick="document.getElementById('weighInModal').remove()" style="padding:8px 20px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;cursor:pointer">CANCELAR</button>
-        <button id="wi_confirm_btn" onclick="confirmWeighIn(${id},${catKg},${limit||0})" style="padding:10px 24px;border-radius:8px;border:none;background:var(--green);color:#000;font-family:Oswald;font-size:13px;font-weight:700;cursor:pointer">✓ CONFIRMAR PESAJE</button>
+        <button id="wi_confirm_btn" onclick="confirmWeighIn(${id},${catKg},${limit||0})" style="padding:10px 24px;border-radius:8px;border:none;background:var(--green);color:#000;font-family:Oswald;font-size:13px;font-weight:700;cursor:pointer"><i class=yl-i-check></i> CONFIRMAR PESAJE</button>
       </div>
     </div>
     <div style="text-align:center;margin-top:10px;font-size:10px;color:var(--muted)">Usa <kbd style="background:var(--bg);padding:1px 6px;border-radius:3px;border:1px solid var(--border);font-family:monospace">Enter</kbd> para avanzar al siguiente campo</div>
@@ -3808,12 +3809,12 @@ function openWeighIn(id){
     if(limit){
       // Categoría normal: máximo permitido = limit
       if(v>limit){st.textContent=''+v+'kg EXCEDE el límite de '+limit+'kg';st.style.color='var(--red)';}
-      else if(v>0){st.textContent='✓ '+v+'kg dentro del límite ('+limit+'kg)';st.style.color='var(--green)';}
+      else if(v>0){st.textContent=v+'kg dentro del límite ('+limit+'kg)';st.style.color='var(--green)';}
       else{st.textContent='Límite categoría: '+limit+' kg';st.style.color='var(--muted)';}
     } else if(isPlusCat && catKg){
       // Categoría "+X": el atleta DEBE pesar más que X
       if(v>0 && v<=catKg){st.textContent=''+v+'kg NO califica para +'+catKg+'kg (debe pesar más de '+catKg+'kg)';st.style.color='var(--red)';}
-      else if(v>catKg){st.textContent='✓ '+v+'kg califica para +'+catKg+'kg';st.style.color='var(--green)';}
+      else if(v>catKg){st.textContent=v+'kg califica para +'+catKg+'kg';st.style.color='var(--green)';}
       else{st.textContent='Categoría +'+catKg+' kg (debe pesar más de '+catKg+' kg)';st.style.color='var(--muted)';}
     }
   });
@@ -4212,7 +4213,7 @@ async function loadLiveAthletes(ev){
       const firstFlight=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort(_cmpFl)[0]||(TARIMA?'A'+TARIMA:'A');
       DATA.flight=firstFlight;
       save();R();
-      showToastLC('\uD83D\uDD34 Nómina en vivo: '+fbAthletes.length+' atletas desde Firestore');
+      showToastLC('Nómina en vivo: '+fbAthletes.length+' atletas desde Firestore');
     }else{
       // During competition: only merge new approvals, don't touch existing
       _mergeFirebaseAthletes(fbAthletes);
@@ -4226,12 +4227,12 @@ async function loadLiveAthletes(ev){
 function _confirmDecisionChange(a,l,r,res){
   const prev=a.att[l][r].r;
   if(prev!=='g'&&prev!=='n')return true;
-  const lbl=prev==='g'?'VÁLIDO ✓':'NULO ✗';
+  const lbl=prev==='g'?'VÁLIDO':'NULO';
   const att=LIFT_S[l]+(r+1);
   if(res===prev){
     return confirm('¿Estás seguro de ANULAR la decisión?\n\n'+a.name+' — '+att+' está marcado como '+lbl+'.\nEl intento quedará SIN decisión (pendiente de nuevo).');
   }
-  const newLbl=res==='g'?'VÁLIDO ✓':'NULO ✗';
+  const newLbl=res==='g'?'VÁLIDO':'NULO';
   return confirm('¿Estás seguro de REVERTIR la decisión?\n\n'+a.name+' — '+att+': pasa de '+lbl+' a '+newLbl+'.');
 }
 function overrideResult(id,l,r,res){
@@ -4292,8 +4293,8 @@ function changeResult(id,l,r,res){
   a.bombed=a.att.sq.every(x=>x.r==='n')&&a.att.bp.every(x=>x.r==='n')&&a.att.dl.every(x=>x.r==='n');
   saveNow();R();
   showToastLC(wasSame?'↺ '+a.name+' — '+LIFT_S[l]+(r+1)+': decisión revocada'
-    :(res==='g'?'✓ '+a.name+' — '+LIFT_S[l]+(r+1)+': cambiado a VÁLIDO'
-                :'✗ '+a.name+' — '+LIFT_S[l]+(r+1)+': cambiado a NULO'));
+    :(res==='g'?a.name+' — '+LIFT_S[l]+(r+1)+': cambiado a VÁLIDO'
+                :a.name+' — '+LIFT_S[l]+(r+1)+': cambiado a NULO'));
 }
 
 // Helper: ¿el atleta quedó descalificado del TOTAL?
@@ -4314,7 +4315,7 @@ function recoverBackup(){
     d.timerOn=false;d.timer=60;
     Object.assign(DATA,d);
     save();
-    showToastLC('\u2705 Sesión recuperada: '+d.athletes.length+' atletas, '+(DATA.event==null?void 0:DATA.event.name));
+    showToastLC('Sesión recuperada: '+d.athletes.length+' atletas, '+(DATA.event==null?void 0:DATA.event.name));
     R();
   }catch(e){showToastLC('Error al recuperar: '+e.message);}
 }
@@ -4322,21 +4323,21 @@ function resetLiveData(){
   if(!isAdmin){alert('Solo admin puede reiniciar');return}
   if(!DATA.event){alert('No hay competencia activa');return}
   const ev=DATA.event;
-  const msg='REINICIAR datos en vivo de:\n"'+ev.name+'"\n\nSE BORRAN:\n• Intentos (squat / bench / deadlift)\n• Pesos cargados y resultados (✓ / ✗)\n• Timer y cursores (lift, ronda)\n• Bombed (atletas eliminados)\n\nSE CONSERVAN:\n• Tandas, vuelos, lots\n• Pesaje (BW), racks\n• Listado de atletas\n\nEsto sobreescribe Firestore para TODOS los dispositivos y widgets de OBS.';
+  const msg='REINICIAR datos en vivo de:\n"'+ev.name+'"\n\nSE BORRAN:\n• Intentos (squat / bench / deadlift)\n• Pesos cargados y resultados\n• Timer y cursores (lift, ronda)\n• Bombed (atletas eliminados)\n\nSE CONSERVAN:\n• Tandas, vuelos, lots\n• Pesaje (BW), racks\n• Listado de atletas\n\nEsto sobreescribe Firestore para TODOS los dispositivos y widgets de OBS.';
   // ANTES de borrar nada: comprobar que ESTA pantalla puede escribir en el servidor.
   // Si no puede (modo espectador, sin sesión admin o Firebase caído), el borrado
   // local dejaba el equipo desincronizado: vacío acá y con todo cargado en el
   // servidor y en el público. Mejor no tocar nada y explicar por qué.
   if(!fbReady){
-    alert('\u26A0 Sin conexión con el servidor.\n\nNo se reinició nada: si borrara solo en esta pantalla, quedaría distinta del resto. Revisa tu conexión y vuelve a intentar.');
+    alert('Sin conexión con el servidor.\n\nNo se reinició nada: si borrara solo en esta pantalla, quedaría distinta del resto. Revisa tu conexión y vuelve a intentar.');
     return;
   }
   if(!isAdmin){
-    alert('\u26A0 Necesitás iniciar sesión como administrador para reiniciar los datos.\n\nNo se borró nada.');
+    alert('Necesitas iniciar sesión como administrador para reiniciar los datos.\n\nNo se borró nada.');
     return;
   }
   if(!window.IS_CONTROLLER){
-    if(confirm('\u26A0 Esta pantalla está en modo ESPECTADOR: no puede guardar en el servidor.\n\nSi reiniciara ahora, se borraría solo acá y el público seguiría viendo todo.\n\n¿Cambiar esta pantalla a CONTROLADOR y continuar?')){
+    if(confirm('Esta pantalla está en modo ESPECTADOR: no puede guardar en el servidor.\n\nSi reiniciara ahora, se borraría solo acá y el público seguiría viendo todo.\n\n¿Cambiar esta pantalla a CONTROLADOR y continuar?')){
       setSyncMode(true);
     }else{
       return;   // no se toca nada
@@ -4366,8 +4367,8 @@ function resetLiveData(){
   R();
   // Confirmar que realmente se propagó (si no escribe, el público no se entera)
   _confirmarPublicado(
-    ()=>alert('\u2713 Datos en vivo reiniciados y propagados a todos los dispositivos y widgets.'),
-    ()=>alert('\u26A0 El reinicio se aplic\u00f3 en ESTA pantalla pero NO se pudo guardar en el servidor'
+    ()=>alert('Datos en vivo reiniciados y propagados a todos los dispositivos y widgets.'),
+    ()=>alert('El reinicio se aplic\u00f3 en ESTA pantalla pero NO se pudo guardar en el servidor'
         +(window.IS_CONTROLLER?'.':' porque est\u00e1 en modo ESPECTADOR.')
         +'\n\nEl p\u00fablico sigue viendo los datos anteriores. Revisa el indicador SYNC y vuelve a intentar.'));
 }
@@ -4418,11 +4419,11 @@ window.recargarNomina=async function(){
   if(!isAdmin){alert('Solo un admin puede volver a cargar la n\u00f3mina');return}
   if(!DATA.event){alert('No hay campeonato activo');return}
   if(!fbReady){
-    alert('\u26a0 Sin conexi\u00f3n con el servidor.\n\nNo se carg\u00f3 nada: si cambiara la n\u00f3mina solo en esta pantalla, quedar\u00eda distinta del resto.');
+    alert('Sin conexi\u00f3n con el servidor.\n\nNo se carg\u00f3 nada: si cambiara la n\u00f3mina solo en esta pantalla, quedar\u00eda distinta del resto.');
     return;
   }
   if(!window.IS_CONTROLLER){
-    if(!confirm('\u26a0 Esta pantalla est\u00e1 en modo ESPECTADOR: no puede guardar en el servidor.\n\n\u00bfCambiarla a CONTROLADOR y continuar?'))return;
+    if(!confirm('Esta pantalla est\u00e1 en modo ESPECTADOR: no puede guardar en el servidor.\n\n\u00bfCambiarla a CONTROLADOR y continuar?'))return;
     setSyncMode(true);
   }
   let ev;
@@ -4459,7 +4460,7 @@ window.recargarNomina=async function(){
       +'\nSE VUELVE A LEER del archivo: tanda, lote, categor\u00eda, divisi\u00f3n y club.'
       +'\n\nEsto sobreescribe el servidor para todos los dispositivos y widgets.';
     if(salenConDatos.length){
-      msg+='\n\n\u26a0 OJO: '+salenConDatos.length+' de los que salen YA TIENEN datos cargados ('
+      msg+='\n\nOJO: '+salenConDatos.length+' de los que salen YA TIENEN datos cargados ('
         +salenConDatos.slice(0,5).map(a=>a.name).join(', ')+(salenConDatos.length>5?'\u2026':'')
         +'). Si sacarlos no es lo que quieres, cancela.';
     }
@@ -4485,11 +4486,11 @@ window.recargarNomina=async function(){
   saveNow();
   R();
   _confirmarPublicado(
-    ()=>alert('\u2713 N\u00f3mina al d\u00eda: '+DATA.athletes.length+' atletas'
+    ()=>alert('N\u00f3mina al d\u00eda: '+DATA.athletes.length+' atletas'
         +(entran.length?' \u00b7 '+entran.length+' entran':'')
         +(salen.length?' \u00b7 '+salen.length+' salen':'')
         +(heredados?'\n\nSe conservaron los datos de tarima de '+heredados+' atleta'+(heredados>1?'s':'')+'.':'')),
-    ()=>alert('\u26a0 La n\u00f3mina se carg\u00f3 en ESTA pantalla pero NO se pudo guardar en el servidor.\n\nEl p\u00fablico y los widgets siguen con la anterior. Revisa el indicador SYNC y vuelve a intentar.'));
+    ()=>alert('La n\u00f3mina se carg\u00f3 en ESTA pantalla pero NO se pudo guardar en el servidor.\n\nEl p\u00fablico y los widgets siguen con la anterior. Revisa el indicador SYNC y vuelve a intentar.'));
 };
 
 const ctIntervals={};
@@ -4520,7 +4521,7 @@ setInterval(()=>{
     // Update manage tab element
     const el=document.getElementById('ct_'+k);
     if(el){
-      if(ct.expired){el.textContent='\u23F0';el.className='inp-sm expired';el.style.borderColor='var(--red)'}
+      if(ct.expired){el.textContent='0s';el.className='inp-sm expired';el.style.borderColor='var(--red)'}
       else{el.textContent=ct.remaining+'s';el.className='inp-sm countdown'}
     }
     // Update compete tab element
@@ -4528,8 +4529,8 @@ setInterval(()=>{
     if(el2){
       const parts=k.split('_');const aId=parseInt(parts[0]);const lift=parts[1];const rnd=parseInt(parts[2]);
       const a=DATA.athletes.find(x=>x.id===aId);const nm=a?a.name:'';
-      if(ct.expired){el2.innerHTML='\u23F0 <strong>'+nm+'</strong> \u2014 '+LIFT_S[lift]+(rnd+1)+' \u2014 TIEMPO';el2.style.color='var(--red)'}
-      else{el2.innerHTML='\u23F1 <strong>'+nm+'</strong> \u2014 '+LIFT_S[lift]+(rnd+1)+' \u2014 '+ct.remaining+'s para entregar intento';el2.style.color='var(--orange)'}
+      if(ct.expired){el2.innerHTML='<i class=yl-i-reloj></i> <strong>'+nm+'</strong> \u2014 '+LIFT_S[lift]+(rnd+1)+' \u2014 TIEMPO';el2.style.color='var(--red)'}
+      else{el2.innerHTML='<i class=yl-i-reloj></i> <strong>'+nm+'</strong> \u2014 '+LIFT_S[lift]+(rnd+1)+' \u2014 '+ct.remaining+'s para entregar intento';el2.style.color='var(--orange)'}
     }
     // On expiry: flash alert banner + beep
     if(justExpired){
@@ -4593,7 +4594,7 @@ setInterval(()=>{
       rel.textContent=dsc.mmss;
       rel.style.color=dsc.rem<=10?'#ef4444':dsc.rem<=30?'#f59e0b':'#ffffff';
       const pa=document.getElementById('descPausa');
-      if(pa)pa.innerHTML=dsc.pausado?'\u23F8 PAUSADO':'';
+      if(pa)pa.innerHTML=dsc.pausado?'PAUSADO':'';
     } else if((!!dsc)!==(!!rel)){
       // Apareció sin estar dibujado, o se fue y quedó el cartel: hay que redibujar.
       // Ojo con sacar la condición de arriba: en Control en Vivo no existe el
@@ -4629,7 +4630,7 @@ function showChangeExpiredAlert(name,lift,rnd){
   const div=document.createElement('div');
   div.className='ct-expired-banner';
   div.style.cssText='position:fixed;top:0;left:0;right:0;background:#C41E3A;color:#fff;padding:10px 20px;z-index:9998;display:flex;justify-content:space-between;align-items:center;font-family:Oswald;font-size:14px;letter-spacing:1px;animation:pulseRed 1s infinite';
-  div.innerHTML='\u23F0 TIEMPO EXPIRADO — '+name.toUpperCase()+' · '+LIFT_S[lift]+(rnd+1)+' — <span style="font-size:11px;opacity:.8">El cambio de intento ya no es válido</span><button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:3px 12px;border-radius:4px;cursor:pointer;font-family:Oswald;font-size:11px;margin-left:12px">✕</button>';
+  div.innerHTML='<i class=yl-i-reloj></i> TIEMPO EXPIRADO — '+name.toUpperCase()+' · '+LIFT_S[lift]+(rnd+1)+' — <span style="font-size:11px;opacity:.8">El cambio de intento ya no es válido</span><button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:3px 12px;border-radius:4px;cursor:pointer;font-family:Oswald;font-size:11px;margin-left:12px"><i class=yl-i-cerrar></i></button>';
   document.body.appendChild(div);
   // Beep via AudioContext
   try{const ac=new(window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator();const g=ac.createGain();o.connect(g);g.connect(ac.destination);o.type='square';o.frequency.setValueAtTime(880,ac.currentTime);g.gain.setValueAtTime(0.3,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.4);o.start(ac.currentTime);o.stop(ac.currentTime+0.4);}catch(e){}
@@ -4875,7 +4876,7 @@ window._openCompModal=function(id,l,mode){
     ?[{min:4,label:'4 min · por defecto',def:true},{min:3,label:'3 min'},{min:2,label:'2 min'},{min:5,label:'5 min'},{min:0,label:'Sin tiempo compensatorio'}]
     :[{min:4,label:'Último de la ronda · 4 min',def:true},{min:3,label:'Penúltimo · 3 min'},{min:2,label:'Antepenúltimo · 2 min'},{min:0,label:'Sigue la competencia · sin tiempo'}];
   let h='<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:22px 24px;width:min(460px,95vw)">';
-  h+='<div style="font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:1px;color:var(--gold)">🕒 '+title+'</div>';
+  h+='<div style="font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:1px;color:var(--gold)"><i class=yl-i-reloj></i> '+title+'</div>';
   h+='<div style="font-size:12px;color:var(--muted);margin:6px 0 14px;line-height:1.5"><b style="color:var(--text)">'+esc(a.name)+' · '+LIFT_S[l]+' — repite su '+['1er','2do','3er'][grNow]+' intento</b> — '+desc+'</div>';
   h+='<div style="font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:8px">TIEMPO COMPENSATORIO A DAR:</div>';
   h+='<div style="display:flex;flex-direction:column;gap:8px">';
@@ -4920,7 +4921,7 @@ function _do4thAttempt(id,l,mode,compMin){
   DATA.flight=a.flight;DATA.lift=l;DATA.round=gr;DATA.forcedCurrent=null;
   saveNow();R();
   const nombreExtra=(gr>=2)?'4º intento':'Intento extra';
-  showToastLC('➕ '+nombreExtra+' ('+(mode==='self'?'se sigue a sí mismo':'final de ronda')+'): '+a.name+' — repite su '+['1er','2do','3er'][gr]+' intento en '+LIFT_S[l]+(compMin?' · '+compMin+' min compensatorio':''));
+  showToastLC(nombreExtra+' ('+(mode==='self'?'se sigue a sí mismo':'final de ronda')+'): '+a.name+' — repite su '+['1er','2do','3er'][gr]+' intento en '+LIFT_S[l]+(compMin?' · '+compMin+' min compensatorio':''));
 }
 // Tiempo compensatorio MANUAL — para casos fuera de las dos opciones del 4º
 // (ej. un atleta abre 1º y 2º de sentadilla seguidos → se le dan 4 min). No crea
@@ -4933,7 +4934,7 @@ window.openManualComp=function(){
   const m=document.createElement('div');m.id='compModal';
   m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100000;padding:16px';
   let h='<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:22px 24px;width:min(440px,95vw)">';
-  h+='<div style="font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:1px;color:var(--gold)">🕒 TIEMPO COMPENSATORIO MANUAL</div>';
+  h+='<div style="font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:1px;color:var(--gold)"><i class=yl-i-reloj></i> TIEMPO COMPENSATORIO MANUAL</div>';
   h+='<div style="font-size:12px;color:var(--muted);margin:6px 0 14px;line-height:1.5"><b style="color:var(--text)">'+esc(who.name)+'</b> — para cuando le corresponde descanso extra sin ser un 4º intento (ej. abre dos intentos seguidos).</div>';
   h+='<div style="display:flex;flex-direction:column;gap:8px">';
   [{min:4,def:true},{min:3},{min:2},{min:1},{min:5}].forEach(o=>{
@@ -4951,7 +4952,7 @@ window._startManualComp=function(id,l,min){
   DATA.compTimer={id:id,lift:l,min:Math.max(1,Math.min(5,min)),startedAt:Date.now()};
   saveNow();R();
   const a=DATA.athletes.find(x=>x.id===id);
-  showToastLC('🕒 '+min+' min compensatorios para '+(a?a.name:'atleta'));
+  showToastLC(min+' min compensatorios para '+(a?a.name:'atleta'));
 };
 // Elimina el 4º intento de un lift (por si se agregó por error o el jurado lo
 // revoca). Solo saca el índice 3, nunca los 3 base. Pide confirmación porque
@@ -5016,7 +5017,7 @@ window.remove4thAttempt=function(id,l){
   // limpiar el tiempo compensatorio si era de este 4º
   if(DATA.compTimer&&DATA.compTimer.id===id&&DATA.compTimer.lift===l)DATA.compTimer=null;
   saveNow();R();
-  showToastLC('🗑 4º intento eliminado: '+a.name+' — '+LIFT_S[l]);
+  showToastLC('4º intento eliminado: '+a.name+' — '+LIFT_S[l]);
 };
 // Cierra el tiempo compensatorio a la vista (manual).
 window.clearCompTimer=function(){ DATA.compTimer=null; saveNow(); R(); };
@@ -5059,7 +5060,7 @@ function editAtt(id,l,r){
     if(r===3&&a.att[l].length===4&&!a.att[l][3].w&&a.att[l][3].r===null){
       a.att[l].pop();
       if(DATA.compTimer&&DATA.compTimer.id===id&&DATA.compTimer.lift===l)DATA.compTimer=null;
-      showToastLC('\ud83d\uddd1 4\u00ba intento eliminado: '+a.name+' \u2014 '+LIFT_S[l]);
+      showToastLC('4\u00ba intento eliminado: '+a.name+' \u2014 '+LIFT_S[l]);
     }
     saveNow();R();
   }
@@ -6488,7 +6489,7 @@ window.exportMedallasXLS=function(){
   const {filas}=_medallasFilas();
   _xlsxDescargar(_actaNombreArchivo('xlsx').replace(/^Acta_/,'Medallas_'),
                  'Medallas',filas,[9,38,16,8,10,30,18,10]);
-  showToastLC('✓ Medallas en Excel');
+  showToastLC('Medallas en Excel');
 };
 
 window.exportMedallasPDF=async function(){
@@ -6517,7 +6518,7 @@ window.exportMedallasPDF=async function(){
       margin:{left:8,right:8}
     });
     doc.save(_actaNombreArchivo('pdf').replace(/^Acta_/,'Medallas_'));
-    showToastLC('✓ Medallas en PDF');
+    showToastLC('Medallas en PDF');
   }catch(e){ console.error('[medallas] pdf',e); showToastLC('No se pudo generar el PDF: '+e.message); }
 };
 
@@ -6741,7 +6742,7 @@ window.exportOverallXLS=function(){
   const {filas,d}=_ovFilas();
   if(!d.bloques.length){showToastLC('No hay resultados con esa selección');return;}
   _xlsxDescargar(_ovNombre('xlsx'),'Overall',filas,[8,34,20,10,8,10,10,11]);
-  showToastLC('✓ Overall en Excel');
+  showToastLC('Overall en Excel');
 };
 // Fondo blanco y cuadrícula gris, igual que el Acta FESUPO.
 const _OV_PDF_EST={styles:{fontSize:7,cellPadding:1.1,textColor:[0,0,0],lineColor:[170,170,170],lineWidth:.15,fillColor:[255,255,255]},
@@ -6782,7 +6783,7 @@ window.exportOverallPDF=async function(){
     doc.setFontSize(6.5);doc.setTextColor(110);
     doc.text(T('Puntos por equipo (Reglamento Tecnico IPF): 12-9-8-7-6-5-4-3-2 del 1 al 9 de cada categoria; 1 punto a cada atleta con total despues del 9. Cuentan los 5 mejores. Empate: mas primeros lugares, luego segundos, etc.; luego la mejor marca GL. En Universitario tambien por universidad.'),8,Math.min(y,288),{maxWidth:PW-16});
     doc.save(_ovNombre('pdf'));
-    showToastLC('✓ Overall en PDF');
+    showToastLC('Overall en PDF');
   }catch(e){ console.error('[overall] pdf',e); showToastLC('No se pudo generar el PDF: '+e.message); }
 };
 
@@ -6905,7 +6906,7 @@ window.exportRecordsBatidosXLS=function(){
     filas.push([]);
   });
   _xlsxDescargar(_rbNombre('xlsx'),'Records',filas,[11,12,12,7,26,9,34,8,9,34]);
-  showToastLC('✓ Récords en Excel');
+  showToastLC('Récords en Excel');
 };
 window.exportRecordsBatidosPDF=async function(){
   try{
@@ -6931,7 +6932,7 @@ window.exportRecordsBatidosPDF=async function(){
       y=doc.lastAutoTable.finalY+10;
     });
     doc.save(_rbNombre('pdf'));
-    showToastLC('✓ Récords en PDF');
+    showToastLC('Récords en PDF');
   }catch(e){ console.error('[récords batidos] pdf',e); showToastLC('No se pudo generar el PDF: '+e.message); }
 };
 
@@ -7047,7 +7048,7 @@ async function exportActaFesupoPDF(){
       doc.text(i+'/'+pgs,287,203,{align:'right'});
     }
     doc.save(_actaNombreArchivo('pdf'));
-    showToastLC('✓ Acta PDF generada');
+    showToastLC('Acta PDF generada');
   }catch(e){ showToastLC('Error generando el PDF: '+e.message); console.error(e); }
   finally{ bk.forEach(b=>{b.ref.name=b.name;b.ref.club=b.club;}); if(btn){btn.disabled=false;btn.textContent='Acta FESUPO (PDF)';} }
 }
@@ -7101,7 +7102,7 @@ async function exportActaFesupoXLS(){
     });
     const cols=[5,32,7,11,8].concat(Array(15).fill(8),[10,10,26]);
     _xlsxDescargar(_actaNombreArchivo('xlsx'),'Acta',F,cols);
-    showToastLC('✓ Excel generado');
+    showToastLC('Excel generado');
   }catch(e){ showToastLC('Error generando el Excel: '+e.message); console.error(e); }
   finally{ if(btn){btn.disabled=false;btn.textContent='Excel';} }
 }
@@ -7410,7 +7411,7 @@ async function generateActaPDF(){
   }finally{
     // Restaurar nombres/clubes originales con acentos (no se pierden datos)
     _pdfBackups.forEach(b=>{b.ref.name=b.name;b.ref.club=b.club;if(b.uni!==undefined)b.ref.uni=b.uni;});
-    if(btn){btn.disabled=false;btn.textContent='\uD83D\uDCCB Generar Acta PDF';}
+    if(btn){btn.disabled=false;btn.textContent='Generar Acta PDF';}
   }
 }
 
@@ -7813,7 +7814,7 @@ function renderObsTx(){
     {id:'leaderboard',icon:'',title:'Tabla de clasificación (FIJO)',desc:'Ranking completo de la categoría actual. Cascada fila por fila. SIEMPRE visible mientras la escena esté activa — úsalo para escenas de pausa entre rondas que manejas tú manualmente.',obsBg:'Opaca (azul oscuro). Escena fullscreen.',size:'1920×1080'},
     {id:'tablaactual',icon:'',title:'Tabla actual (corner)',desc:'Ranking de la categoría del lifter en pantalla, esquina inferior derecha. Entra deslizando desde abajo, queda fijo. El levantador actual se resalta y muestra una flecha de proyección: posición actual → posición que tendría si el intento es válido (ej. 2→1 si se mueve al primer lugar). Activa/desactiva con el botón "Tabla actual" en Control TX o tecla A.',obsBg:'Transparente (overlay sobre cámara). Solo ocupa el cuadrante inferior derecho.',size:'1920×1080 (overlay)'},
     {id:'lbauto',icon:'',title:'Tabla de clasificación (AUTO)',desc:'Igual al leaderboard fijo, pero APARECE SOLO al detectar fin de ronda (cuando cambia lift/round/flight). Queda 10s en pantalla y se va. Ideal como overlay siempre activo en una escena de cámara.',obsBg:'Transparente (overlay sobre cámara).',size:'1920×1080 (overlay fullscreen)'},
-    {id:'slam',icon:'',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activa una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcas ✓/✗ en Control en Vivo. Vuelve a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
+    {id:'slam',icon:'',title:'Slam GOOD LIFT / NO LIFT',desc:'Flash de 2s con texto enorme verde (GOOD LIFT) o rojo (NO LIFT). Activa una sola vez con el botón "slam" del Stream Deck → queda armado y dispara automáticamente cuando marcas válido o nulo en Control en Vivo. Vuelve a apretar el botón para desarmarlo.',obsBg:'Transparente. Sumar como capa encima de la cámara, siempre visible.',size:'1920×1080 (overlay fullscreen)'},
     {id:'lights',icon:'',title:'Luces de jueces',desc:'3 círculos para izq / central / der. Se prenden blanco (good) o rojo (no lift) cuando los jueces votan en su panel. Ideal arriba de la cámara o en pantalla aparte.',obsBg:'Transparente. Funciona solo si activas "Modo Jueces" en Control en Vivo.',size:'1920×1080 (autoescala)'},
     {id:'ceremony',icon:'',title:'Ceremonia (TODO-EN-UNO automático)',desc:'Widget orquestador. Detecta nuevo levantador → PROFILE fullscreen 5s → SCOREBOARD bottom-left (30s) → SLAM top-left flash al marcar resultado → IDLE hasta el próximo. Sin tabla de clasificación: ese ciclo lo manejás aparte con el widget Leaderboard fijo. (El tiempo para dar el intento ya no se muestra acá — es privado, solo lo ve el juez en Control en Vivo.)',obsBg:'Mixto: fullscreen opaco durante PROFILE, transparente sobre cámara durante SCOREBOARD/IDLE. Una sola escena con cámara de fondo + este browser source encima.',size:'1920×1080'},
     {id:'director',icon:'',title:'Director (control 100% MANUAL)',desc:'NO se activa solo. Lee comandos desde Firestore (livecast_director/current) que envías tú desde la barra lateral "Control TX". Cada componente (perfil, marcador, tabla, timer, slam) se muestra/esconde con un botón. Ideal si quieres controlar todo a mano sin tocar OBS.',obsBg:'Mixto. Una sola escena con cámara de fondo + este browser source encima. Tú eliges qué se ve y por cuánto tiempo desde el panel Control TX.',size:'1920×1080'},
@@ -7837,11 +7838,11 @@ function renderObsTx(){
     var t=o[0],l=o[1];
     var u=new URL(location.href); if(t)u.searchParams.set('tarima',t); else u.searchParams.delete('tarima');
     var active=(TARIMA||'')===t;
-    h+='<a href="'+u.href+'" class="btn '+(active?'btn-g':'btn-o')+'" style="text-decoration:none;padding:8px 16px">'+(active?'✓ ':'')+l+'</a>';
+    h+='<a href="'+u.href+'" class="btn '+(active?'btn-g':'btn-o')+'" style="text-decoration:none;padding:8px 16px">'+(active?'<i class=yl-i-check></i> ':'')+l+'</a>';
   });
   h+='</div>';
   h+=TARIMA
-    ? '<div style="margin-top:8px;font-size:11px;color:var(--green)">✓ Estás en TARIMA '+TARIMA+'. Los links de abajo ya incluyen <b>&tarima='+TARIMA+'</b> — cópialos directo a OBS.</div>'
+    ? '<div style="margin-top:8px;font-size:11px;color:var(--green)"><i class=yl-i-check></i> Estás en TARIMA '+TARIMA+'. Los links de abajo ya incluyen <b>&tarima='+TARIMA+'</b> — cópialos directo a OBS.</div>'
     : '<div style="margin-top:8px;font-size:11px;color:var(--muted)">Modo "una sola tarima". Si van a transmitir 2 tarimas en paralelo, cada equipo debe elegir Tarima 1 o 2 aquí.</div>';
   h+='</div>';
   {
@@ -7874,7 +7875,7 @@ function renderObsTx(){
     h+='</div>';
     h+='<div style="display:flex;gap:6px;flex-wrap:wrap">';
     h+='<a href="'+url+'" target="_blank" class="btn btn-o" style="text-decoration:none;font-size:11px;padding:7px 12px">Preview</a>';
-    h+='<button class="btn btn-g" onclick="navigator.clipboard.writeText(\''+url+'\').then(()=>{this.textContent=\'✓ Copiado\';setTimeout(()=>this.textContent=\'Copiar URL\',1500)})" style="font-size:11px;padding:7px 12px">Copiar URL</button>';
+    h+='<button class="btn btn-g" onclick="navigator.clipboard.writeText(\''+url+'\').then(()=>{this.textContent=\'Copiado\';setTimeout(()=>this.textContent=\'Copiar URL\',1500)})" style="font-size:11px;padding:7px 12px">Copiar URL</button>';
     h+='</div>';
     h+='</div>';
     h+='<div style="background:rgba(10,22,40,.6);padding:8px 18px;font-family:monospace;font-size:10px;color:rgba(200,215,240,.6);word-break:break-all;border-top:1px solid var(--border)">'+url+'</div>';
@@ -7891,7 +7892,7 @@ function renderObsTx(){
   h+='<li>Tampoco marqués <b style="color:var(--text)">"Shutdown source when not visible"</b> — mantén el browser source siempre cargado en memoria para que el replay sea instantáneo.</li>';
   h+='<li>Crea <b style="color:var(--text)">escenas separadas</b>: "Cámara + Scoreboard" (cámara de fondo + browser source scoreboard encima), "Profile fullscreen", "Leaderboard fullscreen".</li>';
   h+='<li>Transiciones de OBS (Stinger/Fade/Cut) entre escenas — la animación de entrada la maneja la página al activarse la escena.</li>';
-  h+='<li>Los widgets leen el estado en vivo: lifter actual, intento, peso, timer. Cuando marcas ✓/✗ en "Control en Vivo", todos los widgets se actualizan en tiempo real.</li>';
+  h+='<li>Los widgets leen el estado en vivo: lifter actual, intento, peso, timer. Cuando marcas válido o nulo en "Control en Vivo", todos los widgets se actualizan en tiempo real.</li>';
   h+='<li>Si una escena no se anima al activarse (versiones viejas de OBS), recarga manualmente el browser source con click derecho → "Refresh".</li>';
   h+='</ol></div>';
   h+='</div>';
@@ -9054,7 +9055,7 @@ function _renderTxBreakTimer(bt,scale){
   const txt=m+':'+(s<10?'0':'')+s;
   const timerColor=rem<=10?'#ef4444':rem<=30?'#f59e0b':'#ffffff';
   const movement=(bt.movement||'').toUpperCase();
-  const pausedBadge=bt.pausedAt?'<div style="margin-top:10px;display:inline-block;padding:5px 16px;background:rgba(245,158,11,.18);border:2px solid #f59e0b;border-radius:6px;font-family:Oswald;font-size:15px;letter-spacing:5px;color:#f59e0b">⏸ PAUSADO</div>':'';
+  const pausedBadge=bt.pausedAt?'<div style="margin-top:10px;display:inline-block;padding:5px 16px;background:rgba(245,158,11,.18);border:2px solid #f59e0b;border-radius:6px;font-family:Oswald;font-size:15px;letter-spacing:5px;color:#f59e0b"><i class=yl-i-pausa></i> PAUSADO</div>':'';
   const sc=scale||1;
   const hasVideo=(bt.videos||[]).length>0;
   const evObj=DATA&&DATA.event;
@@ -9691,7 +9692,7 @@ function renderScreenControl(){
   h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">URL PARA LA PANTALLA (ábrela en el navegador de la pantalla / OBS)</div>';
   h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
   h+='<input readonly value="'+screenUrl+'" onclick="this.select()" style="flex:1;min-width:280px;padding:10px 12px;background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:monospace">';
-  h+='<button onclick="navigator.clipboard.writeText(\''+screenUrl+'\');showToastLC(\'✓ Copiado\')" style="padding:10px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">COPIAR</button>';
+  h+='<button onclick="navigator.clipboard.writeText(\''+screenUrl+'\');showToastLC(\'Copiado\')" style="padding:10px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">COPIAR</button>';
   h+='<a href="'+screenUrl+'" target="_blank" style="padding:10px 16px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;text-decoration:none">ABRIR ↗</a>';
   h+='</div>';
   h+='<div style="font-size:11px;color:var(--muted);margin-top:8px">Esta pantalla obedece los botones de abajo en tiempo real: sirve para el televisor que va cambiando durante la competencia. Si tienes más de una pantalla y cada una tiene que mostrar algo distinto, usa los links de abajo.</div>';
@@ -9706,7 +9707,7 @@ function renderScreenControl(){
     h+='<div class="card" style="margin-bottom:16px">';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">';
     h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold)">LOGOS DE LA PANTALLA</div>';
-    h+='<button id="scrLogosBtn" onclick="screenLogosSubir()" style="padding:8px 14px;background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">⬆ Agregar logos</button>';
+    h+='<button id="scrLogosBtn" onclick="screenLogosSubir()" style="padding:8px 14px;background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer"><i class=yl-i-subir></i> Agregar logos</button>';
     h+='</div>';
     h+='<div style="font-size:11px;color:var(--muted);line-height:1.55;margin-bottom:10px">Los que se suban acá salen en <b>todas</b> las escenas de la pantalla: perfil, atleta en barra, intentos, luces y tabla de la jornada. Puedes poner los que quieras —campeonato, federación, auspiciadores— y quedan guardados con el campeonato, así que no hay que volver a subirlos.</div>';
     if(!subidos.length){
@@ -9723,7 +9724,7 @@ function renderScreenControl(){
           +'<div style="display:flex;gap:4px">'
           +'<button onclick="screenLogoMover('+i+',-1)"'+(i===0?' disabled':'')+' title="Mover a la izquierda" style="flex:1;padding:4px;border-radius:5px;border:1px solid var(--border);background:transparent;color:'+(i===0?'rgba(220,230,245,.25)':'var(--text)')+';cursor:'+(i===0?'default':'pointer')+';font-size:11px">←</button>'
           +'<button onclick="screenLogoMover('+i+',1)"'+(i===subidos.length-1?' disabled':'')+' title="Mover a la derecha" style="flex:1;padding:4px;border-radius:5px;border:1px solid var(--border);background:transparent;color:'+(i===subidos.length-1?'rgba(220,230,245,.25)':'var(--text)')+';cursor:'+(i===subidos.length-1?'default':'pointer')+';font-size:11px">→</button>'
-          +'<button onclick="screenLogoBorrar('+i+')" title="Sacar de la pantalla" style="flex:1;padding:4px;border-radius:5px;border:1px solid rgba(239,68,68,.5);background:transparent;color:#ef4444;cursor:pointer;font-size:11px">✕</button>'
+          +'<button onclick="screenLogoBorrar('+i+')" title="Sacar de la pantalla" style="flex:1;padding:4px;border-radius:5px;border:1px solid rgba(239,68,68,.5);background:transparent;color:#ef4444;cursor:pointer;font-size:11px"><i class=yl-i-cerrar></i></button>'
           +'</div></div>';
       });
       h+='</div>';
@@ -9747,7 +9748,7 @@ function renderScreenControl(){
         +'<div style="min-width:190px;flex:0 0 auto"><div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;color:'+col+'">'+lbl+'</div>'
         +'<div style="font-size:10px;color:var(--muted);line-height:1.4">'+nota+'</div></div>'
         +'<input readonly value="'+u+'" onclick="this.select()" style="flex:1;min-width:220px;padding:7px 10px;background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:11px;font-family:monospace">'
-        +'<button onclick="navigator.clipboard.writeText(\''+u+'\');showToastLC(\'✓ Copiado\')" style="padding:7px 13px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">COPIAR</button>'
+        +'<button onclick="navigator.clipboard.writeText(\''+u+'\');showToastLC(\'Copiado\')" style="padding:7px 13px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">COPIAR</button>'
         +'<a href="'+u+'" target="_blank" style="padding:7px 13px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:7px;font-family:Oswald;font-size:11px;font-weight:700;text-decoration:none">ABRIR ↗</a>'
         +'</div>';
     };
@@ -9845,7 +9846,7 @@ function renderScreenControl(){
   flights.forEach(f=>{
     const on=sel.includes(f);
     const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;
-    h+='<button onclick="screenToggleFlight(\''+f+'\')" style="padding:12px 18px;border-radius:10px;border:2px solid '+(on?'var(--green)':'var(--border)')+';background:'+(on?'rgba(34,197,94,.12)':'transparent')+';color:'+(on?'var(--green)':'var(--text)')+';font-family:Oswald;font-size:15px;font-weight:700;cursor:pointer">'+(on?'✓ ':'')+'Tanda '+f+'<span style="font-size:10px;opacity:.7;display:block">'+n+' atletas</span></button>';
+    h+='<button onclick="screenToggleFlight(\''+f+'\')" style="padding:12px 18px;border-radius:10px;border:2px solid '+(on?'var(--green)':'var(--border)')+';background:'+(on?'rgba(34,197,94,.12)':'transparent')+';color:'+(on?'var(--green)':'var(--text)')+';font-family:Oswald;font-size:15px;font-weight:700;cursor:pointer">'+(on?'<i class=yl-i-check></i> ':'')+'Tanda '+f+'<span style="font-size:10px;opacity:.7;display:block">'+n+' atletas</span></button>';
   });
   h+='</div>';
   h+='<button onclick="screenAllFlights()" style="padding:8px 16px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">SELECCIONAR TODAS</button>';
@@ -10103,7 +10104,7 @@ function renderTxJornada(){
   let rows='';
   keysPag.forEach(k=>{
     const parts=k.split('|');
-    const sexLabel=sexO(parts[0])? '♀':'♂';
+    const sexLabel=sexO(parts[0])? 'F':'M';
     const divS=txDivShort(parts[2]);
     // ranking dentro del grupo por total (luego GL)
     const list=groups[k].map(a=>{
@@ -10278,7 +10279,7 @@ function renderTxTablaActual(cur,opts){
               return t?`<div class="ta-logo-anim" style="flex-shrink:0">${t}</div>`:'';})()}
             <div data-ta-title style="min-width:0">
               <div style="font-family:Oswald;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.75);font-weight:600">TABLA ACTUAL · ${liftN} · R${(DATA.round||0)+1}</div>
-              <div style="font-family:Oswald;font-size:18px;letter-spacing:1.5px;color:#fff;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,.4);margin-top:2px">${divS} • ${ref.cat} ${sexLabel==='Mujer'?'♀':'♂'} <span style="font-size:.72em;opacity:.8">· ${_lineaLbl(ref)}</span></div>
+              <div style="font-family:Oswald;font-size:18px;letter-spacing:1.5px;color:#fff;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,.4);margin-top:2px">${divS} • ${ref.cat} ${sexLabel==='Mujer'?'F':'M'} <span style="font-size:.72em;opacity:.8">· ${_lineaLbl(ref)}</span></div>
             </div>
           </div>
           <div style="text-align:right;flex-shrink:0">
@@ -10364,7 +10365,7 @@ function renderTxMedals(md){
   const ranked=_medalTop3(md);
   if(!ranked.length)return '';
   const divS=txDivShort(md.div);
-  const sexLabel=(md.sex==='Femenino'||md.sex==='Mujer'||md.sex==='F')?'♀':'♂';
+  const sexLabel=(md.sex==='Femenino'||md.sex==='Mujer'||md.sex==='F')?'F':'M';
   const RANK_BG={1:'#D4A843',2:'#C0C0C0',3:'#CD7F32'};
   const row=(r,x)=>{
     if(!x)return '';
@@ -11034,7 +11035,7 @@ function _descGearHtml(){
   h+='<button onclick="descTogglePanel()" style="width:28px;height:28px;border-radius:50%;'
     +'border:1px solid rgba(212,225,245,'+(open?'.35':'.15')+');background:rgba(10,22,40,'+(open?'.85':'.15')+');'
     +'color:rgba(255,255,255,'+(open?'.9':'.2')+');font-size:13px;line-height:1;cursor:pointer;display:flex;'
-    +'align-items:center;justify-content:center;transition:all .15s">\u23F1</button>';
+    +'align-items:center;justify-content:center;transition:all .15s"><i class=yl-i-reloj></i></button>';
   h+='</div>';
   return h;
 }
@@ -11102,7 +11103,7 @@ function _piSettingsPanelHtml(){
       ${_descPanelHtml()}
     </div>`;
   }
-  h+=`<button onclick="piToggleSettingsPanel()" title="Ajustes de pantalla" style="width:28px;height:28px;border-radius:50%;border:1px solid rgba(212,225,245,${open?'.35':'.15'});background:rgba(10,22,40,${open?'.85':'.15'});color:rgba(255,255,255,${open?'.9':'.2'});font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s">⚙</button>`;
+  h+=`<button onclick="piToggleSettingsPanel()" title="Ajustes de pantalla" style="width:28px;height:28px;border-radius:50%;border:1px solid rgba(212,225,245,${open?'.35':'.15'});background:rgba(10,22,40,${open?'.85':'.15'});color:rgba(255,255,255,${open?'.9':'.2'});font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s"><i class=yl-i-ajustes></i></button>`;
   h+='</div>';
   return h;
 }
@@ -11417,7 +11418,7 @@ function _renderRecovery(e){
     const el=document.getElementById('R');if(!el)return;
     const msg=(e&&e.message)?String(e.message):'error';
     el.innerHTML='<div style="max-width:560px;margin:60px auto;padding:24px;border:2px solid var(--red);border-radius:14px;background:rgba(239,68,68,.06);text-align:center;font-family:Inter,sans-serif">'
-      +'<div style="font-family:Oswald;font-size:20px;font-weight:700;color:var(--red);letter-spacing:1px">⚠ ERROR AL DIBUJAR LA PANTALLA</div>'
+      +'<div style="font-family:Oswald;font-size:20px;font-weight:700;color:var(--red);letter-spacing:1px"><i class=yl-i-alerta></i> ERROR AL DIBUJAR LA PANTALLA</div>'
       +'<div style="font-size:12px;color:var(--muted);margin:10px 0 16px;line-height:1.5">La aplicación sigue funcionando y los datos están a salvo. Reintenta, deshaz el último cambio o recarga la página.</div>'
       +'<div style="font-size:10px;color:var(--muted);font-family:monospace;background:rgba(0,0,0,.25);padding:8px;border-radius:6px;margin-bottom:16px;word-break:break-word">'+msg.replace(/[<>&]/g,'')+'</div>'
       +'<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
@@ -11557,36 +11558,36 @@ function renderShell(){
   if(isAdmin&&!window._canAccess(DATA.phase))DATA.phase=window._canAccess('manage')?'manage':'director';
   const p=DATA.phase;
   // El botón "Volver a YourLift" sobre el logo (estilo unificado)
-  let h='<button class="hamb" onclick="toggleNav()" aria-label="Menú">☰</button>';
+  let h='<button class="hamb" onclick="toggleNav()" aria-label="Menú"><i class=yl-i-menu></i></button>';
   h+='<div class="nav-backdrop" onclick="toggleNav(false)"></div>';
   h+='<div class="shell"><div class="side">';
-  h+='<button class="nav-close" onclick="toggleNav(false)" aria-label="Cerrar menú">✕</button>';
+  h+='<button class="nav-close" onclick="toggleNav(false)" aria-label="Cerrar menú"><i class=yl-i-cerrar></i></button>';
   h+='<a href="index.html" class="side-back-yl" style="display:flex;align-items:center;gap:6px;padding:8px 12px;margin-bottom:12px;margin-right:42px;background:rgba(10,22,40,.6);border:1px solid rgba(212,168,67,.4);border-radius:8px;color:rgba(220,230,245,.85);font-family:Oswald,sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-decoration:none;cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap" onmouseenter="this.style.borderColor=\'#D4A843\';this.style.color=\'#D4A843\'" onmouseleave="this.style.borderColor=\'rgba(212,168,67,.4)\';this.style.color=\'rgba(220,230,245,.85)\'">← YourLift</a>';
   h+='<div class="logo"><img src="YourLift_logo.png" style="height:28px" onerror="this.remove()"> YourLift</div><div class="event-name-side" style="font-size:11px;color:var(--muted);margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+((DATA.event==null?void 0:DATA.event.short)||(DATA.event==null?void 0:DATA.event.name)||'')+'</div>';
   if(isAdmin){
-  if(window._canAccess('manage'))h+='<div class="side-label">Gesti\u00f3n</div><button class="side-btn '+(p==='manage'?'active':'')+'" onclick="go(\'manage\')"><span class="icon">\uD83D\uDCCB</span>Atletas & Pesaje</button>';
+  if(window._canAccess('manage'))h+='<div class="side-label">Gesti\u00f3n</div><button class="side-btn '+(p==='manage'?'active':'')+'" onclick="go(\'manage\')"><span class="icon"><i class=yl-i-lista></i></span>Atletas & Pesaje</button>';
   // Todo lo que se imprime para la mesa. Sali\u00f3 de Atletas & Pesaje, donde eran
   // cinco botones apretados en la barra de arriba y ya no cab\u00EDan.
-  if(window._canAccess('docs'))h+='<button class="side-btn '+(p==='docs'?'active':'')+'" onclick="go(\'docs\')"><span class="icon">\uD83D\uDCC4</span>Documentos</button>';
+  if(window._canAccess('docs'))h+='<button class="side-btn '+(p==='docs'?'active':'')+'" onclick="go(\'docs\')"><span class="icon"><i class=yl-i-archivo></i></span>Documentos</button>';
   h+='<div class="side-label">'+(window._esStreaming()?'Transmisi\u00f3n':'Competencia')+'</div>';
-  if(window._canAccess('compete'))h+='<button class="side-btn '+(p==='compete'?'active':'')+'" onclick="go(\'compete\')"><span class="icon">\uD83C\uDFCB\uFE0F</span>Control en Vivo</button>';
+  if(window._canAccess('compete'))h+='<button class="side-btn '+(p==='compete'?'active':'')+'" onclick="go(\'compete\')"><span class="icon"><i class=yl-i-pesa></i></span>Control en Vivo</button>';
   // "Scoreboard" se sacó del menú: era una pantalla vieja de proyección que quedó
   // reemplazada por Pantalla de Tarima. Las descargas del acta NO estaban ahí, están
   // en Resultados, así que no se pierde nada.
-  if(window._canAccess('transmision'))h+='<button class="side-btn '+(p==='transmision'?'active':'')+'" onclick="go(\'transmision\')"><span class="icon">\uD83D\uDCE1</span>Transmisi\u00f3n</button>';
-  if(window._canAccess('obsTx'))h+='<button class="side-btn '+(p==='obsTx'?'active':'')+'" onclick="go(\'obsTx\')"><span class="icon">\uD83C\uDFAC</span>Widgets OBS</button>';
-  if(window._canAccess('director'))h+='<button class="side-btn '+(p==='director'?'active':'')+'" onclick="go(\'director\')"><span class="icon"></span>Control TX</button>';
-  if(window._canAccess('remote'))h+='<button class="side-btn '+(p==='remote'?'active':'')+'" onclick="go(\'remote\')"><span class="icon">📱</span>Control Remoto</button>';
-  if(window._canAccess('screen'))h+='<button class="side-btn '+(p==='screen'?'active':'')+'" onclick="go(\'screen\')"><span class="icon"></span>Pantalla Tarima</button>';
+  if(window._canAccess('transmision'))h+='<button class="side-btn '+(p==='transmision'?'active':'')+'" onclick="go(\'transmision\')"><span class="icon"><i class=yl-i-video></i></span>Transmisi\u00f3n</button>';
+  if(window._canAccess('obsTx'))h+='<button class="side-btn '+(p==='obsTx'?'active':'')+'" onclick="go(\'obsTx\')"><span class="icon"><i class=yl-i-capas></i></span>Widgets OBS</button>';
+  if(window._canAccess('director'))h+='<button class="side-btn '+(p==='director'?'active':'')+'" onclick="go(\'director\')"><span class="icon"><i class=yl-i-ajustes></i></span>Control TX</button>';
+  if(window._canAccess('remote'))h+='<button class="side-btn '+(p==='remote'?'active':'')+'" onclick="go(\'remote\')"><span class="icon"><i class=yl-i-telefono></i></span>Control Remoto</button>';
+  if(window._canAccess('screen'))h+='<button class="side-btn '+(p==='screen'?'active':'')+'" onclick="go(\'screen\')"><span class="icon"><i class=yl-i-pantalla></i></span>Pantalla Tarima</button>';
   }
   h+='<div class="side-label">P\u00fablico</div>';
   // "Competencia en Vivo": para el espectador (no admin) es su vista principal, as\u00ed
   // puede volver a ella despu\u00e9s de ir a Resultados/Atletas. Para el admin se mantiene
   // oculta (tiene su propio "Control en Vivo"), como se pidi\u00f3.
-  if(!isAdmin)h+='<button class="side-btn '+(p==='liveView'?'active':'')+'" onclick="go(\'liveView\')"><span class="icon">\ud83d\udcfa</span>Competencia en Vivo</button>';
-  h+='<button class="side-btn '+(p==='results'?'active':'')+'" onclick="go(\'results\')"><span class="icon">\uD83C\uDFC6</span>Resultados</button>';
-  h+='<button class="side-btn '+(p==='atletaInfo'?'active':'')+'" onclick="go(\'atletaInfo\')"><span class="icon">\uD83D\uDC64</span>Atletas</button>';
-  if(window._ensayoFree)h+='<button class="side-btn" onclick="ensayoToggleRole()" style="border:1px solid rgba(96,165,250,.5);color:#60a5fa;margin-top:4px"><span class="icon">'+(isAdmin?'\uD83D\uDC41':'\uD83C\uDF9B')+'</span>'+(isAdmin?'Cambiar a modo espectador':'Cambiar a modo admin')+'</button>';
+  if(!isAdmin)h+='<button class="side-btn '+(p==='liveView'?'active':'')+'" onclick="go(\'liveView\')"><span class="icon"><i class=yl-i-video></i></span>Competencia en Vivo</button>';
+  h+='<button class="side-btn '+(p==='results'?'active':'')+'" onclick="go(\'results\')"><span class="icon"><i class=yl-i-trofeo></i></span>Resultados</button>';
+  h+='<button class="side-btn '+(p==='atletaInfo'?'active':'')+'" onclick="go(\'atletaInfo\')"><span class="icon"><i class=yl-i-usuario></i></span>Atletas</button>';
+  if(window._ensayoFree)h+='<button class="side-btn" onclick="ensayoToggleRole()" style="border:1px solid rgba(96,165,250,.5);color:#60a5fa;margin-top:4px"><span class="icon">'+(isAdmin?'<i class=yl-i-ojo></i>':'<i class=yl-i-ajustes></i>')+'</span>'+(isAdmin?'Cambiar a modo espectador':'Cambiar a modo admin')+'</button>';
   // Vuelo activo, primero por día. Con 36 tandas —A hasta AJ, ocho días— la tira
   // completa era una pared de botones donde encontrar el propio era contar
   // letras. Se elige el día y quedan las cuatro o cinco de ese día, igual que en
@@ -11608,40 +11609,40 @@ function renderShell(){
   h+='</div>';
   if(isAdmin){
   h+='<div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">';
-  h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon">\uD83C\uDFC6</span>Selecci\u00F3n de Campeonato</button>';
+  h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon"><i class=yl-i-trofeo></i></span>Selecci\u00F3n de Campeonato</button>';
   // En PRÁCTICA no hay sincronización (Firebase deshabilitado o en solo-lectura),
   // así que el estado de sync y el selector Controlador/Espectador no aplican:
   // se ocultan para no confundir a quien está entrenando.
   if(!PRACTICE_MODE){
-  h+='<div style="font-size:10px;color:var(--green);margin-bottom:6px;padding:0 8px">\uD83D\uDD13 Admin</div>';
-  h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'\uD83D\uDCE1 Sync activo':'\u23F3 Conectando...')+'</div>';
+  h+='<div style="font-size:10px;color:var(--green);margin-bottom:6px;padding:0 8px"><i class=yl-i-candado></i> Admin</div>';
+  h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'<i class=yl-i-video></i> Sync activo':'<i class=yl-i-espera></i> Conectando...')+'</div>';
   // \u2500\u2500 Modo de sincronizaci\u00F3n: Controlador (escribe) vs Espectador (lee/espeja) \u2500\u2500
   {const ctrl=!!window.IS_CONTROLLER;
    h+='<div style="margin:4px 8px 10px;padding:8px 10px;border-radius:8px;border:1px solid '+(ctrl?'rgba(34,197,94,.4)':'rgba(59,130,246,.4)')+';background:'+(ctrl?'rgba(34,197,94,.08)':'rgba(59,130,246,.08)')+'">'
-     +'<div style="font-size:11px;font-weight:700;font-family:Oswald;letter-spacing:1px;color:'+(ctrl?'var(--green)':'#60a5fa')+'">'+(ctrl?'\uD83C\uDF9B CONTROLADOR':'\uD83D\uDC41 ESPECTADOR')+'</div>'
+     +'<div style="font-size:11px;font-weight:700;font-family:Oswald;letter-spacing:1px;color:'+(ctrl?'var(--green)':'#60a5fa')+'">'+(ctrl?'<i class=yl-i-ajustes></i> CONTROLADOR':'<i class=yl-i-ojo></i> ESPECTADOR')+'</div>'
      +'<div style="font-size:9px;color:var(--muted);margin:3px 0 7px;line-height:1.3">'+(ctrl?'Carga datos y se <b>sincroniza</b> con los dem\u00E1s controladores.':'Solo mira (no escribe). Ej.: pantalla u OBS.')+'</div>'
-     +'<button onclick="setSyncMode('+(ctrl?'false':'true')+')" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;font-size:10px;letter-spacing:.5px;cursor:pointer">Cambiar a '+(ctrl?'\uD83D\uDC41 Espectador':'\uD83C\uDF9B Controlador')+'</button>'
+     +'<button onclick="setSyncMode('+(ctrl?'false':'true')+')" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;font-size:10px;letter-spacing:.5px;cursor:pointer">Cambiar a '+(ctrl?'<i class=yl-i-ojo></i> Espectador':'<i class=yl-i-ajustes></i> Controlador')+'</button>'
    +'</div>';}
   }
   // La cuenta de streaming no administra la competencia: no se le ofrece el backup
   // ni nada que borre datos. Solo entra, transmite y se va.
   if(!window._esStreaming()){
-  h+='<button class="side-btn" onclick="exportBackupJSON()"><span class="icon">\uD83D\uDCBE</span>Exportar Backup</button>';
+  h+='<button class="side-btn" onclick="exportBackupJSON()"><span class="icon"><i class=yl-i-bajar></i></span>Exportar Backup</button>';
   // Solo se ofrece si hay Cronograma cargado (es la lista contra la que compara)
   // y si de verdad hay alguien de m\u00E1s: si no, es un bot\u00F3n peligroso al pedo.
   {let _aj=0;
    try{ const m=window._cronoFlightMap;
      if(m&&Object.keys(m).length)_aj=DATA.athletes.filter(a=>!_cronoLookup(m,a.name)).length; }catch(e){}
-   if(_aj)h+='<button class="side-btn" onclick="limpiarAtletasAjenos()" style="color:#f59e0b;border:1px solid rgba(245,158,11,.5)" title="Saca a los atletas que no figuran en el Cronograma de este campeonato"><span class="icon">\u26A0</span>'+_aj+' atleta'+(_aj>1?'s':'')+' de otro campeonato</button>';}
+   if(_aj)h+='<button class="side-btn" onclick="limpiarAtletasAjenos()" style="color:#f59e0b;border:1px solid rgba(245,158,11,.5)" title="Saca a los atletas que no figuran en el Cronograma de este campeonato"><span class="icon"><i class=yl-i-alerta></i></span>'+_aj+' atleta'+(_aj>1?'s':'')+' de otro campeonato</button>';}
   if(_nomAplica())h+='<button class="side-btn" onclick="recargarNomina()" title="Vuelve a leer la nómina del archivo: entran los que se agregaron, salen los que se dieron de baja y se corrigen tandas y lotes. Conserva pesaje e intentos de los que siguen."><span class="icon">↻</span>Volver a cargar la nómina</button>';
   h+='<button class="side-btn" onclick="resetLiveData()" style="color:#ff8a8a"><span class="icon"></span>Reiniciar datos en vivo</button>';
   }
-  h+='<button class="side-btn" onclick="doLogout()"><span class="icon">\uD83D\uDD12</span>Cerrar sesi\u00f3n</button>';
+  h+='<button class="side-btn" onclick="doLogout()"><span class="icon"><i class=yl-i-candado></i></span>Cerrar sesi\u00f3n</button>';
   h+='</div>';
   }else{
   h+='<div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">';
-  h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'\uD83D\uDCE1 Datos en vivo':'\u23F3 Conectando...')+'</div>';
-  h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon">\ud83c\udfc6</span>Selecci\u00f3n de Campeonato</button>';
+  h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'<i class=yl-i-video></i> Datos en vivo':'<i class=yl-i-espera></i> Conectando...')+'</div>';
+  h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon"><i class=yl-i-trofeo></i></span>Selecci\u00f3n de Campeonato</button>';
   // El bot\u00f3n de iniciar sesi\u00f3n sali\u00f3 de la barra: esta pantalla la mira el
   // p\u00fablico y no corresponde ofrecerle entrar. Pero la raz\u00f3n por la que estaba
   // sigue en pie: si al operador se le vence la sesi\u00f3n EN MEDIO de la competencia,
@@ -11702,7 +11703,7 @@ window.resyncFromAdmin=async function(){
     if(!fbAthletes.length){alert('No hay inscripciones aprobadas/pendientes en Firestore para este campeonato.');return}
     _mergeFirebaseAthletes(fbAthletes);
     // Forzar nuevo render para que los toasts se ordenen
-    showToastLC('✓ Re-sincronización completa: '+fbAthletes.length+' atletas en Firestore');
+    showToastLC('Re-sincronización completa: '+fbAthletes.length+' atletas en Firestore');
   }catch(e){alert('Error sincronizando: '+(e.message||e));console.error(e)}
 };
 
@@ -11809,7 +11810,7 @@ window.obsWsTestEvent=async function(){
   if(!_obsWs||!_obsWsConnected){alert('Conecta primero a OBS WebSocket');return}
   try{
     await _obsWs.call('BroadcastCustomEvent',{eventData:{action:'toggle',component:'profile',_test:true}});
-    alert('✓ Evento enviado a OBS. Si la conexión está bien, el perfil debería togglearse en pantalla en 1-2s. Mira el log de abajo, "Últimos eventos recibidos".');
+    alert('Evento enviado a OBS. Si la conexión está bien, el perfil debería togglearse en pantalla en 1-2s. Mira el log de abajo, "Últimos eventos recibidos".');
   }catch(e){alert('Error enviando evento: '+(e.message||e))}
 };
 // Auto-conectar al cargar (si está habilitado)
@@ -11901,9 +11902,9 @@ window.dirUploadChampionshipLogo=async function(){
       // Forzar sync inmediato a livecast_sync para que los widgets de OBS lo vean
       try{ if(typeof syncToFB==='function') await syncToFB(); }catch(e){}
       R();
-      if(btn)btn.textContent='✓ Subido';
-      setTimeout(()=>{if(btn)btn.textContent='⬆ Cambiar logo'},2000);
-    }catch(e){alert('Error subiendo logo: '+e.message); if(btn)btn.textContent='⬆ Cambiar logo';}
+      if(btn)btn.textContent='Subido';
+      setTimeout(()=>{if(btn)btn.textContent='Cambiar logo'},2000);
+    }catch(e){alert('Error subiendo logo: '+e.message); if(btn)btn.textContent='Cambiar logo';}
   };
   inp.click();
 };
@@ -11954,9 +11955,9 @@ window.screenLogosSubir=async function(){
         lista.push({url:await getDownloadURL(r),nombre:f.name});
       }
       await _guardaLogosPantalla(lista);
-      showToastLC('✓ '+files.length+(files.length>1?' logos agregados':' logo agregado'));
+      showToastLC(files.length+(files.length>1?' logos agregados':' logo agregado'));
     }catch(e){ alert('Error subiendo: '+(e.message||e)); }
-    finally{ if(btn)btn.textContent=rot||'⬆ Agregar logos'; }
+    finally{ if(btn)btn.textContent=rot||'Agregar logos'; }
   };
   inp.click();
 };
@@ -11968,7 +11969,7 @@ window.screenLogoBorrar=async function(i){
   // El archivo se queda en Storage a propósito: si fue un error, se vuelve a
   // agregar desde el mismo link sin tener que buscarlo de nuevo en el
   // computador. Ocupa unos KB.
-  try{ await _guardaLogosPantalla(lista); showToastLC('✓ Logo sacado de la pantalla'); }
+  try{ await _guardaLogosPantalla(lista); showToastLC('Logo sacado de la pantalla'); }
   catch(e){ alert('Error: '+(e.message||e)); }
 };
 window.screenLogoMover=async function(i,paso){
@@ -12081,7 +12082,7 @@ window.dirBtUploadEventLogo=async function(){
       _dirState.breakTimer.style.eventLogoUrl=url;
       await _dirPush();R();
     }catch(e){alert('Error subiendo logo: '+e.message);}
-    if(btn)btn.textContent='⬆ SUBIR';
+    if(btn)btn.textContent='SUBIR';
   };
   inp.click();
 };
@@ -12123,9 +12124,9 @@ function _dirEnsureListener(){
 }
 async function _dirPush(){
   // Feedback claro en vez de no-op silencioso (era la causa de "aprieto y no pasa nada").
-  if(!fbReady||!window._fb){showToastLC('⏳ Conectando a Firebase… espera unos segundos y vuelve a intentar');return;}
+  if(!fbReady||!window._fb){showToastLC('Conectando a Firebase… espera unos segundos y vuelve a intentar');return;}
   if(!isAdmin){showToastLC('Solo un admin logueado puede controlar la transmisión');return;}
-  if(!fbDocId()){showToastLC('⏳ Cargando el evento… espera a que el campeonato aparezca arriba y vuelve a intentar');if(DATA.phase==='remote'||DATA.phase==='director')R();return;}
+  if(!fbDocId()){showToastLC('Cargando el evento… espera a que el campeonato aparezca arriba y vuelve a intentar');if(DATA.phase==='remote'||DATA.phase==='director')R();return;}
   try{
     await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director',evStateDocId('current')),{show:_dirState,ts:Date.now()});
   }catch(e){showToastLC('Error al enviar comando: '+(e.message||e))}
@@ -12531,7 +12532,7 @@ function remoteMedalsPanel(){
   uniq(vivos,a=>a.mod).forEach(m=>{h+=opt(m,MOD_LABEL[m]||m,sel.mod)});
   h+='</select>';
   h+='<select style="'+_remoteSelStyle()+'" '+(sel.mod?'':'disabled')+' onchange="dirMdSet(\'sex\',this.value)"><option value="">Sexo —</option>';
-  uniq(byMod,a=>a.sex).sort().forEach(s=>{h+=opt(s,(s==='Mujer'||s==='Femenino'||s==='F')?'♀ Mujer':'♂ Hombre',sel.sex)});
+  uniq(byMod,a=>a.sex).sort().forEach(s=>{h+=opt(s,(s==='Mujer'||s==='Femenino'||s==='F')?'Mujer':'Hombre',sel.sex)});
   h+='</select>';
   h+='<select style="'+_remoteSelStyle()+'" '+(sel.sex?'':'disabled')+' onchange="dirMdSet(\'div\',this.value)"><option value="">División —</option>';
   uniq(byModSex,a=>a.div).sort().forEach(d=>{h+=opt(d,d,sel.div)});
@@ -12549,7 +12550,7 @@ function remoteMedalsPanel(){
     +' style="width:100%;margin-top:10px;min-height:58px;border-radius:12px;border:2px solid '
     +(listo&&cuantos?'var(--green)':'var(--border)')+';background:'+(listo&&cuantos?'rgba(34,197,94,.16)':'transparent')
     +';color:'+(listo&&cuantos?'#4ade80':'var(--muted)')+';font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:2px;cursor:'
-    +(listo&&cuantos?'pointer':'not-allowed')+';-webkit-tap-highlight-color:transparent">▶ MOSTRAR EN PANTALLA</button>';
+    +(listo&&cuantos?'pointer':'not-allowed')+';-webkit-tap-highlight-color:transparent"><i class=yl-i-reproducir></i> MOSTRAR EN PANTALLA</button>';
   h+='</div>';
   return h;
 }
@@ -12617,7 +12618,7 @@ function renderRemote(){
   let h='<div class="fade" style="max-width:'+(_rmCols===4?960:560)+'px;margin:0 auto">';
   // Encabezado compacto
   h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
-  h+='<div><h2 class="os" style="font-size:20px;letter-spacing:1px;margin:0">📱 CONTROL REMOTO</h2>'
+  h+='<div><h2 class="os" style="font-size:20px;letter-spacing:1px;margin:0"><i class=yl-i-telefono></i> CONTROL REMOTO</h2>'
     +'<div style="font-size:11px;color:var(--muted)">'+evName+(cur?' · en tarima: <b style="color:var(--gold)">'+esc(cur.name)+'</b>':'')+'</div></div>';
   // Estado real: necesita Firebase listo Y el evento resuelto (si no, empujaría al
   // doc equivocado y el overlay de OBS no vería nada → "aprieto y no pasa nada").
@@ -12628,7 +12629,7 @@ function renderRemote(){
   h+='<div style="display:flex;align-items:center;gap:12px">'
     +'<span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:'+_connCol+';display:inline-block"></span>'
     +'<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">'+_connTxt+'</span></span>'
-    +'<button onclick="remoteOrdenar()" title="Cambiar los botones de lugar" style="padding:6px 12px;border-radius:8px;border:1px solid '+(_ord?'var(--gold)':'var(--border)')+';background:'+(_ord?'rgba(212,168,67,.18)':'transparent')+';color:'+(_ord?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(_ord?'✓ LISTO':'↕ ORDENAR')+'</button>'
+    +'<button onclick="remoteOrdenar()" title="Cambiar los botones de lugar" style="padding:6px 12px;border-radius:8px;border:1px solid '+(_ord?'var(--gold)':'var(--border)')+';background:'+(_ord?'rgba(212,168,67,.18)':'transparent')+';color:'+(_ord?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(_ord?'<i class=yl-i-check></i> LISTO':'↕ ORDENAR')+'</button>'
     +'</div>';
   h+='</div>';
   if(_ord){
@@ -12653,7 +12654,7 @@ function renderRemote(){
     return '<button onclick="dirShowSlam(\''+t+'\')" style="min-height:0;height:100%;border-radius:14px;border:2px solid '+(g?'#22c55e':'#ef4444')
       +';background:linear-gradient(180deg,'+(g?'rgba(34,197,94,.25),rgba(34,197,94,.08)':'rgba(239,68,68,.25),rgba(239,68,68,.08)')
       +');color:'+(g?'#4ade80':'#f87171')+';font-family:Oswald;font-size:17px;font-weight:800;letter-spacing:1px;cursor:pointer;-webkit-tap-highlight-color:transparent">'
-      +(g?'✓ GOOD LIFT':'✗ NO LIFT')+'</button>';
+      +(g?'<i class=yl-i-check></i> GOOD LIFT':'<i class=yl-i-cruz></i> NO LIFT')+'</button>';
   };
   const BOTONES={
     profile:    oc=>bigBtn('PERFIL', on('profile')?'EN PANTALLA':'atleta actual', on('profile'), oc||"dirToggle('profile')"),
@@ -12669,9 +12670,9 @@ function renderRemote(){
     medals:     oc=>bigBtn('MEDALLERO', on('medals')?'EN PANTALLA':(window._remoteMenu==='medals'?'elige abajo ▾':'elegir podio'), on('medals'), oc||"remoteMenu('medals')"),
     // Descanso ("ya volvemos"): abre el menú de minutos en vez de pedir que
     // alguien vaya al computador del Control TX a escribirlos.
-    descanso:   oc=>bigBtn(_descanso?'⏹ QUITAR DESCANSO':'⏸ YA VOLVEMOS', _descanso?'en pantalla':(window._remoteMenu==='break'?'elige los minutos ▾':'cartel de descanso'), _descanso, oc||"remoteToggleBreak()"),
-    good:       oc=>oc?bigBtn('✓ GOOD LIFT','',false,oc):_slam('g'),
-    nolift:     oc=>oc?bigBtn('✗ NO LIFT','',false,oc):_slam('n'),
+    descanso:   oc=>bigBtn(_descanso?'QUITAR DESCANSO':'YA VOLVEMOS', _descanso?'en pantalla':(window._remoteMenu==='break'?'elige los minutos ▾':'cartel de descanso'), _descanso, oc||"remoteToggleBreak()"),
+    good:       oc=>oc?bigBtn('GOOD LIFT','',false,oc):_slam('g'),
+    nolift:     oc=>oc?bigBtn('NO LIFT','',false,oc):_slam('n'),
     esconder:   oc=>oc?bigBtn('⨯ ESCONDER TODO','',false,oc,2)
       :'<button onclick="dirHideAll()" style="grid-column:span 2;min-height:0;height:100%;border-radius:14px;border:2px solid var(--red);background:rgba(239,68,68,.1);color:#f87171;font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">⨯ ESCONDER TODO</button>',
   };
@@ -12734,7 +12735,7 @@ function renderDirector(){
         +'<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">'+desc+'</div>'
         +(isOn?'<div style="font-size:10px;color:var(--green);margin-top:4px;font-family:Oswald;letter-spacing:1px">EN PANTALLA</div>':'')
       +'</div>'
-      +'<button class="btn '+(isOn?'btn-r':'btn-g')+'" onclick="'+onClick+'" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(isOn?'⏸ DESACTIVAR':'▶ ACTIVAR')+'</button>'
+      +'<button class="btn '+(isOn?'btn-r':'btn-g')+'" onclick="'+onClick+'" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(isOn?'<i class=yl-i-pausa></i> DESACTIVAR':'<i class=yl-i-reproducir></i> ACTIVAR')+'</button>'
       +'</div>'
       +scaleSlider(key)
       +'</div>';
@@ -12751,7 +12752,7 @@ function renderDirector(){
   h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">';
   h+='<div><div style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px">OBS WEBSOCKET (STREAM DECK)</div>';
   h+='<div style="font-size:13px;font-family:Oswald;margin-top:2px;color:'+wsStatus.c+'">'+wsStatus.icon+' '+wsStatus.label+(_obsWsError?' · <span style="color:var(--muted);font-size:11px">'+esc(_obsWsError)+'</span>':'')+'</div></div>';
-  h+='<button class="btn '+(_obsWsConnected?'btn-r':'btn-g')+'" onclick="obsWsToggleConnection()" style="padding:8px 16px;font-size:12px">'+(_obsWsConnected?'Desconectar':'▶ Conectar')+'</button>';
+  h+='<button class="btn '+(_obsWsConnected?'btn-r':'btn-g')+'" onclick="obsWsToggleConnection()" style="padding:8px 16px;font-size:12px">'+(_obsWsConnected?'Desconectar':'<i class=yl-i-reproducir></i> Conectar')+'</button>';
   h+='</div>';
   h+='<div style="display:grid;grid-template-columns:1fr 90px 1fr auto;gap:8px;align-items:end;font-size:11px">';
   h+='<div><label style="color:var(--muted);display:block;margin-bottom:3px">Host</label><input id="obsWsHost" value="'+esc(_obsWsSettings.host||'localhost')+'" style="width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px"></div>';
@@ -12775,7 +12776,7 @@ function renderDirector(){
   // Setup help
   h+='<details style="margin-top:10px"><summary style="cursor:pointer;font-size:11px;color:var(--gold);font-family:Oswald;letter-spacing:1px">CÓMO CONFIGURAR (CLICK PARA EXPANDIR)</summary>';
   h+='<div style="margin-top:8px;font-size:11px;line-height:1.7;color:var(--muted)">';
-  h+='<b style="color:var(--text)">1. Habilitar WebSocket en OBS</b> (una sola vez):<br>OBS → menú <code>Tools → WebSocket Server Settings</code> → ✓ Enable WebSocket Server → pon un password → Apply.<br><br>';
+  h+='<b style="color:var(--text)">1. Habilitar WebSocket en OBS</b> (una sola vez):<br>OBS → menú <code>Tools → WebSocket Server Settings</code> → activa <b>Enable WebSocket Server</b> → pon un password → Apply.<br><br>';
   h+='<b style="color:var(--text)">2. Pega host (<code>localhost</code> si OBS corre en la misma PC), puerto y password arriba</b> → click "Guardar y conectar". Debería ponerse CONECTADO.<br><br>';
   h+='<b style="color:var(--text)">3. Configurar Stream Deck</b> (Elgato Stream Deck app):<br>';
   h+='• Si tienes el plugin <i>"OBS Studio"</i> instalado: agrega un botón con acción <code>OBS Studio → Send Custom Event</code>.<br>';
@@ -12788,7 +12789,7 @@ function renderDirector(){
   h+='<div>{"action":"toggle","component":"leaderboard"}</div>';
   h+='<div>{"action":"toggle","component":"timer"}</div>';
   h+='<div>{"action":"toggle","component":"breakTimer"}</div>';
-  h+='<div>{"action":"toggle","component":"slam"}     ← arma SLAM (auto GOOD/NO LIFT al ✓/✗)</div>';
+  h+='<div>{"action":"toggle","component":"slam"}     ← arma SLAM (GOOD/NO LIFT automático al marcar válido o nulo)</div>';
   h+='<div>{"action":"slam","type":"g"}        ← GOOD LIFT manual (legacy)</div>';
   h+='<div>{"action":"slam","type":"n"}        ← NO LIFT manual (legacy)</div>';
   h+='<div>{"action":"showLb","cat":"-83 kg (Hombre)"}  ← cat específica</div>';
@@ -12806,7 +12807,7 @@ function renderDirector(){
   h+='<div style="font-family:Oswald;font-size:11px;color:var(--gold);letter-spacing:2px;margin-bottom:6px">URL DEL WIDGET PARA OBS (UNA SOLA VEZ)</div>';
   h+='<div style="font-size:12px;color:var(--muted);line-height:1.6">En OBS: Sources → + → Browser → pega esta URL → 1920×1080 → DESMARCAR "Refresh on activate" y "Shutdown when not visible".</div>';
   h+='<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><code style="flex:1;background:rgba(10,22,40,.6);padding:8px 12px;border-radius:6px;font-size:10px;color:rgba(200,215,240,.8);word-break:break-all">'+widgetUrl+'</code>';
-  h+='<button class="btn btn-g" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent).then(()=>{this.textContent=\'✓ Copiado\';setTimeout(()=>this.textContent=\'Copiar\',1500)})" style="padding:7px 14px;font-size:11px;flex-shrink:0">Copiar</button></div>';
+  h+='<button class="btn btn-g" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent).then(()=>{this.textContent=\'Copiado\';setTimeout(()=>this.textContent=\'Copiar\',1500)})" style="padding:7px 14px;font-size:11px;flex-shrink:0">Copiar</button></div>';
   h+='</div>';
   // Status del lifter actual
   if(cur){
@@ -12827,8 +12828,8 @@ function renderDirector(){
     h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Aparece en el Perfil, el Scoreboard y la Tabla Actual. Recomendado: PNG con fondo transparente, 512×512 o más.</div></div>';
     h+='</div>';
     h+='<div style="display:flex;gap:6px">';
-    h+='<button id="dirChampLogoBtn" class="btn btn-o" onclick="dirUploadChampionshipLogo()" style="padding:10px 16px;font-size:12px;font-family:Oswald;letter-spacing:1.5px">⬆ '+(champLogo?'Cambiar logo':'Subir logo')+'</button>';
-    if(champLogo) h+='<button class="btn" onclick="dirClearChampionshipLogo()" style="padding:10px 14px;font-size:12px;background:transparent;border:1px solid var(--red);color:var(--red);font-family:Oswald;letter-spacing:1.5px">✕ Quitar</button>';
+    h+='<button id="dirChampLogoBtn" class="btn btn-o" onclick="dirUploadChampionshipLogo()" style="padding:10px 16px;font-size:12px;font-family:Oswald;letter-spacing:1.5px"><i class=yl-i-subir></i> '+(champLogo?'Cambiar logo':'Subir logo')+'</button>';
+    if(champLogo) h+='<button class="btn" onclick="dirClearChampionshipLogo()" style="padding:10px 14px;font-size:12px;background:transparent;border:1px solid var(--red);color:var(--red);font-family:Oswald;letter-spacing:1.5px"><i class=yl-i-cerrar></i> Quitar</button>';
     h+='</div></div>';
     // Qué logo va en el barrido de transición. Por defecto el del campeonato:
     // el barrido es el único momento en que la pantalla es suya. El botón de
@@ -12866,7 +12867,7 @@ function renderDirector(){
   if(_isGif){
     const _curFull=liftQueue()[0]?txLookupFull(liftQueue()[0]):null;
     if((_curFull==null?void 0:_curFull.gif_url)){
-      h+='<span style="font-size:10px;color:#a78bfa;font-family:Oswald">✓ GIF disponible para este atleta</span>';
+      h+='<span style="font-size:10px;color:#a78bfa;font-family:Oswald"><i class=yl-i-check></i> GIF disponible para este atleta</span>';
     } else {
       h+='<span style="font-size:10px;color:var(--red);font-family:Oswald">Sin GIF — se mostrará foto/iniciales</span>';
     }
@@ -12886,7 +12887,7 @@ function renderDirector(){
   h+='</select></div>';
   h+=(lbActive?'<div style="font-size:10px;color:var(--green);margin-top:6px;font-family:Oswald;letter-spacing:1px">EN PANTALLA</div>':'');
   h+='</div>';
-  h+='<button class="btn '+(lbActive?'btn-r':'btn-g')+'" onclick="dirToggleLb()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(lbActive?'⏸ DESACTIVAR':'▶ ACTIVAR')+'</button>';
+  h+='<button class="btn '+(lbActive?'btn-r':'btn-g')+'" onclick="dirToggleLb()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(lbActive?'<i class=yl-i-pausa></i> DESACTIVAR':'<i class=yl-i-reproducir></i> ACTIVAR')+'</button>';
   h+='</div>'+scaleSlider('leaderboard')+'</div>';
   h+=compToggle('luces','','Luces de jueces','Los tres círculos abajo a la izquierda, con el nombre del atleta y el intento. El tamaño se ajusta acá abajo. Se deja prendido toda la competencia: mientras no hay decisión no se ve nada, y aparece solo cuando los jueces marcan. Es un espejo — el válido o el nulo se sigue dando en Control en Vivo o en la planilla.','U','dirToggle(\'luces\')');
   h+=compToggle('tablaActual','','Tabla actual (corner)','Ranking de la categoría del lifter actual, esquina inferior derecha. Entra desde abajo, queda fijo. El levantador en pantalla se resalta y muestra la flecha de proyección (pos actual → pos si lo levanta).','A','dirToggle(\'tablaActual\')');
@@ -12925,7 +12926,7 @@ function renderDirector(){
     modOpts.forEach(m=>{h+='<option value="'+m+'"'+(m===sel.mod?' selected':'')+'>'+(MOD_LABEL[m]||m)+'</option>'});
     h+='</select>';
     h+='<select style="'+selStyle+'" '+(sel.mod?'':'disabled')+' onchange="dirMdSet(\'sex\',this.value)"><option value="">2° Sexo —</option>';
-    sexOpts.forEach(s=>{h+='<option value="'+s+'"'+(s===sel.sex?' selected':'')+'>'+((s==='Mujer'||s==='Femenino'||s==='F')?'♀ Mujer':'♂ Hombre')+'</option>'});
+    sexOpts.forEach(s=>{h+='<option value="'+s+'"'+(s===sel.sex?' selected':'')+'>'+((s==='Mujer'||s==='Femenino'||s==='F')?'Mujer':'Hombre')+'</option>'});
     h+='</select>';
     h+='<select style="'+selStyle+'" '+(sel.sex?'':'disabled')+' onchange="dirMdSet(\'div\',this.value)"><option value="">3° División —</option>';
     divOpts.forEach(d=>{h+='<option value="'+d+'"'+(d===sel.div?' selected':'')+'>'+d+'</option>'});
@@ -12936,7 +12937,7 @@ function renderDirector(){
     h+='</div>';
     h+=(mdActive?'<div style="font-size:10px;color:var(--green);margin-top:6px;font-family:Oswald;letter-spacing:1px">EN PANTALLA</div>':'');
     h+='</div>';
-    h+='<button class="btn '+(mdActive?'btn-r':'btn-g')+'" onclick="dirToggleMedals()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(mdActive?'⏸ DESACTIVAR':'▶ ACTIVAR')+'</button>';
+    h+='<button class="btn '+(mdActive?'btn-r':'btn-g')+'" onclick="dirToggleMedals()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(mdActive?'<i class=yl-i-pausa></i> DESACTIVAR':'<i class=yl-i-reproducir></i> ACTIVAR')+'</button>';
     h+='</div>'+scaleSlider('medals')+'</div>';
   }
   // "Timer grande" (corner de tiempo para dar el intento) se sacó del stream a pedido:
@@ -12949,8 +12950,8 @@ function renderDirector(){
   h+='<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Flash de 2s en la esquina superior izquierda. Dispáralo tú cuando los jueces dictaminen.</div>';
   h+='</div>';
   h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
-  h+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px"><button class="btn btn-g" onclick="dirShowSlam(\'g\')" style="padding:14px 22px;font-size:13px;background:#22c55e;border-color:#22c55e;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:140px">✓ GOOD LIFT</button>'+kbd('G')+'</div>';
-  h+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px"><button class="btn btn-r" onclick="dirShowSlam(\'n\')" style="padding:14px 22px;font-size:13px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:140px">✗ NO LIFT</button>'+kbd('N')+'</div>';
+  h+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px"><button class="btn btn-g" onclick="dirShowSlam(\'g\')" style="padding:14px 22px;font-size:13px;background:#22c55e;border-color:#22c55e;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:140px"><i class=yl-i-check></i> GOOD LIFT</button>'+kbd('G')+'</div>';
+  h+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px"><button class="btn btn-r" onclick="dirShowSlam(\'n\')" style="padding:14px 22px;font-size:13px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:140px"><i class=yl-i-cruz></i> NO LIFT</button>'+kbd('N')+'</div>';
   h+='</div></div>'+scaleSlider('slam')+'</div>';
   // Break timer — sección con inputs propios
   const bt=_dirState.breakTimer||{active:false};
@@ -12960,7 +12961,7 @@ function renderDirector(){
     const rem=Math.max(0,Math.ceil((bt.durationSec*1000-elapsed)/1000));
     const m=Math.floor(rem/60),s=rem%60;
     btStatus='<div style="font-size:11px;color:'+(bt.pausedAt?'var(--orange,#f59e0b)':'var(--green)')+';margin-top:6px;font-family:Oswald;letter-spacing:1px">'
-      +(bt.pausedAt?'⏸ PAUSADO':'EN PANTALLA')+' · '+m+':'+(s<10?'0':'')+s+(bt.label?' · '+bt.label:'')+'</div>';
+      +(bt.pausedAt?'<i class=yl-i-pausa></i> PAUSADO':'EN PANTALLA')+' · '+m+':'+(s<10?'0':'')+s+(bt.label?' · '+bt.label:'')+'</div>';
   }
   h+='<div class="card" style="padding:14px 18px;border-left:4px solid '+(bt.active?'var(--green)':'var(--border)')+'">';
   h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">';
@@ -12970,7 +12971,7 @@ function renderDirector(){
   h+=btStatus;
   h+='</div>';
   h+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px">';
-  h+='<button class="btn '+(bt.active?'btn-r':'btn-g')+'" onclick="dirToggleBreak()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(bt.active?'⏹ DETENER':'▶ INICIAR')+'</button>';
+  h+='<button class="btn '+(bt.active?'btn-r':'btn-g')+'" onclick="dirToggleBreak()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(bt.active?'<i class=yl-i-detener></i> DETENER':'<i class=yl-i-reproducir></i> INICIAR')+'</button>';
   h+=kbd('B');
   h+='</div>';
   h+='</div>';
@@ -13000,14 +13001,14 @@ function renderDirector(){
   if(_dirBtVideoUploading){
     h+='<span style="font-size:10px;color:var(--muted);padding:4px 10px">Subiendo...</span>';
   } else {
-    h+='<button onclick="window.dirBtUploadVideo()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:10px;font-family:Oswald;letter-spacing:1px;cursor:pointer">⬆ SUBIR</button>';
+    h+='<button onclick="window.dirBtUploadVideo()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:10px;font-family:Oswald;letter-spacing:1px;cursor:pointer"><i class=yl-i-subir></i> SUBIR</button>';
   }
   h+='<button onclick="window.dirBtLoadVideos()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:10px;font-family:Oswald;letter-spacing:1px;cursor:pointer">CARGAR</button>';
   h+='</div></div>';
   if(_dirBtVideoList===null){
     h+='<div style="padding:10px 12px;font-size:11px;color:var(--muted)">Haz clic en CARGAR para ver los videos disponibles.</div>';
   } else if(_dirBtVideoList.length===0){
-    h+='<div style="padding:10px 12px;font-size:11px;color:var(--muted)">No hay videos en storage. Sube uno con ⬆ SUBIR.</div>';
+    h+='<div style="padding:10px 12px;font-size:11px;color:var(--muted)">No hay videos en storage. Sube uno con <i class=yl-i-subir></i> SUBIR.</div>';
   } else {
     h+='<div style="padding:8px 12px;display:flex;flex-direction:column;gap:6px">';
     const activeUrls=new Set(bt.videos||[]);
@@ -13073,11 +13074,11 @@ function renderDirector(){
   h+='<span style="font-size:10px;color:var(--muted);white-space:nowrap">Logo evento</span>';
   if(_evLogo){
     h+='<img src="'+_evLogo+'" id="dirBtEvLogo" data-url="'+_evLogo+'" style="height:28px;width:auto;max-width:80px;object-fit:contain;background:rgba(255,255,255,.05);border-radius:4px;border:1px solid var(--border);padding:2px" onerror="this.style.opacity=.3">';
-    h+='<button onclick="window.dirBtClearEventLogo()" style="padding:3px 8px;border-radius:4px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;font-size:10px;cursor:pointer">✕ Quitar</button>';
+    h+='<button onclick="window.dirBtClearEventLogo()" style="padding:3px 8px;border-radius:4px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;font-size:10px;cursor:pointer"><i class=yl-i-cerrar></i> Quitar</button>';
   } else {
     h+='<span id="dirBtEvLogo" data-url="" style="font-size:10px;color:var(--muted);font-style:italic">Sin logo</span>';
   }
-  h+='<button id="dirBtEvLogoBtn" onclick="window.dirBtUploadEventLogo()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:10px;font-family:Oswald;letter-spacing:1px;cursor:pointer">⬆ SUBIR</button>';
+  h+='<button id="dirBtEvLogoBtn" onclick="window.dirBtUploadEventLogo()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:10px;font-family:Oswald;letter-spacing:1px;cursor:pointer"><i class=yl-i-subir></i> SUBIR</button>';
   h+='</div>';
   // Tamaños de fuente
   const sl2=(id,lbl,min,max,val)=>'<div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:var(--muted);white-space:nowrap;min-width:90px">'+lbl+'</span><input type="range" id="'+id+'" min="'+min+'" max="'+max+'" value="'+val+'" style="flex:1;accent-color:var(--accent)" oninput="document.getElementById(\''+id+'V\').textContent=this.value"><span id="'+id+'V" style="font-size:10px;color:var(--muted);min-width:18px">'+val+'</span></div>';
@@ -13092,7 +13093,7 @@ function renderDirector(){
   // Botones
   h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">';
   if(!bt.active){
-    h+='<button class="btn btn-g" onclick="dirBreakStart()" style="padding:9px 18px;font-size:12px">▶ INICIAR</button>';
+    h+='<button class="btn btn-g" onclick="dirBreakStart()" style="padding:9px 18px;font-size:12px"><i class=yl-i-reproducir></i> INICIAR</button>';
     // Presets rápidos
     h+='<button class="btn" onclick="document.getElementById(\'dirBreakMin\').value=5;document.getElementById(\'dirBreakSec\').value=0;dirBreakStart()" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">5 min</button>';
     h+='<button class="btn" onclick="document.getElementById(\'dirBreakMin\').value=10;document.getElementById(\'dirBreakSec\').value=0;dirBreakStart()" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">10 min</button>';
@@ -13100,13 +13101,13 @@ function renderDirector(){
     h+='<button class="btn" onclick="document.getElementById(\'dirBreakMin\').value=20;document.getElementById(\'dirBreakSec\').value=0;dirBreakStart()" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">20 min</button>';
   } else {
     if(bt.pausedAt){
-      h+='<button class="btn btn-g" onclick="dirBreakResume()" style="padding:9px 18px;font-size:12px">▶ REANUDAR</button>';
+      h+='<button class="btn btn-g" onclick="dirBreakResume()" style="padding:9px 18px;font-size:12px"><i class=yl-i-reproducir></i> REANUDAR</button>';
     } else {
-      h+='<button class="btn btn-o" onclick="dirBreakPause()" style="padding:9px 18px;font-size:12px">⏸ PAUSAR</button>';
+      h+='<button class="btn btn-o" onclick="dirBreakPause()" style="padding:9px 18px;font-size:12px"><i class=yl-i-pausa></i> PAUSAR</button>';
     }
     h+='<button class="btn" onclick="dirBreakAdd(60)" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">+1 min</button>';
     h+='<button class="btn" onclick="dirBreakAdd(-60)" style="padding:9px 14px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">−1 min</button>';
-    h+='<button class="btn btn-r" onclick="dirBreakHide()" style="padding:9px 18px;font-size:12px">⏹ DETENER</button>';
+    h+='<button class="btn btn-r" onclick="dirBreakHide()" style="padding:9px 18px;font-size:12px"><i class=yl-i-detener></i> DETENER</button>';
   }
   h+='</div>'+scaleSlider('breakTimer');
   h+='</div>';
@@ -13115,8 +13116,8 @@ function renderDirector(){
   const curColors=(_dirState&&_dirState.colors)||{};
   const colorGroups=[
     {title:'INTENTOS',items:[
-      {key:'goodLift',   label:'✓ Good Lift',     desc:'Intento bueno y banner GOOD LIFT'},
-      {key:'noLift',     label:'✗ No Lift',        desc:'Intento fallido, banner NO LIFT y DQ'},
+      {key:'goodLift',   label:'Good Lift',     desc:'Intento bueno y banner GOOD LIFT'},
+      {key:'noLift',     label:'No Lift',        desc:'Intento fallido, banner NO LIFT y DQ'},
       {key:'curAttempt', label:'Intento actual',   desc:'Fondo del intento en curso'},
     ]},
     {title:'NOMBRE / BARRA',items:[
@@ -13307,7 +13308,7 @@ function renderManage(){
   _pedirFotos();
   // Filtrar por tarima si está activo (modo 2 tarimas)
   const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin: trae cambios, borra eliminados sin datos y toma tanda, división, categoría y modalidad del Cronograma">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-o" onclick="go(\'docs\')" title="Hoja de pesaje, altura de rack, revisión de equipo y papeletas" style="border-color:rgba(212,168,67,.55);color:var(--gold)">📄 Documentos</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin: trae cambios, borra eliminados sin datos y toma tanda, división, categoría y modalidad del Cronograma">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-o" onclick="go(\'docs\')" title="Hoja de pesaje, altura de rack, revisión de equipo y papeletas" style="border-color:rgba(212,168,67,.55);color:var(--gold)"><i class=yl-i-archivo></i> Documentos</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
     // ── Barra de búsqueda y tandas ────────────────────────────────────────────
   {
     const _mf0=window._MAN_F||{q:'',flight:''};
@@ -13369,11 +13370,11 @@ h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%
     }
     h+='<td style="padding:3px 2px;text-align:center">';
     if(a.weighedIn){
-      h+='<button onclick="openWeighIn('+a.id+')" style="padding:2px 6px;border-radius:4px;border:1px solid var(--green);background:rgba(34,197,94,.1);color:var(--green);font-family:Oswald;font-size:9px;cursor:pointer;white-space:nowrap">'+a.bw+'kg ✓</button>';
+      h+='<button onclick="openWeighIn('+a.id+')" style="padding:2px 6px;border-radius:4px;border:1px solid var(--green);background:rgba(34,197,94,.1);color:var(--green);font-family:Oswald;font-size:9px;cursor:pointer;white-space:nowrap">'+a.bw+'kg <i class=yl-i-check></i></button>';
     }else{
       h+='<button onclick="openWeighIn('+a.id+')" style="padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:9px;cursor:pointer">Pesar</button>';
     }
-    {const _hasMedia=!!_lcMediaFor(a);h+='<button onclick="openAthleteMedia('+a.id+')" title="Subir foto/GIF del atleta" style="display:block;margin:3px auto 0;padding:2px 8px;border-radius:4px;border:1px solid '+(_hasMedia?'var(--gold)':'var(--border)')+';background:'+(_hasMedia?'rgba(212,168,67,.12)':'transparent')+';color:'+(_hasMedia?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:9px;cursor:pointer;white-space:nowrap">'+(_hasMedia?'Foto ✓':'Foto')+'</button>';}
+    {const _hasMedia=!!_lcMediaFor(a);h+='<button onclick="openAthleteMedia('+a.id+')" title="Subir foto/GIF del atleta" style="display:block;margin:3px auto 0;padding:2px 8px;border-radius:4px;border:1px solid '+(_hasMedia?'var(--gold)':'var(--border)')+';background:'+(_hasMedia?'rgba(212,168,67,.12)':'transparent')+';color:'+(_hasMedia?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:9px;cursor:pointer;white-space:nowrap">'+(_hasMedia?'Foto <i class=yl-i-check></i>':'Foto')+'</button>';}
     h+='</td>';
     // La tabla de pesaje muestra siempre 3 intentos (el 4º extra se gestiona en
     // Control en Vivo). slice(0,3) evita filas con más columnas que el encabezado.
@@ -13381,14 +13382,14 @@ h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%
       const ctKey=a.id+'_'+l+'_'+r;const ct=DATA.changeTimers[ctKey];
       let cls='inp-sm',ph='\u2014';
       if(ct&&!ct.expired&&ct.remaining>0){cls='inp-sm countdown';ph=ct.remaining+'s'}
-      else if(ct&&ct.expired&&!at.w){cls='inp-sm expired';ph='\u23F0'}
+      else if(ct&&ct.expired&&!at.w){cls='inp-sm expired';ph='0s'}
       const bc=at.r==='g'?'var(--green)':at.r==='n'?'var(--red)':at.w>0?LIFT_C[l]:'var(--border)';
       const gActive=at.r==='g';const nActive=at.r==='n';
       h+='<td style="padding:2px">'
         +'<input type="text" inputmode="decimal" class="'+cls+'" id="ct_'+ctKey+'" value="'+(at.w||'')+'" placeholder="'+ph+'" oninput="this.value=this.value.replace(\',\',\'.\')" onchange="setAtt('+a.id+',\''+l+'\','+r+',this.value)" style="border-color:'+bc+';'+(at.r==='n'?'text-decoration:line-through':'')+';width:100%;margin-bottom:2px">'
         +'<div style="display:flex;gap:2px">'
-        +'<button onclick="overrideResult('+a.id+',\''+l+'\','+r+',\'g\')" title="Marcar v\u00e1lido" style="flex:1;padding:2px 0;border-radius:3px;border:1px solid '+(gActive?'var(--green)':'rgba(34,197,94,.3)')+';background:'+(gActive?'rgba(34,197,94,.2)':'transparent')+';color:'+(gActive?'var(--green)':'rgba(34,197,94,.5)')+';font-size:9px;font-weight:700;cursor:pointer;line-height:1">\u2713</button>'
-        +'<button onclick="overrideResult('+a.id+',\''+l+'\','+r+',\'n\')" title="Marcar nulo" style="flex:1;padding:2px 0;border-radius:3px;border:1px solid '+(nActive?'var(--red)':'rgba(239,68,68,.3)')+';background:'+(nActive?'rgba(239,68,68,.2)':'transparent')+';color:'+(nActive?'var(--red)':'rgba(239,68,68,.5)')+';font-size:9px;font-weight:700;cursor:pointer;line-height:1">\u2717</button>'
+        +'<button onclick="overrideResult('+a.id+',\''+l+'\','+r+',\'g\')" title="Marcar v\u00e1lido" style="flex:1;padding:2px 0;border-radius:3px;border:1px solid '+(gActive?'var(--green)':'rgba(34,197,94,.3)')+';background:'+(gActive?'rgba(34,197,94,.2)':'transparent')+';color:'+(gActive?'var(--green)':'rgba(34,197,94,.5)')+';font-size:9px;font-weight:700;cursor:pointer;line-height:1"><i class=yl-i-check></i></button>'
+        +'<button onclick="overrideResult('+a.id+',\''+l+'\','+r+',\'n\')" title="Marcar nulo" style="flex:1;padding:2px 0;border-radius:3px;border:1px solid '+(nActive?'var(--red)':'rgba(239,68,68,.3)')+';background:'+(nActive?'rgba(239,68,68,.2)':'transparent')+';color:'+(nActive?'var(--red)':'rgba(239,68,68,.5)')+';font-size:9px;font-weight:700;cursor:pointer;line-height:1"><i class=yl-i-cruz></i></button>'
         +'</div>'
         +'</td>';
     })});
@@ -13586,20 +13587,20 @@ function _attCellCompete(a,l,j,isCurrentCell){
     // no como un cartel pegado encima. El rojo queda en el borde, no en el texto.
     if(srAny)cell+='<div class="rec-caja"><div class="'+(srHecho?'':'rec-tag')+'" style="font-size:'
       +Math.round(9*sc)+'px;font-weight:800;letter-spacing:.6px;line-height:1;margin-bottom:2px;white-space:nowrap;'
-      +'text-align:center;color:#fff">'+(srHecho?'★ ':'')+srTxt+'</div>';
+      +'text-align:center;color:#fff">'+(srHecho?'<i class=yl-i-estrella></i> ':'')+srTxt+'</div>';
     const srTit=[srR.length?_srBadge(srR)+' — supera '+srR.map(function(x){return x.div+' '+(x.vacio?'(sin récord)':x.kg+'kg')}).join(', '):'',
       srT.length?'RÉCORD DE TOTAL '+srT[0].total+' kg — supera '+srT.map(function(x){return x.div+' '+(x.vacio?'(sin récord)':x.kg+'kg')}).join(', '):''].filter(Boolean).join(' · ');
     cell+='<div class="'+c+' att'+(srAny?' rec-borde':'')+'" onclick="editAtt('+a.id+',\''+l+'\','+j+')"'+(srAny?' title="'+srTit.replace(/"/g,'&quot;')+'"':'')+' style="font-size:'+Math.round((isCurrentCell?15:12)*sc)+'px;font-weight:700;padding:'+Math.round((isCurrentCell?10:8)*sc)+'px 4px;'+srCss+(isCurrentCell?'box-shadow:inset 0 0 0 3px '+LIFT_C[l]+';':'')+'">'+(at.w||'—')+'</div>'+(srR.length?'</div>':'');
   }
   if(isCurrentCell){
     cell+='<div style="display:flex;gap:2px;margin-top:3px">'
-      +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+l+'\','+j+',\'g\')" title="GOOD LIFT" style="flex:1;padding:'+Math.round(7*sc)+'px 0;border-radius:5px;border:2px solid '+(gActive?'#5cb37f':'rgba(92,179,127,.5)')+';background:'+(gActive?'rgba(92,179,127,.45)':'rgba(92,179,127,.1)')+';color:'+(gActive?'#fff':'#5cb37f')+';font-size:'+Math.round(14*sc)+'px;font-weight:800;cursor:pointer;line-height:1">✓</button>'
-      +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+l+'\','+j+',\'n\')" title="NO LIFT" style="flex:1;padding:'+Math.round(7*sc)+'px 0;border-radius:5px;border:2px solid '+(nActive?'#cc6666':'rgba(204,102,102,.5)')+';background:'+(nActive?'rgba(204,102,102,.45)':'rgba(204,102,102,.1)')+';color:'+(nActive?'#fff':'#cc6666')+';font-size:'+Math.round(14*sc)+'px;font-weight:800;cursor:pointer;line-height:1">✗</button>'
+      +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+l+'\','+j+',\'g\')" title="GOOD LIFT" style="flex:1;padding:'+Math.round(7*sc)+'px 0;border-radius:5px;border:2px solid '+(gActive?'#5cb37f':'rgba(92,179,127,.5)')+';background:'+(gActive?'rgba(92,179,127,.45)':'rgba(92,179,127,.1)')+';color:'+(gActive?'#fff':'#5cb37f')+';font-size:'+Math.round(14*sc)+'px;font-weight:800;cursor:pointer;line-height:1"><i class=yl-i-check></i></button>'
+      +'<button onclick="event.stopPropagation();overrideResult('+a.id+',\''+l+'\','+j+',\'n\')" title="NO LIFT" style="flex:1;padding:'+Math.round(7*sc)+'px 0;border-radius:5px;border:2px solid '+(nActive?'#cc6666':'rgba(204,102,102,.5)')+';background:'+(nActive?'rgba(204,102,102,.45)':'rgba(204,102,102,.1)')+';color:'+(nActive?'#fff':'#cc6666')+';font-size:'+Math.round(14*sc)+'px;font-weight:800;cursor:pointer;line-height:1"><i class=yl-i-cruz></i></button>'
     +'</div>';
   } else if(at.w>0){
     cell+='<div style="display:flex;gap:2px;margin-top:3px" title="Cambiar o revocar la decisión de este intento">'
-      +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+l+'\','+j+',\'g\')" title="Cambiar a VÁLIDO (volver a tocar = revocar)" style="flex:1;padding:'+Math.round(3*sc)+'px 0;border-radius:4px;border:1px solid '+(gActive?'var(--green)':'rgba(34,197,94,.35)')+';background:'+(gActive?'rgba(34,197,94,.25)':'transparent')+';color:'+(gActive?'var(--green)':'rgba(34,197,94,.6)')+';font-size:'+Math.round(11*sc)+'px;font-weight:700;cursor:pointer;line-height:1">✓</button>'
-      +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+l+'\','+j+',\'n\')" title="Cambiar a NULO (volver a tocar = revocar)" style="flex:1;padding:'+Math.round(3*sc)+'px 0;border-radius:4px;border:1px solid '+(nActive?'var(--red)':'rgba(239,68,68,.35)')+';background:'+(nActive?'rgba(239,68,68,.25)':'transparent')+';color:'+(nActive?'var(--red)':'rgba(239,68,68,.6)')+';font-size:'+Math.round(11*sc)+'px;font-weight:700;cursor:pointer;line-height:1">✗</button>'
+      +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+l+'\','+j+',\'g\')" title="Cambiar a VÁLIDO (volver a tocar = revocar)" style="flex:1;padding:'+Math.round(3*sc)+'px 0;border-radius:4px;border:1px solid '+(gActive?'var(--green)':'rgba(34,197,94,.35)')+';background:'+(gActive?'rgba(34,197,94,.25)':'transparent')+';color:'+(gActive?'var(--green)':'rgba(34,197,94,.6)')+';font-size:'+Math.round(11*sc)+'px;font-weight:700;cursor:pointer;line-height:1"><i class=yl-i-check></i></button>'
+      +'<button onclick="event.stopPropagation();changeResult('+a.id+',\''+l+'\','+j+',\'n\')" title="Cambiar a NULO (volver a tocar = revocar)" style="flex:1;padding:'+Math.round(3*sc)+'px 0;border-radius:4px;border:1px solid '+(nActive?'var(--red)':'rgba(239,68,68,.35)')+';background:'+(nActive?'rgba(239,68,68,.25)':'transparent')+';color:'+(nActive?'var(--red)':'rgba(239,68,68,.6)')+';font-size:'+Math.round(11*sc)+'px;font-weight:700;cursor:pointer;line-height:1"><i class=yl-i-cruz></i></button>'
     +'</div>';
     if(at.r===null){
       cell+='<button onclick="event.stopPropagation();forceCurrentAttempt('+a.id+',\''+l+'\','+j+')" title="Marcar este intento como el actual (por si se saltó al atleta)" style="width:100%;margin-top:2px;padding:'+Math.round(2*sc)+'px 0;border-radius:4px;border:1px dashed rgba(212,168,67,.5);background:transparent;color:var(--gold);font-size:'+Math.round(9*sc)+'px;font-weight:700;cursor:pointer;letter-spacing:.5px">ACTUAL</button>';
@@ -13635,16 +13636,16 @@ function _attMenuHtml(a,l,j,sc){
     h+='<div class="att-menu" onclick="event.stopPropagation()" style="position:absolute;z-index:60;top:calc(100% + 3px);left:0;min-width:210px;background:var(--card);border:1px solid var(--gold);border-radius:8px;box-shadow:0 8px 26px rgba(0,0,0,.6);overflow:hidden">';
     h+='<div style="padding:6px 10px;font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--muted);border-bottom:1px solid rgba(30,58,95,.4);background:rgba(30,58,95,.25)">'+a.name+' · '+LIFT_S[l]+(j+1)+'</div>';
     if(at.r===null)
-      h+=item('window._attMenuOpen=null;forceCurrentAttempt('+a.id+',\''+l+'\','+j+')','▶','Marcar como actual','var(--gold)','Salta la cola y pone este intento como el que está en tarima ahora (por si se pasó por alto al atleta).');
+      h+=item('window._attMenuOpen=null;forceCurrentAttempt('+a.id+',\''+l+'\','+j+')','<i class=yl-i-reproducir></i>','Marcar como actual','var(--gold)','Salta la cola y pone este intento como el que está en tarima ahora (por si se pasó por alto al atleta).');
     if(!has4th){
-      h+=item('add4thAttempt('+a.id+',\''+l+'\',\'self\')','➕',LBL+' — se sigue a sí mismo','#60a5fa',TIP_SELF);
-      h+=item('add4thAttempt('+a.id+',\''+l+'\',\'endround\')','➕',LBL+' — al final de la ronda','#60a5fa',TIP_ENDROUND);
+      h+=item('add4thAttempt('+a.id+',\''+l+'\',\'self\')','<i class=yl-i-mas></i>',LBL+' — se sigue a sí mismo','#60a5fa',TIP_SELF);
+      h+=item('add4thAttempt('+a.id+',\''+l+'\',\'endround\')','<i class=yl-i-mas></i>',LBL+' — al final de la ronda','#60a5fa',TIP_ENDROUND);
     }else{
       const gr3=((a.att[l][3]&&a.att[l][3].grantedRound)||0)>=2;
-      h+=item('remove4thAttempt('+a.id+',\''+l+'\')','🗑','Eliminar '+(gr3?'4º intento':'intento extra'),'#f59e0b',TIP_REMOVE);
+      h+=item('remove4thAttempt('+a.id+',\''+l+'\')','<i class=yl-i-basura></i>','Eliminar '+(gr3?'4º intento':'intento extra'),'#f59e0b',TIP_REMOVE);
     }
-    h+=item('window._attMenuOpen=null;changeResult('+a.id+',\''+l+'\','+j+',\'g\')','✓','Marcar intento válido','var(--green)','Fija este intento como VÁLIDO (corrección manual, sin efectos de tarima).');
-    h+=item('window._attMenuOpen=null;changeResult('+a.id+',\''+l+'\','+j+',\'n\')','✗','Marcar intento nulo','var(--red)','Fija este intento como NULO (corrección manual, sin efectos de tarima).');
+    h+=item('window._attMenuOpen=null;changeResult('+a.id+',\''+l+'\','+j+',\'g\')','<i class=yl-i-check></i>','Marcar intento válido','var(--green)','Fija este intento como VÁLIDO (corrección manual, sin efectos de tarima).');
+    h+=item('window._attMenuOpen=null;changeResult('+a.id+',\''+l+'\','+j+',\'n\')','<i class=yl-i-cruz></i>','Marcar intento nulo','var(--red)','Fija este intento como NULO (corrección manual, sin efectos de tarima).');
     h+='</div>';
   }
   h+='</div>';
@@ -13723,7 +13724,7 @@ function renderCompete(){
   }
   // En práctica: link de la vista de espectador (lo que ve el público) para compartir.
   if(PRACTICE_MODE){
-    h+='<button onclick="copyPracticeViewerLink()" title="Copiar el link de la vista de espectador (lo que ve el público) para compartir" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(96,165,250,.5);background:rgba(96,165,250,.08);color:#60a5fa;font-size:12px;font-weight:700;cursor:pointer">👁 Link espectador</button>';
+    h+='<button onclick="copyPracticeViewerLink()" title="Copiar el link de la vista de espectador (lo que ve el público) para compartir" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(96,165,250,.5);background:rgba(96,165,250,.08);color:#60a5fa;font-size:12px;font-weight:700;cursor:pointer"><i class=yl-i-ojo></i> Link espectador</button>';
   }
   h+='<button id="histUndoBtn" onclick="histUndo()"'+(window._histUndo&&window._histUndo.length?'':' disabled')+' title="Deshacer (Ctrl+Z)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:700;cursor:pointer;opacity:'+(window._histUndo&&window._histUndo.length?'1':'.4')+'">↶ Deshacer</button>';
   h+='<button id="histRedoBtn" onclick="histRedo()"'+(window._histRedo&&window._histRedo.length?'':' disabled')+' title="Rehacer (Ctrl+Y)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:700;cursor:pointer;opacity:'+(window._histRedo&&window._histRedo.length?'1':'.4')+'">↷ Rehacer</button>';
@@ -13736,14 +13737,14 @@ function renderCompete(){
    const donde=nv?((LIFT_S[nv.lift]||'—')+' · Int '+((typeof nv.round==='number'?nv.round:0)+1)+' · Tanda '+(nv.flight||'—')):'—';
    if(libre){
      h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:8px 12px;border-radius:8px;border:2px solid #60a5fa;background:rgba(96,165,250,.10)">'
-       +'<div><span class="os" style="font-size:12px;font-weight:700;letter-spacing:1px;color:#60a5fa">👁 VISTA LIBRE</span>'
+       +'<div><span class="os" style="font-size:12px;font-weight:700;letter-spacing:1px;color:#60a5fa"><i class=yl-i-ojo></i> VISTA LIBRE</span>'
        +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Te mueves por tu cuenta y no arrastras a nadie. Lo que cargues lo siguen viendo todos. La tarima está en <b style="color:var(--gold)">'+donde+'</b></div></div>'
        +'<button onclick="setNavLibre(false)" style="padding:6px 14px;border-radius:6px;border:1px solid #60a5fa;background:transparent;color:#60a5fa;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;white-space:nowrap">VOLVER A LA TARIMA</button>'
      +'</div>';
    }else{
      h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:6px 12px;border-radius:8px;border:1px solid var(--border)">'
        +'<span style="font-size:11px;color:var(--muted)">Esta pantalla sigue a la tarima: el movimiento, la ronda y la tanda te los mueve quien opera</span>'
-       +'<button onclick="setNavLibre(true)" title="Mirar otra tanda u otro movimiento sin mover a los demás. Los pesos y las decisiones se siguen compartiendo." style="padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;white-space:nowrap">👁 VISTA LIBRE</button>'
+       +'<button onclick="setNavLibre(true)" title="Mirar otra tanda u otro movimiento sin mover a los demás. Los pesos y las decisiones se siguen compartiendo." style="padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;white-space:nowrap"><i class=yl-i-ojo></i> VISTA LIBRE</button>'
      +'</div>';
    }}
   // Selector de tanda activa — lo mismo que "Vuelo Activo" del menú hamburguesa, pero acá
@@ -13783,16 +13784,16 @@ function renderCompete(){
    if(ci){
      const cc=ci.neg?'var(--red)':ci.remaining<=15?'var(--orange)':'#60a5fa';
      h+='<div class="card" style="margin-bottom:10px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border:2px solid #60a5fa;background:rgba(96,165,250,.08)">'
-       +'<div><span style="font-size:12px;font-weight:700;color:#60a5fa">🕒 TIEMPO COMPENSATORIO</span>'
+       +'<div><span style="font-size:12px;font-weight:700;color:#60a5fa"><i class=yl-i-reloj></i> TIEMPO COMPENSATORIO</span>'
          +'<div style="font-size:10px;color:var(--muted);margin-top:2px">'+esc(ci.a.name)+' · '+LIFT_S[ci.lift]+'4 · '+ci.min+' min · <span style="opacity:.8">no bloquea: puedes dar válido/nulo cuando quieras</span></div></div>'
        +'<div style="display:flex;align-items:center;gap:8px">'
          +'<span id="compTimerBox" class="os" style="font-size:26px;font-weight:800;color:'+cc+'">'+ci.mmss+'</span>'
-         +'<button onclick="clearCompTimer()" title="Cerrar el tiempo compensatorio" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:10px;cursor:pointer">✕</button>'
+         +'<button onclick="clearCompTimer()" title="Cerrar el tiempo compensatorio" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:10px;cursor:pointer"><i class=yl-i-cerrar></i></button>'
        +'</div></div>';
    }}
   if(cur){
     // Info compacta del atleta actual (sin botones grandes - los GOOD/NO LIFT estan en la tabla)
-    h+='<div class="card" style="border-left:4px solid '+LIFT_C[DATA.lift]+';margin-bottom:10px;padding:10px 14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:0"><div class="os" style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+cur.name+'</div><div style="font-size:10px;color:var(--muted)">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+' \u00b7 pr\u00f3ximo: <strong style="color:'+LIFT_C[DATA.lift]+'">'+(cw||'\u2014')+'kg</strong></div></div><div style="display:flex;gap:6px;align-items:center">'+(function(){const _s=_rackSetup(_realAth(cur),DATA.lift)||(rack?'RACK '+rack:'');return _s?'<span style="background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:5px;font-size:10px">\uD83D\uDD27 '+_s+'</span>':'';})()+'<span class="flight-badge" style="background:'+(FL_C[cur.flight]||'#666')+'">'+cur.flight+'</span>'+(cur.__is4?'<span title="Intento extra compensatorio — repite este intento" style="background:#60a5fa;color:#fff;padding:3px 8px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:11px;letter-spacing:.5px">'+cur4lbl+'</span>':'')+'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:3px 10px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:12px">'+LIFT_S[DATA.lift]+(DATA.round+1)+'</span></div></div></div>';
+    h+='<div class="card" style="border-left:4px solid '+LIFT_C[DATA.lift]+';margin-bottom:10px;padding:10px 14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:0"><div class="os" style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+cur.name+'</div><div style="font-size:10px;color:var(--muted)">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+' \u00b7 pr\u00f3ximo: <strong style="color:'+LIFT_C[DATA.lift]+'">'+(cw||'\u2014')+'kg</strong></div></div><div style="display:flex;gap:6px;align-items:center">'+(function(){const _s=_rackSetup(_realAth(cur),DATA.lift)||(rack?'RACK '+rack:'');return _s?'<span style="background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:5px;font-size:10px"><i class=yl-i-ajustes></i> '+_s+'</span>':'';})()+'<span class="flight-badge" style="background:'+(FL_C[cur.flight]||'#666')+'">'+cur.flight+'</span>'+(cur.__is4?'<span title="Intento extra compensatorio — repite este intento" style="background:#60a5fa;color:#fff;padding:3px 8px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:11px;letter-spacing:.5px">'+cur4lbl+'</span>':'')+'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:3px 10px;border-radius:5px;font-family:Oswald;font-weight:700;font-size:12px">'+LIFT_S[DATA.lift]+(DATA.round+1)+'</span></div></div></div>';
     // Reloj de 1:00 para dar el pr\u00f3ximo intento \u2014 PRIVADO: solo visible ac\u00e1, en Control en
     // Vivo (isAdmin). No se transmite al p\u00fablico ni a OBS (el widget "Timer independiente"
     // se desactiv\u00f3 a pedido). id="mainTimer" \u2014 lo actualiza startTimer() cada segundo.
@@ -13800,10 +13801,10 @@ function renderCompete(){
      const _mtColor=_mt<=10?'var(--red)':_mt<=30?'var(--orange)':'var(--green)';
      const _mtTxt=Math.floor(_mt/60)+':'+String(_mt%60).padStart(2,'0');
      h+='<div class="card" style="margin-bottom:10px;padding:8px 14px;display:flex;align-items:center;justify-content:space-between">'
-       +'<span style="font-size:11px;color:var(--muted)">\u23f1 Tiempo para el pr\u00f3ximo intento <span style="opacity:.6">(solo lo ves tú ac\u00e1 \u2014 no es p\u00fablico)</span></span>'
+       +'<span style="font-size:11px;color:var(--muted)"><i class=yl-i-reloj></i> Tiempo para el pr\u00f3ximo intento <span style="opacity:.6">(solo lo ves tú ac\u00e1 \u2014 no es p\u00fablico)</span></span>'
        +'<span style="display:flex;align-items:center;gap:10px">'
-         +'<button onclick="openManualComp()" title="Asignar un tiempo compensatorio a mano (ej. el atleta abre dos intentos seguidos)" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(96,165,250,.5);background:rgba(96,165,250,.08);color:#60a5fa;font-family:Oswald;font-size:10px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap">\uD83D\uDD52 COMPENSATORIO MANUAL</button>'
-         +'<button onclick="toggleMainTimer()" title="'+(DATA.timerOn?'Pausar el reloj':'Iniciar el reloj (ej. cuando se va a tirar el intento extra)')+'" style="padding:5px 12px;border-radius:6px;border:1px solid '+(DATA.timerOn?'var(--orange)':'var(--green)')+';background:'+(DATA.timerOn?'rgba(245,158,11,.12)':'rgba(34,197,94,.12)')+';color:'+(DATA.timerOn?'var(--orange)':'var(--green)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap">'+(DATA.timerOn?'\u23F8 Pausar':'\u25B6 Iniciar')+'</button>'
+         +'<button onclick="openManualComp()" title="Asignar un tiempo compensatorio a mano (ej. el atleta abre dos intentos seguidos)" style="padding:5px 10px;border-radius:6px;border:1px solid rgba(96,165,250,.5);background:rgba(96,165,250,.08);color:#60a5fa;font-family:Oswald;font-size:10px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap"><i class=yl-i-reloj></i> COMPENSATORIO MANUAL</button>'
+         +'<button onclick="toggleMainTimer()" title="'+(DATA.timerOn?'Pausar el reloj':'Iniciar el reloj (ej. cuando se va a tirar el intento extra)')+'" style="padding:5px 12px;border-radius:6px;border:1px solid '+(DATA.timerOn?'var(--orange)':'var(--green)')+';background:'+(DATA.timerOn?'rgba(245,158,11,.12)':'rgba(34,197,94,.12)')+';color:'+(DATA.timerOn?'var(--orange)':'var(--green)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer;white-space:nowrap">'+(DATA.timerOn?'<i class=yl-i-pausa></i> Pausar':'<i class=yl-i-reproducir></i> Iniciar')+'</button>'
          +'<button onclick="resetTimer();R()" title="Volver el reloj a 1:00" style="padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">\u21BA</button>'
          +'<span id="mainTimer" class="os" style="font-size:20px;font-weight:700;color:'+_mtColor+'">'+_mtTxt+'</span>'
        +'</span>'
@@ -13838,7 +13839,7 @@ function renderCompete(){
     activeCTs.forEach(k=>{
       const parts=k.split('_');const aId=parseInt(parts[0]);const lift=parts[1];const rnd=parseInt(parts[2]);
       const a=DATA.athletes.find(x=>x.id===aId);const ct=DATA.changeTimers[k];
-      if(a)h+='<div id="cct_'+k+'" style="font-size:13px;color:var(--orange);padding:3px 0">\u23F1 <strong>'+a.name+'</strong> \u2014 '+LIFT_S[lift]+(rnd+1)+' \u2014 '+ct.remaining+'s para entregar intento</div>';
+      if(a)h+='<div id="cct_'+k+'" style="font-size:13px;color:var(--orange);padding:3px 0"><i class=yl-i-reloj></i> <strong>'+a.name+'</strong> \u2014 '+LIFT_S[lift]+(rnd+1)+' \u2014 '+ct.remaining+'s para entregar intento</div>';
     });
     h+='</div>';
   }
@@ -13902,13 +13903,13 @@ function renderCompete(){
       h+='<td style="text-align:center;padding:6px 4px;border-right:1px solid var(--border);"><span class="os" style="color:#fff;font-weight:700;font-size:'+Math.round(18*rsc)+'px">'+(a.lot||'·')+'</span></td>';
       if(_ctLinea){
         h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="display:flex;align-items:center;gap:7px;white-space:nowrap">'
-          +(hiMain?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px;flex-shrink:0">▶</span>':'')
+          +(hiMain?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px;flex-shrink:0"><i class=yl-i-reproducir></i></span>':'')
           +'<span style="font-size:'+Math.round(12*rsc)+'px;font-weight:'+(hiMain?800:500)+';color:'+(hiMain?'#fff':'var(--text)')+'">'+a.name+'</span>'
           +'<span style="font-size:'+Math.round(9*rsc)+'px;color:var(--muted);flex-shrink:0">'+(a.bw>0?a.bw+'kg':'sin BW')+'</span>'
           +_nomChips(a,rsc,true)
           +'</div></td>';
       }else{
-        h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:'+Math.round(12*rsc)+'px;font-weight:'+(hiMain?800:500)+';color:'+(hiMain?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px">'+(hiMain?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">▶</span>':'')+'<span>'+a.name+'</span></div><div style="font-size:'+Math.round(8*rsc)+'px;color:var(--muted)">'+(a.bw>0?a.bw+'kg':'sin BW')+'</div>'+_nomChips(a,rsc)+'</td>';
+        h+='<td style="padding:6px 8px;cursor:pointer" onclick="openWeighIn('+a.id+')" title="Click para editar BW + alturas de rack"><div style="font-size:'+Math.round(12*rsc)+'px;font-weight:'+(hiMain?800:500)+';color:'+(hiMain?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px">'+(hiMain?'<span style="background:'+LIFT_C[DATA.lift]+';color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px"><i class=yl-i-reproducir></i></span>':'')+'<span>'+a.name+'</span></div><div style="font-size:'+Math.round(8*rsc)+'px;color:var(--muted)">'+(a.bw>0?a.bw+'kg':'sin BW')+'</div>'+_nomChips(a,rsc)+'</td>';
       }
       LIFTS.forEach(l=>{
         for(let j=0;j<3;j++){
@@ -13921,7 +13922,7 @@ function renderCompete(){
       {const srT=(tot>0&&!_srSoloBanca(a))?_srRompe(a,'total',tot):[];
        const cssT=srT.length?'background:#F2C230;color:#1a1200;':'color:var(--gold);';
        h+='<td'+(srT.length?' title="'+_srBadge(srT).replace(/"/g,'&quot;')+'"':'')+' style="text-align:center;padding:6px 4px;font-weight:700;font-family:Oswald;'+cssT+'font-size:13px">'
-         +(srT.length?'<span style="display:block;font-size:8.5px;font-weight:800;letter-spacing:.6px;line-height:1.1">★ RÉCORD</span>':'')+(tot||'—')+'</td>';}
+         +(srT.length?'<span style="display:block;font-size:8.5px;font-weight:800;letter-spacing:.6px;line-height:1.1"><i class=yl-i-estrella></i> RÉCORD</span>':'')+(tot||'—')+'</td>';}
       h+=_posCellHtml(isCurrentAthlete?cur:a,{fs:Math.round(11*rsc)});
       h+='</tr>';
       // Fila del/los intento(s) EXTRA (duplicado abajo, solo si tiene)
@@ -13936,7 +13937,7 @@ function renderCompete(){
         let h0=h; h='';
         h+='<tr '+(curOnExtra?'id="ctCurrentLifter" ':'')+'style="border-bottom:1px solid rgba(30,58,95,.18);'+(curOnExtra?'background:linear-gradient(90deg,#60a5fa33,#60a5fa12);box-shadow:inset 3px 0 0 #60a5fa;':'background:rgba(96,165,250,.05)')+'">';
         h+='<td style="text-align:center;padding:6px 4px;color:'+(curOnExtra?'#fff':'#60a5fa')+';font-size:'+Math.round(13*rsc)+'px">↳</td>';
-        h+='<td style="padding:6px 8px"><div style="font-size:'+Math.round(11*rsc)+'px;font-weight:'+(curOnExtra?800:500)+';color:'+(curOnExtra?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px;flex-wrap:wrap">'+(curOnExtra?'<span style="background:#60a5fa;color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px">▶</span>':'')+'<span>'+a.name+'</span><span style="background:#60a5fa;color:#fff;padding:1px 6px;border-radius:4px;font-size:8px;font-family:Oswald;letter-spacing:1px">'+exLbl+'</span></div></td>';
+        h+='<td style="padding:6px 8px"><div style="font-size:'+Math.round(11*rsc)+'px;font-weight:'+(curOnExtra?800:500)+';color:'+(curOnExtra?'#fff':'var(--text)')+';display:flex;align-items:center;gap:5px;flex-wrap:wrap">'+(curOnExtra?'<span style="background:#60a5fa;color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-family:Oswald;letter-spacing:1px"><i class=yl-i-reproducir></i></span>':'')+'<span>'+a.name+'</span><span style="background:#60a5fa;color:#fff;padding:1px 6px;border-radius:4px;font-size:8px;font-family:Oswald;letter-spacing:1px">'+exLbl+'</span></div></td>';
         LIFTS.forEach(l=>{
           if((a.att[l]||[]).length>=4 && a.att[l][3]){
             const isCurrentCell = curOnExtra && l===DATA.lift;
@@ -14124,7 +14125,7 @@ function _renderResultsTable(opts){
   sorted.forEach(a=>{
     const catKey=_catGroupKey(a);
     if(catKey!==prevCat){
-      const symb=(_normSex(a.sex)==='F'?'♀':'♂');
+      const symb=(_normSex(a.sex)==='F'?'F':'M');
       const cerrada=catCerrada[catKey];
       const sello=cerrada
         ? '<span style="background:rgba(34,197,94,.18);border:1px solid rgba(34,197,94,.5);color:var(--green);font-size:9px;letter-spacing:1px;padding:1px 7px;border-radius:4px;margin-left:8px">POSICIÓN FINAL</span>'
@@ -14430,10 +14431,10 @@ function renderSB(){
   const queue=liftQueue(),cur=queue[0],nxt=queue[1],rk=rankings();
   const rack=cur?(DATA.lift==='sq'?cur.rackSQ:DATA.lift==='bp'?cur.rackBP:''):'';
   const cw=cur?cur.att[DATA.lift][DATA.round].w:0;
-  let h='<div class="sb-wrap"><div class="sb-top"><div class="os" style="font-size:22px;font-weight:700;letter-spacing:3px">FECHIPO · YOURLIFT</div><div class="os" style="font-size:15px">'+((DATA.event==null?void 0:DATA.event.short)||'')+'</div><div style="display:flex;gap:6px;align-items:center"><span class="os" style="font-size:13px;background:'+LIFT_C[DATA.lift]+';padding:3px 14px;border-radius:5px;font-weight:700">VLO '+DATA.flight+' \u2014 '+LIFT_N[DATA.lift]+' \u2014 INT '+(DATA.round+1)+'</span><button onclick="go(\'compete\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:10px;font-family:Oswald">\u2699</button></div></div><div class="sb-body"><div style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:30px">';
+  let h='<div class="sb-wrap"><div class="sb-top"><div class="os" style="font-size:22px;font-weight:700;letter-spacing:3px">FECHIPO · YOURLIFT</div><div class="os" style="font-size:15px">'+((DATA.event==null?void 0:DATA.event.short)||'')+'</div><div style="display:flex;gap:6px;align-items:center"><span class="os" style="font-size:13px;background:'+LIFT_C[DATA.lift]+';padding:3px 14px;border-radius:5px;font-weight:700">VLO '+DATA.flight+' \u2014 '+LIFT_N[DATA.lift]+' \u2014 INT '+(DATA.round+1)+'</span><button onclick="go(\'compete\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:10px;font-family:Oswald"><i class=yl-i-ajustes></i></button></div></div><div class="sb-body"><div style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:30px">';
   if(cur){
     h+='<div class="os" style="font-size:clamp(28px,5vw,48px);font-weight:700;letter-spacing:2px;text-align:center;margin-bottom:6px">'+cur.name+'</div>';
-    h+='<div style="color:var(--muted);font-size:14px;margin-bottom:20px">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+(rack?' \u00b7 \uD83D\uDD27 '+rack:'')+'</div>';
+    h+='<div style="color:var(--muted);font-size:14px;margin-bottom:20px">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+(rack?' \u00b7 <i class=yl-i-ajustes></i> '+rack:'')+'</div>';
     h+='<div class="os" style="font-size:70px;font-weight:700;color:'+LIFT_C[DATA.lift]+';letter-spacing:4px">'+(cw||'\u2014')+' <span style="font-size:30px;color:var(--muted)">KG</span></div>';
     if(cw)h+='<div style="margin-top:24px;padding:20px 24px;background:rgba(17,34,59,.6);border:1px solid var(--border);border-radius:12px;display:flex;align-items:center;justify-content:center">'+renderPlates(cw)+'</div>';
     h+='<div style="display:flex;gap:14px;margin-top:24px">';
@@ -15118,7 +15119,7 @@ let DB_FULL=[];
 // ══════════════════════════════════════════════
 // MODO PRÁCTICA (?practica=1) — roster ficticio + bootstrap
 // ══════════════════════════════════════════════
-const PRACTICE_EVENT_NAME='🎓 PRÁCTICA — Jueces (datos ficticios, no oficial)';
+const PRACTICE_EVENT_NAME='PRÁCTICA — Jueces (datos ficticios, no oficial)';
 function _genPracticeRoster(){
   const firstM=['Bruno','Diego','Franco','Hugo','Jorge','Lucas','Nico','Pablo','Simón','Tomás','Iván','Mateo','Andrés','Felipe','Gonzalo','Rodrigo','Sergio','Vicente'];
   const firstF=['Ana','Carla','Elena','Gabriela','Iris','Karen','Marta','Olivia','Renata','Rocío','Sofía','Valentina','Antonia','Josefa','Camila','Fernanda','Paula','Trinidad'];
@@ -15193,7 +15194,7 @@ window.fillPracticeWeights=function(opts){
   });
   DATA.lift='sq';DATA.round=0;
   saveNow();R();
-  showToastLC('✓ Pesos de práctica cargados en '+DATA.athletes.length+' atletas'+(opts.results?' (con resultados)':''));
+  showToastLC('Pesos de práctica cargados en '+DATA.athletes.length+' atletas'+(opts.results?' (con resultados)':''));
   return 'OK — '+DATA.athletes.length+' atletas con pesos';
 };
 // Link de la vista de ESPECTADOR de la práctica (lo que ve el público). Se copia
@@ -15205,7 +15206,7 @@ window.practiceViewerUrl=function(){
 };
 window.copyPracticeViewerLink=function(){
   const url=practiceViewerUrl();
-  if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>showToastLC('👁 Link de espectador copiado')).catch(()=>showToastLC(url));}
+  if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>showToastLC('Link de espectador copiado')).catch(()=>showToastLC(url));}
   else showToastLC(url);
 };
 function _initPracticeMode(){
@@ -15218,7 +15219,7 @@ function _initPracticeMode(){
     if(!DATA.event)DATA.event={id:'practica_jueces',name:PRACTICE_EVENT_NAME,short:'PRÁCTICA (no oficial)',recordsEnabled:false};
     DATA.phase='liveView';
     const chip=document.createElement('div');
-    chip.textContent='🎓 PRÁCTICA · ESPECTADOR'+(PRACTICE_REAL?' · NÓMINA REAL':'');
+    chip.textContent='PRÁCTICA · ESPECTADOR'+(PRACTICE_REAL?' · NÓMINA REAL':'');
     chip.title='Vista de espectador de la práctica (no oficial).';
     chip.style.cssText='position:fixed;bottom:8px;right:8px;z-index:99999;background:rgba(212,168,67,.85);color:#0A1628;font-family:Oswald,sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:3px 9px;border-radius:10px;opacity:.75';
     document.body.appendChild(chip);
@@ -15264,7 +15265,7 @@ function _initPracticeMode(){
   // NO se muestra para no ensuciar la imagen.
   if(!TX_MODE){
     const banner=document.createElement('div');
-    banner.textContent='🎓 PRÁCTICA'+(PRACTICE_REAL?' · NÓMINA REAL (solo lectura)':'');
+    banner.textContent='PRÁCTICA'+(PRACTICE_REAL?' · NÓMINA REAL (solo lectura)':'');
     banner.title=PRACTICE_REAL
       ?'Práctica con nómina real — Firebase en solo lectura, no toca la competencia real. Click para ocultar.'
       :'Modo práctica — atletas ficticios, nada se guarda en el servidor. Click para ocultar.';
@@ -15555,11 +15556,11 @@ if(DEMO_MODE){
           <button onclick="demoShow('timer')" style="padding:8px;background:rgba(34,197,94,.2);border:1px solid #22c55e;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px">TIMER</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
-          <button onclick="demoSlam('g')" style="padding:8px;background:#16a34a;border:0;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">✓ GOOD LIFT</button>
-          <button onclick="demoSlam('r')" style="padding:8px;background:#dc2626;border:0;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">✗ NO LIFT</button>
+          <button onclick="demoSlam('g')" style="padding:8px;background:#16a34a;border:0;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px"><i class=yl-i-check></i> GOOD LIFT</button>
+          <button onclick="demoSlam('r')" style="padding:8px;background:#dc2626;border:0;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px"><i class=yl-i-cruz></i> NO LIFT</button>
         </div>
         <button onclick="demoRecord()" style="width:100%;padding:10px;background:linear-gradient(90deg,#D4A843,#C41E3A);border:0;border-radius:6px;color:#fff;font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:2px;margin-bottom:8px">SIMULAR RÉCORD</button>
-        <button onclick="demoBreak()" style="width:100%;padding:8px;background:rgba(168,85,247,.2);border:1px solid #a855f7;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px;margin-bottom:8px">⏸ BREAK TIMER</button>
+        <button onclick="demoBreak()" style="width:100%;padding:8px;background:rgba(168,85,247,.2);border:1px solid #a855f7;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:1px;margin-bottom:8px"><i class=yl-i-pausa></i> BREAK TIMER</button>
         <div style="display:flex;gap:6px;margin-bottom:8px">
           <button onclick="demoPrev()" style="flex:1;padding:6px;background:rgba(122,143,166,.15);border:1px solid #7A8FA6;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;cursor:pointer">← ANTERIOR</button>
           <button onclick="demoNext()" style="flex:1;padding:6px;background:rgba(122,143,166,.15);border:1px solid #7A8FA6;border-radius:6px;color:#fff;font-family:Oswald;font-size:11px;cursor:pointer">SIGUIENTE →</button>
@@ -15592,7 +15593,7 @@ if(DEMO_MODE){
         _txDirState.slam={active:true,type:t,until:Date.now()+2500,scale:1};
         R&&R();
         if(typeof renderTxWidget==='function')renderTxWidget();
-        showToastLC&&showToastLC(t==='g'?'✓ GOOD LIFT':'✗ NO LIFT');
+        showToastLC&&showToastLC(t==='g'?'GOOD LIFT':'NO LIFT');
       }
     };
     window.demoRecord=function(){
@@ -15615,7 +15616,7 @@ if(DEMO_MODE){
         _dirState.breakTimer={active:true,startedAt:Date.now(),durationSec:300,label:'BREAK ENTRE LIFTS',pausedAt:0,videos:[],movement:'Squat → Bench Press',style:{}};
         R&&R();
         if(typeof renderTxWidget==='function')renderTxWidget();
-        showToastLC&&showToastLC('⏸ Break activado (5 min)');
+        showToastLC&&showToastLC('Break activado (5 min)');
       }
     };
     window.demoUpdate();
@@ -15874,7 +15875,7 @@ function _ytSync(){
   }
   document.getElementById('ytBar').innerHTML=
     '<button class="'+(window._ytOculto?'off':'')+'" onclick="ytToggle()">'
-    +(window._ytOculto?'▶ MOSTRAR TRANSMISIÓN':'✕ OCULTAR TRANSMISIÓN')+'</button>'
+    +(window._ytOculto?'<i class=yl-i-reproducir></i> MOSTRAR TRANSMISIÓN':'<i class=yl-i-cerrar></i> OCULTAR TRANSMISIÓN')+'</button>'
     +(window._ytOculto?'':'<div class="pista">Toca el video para activar el sonido</div>');
 }
 
@@ -16232,7 +16233,7 @@ function renderLiveView(){
   ['sq','bp','dl'].forEach(l=>{
     const isCur = l===DATA.lift;
     const c = LIFT_C[l];
-    h += '<th colspan="'+(maxAtts[l]+(l==='dl'?0:1))+'" style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:12px;letter-spacing:2px;color:'+c+';border-right:1px solid var(--border);background:'+(isCur?c+'18':'transparent')+'">'+LIFT_N[l]+(isCur?' ▶':'')+'</th>';
+    h += '<th colspan="'+(maxAtts[l]+(l==='dl'?0:1))+'" style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:12px;letter-spacing:2px;color:'+c+';border-right:1px solid var(--border);background:'+(isCur?c+'18':'transparent')+'">'+LIFT_N[l]+(isCur?' <i class=yl-i-reproducir></i>':'')+'</th>';
   });
   h += '<th colspan="3" style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);border-right:1px solid var(--border)">TOTALES</th>';
   h += '<th style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:10px;color:var(--gold)">GLP</th>';
@@ -16292,7 +16293,7 @@ function renderLiveView(){
     // El lote, en blanco y 50% más grande: en gris a 8-9 px no se leía desde las
     // teles ni en el teléfono.
     if(isOnPlatform){
-      h += '<span style="color:'+liftColor+';font-family:Oswald;font-weight:700;font-size:14px">▶</span>';
+      h += '<span style="color:'+liftColor+';font-family:Oswald;font-weight:700;font-size:14px"><i class=yl-i-reproducir></i></span>';
       h += '<div style="color:#fff;font-family:Oswald;font-weight:600;font-size:12px;margin-top:1px">'+a.lot+'</div>';
     } else if(inQueue){
       h += '<span style="color:var(--gold);font-family:Oswald;font-weight:700;font-size:11px">'+(queuePos+1)+'°</span>';
@@ -16316,7 +16317,7 @@ function renderLiveView(){
     // lo que sobra es alto y lo que falta es ancho.
     h += '<td style="padding:'+(_enLinea?'3px':'5px')+' 8px;border-right:1px solid var(--border)">';
     if(_enLinea) h += '<div style="display:flex;align-items:center;gap:6px;white-space:nowrap">';
-    if(isOnPlatform) h += '<span style="background:'+liftColor+';color:#fff;padding:1px 6px;border-radius:3px;font-size:8px;font-family:Oswald;letter-spacing:1px;'+(_enLinea?'flex-shrink:0':'display:inline-block;margin-bottom:2px')+'">▶ EN TARIMA</span>'+(_enLinea?'':'<br>');
+    if(isOnPlatform) h += '<span style="background:'+liftColor+';color:#fff;padding:1px 6px;border-radius:3px;font-size:8px;font-family:Oswald;letter-spacing:1px;'+(_enLinea?'flex-shrink:0':'display:inline-block;margin-bottom:2px')+'"><i class=yl-i-reproducir></i> EN TARIMA</span>'+(_enLinea?'':'<br>');
     // La bandera del país, al lado del nombre, como en las tablas de Resultados
     // y en el medallero. Solo si el campeonato tiene más de un país: en un
     // nacional serían cuatrocientas banderas chilenas iguales, que no informan
@@ -16362,7 +16363,7 @@ function renderLiveView(){
         const srCss2='';   // el color de adentro es el del intento, como en el control
         if(srR2.length)h+='<div class="rec-caja"><div class="'+(srOk2?'':'rec-tag')+'" style="font-size:8.5px;'
           +'font-weight:800;letter-spacing:.5px;line-height:1;margin-bottom:2px;text-align:center;color:#fff">'
-          +(srOk2?'★ RÉCORD':'RÉCORD')+'</div>';
+          +(srOk2?'<i class=yl-i-estrella></i> RÉCORD':'RÉCORD')+'</div>';
         h += '<div class="'+cls+' att'+(srR2.length?' rec-borde':'')+'"'+(srR2.length?' title="'+_srBadge(srR2).replace(/"/g,'&quot;')+'"':'')+' style="font-size:'+(isCurAtt?15:11)+'px;font-weight:700;padding:'+(isCurAtt?'10px 3px':'6px 3px')+';cursor:default;'+srCss2+(isCurAtt?'box-shadow:inset 0 0 0 2px '+LIFT_C[l]+';':'')+'min-width:46px;text-align:center">'+(at.w||'—')+'</div>'+(srR2.length?'</div>':'');
         // El que acaba de salir a tarima: cartelito chico bajo su intento, para
         // no perder de vista por dónde va la tanda cuando la lista se reordena.
