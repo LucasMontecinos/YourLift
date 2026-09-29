@@ -17,8 +17,8 @@ SOLO donde se puede hacer con certeza:
 bestLifts.glp se actualiza solo si venía siendo el máximo de sus resultados; si
 salía de otro lado, se deja y se avisa.
 
-    python3 corregir_gl_data.py           # muestra qué cambiaría
-    python3 corregir_gl_data.py --aplicar # lo escribe
+    python3 herramientas/corregir_gl_data.py           # muestra qué cambiaría
+    python3 herramientas/corregir_gl_data.py --aplicar # lo escribe
 """
 import json, math, sys, collections
 

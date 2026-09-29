@@ -18,8 +18,8 @@ Cada sesión del Excel («23 Sep - Weigh in start 07.00 hs…») se convierte en
 jornada, y cada inscripción queda apuntando a la suya. El cronograma público es
 después una vista de esto: no hay una segunda fuente que se pueda desincronizar.
 
-    python3 leer_nomina_fesupo.py Nominaciones_final_2026.xlsx
-    python3 aplicar_nomina_oficial.py
+    python3 herramientas/leer_nomina_fesupo.py Nominaciones_final_2026.xlsx
+    python3 herramientas/aplicar_nomina_oficial.py
 """
 import json
 import re

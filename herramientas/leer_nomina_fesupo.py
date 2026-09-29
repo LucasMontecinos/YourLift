@@ -19,7 +19,7 @@ Dos trampas del archivo, las dos comprobadas contra los datos:
     sesión: la segunda fila trae solo el press de banca. No es un duplicado.
 
 Uso:
-    python3 leer_nomina_fesupo.py Nominaciones_final_2026.xlsx
+    python3 herramientas/leer_nomina_fesupo.py Nominaciones_final_2026.xlsx
 """
 import json
 import re

@@ -17,8 +17,8 @@ competencia con la modalidad combinada, que es como ya lo hace FECHIPO en data.j
 ("Powerlifting Equipado + Only Bench Equipado IPF"): ningún atleta tiene dos competencias
 con el mismo evento.
 
-    python3 agregar_competencias_openipf.py           # muestra qué agregaría
-    python3 agregar_competencias_openipf.py --aplicar # lo escribe
+    python3 herramientas/agregar_competencias_openipf.py           # muestra qué agregaría
+    python3 herramientas/agregar_competencias_openipf.py --aplicar # lo escribe
 """
 import json, math, re, sys
 

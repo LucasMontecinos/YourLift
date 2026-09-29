@@ -9,7 +9,7 @@ récord: la detección sudamericana no se toca.
 Las columnas se separan por la posición de cada palabra en la página, así un nombre
 o un país que ocupa dos renglones no se mezcla con el de al lado.
 
-Uso:  python3 build_records_mundiales.py archivo1.pdf archivo2.pdf …
+Uso:  python3 herramientas/build_records_mundiales.py archivo1.pdf archivo2.pdf …
 Se pueden pasar todos juntos (hombres, mujeres, classic, equipado): cada PDF dice
 en su título qué es.
 """

@@ -12,7 +12,7 @@ cada celda. Negro = válido, gris = nulo.
 El acta no trae el club, así que se lo pega desde las inscripciones de Firestore
 (lectura pública) cruzando por nombre.
 
-    python3 reconstruir_desde_acta.py acta.pdf regionalcentrosur > roster.json
+    python3 herramientas/reconstruir_desde_acta.py acta.pdf regionalcentrosur > roster.json
 
 La salida es la lista de atletas con la forma que usa el livecast, lista para
 cargarla y volver a generar el acta en el formato nuevo.

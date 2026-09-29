@@ -11,7 +11,7 @@ Los resultados nuevos que publica el livecast al cerrar una competencia sí
 guardan el año en el propio resultado, así que esta tabla es solo para lo
 viejo. Igual conviene regenerarla de vez en cuando:
 
-    python3 build_nacimientos.py
+    python3 herramientas/build_nacimientos.py
 
 Solo guarda el AÑO, no la fecha completa: es lo único que hace falta para la
 división y es menos dato del que ya se publica en data.json.
@@ -21,7 +21,8 @@ import os
 import re
 import unicodedata
 
-RAIZ = os.path.dirname(os.path.abspath(__file__))
+# El script vive en herramientas/; los datos, en la raíz del repo.
+RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 FUENTES = [
     # (archivo, campo de la fecha)

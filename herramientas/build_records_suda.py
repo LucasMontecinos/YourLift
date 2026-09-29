@@ -7,7 +7,7 @@ SINGLE LIFT. Las columnas G, H e I ya traen normalizado el movimiento, el códig
 de división y el equipamiento, así que se leen de ahí en vez de adivinar por el
 título de la sección.
 
-    python3 build_records_suda.py <RECORD_SUDA_Nuevo.xls>
+    python3 herramientas/build_records_suda.py <RECORD_SUDA_Nuevo.xls>
 """
 import json, sys, datetime, xlrd
 

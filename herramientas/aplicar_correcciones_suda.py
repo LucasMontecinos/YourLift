@@ -5,8 +5,8 @@ El archivo de FESUPO trae errores de categoría. Las correcciones viven aparte
 para que sobrevivan a cualquier regeneración de la nómina desde el Excel.
 Es idempotente: correr esto dos veces no cambia nada la segunda vez.
 
-    python3 aplicar_correcciones_suda.py        # aplica y reporta
-    python3 aplicar_correcciones_suda.py --dry  # solo muestra qué haría
+    python3 herramientas/aplicar_correcciones_suda.py        # aplica y reporta
+    python3 herramientas/aplicar_correcciones_suda.py --dry  # solo muestra qué haría
 """
 import json, sys, unicodedata
 

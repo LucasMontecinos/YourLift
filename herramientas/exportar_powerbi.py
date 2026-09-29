@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Saca los datos de YourLift a CSV, listos para Power BI.
 
-    python3 exportar_powerbi.py            # deja los CSV en powerbi/
-    python3 exportar_powerbi.py --dir X    # en otra carpeta
+    python3 herramientas/exportar_powerbi.py            # deja los CSV en powerbi/
+    python3 herramientas/exportar_powerbi.py --dir X    # en otra carpeta
 
 Por qué varios archivos y no uno grande. Power BI trabaja mejor con un modelo en
 estrella: una tabla de HECHOS —acá cada marca de cada atleta en cada campeonato—

@@ -9,8 +9,8 @@ atleta está en GoodLift y no en nuestra nómina, el día de la competencia no
 aparece en el livecast; y si está en la nuestra y en ninguna lista oficial,
 figura en una nómina pública gente que no va a levantar.
 
-    python3 verificar_goodlift.py            # los 615 de la nómina, todos los países
-    python3 verificar_goodlift.py Chile      # solo un país
+    python3 herramientas/verificar_goodlift.py            # los 615 de la nómina, todos los países
+    python3 herramientas/verificar_goodlift.py Chile      # solo un país
 
 Sale con código 1 si hay diferencias, para poder colgarlo de la batería.
 
@@ -147,7 +147,7 @@ def main():
         return 0
     print("\nLas diferencias se arreglan en nomina_suda_correcciones.json "
           "(altas / exclusiones / correcciones)\ny después: "
-          "python3 aplicar_correcciones_suda.py && python3 build_suda_dias.py")
+          "python3 herramientas/aplicar_correcciones_suda.py && python3 herramientas/build_suda_dias.py")
     return 1
 
 

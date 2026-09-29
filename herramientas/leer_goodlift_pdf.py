@@ -2,7 +2,7 @@
 """Lee las nominaciones oficiales de goodlift.info en PDF y arma
 nomina_suda_goodlift.json.
 
-    python3 leer_goodlift_pdf.py goodlift_pdf
+    python3 herramientas/leer_goodlift_pdf.py goodlift_pdf
 
 Son doce PDF, uno por campeonato, los que salen del botón de PDF en la página de
 cada nominación. Están guardados en goodlift_pdf/, con el nombre del campeonato. Se leen los doce y de ahí sale el archivo contra el que se cruza

@@ -24,9 +24,9 @@ Cada inscripción trae anotada su sesión (`jornada`), que viene del Excel ofici
 y la escribe aplicar_nomina_oficial.py. Los Only Bench levantan en la sesión de su
 compañero de categoría: el cronograma no les da una aparte.
 
-    python3 leer_nomina_fesupo.py Nominaciones_final_2026.xlsx
-    python3 aplicar_nomina_oficial.py
-    python3 build_suda_dias.py
+    python3 herramientas/leer_nomina_fesupo.py Nominaciones_final_2026.xlsx
+    python3 herramientas/aplicar_nomina_oficial.py
+    python3 herramientas/build_suda_dias.py
 """
 import json, collections, unicodedata, re
 

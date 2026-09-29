@@ -7,7 +7,7 @@ Cloud para completar los fixes críticos de seguridad. El código ya hace su par
 
 ## 1. Desplegar `firestore.rules`
 
-El archivo [`firestore.rules`](./firestore.rules) contiene reglas que cierran la DB
+El archivo [`reglas/firestore.rules`](./reglas/firestore.rules) contiene reglas que cierran la DB
 (por defecto estaba **todo abierto**). Pásalas a producción de una de estas dos formas:
 
 **Opción A — Consola:** Firebase Console → Firestore Database → **Rules** → pega el
@@ -194,7 +194,7 @@ preview primero si es posible.
 
 ## 7. Storage rules
 
-El archivo [`storage.rules`](./storage.rules) restringe quién puede leer/escribir
+El archivo [`reglas/storage.rules`](./reglas/storage.rules) restringe quién puede leer/escribir
 en Firebase Storage. Antes de aplicarlo:
 
 1. Andá a Firebase Console → Storage → Files.

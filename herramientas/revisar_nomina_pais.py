@@ -18,8 +18,8 @@ Además arma el bloque listo para pegar en nomina_suda_correcciones.json con los
 nombres como se leen de verdad ("Lucas Andrés Montecinos Alarcón" y no
 "Montecinos Alarcón Lucas"), que es lo que se muestra en yourlift.cl.
 
-    python3 revisar_nomina_pais.py Brasil nomina_brasil.xlsx
-    python3 revisar_nomina_pais.py Brasil nomina_brasil.csv --hoja "Final"
+    python3 herramientas/revisar_nomina_pais.py Brasil nomina_brasil.xlsx
+    python3 herramientas/revisar_nomina_pais.py Brasil nomina_brasil.csv --hoja "Final"
 
 El archivo del país necesita una columna de nombre. Las de categoría, modalidad,
 sexo y división se toman si están; si no, esa comparación se salta. Los nombres
@@ -209,7 +209,7 @@ if not (errores or cambios or altas or bajas):
 if visibles:
     print('══ NOMBRES — para pegar dentro de "nombres_visibles" en '
           'nomina_suda_correcciones.json')
-    print('  (después:  python3 aplicar_correcciones_suda.py && python3 build_suda_dias.py)')
+    print('  (después:  python3 herramientas/aplicar_correcciones_suda.py && python3 herramientas/build_suda_dias.py)')
     cuerpo = json.dumps(collections.OrderedDict(sorted(visibles.items())),
                         ensure_ascii=False, indent=1)
     print('\n'.join(cuerpo.split('\n')[1:-1]))

@@ -24,8 +24,8 @@ NO se toca:
     sin RUT. Alguien escribió encima de la ficha equivocada: traer eso borraría
     a Yañez Salgado. Hay que separarlas a mano en admin.
 
-    python3 alinear_con_storage.py            # muestra qué cambiaría
-    python3 alinear_con_storage.py --aplicar  # lo escribe
+    python3 herramientas/alinear_con_storage.py            # muestra qué cambiaría
+    python3 herramientas/alinear_con_storage.py --aplicar  # lo escribe
 """
 import json, re, sys, urllib.request
 
