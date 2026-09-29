@@ -4673,11 +4673,23 @@ function _flightsDeJornada(fl){
   const mismas=todas.filter(f=>_jornadaDeFlight(f)===j);
   return mismas.length?mismas:todas;
 }
-// Las sesiones en el orden en que van a competir (por la primera tanda de cada una).
+// Las sesiones en el orden en que van a competir: por día, después por hora o
+// turno (la mañana antes que la tarde) y, si nada de eso lo dice, por la letra de
+// su primera tanda, que es como se ordenaba antes.
 function _jornadasEnOrden(){
-  const out=[];
-  _allFlightsSorted().forEach(f=>{const j=_jornadaDeFlight(f);if(out.indexOf(j)<0)out.push(j);});
-  return out;
+  const out=[], primera={};
+  _allFlightsSorted().forEach((f,i)=>{const j=_jornadaDeFlight(f);if(out.indexOf(j)<0){out.push(j);primera[j]=i;}});
+  const clave=j=>{
+    if(!j)return {dia:null,t:null};
+    const p=_jornadaPartes(j);
+    return {dia:_diaDeJornada(j), t:p.hora!=null?p.hora:(p.turno==='AM'?9*60:p.turno==='PM'?15*60:null)};
+  };
+  return out.slice().sort((a,b)=>{
+    const ka=clave(a), kb=clave(b);
+    if(ka.dia!=null&&kb.dia!=null&&ka.dia!==kb.dia)return ka.dia-kb.dia;
+    if(ka.t!=null&&kb.t!=null&&ka.t!==kb.t)return ka.t-kb.t;
+    return primera[a]-primera[b];
+  });
 }
 function _flightDoneWithLift(fl,lift){
   const athletes=DATA.athletes.filter(a=>a.flight===fl&&!a.bombed);
@@ -4716,7 +4728,11 @@ function advanceLift(){
   if(!c){go('results');return;}
   DATA.flight=c.flight;DATA.lift=c.lift;DATA.round=c.round;
   saveNow();R();
-  if(c.jornada!==undefined)showToastLC('Empieza la jornada '+(c.jornada||'siguiente')+' — tanda '+c.flight);
+  if(c.jornada!==undefined){
+    const _ses=_sesionEtiqueta(c.flight)||c.jornada||'la sesión siguiente';
+    const _fls=_flightsDeJornada(c.flight);
+    showToastLC('Empieza '+_ses+' — tanda'+(_fls.length>1?'s '+_fls.join(' y '):' '+c.flight));
+  }
 }
 // A dónde avanza la competencia cuando se cierra la ronda actual, SIN moverla.
 // Es la única regla de avance: la usa advanceLift() para avanzar y la pantalla
@@ -13855,7 +13871,7 @@ function renderCompete(){
     });
     if(!rows.length)return;
     h+='<div style="margin-bottom:18px">';
-    h+='<div class="os" style="font-size:12px;font-weight:700;letter-spacing:1px;color:'+(FL_C[fl]||'#999')+';padding:5px 2px;border-bottom:2px solid '+(FL_C[fl]||'#999')+'44;margin-bottom:6px">TANDA '+fl+(fl===DATA.flight?' \u00b7 EN TARIMA AHORA':'')+'</div>';
+    h+='<div class="os" style="font-size:12px;font-weight:700;letter-spacing:1px;color:'+(FL_C[fl]||'#999')+';padding:5px 2px;border-bottom:2px solid '+(FL_C[fl]||'#999')+'44;margin-bottom:6px">TANDA '+fl+(_sesionEtiqueta(fl)?' \u00b7 '+_sesionEtiqueta(fl):'')+(fl===DATA.flight?' \u00b7 EN TARIMA AHORA':'')+'</div>';
     // La fila principal SIEMPRE tiene 3 intentos por lift. El intento extra/4º NO
     // ensancha la tabla (no agrega columna a la derecha): el atleta aparece
     // DUPLICADO en una fila abajo (mismo nombre y tanda) con solo la casilla del
@@ -15879,15 +15895,89 @@ function _ytSync(){
 // Elegir un día NO cambia nada de la competencia: filtra qué botones se dibujan.
 // La tarima, la tanda activa y la sincronización quedan donde estaban.
 window._DIA_SEL = window._DIA_SEL || {};
+// ── Día y turno de cada tanda ─────────────────────────────────────────────
+// La jornada de un atleta llega en dos formatos:
+//   · la nómina del Sudamericano: "D1 20/09 · 09:00 · Sesión A";
+//   · el Cronograma del panel (regionales y campeonatos creados): el día como se
+//     escribió ("Día 1", "Sábado 8", "8 de agosto") y el turno AM/PM, unidos:
+//     "Día 1 · AM". Un campeonato de un solo día trae solo "AM" o "PM".
+// Antes solo se entendía el primero, así que en un regional de dos días no había
+// fila de días ni orden de sesiones por día.
+function _turnoDe(p){
+  const n=_nnCrono(p).replace(/\./g,'');
+  if(n==='am'||n==='manana')return 'AM';
+  if(n==='pm'||n==='tarde')return 'PM';
+  return '';
+}
+function _jornadaPartes(j){
+  j=String(j||'').trim();
+  const out={dia:'',turno:'',hora:null,fecha:'',num:null};
+  if(!j)return out;
+  const h=/\b(\d{1,2}):(\d{2})\b/.exec(j);
+  if(h)out.hora=(+h[1])*60+(+h[2]);
+  const m=/^D(\d+)\b\s*([\d/]*)/.exec(j);
+  if(m){out.dia='D'+m[1];out.num=+m[1];out.fecha=m[2]||'';return out;}
+  j.split('\u00b7').map(x=>x.trim()).filter(Boolean).forEach(p=>{
+    const t=_turnoDe(p);
+    if(t){ if(!out.turno)out.turno=t; }
+    else if(!out.dia&&!/^\d{1,2}:\d{2}$/.test(p))out.dia=p;
+  });
+  return out;
+}
+// Orden de los días escritos a mano, con el mismo criterio que el Cronograma del
+// panel: por nombre de día de la semana, si no por el primer número, si no
+// alfabético. (Con el nombre suelto, "domingo" quedaba antes que "sábado".)
+const _DIAS_SEM_LC=['lunes','martes','miercoles','jueves','viernes','sabado','domingo'];
+function _diaClave(d){
+  const n=_nnCrono(d);
+  if(!n)return [3,Infinity,''];
+  let i=_DIAS_SEM_LC.findIndex(x=>n.indexOf(x)>=0);
+  if(i<0){const m=n.match(/\b(lun|mar|mie|jue|vie|sab|dom)\b/); if(m)i=['lun','mar','mie','jue','vie','sab','dom'].indexOf(m[1]);}
+  if(i>=0)return [0,i,n];
+  const num=n.match(/\d+/);
+  if(num)return [1,parseInt(num[0],10),n];
+  return [2,0,n];
+}
+function _cmpDia(a,b){const ka=_diaClave(a),kb=_diaClave(b);return (ka[0]-kb[0])||(ka[1]-kb[1])||ka[2].localeCompare(kb[2]);}
+// Los días del Cronograma de este campeonato, en orden.
+function _diasDelCampeonato(){
+  const s=new Set();
+  (DATA.athletes||[]).forEach(a=>{
+    if(!a.jornada)return;
+    const p=_jornadaPartes(a.jornada);
+    if(p.dia&&p.num==null)s.add(p.dia);
+  });
+  return [...s].sort(_cmpDia);
+}
+function _diaDeJornada(j){
+  const p=_jornadaPartes(j);
+  if(p.num!=null)return p.num;
+  if(!p.dia)return null;
+  const i=_diasDelCampeonato().indexOf(p.dia);
+  return i>=0?i+1:null;
+}
 function _diaDeTanda(f){
   const a=DATA.athletes.find(x=>x.flight===f&&x.jornada);
-  const m=a&&/^D(\d+)\b/.exec(String(a.jornada));
-  return m?+m[1]:null;
+  return a?_diaDeJornada(a.jornada):null;
 }
 function _fechaDeTanda(f){
   const a=DATA.athletes.find(x=>x.flight===f&&x.jornada);
-  const m=a&&/^D\d+\s+([\d/]+)/.exec(String(a.jornada));
-  return m?m[1]:'';
+  if(!a)return '';
+  const p=_jornadaPartes(a.jornada);
+  if(p.num!=null)return p.fecha;
+  // Del Cronograma: si el día no es "Día N", se muestra como se escribió.
+  return /^d[ií]a\s*\d+$/i.test(p.dia)?'':p.dia;
+}
+// La sesión de una tanda, para mostrarle al operador qué tandas van juntas:
+// "DÍA 1 · MAÑANA". Vacío si el campeonato no tiene días ni turnos.
+function _sesionEtiqueta(f){
+  const j=_jornadaDeFlight(f);
+  if(!j)return '';
+  const p=_jornadaPartes(j);
+  const hhmm=p.hora!=null?(String(Math.floor(p.hora/60)).padStart(2,'0')+':'+String(p.hora%60).padStart(2,'0')):'';
+  const turno=p.turno==='AM'?'MAÑANA':p.turno==='PM'?'TARDE':'';
+  const dia=p.num!=null?'DÍA '+p.num:(p.dia||'').toUpperCase();
+  return [dia,turno||hhmm].filter(Boolean).join(' \u00b7 ');
 }
 function _tandasPorDia(tandas){
   const porDia={};
