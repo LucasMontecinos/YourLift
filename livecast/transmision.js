@@ -113,6 +113,8 @@ function renderObsTx(){
 // ══════════════════════════════════════════════
 function txLookupFull(a){
   if(!a||!(DB_FULL==null?void 0:DB_FULL.length))return null;
+  // El padrón publicado ya no trae RUT: primero se busca por código de atleta.
+  if(a.codigo){const c=DB_FULL.find(x=>x.codigo===a.codigo);if(c)return c;}
   const r=(a.rut||'').replace(/[.\s]/g,'');
   if(r)return DB_FULL.find(x=>(x.rut||'').replace(/[.\s]/g,'')===r)||null;
   const nrm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
