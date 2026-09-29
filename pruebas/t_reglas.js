@@ -77,7 +77,7 @@ console.log('\n  El panel avisa cuando el rechazo es de las reglas');
 {
   // Lo que hacía difícil encontrarlo: fallaba en silencio y se veía igual que
   // una base vacía.
-  const adm = fs.readFileSync(raiz + '/admin.html', 'utf8');
+  const adm = require('./apoyo/fuente').admin();
   ok(/ST\._refError=e/.test(adm), 'se guarda el error de la lectura en vez de tragárselo');
   ok(/Firestore no deja leer esta base/.test(adm),
      'y la lista lo dice en vez de mostrar “sin jueces cargados”');

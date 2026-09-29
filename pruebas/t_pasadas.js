@@ -7,7 +7,7 @@
 const fs = require('fs');
 const { chromium } = require('playwright');
 const idx = fs.readFileSync(__dirname + '/../index.html', 'utf8');
-const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+const adm = require('./apoyo/fuente').admin();
 
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };

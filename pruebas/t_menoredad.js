@@ -307,7 +307,7 @@ console.log('\nEn el formulario de verdad');
        'la declaración viaja en la inscripción');
     ok(/declaraMayorFecha: state\.declaraMayor \? \(f\.fechaNac \|\| ''\) : '',/.test(src),
        'junto con la fecha que el sistema tenía');
-    const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+    const adm = require('./apoyo/fuente').admin();
     ok(/i\.declaraMayorEdad\?/.test(adm), 'y se muestra al revisar inscripciones');
     ok(/Confirmar con el carnet/.test(adm),
        'pidiendo que se contraste con el carnet: es lo que evita que sirva para colar a un menor');

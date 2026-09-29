@@ -16,7 +16,7 @@
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_avisobloqueo.js
 const fs = require('fs');
 const src = fs.readFileSync(__dirname + '/../inscripcion.html', 'utf8');
-const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+const adm = require('./apoyo/fuente').admin();
 
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };

@@ -26,11 +26,11 @@ const fs = require('fs');
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };
 
-const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+const adm = require('./apoyo/fuente').admin();
 
 // Se saca del panel el trozo que calcula los rangos y se ejecuta tal cual, para
 // no tener una copia que pueda ir divergiendo de lo que corre de verdad.
-const trozo = adm.slice(adm.indexOf('const _WEB_RANGOS='), adm.indexOf('window.webSetRango='));
+const trozo = require('./apoyo/fuente').piezas(adm, ['const _WEB_RANGOS=', 'const _ymd=', 'function _webRango', 'const _webEnRango=', 'function _webAnterior']);
 const ST = { webRango: { k: '30' } };
 // Se ejecuta en su propio ámbito y se devuelven las funciones, para no chocar
 // con nombres de acá.

@@ -20,7 +20,7 @@ los QR, los links de OBS). Moverlas rompería esos links.
 | `cronograma.html`, `documentos.html` | Cronograma y documentos de cada campeonato |
 | `livecast.html` | Competencia en vivo: Control en Vivo, Control TX, pantalla de tarima, widgets de OBS y la vista del público (su código está en `livecast/`) |
 | `jueces.html` | Panel de los jueces (luces desde el teléfono) |
-| `admin.html` | Panel de administración |
+| `admin.html` | Panel de administración (su código está en `admin/`) |
 | `entrenador.html`, `videos-admin.html` | Panel del entrenador y videos |
 
 ### El livecast: `livecast/`
@@ -50,6 +50,24 @@ abrir la página está en `arranque.js`, que va al final y en su orden original.
 | `practica.js` | Modo práctica para jueces |
 | `interfaz.js` | El dibujo general, el menú y la elección de campeonato |
 | `arranque.js` | Lo que corre al abrir: configuración, estado y el primer dibujo |
+
+### El panel: `admin/`
+
+`admin.html` carga un solo módulo, `admin/panel.js`, que **se arma** juntando las
+fuentes de `admin/` (un archivo por tema). El panel es un módulo de JavaScript
+(import de Firebase, await en el nivel superior), y un módulo no se puede partir
+en varios scripts sin cambiar cómo funciona; por eso se edita por partes y el
+navegador recibe una sola pieza.
+
+- Se edita en `admin/<tema>.js`, **nunca** en `admin/panel.js`.
+- Después: `node herramientas/armar_panel.js` (la prueba `t_panelarmado.js`
+  avisa si quedó atrasado).
+
+Temas: `sesion`, `datos`, `interfaz`, `atletas`, `inscripciones`,
+`entrenadores`, `jueces`, `campeonatos`, `cronograma`, `nominas`, `ranking`,
+`estadisticas`, `resultados`, `fotos`, `medallero`, `records`, `publicaciones`,
+`certificados`, `sitio`, `administradores`, y `arranque.js` con los import y lo
+que corre al abrir el panel.
 
 ### Código compartido: `compartido/`
 
@@ -88,6 +106,7 @@ directo (formularios de consentimiento, capacitación de jueces).
 ## Antes de subir un cambio
 
 ```
+node herramientas/armar_panel.js # si se tocó algo en admin/
 node herramientas/versionar.js   # huellas ?v=… de los .js y .css propios
 sh pruebas/correr.sh             # la batería de pruebas
 ```

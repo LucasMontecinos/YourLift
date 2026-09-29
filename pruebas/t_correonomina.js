@@ -16,7 +16,7 @@
 //   · y que el Excel siga trayendo la columna, que es lo que ya se usaba.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_correonomina.js
 const fs = require('fs');
-const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+const adm = require('./apoyo/fuente').admin();
 const rules = fs.readFileSync(__dirname + '/../reglas/firestore.rules', 'utf8');
 
 let fallas = 0;

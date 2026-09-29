@@ -15,7 +15,7 @@
 // tres cifras que no suman es peor que uno que no las dice.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_basereal.js
 const fs = require('fs');
-const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+const adm = require('./apoyo/fuente').admin();
 const data = JSON.parse(fs.readFileSync(__dirname + '/../data.json', 'utf8'));
 
 let fallas = 0;

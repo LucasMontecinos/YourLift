@@ -7,7 +7,7 @@
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_tandas.js
 const fs = require('fs');
 const src = require('./apoyo/fuente').livecast();
-const admin = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+const admin = require('./apoyo/fuente').admin();
 
 function sacar(nombre) {
   const i = src.search(new RegExp('(?:^|\\n)function ' + nombre + '\\('));

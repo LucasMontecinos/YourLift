@@ -242,7 +242,7 @@ const MODULOS = {
 
   console.log('\n  Queda escrito en el código');
   {
-    const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+    const adm = require('./apoyo/fuente').admin();
     ok(/window\.clubRenombrar=/.test(adm), 'el panel sabe renombrar un club');
     ok(/clubRenombrar\(/.test(adm.slice(adm.indexOf('function renderClubs'))),
        'y el botón está en la tarjeta del club');

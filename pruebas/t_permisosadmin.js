@@ -144,7 +144,7 @@ async function abrirComo(b, admin) {
 
   console.log('\n  Queda escrito en el código');
   {
-    const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+    const adm = require('./apoyo/fuente').admin();
     ok(/_ROLES_SIN_PANEL=\['juez','streaming','transmision'(?:,'mesa')?\]/.test(adm),
        'la lista es de quién NO opera el panel, no de quién sí');
     // Las dos puertas —el botón y la vista— tienen que preguntar lo mismo.

@@ -128,7 +128,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
 
     // Voseo: el usuario es chileno y no habla así.
     const ix = fs.readFileSync(__dirname + '/../index.html', 'utf8');
-    const ad = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+    const ad = require('./apoyo/fuente').admin();
     const VOSEO = /\b(movés|arrastrás|cargás|activás|subís|Confirmás|Asegurate|editás|scrolleás|dejás|podés|tenés|querés|sabés|para vos|ves vos)\b/;
     ok(!VOSEO.test(lc), 'sin voseo en el livecast');
     ok(!VOSEO.test(ix), 'ni en el inicio');

@@ -192,7 +192,7 @@ async function entrarComo(p, mail) {
     // en un teléfono que se presta, se pierde o se olvida; tiene que no servir
     // para nada más que marcar la luz.
     const reglas = fs.readFileSync(__dirname + '/../reglas/firestore.rules', 'utf8');
-    const admin = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+    const admin = require('./apoyo/fuente').admin();
 
     ok(/function esJuez\(\)[\s\S]{0,200}documents\/jueces\/\$\(request\.auth\.uid\)/.test(reglas),
        'los jueces viven en su propia colección, no en admins/');

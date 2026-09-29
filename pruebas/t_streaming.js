@@ -10,7 +10,7 @@
 const fs = require('fs');
 const { chromium } = require('playwright');
 const srcLC = require('./apoyo/fuente').livecast();
-const srcAD = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+const srcAD = require('./apoyo/fuente').admin();
 
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };
@@ -104,17 +104,7 @@ async function menuConRol(p, rol) {
   // El panel de admin corre como módulo, así que su ST/render no se ven desde acá:
   // se saca la función del archivo y se dibuja con una cuenta de prueba.
   // La tabla _SHELL_ROL (textos por rol) va pegada: la función la lee.
-  const iRS = srcAD.indexOf('const _SHELL_ROL={');
-  const fnRS = (() => {
-    let q = srcAD.indexOf('function renderStreamingShell(){', iRS), open = 0, abrio = false;
-    while (q < srcAD.length) {
-      const c = srcAD[q];
-      if (c === '{') { open++; abrio = true; }
-      else if (c === '}') { open--; if (abrio && open === 0) { q++; break; } }
-      q++;
-    }
-    return srcAD.slice(iRS, q);
-  })();
+  const fnRS = require('./apoyo/fuente').piezas(srcAD, ['const _SHELL_ROL={', 'function renderStreamingShell']);
   const pa = await ctx.newPage();
   const errsA = [];
   pa.on('pageerror', e => errsA.push(e.message));

@@ -16,7 +16,7 @@
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_yacompitio.js
 const fs = require('fs');
 const { chromium } = require('playwright');
-const src = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+const src = require('./apoyo/fuente').admin();
 
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };

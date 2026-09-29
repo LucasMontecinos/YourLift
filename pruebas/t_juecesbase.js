@@ -192,7 +192,7 @@ const nrm = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
 
   console.log('\n  Queda escrito en el código');
   {
-    const ad = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+    const ad = require('./apoyo/fuente').admin();
     ok(/window\.refImportarBase=/.test(ad), 'la importación es su propia acción');
     const i = ad.indexOf('window.refImportarBase');
     const f = ad.slice(i, ad.indexOf('window.refDel', i));

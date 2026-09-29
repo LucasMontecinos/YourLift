@@ -172,7 +172,7 @@ const CAMP = 'https://ejemplo.cl/sudamericano.png';
     ok(/_tiraLogos\(\['camp'\],'92px'/.test(lc),
        'y la tabla actual pide solo el del campeonato');
 
-    const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+    const adm = require('./apoyo/fuente').admin();
     ok(/id="ef_logoFedUrl"/.test(adm), 'se sube desde la ficha del campeonato');
     ok(/logoFedUrl,/.test(adm), 'y se guarda con el evento');
     ok(/uploadEventLogo\(this\.files\[0\],'fed'\)/.test(adm), 'con la misma rutina que el otro logo');

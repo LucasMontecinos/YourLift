@@ -205,7 +205,7 @@ const PADRON = [
 
   console.log('\n  Queda escrito en el código');
   {
-    const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+    const adm = require('./apoyo/fuente').admin();
     ok(/function _fotosPendientes\(\)/.test(adm),
        'hay una sola respuesta a "quién tiene foto pendiente"');
     // Lo que no puede volver: cada pantalla armando su propio índice.

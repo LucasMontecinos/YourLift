@@ -185,7 +185,7 @@ const MODULOS = {
 
   console.log('\n  Queda escrito en el código');
   {
-    const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+    const adm = require('./apoyo/fuente').admin();
     ok(/window\.openInsModal=/.test(adm), 'el panel sabe crear una inscripción');
     ok(/origen:'panel'/.test(adm), 'y las marca para distinguirlas de las del formulario');
     ok(/ya tiene inscripción en ese campeonato/.test(adm), 'avisa si ya existe en vez de pisarla');

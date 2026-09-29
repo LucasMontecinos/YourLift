@@ -9,13 +9,14 @@ const RAIZ = path.join(__dirname, '..', '..');
 function pagina(nombre) {
   const html = fs.readFileSync(path.join(RAIZ, nombre), 'utf8');
   const propios = [];
-  const re = /<script src="((?:livecast|admin)\/[^"?]+)(?:\?[^"]*)?"><\/script>/g;
+  // livecast/*.js (scripts normales) y admin/panel.js (el módulo armado del panel)
+  const re = /<script(?: type="module")? src="((?:livecast|admin)\/[^"?]+)(?:\?[^"]*)?"><\/script>/g;
   let m;
   while ((m = re.exec(html))) propios.push(fs.readFileSync(path.join(RAIZ, m[1]), 'utf8'));
   return [html].concat(propios).join('\n');
 }
 
-module.exports = { pagina, livecast: () => pagina('livecast.html') };
+module.exports = { pagina, livecast: () => pagina('livecast.html'), admin: () => pagina('admin.html') };
 
 // Desde `marca` hasta la próxima declaración de nivel superior (una función,
 // un window.x=, una const/let/var o un comentario que empieza en la columna 0).
@@ -35,3 +36,12 @@ function funcion(src, nombre) {
 }
 module.exports.trozo = trozo;
 module.exports.funcion = funcion;
+// Varias piezas juntas, pedidas por su comienzo ('const X=', 'function f', …).
+// Para las pruebas que antes cortaban un tramo contiguo del archivo.
+function piezas(src, marcas) {
+  return marcas.map(m => {
+    const f = m.match(/^(?:async )?function ([\w$]+)$/);
+    return f ? funcion(src, f[1]) : trozo(src, m);
+  }).join('\n');
+}
+module.exports.piezas = piezas;

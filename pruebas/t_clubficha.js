@@ -25,7 +25,7 @@ const fs = require('fs');
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };
 
-const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+const adm = require('./apoyo/fuente').admin();
 const ins = fs.readFileSync(__dirname + '/../inscripcion.html', 'utf8');
 
 // Las mismas reglas que usa el panel, para poder ejercitarlas acá.

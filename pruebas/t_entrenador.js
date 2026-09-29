@@ -167,7 +167,7 @@ const soloNum = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase();
 
     // Corregir el archivo no alcanza: la ficha vieja quedó guardada CON el RUT
     // ajeno, y mientras esté ahí le sigue saliendo la insignia al que no es.
-    const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+    const adm = require('./apoyo/fuente').admin();
     ok(/function _entDocId\(/.test(adm), 'la ficha sabe con qué identificador se guarda');
     ok(/sobran\.length/.test(adm) && /deleteDoc\(doc\(db,'entrenadores',c\.id\)\)/.test(adm),
        'y la importación ofrece borrar las que quedaron con el RUT de otro');

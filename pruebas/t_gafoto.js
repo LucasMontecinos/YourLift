@@ -18,7 +18,7 @@
 //   · y que esto viva solo en el admin, no en el sitio público.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_gafoto.js
 const fs = require('fs');
-const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+const adm = require('./apoyo/fuente').admin();
 const idx = fs.readFileSync(__dirname + '/../index.html', 'utf8');
 
 let fallas = 0;
@@ -39,7 +39,7 @@ function sacar(texto, nombre) {
 }
 
 // Monta GA_FOTO y renderGAFoto() con un esc() de mentira.
-const bloque = adm.slice(adm.indexOf('const GA_FOTO={'), adm.indexOf('async function loadWebAnalytics()'));
+const bloque = require('./apoyo/fuente').piezas(adm, ['const GA_FOTO={', 'function renderGAFoto']);
 const esc = s => String(s == null ? '' : s);
 // El bloque declara GA_FOTO y renderGAFoto con const/function: se evalúa y se
 // devuelven, en vez de declararlos también acá y chocar.

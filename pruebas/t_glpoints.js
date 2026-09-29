@@ -18,7 +18,7 @@ const fs = require('fs');
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };
 
-const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
+const adm = require('./apoyo/fuente').admin();
 
 function sacar(texto, nombre) {
   const i = texto.search(new RegExp('(?:^|\\n)function ' + nombre + '\\('));
@@ -475,7 +475,7 @@ console.log('\n  Cambiar un filtro no te saca de la pestaña en la que estás');
 {
   // Antes updStatsFilter siempre redibujaba la de Deporte: si estabas en otra
   // pestaña y tocabas un filtro, te cambiaba de pantalla.
-  const f = adm.slice(adm.indexOf('window.updStatsFilter'), adm.indexOf('window.updCorte'));
+  const f = require('./apoyo/fuente').trozo(adm, 'window.updStatsFilter');
   ok(/const tab=ST\.statsTab\|\|'deporte';/.test(f), 'mira en qué pestaña estás');
   ['corte', 'demografia'].forEach(t =>
     ok(new RegExp("tab==='" + t + "'").test(f), 'y respeta ' + t));
