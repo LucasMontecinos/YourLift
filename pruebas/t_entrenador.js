@@ -57,11 +57,14 @@ const soloNum = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase();
   // La base de entrenadores ya no está en el repositorio (entrenadores_db.json
   // traía el RUT de cada uno): vive en Firestore. Acá se arman fichas de prueba
   // para dos atletas del padrón, una de cada categoría.
-  const conRut = atletas.filter(a => a.rut && a.codigo);
-  const ej1 = conRut[0], ej2 = conRut[1];
+  // El padrón publicado no trae RUT: la ficha de entrenador se enlaza con el
+  // atleta por su código (codigoAtleta, que anota el panel). El RUT es inventado.
+  const { rutFalso } = require('./apoyo/padron_prueba');
+  const conCod = atletas.filter(a => a.codigo);
+  const ej1 = conCod[0], ej2 = conCod[1];
   const entrenadores = [
-    { rut: ej1.rut, nombre: ej1.nombre, categoria: 'Cat. 1' },
-    { rut: ej2.rut, nombre: ej2.nombre, categoria: 'Cat. 2' },
+    { rut: rutFalso(ej1.codigo), codigoAtleta: ej1.codigo, nombre: ej1.nombre, categoria: 'Cat. 1' },
+    { rut: rutFalso(ej2.codigo), codigoAtleta: ej2.codigo, nombre: ej2.nombre, categoria: 'Cat. 2' },
   ];
   const porRut = {};
   entrenadores.forEach(e => { if (e.rut) porRut[soloNum(e.rut)] = e; });
@@ -102,7 +105,7 @@ const soloNum = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase();
 
   console.log('\n  Y a quien no es entrenador no le inventa nada');
   {
-    const noEs = atletas.find(a => a.rut && !porRut[soloNum(a.rut)] && a.codigo);
+    const noEs = atletas.find(a => a.codigo && a.codigo !== ej1.codigo && a.codigo !== ej2.codigo);
     const t = await ver(noEs.codigo);
     ok(!/ENTRENADOR CAT/.test(t), noEs.nombre + ' no lleva insignia');
   }
@@ -114,7 +117,8 @@ const soloNum = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase();
   {
     const at = fs.readFileSync(__dirname + '/../atleta.html', 'utf8');
     ok(/_aC\('atl_entren'/.test(at), 'los entrenadores se cachean, no se piden en cada ficha');
-    ok(/porRut\[soloNum\(a\.rut\)\]/.test(at), 'el cruce es por RUT normalizado, no por nombre');
+    ok(/porCod\[a\.codigo\]\|\|\(a\.rut\?porRut\[soloNum\(a\.rut\)\]:null\)/.test(at),
+       'el cruce es por código de atleta, o por RUT normalizado; nunca por nombre');
     ok(/const _catRomana=/.test(at), 'y la categoría se pasa a números romanos');
 
     // Corregir el archivo no alcanza: la ficha vieja quedó guardada CON el RUT

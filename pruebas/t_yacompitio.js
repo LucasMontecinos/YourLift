@@ -53,11 +53,11 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
   console.log('\nUn regional del año se ve sin abrir nada');
   {
     ST.allCompResults = [
-      R('21.523.046-5', 'Benjamin Garcia', 'Campeonato Regional Norte ' + ANIO, ANIO + '-06-14'),
+      R('35.219.006-3', 'Benjamin Garcia', 'Campeonato Regional Norte ' + ANIO, ANIO + '-06-14'),
       R('17.111.222-3', 'Sergio Mardones', 'Campeonato Debutantes All Power CD ' + ANIO + ' - Tarima 1', ANIO + '-05-10'),
     ];
     window_._HIST_ANIO = null;
-    const h = _histDe('21523046-5', 'Benjamin Garcia');
+    const h = _histDe('35219006-3', 'Benjamin Garcia');
     ok(h.length === 1, 'se le encuentra su campeonato (' + h.length + ')');
     ok(h[0].regional === true, 'y queda marcado como REGIONAL: ' + h[0].evento);
   }
@@ -101,9 +101,9 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
 
   console.log('\nEl RUT se cruza aunque venga escrito distinto');
   {
-    ST.allCompResults = [R('21.523.046-5', 'Benjamin Garcia', 'Campeonato Regional Norte ' + ANIO, ANIO + '-06-14')];
+    ST.allCompResults = [R('35.219.006-3', 'Benjamin Garcia', 'Campeonato Regional Norte ' + ANIO, ANIO + '-06-14')];
     window_._HIST_ANIO = null;
-    for (const r of ['21523046-5', '21.523.046-5', '215230465', '21523046-K'.replace('K', '5')])
+    for (const r of ['35219006-3', '35.219.006-3', '352190063', '35219006-K'.replace('K', '3')])
       ok(_histDe(r, '').length === 1, '"' + r + '" encuentra al mismo');
   }
 
@@ -229,13 +229,16 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
     // Markos Salgado salía con ✗ habiendo competido, y Andrea Fábregas con ✗
     // estando en la nómina final aunque no compitió. Los dos estaban en data.json
     // y no en competition_results: es el mismo agujero de una sola fuente.
-    const db = JSON.parse(fs.readFileSync(__dirname + '/../data.json', 'utf8'));
+    // El padrón publicado no trae RUT: en el panel viene de privado/padron. Acá,
+    // con RUT inventados (apoyo/padron_prueba.js), buscando a cada uno por nombre.
+    const db = require('./apoyo/padron_prueba').completo(JSON.parse(fs.readFileSync(__dirname + '/../data.json', 'utf8')));
     ST.allCompResults = []; ST.data = db; ST.cupoCfg = null;
     window_._HIST_ANIO = null;
-    const markos = _histDe('19839518-9', '');
+    const rutDe = re => (db.find(a => re.test(a.nombre || '')) || {}).rut || 'no-esta';
+    const markos = _histDe(rutDe(/Markos.*Salgado/i), '');
     ok(markos.length > 0, 'Markos Salgado aparece con ✓ (' + markos.length + ' campeonatos)');
     ok(markos.some(x => /Regional Centro/i.test(x.evento)), 'con su Regional Centro');
-    const andrea = _histDe('21031231-5', '');
+    const andrea = _histDe(rutDe(/Andrea.*F[aá]bregas/i), '');
     ok(andrea.length > 0, 'Andrea Fábregas también, por estar en la nómina final');
     ok(andrea.some(x => /Regional Centro/i.test(x.evento)),
        'aunque no haya competido: la nómina final ya gastó el cupo');

@@ -177,6 +177,7 @@ async function initFB(){
           window._AUTH_LISTO=true;
           if(snap.exists()){
             isAdmin=true;
+            try{_padronPrivadoLC();}catch(e){}   // RUT del padrón, que el público no ve
             window.ADMIN_ROLE=(__o=>__o==null?void 0:__o.role)(snap.data())||'admin';
             // Auto-controller SOLO la primera vez (sin preferencia guardada). Si el
             // usuario eligió "Espectador" (yl_controller='0'), se respeta — así un 2º

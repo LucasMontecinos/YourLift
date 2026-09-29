@@ -254,9 +254,12 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
     const _applyEntren=docs=>{
       const soloNum=r=>String(r||'').replace(/[^0-9kK]/g,'').toUpperCase();
       const porRut={};
-      docs.forEach(e=>{ if(e&&e.rut) porRut[soloNum(e.rut)]=e; });
+      // Por código de atleta (codigoAtleta, que anota el panel) o por RUT: el
+      // padrón público ya no trae el RUT (compartido/privacidad.js).
+      const porCod={};
+      docs.forEach(e=>{ if(e&&e.rut) porRut[soloNum(e.rut)]=e; if(e&&e.codigoAtleta) porCod[e.codigoAtleta]=e; });
       (DB||[]).forEach(a=>{
-        const e=a.rut?porRut[soloNum(a.rut)]:null;
+        const e=porCod[a.codigo]||(a.rut?porRut[soloNum(a.rut)]:null);
         if(e) a.entrenadorCat=e.categoria||'';
       });
       if(window._curCodigo)showProfile(window._curCodigo);
@@ -274,9 +277,10 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
     const _applyRef=docs=>{
       const soloNum=r=>String(r||'').replace(/[^0-9kK]/g,'').toUpperCase();
       const porRut={};
-      docs.forEach(r=>{ if(r&&r.rut) porRut[soloNum(r.rut)]=r; });
+      const porCod={};
+      docs.forEach(r=>{ if(r&&r.rut) porRut[soloNum(r.rut)]=r; if(r&&r.codigoAtleta) porCod[r.codigoAtleta]=r; });
       (DB||[]).forEach(a=>{
-        const j=a.rut?porRut[soloNum(a.rut)]:null;
+        const j=porCod[a.codigo]||(a.rut?porRut[soloNum(a.rut)]:null);
         if(j) a.juez={categoria:j.categoria||'',ambito:j.ambito||'nacional'};
       });
       if(window._curCodigo)showProfile(window._curCodigo);

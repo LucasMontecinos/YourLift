@@ -35,7 +35,7 @@ export function where(){return{};}
 // El mismo atleta con dos resultados del mismo campeonato: el total de
 // powerlifting y, aparte, su banca sola. Es el caso que se reportó.
 const BASE = {
-  source: 'yourlift_livecast', codigo: '', rut: '21523046-5',
+  source: 'yourlift_livecast', codigo: '', rut: '35219006-3',
   nombre: 'Benjamin Ignacio García Pino', club: 'Hannya Strength', sexo: 'Masculino',
   division: 'Junior', categoria: '93',
   // El nombre del campeonato lleva una marca que NO puede estar en data.json.

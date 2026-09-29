@@ -62,6 +62,16 @@ console.log('\nEl panel nunca publica el padrón con datos personales');
      'y al guardar arma el índice por RUT');
 }
 
+console.log('\nLos archivos que publica el sitio no traen datos personales');
+{
+  const d = JSON.parse(fs.readFileSync(path.join(RAIZ, 'data.json'), 'utf8'));
+  ok(d.length > 1000 && d.every(a => !a.rut && !a.fechaNac), 'data.json: ' + d.length + ' atletas, ninguno con RUT ni fecha completa');
+  ok(d.filter(a => a.anioNac).length > 1000, 'y con el año de nacimiento, para la división');
+  const n = JSON.parse(fs.readFileSync(path.join(RAIZ, 'nominas.json'), 'utf8'));
+  const ins = n.events.flatMap(e => e.athletes || []);
+  ok(ins.every(a => !a.rut && !a.dob && !a.fechaNac), 'nominas.json: ' + ins.length + ' inscritos, ninguno con RUT ni fecha completa');
+}
+
 console.log('\nLos archivos semilla con datos personales ya no están');
 for (const f of ['inscripciones.json', 'entrenadores_db.json'])
   ok(!fs.existsSync(path.join(RAIZ, f)), f + ' fuera del sitio y del repositorio');
@@ -74,8 +84,10 @@ for (const f of ['inscripciones.json', 'entrenadores_db.json'])
   console.log('\nLa inscripción reconoce al atleta sin RUT en el padrón');
   {
     // El padrón real, pero como quedará publicado: sin RUT ni fechas.
-    const full = JSON.parse(fs.readFileSync(path.join(RAIZ, 'data.json'), 'utf8'));
-    const a = full.find(x => x.rut && x.codigo && /\d{2}\/\d{2}\/\d{4}/.test(x.fechaNac || ''));
+    // El padrón publicado ya viene sin RUT: se le ponen RUT inventados, como los
+    // que tendría el panel después de leer privado/padron (apoyo/padron_prueba.js).
+    const full = require('./apoyo/padron_prueba').completo(JSON.parse(fs.readFileSync(path.join(RAIZ, 'data.json'), 'utf8')));
+    const a = full.find(x => x.codigo && x.anioNac);
     const limpio = full.map(P.publico);
     const ctx = await b.newContext({ viewport: { width: 900, height: 1000 }, serviceWorkers: 'block' });
     await montarFirebase(ctx);

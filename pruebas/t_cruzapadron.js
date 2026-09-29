@@ -92,9 +92,20 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
 
   console.log('\n  El RUT manda, venga de donde venga');
   {
-    const conRut = await buscar('Nombre Que No Existe', camila.rut, { name: 'x', pais: 'PER' });
+    // El padrón publicado no trae RUT: al livecast le llega de privado/padron
+    // cuando lo opera un admin (_padronPrivadoLC). Se simula eso, con un RUT
+    // inventado (apoyo/padron_prueba.js).
+    const rutCamila = require('./apoyo/padron_prueba').rutFalso(camila.codigo);
+    await p.evaluate(([c, r]) => { DB_FULL.find(a => a.codigo === c).rut = r; }, [camila.codigo, rutCamila]);
+    const conRut = await buscar('Nombre Que No Existe', rutCamila, { name: 'x', pais: 'PER' });
     ok(conRut && conRut.codigo === camila.codigo,
        'con RUT se encuentra aunque el nombre no calce y el país sea otro');
+  }
+
+  console.log('\n  Y el código de atleta, antes que el RUT');
+  {
+    const conCod = await buscar('Nombre Que No Existe', '', { name: 'x', pais: 'PER', codigo: camila.codigo });
+    ok(conCod && conCod.codigo === camila.codigo, 'con su código se encuentra sin RUT ni nombre (el padrón público ya no trae RUT)');
   }
 
   console.log('\n  Ante la duda, ninguna');

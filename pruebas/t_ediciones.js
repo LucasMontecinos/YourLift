@@ -46,7 +46,7 @@ eval(R('compartido/ediciones.js').replace('})(window);', '})(win);'));
 const YL = win.YLEdiciones;
 
 const base = () => ([
-  { codigo: '1637TGA-2024', rut: '16377732-0', nombre: 'Tomas Garay Avila', club: 'Potencia Muscular' },
+  { codigo: '1637TGA-2024', rut: '36381064-0', nombre: 'Tomas Garay Avila', club: 'Potencia Muscular' },
   { codigo: '2215FNP-2024', rut: '11111111-1', nombre: 'Francisca Nuñez Pastore', club: 'A' },
   { codigo: '2127FNS-2025', rut: '22222222-2', nombre: 'Francisca Núñez Salinas', club: 'B' },
   { codigo: '9999XXX-2020', rut: '', nombre: 'Sin RUT', club: 'C' },
@@ -58,7 +58,7 @@ console.log('\nUna corrección de nombre llega al sitio');
 {
   const DB = base();
   const r = YL.aplicar(DB, [
-    { id: 'rut_163777320', rut: '16377732-0', codigo: '1637TGA-2024',
+    { id: 'rut_163777320', rut: '36381064-0', codigo: '1637TGA-2024',
       nombre: 'Tomás Andrés Garay Ávila', club: 'Potencia Muscular', ts: 200 },
   ]);
   ok(DB[0].nombre === 'Tomás Andrés Garay Ávila', 'el nombre queda corregido: ' + DB[0].nombre);
@@ -98,7 +98,7 @@ console.log('\nDos documentos de la misma persona: manda el más nuevo');
   // regla clara ganaba el que Firestore devolviera último, que es cualquiera.
   const borradoDespues = base();
   YL.aplicar(borradoDespues, [
-    { id: 'rut_163777320', rut: '16377732-0', nombre: 'Tomás Andrés Garay Ávila', ts: 100 },
+    { id: 'rut_163777320', rut: '36381064-0', nombre: 'Tomás Andrés Garay Ávila', ts: 100 },
     { id: '1637TGA-2024', codigo: '1637TGA-2024', deleted: true, ts: 200 },
   ]);
   ok(!borradoDespues.some(a => a.codigo === '1637TGA-2024'),
@@ -107,7 +107,7 @@ console.log('\nDos documentos de la misma persona: manda el más nuevo');
   const editadoDespues = base();
   YL.aplicar(editadoDespues, [
     { id: '1637TGA-2024', codigo: '1637TGA-2024', deleted: true, ts: 100 },
-    { id: 'rut_163777320', rut: '16377732-0', nombre: 'Tomás Andrés Garay Ávila', ts: 200 },
+    { id: 'rut_163777320', rut: '36381064-0', nombre: 'Tomás Andrés Garay Ávila', ts: 200 },
   ]);
   const t = editadoDespues.find(a => a.codigo === '1637TGA-2024');
   ok(!!t, 'borrado y después editado → vuelve');
@@ -118,7 +118,7 @@ console.log('\nDos documentos de la misma persona: manda el más nuevo');
   // Y el orden en que Firestore los devuelva no puede cambiar el resultado.
   const alReves = base();
   YL.aplicar(alReves, [
-    { id: 'rut_163777320', rut: '16377732-0', nombre: 'Tomás Andrés Garay Ávila', ts: 200 },
+    { id: 'rut_163777320', rut: '36381064-0', nombre: 'Tomás Andrés Garay Ávila', ts: 200 },
     { id: '1637TGA-2024', codigo: '1637TGA-2024', deleted: true, ts: 100 },
   ]);
   ok(alReves.length === 4 && alReves.find(a => a.codigo === '1637TGA-2024'),
@@ -138,14 +138,14 @@ console.log('\n  Un vacío no pisa un dato bueno');
   // van vacíos. Si un vacío pisara, corregir el club borraría la fecha de
   // nacimiento de alguien.
   const DB = base();
-  YL.aplicar(DB, [{ id: 'x', rut: '16377732-0', nombre: '', sexo: '', fechaNac: '', ts: 1 }]);
+  YL.aplicar(DB, [{ id: 'x', rut: '36381064-0', nombre: '', sexo: '', fechaNac: '', ts: 1 }]);
   ok(DB[0].nombre === 'Tomas Garay Avila', 'el nombre no se borra con un vacío');
   ok(DB[0].sexo === undefined, 'ni se inventan campos vacíos');
 }
 
 console.log('\nLa copia se invalida por versión, no por reloj');
 {
-  const bajar = () => { bajadas++; return Promise.resolve([{ id: 'a', rut: '16377732-0', nombre: 'N' + bajadas, ts: 1 }]); };
+  const bajar = () => { bajadas++; return Promise.resolve([{ id: 'a', rut: '36381064-0', nombre: 'N' + bajadas, ts: 1 }]); };
 
   bajadas = 0; almacen['_yl_edits'] = undefined; delete almacen['_yl_edits'];
   const uno = await YL.cargar(bajar);
@@ -185,21 +185,21 @@ console.log('\nLa foto se encuentra por RUT, no por código');
 
   // Bastián Arévalo: el código se armó con el RUT con puntos y quedó "20.5BAP-2023"
   // en vez de "2056BAP-2023". La foto quedó ahí.
-  DB.push({ codigo: '2056BAP-2023', rut: '20.562.405-8', nombre: 'Bastian Arevalo Peña' });
-  const foto1 = { id: '20.5BAP-2023', codigo: '20.5BAP-2023', rut: '20.562.405-8',
+  DB.push({ codigo: '2056BAP-2023', rut: '36.265.018-6', nombre: 'Bastian Arevalo Peña' });
+  const foto1 = { id: '20.5BAP-2023', codigo: '20.5BAP-2023', rut: '36.265.018-6',
                   foto_url: 'https://ejemplo.cl/bastian.jpg' };
   const a1 = YL.buscarAtleta(DB, foto1);
   ok(!!a1 && a1.codigo === '2056BAP-2023',
      'la foto guardada en "20.5BAP-2023" llega a ' + (a1 ? a1.nombre : 'nadie'));
 
   // Camila Álvarez: la inicial llevaba tilde, "2095CÁC-2024" en vez de "2095CAC-2024".
-  DB.push({ codigo: '2095CAC-2024', rut: '20953951-9', nombre: 'Camila Fernanda Alvarez Carrasco' });
-  const a2 = YL.buscarAtleta(DB, { id: '2095CÁC-2024', codigo: '2095CÁC-2024', rut: '20953951-9' });
+  DB.push({ codigo: '2095CAC-2024', rut: '34296834-1', nombre: 'Camila Fernanda Alvarez Carrasco' });
+  const a2 = YL.buscarAtleta(DB, { id: '2095CÁC-2024', codigo: '2095CÁC-2024', rut: '34296834-1' });
   ok(!!a2 && a2.codigo === '2095CAC-2024', 'y la del código con tilde también llega');
 
   // El RUT manda sobre el código: si los dos apuntan a personas distintas, gana
   // el RUT, porque el código es el que se mueve.
-  const a3 = YL.buscarAtleta(DB, { codigo: '2215FNP-2024', rut: '20953951-9' });
+  const a3 = YL.buscarAtleta(DB, { codigo: '2215FNP-2024', rut: '34296834-1' });
   ok(a3 && a3.codigo === '2095CAC-2024', 'con RUT y código en desacuerdo, manda el RUT');
 
   // Sin RUT se cae al código, que es lo que tienen los documentos viejos.

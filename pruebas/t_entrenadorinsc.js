@@ -146,7 +146,7 @@ global.EVENTOS_G = EVENTOS;
   {
     const r = await p.evaluate(() => ({
       bueno: rutValido('11.111.111-1'), malo: rutValido('11.111.111-2'),
-      corto: rutValido('123'), conK: rutValido('16.179.810-K'), vacio: rutValido(''),
+      corto: rutValido('123'), conK: rutValido('31.490.919-4'), vacio: rutValido(''),
     }));
     ok(r.bueno && r.conK, 'un RUT bien tipeado pasa, con dígito K incluido');
     ok(!r.malo, 'uno con el dígito verificador cambiado, no');

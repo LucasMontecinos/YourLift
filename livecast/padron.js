@@ -34,6 +34,8 @@ function _esDeChile(a){
 //      si hay dos que calzan no se elige ninguna, porque elegir mal es peor que
 //      no mostrar el historial.
 function findInDB(name,rut,ath){
+  // El código de atleta es lo más seguro: el padrón público ya no trae el RUT.
+  if(ath&&ath.codigo){const mc=DB_FULL.find(a=>a.codigo===ath.codigo);if(mc)return mc}
   if(rut){const rc=rut.replace(/[^0-9kK]/g,'').toUpperCase();const m=DB_FULL.find(a=>{const dr=(a.rut||'').replace(/[^0-9kK]/g,'').toUpperCase();return dr&&dr===rc});if(m)return m}
   const nn=nrm(name); if(!nn)return null;
   if(ath&&!_esDeChile(ath))return null;
@@ -121,4 +123,19 @@ function _aplicarEdicionesDB(){
     const r=window.YLEdiciones.aplicar(DB_FULL,eds);
     if(r.editados||r.borrados)console.log('[LC] padrón: '+r.editados+' ediciones, '+r.borrados+' bajas');
   }).catch(e=>console.warn('[LC] athlete_edits:',e&&e.message));
+}
+
+// El padrón público no trae RUT ni fecha completa (compartido/privacidad.js).
+// Quien opera el livecast es admin, así que los recupera de privado/padron —
+// como el panel— para cruzar la nómina por RUT. Al público no le hacen falta.
+async function _padronPrivadoLC(){
+  // Hace falta todo: ser admin, Firebase listo y el padrón ya cargado.
+  if(!isAdmin||!fbReady||!window._fb||!fbDB||window._PADRON_PRIV_LC||!(DB_FULL&&DB_FULL.length))return;
+  window._PADRON_PRIV_LC=true;
+  try{
+    const s=await window._fb.getDoc(window._fb.doc(fbDB,'privado','padron'));
+    if(!s.exists())return;
+    const P=(s.data()||{}).atletas||{};
+    (DB_FULL||[]).forEach(a=>{ const p=P[a.codigo]; if(p&&!a.rut&&p.rut)a.rut=p.rut; });
+  }catch(e){ window._PADRON_PRIV_LC=false; console.warn('[LC] padrón privado:',e&&e.message); }
 }

@@ -65,8 +65,8 @@ console.log('\n  El RUT se compara normalizado, venga como venga');
   const formas = ['11.111.111-1', '11111111-1', '11.111.111-K'.replace('K', '1'), '111111111'];
   const enc = formas.filter(f => decidir(padron, { rut: f, club: 'Nuevo' }));
   ok(enc.length === formas.length, formas.length + ' formas de escribir el mismo RUT, todas calzan');
-  const conK = decidir([{ codigo: 'B', rut: '16.179.810-K', club: 'X' }],
-    { rut: '16179810k', club: 'Y' });
+  const conK = decidir([{ codigo: 'B', rut: '31.000.006-K', club: 'X' }],
+    { rut: '31000006k', club: 'Y' });
   ok(!!conK, 'y la K del dígito verificador no distingue mayúscula de minúscula');
 }
 

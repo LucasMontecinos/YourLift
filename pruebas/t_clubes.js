@@ -120,7 +120,7 @@ const MODULOS = {
       // ellos; se lo pone en pantalla igual que las otras pruebas del formulario.
       EVENTS = [{ id: 'ev1', name: 'Campeonato de Prueba', closeDate: '2030-12-31' }];
       state.view = 'form'; state.privacyConsent = true;
-      state.form = { evento: 'ev1', rut: '19839518-9', nombre: 'Persona De Prueba',
+      state.form = { evento: 'ev1', rut: '34361312-1', nombre: 'Persona De Prueba',
                      fechaNac: '1995-03-20', sexo: 'Masculino', club: '',
                      division: 'Open', categoria: '-83 kg', modalidad: 'Clásico',
                      email: 'a@b.cl', telefono: '999999999' };

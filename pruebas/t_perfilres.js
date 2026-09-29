@@ -18,7 +18,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
 
 // El resultado tal cual lo dejó el livecast al cerrar el Regional Centro Sur.
 const RESULTADO = {
-  id: 'doc1', source: 'yourlift_livecast', view: 'meet', codigo: '', rut: '21523046-5',
+  id: 'doc1', source: 'yourlift_livecast', view: 'meet', codigo: '', rut: '35219006-3',
   nombre: 'Benjamin Ignacio García Pino', club: 'Hannya Strength', sexo: 'Masculino',
   division: 'Junior', categoria: '93', modalidad: 'Powerlifting Classic',
   evento: 'Campeonato Regional CENTRO SUR  FECHIPO 2026', evento_id: 'regionalcentrosur',

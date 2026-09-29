@@ -761,21 +761,48 @@ async function _guardarPadronPrivado(arr){
 window.protegerDatosPersonales=async function(){
   if(ST.adminInfo?.role!=='owner'&&!ST.adminInfo?.bootstrap){showToast('Solo el Owner puede hacer esto',null,true);return;}
   const conRut=(ST.data||[]).filter(a=>a.codigo&&a.rut).length;
-  if(!conRut){showToast('El padrón cargado no trae RUT: ya está protegido, o todavía no termina de cargar',null,true);return;}
+  if(!conRut){showToast('El panel no tiene los RUT del padrón: todavía no termina de cargar, o falta privado/padron',null,true);return;}
   if(!confirm('Se van a guardar en privado el RUT y la fecha de nacimiento de '+conRut+' atletas, y se vuelve a publicar data.json en el sitio SIN esos datos.\n\nAntes tienen que estar publicadas las reglas nuevas de Firestore.\n\n¿Seguir?'))return;
   const btn=document.getElementById('btnProteger'); if(btn){btn.disabled=true;btn.textContent='Guardando…';}
   try{
     const n=await _guardarPadronPrivado(ST.data);
     await _uploadToStorage(ST.data.map(({_isPending,...a})=>a),null);
-    await logAction('proteger_datos','privado/padron',null,n+' atletas');
+    const enl=await _enlazarPorCodigo();
+    await logAction('proteger_datos','privado/padron',null,n+' atletas',{enlazados:enl});
     ST.padronPrivado=n;
-    alert('Listo: '+n+' atletas quedaron en privado, y data.json en Storage ya no tiene RUT ni fechas completas.\n\nAvísale a Claude para sacarlos también del repositorio.');
+    alert('Listo: '+n+' atletas quedaron en privado, y data.json en Storage ya no tiene RUT ni fechas completas.\n\n'
+      +'Además se anotó el código de atleta donde faltaba: '
+      +Object.entries(enl).map(([c,k])=>k+' en '+c).join(', ')+'.\n\nSe puede volver a apretar cuando se agreguen entrenadores, jueces o inscripciones.');
     render();
   }catch(e){
     const perm=/permission/i.test((e.code||'')+' '+(e.message||''));
     showToast(perm?'Firestore no dejó escribir: falta publicar las reglas nuevas (reglas/firestore.rules)':'No se pudo: '+(e.code||e.message),null,true);
   }finally{ if(btn){btn.disabled=false;btn.textContent='Proteger datos personales';} }
 };
+
+// Anota el código de atleta en lo que el sitio público cruzaba con el padrón por
+// RUT: las fichas de entrenador y de juez (codigoAtleta, para las insignias de
+// la ficha), las inscripciones y los resultados (codigo). Como el padrón público
+// ya no trae el RUT, sin esto la ficha no encontraría nada de eso. El panel sí
+// tiene los RUT (privado/padron). Solo completa lo que falta; no pisa nada.
+async function _enlazarPorCodigo(){
+  const porRut={};
+  (ST.data||[]).forEach(a=>{ const r=YLPrivacidad.norm(a.rut); if(r.length>=5&&a.codigo)porRut[r]=a.codigo; });
+  const hechos={};
+  for(const [col,campo] of [['entrenadores','codigoAtleta'],['referees','codigoAtleta'],['inscripciones','codigo'],['competition_results','codigo']]){
+    const snap=await getDocs(collection(db,col));
+    const cambios=[];
+    snap.forEach(d=>{ const x=d.data()||{}; if(x[campo])return;
+      const c=porRut[YLPrivacidad.norm(x.rut)]; if(c)cambios.push([d.id,c]); });
+    for(let i=0;i<cambios.length;i+=450){
+      const b=writeBatch(db);
+      cambios.slice(i,i+450).forEach(([id,c])=>b.update(doc(db,col,id),{[campo]:c}));
+      await b.commit();
+    }
+    hechos[col]=cambios.length;
+  }
+  return hechos;
+}
 
 // ═══════════════════════ admin/atletas.js ═══════════════════════
 // admin.html — Atletas: la comparativa por categoría, editar fichas, logros, solicitudes de edición y el perfil con sus competencias.
@@ -1796,7 +1823,7 @@ window.openInscribirModal=function(){
       </label>
       <label class="field">
         <span>RUT</span>
-        <input id="im_rut" class="inp" placeholder="22863335-6">
+        <input id="im_rut" class="inp" placeholder="12.345.678-5">
       </label>
       <label class="field">
         <span>Fecha de nacimiento</span>

@@ -53,7 +53,11 @@ const MODULOS = {
 };
 
 (async () => {
-  const padron = JSON.parse(fs.readFileSync(__dirname + '/../data.json', 'utf8'));
+  // El padrón publicado ya no trae RUT: el panel lo completa desde privado/padron.
+  // Acá ese documento se arma con RUT inventados (apoyo/padron_prueba.js).
+  const PP = require('./apoyo/padron_prueba');
+  const publicado = JSON.parse(fs.readFileSync(__dirname + '/../data.json', 'utf8'));
+  const padron = PP.completo(publicado);
   // La atleta del caso real.
   const caro = padron.find(a => /Ramos Donoso/i.test(a.nombre || '') && /Carolina/i.test(a.nombre || ''));
 
@@ -87,6 +91,7 @@ const MODULOS = {
                       nombre: 'Ya inscrito', rut: '1111111-1', status: 'approved' }],
     inscripciones_private: [], atleta_fotos: [], atletas_pending: [], athlete_edits: [],
     eventos: [{ id: 'Sudamericano_2026', name: 'Sudamericano_2026' }],
+    privado: [PP.padronPrivado(publicado)],
   });
   await p.goto(`http://localhost:${PUERTO}/admin.html`, { waitUntil: 'domcontentloaded' });
   await p.waitForFunction(() => /ATLETAS/i.test(document.body.innerText || ''), null, { timeout: 25000 });

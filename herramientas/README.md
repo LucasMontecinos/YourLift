@@ -18,7 +18,8 @@ python3 herramientas/build_nacimientos.py
 | `comparar_records_suda.py` | Compara la tabla de récords sudamericanos con una publicación nueva. |
 | `leer_nomina_fesupo.py`, `leer_goodlift_pdf.py` | Leen las nóminas oficiales del Sudamericano. |
 | `aplicar_nomina_oficial.py`, `aplicar_correcciones_suda.py`, `build_suda_dias.py`, `revisar_nomina_pais.py`, `verificar_goodlift.py` | Arman y revisan `nomina_sudamericano.json`. |
-| `agregar_competencias_openipf.py`, `reconstruir_desde_acta.py`, `corregir_gl_data.py`, `alinear_con_storage.py` | Mantención de `data.json` (historial de atletas). |
+| `agregar_competencias_openipf.py`, `reconstruir_desde_acta.py`, `corregir_gl_data.py` | Mantención de `data.json` (historial de atletas). |
+| `limpiar_publicos.py` | Saca RUT y fechas de nacimiento de `data.json` y `nominas.json` antes de subirlos (ver `compartido/privacidad.js`). |
 | `exportar_powerbi.py` | Exporta CSV para Power BI (a `powerbi/`, que no va al repo). |
 
 `fuentes/` guarda los archivos originales de los que salen algunos datos (nómina

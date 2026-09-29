@@ -93,7 +93,7 @@ window.openInscribirModal=function(){
       </label>
       <label class="field">
         <span>RUT</span>
-        <input id="im_rut" class="inp" placeholder="22863335-6">
+        <input id="im_rut" class="inp" placeholder="12.345.678-5">
       </label>
       <label class="field">
         <span>Fecha de nacimiento</span>

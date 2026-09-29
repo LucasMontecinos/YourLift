@@ -107,11 +107,15 @@ const nrm = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
   });
   const p = await ctx.newPage();
   p.on('pageerror', e => { console.log('  [pageerror] ' + e.message); fallas++; });
-  await p.addInitScript(() => {
+  // El panel toma el RUT de cada atleta de privado/padron (el padrón publicado ya
+  // no lo trae). Acá con RUT inventados: apoyo/padron_prueba.js.
+  const PRIV = require('./apoyo/padron_prueba').padronPrivado(
+    JSON.parse(require('fs').readFileSync(__dirname + '/../data.json', 'utf8')));
+  await p.addInitScript(priv => {
     window.__FAKE = { admins: [{ id: 'u1', email: 'x@y.cl', role: 'owner' }], referees: [],
       inscripciones: [], inscripciones_private: [], atleta_fotos: [], atletas_pending: [],
-      athlete_edits: [], eventos: [] };
-  });
+      athlete_edits: [], eventos: [], privado: [priv] };
+  }, PRIV);
   await p.goto(`http://localhost:${PUERTO}/admin.html`, { waitUntil: 'domcontentloaded' });
   await p.waitForFunction(() => /ATLETAS/i.test(document.body.innerText || ''), null, { timeout: 25000 });
   await p.waitForTimeout(3000);

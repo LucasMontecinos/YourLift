@@ -1508,7 +1508,7 @@ const _STOR='https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.fireba
 fetch(_STOR+'public%2Fdata.json?alt=media',{cache:'no-cache'})
   .then(r=>r.ok?r.json():fetch('data.json').then(r=>r.json()))
   .catch(()=>fetch('data.json').then(r=>r.json()))
-  .then(d=>{DB_FULL=d;_aplicarEdicionesDB();
+  .then(d=>{DB_FULL=d;_aplicarEdicionesDB();try{_padronPrivadoLC();}catch(e){}
     if(window._fotosUltSnap){_fotosAlPadron(window._fotosUltSnap);if(typeof R==='function')R();}
   }).catch(()=>{});
 fetch(_STOR+'public%2Frecords.json?alt=media',{cache:'no-cache'})
@@ -1555,14 +1555,14 @@ if(DEMO_MODE){
   console.log('DEMO MODE activo');
   // Atletas demo con datos realistas
   const DEMO_ATHLETES=[
-    {nombre:'Felipe Rieutord',rut:'20540088-5',sexo:'Hombre',categoria:'-83',division:'Universitario',modalidad:'Powerlifting Classic',club:'All Power CD',universidad:'Universidad de Chile',bw:82.5,att:{sq:[{w:240,r:'g'},{w:255,r:'g'},{w:265,r:'g'}],bp:[{w:155,r:'g'},{w:165,r:'g'},{w:170,r:null}],dl:[{w:280,r:'g'},{w:295,r:null},{w:0,r:null}]}},
-    {nombre:'Andrés Landon Osorio',rut:'21030894-6',sexo:'Hombre',categoria:'-120',division:'Universitario',modalidad:'Powerlifting Classic',club:'Bushido Lifting',universidad:'UTEM',bw:118.4,att:{sq:[{w:290,r:'g'},{w:310,r:'g'},{w:320,r:null}],bp:[{w:180,r:'g'},{w:195,r:'g'},{w:200,r:null}],dl:[{w:270,r:'g'},{w:285,r:'g'},{w:295,r:null}]}},
-    {nombre:'Francisco Pérez Tapia',rut:'22604383-7',sexo:'Hombre',categoria:'-83',division:'Universitario',modalidad:'Powerlifting Classic',club:'South Side Club',universidad:'PUC',bw:82.8,att:{sq:[{w:225,r:'g'},{w:240,r:'g'},{w:250,r:null}],bp:[{w:140,r:'g'},{w:150,r:'g'},{w:0,r:null}],dl:[{w:275,r:'g'},{w:0,r:null},{w:0,r:null}]}},
-    {nombre:'Karen Pulecio Girón',rut:'22863335-6',sexo:'Mujer',categoria:'-69',division:'Universitario',modalidad:'Powerlifting Classic',club:'All Power CD',universidad:'USACH',bw:68.5,att:{sq:[{w:157.5,r:'g'},{w:167.5,r:'g'},{w:177.5,r:'g'}],bp:[{w:72.5,r:'g'},{w:78,r:'g'},{w:0,r:null}],dl:[{w:170,r:'g'},{w:185,r:'g'},{w:0,r:null}]}},
-    {nombre:'Luna Mora Báez',rut:'20724095-8',sexo:'Mujer',categoria:'-63',division:'Universitario',modalidad:'Powerlifting Classic',club:'Himalaya Powerlifting',universidad:'PUC',bw:62.8,att:{sq:[{w:140,r:'g'},{w:150,r:'g'},{w:160,r:'g'}],bp:[{w:75,r:'g'},{w:82,r:null},{w:0,r:null}],dl:[{w:155,r:'g'},{w:165,r:null},{w:0,r:null}]}},
-    {nombre:'Keily Rojas Peraza',rut:'26312215-1',sexo:'Mujer',categoria:'-57',division:'Universitario',modalidad:'Powerlifting Classic',club:'Himalaya Powerlifting',universidad:'UV',bw:55.5,att:{sq:[{w:115,r:'g'},{w:122.5,r:'g'},{w:0,r:null}],bp:[{w:65,r:'g'},{w:72.5,r:'g'},{w:0,r:null}],dl:[{w:155,r:'g'},{w:162.5,r:'g'},{w:0,r:null}]}},
-    {nombre:'José Conejera Figueroa',rut:'20758484-3',sexo:'Hombre',categoria:'-74',division:'Universitario',modalidad:'Powerlifting Classic',club:'All Power CD',universidad:'UDP',bw:73.8,att:{sq:[{w:185,r:'g'},{w:200,r:'g'},{w:205,r:'g'}],bp:[{w:125,r:'g'},{w:132.5,r:null},{w:0,r:null}],dl:[{w:215,r:'g'},{w:230,r:'g'},{w:0,r:null}]}},
-    {nombre:'Emilio Galvez Ramos',rut:'20870444-3',sexo:'Hombre',categoria:'-93',division:'Universitario',modalidad:'Powerlifting Classic',club:'South Side Club',universidad:'UTEM',bw:91.2,att:{sq:[{w:220,r:'g'},{w:240,r:'g'},{w:0,r:null}],bp:[{w:140,r:'g'},{w:147.5,r:'g'},{w:0,r:null}],dl:[{w:265,r:'g'},{w:280,r:'g'},{w:0,r:null}]}},
+    {nombre:'Felipe Rieutord',sexo:'Hombre',categoria:'-83',division:'Universitario',modalidad:'Powerlifting Classic',club:'All Power CD',universidad:'Universidad de Chile',bw:82.5,att:{sq:[{w:240,r:'g'},{w:255,r:'g'},{w:265,r:'g'}],bp:[{w:155,r:'g'},{w:165,r:'g'},{w:170,r:null}],dl:[{w:280,r:'g'},{w:295,r:null},{w:0,r:null}]}},
+    {nombre:'Andrés Landon Osorio',sexo:'Hombre',categoria:'-120',division:'Universitario',modalidad:'Powerlifting Classic',club:'Bushido Lifting',universidad:'UTEM',bw:118.4,att:{sq:[{w:290,r:'g'},{w:310,r:'g'},{w:320,r:null}],bp:[{w:180,r:'g'},{w:195,r:'g'},{w:200,r:null}],dl:[{w:270,r:'g'},{w:285,r:'g'},{w:295,r:null}]}},
+    {nombre:'Francisco Pérez Tapia',sexo:'Hombre',categoria:'-83',division:'Universitario',modalidad:'Powerlifting Classic',club:'South Side Club',universidad:'PUC',bw:82.8,att:{sq:[{w:225,r:'g'},{w:240,r:'g'},{w:250,r:null}],bp:[{w:140,r:'g'},{w:150,r:'g'},{w:0,r:null}],dl:[{w:275,r:'g'},{w:0,r:null},{w:0,r:null}]}},
+    {nombre:'Karen Pulecio Girón',sexo:'Mujer',categoria:'-69',division:'Universitario',modalidad:'Powerlifting Classic',club:'All Power CD',universidad:'USACH',bw:68.5,att:{sq:[{w:157.5,r:'g'},{w:167.5,r:'g'},{w:177.5,r:'g'}],bp:[{w:72.5,r:'g'},{w:78,r:'g'},{w:0,r:null}],dl:[{w:170,r:'g'},{w:185,r:'g'},{w:0,r:null}]}},
+    {nombre:'Luna Mora Báez',sexo:'Mujer',categoria:'-63',division:'Universitario',modalidad:'Powerlifting Classic',club:'Himalaya Powerlifting',universidad:'PUC',bw:62.8,att:{sq:[{w:140,r:'g'},{w:150,r:'g'},{w:160,r:'g'}],bp:[{w:75,r:'g'},{w:82,r:null},{w:0,r:null}],dl:[{w:155,r:'g'},{w:165,r:null},{w:0,r:null}]}},
+    {nombre:'Keily Rojas Peraza',sexo:'Mujer',categoria:'-57',division:'Universitario',modalidad:'Powerlifting Classic',club:'Himalaya Powerlifting',universidad:'UV',bw:55.5,att:{sq:[{w:115,r:'g'},{w:122.5,r:'g'},{w:0,r:null}],bp:[{w:65,r:'g'},{w:72.5,r:'g'},{w:0,r:null}],dl:[{w:155,r:'g'},{w:162.5,r:'g'},{w:0,r:null}]}},
+    {nombre:'José Conejera Figueroa',sexo:'Hombre',categoria:'-74',division:'Universitario',modalidad:'Powerlifting Classic',club:'All Power CD',universidad:'UDP',bw:73.8,att:{sq:[{w:185,r:'g'},{w:200,r:'g'},{w:205,r:'g'}],bp:[{w:125,r:'g'},{w:132.5,r:null},{w:0,r:null}],dl:[{w:215,r:'g'},{w:230,r:'g'},{w:0,r:null}]}},
+    {nombre:'Emilio Galvez Ramos',sexo:'Hombre',categoria:'-93',division:'Universitario',modalidad:'Powerlifting Classic',club:'South Side Club',universidad:'UTEM',bw:91.2,att:{sq:[{w:220,r:'g'},{w:240,r:'g'},{w:0,r:null}],bp:[{w:140,r:'g'},{w:147.5,r:'g'},{w:0,r:null}],dl:[{w:265,r:'g'},{w:280,r:'g'},{w:0,r:null}]}},
   ];
   DEMO_ATHLETES.forEach((a,i)=>{
     a.id=i; a.lot=i+1;

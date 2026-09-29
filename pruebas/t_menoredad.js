@@ -203,7 +203,7 @@ console.log('\nEn el formulario de verdad');
       state.wadeName = 'wada.pdf';
       state.consentimientoName = '';          // este es el que está en discusión
       state.form = {
-        evento: 'ev1', rut: '19839518-9', nombre: 'Persona De Prueba',
+        evento: 'ev1', rut: '34361312-1', nombre: 'Persona De Prueba',
         fechaNac: fn, sexo: 'Masculino', club: 'FECHIPO',
         division: 'Open', categoria: '-83 kg', modalidad: 'Clásico',
         email: 'a@b.cl', telefono: '999999999',
