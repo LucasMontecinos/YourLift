@@ -286,7 +286,7 @@ def main():
     # sería una segunda copia de lo mismo, y dos listas que dicen quién compite
     # cuándo terminan diciendo cosas distintas. El cronograma que se publica es
     # una vista de la nómina (nomina_sudamericano.json), no un archivo propio.
-    with open('nomina_suda_fesupo.json', 'w', encoding='utf-8') as fh:
+    with open('herramientas/fuentes/nomina_suda_fesupo.json', 'w', encoding='utf-8') as fh:
         json.dump(atletas, fh, ensure_ascii=False, indent=1)
     print('escrito nomina_suda_fesupo.json')
 

@@ -262,7 +262,7 @@ def main():
     salida['_conteo'] = dict(sorted(Counter(x['pais'] for x in todo).items(),
                                     key=lambda kv: -kv[1]))
     salida['_por_modalidad'] = dict(Counter(x['ev'] for x in todo))
-    with open('nomina_suda_goodlift.json', 'w', encoding='utf-8') as f:
+    with open('herramientas/fuentes/nomina_suda_goodlift.json', 'w', encoding='utf-8') as f:
         json.dump(salida, f, ensure_ascii=False, indent=1)
     print(f'\n{len(todo)} nominaciones · {len(pdfs)} listas')
     print('por país:', salida['_conteo'])

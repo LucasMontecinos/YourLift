@@ -17,7 +17,7 @@ def nrm(s):
     return ''.join(c for c in s if unicodedata.category(c) != 'Mn').lower().strip()
 
 NOM = json.load(open('nomina_sudamericano.json', encoding='utf-8'))
-_C = json.load(open('nomina_suda_correcciones.json', encoding='utf-8'))
+_C = json.load(open('herramientas/fuentes/nomina_suda_correcciones.json', encoding='utf-8'))
 COR = _C['correcciones']
 EXC = _C.get('exclusiones', [])
 VIS = _C.get('nombres_visibles', {})

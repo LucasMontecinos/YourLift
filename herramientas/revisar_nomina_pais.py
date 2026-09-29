@@ -208,7 +208,7 @@ if not (errores or cambios or altas or bajas):
 
 if visibles:
     print('══ NOMBRES — para pegar dentro de "nombres_visibles" en '
-          'nomina_suda_correcciones.json')
+          'herramientas/fuentes/nomina_suda_correcciones.json')
     print('  (después:  python3 herramientas/aplicar_correcciones_suda.py && python3 herramientas/build_suda_dias.py)')
     cuerpo = json.dumps(collections.OrderedDict(sorted(visibles.items())),
                         ensure_ascii=False, indent=1)

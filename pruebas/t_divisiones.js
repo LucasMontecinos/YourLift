@@ -26,7 +26,7 @@ const rk = fs.readFileSync(__dirname + '/../ranking.html', 'utf8');
 const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
 const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
 const rules = fs.readFileSync(__dirname + '/../reglas/firestore.rules', 'utf8');
-const div = require(__dirname + '/../yl-divisiones.js');
+const div = require(__dirname + '/../compartido/divisiones.js');
 
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };
@@ -78,14 +78,14 @@ console.log('\n  La fecha se entiende venga como venga');
 
 console.log('\nLa tabla de años de nacimiento');
 {
-  const nacSrc = fs.readFileSync(__dirname + '/../nacimientos.js', 'utf8');
+  const nacSrc = fs.readFileSync(__dirname + '/../compartido/nacimientos.js', 'utf8');
   const NAC = JSON.parse(nacSrc.match(/window\.YL_NAC=(\{[\s\S]*\});\s*$/)[1]);
   const n = Object.keys(NAC).length;
   ok(n > 900, 'tiene a los atletas de la base (' + n + ')');
   ok(Object.values(NAC).every(v => typeof v === 'number' && v > 1900 && v < 2100),
      'y todos los valores son años válidos');
   ok(Object.keys(NAC).every(k => k === div.ylClaveNombre(k)),
-     'las claves están normalizadas igual que en yl-divisiones.js');
+     'las claves están normalizadas igual que en compartido/divisiones.js');
   ok(!/rut|fechaNac|\d{2}\/\d{2}/.test(nacSrc.slice(200)),
      'solo guarda el año: ni RUT ni fecha completa');
   ok(fs.existsSync(__dirname + '/../herramientas/build_nacimientos.py'),

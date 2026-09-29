@@ -63,7 +63,7 @@ def modalidad(of, banca=False):
 
 
 def main():
-    ofi = json.load(open('nomina_suda_fesupo.json', encoding='utf-8'))
+    ofi = json.load(open('herramientas/fuentes/nomina_suda_fesupo.json', encoding='utf-8'))
     nom = json.load(open('nomina_sudamericano.json', encoding='utf-8'))
 
     # ── Las jornadas, tal como vienen del Excel ──────────────────────────

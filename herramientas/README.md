@@ -12,7 +12,7 @@ python3 herramientas/build_nacimientos.py
 
 | Script | Qué hace |
 |---|---|
-| `build_nacimientos.py` | Arma `nacimientos.js` (año de nacimiento por nombre, para la división por edad del ranking). |
+| `build_nacimientos.py` | Arma `compartido/nacimientos.js` (año de nacimiento por nombre, para la división por edad del ranking). |
 | `build_records_suda.py` | Arma `records_suda.json` desde la planilla oficial de FESUPO. |
 | `build_records_mundiales.py` | Arma `records_mundiales.json` desde los PDF de récords de goodlift.info. |
 | `comparar_records_suda.py` | Compara la tabla de récords sudamericanos con una publicación nueva. |

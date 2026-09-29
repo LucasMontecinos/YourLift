@@ -4,7 +4,7 @@
 // nada: se proyecta en la pantalla o se imprime en la entrada, apuntan la cámara
 // y quedan adentro. Es el MISMO link de "VER EN VIVO", no uno aparte.
 //
-// El generador está escrito dentro del sistema (yl-qr.js) y no se le pide a un
+// El generador está escrito dentro del sistema (compartido/qr.js) y no se le pide a un
 // servicio de internet, por lo mismo de siempre: si el servicio se cae o el
 // recinto tiene mala señal, en la pantalla queda un cuadro vacío. Es lo que pasó
 // en el Regional Norte con las banderas que venían de afuera.
@@ -292,13 +292,13 @@ function leerQR(m, ver, ecl, mask) {
 
   console.log('\n  Queda escrito en el código');
   {
-    const qr = fs.readFileSync(__dirname + '/../yl-qr.js', 'utf8');
+    const qr = fs.readFileSync(__dirname + '/../compartido/qr.js', 'utf8');
     ok(!/https?:\/\/(?!\/)[^\s'"]*qr/i.test(qr), 'no se le pide el dibujo a ningún servicio de internet');
     const idx = fs.readFileSync(__dirname + '/../index.html', 'utf8');
     const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
     // Con o sin ?v=: el número de versión está para saltarse el caché del
     // service worker, y no cambia que el generador sea el mismo archivo.
-    const cargaQR = t => /src="yl-qr\.js(\?[^"]*)?"/.test(t);
+    const cargaQR = t => /src="compartido\/qr\.js(\?[^"]*)?"/.test(t);
     ok(cargaQR(idx) && cargaQR(adm),
        'el generador es el mismo en la página y en el panel');
     ok(/window\.pubQR=/.test(adm), 'desde el panel también se saca el QR de un campeonato');

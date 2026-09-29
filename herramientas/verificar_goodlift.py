@@ -85,7 +85,7 @@ def main():
     for a in _s.argv[1:]:
         if not a.startswith('-'):
             solo = a
-    oficial = json.load(open('nomina_suda_goodlift.json', encoding='utf-8'))['nominaciones']
+    oficial = json.load(open('herramientas/fuentes/nomina_suda_goodlift.json', encoding='utf-8'))['nominaciones']
     nuestra = json.load(open('nomina_sudamericano.json', encoding='utf-8'))['atletas']
     if solo:
         oficial = [o for o in oficial if o['pais'] == solo]

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Arma nacimientos.js: el año de nacimiento de cada atleta, por nombre.
+"""Arma compartido/nacimientos.js: el año de nacimiento de cada atleta, por nombre.
 
 El ranking necesita el año de nacimiento para saber en qué división de edad
-está HOY cada atleta (ver yl-divisiones.js). Los resultados históricos ya
+está HOY cada atleta (ver compartido/divisiones.js). Los resultados históricos ya
 publicados no lo traen —solo el nombre— así que se saca de los archivos que
 sí lo tienen y se deja en una tabla al lado.
 
@@ -32,7 +32,7 @@ FUENTES = [
 
 
 def clave(nombre):
-    """Mismo normalizado que ylClaveNombre() en yl-divisiones.js."""
+    """Mismo normalizado que ylClaveNombre() en compartido/divisiones.js."""
     s = unicodedata.normalize('NFD', str(nombre or ''))
     s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
     return ' '.join(s.lower().split())
@@ -73,13 +73,13 @@ def recolectar():
 def main():
     print('Leyendo fuentes:')
     tabla = recolectar()
-    salida = os.path.join(RAIZ, 'nacimientos.js')
+    salida = os.path.join(RAIZ, 'compartido', 'nacimientos.js')
     cuerpo = json.dumps(tabla, ensure_ascii=False, sort_keys=True,
                         separators=(',', ':'))
     with open(salida, 'w', encoding='utf-8') as fh:
         fh.write('/* Generado por build_nacimientos.py — no editar a mano.\n'
                  '   Año de nacimiento por nombre normalizado, para que el ranking\n'
-                 '   pueda recalcular la división de edad (ver yl-divisiones.js).\n'
+                 '   pueda recalcular la división de edad (ver compartido/divisiones.js).\n'
                  '   %d atletas. */\n' % len(tabla))
         fh.write('window.YL_NAC=' + cuerpo + ';\n')
     print('\n%s: %d atletas, %.1f KB' %

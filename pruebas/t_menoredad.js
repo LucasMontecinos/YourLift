@@ -14,7 +14,7 @@
 // de 2008 pueden estar en lados distintos según el día de su cumpleaños.
 //
 // No confundir con la división de edad, que sí va por año calendario (Sub Junior,
-// Junior, Open…, ver yl-divisiones.js). Son dos cuentas distintas a propósito:
+// Junior, Open…, ver compartido/divisiones.js). Son dos cuentas distintas a propósito:
 // alguien de 2008 puede ser Sub Junior todo 2026 y no necesitar el consentimiento
 // desde el día que cumple 18.
 //
@@ -100,7 +100,7 @@ console.log('\n  Y esto es distinto de la división de edad, a propósito');
 {
   // La división va por año calendario: el de 2008 es Sub Junior TODO 2026, incluso
   // después de cumplir 18. El consentimiento no: se corta el día del cumpleaños.
-  const div = require(__dirname + '/../yl-divisiones.js');
+  const div = require(__dirname + '/../compartido/divisiones.js');
   ok(div.ylDivisionPorAnio(2008, 2026) === 'Sub Junior',
      'un nacido en 2008 es Sub Junior durante todo 2026…');
   ok(!elDia('2026-12-01').isMinor('2008-03-03'),

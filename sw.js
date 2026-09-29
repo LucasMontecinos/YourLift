@@ -114,7 +114,7 @@ self.addEventListener('fetch', e => {
   //
   // Los .js caían en el catch-all de abajo, que es cache-first: una vez
   // guardados quedaban congelados para siempre. Son los que llevan la lógica
-  // compartida —yl-ediciones.js, yl-divisiones.js, clubs.js— así que arreglar
+  // compartida —compartido/ediciones.js, compartido/divisiones.js, compartido/clubs.js— así que arreglar
   // algo ahí no le llegaba nunca a quien ya había entrado al sitio, aunque
   // recargara. La página nueva terminaba corriendo con el archivo viejo.
   const propio = url.origin === self.location.origin;
