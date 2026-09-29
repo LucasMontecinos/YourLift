@@ -363,7 +363,8 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
         if(!pendDocs){const pendSnap=await _fbMod.getDocs(_fbMod.collection(_fbDB,'atletas_pending'));pendDocs=pendSnap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_pend',pendDocs);}
         pendDocs.forEach(pd=>{
           if(!pd.nombre||!pd.codigo) return;
-          if(DB.find(a=>rutNorm(a.rut)===rutNorm(pd.rut))) return;
+          // Por código o por RUT: el padrón público ya no trae el RUT (compartido/privacidad.js).
+          if(DB.find(a=>a.codigo===pd.codigo||(a.rut&&rutNorm(a.rut)===rutNorm(pd.rut)))) return;
           let fn=pd.fechaNac||'';
           const fm=fn.match(/^(\d{4})-(\d{2})-(\d{2})$/);
           if(fm) fn=`${fm[3]}/${fm[2]}/${fm[1]}`;

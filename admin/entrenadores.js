@@ -590,10 +590,13 @@ window.entExportXlsx=function(){
 // insignia de entrenador al atleta al que ese RUT sí pertenece. Por eso la
 // importación ofrece borrar las que ya no están en la base.
 window.importEntrenadores=async function(){
-  if(!confirm('¿Importar la base de entrenadores (entrenadores_db.json) a Firestore?\nLos que ya existan se actualizan.'))return;
-  showToast('Importando…');
+  // El archivo se elige desde el computador: entrenadores_db.json ya no se
+  // publica en el sitio porque trae el RUT de cada entrenador.
+  if(!confirm('¿Importar una base de entrenadores (archivo .json) a Firestore?\nLos que ya existan se actualizan. Elige el archivo a continuación.'))return;
   try{
-    const arr=await fetch('entrenadores_db.json?v='+Date.now()).then(r=>r.json());
+    const arr=await _pedirArchivoJSON();
+    if(!arr)return;
+    showToast('Importando…');
     const ids=new Set(); let n=0;
     for(const c of arr){
       const id=_entDocId(c); if(!id||id==='sr-')continue;

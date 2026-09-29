@@ -15,6 +15,7 @@ async function loadAll(){
   try{
     const dRes=await fetch('data.json').then(r=>r.json()).catch(()=>[]);
     ST.data=Array.isArray(dRes)?dRes:[];
+    await _mezclarPadronPrivado();   // RUT y fecha completa, que data.json ya no publica
     PEERS=_peersBuild(ST.data);
     window._HIST_ANIO=null;   // el cruce de participación ya puede usar data.json
     cargarCupoCfg();          // qué campeonatos cuentan (si se eligieron a mano)
@@ -360,3 +361,67 @@ function renderImportar(){
 
   return h;
 }
+
+// ── Datos personales: el padrón privado ─────────────────────────────────────
+// data.json se publica sin RUT ni fecha de nacimiento completa (ver
+// compartido/privacidad.js). El panel sí los necesita —para cruzar
+// inscripciones, validar edades, los certificados—, así que al cargar los pide a
+// privado/padron, que solo lee un admin, y los pega en cada atleta por código.
+// Mientras data.json todavía los traiga, esto no cambia nada.
+async function _mezclarPadronPrivado(){
+  try{
+    const s=await getDoc(doc(db,'privado','padron'));
+    if(!s.exists())return;
+    const P=(s.data()||{}).atletas||{};
+    const completa=f=>/\d{1,2}[\/-]\d{1,2}[\/-]\d{4}|\d{4}-\d{2}-\d{2}/.test(String(f||''));
+    let n=0;
+    (ST.data||[]).forEach(a=>{
+      const p=P[a.codigo]; if(!p)return;
+      if(!a.rut&&p.rut){a.rut=p.rut;n++;}
+      if(p.fechaNac&&!completa(a.fechaNac))a.fechaNac=p.fechaNac;
+    });
+    ST.padronPrivado=Object.keys(P).length;
+    if(n)console.log('[padrón] RUT completados desde privado/padron:',n);
+  }catch(e){ console.warn('[padrón privado] no se pudo leer:',e.message); }
+}
+
+// Guarda en privado/padron el RUT y la fecha de cada atleta que los tenga, y el
+// índice rut_indice/{rut} con que el formulario de inscripción reconoce a quien
+// escribe su RUT. Se suma a lo que ya había. Devuelve cuántos atletas guardó.
+async function _guardarPadronPrivado(arr){
+  const nuevos={};
+  (arr||[]).forEach(a=>{ if(a&&a.codigo&&(a.rut||a.fechaNac))nuevos[a.codigo]=YLPrivacidad.privado(a); });
+  if(!Object.keys(nuevos).length)return 0;
+  let antes={};
+  try{ const s=await getDoc(doc(db,'privado','padron')); if(s.exists())antes=(s.data()||{}).atletas||{}; }catch(e){}
+  const todos=Object.assign({},antes,nuevos);
+  await setDoc(doc(db,'privado','padron'),{atletas:todos,n:Object.keys(todos).length,actualizado:serverTimestamp()});
+  const idx=Object.entries(nuevos).filter(([,p])=>YLPrivacidad.norm(p.rut).length>=5);
+  for(let i=0;i<idx.length;i+=450){
+    const b=writeBatch(db);
+    idx.slice(i,i+450).forEach(([cod,p])=>b.set(doc(db,'rut_indice',YLPrivacidad.norm(p.rut)),{codigo:cod,fechaNac:p.fechaNac||''}));
+    await b.commit();
+  }
+  return Object.keys(nuevos).length;
+}
+
+// El botón de una sola vez: pasa el RUT y la fecha de todo el padrón cargado a
+// privado/padron y rut_indice, y vuelve a publicar data.json en Storage sin ellos.
+window.protegerDatosPersonales=async function(){
+  if(ST.adminInfo?.role!=='owner'&&!ST.adminInfo?.bootstrap){showToast('Solo el Owner puede hacer esto',null,true);return;}
+  const conRut=(ST.data||[]).filter(a=>a.codigo&&a.rut).length;
+  if(!conRut){showToast('El padrón cargado no trae RUT: ya está protegido, o todavía no termina de cargar',null,true);return;}
+  if(!confirm('Se van a guardar en privado el RUT y la fecha de nacimiento de '+conRut+' atletas, y se vuelve a publicar data.json en el sitio SIN esos datos.\n\nAntes tienen que estar publicadas las reglas nuevas de Firestore.\n\n¿Seguir?'))return;
+  const btn=document.getElementById('btnProteger'); if(btn){btn.disabled=true;btn.textContent='Guardando…';}
+  try{
+    const n=await _guardarPadronPrivado(ST.data);
+    await _uploadToStorage(ST.data.map(({_isPending,...a})=>a),null);
+    await logAction('proteger_datos','privado/padron',null,n+' atletas');
+    ST.padronPrivado=n;
+    alert('Listo: '+n+' atletas quedaron en privado, y data.json en Storage ya no tiene RUT ni fechas completas.\n\nAvísale a Claude para sacarlos también del repositorio.');
+    render();
+  }catch(e){
+    const perm=/permission/i.test((e.code||'')+' '+(e.message||''));
+    showToast(perm?'Firestore no dejó escribir: falta publicar las reglas nuevas (reglas/firestore.rules)':'No se pudo: '+(e.code||e.message),null,true);
+  }finally{ if(btn){btn.disabled=false;btn.textContent='Proteger datos personales';} }
+};

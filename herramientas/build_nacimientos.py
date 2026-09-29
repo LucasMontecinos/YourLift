@@ -62,7 +62,7 @@ def recolectar():
         for a in datos:
             if not isinstance(a, dict):
                 continue
-            y = anio(a.get(campo) or a.get('fechaNac') or a.get('fechanac'))
+            y = anio(a.get(campo) or a.get('fechaNac') or a.get('fechanac') or a.get('anioNac'))
             k = clave(a.get('nombre'))
             if y and k:
                 tabla.setdefault(k, y)

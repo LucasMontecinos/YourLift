@@ -114,9 +114,18 @@ async function cargarDatosDeRut(rut){
   _rutConDatos=n;
   const F=window.FB, formas=_formasRutIns(n);
   const q=col=>F.getDocs(F.query(F.collection(db,col),F.where('rut','in',formas))).catch(()=>null);
+  // El padrón público ya no trae el RUT (compartido/privacidad.js): quién es
+  // este RUT se pregunta a rut_indice/{rut}, que se lee de a uno y no se lista.
+  const qi=F.getDoc(F.doc(db,'rut_indice',n)).catch(()=>null);
   try{
-    const [si,sf]=await Promise.all([q('inscripciones'),q('atleta_fotos')]);
+    const [si,sf,ri]=await Promise.all([q('inscripciones'),q('atleta_fotos'),qi]);
     if(_rutConDatos!==n)return;                     // escribió otro RUT mientras tanto
+    if(ri&&ri.exists&&ri.exists()){
+      window._RUT_IDX=window._RUT_IDX||{};
+      window._RUT_IDX[n]=ri.data()||{};
+      // Si el formulario todavía no lo reconoció, ahora puede autocompletarlo.
+      try{ if(state&&state.form&&!state.form.codigo&&typeof autoFillCode==='function')autoFillCode(); }catch(e){}
+    }
     if(si)insActDB=si.docs.map(d=>{const x=d.data();
       return {rut:x.rut||'',evento:x.evento||'',status:x.status||''};})
       .filter(x=>x.status!=='rejected');

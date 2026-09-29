@@ -143,10 +143,17 @@ function findAthleteByRut(rut) {
   if (!rut) return null;
   const clean = rut.replace(/[^0-9kK]/g, '').toUpperCase();
   if (clean.length < 5) return null;
-  return athleteDB.find(a => {
+  const a = athleteDB.find(a => {
     const dbRut = (a.rut || '').replace(/[^0-9kK]/g, '').toUpperCase();
     return dbRut && dbRut === clean;
-  }) || null;
+  });
+  if (a) return a;
+  // El padrón público ya no trae RUT: rut_indice (ver cargarDatosDeRut) dice de
+  // qué atleta es este RUT, y su fecha de nacimiento completa.
+  const ix = window._RUT_IDX && window._RUT_IDX[clean];
+  if (!ix || !ix.codigo) return null;
+  const b = athleteDB.find(x => x.codigo === ix.codigo);
+  return b ? Object.assign({}, b, { rut: rut, fechaNac: ix.fechaNac || b.fechaNac || '' }) : null;
 }
 
 function generateCode(rut, nombre) {

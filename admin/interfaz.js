@@ -260,3 +260,16 @@ function render(){
 function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 function escapeJsAttr(s){return (s||'').replace(/['"\\]/g,'\\$&')}
+
+// Pide un archivo .json del computador y lo devuelve ya leído (null si se
+// cancela). Para los importadores: las bases con datos personales no se
+// publican en el sitio, así que no se pueden bajar de ahí.
+function _pedirArchivoJSON(){
+  return new Promise((ok,mal)=>{
+    const i=document.createElement('input'); i.type='file'; i.accept='.json,application/json';
+    i.onchange=()=>{ const f=i.files&&i.files[0]; if(!f)return ok(null);
+      const r=new FileReader(); r.onload=()=>{ try{ok(JSON.parse(r.result));}catch(e){mal(e);} };
+      r.onerror=()=>mal(r.error); r.readAsText(f); };
+    i.click();
+  });
+}

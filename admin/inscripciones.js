@@ -238,22 +238,33 @@ window.submitInscripcionManual=async function(){
 // ═══════════════════════════════════════════
 // EXPORT / IMPORT
 // ═══════════════════════════════════════════
-window.exportData=function(){
+// completo=true: el respaldo del dueño, CON RUT y fechas. No es para subir al
+// sitio ni al repositorio. Sin él, el data.json que se publica (sin datos
+// personales, ver compartido/privacidad.js).
+window.exportData=function(completo){
   if(ST.adminInfo?.role!=='owner'&&!ST.adminInfo?.bootstrap){showToast('Solo el Owner puede descargar data.json',null,true);return;}
-  const clean=ST.data.map(({_isPending,...a})=>a);
+  const clean=ST.data.map(({_isPending,...a})=>completo?a:YLPrivacidad.publico(a));
   const blob=new Blob([JSON.stringify(clean,null,2)],{type:'application/json'});
   const u=URL.createObjectURL(blob);
-  const l=document.createElement('a');l.href=u;l.download='data.json';l.click();
+  const l=document.createElement('a');l.href=u;l.download=completo?'respaldo_completo_NO_PUBLICAR.json':'data.json';l.click();
   URL.revokeObjectURL(u);
-  logAction('export','data.json',null,`${clean.length} athletes`);
+  logAction('export',completo?'respaldo_completo':'data.json',null,`${clean.length} athletes`);
 }
 
 // Sube data.json y opcionalmente records.json a Firebase Storage (public/data.json)
 // para que el sitio los sirva automáticamente sin pasar por GitHub.
 async function _uploadToStorage(dataArr, recObj){
   const _stg=getStorage(app);
+  // public/data.json lo lee cualquiera: va sin RUT ni fecha completa. Esos datos
+  // se guardan antes en privado/padron (y el índice de RUT) para no perderlos.
+  // Si todavía no están publicadas las reglas nuevas de Firestore, guardar lo
+  // privado falla: entonces se publica como antes (con los datos), para no dejar
+  // al sitio sin RUT y sin copia privada de ellos.
+  let publico=dataArr;
+  try{ await _guardarPadronPrivado(dataArr); publico=dataArr.map(a=>YLPrivacidad.publico(a)); }
+  catch(e){ console.warn('[padrón privado] no se pudo guardar; se publica como antes:',e.message); }
   await uploadBytes(storageRef(_stg,'public/data.json'),
-    new Blob([JSON.stringify(dataArr,null,2)],{type:'application/json'}),
+    new Blob([JSON.stringify(publico,null,2)],{type:'application/json'}),
     {contentType:'application/json',cacheControl:'public,max-age=60'});
   if(recObj){
     await uploadBytes(storageRef(_stg,'public/records.json'),
@@ -505,7 +516,7 @@ window.publicarDataJson=async function(){
   }catch(e){
     console.warn('[publicar] Storage upload failed:',e.message);
     // Fallback: download locally
-    const blob=new Blob([JSON.stringify(clean,null,2)],{type:'application/json'});
+    const blob=new Blob([JSON.stringify(clean.map(a=>YLPrivacidad.publico(a)),null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob);
     const link=document.createElement('a');link.href=url;link.download='data.json';link.click();
     URL.revokeObjectURL(url);

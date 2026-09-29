@@ -265,6 +265,19 @@ function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&
 
 function escapeJsAttr(s){return (s||'').replace(/['"\\]/g,'\\$&')}
 
+// Pide un archivo .json del computador y lo devuelve ya leído (null si se
+// cancela). Para los importadores: las bases con datos personales no se
+// publican en el sitio, así que no se pueden bajar de ahí.
+function _pedirArchivoJSON(){
+  return new Promise((ok,mal)=>{
+    const i=document.createElement('input'); i.type='file'; i.accept='.json,application/json';
+    i.onchange=()=>{ const f=i.files&&i.files[0]; if(!f)return ok(null);
+      const r=new FileReader(); r.onload=()=>{ try{ok(JSON.parse(r.result));}catch(e){mal(e);} };
+      r.onerror=()=>mal(r.error); r.readAsText(f); };
+    i.click();
+  });
+}
+
 // ═══════════════════════ admin/sesion.js ═══════════════════════
 // admin.html — Entrar al panel: la sesión, el rol de cada cuenta y lo que puede ver.
 //
@@ -353,6 +366,7 @@ async function loadAll(){
   try{
     const dRes=await fetch('data.json').then(r=>r.json()).catch(()=>[]);
     ST.data=Array.isArray(dRes)?dRes:[];
+    await _mezclarPadronPrivado();   // RUT y fecha completa, que data.json ya no publica
     PEERS=_peersBuild(ST.data);
     window._HIST_ANIO=null;   // el cruce de participación ya puede usar data.json
     cargarCupoCfg();          // qué campeonatos cuentan (si se eligieron a mano)
@@ -698,6 +712,70 @@ function renderImportar(){
 
   return h;
 }
+
+// ── Datos personales: el padrón privado ─────────────────────────────────────
+// data.json se publica sin RUT ni fecha de nacimiento completa (ver
+// compartido/privacidad.js). El panel sí los necesita —para cruzar
+// inscripciones, validar edades, los certificados—, así que al cargar los pide a
+// privado/padron, que solo lee un admin, y los pega en cada atleta por código.
+// Mientras data.json todavía los traiga, esto no cambia nada.
+async function _mezclarPadronPrivado(){
+  try{
+    const s=await getDoc(doc(db,'privado','padron'));
+    if(!s.exists())return;
+    const P=(s.data()||{}).atletas||{};
+    const completa=f=>/\d{1,2}[\/-]\d{1,2}[\/-]\d{4}|\d{4}-\d{2}-\d{2}/.test(String(f||''));
+    let n=0;
+    (ST.data||[]).forEach(a=>{
+      const p=P[a.codigo]; if(!p)return;
+      if(!a.rut&&p.rut){a.rut=p.rut;n++;}
+      if(p.fechaNac&&!completa(a.fechaNac))a.fechaNac=p.fechaNac;
+    });
+    ST.padronPrivado=Object.keys(P).length;
+    if(n)console.log('[padrón] RUT completados desde privado/padron:',n);
+  }catch(e){ console.warn('[padrón privado] no se pudo leer:',e.message); }
+}
+
+// Guarda en privado/padron el RUT y la fecha de cada atleta que los tenga, y el
+// índice rut_indice/{rut} con que el formulario de inscripción reconoce a quien
+// escribe su RUT. Se suma a lo que ya había. Devuelve cuántos atletas guardó.
+async function _guardarPadronPrivado(arr){
+  const nuevos={};
+  (arr||[]).forEach(a=>{ if(a&&a.codigo&&(a.rut||a.fechaNac))nuevos[a.codigo]=YLPrivacidad.privado(a); });
+  if(!Object.keys(nuevos).length)return 0;
+  let antes={};
+  try{ const s=await getDoc(doc(db,'privado','padron')); if(s.exists())antes=(s.data()||{}).atletas||{}; }catch(e){}
+  const todos=Object.assign({},antes,nuevos);
+  await setDoc(doc(db,'privado','padron'),{atletas:todos,n:Object.keys(todos).length,actualizado:serverTimestamp()});
+  const idx=Object.entries(nuevos).filter(([,p])=>YLPrivacidad.norm(p.rut).length>=5);
+  for(let i=0;i<idx.length;i+=450){
+    const b=writeBatch(db);
+    idx.slice(i,i+450).forEach(([cod,p])=>b.set(doc(db,'rut_indice',YLPrivacidad.norm(p.rut)),{codigo:cod,fechaNac:p.fechaNac||''}));
+    await b.commit();
+  }
+  return Object.keys(nuevos).length;
+}
+
+// El botón de una sola vez: pasa el RUT y la fecha de todo el padrón cargado a
+// privado/padron y rut_indice, y vuelve a publicar data.json en Storage sin ellos.
+window.protegerDatosPersonales=async function(){
+  if(ST.adminInfo?.role!=='owner'&&!ST.adminInfo?.bootstrap){showToast('Solo el Owner puede hacer esto',null,true);return;}
+  const conRut=(ST.data||[]).filter(a=>a.codigo&&a.rut).length;
+  if(!conRut){showToast('El padrón cargado no trae RUT: ya está protegido, o todavía no termina de cargar',null,true);return;}
+  if(!confirm('Se van a guardar en privado el RUT y la fecha de nacimiento de '+conRut+' atletas, y se vuelve a publicar data.json en el sitio SIN esos datos.\n\nAntes tienen que estar publicadas las reglas nuevas de Firestore.\n\n¿Seguir?'))return;
+  const btn=document.getElementById('btnProteger'); if(btn){btn.disabled=true;btn.textContent='Guardando…';}
+  try{
+    const n=await _guardarPadronPrivado(ST.data);
+    await _uploadToStorage(ST.data.map(({_isPending,...a})=>a),null);
+    await logAction('proteger_datos','privado/padron',null,n+' atletas');
+    ST.padronPrivado=n;
+    alert('Listo: '+n+' atletas quedaron en privado, y data.json en Storage ya no tiene RUT ni fechas completas.\n\nAvísale a Claude para sacarlos también del repositorio.');
+    render();
+  }catch(e){
+    const perm=/permission/i.test((e.code||'')+' '+(e.message||''));
+    showToast(perm?'Firestore no dejó escribir: falta publicar las reglas nuevas (reglas/firestore.rules)':'No se pudo: '+(e.code||e.message),null,true);
+  }finally{ if(btn){btn.disabled=false;btn.textContent='Proteger datos personales';} }
+};
 
 // ═══════════════════════ admin/atletas.js ═══════════════════════
 // admin.html — Atletas: la comparativa por categoría, editar fichas, logros, solicitudes de edición y el perfil con sus competencias.
@@ -1863,22 +1941,33 @@ window.submitInscripcionManual=async function(){
 // ═══════════════════════════════════════════
 // EXPORT / IMPORT
 // ═══════════════════════════════════════════
-window.exportData=function(){
+// completo=true: el respaldo del dueño, CON RUT y fechas. No es para subir al
+// sitio ni al repositorio. Sin él, el data.json que se publica (sin datos
+// personales, ver compartido/privacidad.js).
+window.exportData=function(completo){
   if(ST.adminInfo?.role!=='owner'&&!ST.adminInfo?.bootstrap){showToast('Solo el Owner puede descargar data.json',null,true);return;}
-  const clean=ST.data.map(({_isPending,...a})=>a);
+  const clean=ST.data.map(({_isPending,...a})=>completo?a:YLPrivacidad.publico(a));
   const blob=new Blob([JSON.stringify(clean,null,2)],{type:'application/json'});
   const u=URL.createObjectURL(blob);
-  const l=document.createElement('a');l.href=u;l.download='data.json';l.click();
+  const l=document.createElement('a');l.href=u;l.download=completo?'respaldo_completo_NO_PUBLICAR.json':'data.json';l.click();
   URL.revokeObjectURL(u);
-  logAction('export','data.json',null,`${clean.length} athletes`);
+  logAction('export',completo?'respaldo_completo':'data.json',null,`${clean.length} athletes`);
 }
 
 // Sube data.json y opcionalmente records.json a Firebase Storage (public/data.json)
 // para que el sitio los sirva automáticamente sin pasar por GitHub.
 async function _uploadToStorage(dataArr, recObj){
   const _stg=getStorage(app);
+  // public/data.json lo lee cualquiera: va sin RUT ni fecha completa. Esos datos
+  // se guardan antes en privado/padron (y el índice de RUT) para no perderlos.
+  // Si todavía no están publicadas las reglas nuevas de Firestore, guardar lo
+  // privado falla: entonces se publica como antes (con los datos), para no dejar
+  // al sitio sin RUT y sin copia privada de ellos.
+  let publico=dataArr;
+  try{ await _guardarPadronPrivado(dataArr); publico=dataArr.map(a=>YLPrivacidad.publico(a)); }
+  catch(e){ console.warn('[padrón privado] no se pudo guardar; se publica como antes:',e.message); }
   await uploadBytes(storageRef(_stg,'public/data.json'),
-    new Blob([JSON.stringify(dataArr,null,2)],{type:'application/json'}),
+    new Blob([JSON.stringify(publico,null,2)],{type:'application/json'}),
     {contentType:'application/json',cacheControl:'public,max-age=60'});
   if(recObj){
     await uploadBytes(storageRef(_stg,'public/records.json'),
@@ -2130,7 +2219,7 @@ window.publicarDataJson=async function(){
   }catch(e){
     console.warn('[publicar] Storage upload failed:',e.message);
     // Fallback: download locally
-    const blob=new Blob([JSON.stringify(clean,null,2)],{type:'application/json'});
+    const blob=new Blob([JSON.stringify(clean.map(a=>YLPrivacidad.publico(a)),null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob);
     const link=document.createElement('a');link.href=url;link.download='data.json';link.click();
     URL.revokeObjectURL(url);
@@ -3363,10 +3452,13 @@ window.entExportXlsx=function(){
 // insignia de entrenador al atleta al que ese RUT sí pertenece. Por eso la
 // importación ofrece borrar las que ya no están en la base.
 window.importEntrenadores=async function(){
-  if(!confirm('¿Importar la base de entrenadores (entrenadores_db.json) a Firestore?\nLos que ya existan se actualizan.'))return;
-  showToast('Importando…');
+  // El archivo se elige desde el computador: entrenadores_db.json ya no se
+  // publica en el sitio porque trae el RUT de cada entrenador.
+  if(!confirm('¿Importar una base de entrenadores (archivo .json) a Firestore?\nLos que ya existan se actualizan. Elige el archivo a continuación.'))return;
   try{
-    const arr=await fetch('entrenadores_db.json?v='+Date.now()).then(r=>r.json());
+    const arr=await _pedirArchivoJSON();
+    if(!arr)return;
+    showToast('Importando…');
     const ids=new Set(); let n=0;
     for(const c of arr){
       const id=_entDocId(c); if(!id||id==='sr-')continue;
@@ -7076,8 +7168,16 @@ function renderExports(){
       <div class="h2">Descargas disponibles</div>
       <div style="display:flex;flex-direction:column;gap:10px">
         ${isOwner
-          ?`<button class="btn btn-b" onclick="exportData()" style="text-align:left;padding:14px">data.json (${ST.data.length} atletas) — Descargar</button>
-            <button id="btnSyncStorage" class="btn btn-g" onclick="syncDataJsonToStorage()" style="text-align:left;padding:14px">Publicar data.json al sitio (sin GitHub)</button>`
+          ?`<button class="btn btn-b" onclick="exportData()" style="text-align:left;padding:14px">data.json para el sitio (${ST.data.length} atletas, sin RUT ni fechas) — Descargar</button>
+            <button class="btn" onclick="exportData(true)" style="text-align:left;padding:14px;background:transparent;border:1px solid var(--border)">Respaldo completo, con RUT y fechas — solo para guardar, no subir al sitio</button>
+            <button id="btnSyncStorage" class="btn btn-g" onclick="syncDataJsonToStorage()" style="text-align:left;padding:14px">Publicar data.json al sitio (sin GitHub)</button>
+            <div style="margin-top:6px;border:1px solid ${ST.padronPrivado?'var(--green)':'var(--orange)'};border-radius:8px;padding:12px 14px">
+              <div style="font-family:Oswald;font-size:12px;letter-spacing:1px;color:${ST.padronPrivado?'var(--green)':'var(--orange)'}">DATOS PERSONALES</div>
+              <div style="font-size:12px;color:var(--muted);margin:4px 0 8px;line-height:1.5">${ST.padronPrivado
+                ?'El RUT y la fecha de nacimiento de '+ST.padronPrivado+' atletas están guardados en privado. El data.json que se publica va sin ellos.'
+                :'El RUT y la fecha de nacimiento todavía están en el data.json público. Primero publica las reglas nuevas de Firestore; después apreta este botón una vez.'}</div>
+              <button id="btnProteger" class="btn ${ST.padronPrivado?'':'btn-r'}" onclick="protegerDatosPersonales()" style="padding:10px 14px">Proteger datos personales</button>
+            </div>`
           :`<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:12px"><strong>data.json</strong> — Solo el Owner puede descargar la base de datos raw</div>`
         }
         <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">

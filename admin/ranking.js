@@ -1140,8 +1140,16 @@ function renderExports(){
       <div class="h2">Descargas disponibles</div>
       <div style="display:flex;flex-direction:column;gap:10px">
         ${isOwner
-          ?`<button class="btn btn-b" onclick="exportData()" style="text-align:left;padding:14px">data.json (${ST.data.length} atletas) — Descargar</button>
-            <button id="btnSyncStorage" class="btn btn-g" onclick="syncDataJsonToStorage()" style="text-align:left;padding:14px">Publicar data.json al sitio (sin GitHub)</button>`
+          ?`<button class="btn btn-b" onclick="exportData()" style="text-align:left;padding:14px">data.json para el sitio (${ST.data.length} atletas, sin RUT ni fechas) — Descargar</button>
+            <button class="btn" onclick="exportData(true)" style="text-align:left;padding:14px;background:transparent;border:1px solid var(--border)">Respaldo completo, con RUT y fechas — solo para guardar, no subir al sitio</button>
+            <button id="btnSyncStorage" class="btn btn-g" onclick="syncDataJsonToStorage()" style="text-align:left;padding:14px">Publicar data.json al sitio (sin GitHub)</button>
+            <div style="margin-top:6px;border:1px solid ${ST.padronPrivado?'var(--green)':'var(--orange)'};border-radius:8px;padding:12px 14px">
+              <div style="font-family:Oswald;font-size:12px;letter-spacing:1px;color:${ST.padronPrivado?'var(--green)':'var(--orange)'}">DATOS PERSONALES</div>
+              <div style="font-size:12px;color:var(--muted);margin:4px 0 8px;line-height:1.5">${ST.padronPrivado
+                ?'El RUT y la fecha de nacimiento de '+ST.padronPrivado+' atletas están guardados en privado. El data.json que se publica va sin ellos.'
+                :'El RUT y la fecha de nacimiento todavía están en el data.json público. Primero publica las reglas nuevas de Firestore; después apreta este botón una vez.'}</div>
+              <button id="btnProteger" class="btn ${ST.padronPrivado?'':'btn-r'}" onclick="protegerDatosPersonales()" style="padding:10px 14px">Proteger datos personales</button>
+            </div>`
           :`<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:12px"><strong>data.json</strong> — Solo el Owner puede descargar la base de datos raw</div>`
         }
         <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">

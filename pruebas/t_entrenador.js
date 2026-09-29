@@ -54,20 +54,17 @@ const soloNum = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase();
 
 (async () => {
   const atletas = JSON.parse(fs.readFileSync(__dirname + '/../data.json', 'utf8'));
-  const entrenadores = JSON.parse(fs.readFileSync(__dirname + '/../entrenadores_db.json', 'utf8'));
-
+  // La base de entrenadores ya no está en el repositorio (entrenadores_db.json
+  // traía el RUT de cada uno): vive en Firestore. Acá se arman fichas de prueba
+  // para dos atletas del padrón, una de cada categoría.
+  const conRut = atletas.filter(a => a.rut && a.codigo);
+  const ej1 = conRut[0], ej2 = conRut[1];
+  const entrenadores = [
+    { rut: ej1.rut, nombre: ej1.nombre, categoria: 'Cat. 1' },
+    { rut: ej2.rut, nombre: ej2.nombre, categoria: 'Cat. 2' },
+  ];
   const porRut = {};
   entrenadores.forEach(e => { if (e.rut) porRut[soloNum(e.rut)] = e; });
-  const cruzados = atletas.filter(a => a.rut && porRut[soloNum(a.rut)]);
-
-  console.log('\nEl cruce por RUT encuentra a los que son las dos cosas');
-  ok(cruzados.length > 50,
-     cruzados.length + ' de los ' + entrenadores.length + ' entrenadores son además atletas');
-  ok(cruzados.some(a => /1/.test(porRut[soloNum(a.rut)].categoria)), 'hay de categoría 1');
-  ok(cruzados.some(a => /2/.test(porRut[soloNum(a.rut)].categoria)), 'y de categoría 2');
-
-  const ej1 = cruzados.find(a => /1/.test(porRut[soloNum(a.rut)].categoria));
-  const ej2 = cruzados.find(a => /2/.test(porRut[soloNum(a.rut)].categoria));
 
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
   process.on('uncaughtException', async e => {
@@ -101,51 +98,6 @@ const soloNum = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase();
     ok(/ENTRENADOR CAT I(?!I)/.test(t1), ej1.nombre + ' → CAT I');
     const t2 = await ver(ej2.codigo);
     ok(/ENTRENADOR CAT II/.test(t2), ej2.nombre + ' → CAT II');
-  }
-
-  console.log('\n  El caso que lo destapó: Sergio Hernán Mardones Meza');
-  {
-    // Su perfil decía ENTRENADOR CAT II y es Cat. 1. No era un error de dibujo:
-    // la ficha de entrenador que le calzaba era la de OTRA persona, porque en la
-    // planilla llevaba un RUT ajeno.
-    const ent = entrenadores.find(e => /Mardones Meza/i.test(e.nombre || ''));
-    const atl = atletas.find(a => a.codigo === '1718SMM-2025');
-    ok(!!ent && !!atl, 'está en las dos bases');
-    ok(ent && atl && soloNum(ent.rut) === soloNum(atl.rut),
-       'la ficha de entrenador lleva SU RUT (' + (ent || {}).rut + ')');
-    ok(ent && /1/.test(ent.categoria || ''), 'y su categoría es ' + (ent || {}).categoria);
-    const t = await ver('1718SMM-2025');
-    ok(/ENTRENADOR CAT I(?!I)/.test(t), 'el perfil dice CAT I');
-  }
-
-  console.log('\n  Ninguna ficha lleva el RUT de otra persona');
-  {
-    // Esto es lo que hay que cuidar. Un RUT corrido de fila no deja un dato
-    // incompleto: le cuelga la insignia de entrenador —con su categoría— a un
-    // atleta que no es entrenador. Venían 43 así.
-    const nrm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(w => w.length > 1);
-    const porRutAtl = {};
-    atletas.forEach(a => { if (a.rut) (porRutAtl[soloNum(a.rut)] = porRutAtl[soloNum(a.rut)] || []).push(a); });
-    const ajenos = entrenadores.filter(e => {
-      const ats = e.rut ? porRutAtl[soloNum(e.rut)] : null;
-      if (!ats) return false;
-      const T = new Set(nrm(e.nombre));
-      return !ats.some(a => nrm(a.nombre).filter(w => T.has(w)).length >= 2);
-    });
-    ok(ajenos.length === 0, 'ninguna de las ' + entrenadores.length + ' fichas'
-       + (ajenos.length ? ' — se cuelan: ' + ajenos.map(e => e.nombre + ' ' + e.rut).join(', ') : ''));
-    // Un RUT chileno mal copiado casi siempre falla el dígito verificador.
-    const dv = c => { let s = 0; c.split('').reverse().forEach((ch, i) => s += (+ch) * [2,3,4,5,6,7][i % 6]);
-                      const r = 11 - (s % 11); return r === 11 ? '0' : r === 10 ? 'K' : String(r); };
-    const malDV = entrenadores.filter(e => { const r = soloNum(e.rut);
-      return r && !(r.length >= 8 && /^\d+$/.test(r.slice(0, -1)) && dv(r.slice(0, -1)) === r.slice(-1)); });
-    ok(malDV.length === 0, 'y todos los RUT tienen dígito verificador válido'
-       + (malDV.length ? ' — ' + malDV.map(e => e.nombre + ' ' + e.rut).join(', ') : ''));
-    // Los que no se pudieron verificar van SIN RUT, no con uno prestado.
-    const sinRut = entrenadores.filter(e => !soloNum(e.rut));
-    ok(sinRut.every(e => e.rut_planilla),
-       'los ' + sinRut.length + ' sin RUT dejan anotado el que traía la planilla');
   }
 
   console.log('\n  Y a quien no es entrenador no le inventa nada');

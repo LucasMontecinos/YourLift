@@ -318,12 +318,12 @@ function embedded(url){return `<iframe src="${url}?embedded=1" style="width:100%
 // ── Solicitud de certificado (público, moderado) ──
 function _certNorm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
 function _certRut(s){return String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();}
-function _certSelectedOk(a,champ){const list=(champ&&champ.seleccionados)||[];if(!list.length)return false;const ar=_certRut(a&&a.rut);return list.some(x=>_certRut(x)===ar);}
+function _certSelectedOk(a,champ){const list=(champ&&champ.seleccionados)||[];if(!list.length)return false;const ar=_certRut(a&&a.rut);return list.some(x=>(ar&&_certRut(x)===ar)||(a&&a.codigo&&x===a.codigo));}   // por RUT o por código de atleta
 function _certLugar(p){const n=parseInt(p);return ({1:'Primer',2:'Segundo',3:'Tercer',4:'Cuarto',5:'Quinto',6:'Sexto'})[n]||(p?(p+'°'):'');}
 function _certResultsHtml(){
   const q=_certNorm(CERTF.q).trim(); if(q.length<2) return '';
   const ws=q.split(/\s+/), qn=q.replace(/[^0-9k]/g,'');
-  const list=(D||[]).filter(a=>{const n=_certNorm(a.nombre);return ws.every(w=>n.includes(w))||(qn.length>=4&&_certRut(a.rut).toLowerCase().includes(qn));}).slice(0,8);
+  const list=(D||[]).filter(a=>{const n=_certNorm(a.nombre);return ws.every(w=>n.includes(w));}/* solo por nombre: buscar por RUT dejaba ver el de cualquiera */).slice(0,8);
   if(!list.length) return '<div style="color:var(--muted);font-size:12px;padding:6px">Sin resultados</div>';
   return list.map(a=>`<div onclick="certSel('${a.codigo.replace(/'/g,"\\'")}')" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:4px;cursor:pointer;display:flex;justify-content:space-between"><span>${_escH(a.nombre)}</span><span style="color:var(--muted);font-size:11px">${_escH(a.codigo)}</span></div>`).join('');
 }
@@ -388,9 +388,9 @@ function certForm(){
   const inp=(label,val,fn,ph)=>`<div style="margin-bottom:10px"><div style="font-size:11px;color:var(--muted);margin-bottom:3px">${label}</div><input value="${_escH(val||'')}" placeholder="${ph||''}" oninput="${fn}" style="width:100%;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px"></div>`;
   let h=`<div class="cd2" style="max-width:680px;margin:0 auto"><div class="ct"><h2>Solicitud de certificado</h2></div>
    <p style="color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:16px">Solicita tu certificado oficial FECHIPO. Búscate, elige el campeonato y el motivo. Lo revisamos y te lo enviamos.</p>
-   <div style="margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:3px">1 · Tu nombre o RUT</div>
+   <div style="margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:3px">1 · Tu nombre</div>
      <input value="${_escH(CERTF.q)}" oninput="certSetQ(this.value)" placeholder="Escribe tu nombre..." style="width:100%;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">
-     ${CERTF.athlete?`<div style="margin-top:6px;color:var(--green);font-size:12px"><i class=yl-i-check></i> ${_escH(CERTF.athlete.nombre)} · ${_escH(CERTF.athlete.rut||'')} ${CERTF.athlete.club?('· '+_escH(CERTF.athlete.club)):''} <a onclick="CERTF.athlete=null;CERTF.q='';render()" style="color:var(--accent);cursor:pointer;margin-left:6px">cambiar</a></div>`:`<div id="certResults" style="margin-top:6px">${_certResultsHtml()}</div>`}</div>`;
+     ${CERTF.athlete?`<div style="margin-top:6px;color:var(--green);font-size:12px"><i class=yl-i-check></i> ${_escH(CERTF.athlete.nombre)} ${CERTF.athlete.club?('· '+_escH(CERTF.athlete.club)):''} <a onclick="CERTF.athlete=null;CERTF.q='';render()" style="color:var(--accent);cursor:pointer;margin-left:6px">cambiar</a></div>`:`<div id="certResults" style="margin-top:6px">${_certResultsHtml()}</div>`}</div>`;
   if(CERTF.athlete){
     h+=`<div style="margin-bottom:12px"><div style="font-size:11px;color:var(--muted);margin-bottom:3px">2 · Campeonato donde competiste</div>
       <select onchange="certSetChamp(this.value)" style="width:100%;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">

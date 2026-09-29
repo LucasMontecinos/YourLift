@@ -92,6 +92,7 @@ Reglas y piezas que usan varias páginas. Se cambian en un solo lugar: la prueba
 | `gl.js` | Puntos GL (IPF GL 2020): los coeficientes y la fórmula, una sola vez |
 | `dias.js` | El orden de los días de un campeonato ("Sábado 8" antes que "Domingo 9") |
 | `campeonatos.js` | Reconocer un campeonato aunque venga escrito distinto (sin la tarima, sin tildes) |
+| `privacidad.js` | Qué datos de un atleta son públicos: el padrón publicado va sin RUT ni fecha de nacimiento completa |
 | `canales.js` | Los documentos de Firestore de cada campeonato. Así dos campeonatos a la misma hora no se mezclan |
 | `divisiones.js` | División por edad (Sub-Junior, Junior, Open, Master) |
 | `ediciones.js` | Correcciones y bajas hechas desde el panel sobre el padrón |
@@ -103,7 +104,7 @@ Reglas y piezas que usan varias páginas. Se cambian en un solo lugar: la prueba
 ### Datos (raíz)
 
 `data.json`, `nominas.json`, `records*.json`, `nomina_sudamericano.json`,
-`inscripciones.json`, `entrenadores_db.json`, `jueces_base.json`. Los leen las
+`jueces_base.json`. Los leen las
 páginas con su dirección pública. Lo que cambia en vivo (inscripciones, estado de
 la competencia) está en Firestore, no en estos archivos.
 

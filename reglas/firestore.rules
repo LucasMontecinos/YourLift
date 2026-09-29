@@ -248,6 +248,23 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── Datos personales del padrón ─────────────────────────────
+    // El padrón público (data.json) ya no lleva RUT ni fecha de nacimiento
+    // completa. Esos dos datos viven acá:
+    //   · privado/padron: todos, por código de atleta. Solo lo lee un admin.
+    //   · rut_indice/{rut}: RUT → código y fecha, para que el formulario de
+    //     inscripción reconozca a quien escribe SU RUT. Se lee de a un
+    //     documento (hay que saber el RUT) pero NO se lista: nadie puede bajar
+    //     la lista completa. Ver compartido/privacidad.js.
+    match /privado/{doc} {
+      allow read, write: if isAdmin();
+    }
+    match /rut_indice/{rut} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if isAdmin();
+    }
+
     match /athlete_edits/{id} {
       allow read: if true;
       allow write: if isAdmin();
