@@ -299,7 +299,12 @@ onAuthStateChanged(auth,async(u)=>{window._authFired=true;
       }catch(e){console.warn('Bootstrap achievement skip:',e.message);}
     })();
     // ─────────────────────────────────────────────────────────────────────
-    loadAll(); // intentional: no await — render() called inside
+    // Las cuentas de transmisión y de mesa técnica no ven el panel, solo la
+    // puerta al livecast (renderStreamingShell). Cargarles la base —inscripciones,
+    // datos privados, resultados, fotos— eran miles de lecturas de Firestore en
+    // cada entrada, para nada.
+    if(ST.adminInfo?.role==='streaming'||ST.adminInfo?.role==='mesa'){ render(); }
+    else loadAll(); // intentional: no await — render() called inside
   }catch(e){
     console.error('Auth error',e);
     ST.user=null;
