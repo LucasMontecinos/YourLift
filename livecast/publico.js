@@ -391,12 +391,12 @@ function renderLiveView(){
         const srCss2='';   // el color de adentro es el del intento, como en el control
         if(srR2.length)h+='<div class="rec-caja"><div class="'+(srOk2?'':'rec-tag')+'" style="font-size:8.5px;'
           +'font-weight:800;letter-spacing:.5px;line-height:1;margin-bottom:2px;text-align:center;color:#fff">'
-          +(srOk2?'<i class=yl-i-estrella></i> RÉCORD':'RÉCORD')+'</div>';
+          +'RÉCORD'+'</div>';
         h += '<div class="'+cls+' att'+(srR2.length?' rec-borde':'')+'"'+(srR2.length?' title="'+_srBadge(srR2).replace(/"/g,'&quot;')+'"':'')+' style="font-size:'+(isCurAtt?18:15)+'px;font-weight:700;padding:'+(isCurAtt?'10px 3px':'6px 3px')+';cursor:default;'+srCss2+(isCurAtt?'box-shadow:inset 0 0 0 2px '+LIFT_C[l]+';':'')+'min-width:46px;text-align:center">'+(at.w?(+at.w).toFixed(1):'—')+'</div>'+(srR2.length?'</div>':'');
         // El que acaba de salir a tarima: cartelito chico bajo su intento, para
         // no perder de vista por dónde va la tanda cuando la lista se reordena.
         if(ultimo && !a.__is4 && ra.id===ultimo.id && l===ultimo.lift && j===ultimo.round)
-          h += '<div style="font-family:Oswald;font-size:7px;letter-spacing:.5px;color:var(--muted);text-align:center;line-height:1.2;margin-top:1px">RECIÉN SALIÓ</div>';
+          h += '<div style="font-family:Oswald;font-size:7px;letter-spacing:.5px;color:#fff;text-align:center;line-height:1.2;margin-top:1px">RECIÉN SALIÓ</div>';
         h += '</td>';
       }
       // Subtotal / Total
