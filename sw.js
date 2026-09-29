@@ -1,5 +1,5 @@
 // YourLift Service Worker — v2
-const CACHE = 'yourlift-v5';
+const CACHE = 'yourlift-v6';
 
 const PRECACHE_URLS = [
   '/',
@@ -11,6 +11,8 @@ const PRECACHE_URLS = [
   '/inscripcion.html',
   '/documentos.html',
   '/bg-fechipo.css',
+  '/compartido/paleta.css',
+  '/compartido/iconos.css',
   '/favicon.ico',
   '/favicon.png',
   '/icon-96.png',
