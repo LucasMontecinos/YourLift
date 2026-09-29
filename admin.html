@@ -555,7 +555,8 @@ async function loadAll(){
   if(!window._allCompResListener){
     try{
       window._allCompResListener=onSnapshot(collection(db,'competition_results'),(snap)=>{
-        ST.allCompResults=snap.docs.map(d=>({id:d.id,...d.data()}));
+        // Sin los resultados de eventos de prueba (ensayo), por si alguno se publicó.
+        ST.allCompResults=snap.docs.map(d=>({id:d.id,...d.data()})).filter(x=>!(/ensayo/i.test(String(x.evento_id||''))||/ensayo/i.test(String(x.id||''))||/^\s*ensayo\b/i.test(String(x.evento||''))));
         window._HIST_ANIO=null;   // el índice del año se rehace con los datos nuevos
         // Estadísticas también: la pestaña de afiliaciones se arma con estos
         // resultados, y sin esto quedaba mostrando solo lo de data.json hasta

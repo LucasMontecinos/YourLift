@@ -441,8 +441,12 @@ function applyEdit(o){
       'yohan alejando perez coninir':'Yohan Alejandro Perez Coñuñir'
     };
     function _aliasNombre(n){ return ALIAS_NOMBRES[_normName(n)]||n; }
+    // Resultados de un evento de prueba (ensayo): nunca cuentan, por si alguno
+    // se llegó a publicar.
+    function _esDePrueba(x){ return !!x&&(/ensayo/i.test(String(x.evento_id||''))||/ensayo/i.test(String(x.id||''))||/^\s*ensayo\b/i.test(String(x.evento||''))); }
     function _applyCompRes(docs){
       var liveEntries=[];
+      docs=(docs||[]).filter(function(x){return !_esDePrueba(x);});
       docs.forEach(function(data){
         var r=data.resultado||{};
         if((r.status||'')==='DQ'||(r.total||0)<=0)return;

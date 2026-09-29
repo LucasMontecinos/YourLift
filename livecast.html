@@ -2205,7 +2205,9 @@ async function tryLoadFromFB(){
 // "Anónimo" habilitado (Console → Authentication → Sign-in method): acá se
 // intenta signInAnonymously(); si no está habilitado, el ensayo funciona igual
 // pero solo-local en esa pantalla.
-function _isEnsayo(ev){ev=ev||DATA.event;return !!(ev&&(ev.id==='suda2026_ensayo'||/^ENSAYO\s/.test(ev.name||'')));}
+// Evento de prueba: marcado como ensayo, con "ensayo" en el id o con el nombre
+// empezando por ENSAYO. Los del Sudamericano ya se sacaron de nominas.json.
+function _isEnsayo(ev){ev=ev||DATA.event;return !!(ev&&(ev.ensayo||/ensayo/i.test(String(ev.id||''))||/^\s*ENSAYO\b/i.test(String(ev.name||''))));}
 function _ensayoGrant(){
   // El permiso del ensayo es EXCLUSIVO del ensayo. Al cambiar a un evento real
   // hay que revocarlo: si no, el operador queda "admin" localmente pero SIN
@@ -7385,6 +7387,9 @@ async function cerrarCompetenciaConfirm(){
   const evName = (DATA.event==null?void 0:DATA.event.name) || '';
   const evId   = (DATA.event==null?void 0:DATA.event.id) || (window.LIVE_EVENTS ? Object.keys(window.LIVE_EVENTS).find(k=>window.LIVE_EVENTS[k]===evName) : '') || evName.replace(/[^a-zA-Z0-9]+/g,'_').toLowerCase();
   if(!evName){ alert('No hay evento cargado.'); return; }
+  // Un evento de prueba nunca publica: sus marcas irían al ranking y a los
+  // perfiles de atletas reales como si fueran de verdad.
+  if(_isEnsayo()){ alert('Este es un evento de PRUEBA (ensayo).\n\nSus resultados no se publican en el ranking ni en los perfiles.'); return; }
   const ath = _cierreAtletas();
   const fuera = (DATA.athletes||[]).filter(a=>!a.__is4).length - ath.filter(a=>!a.__is4).length;
   const counts = {meet:0, bench:0, dq:0};
@@ -11374,11 +11379,11 @@ function renderSetup(){
   // Qué se dibuja. El encabezado y la lista salen de esta misma función, si no
   // pueden decir cosas distintas ("son 9 jornadas" y abajo ninguna).
   const _verEv=ev=>{
-    // Modo operar: solo lo publicado y los ensayos, sin la lista completa de
-    // todo lo que hay cargado (que para el día a día es ruido).
+    // Modo operar: solo lo publicado, sin la lista completa de todo lo que hay
+    // cargado (que para el día a día es ruido). Los ensayos ya no salen: los del
+    // Sudamericano se eliminaron, y uno nuevo se abre con su link (?evento=…).
     if(_OPERAR&&!_flt){
-      const pubOk=!!(_pub&&(_pub.has(ev.id)||_pub.has(ev.name)||(ev.parent&&_pub.has(ev.parent))));
-      return pubOk||_isEnsayo(ev);
+      return !!(_pub&&(_pub.has(ev.id)||_pub.has(ev.name)||(ev.parent&&_pub.has(ev.parent))));
     }
     // Adentro de un campeonato (?evento=…) NO se aplica el ocultar-de-la-lista:
     // "archivado" y "no visible en el livecast" están para que la lista general no

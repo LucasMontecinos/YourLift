@@ -853,8 +853,9 @@ async function cargarCompRes(){
     if(c){ compResDB=c; return; }
     if(!firebaseReady||!window.FB)return;
     const snap=await window.FB.getDocs(window.FB.collection(db,'competition_results'));
-    compResDB=snap.docs.map(d=>{const x=d.data();
-      return {rut:x.rut||'',evento:x.evento||'',fecha:x.fecha||''};});
+    // Sin los resultados de eventos de prueba (ensayo).
+    compResDB=snap.docs.map(d=>({...d.data(),id:d.id})).filter(x=>!(/ensayo/i.test(String(x.evento_id||''))||/ensayo/i.test(String(x.id||''))||/^\s*ensayo\b/i.test(String(x.evento||''))))
+      .map(x=>({rut:x.rut||'',evento:x.evento||'',fecha:x.fecha||''}));
     _ifsSetCache('ins_compres', compResDB);
     _redibujarPorAviso();
   }catch(e){ console.warn('[aviso] no se pudieron cargar los resultados recientes',e); }

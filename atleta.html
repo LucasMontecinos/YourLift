@@ -310,8 +310,10 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
       if(window._curCodigo)showProfile(window._curCodigo);
     };
     const cr=_aC('atl_res',10*60*1000);
-    if(cr){_conDB(()=>_applyResults(cr));}
-    else{fb.getDocs(fb.collection(db,'competition_results')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_res',docs);_conDB(()=>_applyResults(docs));});}
+    // Resultados de un evento de prueba (ensayo): no son de verdad y no se muestran.
+    const _real=docs=>(docs||[]).filter(x=>!(x&&(/ensayo/i.test(String(x.evento_id||''))||/ensayo/i.test(String(x.id||''))||/^\s*ensayo\b/i.test(String(x.evento||'')))));
+    if(cr){_conDB(()=>_applyResults(_real(cr)));}
+    else{fb.getDocs(fb.collection(db,'competition_results')).then(snap=>{const docs=_real(snap.docs.map(d=>({...d.data(),id:d.id})));_aSC('atl_res',docs);_conDB(()=>_applyResults(docs));});}
 
     // Overrides de posición para competencias históricas (data.json): getDocs + caché 1h
     const _applyPos=docs=>{window._HIST_POS={};docs.forEach(v=>{if(v.codigo&&v.evento)window._HIST_POS[v.codigo+'__'+v.evento]=v;});if(window._curCodigo)showProfile(window._curCodigo);};
