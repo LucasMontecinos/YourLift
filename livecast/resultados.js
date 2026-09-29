@@ -100,32 +100,36 @@ function _renderResultsTable(opts){
     const virtual=!dq&&typeof pos==='number'&&!catCerrada[catKey];
     h+='<td class="os" title="'+(dq?'Descalificado':virtual?'Posición virtual: todavía quedan intentos':'Posición final')+'" style="padding:6px 4px;text-align:center;color:'+(dq?'var(--red)':typeof pos==="number"&&pos<=3?'var(--gold)':'var(--muted)')+';font-weight:700;font-size:14px;'+(virtual?'opacity:.85':'')+'">'+pos+(virtual?'<span style="font-size:9px;color:#f59e0b;margin-left:1px">~</span>':'')+'</td>';
     if(_variosPaises()){
-      h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap;display:flex;align-items:center">'+_flagImg(_ctry(a),12,true)+'<span>'+a.name+'</span></div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+'</span></div></td>';
+      h+='<td style="padding:6px 4px"><div style="font-family:Oswald,sans-serif;font-weight:500;letter-spacing:.3px;font-size:13px;color:#fff;white-space:nowrap;display:flex;align-items:center">'+_flagImg(_ctry(a),12,true)+'<span>'+a.name+'</span></div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+'</span></div></td>';
     }else{
       // Un solo país: el logo del club donde iba la bandera, y abajo el club en texto.
-      h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap;display:flex;align-items:center">'+_logoClub(a,22)+'<span>'+a.name+'</span></div>'
+      h+='<td style="padding:6px 4px"><div style="font-family:Oswald,sans-serif;font-weight:500;letter-spacing:.3px;font-size:13px;color:#fff;white-space:nowrap;display:flex;align-items:center">'+_logoClub(a,22)+'<span>'+a.name+'</span></div>'
         +'<div style="font-size:9px;color:var(--muted);white-space:nowrap">'+(a.club||'')+'</div></td>';
     }
-    h+='<td style="padding:6px 3px;text-align:center;font-size:11px">'+(a.bw||'—')+'</td>';
+    h+='<td style="padding:6px 3px;text-align:center;font-family:Oswald,sans-serif;font-size:12px;color:rgba(220,230,245,.9)">'+(a.bw?(+a.bw).toFixed(1):'—')+'</td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:10px">'+(a.div||'—')+'</td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:10px">'+(a.cat||'—')+'</td>';
     const _attTd=(at)=>{
       if(!at)return '<td style="padding:4px 2px;text-align:center;color:var(--border);font-family:Oswald;font-size:11px">·</td>';
-      let st='',tx=at.w||'—';
-      if(at.r==='g')st='background:rgba(34,197,94,.12);color:var(--green);font-weight:700';
-      else if(at.r==='n')st='background:rgba(239,68,68,.1);color:var(--red);text-decoration:line-through';
-      else if(at.w>0)st='color:var(--text)';else st='color:var(--border)';
-      return '<td style="padding:4px 2px;text-align:center;'+st+';font-family:Oswald;font-size:11px">'+tx+'</td>';
+      // Igual que la pantalla de tarima y la Competencia en Vivo: la casilla
+      // entera verde o roja, en Oswald y con un decimal.
+      let st='',tx=at.w?(+at.w).toFixed(1):'—';
+      if(at.r==='g')st='background:rgba(34,197,94,.88);color:#06210f;font-weight:700';
+      else if(at.r==='n')st='background:rgba(220,38,38,.85);color:#fff;font-weight:700;text-decoration:line-through;text-decoration-thickness:2px';
+      else if(at.w>0)st='color:#fff;font-weight:600';else st='color:rgba(150,170,200,.35)';
+      return '<td style="padding:7px 2px;text-align:center;'+st+';font-family:Oswald;font-size:13px;border-left:1px solid rgba(10,22,40,.55)">'+tx+'</td>';
     };
     if(isBench){
       for(let j=0;j<maxAtts.bp;j++)h+=_attTd(a.att.bp[j]);
       const bestBP=bestOf(a,'bp');
-      h+='<td style="padding:4px 2px;text-align:center;font-weight:700;font-family:Oswald;color:#d4a843;font-size:12px;background:rgba(212,168,67,.08)">'+(bestBP||'—')+'</td>';
+      h+='<td style="padding:4px 2px;text-align:center;font-weight:700;font-family:Oswald;color:#d4a843;font-size:13px;background:rgba(212,168,67,.12)">'+(bestBP?(+bestBP).toFixed(1):'—')+'</td>';
     } else {
       ['sq','bp','dl'].forEach(l=>{
         for(let j=0;j<maxAtts[l];j++)h+=_attTd(a.att[l][j]);
         const sub=l==='sq'?bestOf(a,'sq'):l==='bp'?bestOf(a,'sq')+bestOf(a,'bp'):bestOf(a,'sq')+bestOf(a,'bp')+bestOf(a,'dl');
-        h+='<td style="padding:4px 2px;text-align:center;font-weight:700;font-family:Oswald;color:#d4a843;font-size:12px;background:rgba(212,168,67,.08)">'+(sub||'—')+'</td>';
+        // El subtotal con el color de su movimiento, como en la Competencia en Vivo.
+        const _sq=l==='sq';
+        h+='<td style="padding:4px 2px;text-align:center;font-weight:700;font-family:Oswald;color:'+(_sq?'#7fb6ff':'#d4a843')+';font-size:13px;background:'+(_sq?'rgba(30,111,208,.16)':'rgba(212,168,67,.12)')+'">'+(sub?(+sub).toFixed(1):'—')+'</td>';
       });
     }
     if(dq){

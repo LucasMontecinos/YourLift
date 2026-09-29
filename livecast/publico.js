@@ -347,7 +347,9 @@ function renderLiveView(){
     // En un nacional va el logo del club, que es lo que distingue a cada uno.
     if(_variosPaises()) h += _flagImg(_ctry(a),isOnPlatform?15:12,true);
     else h += _logoClub(a,_enLinea?(isOnPlatform?30:26):(isOnPlatform?34:30));
-    h += '<span style="font-weight:'+(isOnPlatform?700:500)+';font-size:'+(isOnPlatform?13:11)+'px;color:'+(isOnPlatform?'#fff':'var(--text)')+'">'+a.name+'</span>';
+    // Nombre y peso corporal en la letra del lote (Oswald, blanco), como en la
+    // tabla de la pantalla de tarima.
+    h += '<span style="font-family:Oswald,sans-serif;font-weight:'+(isOnPlatform?600:500)+';letter-spacing:.3px;font-size:'+(isOnPlatform?15:13)+'px;color:#fff">'+a.name+'</span>';
     // Club/país + peso corporal. El club se omite cuando repite lo que ya dice la
     // bandera: en un sudamericano, "Brasil" al lado de la bandera brasileña gasta
     // ancho sin agregar nada. En un nacional el club sí dice algo y se muestra.
@@ -356,8 +358,8 @@ function renderLiveView(){
       const _pn=String(_ctryName(_ctry(a))||'').trim();
       const _clV=(_cl&&_variosPaises()&&_cl.toLowerCase()===_pn.toLowerCase())?'':(_cl?_cl+' · ':'');
       h += _enLinea
-        ? '<span style="font-size:9px;color:rgba(255,255,255,.75);flex-shrink:0">'+_clV+(a.bw?a.bw+'kg':'—')+'</span>'
-        : '<div style="font-size:9px;color:rgba(255,255,255,.9);margin-top:1px">'+_clV+(a.bw?a.bw+'kg':'—')+'</div>';
+        ? '<span style="font-family:Oswald,sans-serif;font-size:12px;font-weight:500;color:rgba(220,230,245,.9);flex-shrink:0">'+_clV+(a.bw?(+a.bw).toFixed(1)+' kg':'—')+'</span>'
+        : '<div style="font-family:Oswald,sans-serif;font-size:12px;font-weight:500;color:rgba(220,230,245,.9);margin-top:1px">'+_clV+(a.bw?(+a.bw).toFixed(1)+' kg':'—')+'</div>';
     }
     // El puesto virtual, pegado al nombre. Va acá y no en una columna porque la
     // columna quedaría a la derecha del todo, fuera de la pantalla del teléfono.
