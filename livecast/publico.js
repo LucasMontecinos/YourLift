@@ -243,7 +243,10 @@ function renderLiveView(){
     +'dentro de su categoría y división. Al lado va el total proyectado y cuánto falta para el puesto de arriba.</span>'
     +'</div>';
   h += '<div class="card" style="padding:0;overflow-x:auto">';
-  h += '<table style="width:100%;border-collapse:collapse;font-size:11px;min-width:780px">';
+  // lv-solido: los intentos se pintan como en la pantalla de tarima (válido
+  // verde lleno, nulo rojo lleno y tachado), que desde la galería se lee de un
+  // vistazo. El resto de la fila (lote, puesto virtual, categoría) no cambia.
+  h += '<table class="lv-solido" style="width:100%;border-collapse:collapse;font-size:11px;min-width:780px">';
 
   // Fila de grupos (SQ / BP / DL)
   h += '<thead>';
