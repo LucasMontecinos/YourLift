@@ -2481,20 +2481,28 @@ const FLAG_SVG={
 // en el campeonato, igual que el acta elige entre columna "País" y columna "Club".
 // Así nadie tiene que configurar nada y siempre se ve lo que informa.
 function _variosPaises(){
-  if(window._VARIOS_PAISES===undefined){
-    const p=new Set((DATA.athletes||[]).filter(a=>!a.__is4).map(a=>_ctry(a)).filter(Boolean));
+  // Se vuelve a contar si cambia la cantidad de atletas: si se preguntara antes
+  // de que llegue la nómina (cero atletas, cero países) quedaría "un solo país"
+  // pegado, y un campeonato internacional se vería sin banderas.
+  const ath=DATA.athletes||[];
+  if(window._VARIOS_PAISES===undefined||window._VARIOS_PAISES_N!==ath.length){
+    const p=new Set(ath.filter(a=>!a.__is4).map(a=>_ctry(a)).filter(Boolean));
     window._VARIOS_PAISES=p.size>1;
+    window._VARIOS_PAISES_N=ath.length;
   }
   return window._VARIOS_PAISES;
 }
 function _insignia(a,alto){
   alto=alto||14;
   if(_variosPaises())return _flagImg(_ctry(a),alto,true);
-  if(window.clubLogoImg&&a&&a.club){
-    const l=window.clubLogoImg(a.club,alto,'background:rgba(10,22,40,.4);padding:1px;margin-right:6px;vertical-align:middle;');
-    if(l)return l;
-  }
-  return _flagImg(_ctry(a),alto,true);   // sin logo de club, la bandera igual sirve
+  return _logoClub(a,alto);
+}
+// El logo del club del atleta, o nada. En un campeonato de un solo país la
+// bandera ya no vuelve de relleno cuando el club no tiene logo: serían todas la
+// misma y no dicen nada (se pidió así después del Sudamericano).
+function _logoClub(a,px,extra){
+  if(!window.clubLogoImg||!a||!a.club)return '';
+  return window.clubLogoImg(a.club,px,'background:rgba(10,22,40,.4);padding:1px;margin-right:6px;vertical-align:middle;flex-shrink:0;'+(extra||''));
 }
 // La misma bandera, como imagen, para usarla de fondo.
 function _flagDataUri(code){
@@ -3572,7 +3580,7 @@ function openAthleteMedia(id){
   m.innerHTML=`
   <div style="background:#0D1F38;border:2px solid var(--border);border-radius:16px;padding:24px 28px;width:min(560px,94vw);max-height:92vh;overflow-y:auto">
     <div style="font-family:Oswald;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:4px">FOTO / GIF</div>
-    <div style="font-size:12px;color:var(--gold);font-family:Oswald;margin-bottom:4px">${_flagImg(_ctry(a),14)}${a.name}</div>
+    <div style="font-size:12px;color:var(--gold);font-family:Oswald;margin-bottom:4px">${_insignia(a,16)}${a.name}</div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:16px">Se guarda y se reutiliza automáticamente si el atleta vuelve a competir.</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div>
@@ -8181,7 +8189,7 @@ function _renderTxCerScoreboardBL(cur,opts){
     _forecastTxt='Posición '+_forecastPos;
     _forecastColor=_forecastPos===1?_txC('goodLift'):_forecastPos<=3?_txC('accent'):_txC('puesto');
   }
-  const logo=window.clubLogoImg?window.clubLogoImg(cur.club,28,'background:rgba(10,22,40,.85);padding:2px;flex-shrink:0;'):'';
+  const logo=window.clubLogoImg?window.clubLogoImg(cur.club,_variosPaises()?28:34,'background:rgba(10,22,40,.85);padding:2px;flex-shrink:0;'):'';
   // animOrTx → animación de ciclo automatico (modo widget standalone) o transform de scale
   // extraStyle → animación in/out cuando se enciende/apaga desde control TX (slide vertical)
   const animDir=opts.animDir||null; // 'in' | 'out' | null
@@ -8209,14 +8217,16 @@ function _renderTxCerScoreboardBL(cur,opts){
     +'<div style="'+_sbRowAnim(animDir,1)+'background:linear-gradient(90deg,'+_txC('nameBg')+','+_txC('nameBg2')+');padding:5px 14px;display:flex;align-items:center;gap:10px">'
       // Bandera + código del país DEL ATLETA. Antes acá decía "CHI" escrito a mano,
       // así que a un ecuatoriano le salía Chile.
-      +'<div style="display:flex;align-items:center;gap:6px;background:rgba(10,22,40,.9);padding:3px 9px;border-radius:3px;flex-shrink:0">'
+      // En un campeonato de un solo país la bandera no va (serían todas iguales):
+      // en su lugar va el logo del club, que entonces ya no se repite a la derecha.
+      +(_variosPaises()?'<div style="display:flex;align-items:center;gap:6px;background:rgba(10,22,40,.9);padding:3px 9px;border-radius:3px;flex-shrink:0">'
         +_flagImg(_ctry(cur),14)
         +'<span style="color:'+_txC('nameBg')+';font-family:Oswald;font-size:10px;letter-spacing:2px;font-weight:700">'+_ctry(cur)+'</span>'
-      +'</div>'
+      +'</div>':logo)
       +'<div style="flex:1;font-family:Oswald;color:'+_txC('nameText')+';letter-spacing:1px;overflow:hidden">'
         +'<div style="font-size:24px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nombreAtleta+'</div>'
       +'</div>'
-      +logo
+      +(_variosPaises()?logo:'')
     +'</div>'
     +'<div style="'+_sbRowAnim(animDir,2)+'display:grid;grid-template-columns:repeat(3,1fr) 100px;background:'+_txC('gridBg')+'">'
       +cur.att[DATA.lift].map((at,j)=>{
@@ -9473,7 +9483,7 @@ function renderTxScoreboard(cur,lifterChanged){
   else if(sqB>0&&bpB>0&&dlB>0){totVal=totB.toFixed(1);totClr=GREEN}
   else if(totB>0){totVal=totB.toFixed(1);totClr=WHITE}
   else{totVal='—';totClr=WHITE_DIM}
-  const flagHtml=_flagImg(_ctry(cur),22);
+  const flagHtml=_variosPaises()?_flagImg(_ctry(cur),22):_logoClub(cur,34,'margin-right:0;');
   return `
     <!-- pointer-events:none — el marcador es un cartel, no una interfaz, y va al
          aire. Si el mouse queda quieto encima (queda: es la ventana que captura
@@ -10031,8 +10041,10 @@ function renderTxJornada(){
         // así que el nombre largo se salía encima de la columna del país y
         // quedaba pisando la bandera. El recorte tiene que ir en un bloque de
         // ancho fijo adentro de la celda.
-        +'<td style="vertical-align:middle;padding:0 10px;font-family:Inter,sans-serif;font-weight:600;color:#fff;font-size:'+Math.round(fs(15)*nameScale)+'px;max-width:'+Math.round(430*nameScale)+'px"><span style="display:flex;align-items:center;max-width:'+Math.round(420*nameScale)+'px"><span style="flex-shrink:0;display:inline-flex">'+_insignia(a,fs(13))+'</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+a.name+'</span></span></td>'
-        +'<td style="'+td+';color:rgba(220,230,245,.85);white-space:nowrap">'+_flagImg(_ctry(a),fs(14),true)+_ctry(a)+'</td>'
+        +'<td style="vertical-align:middle;padding:0 10px;font-family:Inter,sans-serif;font-weight:600;color:#fff;font-size:'+Math.round(fs(15)*nameScale)+'px;max-width:'+Math.round(430*nameScale)+'px"><span style="display:flex;align-items:center;max-width:'+Math.round(420*nameScale)+'px"><span style="flex-shrink:0;display:inline-flex">'+(_variosPaises()?_insignia(a,fs(13)):'')+'</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+a.name+'</span></span></td>'
+        // En un nacional la columna es CLUB: el logo grande, y el nombre queda solo.
+        +'<td style="'+td+';color:rgba(220,230,245,.85);white-space:nowrap">'+(_variosPaises()?_flagImg(_ctry(a),fs(14),true)+_ctry(a)
+          :_logoClub(a,fs(24),'margin-right:0;'))+'</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.65)">'+(_yob2(a)||'—')+'</td>'
         +'<td style="'+td+';color:rgba(220,230,245,.9)">'+(a.bw?a.bw.toFixed(1):'—')+'</td>'
         // SQ 3 intentos + subtotal
@@ -10081,7 +10093,7 @@ function renderTxJornada(){
         +'<col style="width:5.6%"><col style="width:4.6%">'
       +'</colgroup>'
       +'<thead><tr style="height:'+theadH+'px;background:rgba(10,22,40,.5)">'
-        +H('#')+H('ATLETA')+H('PAÍS')+H('AÑO')+H('BW')
+        +H('#')+H('ATLETA')+H(_variosPaises()?'PAÍS':'CLUB')+H('AÑO')+H('BW')
         +'<th colspan="4" style="padding:0;font-family:Oswald;font-size:'+fs(12)+'px;letter-spacing:1px;color:#3b82f6;border-bottom:1px solid rgba(59,130,246,.3)">SQUAT</th>'
         +'<th colspan="4" style="padding:0;font-family:Oswald;font-size:'+fs(12)+'px;letter-spacing:1px;color:#f59e0b;border-bottom:1px solid rgba(245,158,11,.3)">BENCH</th>'
         +'<th colspan="3" style="padding:0;font-family:Oswald;font-size:'+fs(12)+'px;letter-spacing:1px;color:#ef4444;border-bottom:1px solid rgba(239,68,68,.3)">DEADLIFT</th>'
@@ -10274,7 +10286,7 @@ function renderTxMedals(md){
     const big=r===1;
     // La bandera va entre el nombre y el total: en un sudamericano es lo que se
     // busca de un vistazo, y ahí no compite con el número de puesto.
-    const flag=_flagImg(_ctry(x.a),big?26:22);
+    const flag=_variosPaises()?_flagImg(_ctry(x.a),big?26:22):_logoClub(x.a,big?34:28,'margin-right:0;');
     // El fondo sale de la paleta elegida en Control TX, como el resto de las
     // pantallas. El ORO, la PLATA y el BRONCE no: son el color de la medalla y
     // no cambian por tema — un primer lugar plateado no se entiende.
@@ -10493,7 +10505,8 @@ function renderScreenBarra(a){
     ${B('bLinea',`<div style="width:90vw;height:2px;background:rgba(255,255,255,.22)"></div>`)}
 
     ${B('bPais',`<div style="display:flex;align-items:center;gap:1.1vw;white-space:nowrap;font-size:clamp(16px,2.6vw,40px);font-weight:700;letter-spacing:.06em">
-      ${_flagImg(_ctry(a),34,true)}<span>${esc(_ctry(a))}</span>
+      ${_variosPaises()?`${_flagImg(_ctry(a),34,true)}<span>${esc(_ctry(a))}</span>`
+        :`${_logoClub(a,56,'margin-right:0;background:rgba(10,22,40,.25);padding:3px;border-radius:8px;')}<span>${esc(a.club||'')}</span>`}
     </div>`)}
 
     ${B('bDatos',`<div style="white-space:nowrap;font-size:clamp(15px,2.4vw,36px);font-weight:600;letter-spacing:.1em;opacity:.9;text-align:center">
@@ -13250,7 +13263,19 @@ h+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%
   _visibles.forEach(a=>{
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.3);'+(a.bombed?'opacity:.4':'')+'">';
     h+='<td style="padding:3px 2px;text-align:center"><input type="number" min="1" value="'+a.lot+'" onchange="setLot('+a.id+',this.value)" title="Edita el número de lote — si ya existe se hace swap" style="width:42px;padding:3px 2px;font-family:Oswald;font-weight:700;color:var(--gold);background:transparent;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:13px"></td>';
-    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+_flagImg(_ctry(a),13)+'<span onclick="renameAthlete('+a.id+')" title="Click para corregir el nombre — se cambia en la tarima, el acta y la transmisión" style="cursor:text;border-bottom:1px dashed rgba(212,168,67,.45)">'+esc(a.name)+'</span>'+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+_ctry(a)+' \u00b7 '+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
+    {
+      // Con varios países, la bandera junto al nombre y el país en la línea de
+      // abajo. Con uno solo, la bandera no informa: en su lugar, antes del nombre,
+      // va el logo del club (más grande que la bandera), y abajo ya no se repite
+      // ni el logo chico ni el país.
+      const _nomA='<span onclick="renameAthlete('+a.id+')" title="Click para corregir el nombre — se cambia en la tarima, el acta y la transmisión" style="cursor:text;border-bottom:1px dashed rgba(212,168,67,.45)">'+esc(a.name)+'</span>';
+      if(_variosPaises()){
+        h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap">'+_flagImg(_ctry(a),13)+_nomA+'</div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+_ctry(a)+' \u00b7 '+a.club+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</span></div></td>';
+      }else{
+        h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap;display:flex;align-items:center">'+_logoClub(a,24)+_nomA+'</div>'
+          +'<div style="font-size:9px;color:var(--muted);white-space:nowrap">'+esc(a.club||'')+' \u00b7 '+a.div+' \u00b7 '+a.cat+'</div></td>';
+      }
+    }
     {
       // Opciones del dropdown de vuelo: si hay tarima, suffix con 1/2; si no, letras simples.
       const _flOpts = TARIMA ? FL_LETTERS.map(L=>L+TARIMA) : FL_LETTERS.slice();
@@ -14027,7 +14052,13 @@ function _renderResultsTable(opts){
     h+='<tr style="border-bottom:1px solid rgba(30,58,95,.25);'+(a.bombed?'opacity:.4':dq?'opacity:.7':'')+'">';
     const virtual=!dq&&typeof pos==='number'&&!catCerrada[catKey];
     h+='<td class="os" title="'+(dq?'Descalificado':virtual?'Posición virtual: todavía quedan intentos':'Posición final')+'" style="padding:6px 4px;text-align:center;color:'+(dq?'var(--red)':typeof pos==="number"&&pos<=3?'var(--gold)':'var(--muted)')+';font-weight:700;font-size:14px;'+(virtual?'opacity:.85':'')+'">'+pos+(virtual?'<span style="font-size:9px;color:#f59e0b;margin-left:1px">~</span>':'')+'</td>';
-    h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap;display:flex;align-items:center">'+(_variosPaises()?_flagImg(_ctry(a),12,true):'')+'<span>'+a.name+'</span></div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+'</span></div></td>';
+    if(_variosPaises()){
+      h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap;display:flex;align-items:center">'+_flagImg(_ctry(a),12,true)+'<span>'+a.name+'</span></div><div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)">'+(window.clubLogoImg?window.clubLogoImg(a.club,14,'background:rgba(10,22,40,.4);padding:1px;'):'')+'<span>'+a.club+'</span></div></td>';
+    }else{
+      // Un solo país: el logo del club donde iba la bandera, y abajo el club en texto.
+      h+='<td style="padding:6px 4px"><div style="font-weight:600;font-size:12px;white-space:nowrap;display:flex;align-items:center">'+_logoClub(a,22)+'<span>'+a.name+'</span></div>'
+        +'<div style="font-size:9px;color:var(--muted);white-space:nowrap">'+(a.club||'')+'</div></td>';
+    }
     h+='<td style="padding:6px 3px;text-align:center;font-size:11px">'+(a.bw||'—')+'</td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:10px">'+(a.div||'—')+'</td>';
     h+='<td style="padding:6px 3px;text-align:center;font-size:10px">'+(a.cat||'—')+'</td>';
@@ -16109,7 +16140,9 @@ function renderLiveView(){
     // y en el medallero. Solo si el campeonato tiene más de un país: en un
     // nacional serían cuatrocientas banderas chilenas iguales, que no informan
     // nada y le quitan lugar al nombre. Es la misma condición que usa Resultados.
+    // En un nacional va el logo del club, que es lo que distingue a cada uno.
     if(_variosPaises()) h += _flagImg(_ctry(a),isOnPlatform?15:12,true);
+    else h += _logoClub(a,_enLinea?(isOnPlatform?30:26):(isOnPlatform?34:30));
     h += '<span style="font-weight:'+(isOnPlatform?700:500)+';font-size:'+(isOnPlatform?13:11)+'px;color:'+(isOnPlatform?'#fff':'var(--text)')+'">'+a.name+'</span>';
     // Club/país + peso corporal. El club se omite cuando repite lo que ya dice la
     // bandera: en un sudamericano, "Brasil" al lado de la bandera brasileña gasta

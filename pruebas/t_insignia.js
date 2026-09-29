@@ -72,22 +72,29 @@ const MONTAR = `(paises)=>{
     ok(/clubs\//.test(r.html), 'sale el logo del club: ' + r.html);
   }
 
-  console.log('\n  Sin logo de club, la bandera igual sirve de respaldo');
+  console.log('\n  Sin logo de club, la bandera NO vuelve de relleno');
   {
+    // Se pidió así después del Sudamericano: en un campeonato de un solo país
+    // la bandera no dice nada, ni siquiera como respaldo.
     const r = await p.evaluate(() => {
       DATA.athletes.forEach(a => { a.club = ''; });
       window._VARIOS_PAISES = undefined;
-      return /class="flag-img"|flag-code/.test(_insignia(DATA.athletes[0], 14));
+      return _insignia(DATA.athletes[0], 14);
     });
-    ok(r, 'no queda el hueco vacío');
+    ok(!/class="flag-img"|flag-code/.test(r), 'no sale la bandera');
+    ok(r === '', 'queda solo el nombre');
   }
 
   console.log('\nSe usa en las cuatro pantallas');
   ok(/\$\{_insignia\(a,15\)\}/.test(src), 'Tabla Actual (el ranking de la esquina)');
   ok(/_insignia\(a,fs\(13\)\)/.test(src), 'la tabla de jornada');
   ok(/_insignia\(a,13\)/.test(src), 'las fichas de Atletas del campeonato');
-  ok(/_variosPaises\(\)\?_flagImg\(_ctry\(a\),12,true\):''/.test(src),
-     'y en Resultados, donde el club ya se muestra abajo, la bandera sale solo si hay varios países');
+  // En un nacional el logo del club va donde iba la bandera, antes del nombre.
+  ok(/if\(_variosPaises\(\)\)\{\s*h\+='<td[^\n]*_flagImg\(_ctry\(a\),12,true\)/.test(src)
+     && /_logoClub\(a,22\)\+'<span>'\+a\.name/.test(src),
+     'en Resultados: bandera con varios países, logo del club en su lugar con uno solo');
+  ok(/_logoClub\(a,24\)\+_nomA/.test(src),
+     'y en Atletas y Pesaje, igual: el logo del club antes del nombre');
 
   console.log('\n  El caché se rehace al cambiar de campeonato');
   ok(/window\._VARIOS_PAISES=undefined;/.test(src), 'se limpia en pickEvent');

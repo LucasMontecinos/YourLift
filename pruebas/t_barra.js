@@ -26,7 +26,11 @@ const MONTAR = `(pais,logo,fondo)=>{
   const a={id:1,name:'Angelo Matias FORTINO SILVA',lot:197,flight:'A',sex:'Hombre',
     cat:'83',div:'Open',mod:'classic',bw:82.4,club:'Athor',country:pais,bombed:false,att:n9()};
   a.att.sq=[{w:300,r:'g'},{w:312.5,r:'g'},{w:322.5,r:null}];
-  DATA.athletes=[a];
+  // Otro atleta, de otro país y en otra tanda: el campeonato es internacional,
+  // como el Sudamericano, y la pantalla muestra bandera y código de país.
+  const b={id:2,name:'Otro Atleta',lot:298,flight:'B',sex:'Hombre',cat:'83',div:'Open',
+    mod:'classic',bw:82,club:'Hannya',country:'ARG',bombed:false,att:n9()};
+  DATA.athletes=[a,b]; window._VARIOS_PAISES=undefined;
   DATA.lift='sq'; DATA.round=2; DATA.flight='A'; DATA.phase='compete';
   DATA.event={id:'x',name:'Campeonato de Prueba',short:'Prueba',logoUrl:logo||''};
   window._SCREEN_STATE={mode:'barra',flights:null,fondo:fondo||'bandera'};
@@ -58,6 +62,18 @@ const MONTAR = `(pais,logo,fondo)=>{
   ok(/322\.5/.test(txt), 'el peso de la barra');
   ok(/KG/.test(txt), 'en kilos');
   ok(/CHI/.test(txt), 'el código del país');
+  // En un campeonato de un solo país, en ese lugar va el club.
+  const nac = await p.evaluate(() => {
+    DATA.athletes = [DATA.athletes[0]]; window._VARIOS_PAISES = undefined;
+    DATA.athletes[0].club = 'Black Bars';
+    renderTxWidget();
+    const t = document.body.innerText;
+    const r = { club: /Black Bars/.test(t), codigo: /\bCHI\b/.test(t),
+                logo: !!document.querySelector('img[src*="clubs/"]') };
+    return r;
+  });
+  ok(nac.club && !nac.codigo, 'con un solo país, en su lugar va el club y no "CHI"');
+  ok(nac.logo, 'con su logo');
   ok(/83/.test(txt) && /OPN|Open/i.test(txt), 'la categoría y la división: ' + (txt.match(/83[^\n]*/)||[''])[0]);
 
   console.log('\n  Y lo que se sacó a propósito');
