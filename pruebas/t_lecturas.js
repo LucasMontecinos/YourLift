@@ -231,6 +231,35 @@ const suma = (l, f) => l.filter(f).reduce((n, x) => n + x.n, 0);
     await ctx.close();
   }
 
+  console.log('\nLa ficha de un atleta pide solo lo suyo');
+  {
+    // Un atleta real de data.json, con una inscripción y una foto en la base falsa.
+    const A = { codigo: '2233JAM-2024', rut: '22334174-8', nombre: 'Jaime Ignacio Abello Maulen' };
+    const { p, ctx, errs } = await abrir(b, `http://localhost:${PUERTO}/atleta.html?codigo=${A.codigo}`);
+    await p.evaluate(A => {
+      window.__FAKE.inscripciones.push({ id: 'mia', evento: 'regional_centro_2026', status: 'approved',
+        nombre: A.nombre, rut: A.rut, division: 'Open', categoria: '-93 kg', modalidad: 'Powerlifting Classic', club: 'Bushido' });
+      window.__FAKE.atleta_fotos.push({ id: A.codigo, rut: A.rut, codigo: A.codigo, foto_url: 'http://localhost:' + location.port + '/YourLift_logo.png?foto-jaime' });
+    }, A);
+    await p.waitForFunction(() => /Inscripciones activas/i.test((document.getElementById('profileSection') || {}).innerText || ''),
+      null, { timeout: 20000 }).catch(() => {});
+    await p.waitForTimeout(800);
+    const l = await lecturas(p);
+    const insc = l.filter(x => x.col === 'inscripciones');
+    ok(insc.length >= 1 && insc.every(x => (x.filtros || []).length), 'las inscripciones se piden filtradas por el atleta, nunca enteras');
+    ok(suma(insc, () => true) <= 4, 'y se leen solo las suyas (' + suma(insc, () => true) + ')');
+    const fotos = l.filter(x => x.col === 'atleta_fotos');
+    ok(suma(fotos, () => true) <= 3, 'la foto: ' + suma(fotos, () => true) + ' lecturas en vez de ~500');
+    const r = await p.evaluate(() => ({
+      txt: document.getElementById('profileSection').innerText,
+      foto: !!document.querySelector('#profileSection img[src*="foto-jaime"]'),
+    }));
+    ok(/Inscripciones activas/i.test(r.txt) && /-93 kg/.test(r.txt), 'y la ficha muestra su inscripción');
+    ok(r.foto, 'y su foto');
+    ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.join(' | ') : ''));
+    await ctx.close();
+  }
+
   console.log(fallas ? `\n${fallas} FALLA(S)` : '\nTodo OK');
   await b.close();
   process.exit(fallas ? 1 : 0);

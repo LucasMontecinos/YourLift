@@ -210,10 +210,8 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
     const db=fb.getFirestore(app);
     _fbDB=db; _fbMod=fb;
 
-    // Inscripciones: getDocs + caché 5min
-    const ci=_aC('atl_insc',5*60*1000);
-    if(ci){INSC=ci;}
-    else{fb.getDocs(fb.collection(db,'inscripciones')).then(snap=>{INSC=snap.docs.map(d=>({id:d.id,...d.data()}));_aSC('atl_insc',INSC);if(window._curCodigo)showProfile(window._curCodigo);});}
+    // Las inscripciones y la foto ya no se bajan enteras: se piden las del
+    // atleta que se está mirando, al abrir su ficha (ver _cargarPropio).
 
     // Eventos: getDocs + caché 10min
     const ce=_aC('atl_evs',10*60*1000);
@@ -227,8 +225,8 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
     // viejo. Con el RUT —que el propio documento de foto trae adentro— se
     // encuentran solas.
     const _applyFotos=docs=>{docs.forEach(data=>{const ath=window.YLEdiciones.buscarAtleta(DB,data);if(ath&&data.foto_url)ath.foto_url=data.foto_url;});if(window._curCodigo)showProfile(window._curCodigo);};
+    // Quien ya tenía la colección guardada en el equipo la sigue aprovechando.
     if(cf){_conDB(()=>_applyFotos(cf));}
-    else{fb.getDocs(fb.collection(db,'atleta_fotos')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_fotos',docs);_conDB(()=>_applyFotos(docs));});}
 
     // Logros: getDocs + caché 30min
     const ca=_aC('atl_ach',30*60*1000);
@@ -543,6 +541,53 @@ function fechaOrden(c){
 }
 
 // ── Profile ──────────────────────────────────────────────
+// ── Lo propio del atleta que se está mirando ───────────────────────────────
+// Antes cada visita a una ficha bajaba las 712 inscripciones y las ~500 fotos de
+// Firestore para mostrar las de UNA persona: era la mitad de las lecturas de la
+// página. Ahora se piden solo las suyas, por código y por RUT. Las inscripciones
+// guardan el RUT como 12345678-9, pero alguna vieja trae puntos o viene sin
+// guion, así que se pregunta por todas las formas de escribirlo.
+const _PROPIO={};
+function _formasRut(r){
+  const n=String(r||'').replace(/[^0-9kK]/g,'').toUpperCase();
+  if(n.length<2)return [];
+  const c=n.slice(0,-1), dv=n.slice(-1), p=c.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+  return [...new Set([c+'-'+dv, p+'-'+dv, n, c+'-'+dv.toLowerCase(), p+'-'+dv.toLowerCase(), n.toLowerCase()])];
+}
+// La foto de Firestore manda sobre la de data.json, como antes: es la que se
+// cambia desde el panel.
+function _aplicarPropio(a,d){
+  if(d&&d.foto)a.foto_url=d.foto;
+}
+async function _cargarPropio(a){
+  if(!_fbDB||!_fbMod||!a||!a.codigo)return;
+  const cod=a.codigo;
+  if(_PROPIO[cod])return;
+  const g=_aC('atl_p_'+cod,30*60*1000);
+  if(g){_PROPIO[cod]=g;_aplicarPropio(a,g);return;}
+  _PROPIO[cod]={cargando:true};
+  const fb=_fbMod, db=_fbDB, formas=_formasRut(a.rut);
+  const q=(col,campo,op,val)=>fb.getDocs(fb.query(fb.collection(db,col),fb.where(campo,op,val))).catch(()=>null);
+  try{
+    const [i1,i2,f1,f2]=await Promise.all([
+      q('inscripciones','codigo','==',cod),
+      formas.length?q('inscripciones','rut','in',formas):null,
+      fb.getDoc(fb.doc(db,'atleta_fotos',cod)).catch(()=>null),
+      formas.length?q('atleta_fotos','rut','in',formas):null,
+    ]);
+    const insc={};
+    [i1,i2].forEach(s=>{ if(s)s.docs.forEach(d=>{insc[d.id]=Object.assign({id:d.id},d.data());}); });
+    const fotos=[];
+    if(f1&&f1.exists())fotos.push(f1.data());
+    if(f2)f2.docs.forEach(d=>fotos.push(d.data()));
+    const conFoto=fotos.find(x=>x&&x.foto_url);
+    const d={insc:Object.values(insc),foto:conFoto?conFoto.foto_url:null};
+    _PROPIO[cod]=d;
+    _aSC('atl_p_'+cod,d);
+    _aplicarPropio(a,d);
+  }catch(e){ _PROPIO[cod]={insc:[],foto:null}; }
+  if(window._curCodigo===cod)showProfile(cod);
+}
 window.showProfile=function(codigo){
   window._curCodigo=codigo;
   const a=DB.find(x=>x.codigo===codigo);
@@ -551,6 +596,7 @@ window.showProfile=function(codigo){
     document.getElementById('profileSection').style.display='block';
     return;
   }
+  _cargarPropio(a);
   history.replaceState(null,'','?codigo='+codigo);
   _aplicarCompetenciasEdits(a);
 
@@ -616,10 +662,13 @@ window.showProfile=function(codigo){
     return pp?{peer:pp,pg:pp.g,mio:mio.total}:null;
   }).filter(Boolean);
 
-  // Active inscriptions
-  const activeInsc=INSC.filter(i=>{
+  // Active inscriptions (las del atleta, pedidas al abrir su ficha)
+  // Las pedidas por su código o su RUT ya son de él; con la lista general (si
+  // estaba guardada de antes) se reconoce por nombre o código, como siempre.
+  const _propias=_PROPIO[codigo]&&_PROPIO[codigo].insc;
+  const activeInsc=(_propias||INSC).filter(i=>{
     if(i.status==='rejected')return false;
-    return nrm(i.nombre)===nrm(a.nombre)||(i.codigo&&i.codigo===codigo);
+    return !!_propias||nrm(i.nombre)===nrm(a.nombre)||(i.codigo&&i.codigo===codigo);
   });
 
   const initials=a.nombre.split(' ').map(w=>w[0]).filter(Boolean).slice(0,2).join('').toUpperCase();
