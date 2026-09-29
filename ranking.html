@@ -464,6 +464,7 @@ function applyEdit(o){
         if(cat==='84' && !_maleC && _bwC>84) cat='84+';
         if(cat==='120' && _maleC && _bwC>120) cat='120+';
         if(!cat||!data.sexo)return;
+        if(rkNoDioPeso(cat,_bwC))return;
         var tab=_getTab(data.sexo,data.modalidad,data.view,(data.division||'')+' '+(data.evento||''));
         var isBench=tab.indexOf('bench')===0;
         // `fecha` la usa el ciclo del ranking; `an` es el año de nacimiento, que
@@ -529,6 +530,16 @@ function applyEdit(o){
 })();
 
 function cn(c){return parseFloat((c||'999').replace('+',''))}
+// ¿Pesó más que el límite de su categoría? Entonces no dio el peso y esa marca
+// no cuenta. Pasó con Joaquín Cocio en el Universitario 2026: categoría 59,
+// pesó 59,6 y el resultado quedó publicado como válido, así que salía primero
+// en 59 kg. Las categorías abiertas (84+, 120+) no tienen límite.
+function rkNoDioPeso(cat,bw){
+  cat=String(cat||''); bw=+bw||0;
+  if(!bw||cat.indexOf('+')>=0)return false;
+  var lim=parseFloat(cat);
+  return lim>0&&bw>lim;
+}
 
 function R(){
 // `_baja` son las fichas dadas de baja desde el panel —repetidas, casi siempre—.
