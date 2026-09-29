@@ -385,6 +385,9 @@ window.createCoach=async function(email,password,nombre,grado,rut,extra){
 // DATA LOADING
 // ═══════════════════════════════════════════
 async function loadAll(){
+  // ¿La nómina del Sudamericano sigue publicada? Mientras lo esté, el panel la
+  // ofrece en Nóminas, Tarjetas y Medallero; cuando se despublica, desaparece.
+  fetch('nomina_sudamericano.json').then(r=>r.json()).then(j=>{ST.sudaPublicada=j.publicada!==false;if(ST.sudaPublicada&&typeof render==='function')render();}).catch(()=>{});
   // Load data.json — non-blocking, dashboard degrades gracefully if missing
   try{
     const dRes=await fetch('data.json').then(r=>r.json()).catch(()=>[]);
@@ -5978,7 +5981,8 @@ window.ncLoad=async function(){
   ST.ncData={};
   try{
     const j=await (await fetch('nomina_sudamericano.json?'+Date.now())).json();
-    ST.ncSuda=j.eventoCorto||'Sudamericano 2026';
+    ST.sudaPublicada=j.publicada!==false;
+    if(ST.sudaPublicada)ST.ncSuda=j.eventoCorto||'Sudamericano 2026';
   }catch(e){}
   // cargar lo guardado
   try{
@@ -6092,7 +6096,7 @@ function renderNominas(){
     <div class="search-box">
       <select class="inp" onchange="ST.filterEv=this.value;ST.filterClasif='';render()">
         ${allEvents.map(e=>`<option value="${e}" ${ST.filterEv===e?'selected':''}>${e}</option>`).join('')}
-        <option value="${NS_EV}">Sudamericano 2026 — nómina FESUPO</option>
+        ${ST.sudaPublicada?`<option value="${NS_EV}">Sudamericano 2026 — nómina FESUPO</option>`:''}
       </select>
       ${_posNacCol?`<select class="inp" style="max-width:190px" onchange="ST.filterClasif=this.value;render()">
         <option value="">Todos</option>
@@ -10463,7 +10467,7 @@ window.medTodos=function(grupo,encender){
 function renderMedallero(){
   const M=_medEstado();
   const evs=[...new Set((ST.inscripciones||[]).map(i=>i.evento))].filter(Boolean);
-  if(!M.ev) M.ev=evs[0]||NS_EV;
+  if(!M.ev) M.ev=evs[0]||(ST.sudaPublicada?NS_EV:'');
   const P=_medPlan();
   const on=(set,k)=>!set||set[k]!==false;
   const chip=(grupo,k,lbl,activo)=>`<button onclick="medTog('${escapeJsAttr(grupo)}','${escapeJsAttr(k)}')" style="padding:5px 11px;border-radius:14px;cursor:pointer;font-size:11px;border:1px solid ${activo?'var(--gold)':'var(--border)'};background:${activo?'rgba(212,168,67,.15)':'transparent'};color:${activo?'var(--gold)':'var(--muted)'}">${escapeHtml(lbl)}</button>`;
@@ -10474,7 +10478,7 @@ function renderMedallero(){
   // Nómina
   h+='<div class="card" style="margin-bottom:12px"><div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">NÓMINA</div>';
   h+='<select onchange="medSet(\'ev\',this.value)" style="width:100%;max-width:520px;padding:9px 11px;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px">';
-  h+=`<option value="${NS_EV}" ${M.ev===NS_EV?'selected':''}>Sudamericano 2026 (nómina FESUPO)</option>`;
+  if(ST.sudaPublicada)h+=`<option value="${NS_EV}" ${M.ev===NS_EV?'selected':''}>Sudamericano 2026 (nómina FESUPO)</option>`;
   evs.forEach(e=>{h+=`<option value="${escapeHtml(e)}" ${M.ev===e?'selected':''}>${escapeHtml(e)}</option>`;});
   h+='</select></div>';
 

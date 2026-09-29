@@ -1,7 +1,12 @@
 """Servidor local de la batería de pruebas.
 
-Sirve el repositorio igual que `python3 -m http.server`, con una diferencia: a
-nominas.json le suma los eventos de prueba de pruebas/fixtures/eventos_ensayo.json.
+Sirve el repositorio igual que `python3 -m http.server`, con dos diferencias:
+
+· a nominas.json le suma los eventos de prueba de pruebas/fixtures/eventos_ensayo.json;
+· nomina_sudamericano.json sale como PUBLICADA (con su cronograma). El
+  Sudamericano ya terminó y en el sitio está oculto, pero es la nómina de
+  ejemplo con la que se prueban la pestaña Nóminas, el cronograma, las fichas y
+  el panel: sin esto, esas pruebas dejarían de ejercitar nada.
 
 Las pruebas usan esos eventos (atletas con intentos ya cargados, varios días,
 dos tarimas) como datos de ejemplo. Antes vivían en el nominas.json del sitio y
@@ -29,13 +34,22 @@ def nominas_con_pruebas():
     return json.dumps(nom, ensure_ascii=False).encode('utf-8')
 
 
+def suda_publicada():
+    with open(os.path.join(RAIZ, 'nomina_sudamericano.json'), encoding='utf-8') as f:
+        j = json.load(f)
+    j['publicada'] = True
+    j['cronogramaPublico'] = True
+    return json.dumps(j, ensure_ascii=False).encode('utf-8')
+
+
 class Manejador(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **k):
         super().__init__(*a, directory=RAIZ, **k)
 
     def do_GET(self):
-        if self.path.split('?')[0] == '/nominas.json':
-            cuerpo = nominas_con_pruebas()
+        ruta = self.path.split('?')[0]
+        if ruta in ('/nominas.json', '/nomina_sudamericano.json'):
+            cuerpo = nominas_con_pruebas() if ruta == '/nominas.json' else suda_publicada()
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Content-Length', str(len(cuerpo)))

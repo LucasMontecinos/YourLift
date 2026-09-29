@@ -24,7 +24,9 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
 
   console.log('\nLa nómina trae el cronograma oficial');
   {
-    ok(N.cronogramaPublico === true, 'el cronograma está marcado como público');
+    // (el Sudamericano ya terminó y en el sitio está oculto; el servidor de
+    // pruebas lo sirve público para seguir probando el cronograma)
+    ok(typeof N.cronogramaPublico === 'boolean', 'el cronograma dice si es público');
     const j = N.jornadas || [];
     ok(j.length === 20, j.length + ' sesiones');
     const dias = [...new Set(j.map(x => x.fecha))].sort();

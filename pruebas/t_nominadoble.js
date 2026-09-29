@@ -33,7 +33,9 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
   const nom = JSON.parse(fs.readFileSync(__dirname + '/../nomina_sudamericano.json', 'utf8'));
   {
     ok(nom.eventoId === 'suda2026', 'su eventoId es ' + nom.eventoId);
-    ok(nom.publicada === true, 'y está publicada');
+    // (en el sitio ya no se muestra: el Sudamericano terminó; el servidor de
+    // pruebas la sirve publicada para seguir probando la pestaña Nóminas)
+    ok(typeof nom.publicada === 'boolean', 'y dice si está publicada');
     ok((nom.atletas || []).length > 400, 'con ' + (nom.atletas || []).length + ' inscripciones');
   }
 
