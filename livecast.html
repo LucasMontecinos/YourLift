@@ -527,6 +527,12 @@ async function initFB(){
     if(typeof _aplicarEdicionesDB==='function')_aplicarEdicionesDB();  // ediciones del panel sobre el padrón
     if(typeof _setupLcMediaListener==='function')_setupLcMediaListener(); // logos de clubes subidos en el panel
     if(typeof _fotosArrancar==='function')_fotosArrancar();               // fotos: solo si alguna pantalla ya las pidió
+    // Récords nacionales vigentes: records/data (lo que guardó el último cierre y
+    // lo que edita el panel). La copia de Storage/records.json puede estar atrasada
+    // —después del Sudamericano 2026 seguía con la tabla de antes— y el aviso de
+    // récord comparaba contra marcas que ya no eran récord.
+    if(!TX_MODE)fb.getDoc(fb.doc(fbDB,'records','data')).then(s=>{const r=s.exists()?s.data():null;
+      if(r&&(r.classic||r.equipped)){RECORDS=r;window._RECORDS_FS=true;}}).catch(()=>{});
     // Keep LIVE_EVENTS in sync with Firestore eventos
     fb.onSnapshot(fb.collection(fbDB,'eventos'),async (snap)=>{
       const evs={};
@@ -1686,7 +1692,10 @@ function isMeetClassic(a){
 function isMeetEquipped(a){
   return a&&(a.mod==='equipped'||(a.mod==='equipped_bench'&&_isPlusBench(a)));
 }
-function bestOf(a,l){let b=0;a.att[l].forEach(x=>{if(x.r==='g'&&x.w>b)b=x.w});return b}
+// Siempre en número. Hay pesos que llegan como texto ("305", desde la planilla o
+// la nómina) y así se comparaban como texto: "97.5" le ganaba a "102.5", y el
+// Sudamericano 2026 se publicó con marcas y totales en texto.
+function bestOf(a,l){let b=0;a.att[l].forEach(x=>{const w=+(x&&x.w)||0;if(x.r==='g'&&w>b)b=w});return b}
 function totalOf(a,view){
   // view: 'meet' (default) → suma SQ+BP+DL para Powerlifting completo
   //       'bench' → solo mejor BP (para tabla Only Bench)
@@ -15532,7 +15541,7 @@ function _aplicarEdicionesDB(){
 fetch(_STOR+'public%2Frecords.json?alt=media',{cache:'no-cache'})
   .then(r=>r.ok?r.json():fetch('records.json').then(r=>r.json()))
   .catch(()=>fetch('records.json').then(r=>r.json()))
-  .then(d=>{RECORDS=d}).catch(()=>console.warn('[FECHIPO] records.json no cargado'));
+  .then(d=>{if(!window._RECORDS_FS)RECORDS=d}).catch(()=>console.warn('[FECHIPO] records.json no cargado'));
 // Récords sudamericanos (FESUPO) — solo se usan en los eventos que los declaran
 // (records:'suda'). Archivo estático: se genera con herramientas/build_records_suda.py.
 fetch('records_suda.json',{cache:'no-cache'}).then(r=>r.ok?r.json():null)

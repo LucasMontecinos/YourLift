@@ -316,6 +316,12 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
     const cr=_aC('atl_res',10*60*1000);
     // Resultados de un evento de prueba (ensayo): no son de verdad y no se muestran.
     const _real=docs=>(docs||[]).filter(x=>!(x&&(/ensayo/i.test(String(x.evento_id||''))||/ensayo/i.test(String(x.id||''))||/^\s*ensayo\b/i.test(String(x.evento||'')))));
+    // Récords: la tabla vigente es records/data de Firestore —la que actualiza el
+    // cierre del livecast y edita el panel—, igual que en el inicio. records.json
+    // es solo el respaldo: con él solo, los récords del Sudamericano 2026 no
+    // aparecían en la ficha aunque ya estuvieran guardados.
+    fb.getDoc(fb.doc(db,'records','data')).then(s=>{const r=s.exists()?s.data():null;
+      if(r&&(r.classic||r.equipped)){window.RECORDS=r;if(window._curCodigo)showProfile(window._curCodigo);}}).catch(()=>{});
     if(cr){_conDB(()=>_applyResults(_real(cr)));}
     else{fb.getDocs(fb.collection(db,'competition_results')).then(snap=>{const docs=_real(snap.docs.map(d=>({...d.data(),id:d.id})));_aSC('atl_res',docs);_conDB(()=>_applyResults(docs));});}
 
