@@ -431,7 +431,7 @@
         var f = new File([blob], archivo, { type: 'image/png' });
         if (navigator.canShare({ files: [f] })) {
           navigator.share({ files: [f], title: titulo || 'QR' })
-            .then(function () { aviso('LISTO ✓'); })
+            .then(function () { aviso('LISTO'); })
             .catch(function (e) {
               // Cancelar no es un error: si cerró el menú a propósito, no hay
               // que insistirle abriéndole una pestaña encima.
@@ -520,7 +520,7 @@
     ov.querySelector('#ylqr-png').onclick = function () { bajarPNG(url, archivo, titulo, this); };
     ov.querySelector('#ylqr-copiar').onclick = function () {
       var b = this;
-      var listo = function () { b.textContent = 'COPIADO ✓'; setTimeout(function () { b.textContent = 'COPIAR LINK'; }, 1600); };
+      var listo = function () { b.textContent = 'COPIADO'; setTimeout(function () { b.textContent = 'COPIAR LINK'; }, 1600); };
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(listo, function () {});
       else { var t = document.createElement('textarea'); t.value = url; document.body.appendChild(t); t.select();
              try { document.execCommand('copy'); listo(); } catch (e) {} t.remove(); }

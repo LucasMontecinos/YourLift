@@ -212,7 +212,7 @@ async function entrarComo(p, mail) {
     ok(/const esJuez = role==='juez';/.test(admin), 'al crear la cuenta, el panel separa al juez');
     ok(/setDoc\(doc\(db, esJuez\?'jueces':'admins', newUID\)/.test(admin),
        'y la guarda en jueces/ en vez de admins/');
-    ok(/⚠ Cuenta de juez guardada entre los admins/.test(admin),
+    ok(/(?:⚠|<i class=yl-i-alerta><\/i>) Cuenta de juez guardada entre los admins/.test(admin),
        'y avisa si quedó alguna cuenta vieja de juez con acceso completo');
   }
 
