@@ -113,10 +113,20 @@ service firebase.storage {
     // El tope de tamaño sí se puede poner sin romper nada —un carnet comprimido a
     // WebP o un PDF escaneado están muy por debajo— y evita que el bucket termine
     // usándose de disco gratis.
+    // Documentos de las inscripciones: carnet, pasaporte, consentimientos de
+    // menores, fichas médicas. Son datos personales —algunos sensibles—, así que:
+    //   · NADIE fuera del panel puede listar la carpeta. Antes read: if true
+    //     dejaba listar athlete_files/ entero y bajar los documentos de todos.
+    //   · Leer un archivo exige saber su nombre exacto, que lleva la hora de
+    //     subida en milisegundos: el formulario lo necesita para pedir su link
+    //     (getDownloadURL) justo después de subirlo, y el link queda guardado en
+    //     inscripciones_private, que solo lee un admin.
+    //   · Se puede crear, no sobrescribir: nadie puede pisar el documento de otro.
     match /athlete_files/{rut}/{file} {
-      allow read: if true;
-      allow create, update: if request.resource.size < 20 * 1024 * 1024;
-      allow delete: if isAdmin();
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if request.resource.size < 20 * 1024 * 1024;
+      allow update, delete: if isAdmin();
     }
 
     // ── Formularios propios de cada campeonato ───────────────────
