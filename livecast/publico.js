@@ -379,14 +379,16 @@ function renderLiveView(){
         if(!at){ h += '<td style="padding:2px;background:'+bg+'"><div class="att att-e" style="font-size:11px;padding:6px 3px;min-width:46px;text-align:center;color:var(--border)">·</div></td>'; continue; }
         const isCurAtt = isCurLift && isOnPlatform && j===ci;
         const cls = at.r==='g'?'att-g':at.r==='n'?'att-n':at.w>0?'att-p':'att-e';
-        h += '<td style="padding:2px;background:'+bg+'">';
+        // La casilla entera toma el color del resultado, de borde a borde, como
+        // en la tabla de la pantalla de tarima (lv-solido en livecast.html).
+        h += '<td class="lv-att lv-'+cls.slice(4)+'" style="padding:2px;background:'+bg+'">';
         // Récord sudamericano: el público ve la misma marca amarilla que el control
         const srR2=_srRompe(ra,l,at.w), srOk2=srR2.length&&at.r==='g';
         const srCss2='';   // el color de adentro es el del intento, como en el control
         if(srR2.length)h+='<div class="rec-caja"><div class="'+(srOk2?'':'rec-tag')+'" style="font-size:8.5px;'
           +'font-weight:800;letter-spacing:.5px;line-height:1;margin-bottom:2px;text-align:center;color:#fff">'
           +(srOk2?'<i class=yl-i-estrella></i> RÉCORD':'RÉCORD')+'</div>';
-        h += '<div class="'+cls+' att'+(srR2.length?' rec-borde':'')+'"'+(srR2.length?' title="'+_srBadge(srR2).replace(/"/g,'&quot;')+'"':'')+' style="font-size:'+(isCurAtt?15:11)+'px;font-weight:700;padding:'+(isCurAtt?'10px 3px':'6px 3px')+';cursor:default;'+srCss2+(isCurAtt?'box-shadow:inset 0 0 0 2px '+LIFT_C[l]+';':'')+'min-width:46px;text-align:center">'+(at.w||'—')+'</div>'+(srR2.length?'</div>':'');
+        h += '<div class="'+cls+' att'+(srR2.length?' rec-borde':'')+'"'+(srR2.length?' title="'+_srBadge(srR2).replace(/"/g,'&quot;')+'"':'')+' style="font-size:'+(isCurAtt?15:12)+'px;font-weight:700;padding:'+(isCurAtt?'10px 3px':'6px 3px')+';cursor:default;'+srCss2+(isCurAtt?'box-shadow:inset 0 0 0 2px '+LIFT_C[l]+';':'')+'min-width:46px;text-align:center">'+(at.w?(+at.w).toFixed(1):'—')+'</div>'+(srR2.length?'</div>':'');
         // El que acaba de salir a tarima: cartelito chico bajo su intento, para
         // no perder de vista por dónde va la tanda cuando la lista se reordena.
         if(ultimo && !a.__is4 && ra.id===ultimo.id && l===ultimo.lift && j===ultimo.round)
@@ -399,8 +401,10 @@ function renderLiveView(){
       if(l==='sq')      sub = bSQ||null;
       else if(l==='bp') sub = (bSQ||bBP) ? (bSQ+bBP)||null : null;
       else              return;               // el peso muerto no lleva subtotal: van los tres totales
-      h += '<td style="text-align:center;padding:3px;border-right:1px solid var(--border)">';
-      h += '<span style="font-family:Oswald;font-size:'+(sub?13:10)+'px;font-weight:700;color:'+(sub?'#ccc':'rgba(100,120,150,.5)')+';">'+(sub||'—')+'</span>';
+      // El subtotal con el color de su movimiento, como la columna de mejor
+      // intento de la pantalla de tarima.
+      h += '<td class="lv-sub lv-sub-'+l+'" style="text-align:center;padding:3px;border-right:1px solid var(--border)">';
+      h += '<span style="font-family:Oswald;font-size:'+(sub?14:10)+'px;font-weight:700;color:'+(sub?(l==='sq'?'#7fb6ff':'var(--gold)'):'rgba(100,120,150,.5)')+';">'+(sub?(+sub).toFixed(1):'—')+'</span>';
       h += '</td>';
     });
 
