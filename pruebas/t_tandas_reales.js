@@ -48,7 +48,7 @@ const porTanda = filas => {
 
 // Los dos cronogramas reales, reducidos a lo que importa para armar tandas.
 // Se guardan acá y no se leen de Firestore: una prueba no puede depender de la red.
-const REALES = JSON.parse(fs.readFileSync(__dirname + '/fixtures_cronogramas.json', 'utf8'));
+const REALES = JSON.parse(fs.readFileSync(__dirname + '/fixtures/cronogramas.json', 'utf8'));
 
 (async () => {
 

@@ -1671,15 +1671,8 @@ function calcGL(t,bw,sex,mod,view){
   return d>0?Math.round(t*100/d*100)/100:0;
 }
 
-// Helpers para identificar en qué rankings/tablas aparece un atleta
-function inMeetRanking(a){
-  return a&&(a.mod==='classic'||a.mod==='equipped'||a.mod==='classic_bench'||a.mod==='equipped_bench');
-}
 function inBenchRanking(a){
   return a&&(a.mod==='onlybench'||a.mod==='classic_bench'||a.mod==='equipped_bench');
-}
-function inOERanking(a){
-  return a&&a.mod==='oe_classic';   // OE solo Classic full meet, no bench-only
 }
 function isOEClassic(a){return a&&a.mod==='oe_classic';}
 function isOEBench(a){return false;}  // OE no tiene bench-only
@@ -2174,26 +2167,6 @@ function _discosPorLado(ladoKg){
   for(const p of [25,20,15,10,5,2.5,1.25]){ while(rem>=p-0.001){ r.push(p); rem=Math.round((rem-p)*100)/100; } }
   for(const [p,n] of _FRACCIONARIOS){ for(let i=0;i<n&&rem>=p-0.001;i++){ r.push(p); rem=Math.round((rem-p)*100)/100; } }
   return r;
-}
-function calcPlates(w){return _discosPorLado((w-BAR-COLLARS)/2)}
-function renderPlates(w){
-  const pl=calcPlates(w);
-  if(!pl.length)return'<div style="display:flex;align-items:center;justify-content:center;gap:0"><div style="background:#777;height:14px;width:120px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:11px;color:#fff;font-weight:700">BARRA 20kg</div></div>';
-  const pH={25:80,20:72,15:64,10:54,5:46,'2.5':38,'1.25':32,'0.5':26,'0.25':22};
-  const pW={25:16,20:14,15:14,10:11,5:10,'2.5':9,'1.25':8,'0.5':7,'0.25':7};
-  function plateHTML(p){
-    const h=pH[p]||30;const wd=pW[p]||8;const bg=PLATE_C[p]||'#888';const dk=p===5;
-    return'<div style="display:flex;flex-direction:column;align-items:center;gap:1px"><div style="height:'+h+'px;width:'+wd+'px;background:'+bg+';border-radius:2px;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-weight:700;font-size:'+(p>=10?10:p>=2.5?8:7)+'px;color:'+(dk?'#000':'#fff')+';writing-mode:vertical-lr;text-orientation:mixed">'+p+'</div></div>';
-  }
-  const collar='<div style="height:30px;width:18px;background:var(--border);border-radius:2px;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:8px;color:var(--text);font-weight:700;writing-mode:vertical-lr">2.5</div>';
-  const bar='<div style="height:14px;width:70px;background:#777;border-radius:2px;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:10px;color:#fff;font-weight:700">20kg</div>';
-  const rev=[...pl].reverse();
-  let out='<div style="display:flex;align-items:center;justify-content:center;gap:1px">'+collar;
-  rev.forEach(p=>{out+=plateHTML(p)});
-  out+=bar;
-  pl.forEach(p=>{out+=plateHTML(p)});
-  out+=collar+'</div>';
-  return out;
 }
 
 function go(p){DATA.phase=p;save();toggleNav(false);R()}
@@ -3265,35 +3238,6 @@ async function toggleJudgeMode(){
     showToastLC('Modo Jueces DESACTIVADO — decisiones manuales');
   }
   R();
-}
-function manualRecordAlert(){
-  const queue=liftQueue();const cur=queue[0];if(!cur){showToastLC('No hay atleta activo');return;}
-  const weight=cur.att[DATA.lift][DATA.round].w;
-  if(!weight){showToastLC('Ingresa el peso del intento primero');return;}
-  // Try to find existing record
-  if(RECORDS){
-    const mod=cur.mod||'classic';
-    const cat=_normCat(cur.cat||'');
-    const div=_normDiv(cur.div||'');
-    const liftRecs=(RECORDS[mod]&&RECORDS[mod][DATA.lift])||[];
-    const match=liftRecs.find(rec=>rec.categoria===cat&&_normDiv(rec.division)===div);
-    if(match){showRecordAlert(cur.name,DATA.lift,DATA.round,weight,match.marca,match.nombre,cat,div,mod);return;}
-  }
-  // Generic record attempt overlay (no existing record to compare)
-  const ex=document.getElementById('recAlert');if(ex)ex.remove();
-  const LL={sq:'SQUAT',bp:'BENCH PRESS',dl:'DEADLIFT'};
-  const el=document.createElement('div');el.id='recAlert';
-  el.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:99999';
-  el.innerHTML='<div style="background:#0D1F38;border:3px solid #D4A843;border-radius:20px;padding:36px 44px;max-width:480px;width:90%;text-align:center;box-shadow:0 0 80px rgba(212,168,67,.35)">'
-    +'<div style="font-size:48px;margin-bottom:6px">&#127942;</div>'
-    +'<div style="font-family:Oswald;font-size:13px;letter-spacing:4px;color:#D4A843;margin-bottom:10px">INTENTO DE RÉCORD NACIONAL</div>'
-    +'<div style="font-family:Oswald;font-size:28px;font-weight:700;color:#fff;margin-bottom:4px">'+cur.name+'</div>'
-    +'<div style="font-family:Oswald;font-size:16px;color:#8A9BB2;margin-bottom:20px">'+LL[DATA.lift]+' · -'+_normCat(cur.cat||'')+'kg · '+_normDiv(cur.div||'')+'</div>'
-    +'<div style="font-family:Oswald;font-size:64px;font-weight:700;color:#D4A843;margin-bottom:8px">'+weight+' kg</div>'
-    +'<button onclick="closeRecAlert()" style="padding:10px 30px;border-radius:10px;border:2px solid #D4A843;background:transparent;color:#fff;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;cursor:pointer">CONFIRMAR</button>'
-    +'</div>';
-  document.body.appendChild(el);
-  setTimeout(()=>{const e=document.getElementById('recAlert');if(e)e.remove();},15000);
 }
 function showToastLC(msg){
   const t=document.createElement('div');t.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--green);color:var(--text);padding:12px 20px;border-radius:10px;z-index:9999;font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,.4)';
@@ -7799,64 +7743,6 @@ window.guardarRecordsNac=async function(){
   }catch(e){ alert('No se pudo guardar: '+(e.code||e.message)); }
 };
 
-function exportCompetenciasParaPerfiles(){
-  const evName=(DATA.event==null?void 0:DATA.event.name)||'Campeonato sin nombre';
-  const today=new Date().toISOString().slice(0,10);
-  // Incluimos también atletas DQ (3 fallos en algún lift) y los que tienen
-  // al menos un intento registrado (aunque su total sea 0).
-  const flightAth=DATA.athletes.filter(a=>{
-    if(a.bombed && totalOf(a)<=0 && bestOf(a,'bp')<=0)return false;
-    // Incluir si tiene al menos un peso registrado o intento marcado
-    const hasAnyAttempt=['sq','bp','dl'].some(l=>((a.att==null?void 0:a.att[l])||[]).some(at=>at.w>0||at.r));
-    return hasAnyAttempt;
-  });
-  const out=[];
-  flightAth.forEach(a=>{
-    // Para cada vista en la que participa, generar una entrada de competencia
-    const views=[];
-    if(isMeetClassic(a)||isMeetEquipped(a))views.push('meet');
-    if(inBenchRanking(a))views.push('bench');
-    views.forEach(view=>{
-      const dq=view==='meet'&&isDQ(a);
-      const t=totalOf(a,view);
-      // Excluir solo si NO hay total Y NO está DQ (i.e. no compitió ese movimiento)
-      if(t<=0 && !dq)return;
-      const gl=dq?0:calcGL(t,a.bw,a.sex,_glMod(a),view);
-      const isEq=isMeetEquipped(a);
-      let modLabel;
-      if(view==='bench')modLabel=isEq?'Only Bench Equipado':'Only Bench Classic';
-      else modLabel=isEq?'Powerlifting Equipado':'Powerlifting Classic';
-      const entry={
-        rut:a.rut||'',
-        nombre:a.name||'',
-        evento:evName,
-        fecha:today,
-        sexo:a.sex||'',
-        division:a.div||'',
-        categoria:a.cat||'',
-        modalidad:modLabel,
-        club:a.club||'',
-        resultado:{
-          bw:a.bw||0,
-          sq:view==='bench'?0:bestOf(a,'sq'),
-          bp:bestOf(a,'bp'),
-          dl:view==='bench'?0:bestOf(a,'dl'),
-          total:dq?0:t,
-          glp:dq?0:gl,
-          status:dq?'DQ':'OK'
-        },
-        source:'yourlift_livecast'
-      };
-      out.push(entry);
-    });
-  });
-  const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
-  const u=URL.createObjectURL(blob);
-  const l=document.createElement('a');
-  const evShort=((DATA.event==null?void 0:DATA.event.short)||evName).replace(/[^a-zA-Z0-9]+/g,'_');
-  l.href=u;l.download='competencias_'+evShort+'_'+today+'.json';l.click();
-  alert('Exportadas '+out.length+' competencias listas para mergear a data.json');
-}
 
 function renderObsTx(){
   const evId=(DATA.event==null?void 0:DATA.event.id)||(DATA.event==null?void 0:DATA.event.name)||'';
@@ -10068,15 +9954,6 @@ function _yob2(a){
   const m=String(fn).match(/(\d{4})/);
   if(!m) return '';
   return m[1].slice(2);
-}
-// celda de un intento: peso con color válido/nulo
-function _attCell(at){
-  if(!at||(!at.w&&at.r===null)) return '<span style="color:rgba(150,170,200,.35)">—</span>';
-  const w=at.w||0;
-  if(at.r==='g') return '<span style="color:#22c55e;font-weight:700">'+(w?w.toFixed(1):'—')+'</span>';
-  if(at.r==='n') return '<span style="color:#ef4444;font-weight:700;text-decoration:line-through;text-decoration-color:rgba(239,68,68,.6)">'+(w?w.toFixed(1):'—')+'</span>';
-  // pendiente (peso declarado, sin resultado)
-  return '<span style="color:rgba(220,230,245,.85)">'+(w?w.toFixed(1):'—')+'</span>';
 }
 // Celda de intento para la PANTALLA DE TARIMA: marca el resultado con COLOR DE FONDO
 // (válido = verde, nulo = rojo), legible a distancia en una proyección grande.
@@ -14492,26 +14369,6 @@ function renderResults(){
   return h;
 }
 
-function renderSB(){
-  const queue=liftQueue(),cur=queue[0],nxt=queue[1],rk=rankings();
-  const rack=cur?(DATA.lift==='sq'?cur.rackSQ:DATA.lift==='bp'?cur.rackBP:''):'';
-  const cw=cur?cur.att[DATA.lift][DATA.round].w:0;
-  let h='<div class="sb-wrap"><div class="sb-top"><div class="os" style="font-size:22px;font-weight:700;letter-spacing:3px">FECHIPO · YOURLIFT</div><div class="os" style="font-size:15px">'+((DATA.event==null?void 0:DATA.event.short)||'')+'</div><div style="display:flex;gap:6px;align-items:center"><span class="os" style="font-size:13px;background:'+LIFT_C[DATA.lift]+';padding:3px 14px;border-radius:5px;font-weight:700">VLO '+DATA.flight+' \u2014 '+LIFT_N[DATA.lift]+' \u2014 INT '+(DATA.round+1)+'</span><button onclick="go(\'compete\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:10px;font-family:Oswald"><i class=yl-i-ajustes></i></button></div></div><div class="sb-body"><div style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:30px">';
-  if(cur){
-    h+='<div class="os" style="font-size:clamp(28px,5vw,48px);font-weight:700;letter-spacing:2px;text-align:center;margin-bottom:6px">'+cur.name+'</div>';
-    h+='<div style="color:var(--muted);font-size:14px;margin-bottom:20px">'+cur.club+' \u00b7 '+cur.bw+'kg \u00b7 '+cur.div+' \u00b7 '+cur.cat+(rack?' \u00b7 <i class=yl-i-ajustes></i> '+rack:'')+'</div>';
-    h+='<div class="os" style="font-size:70px;font-weight:700;color:'+LIFT_C[DATA.lift]+';letter-spacing:4px">'+(cw||'\u2014')+' <span style="font-size:30px;color:var(--muted)">KG</span></div>';
-    if(cw)h+='<div style="margin-top:24px;padding:20px 24px;background:rgba(17,34,59,.6);border:1px solid var(--border);border-radius:12px;display:flex;align-items:center;justify-content:center">'+renderPlates(cw)+'</div>';
-    h+='<div style="display:flex;gap:14px;margin-top:24px">';
-    cur.att[DATA.lift].forEach((at,j)=>{h+='<div style="text-align:center;opacity:'+(j===DATA.round?1:.5)+'"><div style="font-size:9px;color:var(--muted);margin-bottom:3px;font-family:Oswald;letter-spacing:1px">INT '+(j+1)+'</div><div class="os" style="font-size:26px;font-weight:700;color:'+(at.r==='g'?'var(--green)':at.r==='n'?'var(--red)':'var(--muted)')+';text-decoration:'+(at.r==='n'?'line-through':'none')+'">'+(at.w||'\u2014')+'</div></div>'});
-    h+='</div>';
-    if(nxt)h+='<div style="margin-top:30px;color:var(--muted);font-size:12px">Siguiente: <strong style="color:var(--text)">'+nxt.name+'</strong> \u2014 '+nxt.att[DATA.lift][DATA.round].w+'kg</div>';
-  }else{h+='<div class="os" style="font-size:26px;color:var(--gold);letter-spacing:2px">RONDA COMPLETADA</div>'}
-  h+='</div><div style="background:rgba(17,34,59,.8);border-left:1px solid var(--border);padding:16px;overflow-y:auto"><h3 class="os" style="font-size:14px;letter-spacing:2px;color:var(--gold);margin-bottom:10px;text-align:center">RANKING GL</h3>';
-  rk.forEach((a,i)=>{h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid rgba(29,49,80,.3);background:'+(cur&&a.id===cur.id?LIFT_C[DATA.lift]+'15':'transparent')+';border-radius:3px"><div style="display:flex;align-items:center;gap:8px"><span class="os" style="color:'+(i<3?'var(--gold)':'var(--muted)')+';font-weight:700;font-size:16px;width:24px">'+(i+1)+'</span><div><div style="font-weight:600;font-size:13px">'+a.name+'</div><div style="font-size:10px;color:var(--muted)">SQ '+bestOf(a,'sq')+' \u00b7 BP '+bestOf(a,'bp')+' \u00b7 DL '+bestOf(a,'dl')+'</div></div></div><div style="text-align:right"><div class="os" style="font-size:18px;font-weight:700;color:var(--gold)">'+a.gl+'</div><div style="font-size:10px;color:var(--muted)">'+a.total+'kg</div></div></div>'});
-  if(!rk.length)h+='<p style="color:var(--muted);font-size:11px;text-align:center;padding:20px">Sin totales</p>';
-  h+='</div></div></div>';return h;
-}
 
 function subTotal(a,lift){
   const s=bestOf(a,'sq');
@@ -14995,132 +14852,8 @@ function txFooter(evName){
   return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 18px;background:linear-gradient(90deg,rgba(12,22,42,.92),rgba(16,26,46,.92));border-radius:0 0 7px 7px"><div style="font-family:Oswald;font-size:11px;color:rgba(160,180,210,.45);letter-spacing:1px">YourLift</div><div style="font-family:Oswald;font-size:11px;color:rgba(160,180,210,.45);letter-spacing:1px;text-transform:uppercase">'+evName+'</div></div>';
 }
 
-// ── MARCADOR (existing overlay) ──
-function txMarcador(cur,evName){
-  let h='<div style="flex:1"></div>';
-  if(!cur){
-    h+='<div style="margin:0 30px 60px;padding:18px 30px;background:linear-gradient(135deg,rgba(20,35,65,.97),rgba(25,40,72,.97));border-radius:8px;max-width:760px;border:1px solid rgba(60,90,140,.3)">';
-    h+='<div style="font-family:Oswald;font-size:26px;font-weight:700;color:#d4a843;letter-spacing:3px;text-align:center">RONDA COMPLETADA</div>';
-    h+=txFooter(evName)+'</div>';return h;
-  }
-  const cw=cur.att[DATA.lift][DATA.round].w;
-  const rk=catRankBySub(cur);const st=subTotal(cur,DATA.lift);
-  const parts=cur.name.split(' ');
-  const lastName=parts.length>2?parts.slice(-2).join(' '):parts[parts.length-1];
-  const firstName=parts.length>2?parts.slice(0,-2).join(' '):parts.slice(0,-1).join(' ');
-  const divShort=txDivShort(cur.div);
-  const catDiv=(cur.cat?'-'+cur.cat+'kg ':'')+divShort;
-  h+='<div style="margin:0 30px 50px;max-width:760px">';
-  h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 18px;background:linear-gradient(90deg,rgba(30,50,85,.94),rgba(35,55,95,.94));border-radius:7px 7px 0 0;border-bottom:1px solid rgba(80,120,180,.25)">';
-  h+='<div style="font-family:Oswald;font-size:14px;color:rgba(180,200,230,.75);letter-spacing:1px">'+catDiv+'</div>';
-  h+='<div style="font-family:Oswald;font-size:17px;color:#fff;letter-spacing:2px">RANK <span style="font-weight:700;color:#d4a843">'+(rk.pos||'')+'</span> <span style="color:rgba(180,200,230,.45)">de '+rk.of+'</span></div>';
-  h+='</div>';
-  h+='<div style="display:flex;align-items:center;padding:8px 18px;background:linear-gradient(90deg,rgba(22,40,72,.96),rgba(28,46,80,.96));gap:14px">';
-  h+='<div style="background:rgba(40,65,110,.8);padding:5px 10px;border-radius:4px;min-width:75px;text-align:center;border:1px solid rgba(70,110,170,.3)"><div style="font-family:Oswald;font-size:10px;color:rgba(180,200,230,.7);letter-spacing:.5px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(cur.club||'—')+'</div></div>';
-  h+='<div style="flex:1">';
-  if(firstName)h+='<div style="font-size:11px;color:rgba(180,200,230,.65);line-height:1;margin-bottom:1px">'+firstName+'</div>';
-  h+='<div style="font-family:Oswald;font-size:clamp(22px,4vw,32px);font-weight:700;color:#fff;letter-spacing:1px;line-height:1.1;text-transform:uppercase">'+lastName+'</div></div></div>';
-  h+='<div style="display:flex;align-items:stretch;background:linear-gradient(90deg,rgba(16,30,55,.96),rgba(20,34,60,.96))"><div style="display:flex;flex:1">';
-  cur.att[DATA.lift].forEach((at,j)=>{
-    let bg,clr,td='none';
-    if(at.r==='g'){bg='rgba(34,197,94,.22)';clr='#22c55e'}else if(at.r==='n'){bg='rgba(239,68,68,.18)';clr='#ef4444';td='line-through'}else if(at.w>0){bg='rgba(45,65,105,.6)';clr='#fff'}else{bg='rgba(30,48,78,.4)';clr='rgba(90,120,160,.35)'}
-    const cur2=j===DATA.round&&at.r===null;
-    h+='<div style="flex:1;padding:10px 16px;text-align:center;background:'+bg+';border-right:1px solid rgba(55,85,130,.2);'+(cur2?'box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';':'')+'"><div style="font-family:Oswald;font-size:24px;font-weight:700;color:'+clr+';text-decoration:'+td+'">'+(at.w||'—')+'</div></div>';
-  });
-  h+='</div>';
-  if(st>0)h+='<div style="padding:10px 22px;text-align:center;background:rgba(212,168,67,.18);border-left:2px solid #d4a843;min-width:100px;display:flex;align-items:center;justify-content:center"><div style="font-family:Oswald;font-size:28px;font-weight:700;color:#d4a843">'+st.toFixed(1)+'</div></div>';
-  h+='</div>';
-  h+=txFooter(evName)+'</div>';
-  return h;
-}
 
-// ── LEADERBOARD ──
-function txLeaderboard(cur,evName){
-  let h='<div style="flex:1;display:flex;align-items:center;justify-content:center">';
-  if(!cur){h+='<div style="font-family:Oswald;font-size:26px;color:#d4a843">RONDA COMPLETADA</div></div>';return h}
-  const sameCat=DATA.athletes.filter(a=>a.cat===cur.cat&&a.flight===DATA.flight&&!a.bombed);
-  const ranked=sameCat.map(a=>{
-    const t=totalOf(a);const ft=forecastTotal(a);
-    return{...a,total:t,fTotal:ft,fPlace:0};
-  });
-  ranked.sort((a,b)=>b.fTotal-a.fTotal);
-  ranked.forEach((a,i)=>a.fPlace=i+1);
-  const divShort=txDivShort(cur.div);
-  h+='<div style="margin:60px 30px 40px;max-width:700px;width:100%">';
-  h+='<div style="padding:10px 18px;background:linear-gradient(90deg,rgba(25,42,72,.96),rgba(30,48,82,.96));border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center">';
-  h+='<div><div style="font-family:Oswald;font-size:11px;color:rgba(160,180,210,.5);letter-spacing:1px">LEADERBOARD</div><div style="font-family:Oswald;font-size:16px;color:#fff;letter-spacing:1px">'+((cur.sex==='Femenino'||cur.sex==='Mujer'||cur.sex==='F')?'WOMEN\'S':'MEN\'S')+' '+divShort+' • '+cur.cat+'</div></div>';
-  h+='<div style="font-family:Oswald;font-size:14px;color:rgba(160,180,210,.4);letter-spacing:1px">YourLift</div></div>';
-  // Table header
-  h+='<div style="display:grid;grid-template-columns:2fr 70px 80px 50px;gap:0;padding:6px 18px;background:rgba(20,35,60,.9);border-bottom:1px solid rgba(60,90,140,.3)">';
-  h+='<div style="font-family:Oswald;font-size:10px;color:rgba(160,180,210,.5);letter-spacing:1px">NOMBRE</div>';
-  h+='<div style="font-family:Oswald;font-size:10px;color:rgba(160,180,210,.5);text-align:center;letter-spacing:1px">TOTAL</div>';
-  h+='<div style="font-family:Oswald;font-size:10px;color:rgba(160,180,210,.5);text-align:center;letter-spacing:1px">F.TOTAL</div>';
-  h+='<div style="font-family:Oswald;font-size:10px;color:rgba(160,180,210,.5);text-align:center;letter-spacing:1px">F.POS</div></div>';
-  // Rows
-  ranked.forEach(a=>{
-    const isCur=a.id===cur.id;
-    const bg=isCur?'rgba(196,30,58,.25)':'rgba(18,32,55,.9)';
-    h+='<div style="display:grid;grid-template-columns:2fr 70px 80px 50px;gap:0;padding:8px 18px;background:'+bg+';border-bottom:1px solid rgba(40,65,100,.3)">';
-    h+='<div style="font-family:Oswald;font-size:14px;font-weight:'+(isCur?'700':'400')+';color:'+(isCur?'#fff':'rgba(200,215,240,.8)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+a.name+'</div>';
-    h+='<div style="font-family:Oswald;font-size:14px;text-align:center;color:rgba(200,215,240,.6)">'+(a.total||'0')+'</div>';
-    h+='<div style="font-family:Oswald;font-size:14px;text-align:center;font-weight:700;color:'+(isCur?'#d4a843':'rgba(200,215,240,.8)')+'">'+a.fTotal+'</div>';
-    h+='<div style="font-family:Oswald;font-size:14px;text-align:center;font-weight:700;color:'+(isCur?'#d4a843':'rgba(200,215,240,.6)')+'">'+a.fPlace+'</div>';
-    h+='</div>';
-  });
-  // Current athlete details bar
-  h+='<div style="padding:8px 18px;background:rgba(196,30,58,.2);border-radius:0 0 8px 8px;display:flex;gap:16px">';
-  ['sq','bp','dl'].forEach(l=>{
-    const b=bestOf(cur,l);
-    h+='<div style="display:flex;gap:6px;align-items:center"><span style="font-family:Oswald;font-size:10px;color:rgba(160,180,210,.5);letter-spacing:1px">BEST '+LIFT_S[l]+'</span><span style="font-family:Oswald;font-size:16px;font-weight:700;color:'+(b?LIFT_C[l]:'rgba(100,130,160,.3)')+'">'+(b||'-')+'</span></div>';
-  });
-  h+='</div></div></div>';
-  return h;
-}
 
-// ── SI LO LEVANTA ──
-function txSiLevanta(cur,evName){
-  let h='<div style="flex:1;display:flex;align-items:center;justify-content:center">';
-  if(!cur){h+='<div style="font-family:Oswald;font-size:26px;color:#d4a843">RONDA COMPLETADA</div></div>';return h}
-  const cw=cur.att[DATA.lift][DATA.round].w;
-  if(!cw){h+='<div style="font-family:Oswald;font-size:22px;color:rgba(160,180,210,.5)">Sin peso cargado</div></div>';return h}
-  // Current rank by subtotal
-  const curRk=catRankBySub(cur);
-  // Simulate successful lift
-  const simSub=subTotal(cur,DATA.lift)>0?subTotal(cur,DATA.lift):0;
-  const simBest=bestOf(cur,DATA.lift);
-  const newBest=Math.max(simBest,cw);
-  let newSub;
-  if(DATA.lift==='sq')newSub=newBest;
-  else if(DATA.lift==='bp')newSub=bestOf(cur,'sq')+newBest;
-  else newSub=bestOf(cur,'sq')+bestOf(cur,'bp')+newBest;
-  // Rank with the simulated sub
-  // Mismo sexo + cat + div (separar divisiones de edad)
-  const sameCat=DATA.athletes.filter(a=>a.cat===cur.cat&&a.div===cur.div&&a.sex===cur.sex&&a.flight===DATA.flight&&!a.bombed);
-  const simRanked=sameCat.map(a=>{
-    if(a.id===cur.id)return{id:a.id,sub:newSub};
-    return{id:a.id,sub:subTotal(a,DATA.lift)};
-  }).filter(x=>x.sub>0).sort((a,b)=>b.sub-a.sub);
-  const simPos=simRanked.findIndex(x=>x.id===cur.id)+1;
-  const parts=cur.name.split(' ');
-  const lastName=parts.length>2?parts.slice(-2).join(' '):parts[parts.length-1];
-
-  h+='<div style="max-width:480px;width:90%">';
-  h+='<div style="text-align:center;margin-bottom:24px"><div style="font-family:Oswald;font-size:clamp(28px,5vw,42px);font-weight:700;color:#fff;letter-spacing:3px">SI LO LEVANTA</div></div>';
-  h+='<div style="background:linear-gradient(135deg,rgba(22,38,68,.96),rgba(28,44,76,.96));border-radius:12px;border:1px solid rgba(60,90,140,.3);overflow:hidden">';
-  // Name
-  h+='<div style="padding:14px 22px;background:rgba(196,30,58,.2);border-bottom:1px solid rgba(100,140,200,.2);text-align:center"><div style="font-family:Oswald;font-size:clamp(20px,4vw,28px);font-weight:700;color:#fff;letter-spacing:1px;text-transform:uppercase">'+lastName+'</div><div style="font-size:11px;color:rgba(180,200,230,.6)">'+cur.cat+' · '+(cur.div||'')+'</div></div>';
-  // Rank row
-  h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 28px;border-bottom:1px solid rgba(50,80,120,.3)">';
-  h+='<div style="font-family:Oswald;font-size:14px;color:rgba(180,200,230,.6);letter-spacing:1px">POSICIÓN</div>';
-  h+='<div style="display:flex;align-items:center;gap:14px"><span style="font-family:Oswald;font-size:32px;font-weight:700;color:rgba(200,215,240,.5)">'+(curRk.pos||'—')+'°</span><span style="font-family:Oswald;font-size:28px;color:#d4a843">▸</span><span style="font-family:Oswald;font-size:32px;font-weight:700;color:#d4a843">'+simPos+'°</span></div></div>';
-  // Subtotal row
-  h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 28px">';
-  h+='<div style="font-family:Oswald;font-size:14px;color:rgba(180,200,230,.6);letter-spacing:1px">SUBTOTAL</div>';
-  h+='<div style="display:flex;align-items:center;gap:14px"><span style="font-family:Oswald;font-size:28px;font-weight:700;color:rgba(200,215,240,.5)">'+(simSub||'—')+' kg</span><span style="font-family:Oswald;font-size:28px;color:#d4a843">▸</span><span style="font-family:Oswald;font-size:28px;font-weight:700;color:#d4a843">'+newSub.toFixed(1)+' kg</span></div></div>';
-  h+='</div>';
-  h+=txFooter(evName)+'</div></div>';
-  return h;
-}
 
 // ── PREMIACIÓN ──
 function txPremiacion(evName){

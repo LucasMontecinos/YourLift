@@ -986,20 +986,6 @@ function openEventsFromFirebase() {
   });
 }
 
-// Helper para mostrar el tiempo restante hasta el cierre de pre-nómina
-function timeUntilPreClose(ev) {
-  if (!ev?.preNominaCloseAt) return null;
-  const close = new Date(ev.preNominaCloseAt);
-  if (isNaN(close)) return null;
-  const diff = close - new Date();
-  if (diff <= 0) return 'CERRADO';
-  const days = Math.floor(diff / 86400000);
-  const hours = Math.floor((diff % 86400000) / 3600000);
-  const mins = Math.floor((diff % 3600000) / 60000);
-  if (days > 0) return `${days}d ${hours}h restantes`;
-  if (hours > 0) return `${hours}h ${mins}min restantes`;
-  return `${mins}min restantes`;
-}
 
 // Admin auth: handled by Firebase Auth + admins/{uid} doc (see initFirebase)
 
@@ -2015,13 +2001,6 @@ function _partesFecha(fechaNac) {
   if (m) return { anio: +m[3], mes: +m[2], dia: +m[1] };
   return null;
 }
-// Solo el año, para cuando basta con eso.
-function _anioNac(fechaNac) {
-  const p = _partesFecha(fechaNac);
-  if (p) return p.anio;
-  const m = String(fechaNac || '').match(/\b(19|20)(\d{2})\b/);
-  return m ? parseInt(m[0], 10) : 0;
-}
 // Los documentos que este atleta tiene que subir de verdad.
 //
 // El evento pide una lista fija, pero el consentimiento del tutor solo aplica a
@@ -2448,11 +2427,6 @@ function resetForm() {
   render();
 }
 
-function toggleAdmin() {
-  if (state.view === 'admin') { state.view = 'form'; render(); return; }
-  state.view = 'admin';
-  render();
-}
 
 async function authAdmin() {
   const email = (document.getElementById('adminEmail')?.value || '').trim();
@@ -2472,13 +2446,6 @@ async function authAdmin() {
   }
 }
 
-async function logoutAdmin() {
-  if (!confirm('¿Cerrar sesión de admin?')) return;
-  try { await window.FB.signOut(authInstance); } catch(e) { console.warn(e); }
-  state.adminAuth = false;
-  state.view = 'form';
-  render();
-}
 
 async function loadInscripciones() {
   if (firebaseReady) {

@@ -20,7 +20,6 @@ python3 herramientas/build_nacimientos.py
 | `aplicar_nomina_oficial.py`, `aplicar_correcciones_suda.py`, `build_suda_dias.py`, `revisar_nomina_pais.py`, `verificar_goodlift.py` | Arman y revisan `nomina_sudamericano.json`. |
 | `agregar_competencias_openipf.py`, `reconstruir_desde_acta.py`, `corregir_gl_data.py`, `alinear_con_storage.py` | Mantención de `data.json` (historial de atletas). |
 | `exportar_powerbi.py` | Exporta CSV para Power BI (a `powerbi/`, que no va al repo). |
-| `fix_regional_centro_sur.js`, `limpiar_regional_centro_sur.js` | Arreglos puntuales ya aplicados; quedan como referencia. |
 
 `fuentes/` guarda los archivos originales de los que salen algunos datos (nómina
 oficial en Excel, PDF de goodlift.info).

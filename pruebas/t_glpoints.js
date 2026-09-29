@@ -43,7 +43,7 @@ const GL_RANK_TOPE = 300;
 const esc = s => String(s == null ? '' : s);
 const GL_ORDEN_DIV = ['Sub-Junior', 'Junior', 'Open', 'Master I', 'Master II', 'Master III', 'Master IV', 'Universitario'];
 const FUNCS = ['_hNom', 'buildStatsRows', 'applyStatsFilters', '_glRows', '_glProm', '_glCuartil',
-  '_glMediana', '_glResumen', '_glTablaHtml', '_glDispersionHtml', '_glRowsRank', '_glRankingAtletas',
+  '_glResumen', '_glTablaHtml', '_glDispersionHtml', '_glRowsRank', '_glRankingAtletas',
   'renderGLRanking', '_corteTemporada', '_corteFilas', '_corteGrupos', '_corteDe',
   '_corteUnico', 'renderCorte', 'renderGL'];
 eval(FUNCS.map(n => sacar(adm, n)).join('\n'));

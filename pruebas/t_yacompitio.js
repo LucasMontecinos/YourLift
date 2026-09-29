@@ -173,8 +173,8 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
 
   console.log('\nContra los datos DE VERDAD de este año');
   {
-    const reales = JSON.parse(fs.readFileSync(__dirname + '/cr_reales.json', 'utf8'));
-    const hist = JSON.parse(fs.readFileSync(__dirname + '/datajson_2026.json', 'utf8'));
+    const reales = JSON.parse(fs.readFileSync(__dirname + '/fixtures/cr_reales.json', 'utf8'));
+    const hist = JSON.parse(fs.readFileSync(__dirname + '/fixtures/datajson_2026.json', 'utf8'));
     ST.allCompResults = reales;
     ST.data = hist;
     window_._HIST_ANIO = null;
@@ -382,7 +382,7 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
     // sentido a un punto, y de hecho pasó — el punto 2 estaba escrito al revés,
     // "se consideran" en vez de "no considera", que es justo el error capaz de
     // dejar entrar a quien no correspondía.
-    const oficial = JSON.parse(fs.readFileSync(__dirname + '/anexo3_oficial.json', 'utf8'));
+    const oficial = JSON.parse(fs.readFileSync(__dirname + '/fixtures/anexo3_oficial.json', 'utf8'));
     // El PDF deja espacios sueltos donde hay negrita ("Anexo 2 ,"), así que se
     // normalizan los espacios antes de puntuación antes de comparar.
     const limpiar = s => String(s).replace(/\s+/g, ' ').replace(/\s+([,.;:])/g, '$1')

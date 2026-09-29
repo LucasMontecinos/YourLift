@@ -55,7 +55,7 @@ function sacar(texto, nombre) {
 // pero sin ellas la función no se puede montar. Lo mismo _modalidadActual y
 // esModalidadOE: con Olimpiadas Especiales la lista suma sus documentos propios.
 const FUNCS = ['isMinor', 'requiereConsentimientoMenor', '_edadHoy', '_partesFecha',
-               '_anioNac', '_limpiaLista', '_docAplica', '_modalidadActual',
+               '_limpiaLista', '_docAplica', '_modalidadActual',
                'esModalidadOE', 'docsRequeridos'];
 const CUERPO = FUNCS.map(n => sacar(src, n)).join('\n');
 function elDia(iso) {
@@ -127,8 +127,6 @@ console.log('\n  La fecha se entiende venga como venga');
   ok(A._edadHoy('1995-03-20') === 31, 'yyyy-mm-dd, que es lo que manda el campo de fecha');
   ok(A._edadHoy('5/3/1995') === 31, 'y sin el cero adelante también');
   ok(A._partesFecha('20/03/1995').mes === 3, 'no confunde el día con el mes: 20/03 es marzo');
-  ok(A._anioNac('20/03/1995') === 1995 && A._anioNac('1995-03-20') === 1995,
-     'y el año se saca igual de los dos formatos');
 }
 
 console.log('\nAl adulto se le piden los demás documentos, todos');
