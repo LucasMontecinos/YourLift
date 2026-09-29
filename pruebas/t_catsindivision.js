@@ -101,7 +101,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
 
   console.log('\n  Queda escrito de dónde salen las categorías');
   {
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     ok(/function _srClases\(\)/.test(lc) && /Object\.keys\(RECSUDA/.test(lc),
        'se leen del archivo de récords, no de una lista escrita a mano');
     ok(/_SR_CLASES=null/.test(lc.slice(lc.indexOf('RECSUDA=d.records'))),

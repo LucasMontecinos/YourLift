@@ -9,7 +9,7 @@
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_streaming.js
 const fs = require('fs');
 const { chromium } = require('playwright');
-const srcLC = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+const srcLC = require('./apoyo/fuente').livecast();
 const srcAD = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
 
 let fallas = 0;

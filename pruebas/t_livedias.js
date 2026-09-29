@@ -226,7 +226,7 @@ function atletas() {
 
   console.log('\n  Queda escrito en el código');
   {
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     ok(/window\.verDia=function/.test(lc), 'elegir día es su propia acción');
     ok((lc.match(/_filaDias\(/g) || []).length >= 5,
        'y una sola forma de armar la fila, usada en las cuatro pantallas');

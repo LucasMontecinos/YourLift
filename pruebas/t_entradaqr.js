@@ -155,7 +155,7 @@ async function abrir(b, url, demoraMs) {
 
   console.log('\n  Queda escrito en el código');
   {
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     ok(/window\._EV_ESPERANDO=/.test(lc), 'la marca de "vengo por un link" existe');
     ok(/if\(el\.innerHTML!==_nuevo\)el\.innerHTML=_nuevo/.test(lc),
        'y el selector no se reescribe si va a quedar igual');

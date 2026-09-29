@@ -4,7 +4,7 @@
 // el orden de salida de toda la competencia.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_lote.js
 const fs = require('fs');
-const src = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+const src = require('./apoyo/fuente').livecast();
 
 function sacar(nombre) {
   const i = src.search(new RegExp('(?:^|\\n)function ' + nombre + '\\('));

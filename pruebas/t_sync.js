@@ -135,7 +135,7 @@ const ROJO = /rgb\(239, 68, 68\)/;
        'con ediciones sin mandar, la firma NO se alinea (seguiría avisando)');
     ok(r.sinPendientes === r.real,
        'y sin nada pendiente sí se alinea, para no avisar de gusto');
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     ok(/const _limpio=!_syncInFlight&&!_syncPending/.test(lc),
        'y esa guarda está en el listener de verdad, no solo acá');
   }

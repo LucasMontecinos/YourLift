@@ -13,7 +13,7 @@
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_obs.js
 const fs = require('fs');
 const { chromium } = require('playwright');
-const src = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+const src = require('./apoyo/fuente').livecast();
 
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };

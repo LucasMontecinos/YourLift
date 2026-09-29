@@ -113,7 +113,7 @@ const NOMBRES = t => ['Classic Uno','Classic Dos','Equipado Uno','Equipado Dos',
 
   console.log('\n  Queda escrito en el código');
   {
-    const src = await (await fetch(`http://localhost:${PUERTO}/livecast.html`)).text();
+    const src = require('./apoyo/fuente').livecast();
     ok(/_catGroupKey\(a\)\{[^}]*_lineaComp\(a\)/.test(src),
        'la llave de agrupación incluye la línea competitiva');
   }

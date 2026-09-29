@@ -177,7 +177,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
 
   console.log('\n  Queda escrito en el código');
   {
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     ok(/function _esDeChile\(/.test(lc), 'hay una sola forma de saber si es de Chile');
     const i = lc.indexOf('function findInDB');
     const f = lc.slice(i, lc.indexOf('let _fotoUnsubLC', i));

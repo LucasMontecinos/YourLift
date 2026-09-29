@@ -130,7 +130,7 @@ const DONDE = () => {
     // dentro de resetJudgeLights(), que corre nada más si el modo jueces está
     // encendido: como no se usa, el movimiento nunca llegaba y el bloque se veía
     // siempre vacío. Es la causa de que la explicación "no estuviera".
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     ok(/async function _avisarAtletaAJueces\(\)\{/.test(lc),
        'el control en vivo tiene su propio aviso, fuera del modo jueces');
     // Se mira el bloque, no la línea exacta: ahí adentro se fue sumando más de

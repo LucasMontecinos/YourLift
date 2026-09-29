@@ -1,0 +1,169 @@
+// livecast.html — Las luces de los jueces: escucharlas, anotarlas en cada intento y avisarles quién está en la barra.
+//
+// Este archivo es parte del livecast: se carga como <script> clásico desde
+// livecast.html, así que todo lo que define queda global, igual que antes de
+// partir el archivo. Solo define funciones: lo que corre al abrir la página
+// está en arranque.js, que se carga al final.
+
+// Judge mode functions
+async function toggleJudgeMode(){
+  judgeMode=!judgeMode;
+  if(judgeMode){
+    if(!fbReady){
+      showToastLC('Firebase no conectado — esperando conexión para activar panel de jueces');
+      // Retry when fbReady becomes true (poll every 500ms, max 20s)
+      let attempts=0;
+      const waitFB=setInterval(()=>{
+        attempts++;
+        if(fbReady){clearInterval(waitFB);startJudgeListener();showToastLC('Modo Jueces ACTIVADO — Firebase conectado');}
+        else if(attempts>=40){clearInterval(waitFB);judgeMode=false;showToastLC('Firebase no disponible — usa modo manual');R();}
+      },500);
+    }else{
+      startJudgeListener();
+      showToastLC('Modo Jueces ACTIVADO — las decisiones vienen del panel de jueces');
+    }
+  }else{
+    if(judgeUnsub){judgeUnsub();judgeUnsub=null}
+    if(_timerUnsub){try{_timerUnsub()}catch(e){} _timerUnsub=null;}
+    showToastLC('Modo Jueces DESACTIVADO — decisiones manuales');
+  }
+  R();
+}
+
+function startJudgeListener(){
+  if(!fbReady)return;
+  if(judgeUnsub){judgeUnsub();judgeUnsub=null}
+  // Antes el oyente del cronómetro no se soltaba nunca: cada vez que se
+  // encendía el modo jueces se sumaba otro, y quedaban escuchando el canal viejo.
+  if(_timerUnsub){try{_timerUnsub()}catch(e){} _timerUnsub=null;}
+  _judgeDoc=juezDocId();
+  // Also listen for timer-start signals from judge panel
+  let _timerListenerFirst=true;
+  _timerUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'timer_control',_judgeDoc),(snap)=>{
+    if(!snap.exists())return;
+    const d=snap.data();
+    // First snapshot: just record current ts to ignore stale signals already in Firestore
+    if(_timerListenerFirst){
+      _timerListenerFirst=false;
+      if(d.ts)_lastTimerSignal=d.ts;
+      return;
+    }
+    if(d.action==='start'&&d.ts&&d.ts>_lastTimerSignal){
+      _lastTimerSignal=d.ts;
+      if(!DATA.timerOn)startTimer();
+    }
+  });
+  judgeUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',_judgeDoc),(snap)=>{
+    if(!snap.exists())return;
+    const d=snap.data();
+    judgeLights={izq:d.izq||null,central:d.central||null,der:d.der||null};
+    // Check if all 3 judges voted
+    if(judgeLights.izq&&judgeLights.central&&judgeLights.der){
+      // Determine result by majority
+      const votes=[judgeLights.izq,judgeLights.central,judgeLights.der];
+      const goods=votes.filter(v=>v==='white').length;
+      const result=goods>=2?'g':'n';
+      // Auto-apply result to current athlete
+      const queue=liftQueue();
+      if(queue.length>0){
+        const cur=queue[0];
+        setTimeout(()=>{
+          setResult(cur.id,DATA.lift,DATA.round,result);
+        },2000); // 2s delay to show lights before advancing
+      }
+    }
+    R();
+  });
+}
+
+function _escucharLucesHistorial(){
+  if(!fbReady||!window._fb||!fbDB)return;
+  // Ya escuchando el canal de este campeonato: nada que hacer. Si se cambió de
+  // campeonato, se suelta el canal del anterior.
+  if(_lucesHistUnsub&&_lucesHistDoc===juezDocId())return;
+  if(_lucesHistUnsub){try{_lucesHistUnsub()}catch(e){} _lucesHistUnsub=null;_lucesHistDestino=null;}
+  _lucesHistDoc=juezDocId();
+  try{
+    _lucesHistUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',_lucesHistDoc),(snap)=>{
+      if(!snap.exists())return;
+      const d=snap.data();
+      const L={izq:d.izq||null,central:d.central||null,der:d.der||null};
+      const cuantas=[L.izq,L.central,L.der].filter(Boolean).length;
+      if(cuantas===0){_lucesHistDestino=null;return;}      // se apagaron: listo para el próximo
+      if(!_lucesHistDestino){
+        const cur=liftQueue()[0];
+        if(!cur)return;
+        _lucesHistDestino={id:cur.id,lift:DATA.lift,round:DATA.round};
+      }
+      if(cuantas<3)return;                                  // todavía falta algún juez
+      const dst=_lucesHistDestino;
+      const firma=dst.id+'|'+dst.lift+'|'+dst.round+'|'+L.izq+L.central+L.der;
+      if(firma===_lucesHistUlt)return;
+      _lucesHistUlt=firma;
+      const a=DATA.athletes.find(x=>x.id===dst.id);
+      const at=a&&a.att[dst.lift]&&a.att[dst.lift][dst.round];
+      if(!at)return;
+      at.luces=L;
+      saveNow();R();
+    },(e)=>console.warn('[luces] no se pudieron anotar:',e.message));
+  }catch(e){console.warn('[luces] no se pudo escuchar',e);}
+}
+
+// Los tres circulitos de un intento ya juzgado. Devuelve '' si de ese intento no
+// hay luces: en un campeonato sin luces, o en el que se cargó a mano, no tiene
+// que aparecer nada.
+function _lucesDeIntento(at,px){
+  const L=at&&at.luces;
+  if(!L||!L.izq||!L.central||!L.der)return '';
+  const d=px||9;
+  const pt=(v)=>{
+    const e=_luzEstilo(v);
+    return '<span style="display:inline-flex;flex-direction:column;align-items:center;gap:1px">'
+      +'<span style="width:'+d+'px;height:'+d+'px;border-radius:50%;background:'+e.bg+';border:1px solid '+e.bd+';display:block"></span>'
+      +(e.chip&&v!=='red'
+        ? '<span style="width:'+Math.max(3,Math.round(d*.42))+'px;height:'+Math.max(3,Math.round(d*.42))+'px;border-radius:50%;background:'+e.chip+';display:block"></span>'
+        : '<span style="height:'+Math.max(3,Math.round(d*.42))+'px;display:block"></span>')
+      +'</span>';
+  };
+  return '<span style="display:inline-flex;gap:'+Math.max(2,Math.round(d*.34))+'px;align-items:flex-start;justify-content:center;line-height:1">'
+    +pt(L.izq)+pt(L.central)+pt(L.der)+'</span>';
+}
+
+async function _avisarAtletaAJueces(){
+  if(!fbReady||!fbDB||!window._fb)return;
+  try{
+    const cur=liftQueue()[0];
+    const lift=LIFT_S[DATA.lift]||'';
+    const firma=juezDocId()+'|'+(cur?cur.name:'')+'|'+lift+'|'+DATA.round;
+    if(firma===_juezUltAtleta)return;
+    _juezUltAtleta=firma;
+    await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions',juezDocId()),{
+      // El panel de los jueces muestra de qué campeonato es: con dos a la misma
+      // hora, el juez ve que abrió el link correcto.
+      evento:(DATA.event&&DATA.event.name)||'',
+      athlete_name:cur?cur.name:'',
+      athlete_weight:cur?(cur.att[DATA.lift][DATA.round]||{}).w||0:0,
+      athlete_lift:lift,
+      athlete_round:DATA.round
+    },{merge:true});
+  }catch(e){console.warn('[jueces] no se pudo avisar el atleta en barra',e);}
+}
+
+async function resetJudgeLights(){
+  judgeLights={izq:null,central:null,der:null};
+  if(!fbReady)return;
+  try{
+    // Send current athlete info + reset
+    const queue=liftQueue();
+    const cur=queue[0];
+    await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions',juezDocId()),{
+      izq:null,central:null,der:null,
+      reset_ts:Date.now(),
+      evento:(DATA.event&&DATA.event.name)||'',
+      athlete_name:cur?cur.name:'',
+      athlete_weight:cur?cur.att[DATA.lift][DATA.round].w:0,
+      athlete_lift:LIFT_S[DATA.lift]||'',
+      athlete_round:DATA.round
+    });
+  }catch(e){console.warn('Reset judge lights error',e)}
+}

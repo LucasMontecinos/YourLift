@@ -190,7 +190,7 @@ console.log('\n  Y lo que la pestaña abierta no necesita, no se baja');
   // solo recibir datos, se apaga.
   console.log('\n  Entrando al livecast tampoco salta');
   {
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     ok(/\.sin-anim \.fade\{animation:none\}/.test(lc),
        'hay una manera de apagar la animación de aparecer');
     ok(/el\.classList\.toggle\('sin-anim', window\._ultPantalla===_pant\)/.test(lc)

@@ -18,10 +18,38 @@ los QR, los links de OBS). Moverlas rompería esos links.
 | `inscripcion.html`, `inscripcion_entrenador.html` | Formularios de inscripción |
 | `atleta.html`, `ranking.html`, `resultados.html` | Fichas, ranking y resultados |
 | `cronograma.html`, `documentos.html` | Cronograma y documentos de cada campeonato |
-| `livecast.html` | Competencia en vivo: Control en Vivo, Control TX, pantalla de tarima, widgets de OBS y la vista del público |
+| `livecast.html` | Competencia en vivo: Control en Vivo, Control TX, pantalla de tarima, widgets de OBS y la vista del público (su código está en `livecast/`) |
 | `jueces.html` | Panel de los jueces (luces desde el teléfono) |
 | `admin.html` | Panel de administración |
 | `entrenador.html`, `videos-admin.html` | Panel del entrenador y videos |
+
+### El livecast: `livecast/`
+
+`livecast.html` es solo la página: carga su código desde `livecast/`, un archivo
+por tema. Todos se cargan como scripts normales, así que lo que definen es global
+igual que antes. Los archivos de tema solo definen funciones; lo que corre al
+abrir la página está en `arranque.js`, que va al final y en su orden original.
+
+| Archivo | Qué es |
+|---|---|
+| `reglas.js` | Reglas del deporte: GL, mejores intentos, totales, orden de la barra, categorías |
+| `sesiones.js` | Días y turnos: qué tandas van juntas en cada sesión |
+| `sincronizacion.js` | Firebase, el estado en vivo, guardado local, deshacer y respaldos |
+| `padron.js`, `nomina.js` | La base de atletas y la nómina en vivo del campeonato |
+| `pesaje.js` | Atletas & Pesaje |
+| `competencia.js` | Control en Vivo: pesos, resultados, cronómetros |
+| `jueces.js` | Las luces de los jueces |
+| `records.js`, `cierre.js` | Récords durante la competencia y al cerrarla |
+| `resultados.js` | La tabla de Resultados |
+| `documentos.js` | Documentos de mesa y actas (PDF y Excel) |
+| `transmision.js` | Widgets de OBS, Control TX y el director |
+| `pantalla.js` | La pantalla de tarima |
+| `control_remoto.js` | El Control Remoto del teléfono |
+| `publico.js` | La vista del público |
+| `banderas.js` | Banderas y logos de club |
+| `practica.js` | Modo práctica para jueces |
+| `interfaz.js` | El dibujo general, el menú y la elección de campeonato |
+| `arranque.js` | Lo que corre al abrir: configuración, estado y el primer dibujo |
 
 ### Código compartido: `compartido/`
 
@@ -56,6 +84,17 @@ la competencia) está en Firestore, no en estos archivos.
 
 Los PDF, planillas y videos de la raíz se quedan ahí porque se comparten por link
 directo (formularios de consentimiento, capacitación de jueces).
+
+## Antes de subir un cambio
+
+```
+node herramientas/versionar.js   # huellas ?v=… de los .js y .css propios
+sh pruebas/correr.sh             # la batería de pruebas
+```
+
+Las huellas hacen que el navegador pida la versión nueva de un archivo apenas
+cambia, en vez de mezclar una página nueva con un archivo viejo de su caché. Si
+se olvida, la prueba `t_versiones.js` lo avisa.
 
 ## Pruebas
 

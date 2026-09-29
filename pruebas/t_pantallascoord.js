@@ -185,7 +185,7 @@ const PANTALLAS = [
 
   console.log('\n  Queda escrito en el código');
   {
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     // La razón por la que coordinan: todas leen el mismo lugar.
     ok(/const cur=liftQueue\(\)\[0\];/.test(lc),
        'todas las pantallas sacan al de la barra del mismo sitio');

@@ -17,14 +17,14 @@
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_luceshistorial.js
 const fs = require('fs');
 const { chromium } = require('playwright');
-const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+const lc = require('./apoyo/fuente').livecast();
 
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };
 
 console.log('\nAnotar las luces no es decidir el intento');
 {
-  const f = lc.slice(lc.indexOf('let _lucesHistUnsub'), lc.indexOf('function _lucesDeIntento'));
+  const f = require('./apoyo/fuente').funcion(lc, '_escucharLucesHistorial');
   ok(f.length > 100, 'el que las anota está escrito aparte');
   ok(!/setResult|changeResult|\.r=/.test(f),
      'y no toca el resultado del intento: eso lo sigue dando el operador');
@@ -40,7 +40,7 @@ console.log('\n  Se anotan en el atleta que estaba en la barra');
   // Es el detalle fino: si el operador marca el resultado antes de que vote el
   // tercer juez, la cola avanza. Fijando el destino con la PRIMERA luz, las
   // luces igual quedan donde corresponde.
-  const f = lc.slice(lc.indexOf('let _lucesHistUnsub'), lc.indexOf('function _lucesDeIntento'));
+  const f = require('./apoyo/fuente').funcion(lc, '_escucharLucesHistorial');
   ok(/if\(!_lucesHistDestino\)\{/.test(f), 'el destino se fija con la primera luz');
   ok(/if\(cuantas<3\)return;/.test(f), 'y se escribe recién cuando votaron los tres');
   ok(/if\(cuantas===0\)\{_lucesHistDestino=null;return;\}/.test(f),

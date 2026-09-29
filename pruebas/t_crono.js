@@ -4,7 +4,7 @@
 // los ejercita con filas armadas a mano.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_crono.js
 const fs = require('fs');
-const src = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+const src = require('./apoyo/fuente').livecast();
 
 // Extrae una función/const del archivo por nombre, con llaves balanceadas.
 function sacar(nombre) {

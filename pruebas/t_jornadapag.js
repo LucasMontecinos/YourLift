@@ -188,7 +188,7 @@ const MEDIR = () => {
 
   console.log('\n  Queda escrito en el código');
   {
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     ok(/const UNIT_MIN=/.test(lc), 'hay un piso de alto de fila');
     ok(/_jornPagTimer/.test(lc), 'y páginas que rotan cuando no entra');
     // Los logos de la pantalla pasaron a ser una lista que se sube desde el

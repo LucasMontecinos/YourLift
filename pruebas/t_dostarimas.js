@@ -17,7 +17,7 @@
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_dostarimas.js
 const fs = require('fs');
 const { chromium } = require('playwright');
-const src = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+const src = require('./apoyo/fuente').livecast();
 const jue = fs.readFileSync(__dirname + '/../jueces.html', 'utf8');
 
 let fallas = 0;

@@ -154,7 +154,7 @@ const CAMP = 'https://ejemplo.cl/sudamericano.png';
 
   console.log('\n  Queda escrito en el código');
   {
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     ok(/function _tiraLogos\(/.test(lc), 'una sola forma de armar la tira');
     ok(/DATA\.event\.logoFedUrl=e\.logoFedUrl\|\|''/.test(lc),
        'y el logo de la federación llega desde el campeonato');
@@ -166,7 +166,8 @@ const CAMP = 'https://ejemplo.cl/sudamericano.png';
        'ninguna pantalla lee el campo por su cuenta');
     // Si el scoreboard volviera a tener el de YourLift escrito adentro, la regla
     // se rompería sin que nadie se diera cuenta.
-    const sb = lc.slice(lc.indexOf('sb-card-explode'), lc.indexOf('sb-wipe-content'));
+    const _i = lc.indexOf('class="sb-card-explode" style="pointer-events');
+    const sb = lc.slice(_i, lc.indexOf('sb-wipe-content', _i));
     ok(!/YourLift_logo\.png/.test(sb), 'el scoreboard ya no lo tiene escrito a mano');
     ok(/_tiraLogos\(\['camp'\],'92px'/.test(lc),
        'y la tabla actual pide solo el del campeonato');

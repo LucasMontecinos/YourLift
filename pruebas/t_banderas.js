@@ -45,7 +45,8 @@ const MONTAR = `(paisRaro)=>{
     // esta prueba lo delataría.
     await p.route('**://**', r => {
       const u = r.request().url();
-      if (/flagcdn|flag|bandera/i.test(u)) { externas.push(u); return r.abort(); }
+      // (livecast/banderas.js es el código del propio livecast, no una bandera)
+      if (/flagcdn|flag|bandera/i.test(u) && !/\/livecast\/[a-z_]+\.js/.test(u)) { externas.push(u); return r.abort(); }
       return /localhost:8972/.test(u) ? r.continue() : r.abort();
     });
     await p.goto('http://localhost:8972/livecast.html?tx=director&evento=suda2026_fesupo_full',
@@ -145,7 +146,7 @@ const MONTAR = `(paisRaro)=>{
   ok(externas.length === 0,
      'ninguna petición externa' + (externas.length ? ': ' + externas.slice(0, 3).join(' | ') : ''));
   const fs2 = require('fs');
-  const src = fs2.readFileSync(__dirname + '/../livecast.html', 'utf8');
+  const src = require('./apoyo/fuente').livecast();
   ok(!/flagcdn/.test(src), 'y no queda ninguna referencia a flagcdn en el código');
 
   console.log('\nUn país fuera de la tabla queda con su código');

@@ -23,7 +23,7 @@
 const fs = require('fs');
 const { chromium } = require('playwright');
 const rk = fs.readFileSync(__dirname + '/../ranking.html', 'utf8');
-const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+const lc = require('./apoyo/fuente').livecast();
 const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
 const rules = fs.readFileSync(__dirname + '/../reglas/firestore.rules', 'utf8');
 const div = require(__dirname + '/../compartido/divisiones.js');

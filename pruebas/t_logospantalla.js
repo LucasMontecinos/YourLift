@@ -35,7 +35,7 @@ const b64 = f => 'data:image/png;base64,' + fs.readFileSync(__dirname + '/../' +
 const ESCENAS = ['profile', 'barra', 'intentos', 'luces', 'jornada'];
 
 (async () => {
-  const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+  const lc = require('./apoyo/fuente').livecast();
 
   console.log('\nLa lista se guarda con el campeonato');
   {

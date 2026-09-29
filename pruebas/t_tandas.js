@@ -6,7 +6,7 @@
 // y las tandas nuevas quedaban sin color.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_tandas.js
 const fs = require('fs');
-const src = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+const src = require('./apoyo/fuente').livecast();
 const admin = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
 
 function sacar(nombre) {

@@ -91,7 +91,7 @@ const haySesion = () => /INICIAR SESI[OÓ]N/i.test(document.body.innerText || ''
 
   console.log('\n  Queda escrito en el código');
   {
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     ok(/Ctrl\+Shift\+L/.test(lc), 'el atajo está documentado donde se define');
     // Si volviera a aparecer el botón, esto lo agarra.
     ok(!/Iniciar sesi\\u00f3n \(operador\)/.test(lc) && !/Iniciar sesión \(operador\)/.test(lc),

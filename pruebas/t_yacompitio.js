@@ -333,7 +333,7 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
 
   console.log('\nUna cuenta de juez no entra a ningún panel');
   {
-    const liv = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const liv = require('./apoyo/fuente').livecast();
     // El respaldo del livecast daba admin ante CUALQUIER error al leer admins/.
     // Las reglas solo dejan esa lectura a un admin, así que una cuenta de juez
     // rebotaba ahí y salía con acceso completo — al revés de lo que se buscaba.

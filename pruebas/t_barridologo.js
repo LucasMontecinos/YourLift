@@ -24,7 +24,7 @@
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_barridologo.js
 const fs = require('fs');
 const { chromium } = require('playwright');
-const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+const lc = require('./apoyo/fuente').livecast();
 
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };
@@ -33,13 +33,13 @@ console.log('\nEl logo sale del campeonato, no está escrito a mano');
 {
   ok(/function _barridoLogoImg\(\)\{/.test(lc), 'hay una función que lo decide');
   ok(/\+_barridoLogoImg\(\)/.test(lc), 'y el barrido la usa');
-  const f = lc.slice(lc.indexOf('function _barridoLogoImg'), lc.indexOf('function _startBarrido'));
+  const f = require('./apoyo/fuente').funcion(lc, '_barridoLogoImg');
   ok(/ev\.barridoLogo==='yourlift'/.test(f),
      'y solo deja el del campeonato si alguien eligió a propósito el de YourLift');
   ok(/yourlift_logo_hd\.png/.test(f), 'y tiene al de YourLift de respaldo');
   ok(/onerror=/.test(f), 'con salida si la imagen no carga');
   // El barrido ya no puede tener el logo escrito adentro.
-  const b = lc.slice(lc.indexOf('function _startBarrido'), lc.indexOf('function _txDetectTransitions'));
+  const b = require('./apoyo/fuente').funcion(lc, '_startBarrido');
   ok(!/yourlift_logo_hd\.png/.test(b), 'y en el barrido ya no queda ninguno fijo');
 }
 
@@ -48,7 +48,7 @@ console.log('\nSe elige en el mismo panel donde se sube el logo');
   ok(/LOGO EN EL BARRIDO DE TRANSICIÓN/.test(lc), 'con su propio apartado');
   ok(/dirSetBarridoLogo/.test(lc), 'y dos botones para elegir');
   ok(/window\.dirSetBarridoLogo=async function\(cual\)/.test(lc), 'que guardan la elección');
-  const g = lc.slice(lc.indexOf('window.dirSetBarridoLogo'), lc.indexOf('// ── Quitar el fondo'));
+  const g = require('./apoyo/fuente').trozo(lc, 'window.dirSetBarridoLogo');
   ok(/updateDoc\(window\._fb\.doc\(fbDB,'eventos',evId\),\{barridoLogo:val\}\)/.test(g),
      'con el campeonato, así queda para la próxima vez');
   ok(/syncToFB/.test(g), 'y avisando a los widgets de OBS en el momento');

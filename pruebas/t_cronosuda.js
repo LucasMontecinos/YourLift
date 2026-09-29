@@ -193,7 +193,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     // nunca se notó; el Sudamericano llega hasta la AJ y ahí el orden de salida
     // quedaba A, AA, AB… AJ, B, C — o sea, el operador pasaba de la primera
     // ronda del 20 a la primera del 25.
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     const src = (lc.match(/function _cmpFl\(a,b\)\{[\s\S]*?\n\}/) || [])[0];
     ok(!!src, 'hay un solo criterio para ordenar tandas');
     if (src) {

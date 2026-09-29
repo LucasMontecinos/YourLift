@@ -173,7 +173,7 @@ async function abrir(b, pos) {
 
   console.log('\nLa tarima sigue sin escribir: se limpia el documento, no la pantalla');
   {
-    const liv = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const liv = require('./apoyo/fuente').livecast();
     const i = liv.indexOf('function renderLucesTarima(');
     ok(!/updateDoc|setDoc/.test(liv.slice(i, liv.indexOf('\n}', i))), 'la pantalla de tarima no escribe nada');
     const j = src.indexOf('function _programarLimpieza');

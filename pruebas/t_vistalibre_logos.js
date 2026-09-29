@@ -122,7 +122,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     // El PDF de la planilla se imprime sobre papel: ahí el blanco desaparecería.
     ok(fs.existsSync(__dirname + '/../fechipo_logo.png'), 'y el original a color, que es el que usa el PDF');
 
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     ok(/window\._navLibreGuardada=false;/.test(lc), 'la vista libre arranca apagada, sin excepción');
     ok(!/localStorage\.setItem\('yl_nav_libre'/.test(lc), 'y ya no se guarda en ninguna parte');
 

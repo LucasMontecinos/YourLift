@@ -127,7 +127,7 @@ const MEDALLERO = `renderTxMedals({mod:'Powerlifting Classic',sex:'Hombre',div:'
 
   console.log('\n  Queda escrito en el código');
   {
-    const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+    const lc = require('./apoyo/fuente').livecast();
     ok(/\n  suda:\{/.test(lc), 'el tema vive junto a los otros, no aparte');
     // El medallero ya no puede tener el fondo escrito a mano.
     const i = lc.indexOf('function renderTxMedals');

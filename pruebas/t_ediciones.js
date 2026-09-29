@@ -23,7 +23,8 @@
 //     contradecían y no había regla de cuál mandaba.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_ediciones.js
 const fs = require('fs');
-const R = f => fs.readFileSync(__dirname + '/../' + f, 'utf8');
+// Las páginas con su código propio (livecast.html carga livecast/*.js).
+const R = f => /\.html$/.test(f) ? require('./apoyo/fuente').pagina(f) : fs.readFileSync(__dirname + '/../' + f, 'utf8');
 
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };

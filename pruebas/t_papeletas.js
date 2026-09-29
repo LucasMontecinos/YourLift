@@ -37,7 +37,7 @@ const JSPDF = ['/opt/node22/lib/node_modules/jspdf/dist/jspdf.umd.min.js',
   path.join(__dirname, 'apoyo', 'jspdf.umd.min.js')].find(p => fs.existsSync(p));
 
 (async () => {
-  const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
+  const lc = require('./apoyo/fuente').livecast();
 
   console.log('\nTodo lo que se imprime vive en Documentos, no en Atletas & Pesaje');
   {
@@ -52,8 +52,7 @@ const JSPDF = ['/opt/node22/lib/node_modules/jspdf/dist/jspdf.umd.min.js',
     ok(!/generateHojaPesaje\(\)|generatePapeletas\(/.test(man),
        'y ya no están sueltos en la barra de Atletas & Pesaje');
     ok(/go\(\\'docs\\'\)/.test(man), 'que ahora solo tiene un acceso a Documentos');
-    const docs = lc.slice(lc.indexOf('function renderDocs()'),
-                          lc.indexOf('function renderManage()'));
+    const docs = require('./apoyo/fuente').funcion(lc, 'renderDocs');
     ['generateHojaPesaje', 'generateHojaRack', 'generateHojaEquipo',
      'generatePapeletasNom', 'generatePapeletasBco'].forEach(f =>
       ok(docs.indexOf("fn:'" + f + "'") >= 0, '  · ' + f + ' se baja desde Documentos'));
