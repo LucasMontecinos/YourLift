@@ -213,7 +213,8 @@ const PADRON = [
        'y ya nadie arma su propio índice de fotos por RUT');
     ok((adm.match(/_fotosPendientes\(\)/g) || []).length >= 3,
        'la tarjeta, el contador y "seleccionar todas" preguntan lo mismo');
-    ok(/status === 'rejected' && u === fotoDoc\.rejected_url/.test(adm),
+    // (desde 225054d se compara contra la foto puntual: publicada, fuente o rechazada)
+    ok(/fd\.rejected_url===u/.test(adm),
        'una foto rechazada solo queda fuera si sigue siendo la misma');
     ok(/fotosSnap\.metadata\?\.fromCache/.test(adm),
        'y el panel sabe si las fotos vinieron de la copia del navegador');

@@ -137,8 +137,15 @@ const MODULOS = {
       globalThis.__ESCRITO = [];
       return window.insGuardar().then(() => globalThis.__ESCRITO);
     });
-    ok(r.length === 1, 'una sola escritura');
-    const e = r[0] || {};
+    // Dos escrituras: la inscripción y su carpeta privada de documentos. Sin la
+    // segunda, a la inscripción manual no se le podían subir archivos.
+    ok(r.length === 2, 'dos escrituras: la inscripción y su carpeta de documentos (' + r.length + ')');
+    const e = r.find(x => x.col === 'inscripciones') || {};
+    const priv = r.find(x => x.col === 'inscripciones_private') || {};
+    ok(priv.id === e.id, 'la carpeta de documentos va con el mismo id');
+    ok(/^\d{4}$/.test((priv.data || {}).pin || '') && (priv.data || {}).docs
+       && Object.keys(priv.data.docs).length === 0,
+       'con un PIN de 4 dígitos y sin documentos todavía');
     const d = e.data || {};
     ok(e.col === 'inscripciones', 'sobre inscripciones');
     // El id se arma igual que en el formulario público: si no, la misma persona

@@ -24,9 +24,13 @@ function bloque(marca, largo) {
   const tarima = bloque('const recordHtml=', 900);
   ok(!!tarima, 'se encuentra el cartel de la pantalla de tarima');
   ok(/class="sr-parpadea"/.test(tarima), 'el de la pantalla de tarima parpadea');
-  ok(/INTENTO DE RÉCORD SUDAMERICANO/.test(tarima), 'y dice intento de récord sudamericano');
+  // El texto lo arma _srIntentoTexto (sudamericano, de total o mundial).
+  ok(/_srIntentoTexto\(_srX\)/.test(tarima), 'y el texto sale de _srIntentoTexto');
+  eval(bloque('function _srIntentoTexto(', 700).replace(/\n\/\/[\s\S]*$/, ''));
+  ok(_srIntentoTexto({ hay: true, mov: [1], tot: [] }) === 'INTENTO DE RÉCORD SUDAMERICANO',
+     'que dice intento de récord sudamericano');
 
-  const marcador = bloque("return rr.length?'<span", 500);
+  const marcador = bloque("return x.hay?'<span", 500);
   ok(!!marcador, 'se encuentra el cartel del marcador');
   ok(/class="sr-parpadea"/.test(marcador), 'el del marcador parpadea');
 

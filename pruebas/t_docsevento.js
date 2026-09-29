@@ -230,7 +230,7 @@ const EVENTO = {
     // "Missing or insufficient permissions", y pasa al final, después de que el
     // atleta ya subió todos sus archivos. Por eso las URLs de los documentos
     // propios van dentro del mapa `docs`, que sí está permitido.
-    const reglas = fs.readFileSync('/home/user/YourLift/firestore.rules', 'utf8');
+    const reglas = fs.readFileSync(__dirname + '/../reglas/firestore.rules', 'utf8');
     const m = reglas.match(/function datosPrivadosValidos\(\)[\s\S]*?hasOnly\(\[([^\]]*)\]\)/);
     const permitidos = m ? m[1].split(',').map(s => s.trim().replace(/^'|'$/g, '')) : [];
     ok(permitidos.includes('docs'), 'las reglas permiten el mapa docs');
@@ -245,7 +245,7 @@ const EVENTO = {
 
     // Y la contraparte en Storage: el formulario en blanco que sube el admin va a
     // una ruta nueva, y toda ruta que el código toca tiene que tener su match.
-    const st = fs.readFileSync('/home/user/YourLift/storage.rules', 'utf8');
+    const st = fs.readFileSync(__dirname + '/../reglas/storage.rules', 'utf8');
     ok(/match \/evento_docs\//.test(st), 'storage.rules tiene la ruta de los formularios del campeonato');
     const bloque = st.split('match /evento_docs/')[1].split('allow delete')[0];
     ok(/allow read: if true/.test(bloque),

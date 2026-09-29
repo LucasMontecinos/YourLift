@@ -52,9 +52,11 @@ function sacar(texto, nombre) {
 // cualquier día y ver el corte moverse con el cumpleaños.
 // _docAplica y _limpiaLista entran porque docsRequeridos ahora también filtra por
 // modalidad y división. Acá no se prueba eso —para eso está t_docsevento.js—,
-// pero sin ellas la función no se puede montar.
+// pero sin ellas la función no se puede montar. Lo mismo _modalidadActual y
+// esModalidadOE: con Olimpiadas Especiales la lista suma sus documentos propios.
 const FUNCS = ['isMinor', 'requiereConsentimientoMenor', '_edadHoy', '_partesFecha',
-               '_anioNac', '_limpiaLista', '_docAplica', 'docsRequeridos'];
+               '_anioNac', '_limpiaLista', '_docAplica', '_modalidadActual',
+               'esModalidadOE', 'docsRequeridos'];
 const CUERPO = FUNCS.map(n => sacar(src, n)).join('\n');
 function elDia(iso) {
   const t = iso.split('-').map(Number);

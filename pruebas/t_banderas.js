@@ -107,7 +107,9 @@ const MONTAR = `(paisRaro)=>{
     const rayos = k => ((F[k].match(/Z/g) || []).length);
     ok(rayos('ARG') >= 16, 'el sol de Argentina tiene sus rayos (' + rayos('ARG') + ')');
     ok(rayos('URU') >= 16, 'y el de Uruguay también (' + rayos('URU') + ')');
-    ok(/85340A/.test(F.ARG), 'con la cara del sol marcada');
+    // Sin cara: a este tamaño los ojos quedaban como dos manchas (d241e08).
+    // Queda el disco con su contorno.
+    ok(/C08A1E/.test(F.ARG) && !/85340A/.test(F.ARG), 'con el disco del sol contorneado y sin cara');
 
     // Los escudos son un dibujo, no un disco de un solo color.
     const cuerpos = k => ((F[k].match(/<path|<ellipse/g) || []).length);

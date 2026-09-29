@@ -319,7 +319,7 @@ global.EVENTOS_G = EVENTOS;
 
     // La parte que no se ve y es la que rompe: los campos tienen que caber en la
     // lista cerrada de las reglas.
-    const reglas = fs.readFileSync('/home/user/YourLift/firestore.rules', 'utf8');
+    const reglas = fs.readFileSync(__dirname + '/../reglas/firestore.rules', 'utf8');
     const prohibidos = (reglas.match(/function inscEntrenadorValida\(\)[\s\S]*?hasAny\(\[([^\]]*)\]\)/) || [])[1] || '';
     const veto = prohibidos.split(',').map(s => s.trim().replace(/^'|'$/g, '')).filter(Boolean);
     const colados = Object.keys(escrito.pub || {}).filter(k => veto.includes(k));
@@ -341,7 +341,7 @@ global.EVENTOS_G = EVENTOS;
     // entrenadores que además compiten: mismo RUT, misma carpeta.
     const src = await (await fetch(`http://localhost:${PUERTO}/inscripcion_entrenador.html`)).text();
     ok(/athlete_files\/\$\{rc\}\/entrenador_/.test(src), 'sube a athlete_files con el prefijo entrenador_');
-    const st = fs.readFileSync('/home/user/YourLift/storage.rules', 'utf8');
+    const st = fs.readFileSync(__dirname + '/../reglas/storage.rules', 'utf8');
     ok(/match \/athlete_files\/\{rut\}\/\{file\}/.test(st), 'y esa ruta tiene su match en storage.rules');
   }
 

@@ -193,9 +193,12 @@ console.log('\n  Y lo que la pestaña abierta no necesita, no se baja');
     const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
     ok(/\.sin-anim \.fade\{animation:none\}/.test(lc),
        'hay una manera de apagar la animación de aparecer');
-    ok(/el\.classList\.toggle\('sin-anim', window\._ultPantalla===_pant\)/.test(lc),
+    ok(/el\.classList\.toggle\('sin-anim', window\._ultPantalla===_pant\)/.test(lc)
+       || (/const _mismaPant=\(window\._ultPantalla===_pant\);/.test(lc)
+           && /el\.classList\.toggle\('sin-anim', _mismaPant\)/.test(lc)),
        'y se apaga cuando se sigue en la misma pantalla');
-    ok(/const _nuevo=renderShell\(\);\s*\n\s*if\(el\.innerHTML!==_nuevo\)el\.innerHTML=_nuevo;/.test(lc),
+    // (dentro del if ahora también se guarda y devuelve el scroll)
+    ok(/const _nuevo=renderShell\(\);\s*\n\s*if\(el\.innerHTML!==_nuevo\)/.test(lc),
        'y si lo que hay que dibujar es igual, no se reescribe');
 
     const b2 = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });

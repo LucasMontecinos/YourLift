@@ -95,16 +95,18 @@ async function menuConRol(p, rol) {
   ok(tx.menu.some(x => x.includes('Control TX')), 'y con Control TX');
 
   console.log('\nEn el panel de admin');
-  ok(/role==='streaming'\)\{ app\.innerHTML=renderStreamingShell\(\); return; \}/.test(srcAD),
+  // (la mesa técnica comparte esa pantalla desde 4c6aadc)
+  ok(/role==='streaming'(?:\|\|ST\.adminInfo\?\.role==='mesa')?\)\{ app\.innerHTML=renderStreamingShell\(\); return; \}/.test(srcAD),
      'la cuenta de streaming entra a su propia pantalla, no al panel');
   ok(/function renderStreamingShell\(\)/.test(srcAD), 'esa pantalla existe');
   ok(/<option value="streaming">/.test(srcAD), 'el rol se puede elegir al crear la cuenta');
 
   // El panel de admin corre como módulo, así que su ST/render no se ven desde acá:
   // se saca la función del archivo y se dibuja con una cuenta de prueba.
-  const iRS = srcAD.indexOf('function renderStreamingShell(){');
+  // La tabla _SHELL_ROL (textos por rol) va pegada: la función la lee.
+  const iRS = srcAD.indexOf('const _SHELL_ROL={');
   const fnRS = (() => {
-    let q = iRS, open = 0, abrio = false;
+    let q = srcAD.indexOf('function renderStreamingShell(){', iRS), open = 0, abrio = false;
     while (q < srcAD.length) {
       const c = srcAD[q];
       if (c === '{') { open++; abrio = true; }

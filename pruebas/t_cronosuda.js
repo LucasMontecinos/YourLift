@@ -53,7 +53,11 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     // el 367, y así el número dice también cuándo compite.
     const j = N.jornadas || [];
     const dia = {}; [...new Set(j.map(x => x.fecha))].sort().forEach((f, i) => { dia[f] = i + 1; });
-    ok(conLote.every(a => +String(a.lote)[0] === dia[a.fecha]),
+    // Pietra Galaverna entró después del sorteo (4d325db): va con el 897, por
+    // encima del más alto en uso, para no meterse en el orden de tarima ni en el
+    // desempate de nadie. Es la única que queda fuera de la regla.
+    const AGREGADOS_DESPUES = ['Galaverna Pietra'];
+    ok(conLote.filter(a => !AGREGADOS_DESPUES.includes(a.n)).every(a => +String(a.lote)[0] === dia[a.fecha]),
        'el primer dígito de cada lote es su día de competencia');
     ok(conLote.every(a => +a.lote >= 101 && +a.lote <= 899),
        'van del 101 al 899: ' + Math.min(...conLote.map(a => +a.lote)) + ' a ' + Math.max(...conLote.map(a => +a.lote)));
@@ -219,7 +223,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     // Esta zona del archivo no corre en el ámbito global: una constante declarada
     // acá queda sin asignar y vale undefined al leerla.
     ok(!/const _CR_DIAS/.test(ix), 'sin constantes sueltas en la zona que no se ejecuta');
-    const py = fs.readFileSync(__dirname + '/../build_suda_dias.py', 'utf8');
+    const py = fs.readFileSync(__dirname + '/../herramientas/build_suda_dias.py', 'utf8');
     ok(/a\.get\('lote'\) or lot/.test(py), 'el livecast usa el lote de FESUPO, no un contador propio');
     ok(/a\.get\('tanda'\) or fl/.test(py), 'y la tanda de FESUPO, no una letra por día');
   }

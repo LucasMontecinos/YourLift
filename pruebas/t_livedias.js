@@ -86,7 +86,7 @@ function atletas() {
   console.log('\nAl entrar se ve el día que se está compitiendo');
   {
     const r = await p.evaluate(() => ({
-      hayDias: /VER DÍA/.test(document.body.innerText),
+      hayDias: /VER DÍA(?! Y TANDA)/.test(document.body.innerText),
       sel: window._DIA_SEL.publico,
       // Solo los de la vista pública: la barra lateral tiene su propia fila de
       // días para el Vuelo Activo, y contarlos todos juntos daba seis.
@@ -136,7 +136,8 @@ function atletas() {
       DATA.athletes.forEach(a => { a.jornada = ''; });
       window._DIA_SEL = {}; R();
       return {
-        hayDias: /VER DÍA/.test(document.body.innerText),
+        // (el panel plegable se llama "VER DÍA Y TANDA"; la fila de días es otra cosa)
+        hayDias: /VER DÍA(?! Y TANDA)/.test(document.body.innerText),
         tandas: window.__tandasVisibles(),
       };
     });
@@ -155,12 +156,12 @@ function atletas() {
       DATA.flight = 'C';
       ST_ADMIN = true;
       DATA.phase = 'compete'; R();
-      out.control = /VER DÍA/.test(document.body.innerText);
+      out.control = /VER DÍA(?! Y TANDA)/.test(document.body.innerText);
       out.flightTrasControl = DATA.flight;
       verDia('control', 1);
       out.flightTrasElegirDia = DATA.flight;
       DATA.phase = 'manage'; R();
-      out.pesaje = /VER DÍA/.test(document.body.innerText);
+      out.pesaje = /VER DÍA(?! Y TANDA)/.test(document.body.innerText);
       verDia('pesaje', 2);
       out.flightTrasPesaje = DATA.flight;
       // Cada pantalla recuerda su propio día.

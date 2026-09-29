@@ -171,7 +171,9 @@ console.log('\nEl tamaño se puede cambiar de verdad');
   const sig = lc.slice(lc.indexOf("+'|sc-'+"), lc.indexOf("+'|col-'"));
   ['profile', 'scoreboard', 'leaderboard', 'timer', 'slam', 'breakTimer',
    'tablaActual', 'medals', 'luces'].forEach(k =>
-    ok(sig.indexOf('_txDirState.' + k + '?.scale') > 0,
+    // (escrito sin ?. para los navegadores de televisor viejos)
+    ok(sig.indexOf('_txDirState.' + k + '?.scale') > 0
+       || sig.indexOf('_txDirState.' + k + '==null?void 0:_txDirState.' + k + '.scale') > 0,
        'la escala de ' + k + ' entra en la firma del redibujado'));
 
   // Y otra: la escala iba en el MISMO elemento que la animación de entrada. Los
@@ -182,7 +184,7 @@ console.log('\nEl tamaño se puede cambiar de verdad');
     const escalaEnLaMisma = /transform:scale\([^)]*\);transform-origin:[^;]*;'\+\w*Anim/.test(bloque);
     return { anim, escalaEnLaMisma };
   };
-  const ta = lc.slice(lc.indexOf('const taScale=_txDirState.tablaActual'), lc.indexOf('// Medallero (Top 3)'));
+  const ta = lc.slice(lc.indexOf('const taScale='), lc.indexOf('// Medallero (Top 3)'));
   ok(capas(ta).anim, 'la Tabla Actual entra con animación');
   ok(!capas(ta).escalaEnLaMisma, 'y su escala ya NO comparte elemento con ella');
   ok(/transform:scale\('\+taScale\+'\);transform-origin:bottom right/.test(ta),
@@ -194,7 +196,7 @@ console.log('\nEl tamaño se puede cambiar de verdad');
   ok(/transform:scale\('\+mdScale\+'\);transform-origin:bottom center/.test(md),
      'con su capa propia');
 
-  const lzI = lc.indexOf('const lzScale=_txDirState.luces');
+  const lzI = lc.indexOf('const lzScale=');
   const lz = lc.slice(lzI, lzI + 700);
   ok(/transform:scale\('\+lzScale\+'\);transform-origin:bottom left/.test(lz),
      'y las luces nacen ya con la escala en su capa');

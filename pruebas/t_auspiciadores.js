@@ -132,7 +132,7 @@ const MARCAS = [
   console.log('\n  Solo el owner los define');
   {
     const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
-    const reglas = fs.readFileSync(__dirname + '/../firestore.rules', 'utf8');
+    const reglas = fs.readFileSync(__dirname + '/../reglas/firestore.rules', 'utf8');
     // Quién sale en el sitio y a dónde lleva su logo es un compromiso comercial.
     ok(/view==='sponsors'\)\{if\(ST\.adminInfo\?\.role==='owner'/.test(adm),
        'la pantalla es solo del owner');

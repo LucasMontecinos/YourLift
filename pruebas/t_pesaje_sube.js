@@ -35,6 +35,7 @@ const _MERGE_META_FIELDS = ['bw','rackSQ','rackBP','sqAbat','bpSeg','bpPalm','mo
   'flight','lot','bombed','weighedIn','jornada','name','div','cat','sex','club','uni'];
 eval(sacar('_markAtt'));
 eval(sacar('_nnCrono'));
+eval(sacar('_mismaPersona'));
 eval(sacar('_mergeForWrite'));
 
 const att = () => ({ sq: [{w:0,r:null},{w:0,r:null},{w:0,r:null}],

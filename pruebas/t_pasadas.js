@@ -110,8 +110,8 @@ const FICHAS = [
   ok(/if\(on&&!\(ficha\.docs\|\|\[\]\)\.length\)/.test(adm), 'no deja publicar un campeonato sin documentos');
 
   console.log('\nLas reglas dejan leer a cualquiera y escribir solo al admin');
-  const fr = fs.readFileSync(__dirname + '/../firestore.rules', 'utf8');
-  const sr = fs.readFileSync(__dirname + '/../storage.rules', 'utf8');
+  const fr = fs.readFileSync(__dirname + '/../reglas/firestore.rules', 'utf8');
+  const sr = fs.readFileSync(__dirname + '/../reglas/storage.rules', 'utf8');
   ok(/match \/competencias_pasadas\/\{id\} \{\s*allow read: if true;\s*allow write: if isAdmin\(\);/.test(fr),
      'Firestore: lectura pública, escritura de admin');
   // El bloque ya no dice `allow write`: en Storage `write` incluye BORRAR, y al

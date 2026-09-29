@@ -110,10 +110,13 @@ async function abrirComo(b, admin) {
     ok(r.pestanas.length === 4, 'y las cuatro pestañas: ' + JSON.stringify(r.pestanas));
   }
 
-  console.log('\n  La comisión técnica ve la parte deportiva, y entra de verdad');
+  console.log('\n  El resto de los admins opera el panel, pero Estadísticas es del owner');
   {
-    // Los tres casos que daban el mismo síntoma: el rol de siempre, un documento
-    // sin el campo role, y un rol propio que no estaba en ninguna lista.
+    // Desde 61f6f54 la pantalla entera es del owner: dice cuánta gente compite,
+    // de qué clubes y cuántas afiliaciones deja cada campeonato, que es con lo
+    // que se negocia. Los tres casos de siempre —el rol admin, un documento sin
+    // el campo role y un rol propio— entran al panel igual, sin ese botón. Y las
+    // dos puertas siguen preguntando lo mismo: si alguien fuerza la vista, rebota.
     for (const admin of [
       { id: 'u1', email: 'x@y.cl', role: 'admin' },
       { id: 'u1', email: 'x@y.cl' },
@@ -121,13 +124,10 @@ async function abrirComo(b, admin) {
     ]) {
       const quien = admin.role || '(sin campo role)';
       const r = await abrirComo(b, admin);
-      ok(r.menuEstadisticas, quien + ': tiene el botón en el menú');
-      // Lo que fallaba: el botón estaba pero la vista rebotaba a Atletas.
-      ok(r.vista === 'stats', quien + ': y al abrirlo NO lo devuelve a Atletas');
-      ok(r.pestanas.includes('DEPORTE') && r.pestanas.includes('CORTE NACIONAL'),
-         quien + ': ve Deporte y Corte Nacional');
-      ok(!r.pestanas.includes('DEMOGRAFÍA') && !r.pestanas.includes('TRÁFICO WEB'),
-         quien + ': y NO ve demografía ni tráfico web');
+      ok(r.entro, quien + ': entra al panel');
+      ok(!r.menuEstadisticas, quien + ': no tiene Estadísticas en el menú');
+      ok(r.vista !== 'stats' && r.pestanas.length === 0,
+         quien + ': y si fuerza la vista, rebota sin ver ninguna pestaña');
       ok(r.menuClubes, quien + ': puede entrar a Clubes');
     }
   }
@@ -145,15 +145,16 @@ async function abrirComo(b, admin) {
   console.log('\n  Queda escrito en el código');
   {
     const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
-    ok(/_ROLES_SIN_PANEL=\['juez','streaming','transmision'\]/.test(adm),
+    ok(/_ROLES_SIN_PANEL=\['juez','streaming','transmision'(?:,'mesa')?\]/.test(adm),
        'la lista es de quién NO opera el panel, no de quién sí');
     // Las dos puertas —el botón y la vista— tienen que preguntar lo mismo.
     ok(/\$\{_statsPuede\(\)\?`<button class="side-btn \$\{ST\.view==='stats'/.test(adm),
        'el botón pregunta _statsPuede()');
     ok(/else if\(ST\.view==='stats'\)\{if\(_statsPuede\(\)\)/.test(adm),
        'y la vista pregunta lo mismo');
+    ok(/const _statsPuede=_statsOwner;/.test(adm), 'y esa pregunta es: ¿es el owner?');
     ok(/_statsOwner\(\)\?tabBtn\('demografia'/.test(adm) && /_statsOwner\(\)\?tabBtn\('web'/.test(adm),
-       'y adentro, demografía y tráfico web siguen siendo solo del owner');
+       'y adentro, demografía y tráfico web también piden owner');
   }
 
   console.log(fallas ? `\n${fallas} FALLA(S)` : '\nTodo OK');

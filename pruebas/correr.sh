@@ -13,7 +13,9 @@ if python3 -c "import socket,sys; s=socket.socket(); sys.exit(0 if s.connect_ex(
   echo "  Ciérralo antes de correr la batería:  kill \$(ps -eo pid,args | grep '[h]ttp.server' | awk '{print \$1}')"
   exit 1
 fi
-python3 -m http.server 8972 >/dev/null 2>&1 &
+# Servidor propio de la batería: el sitio tal cual, más los eventos de prueba
+# (pruebas/fixtures) sumados a nominas.json. Ver pruebas/apoyo/servidor.py.
+python3 pruebas/apoyo/servidor.py 8972 >/dev/null 2>&1 &
 SRV=$!; sleep 2
 if ! kill -0 "$SRV" 2>/dev/null; then
   echo "✗ No se pudo levantar el servidor local en 8972."

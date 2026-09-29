@@ -68,6 +68,10 @@ const MONTAR = `(pais,logo,fondo)=>{
   console.log('\n  El intento sale del movimiento y la ronda en curso');
   const otros = await p.evaluate(() => {
     const out = {};
+    // Cada caso en un estado que pueda darse en tarima: la ronda en curso todavía
+    // sin resultado. Con la ronda ya cerrada la pantalla muestra al que abre la
+    // siguiente (e06b757), así que SQ 1 con el 300 ya juzgado mostraría SQ 2.
+    DATA.athletes[0].att.sq = [{ w: 300, r: null }, { w: 0, r: null }, { w: 0, r: null }];
     DATA.lift = 'sq'; DATA.round = 0; renderTxWidget();
     out.sq1 = /SQ 1/.test(document.body.innerText);
     DATA.athletes[0].att.bp = [{ w: 200, r: null }, { w: 0, r: null }, { w: 0, r: null }];
@@ -152,7 +156,7 @@ const MONTAR = `(pais,logo,fondo)=>{
        'un campeonato nacional diría: ' + r.etiquetaNacional);
     ok(r.etiquetaVacia === '', 'y uno sin tabla de récords no dice nada');
   }
-  ok(/function _recordEtiqueta\(\)/.test(src), 'la etiqueta sale del campeonato, no está fija');
+  ok(/function _recordEtiqueta\(a?\)/.test(src), 'la etiqueta sale del campeonato, no está fija');
   ok(/r==='nacional'\)return 'INTENTO DE RÉCORD NACIONAL'/.test(src), 'ya contempla la tabla nacional para cuando se cargue');
   ok(/@keyframes barraParpadeo/.test(src), 'y el parpadeo está definido');
   ok(/prefers-reduced-motion/.test(src), 'respetando a quien pidió menos animación');

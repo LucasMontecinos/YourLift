@@ -294,7 +294,7 @@ const R = (rut, nombre, evento, fecha, extra) => Object.assign(
   console.log('\n  Lo elegido queda guardado, y lo nuevo se avisa');
   ok(/setDoc\(doc\(db,'config','participacion'\)/.test(src), 'se guarda en Firestore, no en el navegador');
   ok(/match \/config\/\{id\} \{[\s\S]{0,80}allow read, write: if isAdmin\(\);/.test(
-       fs.readFileSync(__dirname + '/../firestore.rules', 'utf8')),
+       fs.readFileSync(__dirname + '/../reglas/firestore.rules', 'utf8')),
      'con su regla, y solo para el admin');
   ok(/vistos:H\.todos\.map\(x=>x\.clave\)/.test(src), 'se anota qué campeonatos había al guardar');
   ok(/NUEVO<\/span>/.test(src), 'para marcar como NUEVO lo que aparezca después');

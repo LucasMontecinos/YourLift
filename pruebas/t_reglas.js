@@ -22,7 +22,7 @@ let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };
 
 const raiz = __dirname + '/..';
-const rules = fs.readFileSync(raiz + '/firestore.rules', 'utf8');
+const rules = fs.readFileSync(raiz + '/reglas/firestore.rules', 'utf8');
 const paginas = fs.readdirSync(raiz).filter(f => f.endsWith('.html'));
 
 // Las colecciones que el código toca, sacadas de las llamadas a Firestore.

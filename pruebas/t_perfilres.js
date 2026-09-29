@@ -85,7 +85,8 @@ export function where(){return{};}
 
   console.log('\nLa cola espera a data.json y se suelta una sola vez');
   ok(/window\._DB_LISTA=false;/.test(src), 'arranca marcada como no lista');
-  ok(/if\(cr\)\{_conDB\(\(\)=>_applyResults\(cr\)\);\}/.test(src), 'los resultados se encolan');
+  // (_real() saca los resultados de los ensayos antes de pintarlos)
+  ok(/if\(cr\)\{_conDB\(\(\)=>_applyResults\((?:_real\(cr\)|cr)\)\);\}/.test(src), 'los resultados se encolan');
   ok(/_conDB\(\(\)=>_applyFotos/.test(src), 'las fotos también');
   ok(/_conDB\(\(\)=>_applyAch/.test(src), 'los logros también');
   ok(/_conDB\(\(\)=>_applyPos/.test(src), 'y las posiciones');

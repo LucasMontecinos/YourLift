@@ -37,6 +37,9 @@ const formas = [
   'imprimí', 'añadí', 'compartí', 'definí', 'pedí', 'subila', 'subilo',
   // presente de indicativo
   'tenés', 'podés', 'querés', 'sabés', 'debés', 'hacés', 'decís', 'vivís',
+  // los que se colaron después (avisos de error, ayuda de OBS, credenciales)
+  'reintentá', 'deshacé', 'recargá', 'recordá', 'iniciá', 'mantené', 'cerrá',
+  'editá', 'renombrá', 'revisala', 'escribilo', 'pegalo', 'avisame', 'recordale',
 ];
 
 // La palabra tiene que ir suelta: "creá" sí, "creación" no; "seguí" sí, "seguía"

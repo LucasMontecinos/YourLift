@@ -39,6 +39,9 @@ eval(sacar('curAtt'));
 eval(sacar('bestOf'));
 eval(sacar('subTotal'));
 eval(sacar('_posForecast'));
+eval(sacar('_sbSoloBanca'));
+eval(sacar('_sbEquipo'));
+eval(sacar('_sbPool'));
 eval(sacar('catRankBySub'));
 
 const nueve = () => ({ sq: [{w:0,r:null},{w:0,r:null},{w:0,r:null}],

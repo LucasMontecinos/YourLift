@@ -250,7 +250,7 @@ const MODULOS = {
     ok(/function clubsParaElegir/.test(ins), 'una sola forma de armar la lista');
     ok(!/\$\{CLUBS\.map/.test(ins), 'y ningún desplegable quedó con la lista fija');
     // Si el padrón llega después de dibujar, hay que redibujar o se queda el respaldo.
-    ok(/athleteDB=d;_insAplicarEdits\(\);[\s\S]{0,220}?render\(\)/.test(ins),
+    ok(/athleteDB=d;\s*_insAplicarEdits\(\);[\s\S]{0,320}?render\(\)/.test(ins),
        'y se redibuja cuando llega el padrón');
   }
 

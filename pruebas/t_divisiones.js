@@ -25,7 +25,7 @@ const { chromium } = require('playwright');
 const rk = fs.readFileSync(__dirname + '/../ranking.html', 'utf8');
 const lc = fs.readFileSync(__dirname + '/../livecast.html', 'utf8');
 const adm = fs.readFileSync(__dirname + '/../admin.html', 'utf8');
-const rules = fs.readFileSync(__dirname + '/../firestore.rules', 'utf8');
+const rules = fs.readFileSync(__dirname + '/../reglas/firestore.rules', 'utf8');
 const div = require(__dirname + '/../yl-divisiones.js');
 
 let fallas = 0;
@@ -88,7 +88,7 @@ console.log('\nLa tabla de años de nacimiento');
      'las claves están normalizadas igual que en yl-divisiones.js');
   ok(!/rut|fechaNac|\d{2}\/\d{2}/.test(nacSrc.slice(200)),
      'solo guarda el año: ni RUT ni fecha completa');
-  ok(fs.existsSync(__dirname + '/../build_nacimientos.py'),
+  ok(fs.existsSync(__dirname + '/../herramientas/build_nacimientos.py'),
      'y se puede regenerar con un script, no se edita a mano');
 }
 
