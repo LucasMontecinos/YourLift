@@ -516,10 +516,9 @@ async function initFB(){
     }
     window._fbAuth=authMod;fbReady=true;
     window._fbStInst=storageMod.getStorage(app);
-    _setupFotoListener(); // in case data.json already loaded before Firebase was ready
     if(typeof _aplicarEdicionesDB==='function')_aplicarEdicionesDB();  // ediciones del panel sobre el padrón
-    if(typeof _setupLcMediaListener==='function')_setupLcMediaListener(); // foto/gif persistente por atleta (livecast)
-    if(typeof _cargarFotosSuda==='function')_cargarFotosSuda();               // fotos de la nómina del Sudamericano
+    if(typeof _setupLcMediaListener==='function')_setupLcMediaListener(); // logos de clubes subidos en el panel
+    if(typeof _fotosArrancar==='function')_fotosArrancar();               // fotos: solo si alguna pantalla ya las pidió
     // Keep LIVE_EVENTS in sync with Firestore eventos
     fb.onSnapshot(fb.collection(fbDB,'eventos'),async (snap)=>{
       const evs={};
@@ -589,18 +588,17 @@ async function initFB(){
       }catch(e){}
       if(DATA.phase==='setup'&&DATA.events.length>0)R();
       if(!window._autoEvtTried){window._autoEvtTried=true;try{applyEventURLParam()}catch(e){console.warn('[LC] auto-pick',e)}}
-      // Contar atletas por evento desde inscripciones (para mostrar en el picker)
-      for(const evId of activeIds){
-        try{
-          const q=fb.query(fb.collection(fbDB,'inscripciones'),fb.where('evento','==',evId),fb.where('status','in',['approved','pending']));
-          const insSnap=await fb.getDocs(q);
-          if(window.LIVE_EVENT_META[evId]){
-            window.LIVE_EVENT_META[evId].athleteCount=insSnap.size;
-          }
-          // Refrescar el picker si está activo
-          if(DATA.phase==='setup')R();
-        }catch(e){/* silencioso */}
-      }
+      // Cuántos atletas tiene cada campeonato, para la lista de elección.
+      //
+      // Antes se bajaban TODAS las inscripciones de cada campeonato activo —cientos
+      // de documentos— en cada apertura del livecast, también en cada televisor y
+      // en cada widget de OBS, y de nuevo con cada cambio en cualquier campeonato
+      // (pegar el link de YouTube del día bastaba). Era una de las mayores fuentes
+      // de lecturas de Firestore. Ahora: solo donde la lista se puede ver (no en
+      // los widgets), solo el número (Firestore cobra una lectura por cada mil
+      // inscripciones contadas) y como mucho una vez cada diez minutos por
+      // campeonato, guardado en el equipo.
+      if(!TX_MODE)_contarAtletasEventos(fb,activeIds);
     });
     // Check if already logged in (session persists)
     authMod.onAuthStateChanged(fbAuth,(u)=>{
@@ -2474,6 +2472,42 @@ const FLAG_SVG={
   CAN:'<rect width="30" height="20" fill="#fff"/><rect width="7.5" height="20" fill="#D80621"/><rect x="22.5" width="7.5" height="20" fill="#D80621"/><path d="M15 4.4l1.1 2.6 2.4-1-1.1 2.7 2.3.6-2.1 1.6.6 1.5-2.5-.5.2 2.7h-1.8l.2-2.7-2.5.5.6-1.5-2.1-1.6 2.3-.6L11.5 6l2.4 1z" fill="#D80621"/>',
   USA:'<rect width="30" height="20" fill="#fff"/><g fill="#B22234"><rect width="30" height="1.54"/><rect y="3.08" width="30" height="1.54"/><rect y="6.15" width="30" height="1.54"/><rect y="9.23" width="30" height="1.54"/><rect y="12.31" width="30" height="1.54"/><rect y="15.38" width="30" height="1.54"/><rect y="18.46" width="30" height="1.54"/></g><rect width="12" height="10.77" fill="#3C3B6E"/><path d="M1.9 1.58L2.05 2L2.49 2.01L2.14 2.28L2.26 2.7L1.9 2.45L1.54 2.7L1.66 2.28L1.31 2.01L1.75 2ZM4.65 1.58L4.8 2L5.24 2.01L4.89 2.28L5.01 2.7L4.65 2.45L4.29 2.7L4.41 2.28L4.06 2.01L4.5 2ZM7.4 1.58L7.55 2L7.99 2.01L7.64 2.28L7.76 2.7L7.4 2.45L7.04 2.7L7.16 2.28L6.81 2.01L7.25 2ZM10.15 1.58L10.3 2L10.74 2.01L10.39 2.28L10.51 2.7L10.15 2.45L9.79 2.7L9.91 2.28L9.56 2.01L10 2ZM1.9 4.78L2.05 5.2L2.49 5.21L2.14 5.48L2.26 5.9L1.9 5.65L1.54 5.9L1.66 5.48L1.31 5.21L1.75 5.2ZM4.65 4.78L4.8 5.2L5.24 5.21L4.89 5.48L5.01 5.9L4.65 5.65L4.29 5.9L4.41 5.48L4.06 5.21L4.5 5.2ZM7.4 4.78L7.55 5.2L7.99 5.21L7.64 5.48L7.76 5.9L7.4 5.65L7.04 5.9L7.16 5.48L6.81 5.21L7.25 5.2ZM10.15 4.78L10.3 5.2L10.74 5.21L10.39 5.48L10.51 5.9L10.15 5.65L9.79 5.9L9.91 5.48L9.56 5.21L10 5.2ZM1.9 7.98L2.05 8.4L2.49 8.41L2.14 8.68L2.26 9.1L1.9 8.85L1.54 9.1L1.66 8.68L1.31 8.41L1.75 8.4ZM4.65 7.98L4.8 8.4L5.24 8.41L4.89 8.68L5.01 9.1L4.65 8.85L4.29 9.1L4.41 8.68L4.06 8.41L4.5 8.4ZM7.4 7.98L7.55 8.4L7.99 8.41L7.64 8.68L7.76 9.1L7.4 8.85L7.04 9.1L7.16 8.68L6.81 8.41L7.25 8.4ZM10.15 7.98L10.3 8.4L10.74 8.41L10.39 8.68L10.51 9.1L10.15 8.85L9.79 9.1L9.91 8.68L9.56 8.41L10 8.4Z" fill="#fff"/>',
 };
+// ── Conteo de atletas por campeonato (lista de elección) ─────────────────
+// Ver el comentario donde se llama. El resultado vive en localStorage diez
+// minutos: recargar la página, o abrir otra pestaña, no vuelve a contar.
+const _CONTEO_TTL=10*60*1000;
+function _conteoGuardado(evId){
+  try{
+    const o=JSON.parse(localStorage.getItem('yl_conteo_'+evId)||'null');
+    if(o&&Date.now()-o.ts<_CONTEO_TTL)return o.n;
+  }catch(e){}
+  return null;
+}
+async function _contarAtletasEventos(fb,ids){
+  window._conteoEnCurso=window._conteoEnCurso||{};
+  for(const evId of ids){
+    const meta=window.LIVE_EVENT_META&&window.LIVE_EVENT_META[evId];
+    if(!meta)continue;
+    const g=_conteoGuardado(evId);
+    if(g!==null){ meta.athleteCount=g; continue; }
+    if(window._conteoEnCurso[evId])continue;
+    window._conteoEnCurso[evId]=true;
+    try{
+      const q=fb.query(fb.collection(fbDB,'inscripciones'),fb.where('evento','==',evId),fb.where('status','in',['approved','pending']));
+      let n;
+      if(typeof fb.getCountFromServer==='function'){
+        const c=await fb.getCountFromServer(q);
+        n=c.data().count;
+      }else{
+        n=(await fb.getDocs(q)).size;
+      }
+      meta.athleteCount=n;
+      try{localStorage.setItem('yl_conteo_'+evId,JSON.stringify({ts:Date.now(),n:n}));}catch(e){}
+    }catch(e){/* silencioso: el número es solo informativo */}
+    finally{ window._conteoEnCurso[evId]=false; }
+  }
+  if(DATA.phase==='setup')R();
+}
 // ── Qué se muestra junto al nombre: bandera o logo del club ────────────────
 // En un sudamericano la bandera es el dato: identifica a quién representa cada
 // uno. En un campeonato chileno son todos CHI y la bandera no dice nada — ahí lo
@@ -3458,6 +3492,9 @@ function _nsudaSlugLC(s){
     .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,'-').slice(0,80);
 }
 function _fotoSudaFor(a){
+  // Son fotos de extranjeros: en un campeonato de un solo país no hace falta
+  // bajarlas (son 544 documentos). Se piden la primera vez que se buscan.
+  if(!window._nsudaFotosLC){ if(!_variosPaises())return null; _cargarFotosSuda(); }
   const u=window.NSUDA_FOTOS_LC[_nsudaSlugLC(a&&a.name)];
   return u?{foto_url:u}:null;
 }
@@ -3557,20 +3594,20 @@ function _setupLcMediaListener(){
       });
     }
   }catch(e){}
-  try{
-    window._lcMediaUnsub=window._fb.onSnapshot(window._fb.collection(fbDB,'atleta_fotos'),snap=>{
-      snap.docs.forEach(d=>{
-        const data=d.data();
-        if(String(d.id).indexOf('lc_')===0){ window._LC_MEDIA[d.id]=data; return; }
-        const r=_rutKey(data.rut);
-        if(r&&data.foto_url&&data.status!=='rejected')window._ADMIN_FOTOS_BY_RUT[r]={foto_url:data.foto_url};
-      });
-      if(typeof renderTxWidget==='function')renderTxWidget();
-      if(!TX_MODE && DATA.phase==='manage' && typeof R==='function')R();
-    });
-  }catch(e){console.warn('[lc-media]',e.message);}
+  window._lcMediaUnsub=true;
+}
+// La foto o GIF propio del livecast (docs lc_*) y la foto aprobada en el panel,
+// por RUT. Sale del mismo oyente de atleta_fotos que las fotos del padrón.
+function _fotosAlLivecast(snap){
+  snap.docs.forEach(d=>{
+    const data=d.data();
+    if(String(d.id).indexOf('lc_')===0){ window._LC_MEDIA[d.id]=data; return; }
+    const r=_rutKey(data.rut);
+    if(r&&data.foto_url&&data.status!=='rejected')window._ADMIN_FOTOS_BY_RUT[r]={foto_url:data.foto_url};
+  });
 }
 function openAthleteMedia(id){
+  _pedirFotos();
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   const m0=_lcMediaFor(a)||{};
   const ex=document.getElementById('athMediaModal');if(ex)ex.remove();
@@ -9314,6 +9351,7 @@ function _lucesEnTarima(){
   return !!st.luces;
 }
 function renderTxProfile(cur){
+  _pedirFotos();
   const full=txLookupFull(cur);
   // Media efectiva: foto/gif subida en el livecast (persistente) tiene prioridad
   // sobre la de la base de Chile. Permite fotos de atletas internacionales.
@@ -9803,15 +9841,38 @@ async function loadBirthYears(){
   try{
     // Las inscripciones se buscan por RUT sin filtrar por evento: traemos TODAS
     // y cruzamos por RUT. Así funciona para sub-tarimas y cualquier evento.
+    // Es la colección entera (unas setecientas), así que se guarda en el equipo
+    // doce horas: un televisor que se recarga no la vuelve a pedir.
     const snap=await window._fb.getDocs(window._fb.collection(fbDB,'inscripciones'));
+    const m={};
     snap.docs.forEach(d=>{
       const x=d.data();
       const k=String(x.rut||'').replace(/[^0-9kK]/gi,'').toUpperCase();
-      if(k&&x.fechaNac)window.BIRTH_BY_RUT[k]=x.fechaNac;
+      if(k&&x.fechaNac){ const y=String(x.fechaNac).match(/(\d{4})/); if(y)m[k]=y[1]; }
     });
+    Object.assign(window.BIRTH_BY_RUT,m);
+    try{localStorage.setItem('yl_nac_rut',JSON.stringify({ts:Date.now(),m:m}));}catch(e){}
     console.log('[screen] fechaNac cargadas:',Object.keys(window.BIRTH_BY_RUT).length);
     if(TX_MODE==='jornada'||TX_MODE==='screen')R();
   }catch(e){console.warn('[screen] loadBirthYears',e.message);}
+}
+// El año de nacimiento se pide recién cuando la tabla lo necesita y no lo tiene:
+// la mayoría de los atletas ya lo trae en la nómina (a.born). Primero se mira lo
+// guardado en el equipo; solo si igual falta se va a Firestore, una vez.
+function _pedirNacimiento(k){
+  if(!window._nacCacheMirada){
+    window._nacCacheMirada=true;
+    try{
+      const o=JSON.parse(localStorage.getItem('yl_nac_rut')||'null');
+      if(o&&o.m&&Date.now()-o.ts<12*60*60*1000){
+        Object.assign(window.BIRTH_BY_RUT,o.m);
+        if(window.BIRTH_BY_RUT[k]){ setTimeout(()=>{if(typeof R==='function')R();},0); return; }
+      }
+    }catch(e){}
+  }
+  if(window._nacPedidos||!fbReady||!DATA.event)return;
+  window._nacPedidos=true;
+  loadBirthYears();
 }
 function _screenDocId(){
   if(!DATA.event)return null;
@@ -9912,10 +9973,13 @@ function _renderTxAtletaEnBarra(c,st){
 window.BIRTH_BY_RUT = window.BIRTH_BY_RUT || {};
 function _rutN(s){return String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();}
 function _yob2(a){
-  // 2 dígitos del año de nacimiento. Busca por RUT en BIRTH_BY_RUT.
+  // 2 dígitos del año de nacimiento: el de la nómina si viene; si no, por RUT
+  // en BIRTH_BY_RUT (que se carga recién la primera vez que falta uno).
+  const b=String(a.born||'').match(/(\d{4})/);
+  if(b) return b[1].slice(2);
   const k=_rutN(a.rut);
   let fn=k&&window.BIRTH_BY_RUT[k];
-  if(!fn) return '';
+  if(!fn){ if(k)_pedirNacimiento(k); return ''; }
   const m=String(fn).match(/(\d{4})/);
   if(!m) return '';
   return m[1].slice(2);
@@ -13219,6 +13283,7 @@ function renderDocs(){
 }
 
 function renderManage(){
+  _pedirFotos();
   // Filtrar por tarima si está activo (modo 2 tarimas)
   const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
   let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin: trae cambios, borra eliminados sin datos y toma tanda, división, categoría y modalidad del Cronograma">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-o" onclick="go(\'docs\')" title="Hoja de pesaje, altura de rack, revisión de equipo y papeletas" style="border-color:rgba(212,168,67,.55);color:var(--gold)">📄 Documentos</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
@@ -15307,38 +15372,60 @@ function findInDB(name,rut,ath){
   });
   return cand.length===1?cand[0]:null;
 }
-let _fotoUnsubLC=null;
-function _setupFotoListener(){
-  if(!fbReady||!window._fb||!fbDB||_fotoUnsubLC)return;
+// ── Fotos de los atletas: se cargan solo si alguna pantalla las muestra ─────
+// atleta_fotos tiene una foto por atleta (unas quinientas). Antes cada apertura
+// del livecast —cada espectador, cada televisor, cada widget de OBS— la leía
+// entera DOS veces (había dos oyentes sobre la misma colección) y además bajaba
+// la nómina de fotos del Sudamericano, aunque en esa pantalla no se viera
+// ninguna foto. Ahora hay un solo oyente y arranca recién cuando una pantalla
+// que muestra fotos lo pide: el perfil de la transmisión, la vista Atletas y el
+// panel del operador (Atletas y Pesaje, subir foto/GIF).
+function _pedirFotos(){
+  if(window._fotosQueridas)return;
+  window._fotosQueridas=true;
+  _fotosArrancar();
+}
+function _fotosArrancar(){
+  if(!window._fotosQueridas||window._fotosUnsub||!fbReady||!window._fb||!fbDB)return;
   try{
-    _fotoUnsubLC=window._fb.onSnapshot(window._fb.collection(fbDB,'atleta_fotos'),snap=>{
-      snap.docs.forEach(doc=>{
-        const d2=doc.data();
-        // Por RUT primero: el código cambia al corregir un nombre o un RUT y la
-        // foto quedaba apuntando al viejo.
-        const ath=(window.YLEdiciones&&window.YLEdiciones.buscarAtleta(DB_FULL,Object.assign({id:doc.id},d2)))
-                  ||DB_FULL.find(a=>a.codigo===(d2.codigo||doc.id));
-        if(ath){
-          if(d2.foto_url)ath.foto_url=d2.foto_url;
-          if(d2.gif_url!==undefined)ath.gif_url=d2.gif_url||null;
-          if(d2.gif_blend)ath.gif_blend=d2.gif_blend;
-          if(d2.gif_zoom!=null)ath.gif_zoom=d2.gif_zoom;
-          if(d2.gif_offset_x!=null)ath.gif_offset_x=d2.gif_offset_x;
-          if(d2.gif_offset_y!=null)ath.gif_offset_y=d2.gif_offset_y;
-          if(d2.gif_start!=null)ath.gif_start=d2.gif_start;
-          ath.gif_end=(d2.gif_end!=null?d2.gif_end:(null));
-        }
-      });
+    window._fotosUnsub=window._fb.onSnapshot(window._fb.collection(fbDB,'atleta_fotos'),snap=>{
+      window._fotosUltSnap=snap;
+      _fotosAlPadron(snap);
+      _fotosAlLivecast(snap);
       if(typeof renderTxWidget==='function')renderTxWidget();
       if(typeof R==='function')R();
     });
   }catch(e){console.warn('[livecast] atleta_fotos:',e.message);}
 }
+// Las fotos sobre el padrón (data.json). Si el padrón llega después que las
+// fotos, se vuelven a pegar sobre el padrón nuevo con la última lectura.
+function _fotosAlPadron(snap){
+  if(!snap||!DB_FULL||!DB_FULL.length)return;
+  snap.docs.forEach(doc=>{
+    const d2=doc.data();
+    // Por RUT primero: el código cambia al corregir un nombre o un RUT y la
+    // foto quedaba apuntando al viejo.
+    const ath=(window.YLEdiciones&&window.YLEdiciones.buscarAtleta(DB_FULL,Object.assign({id:doc.id},d2)))
+              ||DB_FULL.find(a=>a.codigo===(d2.codigo||doc.id));
+    if(ath){
+      if(d2.foto_url)ath.foto_url=d2.foto_url;
+      if(d2.gif_url!==undefined)ath.gif_url=d2.gif_url||null;
+      if(d2.gif_blend)ath.gif_blend=d2.gif_blend;
+      if(d2.gif_zoom!=null)ath.gif_zoom=d2.gif_zoom;
+      if(d2.gif_offset_x!=null)ath.gif_offset_x=d2.gif_offset_x;
+      if(d2.gif_offset_y!=null)ath.gif_offset_y=d2.gif_offset_y;
+      if(d2.gif_start!=null)ath.gif_start=d2.gif_start;
+      ath.gif_end=(d2.gif_end!=null?d2.gif_end:(null));
+    }
+  });
+}
 const _STOR='https://firebasestorage.googleapis.com/v0/b/fechipo-db-13148.firebasestorage.app/o/';
 fetch(_STOR+'public%2Fdata.json?alt=media',{cache:'no-cache'})
   .then(r=>r.ok?r.json():fetch('data.json').then(r=>r.json()))
   .catch(()=>fetch('data.json').then(r=>r.json()))
-  .then(d=>{DB_FULL=d;_aplicarEdicionesDB();_setupFotoListener();}).catch(()=>{});
+  .then(d=>{DB_FULL=d;_aplicarEdicionesDB();
+    if(window._fotosUltSnap){_fotosAlPadron(window._fotosUltSnap);if(typeof R==='function')R();}
+  }).catch(()=>{});
 
 // El padrón que usa el livecast para buscar a un atleta por RUT o por nombre
 // —su historial, su foto, su ficha— es data.json, y data.json no se entera de
@@ -15649,8 +15736,7 @@ function applyEventURLParam(){
         }catch(e){console.warn('[TX] no pude sembrar la nómina',e);}
       }
       const tryStart=()=>{if(!fbReady){setTimeout(tryStart,300);return}startFBSync();
-        // jornada/screen necesitan fechaNac (año nac) y el canal de control de pantalla
-        if(TX_MODE==='jornada'||TX_MODE==='screen'){loadBirthYears();}
+        // jornada/screen: el año de nacimiento se pide solo si falta (ver _yob2)
         if(TX_MODE==='screen'||TX_MODE==='jornada'){subscribeScreenChannel();}
         R();};
       tryStart();
@@ -16259,6 +16345,7 @@ function renderLiveView(){
 }
 
 function renderAtletaInfo(){
+  _pedirFotos();
   const ath=DATA.athletes;
   // Si hay alguien de afuera, se baja la nómina para poder mostrarle sus marcas
   // nominadas. Si son todos chilenos no hace falta y no se pide.

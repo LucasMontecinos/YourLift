@@ -488,6 +488,11 @@ function _applyEventos(docs){
   // no las usa —arma su carrusel con nominas.json y con los eventos— y son 923 KB.
   // Ahora se piden al abrir la pestaña, en cargarParaVista().
   if(evs.length)NOM_EVENTS=evs;
+  // Llegó la lista de campeonatos: el oyente de Nóminas ya puede filtrar por ella.
+  // Si estaba escuchando otra lista (cambió un campeonato), se rearma.
+  window._eventosFS=true;
+  if(window._nomEspera){clearTimeout(window._nomEspera);window._nomEspera=null;if(typeof _nominasEscuchar==='function')_nominasEscuchar();}
+  else if(window._nomOyente&&window._nomOyente.clave!==_nominasClaves().join('|')){_nominasSoltar();_nominasEscuchar();}
   if(ST.v==='trans')renderFondo();
 }
 async function initFB(){
@@ -874,18 +879,76 @@ async function loadFBNominas(force){
   try{
     // Caché 5min: esta colección se leía completa y sin caché en CADA carga de
     // página (home, records, etc, no solo la pestaña Nóminas) — era el mayor
-    // driver de lecturas Firestore del sitio público. `force` (usado por el
-    // polling de la pestaña Nóminas) ignora el caché para traer datos frescos.
+    // driver de lecturas Firestore del sitio público.
     if(!force){
       const cn=_fsCache('inscripciones',5*60*1000);
-      if(cn){_applyNominas(cn);return;}
+      if(cn)_applyNominas(cn);
     }
-    const snap=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'inscripciones'));
-    const all=[];snap.forEach(d=>all.push({id:d.id,...d.data()}));
-    _fsSetCache('inscripciones',all);
-    _applyNominas(all);
+    // Mientras se mira la pestaña, las nóminas llegan por un oyente: se cobra la
+    // primera lectura y después solo lo que cambia. Antes se volvía a bajar todo
+    // cada tres minutos mientras la pestaña estuviera abierta.
+    _nominasEscuchar();
   }catch(e){console.warn('Error loading Firebase nominas',e)}
 }
+// Solo las inscripciones de los campeonatos que la pestaña muestra: los no
+// archivados (ver _applyNominas). Las de campeonatos cerrados eran más de la
+// mitad de la colección y la pestaña las descartaba al llegar.
+function _nominasClaves(){
+  if(window._eventosFS!==true)return [];                   // sin la lista de campeonatos: todo
+  const evs=(NOM_EVENTS||[]).filter(ev=>ev&&ev.status!=='archived'&&ev.status!=='draft');
+  return [...new Set(evs.flatMap(ev=>[ev.id,ev.name]).filter(Boolean))].sort();
+}
+function _nominasConsultas(claves){
+  const Q=window.FBQ, col=Q.collection(fbDB,'inscripciones');
+  if(!claves.length||!Q.where||!Q.query)return [col];
+  const out=[];
+  for(let i=0;i<claves.length;i+=30)out.push(Q.query(col,Q.where('evento','in',claves.slice(i,i+30))));
+  return out;
+}
+window._nomOyente=window._nomOyente||null;
+function _nominasEscuchar(){
+  if(!fbReady||window._nomOyente)return;
+  // La lista de campeonatos (eventos) llega por su lado. Mientras no llegue,
+  // NOM_EVENTS es la lista fija de respaldo y filtrar por ella dejaría fuera a
+  // los campeonatos de verdad: se espera, y si en 4 s no llega, se escucha todo.
+  if(!window._eventosFS){
+    if(!window._nomEspera)window._nomEspera=setTimeout(()=>{
+      window._nomEspera=null;
+      if(!window._eventosFS)window._eventosFS='sin-lista';
+      _nominasEscuchar();
+    },4000);
+    return;
+  }
+  const claves=_nominasClaves();
+  const consultas=_nominasConsultas(claves);
+  const partes=consultas.map(()=>null);
+  const unsubs=consultas.map((q,i)=>window.FBQ.onSnapshot(q,snap=>{
+    partes[i]=snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(partes.some(p=>p===null))return;          // falta que llegue alguna parte
+    const all=[].concat(...partes);
+    _fsSetCache('inscripciones',all);
+    _applyNominas(all);
+  },e=>console.warn('[nominas] oyente',e)));
+  window._nomOyente={unsubs,clave:claves.join('|'),desde:Date.now(),fuera:0};
+}
+function _nominasSoltar(){
+  if(!window._nomOyente)return;
+  window._nomOyente.unsubs.forEach(u=>{try{u()}catch(e){}});
+  window._nomOyente=null;
+}
+// El oyente se suelta cuando nadie mira la pestaña hace dos minutos (se fue a
+// otra sección o dejó el teléfono): así una ida y vuelta rápida no vuelve a
+// cobrar la primera lectura, y una pestaña olvidada no queda escuchando.
+setInterval(()=>{
+  const o=window._nomOyente; if(!o)return;
+  const mirando=(ST.v==='nominas'&&document.visibilityState==='visible');
+  if(mirando){o.fuera=0;return;}
+  if(!o.fuera)o.fuera=Date.now();
+  else if(Date.now()-o.fuera>2*60*1000)_nominasSoltar();
+},10000);
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&ST.v==='nominas'&&!window._nomOyente&&fbReady)_nominasEscuchar();
+});
 const CC={"Campeonato Nacional FECHIPO 2026":{bg:"#fef3c7",b:"#f59e0b",t:"#92400e",n:"Nacional 2026"},"Campeonato Nacional FECHIPO 2025":{bg:"#dbeafe",b:"#3b82f6",t:"#1e40af",n:"Nacional 2025"},"Regional Centro Norte 2025":{bg:"#dcfce7",b:"#22c55e",t:"#166534",n:"Reg. Centro Norte 2025"},"Regional Sur Austral 2025":{bg:"#f3e8ff",b:"#a855f7",t:"#6b21a8",n:"Reg. Sur Austral 2025"},"Zonal Centro Clausura 2024":{bg:"#ffe4e6",b:"#f43f5e",t:"#9f1239",n:"Zonal Centro 2024"},"Campeonato Nacional 2025":{bg:"#fef9c3",b:"#eab308",t:"#713f12",n:"Nacional 2025 "},"Campeonato Nacional 2023":{bg:"#e0f2fe",b:"#0ea5e9",t:"#0c4a6e",n:"Nacional 2023 "},"Zonal Sur Los Toros 2025":{bg:"#ecfdf5",b:"#10b981",t:"#064e3b",n:"Zonal Sur 2025 "},"Regional Centro 2025":{bg:"#fdf4ff",b:"#c084fc",t:"#581c87",n:"Reg. Centro 2025 "}};
 // Categorías retiradas: no se muestran aunque vengan en los datos.
 //
@@ -3030,10 +3093,8 @@ fetch('nomina_sudamericano.json').then(r=>r.ok?r.json():null).then(j=>{
   window.NOMSUDA=j; _nsudaApplyEdits(); if(ST.v==='nominas'||ST.v==='crono')renderFondo();
 }).catch(()=>{});
 Promise.all([fetch("data.json").then(r=>r.json()),fetch("records.json").then(r=>r.json()).catch(()=>({})),fetch("nominas.json").then(r=>r.json()).catch(()=>({events:[]}))]).then(([d,r,n])=>{D=d;R=sinRetiradas(r);NM=n;NM._static=[...(n.events||[])];render();initFB();
-  // Refresco de Nóminas: cada 3min, SOLO si la pestaña está visible y el visitante
-  // sigue en esa vista. Antes era cada 30s sin importar visibilidad — leía la
-  // colección completa de inscripciones muy seguido en pestañas dejadas abiertas.
-  setInterval(()=>{if(ST.v==="nominas"&&document.visibilityState==="visible"){loadFBNominas(true)}},3*60*1000);
+  // Las nóminas ya no se refrescan cada 3 minutos: mientras la pestaña está a
+  // la vista las mantiene al día un oyente (ver _nominasEscuchar).
 }).catch(e=>{document.getElementById("app").innerHTML=`<div class="ld"><p style="color:var(--accent);font-weight:600">Error cargando datos</p><p style="color:var(--muted);font-size:13px">${e.message}</p></div>`});
 </script>
 <script>
