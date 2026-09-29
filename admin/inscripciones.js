@@ -642,13 +642,7 @@ function _esRegional(ev){return /regional/i.test(String(ev||''));}
 // El separador antes de la tarima es opcional: cuando el resultado lo sube el
 // atleta y no el livecast, el campeonato llega escrito a mano y el guión puede
 // no venir. "Debutantes - Tarima 1" y "Debutantes Tarima 2" son el mismo.
-function _evClave(ev){
-  return String(ev||'')
-    .replace(/\s*[-–—:]?\s*tarima\s*\d+\s*$/i,'')
-    .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
-    .replace(/\b(campeonato|fechipo|torneo|de|del|cd)\b/g,' ')
-    .replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
-}
+function _evClave(ev){ return YLCampeonato.clave(ev); }   // compartido/campeonatos.js
 
 // ── Qué campeonatos cuentan ──────────────────────────────────────────────────
 // Al principio esto era "los de este año", calculado del calendario. Sirve para

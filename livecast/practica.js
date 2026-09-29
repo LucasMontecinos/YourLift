@@ -147,3 +147,57 @@ function _initPracticeSync(){
     R();
   });
 }
+
+// ── Acciones de los botones (window.…) ──────────────────────────────────────
+// Las llaman los onclick de la pantalla. Asignarlas acá, antes de arranque.js,
+// solo las deja listas un poco antes: ninguna se ejecuta al cargar.
+
+// Rellena los 3 intentos de cada atleta con pesos declarados (sin resultado), para
+// practicar en la Pantalla de Tarima / Control en Vivo. Ejecutable desde la consola:
+//   fillPracticeWeights()            → 3 intentos por levantamiento
+//   fillPracticeWeights({results:true}) → además marca válidos/nulos realistas
+window.fillPracticeWeights=function(opts){
+  opts=opts||{};
+  if(!DATA.athletes||!DATA.athletes.length){showToastLC('No hay atletas cargados');return;}
+  const rnd25=v=>Math.round(v/2.5)*2.5;
+  const isM=a=>(a.sex==='Hombre'||a.sex==='Masculino'||a.sex==='M');
+  DATA.athletes.forEach(a=>{
+    // Solo los dígitos de la categoría: con el formato real '-59 kg (Hombre)'
+    // parseFloat daba -59 (negativo) y los pesos generados quedaban negativos
+    // → la cola de tarima salía vacía.
+    const catNum=parseFloat((String(a.cat).match(/\d+(\.\d+)?/)||[])[0])||100;
+    const factor=isM(a)?1:0.62;
+    const base={
+      sq:rnd25((a.att.sq&&a.att.sq[0]&&a.att.sq[0].w)||catNum*0.85*factor),
+      bp:rnd25((a.att.bp&&a.att.bp[0]&&a.att.bp[0].w)||catNum*0.55*factor),
+      dl:rnd25((a.att.dl&&a.att.dl[0]&&a.att.dl[0].w)||catNum*1.0*factor)
+    };
+    ['sq','bp','dl'].forEach(l=>{
+      const o=base[l], step=(l==='bp')?2.5:5;
+      const ws=[o,o+step,o+2*step];
+      a.att[l]=ws.map((w,i)=>{
+        let r=null;
+        if(opts.results){ r=(i<2)?'g':(Math.random()<0.5?'g':'n'); } // 1º y 2º válidos, 3º al azar
+        return {w,r};
+      });
+    });
+  });
+  DATA.lift='sq';DATA.round=0;
+  saveNow();R();
+  showToastLC('Pesos de práctica cargados en '+DATA.athletes.length+' atletas'+(opts.results?' (con resultados)':''));
+  return 'OK — '+DATA.athletes.length+' atletas con pesos';
+};
+
+// Link de la vista de ESPECTADOR de la práctica (lo que ve el público). Se copia
+// al portapapeles para mandárselo a la gente que quiere ir mirando.
+window.practiceViewerUrl=function(){
+  // El espectador debe leer el MISMO sandbox que el admin: si es práctica con
+  // nómina real, el link lleva &real=1 (usa la clave de localStorage real).
+  return location.origin+location.pathname.replace(/[^/]*$/,'')+'livecast.html?practica=1'+(PRACTICE_REAL?'&real=1':'')+'&espectador=1';
+};
+
+window.copyPracticeViewerLink=function(){
+  const url=practiceViewerUrl();
+  if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>showToastLC('Link de espectador copiado')).catch(()=>showToastLC(url));}
+  else showToastLC(url);
+};

@@ -3001,3 +3001,488 @@ function txPremiacion(evName){
   h+='</div>';
   return h;
 }
+
+// ── Acciones de los botones (window.…) ──────────────────────────────────────
+// Las llaman los onclick de la pantalla. Asignarlas acá, antes de arranque.js,
+// solo las deja listas un poco antes: ninguna se ejecuta al cargar.
+
+window.dirBtLoadVideos=function(){_dirLoadBtVideos();};
+
+window.dirBtUploadVideo=async function(){
+  if(_dirBtVideoUploading)return;
+  const inp=document.createElement('input');inp.type='file';inp.accept='video/mp4,video/webm,video/mov,.mp4,.webm,.mov';inp.multiple=true;
+  inp.onchange=async()=>{
+    if(!inp.files||!inp.files.length)return;
+    if(!window._fbSt||!window._fbStInst){alert('Storage no disponible');return;}
+    _dirBtVideoUploading=true;R();
+    const {ref,uploadBytes}=window._fbSt;
+    const errs=[];
+    for(const f of inp.files){
+      try{
+        const r=ref(window._fbStInst,'videos/break/'+f.name);
+        await uploadBytes(r,f,{contentType:f.type||'video/mp4'});
+      }catch(e){errs.push(f.name+': '+e.message);}
+    }
+    _dirBtVideoUploading=false;
+    if(errs.length)alert('Errores:\n'+errs.join('\n'));
+    await _dirLoadBtVideos(); // refresh list
+  };
+  inp.click();
+};
+
+// Logo DEL CAMPEONATO (no del break timer): persiste en Firestore eventos/{evId}.logoUrl
+// y se muestra en scoreboard, perfil, tabla actual y en el barrido de transición.
+window.dirUploadChampionshipLogo=async function(){
+  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía');return;}
+  if(!DATA.event){alert('Primero elige un evento');return;}
+  const evId = DATA.event.id || DATA.event.name;
+  const inp=document.createElement('input');inp.type='file';inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
+  inp.onchange=async()=>{
+    const f=inp.files&&inp.files[0];if(!f)return;
+    const btn=document.getElementById('dirChampLogoBtn');if(btn)btn.textContent='Subiendo...';
+    try{
+      // Si el logo trae un fondo liso alrededor —el caso normal cuando llega como
+      // JPG— se ofrece sacarlo. Sobre el barrido o el scoreboard, ese cuadrado se
+      // ve encima de todo.
+      let subir=f, nombre=f.name, tipo=f.type;
+      if(!/svg/i.test(f.type)){
+        try{
+          if(btn)btn.textContent='Revisando…';
+          const sin=await _logoSinFondo(f);
+          if(sin){
+            const pct=Math.round(sin.quitados/sin.total*100);
+            const col='rgb('+sin.fondo.r+', '+sin.fondo.g+', '+sin.fondo.b+')';
+            if(confirm('Este logo tiene un fondo liso ('+col+') que ocupa el '+pct+'% de la imagen.\n\n'
+              +'¿Quitarlo y dejarlo transparente?\n\nSe recomienda: sobre el barrido y el scoreboard, '
+              +'ese fondo se ve como un cuadrado encima de la transmisión.')){
+              subir=sin.blob; tipo='image/png';
+              nombre=f.name.replace(/\.[^.]+$/,'')+'_sinfondo.png';
+            }
+          }
+        }catch(e){ console.warn('[logo] no se pudo revisar el fondo',e); }
+      }
+      if(btn)btn.textContent='Subiendo...';
+      const {ref,uploadBytes,getDownloadURL}=window._fbSt;
+      const safeId=evId.replace(/[^a-zA-Z0-9_]/g,'_');
+      const r=ref(window._fbStInst,'logos/event/'+safeId+'_'+nombre);
+      await uploadBytes(r,subir,{contentType:tipo});
+      const url=await getDownloadURL(r);
+      // Guardar en el doc del evento
+      await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{logoUrl:url});
+      DATA.event.logoUrl=url;
+      // Forzar sync inmediato a livecast_sync para que los widgets de OBS lo vean
+      try{ if(typeof syncToFB==='function') await syncToFB(); }catch(e){}
+      R();
+      if(btn)btn.textContent='Subido';
+      setTimeout(()=>{if(btn)btn.textContent='Cambiar logo'},2000);
+    }catch(e){alert('Error subiendo logo: '+e.message); if(btn)btn.textContent='Cambiar logo';}
+  };
+  inp.click();
+};
+
+window.screenLogosSubir=async function(){
+  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía');return;}
+  if(!DATA.event){alert('Primero elige un campeonato');return;}
+  const inp=document.createElement('input');
+  inp.type='file';inp.multiple=true;
+  inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
+  inp.onchange=async()=>{
+    const files=[...(inp.files||[])]; if(!files.length)return;
+    const btn=document.getElementById('scrLogosBtn');
+    const rot=btn?btn.textContent:'';
+    try{
+      const {ref,uploadBytes,getDownloadURL}=window._fbSt;
+      const safeId=_evIdActual().replace(/[^a-zA-Z0-9_]/g,'_');
+      const lista=(Array.isArray(DATA.event.logosPantalla)?DATA.event.logosPantalla:[]).slice();
+      for(let i=0;i<files.length;i++){
+        const f=files[i];
+        if(btn)btn.textContent='Subiendo '+(i+1)+'/'+files.length+'…';
+        const limpio=f.name.replace(/[^A-Za-z0-9._-]/g,'_');
+        const r=ref(window._fbStInst,'logos/pantalla/'+safeId+'_'+Date.now()+'_'+limpio);
+        await uploadBytes(r,f,{contentType:f.type||'image/png'});
+        lista.push({url:await getDownloadURL(r),nombre:f.name});
+      }
+      await _guardaLogosPantalla(lista);
+      showToastLC(files.length+(files.length>1?' logos agregados':' logo agregado'));
+    }catch(e){ alert('Error subiendo: '+(e.message||e)); }
+    finally{ if(btn)btn.textContent=rot||'Agregar logos'; }
+  };
+  inp.click();
+};
+
+window.screenLogoBorrar=async function(i){
+  const lista=(Array.isArray(DATA.event&&DATA.event.logosPantalla)?DATA.event.logosPantalla:[]).slice();
+  const q=lista[i]; if(!q)return;
+  if(!confirm('¿Sacar "'+(q.nombre||'este logo')+'" de la pantalla?'))return;
+  lista.splice(i,1);
+  // El archivo se queda en Storage a propósito: si fue un error, se vuelve a
+  // agregar desde el mismo link sin tener que buscarlo de nuevo en el
+  // computador. Ocupa unos KB.
+  try{ await _guardaLogosPantalla(lista); showToastLC('Logo sacado de la pantalla'); }
+  catch(e){ alert('Error: '+(e.message||e)); }
+};
+
+window.screenLogoMover=async function(i,paso){
+  const lista=(Array.isArray(DATA.event&&DATA.event.logosPantalla)?DATA.event.logosPantalla:[]).slice();
+  const j=i+paso;
+  if(!lista[i]||j<0||j>=lista.length)return;
+  const t=lista[i];lista[i]=lista[j];lista[j]=t;
+  try{ await _guardaLogosPantalla(lista); }catch(e){ alert('Error: '+(e.message||e)); }
+};
+
+// Qué logo va en el barrido. Se guarda con el campeonato, así que queda elegido
+// para la próxima vez sin tener que acordarse.
+window.dirSetBarridoLogo=async function(cual){
+  if(!DATA.event){alert('Primero elige un evento');return;}
+  const val=cual==='campeonato'?'campeonato':'yourlift';
+  DATA.event.barridoLogo=val;
+  R();
+  try{
+    const evId=DATA.event.id||DATA.event.name;
+    await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{barridoLogo:val});
+    if(typeof syncToFB==='function')await syncToFB();   // que los widgets de OBS lo vean ya
+  }catch(e){ console.warn('[barrido] no se pudo guardar la elección',e); }
+};
+
+window.dirClearChampionshipLogo=async function(){
+  if(!DATA.event)return;
+  if(!confirm('¿Quitar el logo del campeonato?'))return;
+  const evId = DATA.event.id || DATA.event.name;
+  try{
+    await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{logoUrl:''});
+    DATA.event.logoUrl='';
+    try{ if(typeof syncToFB==='function') await syncToFB(); }catch(e){}
+    R();
+  }catch(e){alert('Error: '+e.message);}
+};
+
+window.dirBtUploadEventLogo=async function(){
+  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía');return;}
+  const inp=document.createElement('input');inp.type='file';inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
+  inp.onchange=async()=>{
+    const f=inp.files&&inp.files[0];if(!f)return;
+    const btn=document.getElementById('dirBtEvLogoBtn');if(btn)btn.textContent='Subiendo...';
+    try{
+      const {ref,uploadBytes,getDownloadURL}=window._fbSt;
+      const r=ref(window._fbStInst,'logos/event/'+f.name);
+      await uploadBytes(r,f,{contentType:f.type});
+      const url=await getDownloadURL(r);
+      // Guardar en el estilo inmediatamente
+      if(!_dirState)_dirState={};
+      if(!_dirState.breakTimer)_dirState.breakTimer={};
+      if(!_dirState.breakTimer.style)_dirState.breakTimer.style={};
+      _dirState.breakTimer.style.eventLogoUrl=url;
+      await _dirPush();R();
+    }catch(e){alert('Error subiendo logo: '+e.message);}
+    if(btn)btn.textContent='SUBIR';
+  };
+  inp.click();
+};
+
+window.dirBtClearEventLogo=async function(){
+  if(!(_dirState==null?void 0:(_dirState.breakTimer==null?void 0:_dirState.breakTimer.style)))return;
+  _dirState.breakTimer.style.eventLogoUrl='';
+  await _dirPush();R();
+};
+
+window.dirBtDeleteVideo=async function(name){
+  if(!confirm('¿Eliminar '+name+'?'))return;
+  if(!window._fbSt||!window._fbStInst)return;
+  try{
+    const {ref,deleteObject}=window._fbSt;
+    await deleteObject(ref(window._fbStInst,'videos/break/'+name));
+    await _dirLoadBtVideos();
+  }catch(e){alert('Error al eliminar: '+e.message);}
+};
+
+window.dirShow=async function(comp,seconds,opts){
+  if(!_dirState)_dirState={};
+  const until=seconds>0?Date.now()+seconds*1000:0;
+  // Mutual exclusion entre componentes fullscreen (profile y leaderboard).
+  // Si activo uno y el otro está prendido, lo apago automáticamente.
+  const FULLSCREEN_EXCLUSIVE = ['profile','leaderboard'];
+  if(FULLSCREEN_EXCLUSIVE.includes(comp)){
+    FULLSCREEN_EXCLUSIVE.forEach(other=>{
+      if(other!==comp){
+        const o=_dirState[other];
+        if(o && o.active){
+          _dirState[other]=Object.assign({},o,{active:false,until:0});
+        }
+      }
+    });
+    // Al activar un fullscreen (perfil/leaderboard), apagar tambien la Tabla Actual.
+    // Asi cuando se quite el fullscreen la tabla NO reaparece sola; debe re-activarse a mano.
+    const ta=_dirState.tablaActual;
+    if(ta && ta.active){
+      _dirState.tablaActual=Object.assign({},ta,{active:false,until:0});
+    }
+  }
+  // El medallero es una banda de abajo, no un fullscreen, así que quedaba tapado
+  // por el Perfil, la Tabla Actual o el Break Timer — y el panel igual mostraba
+  // "EN PANTALLA" en verde. Se activa a propósito para premiar, así que ahora
+  // apaga lo que lo taparía: apretar MEDALLERO muestra el medallero.
+  if(comp==='medals'){
+    ['profile','leaderboard','breakTimer'].forEach(otro=>{
+      const o=_dirState[otro];
+      if(o&&o.active)_dirState[otro]=Object.assign({},o,{active:false,until:0});
+    });
+  }
+  _dirState[comp]=Object.assign({},_dirState[comp]||{},{active:true,until},opts||{});
+  await _dirPush();R();
+};
+
+window.dirHide=async function(comp){
+  if(!_dirState)return;
+  _dirState[comp]=Object.assign({},_dirState[comp]||{},{active:false,until:0});
+  await _dirPush();R();
+};
+
+window.dirHideAll=async function(){
+  ['profile','scoreboard','leaderboard','timer','slam','tablaActual','medals','luces'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
+  await _dirPush();R();
+};
+
+window.dirShowLb=async function(cat,seconds){
+  await window.dirShow('leaderboard',seconds,{cat:cat||''});
+};
+
+window.dirMdSet=function(field,val){
+  window._mdSel[field]=val;
+  if(field==='tipo'){/* el tipo no toca la selección: es la misma categoría, otro premio */}
+  else if(field==='mod'){window._mdSel.sex='';window._mdSel.div='';window._mdSel.cat='';}
+  else if(field==='sex'){window._mdSel.div='';window._mdSel.cat='';}
+  else if(field==='div'){window._mdSel.cat='';}
+  R();
+};
+
+window.dirToggleMedals=async function(){
+  const c=_dirState&&_dirState.medals;
+  const isOn=c&&c.active&&(!c.until||c.until>Date.now());
+  if(isOn){await window.dirHide('medals');return;}
+  const{mod,sex,div,cat,tipo}=window._mdSel;
+  if(!mod||!sex||!div||!cat){showToastLC('Elige modalidad, sexo, división y categoría primero');return;}
+  await window.dirShow('medals',0,{mod,sex,div,cat,tipo:tipo||'total'});
+};
+
+window.dirShowSlam=async function(type){
+  await window.dirShow('slam',2,{type});
+};
+
+// Toggle ON/OFF (mismo botón / misma tecla = on si está off, off si está on)
+window.dirToggle=async function(comp){
+  const c=_dirState&&_dirState[comp];
+  const isOn=c&&c.active&&(!c.until||c.until>Date.now());
+  if(isOn) await window.dirHide(comp);
+  else await window.dirShow(comp,0); // permanente
+};
+
+window.dirToggleLb=async function(){
+  const c=_dirState&&_dirState.leaderboard;
+  const isOn=c&&c.active&&(!c.until||c.until>Date.now());
+  if(isOn) await window.dirHide('leaderboard');
+  else {
+    // Usa la categoría seleccionada en el dropdown (vacía = auto = cat del lifter actual)
+    const cat=(__o=>__o==null?void 0:__o.value)(document.getElementById('dirLbCat'))||'';
+    await window.dirShowLb(cat,0);
+  }
+};
+
+window.dirSetScale=async function(comp,scale){
+  if(!_dirState)_dirState={};
+  const s=Math.max(0.5,Math.min(2.0,parseFloat(scale)||1));
+  _dirState[comp]=Object.assign({},_dirState[comp]||{},{scale:s});
+  await _dirPush();
+  // Solo re-render si está activo (cambia visual en pantalla)
+  if(DATA.phase==='director')R();
+};
+
+window.dirResetScale=async function(comp){await window.dirSetScale(comp,1)};
+
+window.dirSetColor=async function(key,val){
+  if(!_dirState)_dirState={};
+  if(!_dirState.colors)_dirState.colors={};
+  _dirState.colors[key]=val;
+  _txColorsLS=Object.assign({},_txColorsLS,{[key]:val});
+  try{localStorage.setItem('fechipo_tx_colors',JSON.stringify(_dirState.colors))}catch(e){}
+  await _dirPush();
+  if(DATA.phase==='director')R();
+};
+
+window.dirResetColors=async function(){
+  if(!_dirState)return;
+  _dirState.colors={};_dirState.palette=null;
+  _txColorsLS={};
+  try{localStorage.removeItem('fechipo_tx_colors')}catch(e){}
+  await _dirPush();
+  if(DATA.phase==='director')R();
+};
+
+window.setTxProfileMedia=function(type){
+  _txProfileMediaType=type;
+  try{localStorage.setItem('fechipo_tx_prof_media',type)}catch(e){}
+  if(_dirState){_dirState.profileMediaType=type;_dirPush();}
+  if(typeof renderTxWidget==='function')renderTxWidget();
+  if(typeof R==='function')R();
+};
+
+window.dirApplyPalette=async function(name){
+  const p=_TX_COLOR_PALETTES[name];if(!p)return;
+  if(!_dirState)_dirState={};
+  _dirState.colors={...p.colors};
+  _dirState.palette=name;
+  _txColorsLS={...p.colors};
+  try{localStorage.setItem('fechipo_tx_colors',JSON.stringify(_dirState.colors))}catch(e){}
+  try{localStorage.setItem('fechipo_tx_palette',name)}catch(e){}
+  await _dirPush();
+  if(DATA.phase==='director')R();
+};
+
+window.dirToggleBreak=async function(){
+  const bt=_dirState&&_dirState.breakTimer;
+  if(bt&&bt.active){await window.dirBreakHide();return}
+  // Si los inputs existen y tienen valor los usa; si no, default 10 min
+  const mEl=document.getElementById('dirBreakMin');
+  const sEl=document.getElementById('dirBreakSec');
+  const m=parseInt((mEl==null?void 0:mEl.value)||'0',10)||10;
+  const s=parseInt((sEl==null?void 0:sEl.value)||'0',10)||0;
+  if(mEl)mEl.value=m;
+  if(sEl)sEl.value=s;
+  await window.dirBreakStart();
+};
+
+// Atajos de teclado para Stream Deck
+window._dirKeyHandler=function(e){
+  // Atajos del director (Stream Deck): funcionan desde CUALQUIER vista admin del
+  // LiveCast (Control en Vivo, Control TX, etc.) — no solo en la vista Director.
+  // Así puedes prender/apagar la Tabla Actual del stream con el Stream Deck mientras
+  // operás la competencia. Requiere ser admin y NO tener foco en un input.
+  if(!isAdmin)return;
+  // Ignorar si hay foco en un input/textarea/select (no pisar la edición de pesos)
+  const tag=((document.activeElement==null?void 0:document.activeElement.tagName)||'').toUpperCase();
+  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;
+  // Solo teclas simples sin modificadores (evita pisar atajos del navegador/SO)
+  if(e.ctrlKey||e.altKey||e.metaKey)return;
+  const k=(e.key||'').toLowerCase();
+  const map={p:'profile',s:'scoreboard',t:'timer'};
+  if(map[k]){e.preventDefault();window.dirToggle(map[k]);return}
+  if(k==='l'){e.preventDefault();window.dirToggleLb();return}
+  if(k==='a'){e.preventDefault();window.dirToggle('tablaActual');return}
+  if(k==='u'){e.preventDefault();window.dirToggle('luces');return}
+  if(k==='m'){e.preventDefault();window.dirToggleMedals();return}
+  if(k==='g'){e.preventDefault();window.dirShowSlam('g');return}
+  if(k==='n'){e.preventDefault();window.dirShowSlam('n');return}
+  if(k==='b'){e.preventDefault();window.dirToggleBreak();return}
+  if(k==='0'||k==='escape'){e.preventDefault();window.dirHideAll();return}
+};
+
+// ── Break timer (descanso configurable) ─────────────────────
+window.dirBreakStart=async function(){
+  const m=parseInt((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakMin'))||'0',10)||0;
+  const s=parseInt((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakSec'))||'0',10)||0;
+  const label=((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakLabel'))||'').trim();
+  const movement=((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakMovement'))||'').trim();
+  // Videos seleccionados en la lista dinámica
+  const videos=(_dirBtVideoList||[]).filter((_,i)=>(__o=>__o==null?void 0:__o.checked)(document.getElementById('dirBtVid_'+i))).map(v=>v.url);
+  const durationSec=m*60+s;
+  if(durationSec<=0){alert('Ingresa al menos 1 segundo');return}
+  if(!_dirState)_dirState={};
+  const currentStyle=(_dirState==null?void 0:(_dirState.breakTimer==null?void 0:_dirState.breakTimer.style))||{};
+  _dirState.breakTimer={active:true,startedAt:Date.now(),durationSec,label,pausedAt:0,videos,movement,style:currentStyle};
+  await _dirPush();R();
+};
+
+window.dirBreakPause=async function(){
+  if(!(_dirState==null?void 0:(_dirState.breakTimer==null?void 0:_dirState.breakTimer.active)))return;
+  if(_dirState.breakTimer.pausedAt)return; // ya pausado
+  _dirState.breakTimer.pausedAt=Date.now();
+  await _dirPush();R();
+};
+
+window.dirBreakResume=async function(){
+  const bt=(_dirState==null?void 0:_dirState.breakTimer);
+  if(!(bt==null?void 0:bt.active)||!bt.pausedAt)return;
+  // Compensar el tiempo de pausa: empujar startedAt por el tiempo pausado
+  bt.startedAt+=Date.now()-bt.pausedAt;
+  bt.pausedAt=0;
+  await _dirPush();R();
+};
+
+window.dirBreakHide=async function(){
+  if(!_dirState)return;
+  const prevStyle=(_dirState.breakTimer==null?void 0:_dirState.breakTimer.style)||{};
+  _dirState.breakTimer={active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,videos:[],movement:'',style:prevStyle};
+  await _dirPush();R();
+};
+
+// ── Break timer visual editor — drag & drop ─────────────────────────────
+window.dirBtDown=function(e,type){
+  e.preventDefault();
+  const cv=document.getElementById('dirBtCanvas');if(!cv)return;
+  const r=cv.getBoundingClientRect();
+  const stl=((_dirState==null?void 0:(_dirState.breakTimer==null?void 0:_dirState.breakTimer.style)))||{};
+  _dirBtDrag={type,
+    mx0:(e.clientX-r.left)/r.width*100,
+    my0:(e.clientY-r.top)/r.height*100,
+    sv:{
+      videoX:stl.videoX!=null?stl.videoX:0,videoY:stl.videoY!=null?stl.videoY:5,
+      videoW:stl.videoW!=null?stl.videoW:40,videoH:stl.videoH!=null?stl.videoH:80,
+      textX:stl.textX!=null?stl.textX:44,textY:stl.textY!=null?stl.textY:10
+    }
+  };
+  if(e.target&&e.target.style)e.target.style.cursor='grabbing';
+};
+
+window.dirBtMove=function(e){
+  if(!_dirBtDrag)return;
+  const cv=document.getElementById('dirBtCanvas');if(!cv)return;
+  const r=cv.getBoundingClientRect();
+  const mx=(e.clientX-r.left)/r.width*100;
+  const my=(e.clientY-r.top)/r.height*100;
+  const dx=mx-_dirBtDrag.mx0,dy=my-_dirBtDrag.my0;
+  const sv=_dirBtDrag.sv;
+  if(!(_dirState==null?void 0:_dirState.breakTimer))return;
+  const s=(_dirState.breakTimer.style=(_dirState.breakTimer.style||{}));
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  if(_dirBtDrag.type==='vid'){s.videoX=clamp(sv.videoX+dx,0,80);s.videoY=clamp(sv.videoY+dy,0,80);}
+  else if(_dirBtDrag.type==='vid-resize'){s.videoW=clamp(sv.videoW+dx,5,95);s.videoH=clamp(sv.videoH+dy,5,100);}
+  else if(_dirBtDrag.type==='vid-w'){s.videoW=clamp(sv.videoW+dx,5,95);}
+  else if(_dirBtDrag.type==='vid-h'){s.videoH=clamp(sv.videoH+dy,5,100);}
+  else if(_dirBtDrag.type==='txt'){s.textX=clamp(sv.textX+dx,0,92);s.textY=clamp(sv.textY+dy,0,90);}
+  // Actualizar preview en tiempo real
+  const vid=document.getElementById('dirBtVid');
+  const txt=document.getElementById('dirBtTxt');
+  if(vid){vid.style.left=s.videoX+'%';vid.style.top=s.videoY+'%';vid.style.width=s.videoW+'%';vid.style.height=s.videoH+'%';}
+  if(txt){txt.style.left=s.textX+'%';txt.style.top=s.textY+'%';txt.style.maxWidth=(100-s.textX-1)+'%';}
+};
+
+window.dirBtUp=function(){_dirBtDrag=null;};
+
+window.dirBtPreviewBg=function(color){
+  const cv=document.getElementById('dirBtCanvas');if(cv)cv.style.background=color;
+};
+
+window.dirBtApplyStyle=async function(){
+  if(!_dirState)return;
+  if(!_dirState.breakTimer)_dirState.breakTimer={};
+  const s=_dirState.breakTimer.style||{};
+  _dirState.breakTimer.style={
+    ...s,
+    bgColor:(__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtBgColor'))||s.bgColor||'#0A1628',
+    accentColor:(__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtAccent'))||s.accentColor||'#C41E3A',
+    titleSize:Number((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtTS'))||s.titleSize||8),
+    movSize:Number((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtMS'))||s.movSize||5),
+    timerSize:Number((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtTmr'))||s.timerSize||12),
+    blurAmount:Number((__n=>__n!=null?__n:(24))((__n=>__n!=null?__n:(s.blurAmount))((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtBlur'))))),
+    overlayOpacity:Number((__n=>__n!=null?__n:(0.65))((__n=>__n!=null?__n:(s.overlayOpacity))((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtOv'))))),
+    showLogos:(__o=>__o==null?void 0:__o.checked)(document.getElementById('dirBtShowLogos'))!==false,
+    eventLogoUrl:(__n=>__n!=null?__n:(''))((__n=>__n!=null?__n:(s.eventLogoUrl))((__o=>__o==null?void 0:__o.dataset.url)(document.getElementById('dirBtEvLogo')))),
+  };
+  await _dirPush();R();
+};
+
+window.dirBreakAdd=async function(secs){
+  const bt=(_dirState==null?void 0:_dirState.breakTimer);
+  if(!(bt==null?void 0:bt.active))return;
+  bt.durationSec=Math.max(1,(bt.durationSec||0)+secs);
+  await _dirPush();R();
+};

@@ -19,6 +19,7 @@
 <link rel="stylesheet" href="compartido/iconos.css?v=10cfc8ba">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="bg-fechipo.css?v=5ab42c19">
+<script src="compartido/gl.js?v=47a36058"></script>
 <script src="compartido/divisiones.js?v=a9a6dcfc"></script>
 <script src="compartido/ediciones.js?v=477f1b0a"></script>
 <script src="compartido/nacimientos.js?v=eb4166aa"></script>
@@ -195,12 +196,8 @@ var D=[{"n":"Josefa Ignacia Soto Arcos","t":"REMA","c":"57","d":"Junior","bw":56
 // no traen peso corporal.
 //
 // Fórmula oficial: GL = 100 × total / (a − b × e^(−c × BW))
-var GL_COEFS={
-  pl_m:{a:1199.72839,b:1025.18162,c:0.00921}, pl_f:{a:610.32796,b:1045.59282,c:0.03048},
-  ple_m:{a:1236.25115,b:1449.21864,c:0.01644},ple_f:{a:758.63878,b:949.31382,c:0.02435},
-  bo_m:{a:320.98041,b:281.40258,c:0.01008},   bo_f:{a:142.40398,b:442.52671,c:0.04724},
-  boe_m:{a:381.22073,b:733.79378,c:0.02398},  boe_f:{a:221.82209,b:357.00377,c:0.02937}
-};
+// Los coeficientes están en compartido/gl.js (una sola tabla para todo el sitio).
+var GL_COEFS=YLGL.COEF;
 // Qué coeficientes le tocan a cada tabla del ranking. Universitario levanta con
 // reglamento clásico, así que usa los de clásico; Olimpiadas Especiales también
 // —la modalidad separa el ranking, no cambia la fórmula—.
@@ -208,11 +205,7 @@ var GL_TAB={cl_m:'pl_m',cl_f:'pl_f',uni_m:'pl_m',uni_f:'pl_f',oe_m:'pl_m',oe_f:'
             eq_m:'ple_m',eq_f:'ple_f',bench_cl_m:'bo_m',bench_cl_f:'bo_f',
             bench_eq_m:'boe_m',bench_eq_f:'boe_f'};
 function glDeFila(tab,bw,total){
-  var c=GL_COEFS[GL_TAB[tab]];
-  if(!c||!(bw>0)||!(total>0))return null;
-  var d=c.a-c.b*Math.exp(-c.c*bw);
-  if(!(d>0))return null;
-  return Math.round(total*100/d*100)/100;
+  return YLGL.puntos(GL_TAB[tab],bw,total);
 }
 function glNormalizar(e){
   var v=glDeFila(e&&e.tab,e&&e.bw,e&&e.tt);

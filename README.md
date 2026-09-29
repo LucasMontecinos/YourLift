@@ -71,10 +71,14 @@ que corre al abrir el panel.
 
 ### Código compartido: `compartido/`
 
-Reglas y piezas que usan varias páginas. Se cambian en un solo lugar.
+Reglas y piezas que usan varias páginas. Se cambian en un solo lugar: la prueba
+`t_reglascomunes.js` falla si alguna se vuelve a copiar dentro de una página.
 
 | Archivo | Qué es |
 |---|---|
+| `gl.js` | Puntos GL (IPF GL 2020): los coeficientes y la fórmula, una sola vez |
+| `dias.js` | El orden de los días de un campeonato ("Sábado 8" antes que "Domingo 9") |
+| `campeonatos.js` | Reconocer un campeonato aunque venga escrito distinto (sin la tarima, sin tildes) |
 | `canales.js` | Los documentos de Firestore de cada campeonato. Así dos campeonatos a la misma hora no se mezclan |
 | `divisiones.js` | División por edad (Sub-Junior, Junior, Open, Master) |
 | `ediciones.js` | Correcciones y bajas hechas desde el panel sobre el padrón |

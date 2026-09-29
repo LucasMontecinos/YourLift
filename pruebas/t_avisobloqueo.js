@@ -15,6 +15,9 @@
 //   · y que no salte si el campeonato no configuró ningún bloqueo.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_avisobloqueo.js
 const fs = require('fs');
+// La regla vive en compartido/campeonatos.js: se carga acá igual que en la página.
+globalThis.window = globalThis.window || globalThis;
+require('../compartido/campeonatos.js');
 const src = fs.readFileSync(__dirname + '/../inscripcion.html', 'utf8');
 const adm = require('./apoyo/fuente').admin();
 

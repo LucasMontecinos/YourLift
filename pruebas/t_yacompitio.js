@@ -15,6 +15,9 @@
 //   · y que el Debutantes, que vino partido en dos tarimas, cuente como uno.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_yacompitio.js
 const fs = require('fs');
+// La regla vive en compartido/campeonatos.js: se carga acá igual que en la página.
+globalThis.window = globalThis.window || globalThis;
+require('../compartido/campeonatos.js');
 const { chromium } = require('playwright');
 const src = require('./apoyo/fuente').admin();
 

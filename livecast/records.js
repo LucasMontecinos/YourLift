@@ -423,3 +423,21 @@ function showRecordAlert(athName,lift,round,newMark,oldMark,holder,cat,div,mod){
   document.body.appendChild(el);
   setTimeout(()=>{const e=document.getElementById('recAlert');if(e)e.remove();},15000);
 }
+
+// ── Acciones de los botones (window.…) ──────────────────────────────────────
+// Las llaman los onclick de la pantalla. Asignarlas acá, antes de arranque.js,
+// solo las deja listas un poco antes: ninguna se ejecuta al cargar.
+
+window.toggleChangeTimers=function(){
+  window._CT_ENABLED=!window._CT_ENABLED;
+  try{localStorage.setItem('yl_ct', window._CT_ENABLED?'1':'0')}catch(e){}
+  if(!window._CT_ENABLED) DATA.changeTimers={}; // limpiar los timers activos al apagar
+  if(typeof saveNow==='function')saveNow();
+  if(typeof R==='function')R();
+};
+
+window.toggleChangeTimerAutofill=function(){
+  window._CT_AUTOFILL_ENABLED=!window._CT_AUTOFILL_ENABLED;
+  try{localStorage.setItem('yl_ct_autofill', window._CT_AUTOFILL_ENABLED?'1':'0')}catch(e){}
+  if(typeof R==='function')R();
+};

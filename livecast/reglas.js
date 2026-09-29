@@ -85,31 +85,18 @@ function calcGL(t,bw,sex,mod,view){
   // (la modalidad solo separa el ranking, no cambia la fórmula)
   // const isOE=(mod==='oe_classic'||mod==='oe_bench');
 
-  let c;
-
+  // Qué tabla de coeficientes le toca (compartido/gl.js).
+  let clave;
   if(view==='bench' || isOnlyBenchPure){
-    // Coeficientes Bench-only
-    if(isEquippedBench||mod==='onlybench_eq'){
-      // Bench Equipped
-      c=isMale?{a:381.22073,b:733.79378,c:0.02398}
-              :{a:221.82209,b:357.00377,c:0.02937};
-    } else {
-      // Bench Classic (default para onlybench y classic_bench cuando view=bench)
-      c=isMale?{a:320.98041,b:281.40258,c:0.01008}
-              :{a:142.40398,b:442.52671,c:0.04724};
-    }
+    // Bench Equipped, o Bench Classic (default para onlybench y classic_bench cuando view=bench)
+    clave=(isEquippedBench||mod==='onlybench_eq')?'boe':'bo';
   } else if(isEquippedMeet||isEquippedBench){
-    // Powerlifting Equipped (full meet)
-    c=isMale?{a:1236.25115,b:1449.21864,c:0.01644}
-            :{a:758.63878, b:949.31382, c:0.02435};
+    clave='ple';   // Powerlifting Equipped (full meet)
   } else {
-    // Powerlifting Classic / Raw (full meet) — default
-    c=isMale?{a:1199.72839,b:1025.18162,c:0.00921}
-            :{a:610.32796, b:1045.59282,c:0.03048};
+    clave='pl';    // Powerlifting Classic / Raw (full meet) — default
   }
-
-  const d=c.a-c.b*Math.exp(-c.c*bw);
-  return d>0?Math.round(t*100/d*100)/100:0;
+  const v=YLGL.puntos(clave+(isMale?'_m':'_f'),bw,t);
+  return v===null?0:v;
 }
 
 function inBenchRanking(a){

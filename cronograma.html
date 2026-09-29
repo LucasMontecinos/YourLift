@@ -45,6 +45,7 @@ tr:last-child td{border-bottom:none}
   <div style="margin-bottom:18px"><select id="evsel" onchange="pick(this.value)"><option value="">Cargando campeonatos…</option></select></div>
   <div id="out"></div>
 </div>
+<script src="compartido/dias.js?v=650043b9"></script>
 <script type="module">
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {getFirestore,collection,getDocs,doc,onSnapshot,query,where} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -95,24 +96,9 @@ function handlerNames(ev,row){
 // "sábado"…), así que hay que entender las tres formas. Con el nombre del día suelto
 // el orden alfabético dejaba el domingo ANTES del sábado, que es justo al revés de
 // como se corre un fin de semana.
-const _DIAS_SEMANA=['lunes','martes','miercoles','jueves','viernes','sabado','domingo'];
-function _cronoDiaKey(d){
-  const s=String(d||'').trim();
-  if(!s)return [3,Infinity,''];                                  // sin día: al final
-  const n=s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  let i=_DIAS_SEMANA.findIndex(x=>n.indexOf(x)>=0);              // "sábado", "Sábado 8"
-  // Abreviaturas, con borde de palabra para no confundir "mar" con "marzo".
-  if(i<0){const m=n.match(/\b(lun|mar|mie|jue|vie|sab|dom)\b/);
-          if(m)i=['lun','mar','mie','jue','vie','sab','dom'].indexOf(m[1]);}
-  if(i>=0)return [0,i,n];
-  const num=n.match(/\d+/);
-  if(num)return [1,parseInt(num[0],10),n];                       // "Día 1", "8 de agosto"
-  return [2,0,n];                                                // texto suelto: alfabético
-}
-function _cronoCmpDia(a,b){
-  const ka=_cronoDiaKey(a),kb=_cronoDiaKey(b);
-  return (ka[0]-kb[0])||(ka[1]-kb[1])||ka[2].localeCompare(kb[2]);
-}
+const _DIAS_SEMANA=YLDias.SEMANA;
+function _cronoDiaKey(d){ return YLDias.clave(d); }   // compartido/dias.js
+function _cronoCmpDia(a,b){ return YLDias.comparar(a,b); }
 function render(ev,rows){
   if(!rows.length){ $('out').innerHTML='<div class="muted">Sin atletas en este cronograma.</div>'; return; }
   // agrupar por día -> tarima -> flight. El día se escribe a mano en el panel

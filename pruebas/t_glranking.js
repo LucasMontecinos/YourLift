@@ -130,9 +130,11 @@ const glEsperado = (tab, bw, total) => {
   console.log('\n  Queda escrito en el código');
   {
     const rk = fs.readFileSync(__dirname + '/../ranking.html', 'utf8');
-    ok(/var GL_COEFS=/.test(rk), 'los cuatro juegos de coeficientes están en el ranking');
-    ok(/ple_m:|ple_f:/.test(rk), 'incluidos los de equipado');
-    ok(/boe_m:|boe_f:/.test(rk), 'y los de banca equipada');
+    const gl = fs.readFileSync(__dirname + '/../compartido/gl.js', 'utf8');
+    ok(/var GL_COEFS=YLGL\.COEF;/.test(rk) && /YLGL\.puntos\(/.test(rk),
+       'el ranking usa la tabla única de coeficientes (compartido/gl.js)');
+    ok(/ple_m:|ple_f:/.test(gl), 'que incluye los de equipado');
+    ok(/boe_m:|boe_f:/.test(gl), 'y los de banca equipada');
     ok(/D\.forEach\(glNormalizar\)/.test(rk), 'y se recalcula toda la tabla al cargar');
     ok(/liveEntries\.push\(glNormalizar\(/.test(rk),
        'también lo que llega en vivo desde el livecast');

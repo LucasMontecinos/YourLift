@@ -227,3 +227,61 @@ function renderRemote(){
   setTimeout(_rmMedir,0);
   return h;
 }
+
+// ── Acciones de los botones (window.…) ──────────────────────────────────────
+// Las llaman los onclick de la pantalla. Asignarlas acá, antes de arranque.js,
+// solo las deja listas un poco antes: ninguna se ejecuta al cargar.
+
+window.remoteMenu=function(cual){
+  window._remoteMenu = (window._remoteMenu===cual) ? '' : cual;
+  R();
+  // Los botones ocupan toda la pantalla, así que el menú se abre debajo: se lo
+  // trae a la vista para que no parezca que el botón no hizo nada.
+  if(window._remoteMenu)setTimeout(function(){
+    const p=document.getElementById('rmPanel');
+    if(p)p.scrollIntoView({behavior:'smooth',block:'nearest'});
+  },60);
+};
+
+window.remoteOrdenar=function(){ window._rmOrdenar=!window._rmOrdenar; window._rmSel=null; window._remoteMenu=''; R(); };
+
+window.remoteOrdenTap=function(id){
+  if(!window._rmSel){ window._rmSel=id; R(); return; }
+  if(window._rmSel!==id){
+    const ids=['profile','scoreboard','tablaActual','luces','leaderboard','timer','medals','descanso','good','nolift','esconder'];
+    const o=_rmOrden(ids), i=o.indexOf(window._rmSel), j=o.indexOf(id);
+    if(i>=0&&j>=0){ o[i]=id; o[j]=window._rmSel; try{ localStorage.setItem('yl_remoteOrden',JSON.stringify(o)); }catch(e){} }
+  }
+  window._rmSel=null; R();
+};
+
+window.remoteOrdenReset=function(){
+  try{ localStorage.removeItem('yl_remoteOrden'); }catch(e){}
+  window._rmSel=null; R();
+};
+
+// Arranca el descanso con los minutos del remoto, sin depender de los campos del
+// Control TX: en el teléfono esos inputs no existen.
+window.remoteBreakStart=async function(min){
+  let m=min;
+  if(!m){ m=parseInt((document.getElementById('remoteBreakMin')||{}).value||'0',10); }
+  if(!m||m<1){ showToastLC('Elige cuántos minutos'); return; }
+  if(!_dirState)_dirState={};
+  const previo=_dirState.breakTimer||{};
+  // Se arma igual que en el Control TX, pero conservando lo que ya estaba
+  // configurado ahí —el estilo, los videos, el texto— para que el cartel se vea
+  // igual se dispare desde donde se dispare.
+  _dirState.breakTimer=Object.assign({},previo,{
+    active:true, startedAt:Date.now(), durationSec:m*60, pausedAt:0,
+  });
+  await _dirPush();
+  window._remoteMenu='';
+  R();
+  showToastLC('Descanso de '+m+' min en pantalla');
+};
+
+window.remoteToggleBreak=async function(){
+  const bt=_dirState&&_dirState.breakTimer;
+  if(bt&&bt.active){ await window.dirBreakHide(); window._remoteMenu=''; R(); return; }
+  window.remoteMenu('break');
+};

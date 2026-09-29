@@ -1208,3 +1208,187 @@ async function _logoSinFondo(file){
   const blob=await new Promise(res=>c.toBlob(res,'image/png'));
   return blob?{blob,fondo,quitados,total}:null;
 }
+
+// ── Acciones de los botones (window.…) ──────────────────────────────────────
+// Las llaman los onclick de la pantalla. Asignarlas acá, antes de arranque.js,
+// solo las deja listas un poco antes: ninguna se ejecuta al cargar.
+
+window.screenSetMode=function(m){window._SCREEN_LOCAL.mode=m;_screenPush();R();};
+
+// Fondo del modo "Atleta en barra": bandera del país · logo del campeonato · azul.
+window.screenSetFondo=function(f){window._SCREEN_LOCAL.fondo=f;_screenPush();R();};
+
+// Difuminado de la bandera de fondo. Sin R(): un re-render en medio del arrastre
+// corta el deslizador, igual que pasaba con el del tamaño de los nombres.
+window.screenSetVelo=function(v){
+  let n=parseFloat(v); if(isNaN(n))n=0.55;
+  n=Math.max(0.15,Math.min(0.85,n)); n=Math.round(n*100)/100;
+  window._SCREEN_LOCAL.veloBandera=n;
+  _screenPush();
+  const sl=document.getElementById('scrVeloRange'); if(sl&&parseFloat(sl.value)!==n)sl.value=n;
+  const lb=document.getElementById('scrVeloPct'); if(lb)lb.textContent=Math.round(n*100)+'%';
+};
+
+// Luces de jueces en la pantalla de tarima. Es un espejo: no da válido ni nulo.
+window.screenToggleLuces=function(){
+  window._SCREEN_LOCAL.luces=!window._SCREEN_LOCAL.luces;_screenPush();R();
+};
+
+window.screenSetNameScale=function(v){
+  let n=parseFloat(v)||1; n=Math.max(0.6,Math.min(2.2,n)); n=Math.round(n*100)/100;
+  window._SCREEN_LOCAL.nameScale=n; window._JORNADA_NAMESCALE=n;
+  _screenPush();
+  // Actualizar el panel SIN re-render (para no cortar el arrastre del slider)
+  const sl=document.getElementById('scrNameRange'); if(sl&&parseFloat(sl.value)!==n)sl.value=n;
+  const lb=document.getElementById('scrNamePct'); if(lb)lb.textContent=Math.round(n*100)+'%';
+  const pv=document.getElementById('scrNamePrev'); if(pv)pv.style.fontSize=Math.round(15*n)+'px';
+};
+
+window.screenNudgeNameScale=function(d){window.screenSetNameScale((window._SCREEN_LOCAL.nameScale||1)+d);};
+
+window.screenToggleFlight=function(f){
+  const arr=window._SCREEN_LOCAL.flights;
+  const i=arr.indexOf(f);
+  if(i>=0)arr.splice(i,1);else arr.push(f);
+  _screenPush();R();
+};
+
+window.screenAllFlights=function(){
+  const all=[...new Set(DATA.athletes.map(a=>a.flight))].sort(_cmpFl);
+  window._SCREEN_LOCAL.flights=all;_screenPush();R();
+};
+
+window.piResetLayout=function(){
+  if(!confirm('¿Restablecer las posiciones y tamaños de la Pantalla de Intentos a los valores por defecto?'))return;
+  // Las de "Atleta en barra" son las que empiezan con b y mayúscula (bSigla,
+  // bPeso…). 'barbell' es de esta pantalla, por eso se pide la mayúscula.
+  _piResetClaves(k=>!/^b[A-Z]/.test(k));
+};
+
+window.barraResetLayout=function(){
+  if(!confirm('¿Volver a dejar "Atleta en barra" como venía de fábrica?\nSe pierden las posiciones y tamaños que acomodaste en esta pantalla.'))return;
+  _piResetClaves(k=>/^b[A-Z]/.test(k));
+};
+
+window.piSetSetting=function(key,val){
+  window._piSettings[key]=val;
+  _piSaveSettings();
+  if(typeof R==='function')R();
+};
+
+window.piToggleSettingsPanel=function(){
+  window._piPanelOpen=!window._piPanelOpen;
+  if(typeof R==='function')R();
+};
+
+window.piResetColors=function(){
+  window._piSettings.bgColor=PI_DEFAULT_SETTINGS.bgColor;
+  window._piSettings.accentColor=PI_DEFAULT_SETTINGS.accentColor;
+  window._piSettings.textColor=PI_DEFAULT_SETTINGS.textColor;
+  _piSaveSettings();
+  if(typeof R==='function')R();
+};
+
+window.descPoner=function(min){
+  const seg=Math.round(Number(min)*60);
+  if(!(seg>0))return;
+  const rot=(document.getElementById('descTexto')||{}).value;
+  _descEscribe({active:true,startedAt:Date.now(),durationSec:seg,
+    label:(rot||'').trim(),pausedAt:0,videos:[],movement:'',style:_descEstiloPrevio()});
+};
+
+window.descPausar=function(){
+  const bt=_descBT(); if(!bt)return;
+  if(bt.pausedAt){
+    // Seguir: se corre el arranque tanto como duró la pausa, así no se pierde
+    // el tiempo que estuvo detenido.
+    _descEscribe(Object.assign({},bt,{startedAt:bt.startedAt+(Date.now()-bt.pausedAt),pausedAt:0}));
+  } else {
+    _descEscribe(Object.assign({},bt,{pausedAt:Date.now()}));
+  }
+};
+
+window.descQuitar=function(){
+  _descEscribe({active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,
+    videos:[],movement:'',style:_descEstiloPrevio()});
+};
+
+window.descTogglePanel=function(){
+  window._descPanelOpen=!window._descPanelOpen;
+  if(typeof renderTxWidget==='function'&&TX_MODE)renderTxWidget();
+  else if(typeof R==='function')R();
+};
+
+// Re-sincroniza la nómina con el admin. Trae todos los atletas aprobados/pendientes
+// desde Firestore y reconcilia: agrega nuevos, elimina los que ya no están (sin datos)
+// y avisa de los borrados que tienen pesos/intentos cargados.
+window.resyncFromAdmin=async function(){
+  if(!fbReady||!window._fb){alert('Firebase no listo todavía. Espera unos segundos y vuelve a intentar.');return}
+  if(!DATA.event){alert('No hay competencia activa');return}
+  if(!confirm('Re-sincronizar la nómina con el admin?\n\n• Trae atletas nuevos\n• Borra los que ya no están en admin (si NO tienen pesos/intentos cargados acá)\n• Avisa de los borrados que sí tienen datos para revisarlos a mano\n• Toma tanda, división, categoría y modalidad de la pestaña Cronograma\n\nLotes y pesaje se conservan. La categoría de los que ya están pesados no se toca.'))return;
+  const evId=Object.keys(LIVE_EVENTS).find(k=>LIVE_EVENTS[k]===DATA.event.name)||DATA.event.id||DATA.event.name;
+  try{
+    const q=window._fb.query(
+      window._fb.collection(fbDB,'inscripciones'),
+      window._fb.where('evento','==',evId),
+      window._fb.where('status','in',['approved','pending'])
+    );
+    const snap=await window._fb.getDocs(q);
+    const flightMap=await _loadCronoFlightMap(evId);
+    const fbAthletes=snap.docs
+      .map(d=>({...d.data(),id:d.id}))
+      .sort((a,b)=>((a.timestamp==null?void 0:a.timestamp.seconds)||0)-((b.timestamp==null?void 0:b.timestamp.seconds)||0))
+      .map((ins,j)=>_inscToAthlete(ins,j,flightMap));
+    if(!fbAthletes.length){alert('No hay inscripciones aprobadas/pendientes en Firestore para este campeonato.');return}
+    _mergeFirebaseAthletes(fbAthletes);
+    // Forzar nuevo render para que los toasts se ordenen
+    showToastLC('Re-sincronización completa: '+fbAthletes.length+' atletas en Firestore');
+  }catch(e){alert('Error sincronizando: '+(e.message||e));console.error(e)}
+};
+
+// Editar el lote a mano. Si el número nuevo ya lo tenía otro atleta,
+// hace un swap (intercambia los lotes entre los dos).
+window.setLot=function(id,val){
+  const n=parseInt(val,10);
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  if(!Number.isFinite(n)||n<1){
+    showToastLC('Lote inválido — debe ser un número entero ≥ 1');
+    R();return;
+  }
+  if(n===a.lot){R();return}
+  const other=DATA.athletes.find(x=>x.lot===n&&x.id!==id);
+  if(other){
+    // Swap: el otro recibe el lote anterior
+    other.lot=a.lot;
+    a.lot=n;
+  } else {
+    a.lot=n;
+  }
+  _markAtt(id,'meta');
+  save();R();
+};
+
+window.obsWsSaveAndConnect=function(){
+  _obsWsSettings={
+    host:(__o=>__o==null?void 0:__o.value)(document.getElementById('obsWsHost'))||'localhost',
+    port:parseInt((__o=>__o==null?void 0:__o.value)(document.getElementById('obsWsPort')),10)||4455,
+    password:(__o=>__o==null?void 0:__o.value)(document.getElementById('obsWsPass'))||'',
+    autoConnect:(__o=>__o==null?void 0:__o.checked)(document.getElementById('obsWsAuto'))||false
+  };
+  try{localStorage.setItem('obs_ws_settings',JSON.stringify(_obsWsSettings))}catch(e){}
+  obsWsConnect();
+};
+
+window.obsWsToggleConnection=function(){
+  if(_obsWsConnected)obsWsDisconnect();else obsWsConnect();
+};
+
+// Envía un CustomEvent a través de OBS para verificar el roundtrip.
+// OBS lo broadcastea, nuestro listener lo recibe → toggle profile.
+window.obsWsTestEvent=async function(){
+  if(!_obsWs||!_obsWsConnected){alert('Conecta primero a OBS WebSocket');return}
+  try{
+    await _obsWs.call('BroadcastCustomEvent',{eventData:{action:'toggle',component:'profile',_test:true}});
+    alert('Evento enviado a OBS. Si la conexión está bien, el perfil debería togglearse en pantalla en 1-2s. Mira el log de abajo, "Últimos eventos recibidos".');
+  }catch(e){alert('Error enviando evento: '+(e.message||e))}
+};

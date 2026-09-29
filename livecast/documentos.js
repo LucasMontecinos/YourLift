@@ -2030,3 +2030,398 @@ function renderDocs(){
   h+='</div></div>';
   return h;
 }
+
+// ── Acciones de los botones (window.…) ──────────────────────────────────────
+// Las llaman los onclick de la pantalla. Asignarlas acá, antes de arranque.js,
+// solo las deja listas un poco antes: ninguna se ejecuta al cargar.
+
+window.setActaDia=function(d){
+  window._ACTA_DIA=_diasDelEvento().indexOf(d)>=0?d:'';
+  R();
+};
+
+window.medPorTanda=function(v){
+  window._MED_POR_TANDA=!!v;
+  const m=document.getElementById('medModal'); const y=m?m.scrollTop:0;
+  if(m)m.remove();
+  window.mostrarMedallas();
+  const n=document.getElementById('medModal'); if(n)n.scrollTop=y;
+};
+
+window.mostrarMedallas=function(){
+  const d=_medallasDetalle();
+  if(!d.total){showToastLC('Todavía no hay resultados para repartir medallas');return;}
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  let h='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
+    +'<div><div class="os" style="font-size:22px;font-weight:700">Detalle de medallas</div>'
+    +'<div style="font-size:12px;color:var(--muted)">'+d.grupos.length+' categorías'+esc(_actaSufijoDia())+'</div></div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button class="btn" onclick="exportMedallasXLS()" style="background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);font-weight:700">Excel</button>'
+    +'<button class="btn" onclick="exportMedallasPDF()" style="background:#fff;border:1px solid #999;color:#111;font-weight:700">PDF</button>'
+    +'<button class="btn" onclick="document.getElementById(\'medModal\').remove()">Cerrar</button></div></div>';
+
+  // Resumen: lo que hay que mandar a hacer.
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">';
+  [['Oro',d.oro,0],['Plata',d.plata,1],['Bronce',d.bronce,2],['Total',d.total,null]].forEach(([lbl,n,i])=>{
+    h+='<div style="flex:1;min-width:110px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:12px 14px">'
+      +'<div class="os" style="font-size:30px;font-weight:800;color:'+(i===null?'var(--text)':_MED_COL[i])+'">'+n+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">'+lbl+'</div></div>';
+  });
+  h+='</div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:16px">Por modalidad: '
+    +Object.entries(d.porMod).sort((a,b)=>b[1].total-a[1].total)
+      .map(([m,v])=>esc(_ACTA_MOD_N[m]||m)+' <b style="color:var(--text)">'+v.total+'</b>').join(' · ')+'</div>';
+
+  // Medallero por país o club.
+  h+='<div class="os" style="font-size:15px;font-weight:700;margin:18px 0 6px">Medallero por '+(d.porPais?'país':'club')+'</div>';
+  h+='<div style="overflow-x:auto"><table class="tbl" style="width:100%"><tr><th style="text-align:left">'+(d.porPais?'País':'Club')+'</th><th>Oro</th><th>Plata</th><th>Bronce</th><th>Total</th></tr>';
+  d.tabla.forEach((r,i)=>{
+    h+='<tr><td style="text-align:left">'+(i+1)+'. '+(r.cod?_flagImg(r.cod,14,true):'')+esc(r.quien)+'</td>'
+      +'<td style="color:'+_MED_COL[0]+';font-weight:700">'+r.oro+'</td>'
+      +'<td style="color:'+_MED_COL[1]+';font-weight:700">'+r.plata+'</td>'
+      +'<td style="color:'+_MED_COL[2]+';font-weight:700">'+r.bronce+'</td>'
+      +'<td style="font-weight:700">'+r.total+'</td></tr>';
+  });
+  h+='</table></div>';
+
+  // Listado para la premiación: por categoría, o agrupado por tanda (se premia al
+  // terminar cada una).
+  const _pt=!!window._MED_POR_TANDA;
+  const _btn=(on,txt,v)=>'<button onclick="medPorTanda('+v+')" style="padding:5px 12px;border-radius:999px;border:1px solid '+(on?'var(--gold)':'var(--border)')
+    +';background:'+(on?'rgba(212,168,67,.16)':'transparent')+';color:'+(on?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">'+txt+'</button>';
+  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:22px 0 6px">'
+    +'<div class="os" style="font-size:15px;font-weight:700;margin-right:6px">Premiación</div>'
+    +_btn(!_pt,'POR CATEGORÍA',0)+_btn(_pt,'POR TANDA',1)+'</div>';
+  const _secciones=_pt?_medallasPorTanda(d.grupos):[{tanda:null,grupos:d.grupos}];
+  _secciones.forEach(sec=>{
+  if(sec.tanda!==null){
+    h+='<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:18px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--gold)">'
+      +'<span class="os" style="font-size:18px;font-weight:800;color:var(--gold);letter-spacing:1px">TANDA '+esc(sec.tanda)+'</span>'
+      +(sec.dia?'<span style="font-size:11px;color:var(--muted)">Día '+esc(sec.dia)+'</span>':'')
+      +'<span style="font-size:12px;color:var(--muted)">'+sec.grupos.length+' categorías · '
+      +'<b style="color:'+_MED_COL[0]+'">'+sec.oro+' oro</b> · <b style="color:'+_MED_COL[1]+'">'+sec.plata+' plata</b> · <b style="color:'+_MED_COL[2]+'">'+sec.bronce+' bronce</b></span></div>';
+  }
+  sec.grupos.forEach(gr=>{
+    h+='<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'
+      +'<div class="os" style="font-size:13px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:8px">'+esc(gr.titulo)
+        +(sec.tanda===null?' <span style="color:var(--muted);font-weight:400;font-size:11px">· tanda '+esc(gr.tanda)+'</span>':'')+'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px">';
+    gr.podios.forEach(p=>{
+      if(!p.top.length)return;
+      h+='<div><div style="font-size:10px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">'+p.label+'</div>';
+      p.top.forEach((x,i)=>{
+        h+='<div style="display:flex;align-items:center;gap:7px;font-size:12px;padding:2px 0">'
+          +'<span style="width:16px;height:16px;flex-shrink:0;border-radius:50%;background:'+_MED_COL[i]+';color:#0A1628;font-weight:800;font-size:10px;display:flex;align-items:center;justify-content:center">'+(i+1)+'</span>'
+          // La bandera va DENTRO del bloque del nombre y no como otro elemento
+          // de la fila: si fuera hermana, el hueco entre el número y la bandera
+          // y el que queda hasta el nombre saldrían distintos.
+          +'<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+            +(d.porPais?_flagImg(_ctry(x.a),13,true):'')+esc(x.a.name||'')+'</span>'
+          +'<b>'+(+x.valor).toFixed(1)+'</b></div>';
+      });
+      h+='</div>';
+    });
+    h+='</div></div>';
+  });
+  });
+
+  const _vieja=document.getElementById('medModal'); if(_vieja)_vieja.remove();
+  const m=document.createElement('div');
+  m.id='medModal';
+  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.8);z-index:99999;overflow-y:auto;padding:24px';
+  m.innerHTML='<div style="max-width:1000px;margin:0 auto;background:var(--card,#0F1D33);border:1px solid var(--border);border-radius:14px;padding:20px">'+h+'</div>';
+  document.body.appendChild(m);
+  m.onclick=e=>{if(e.target===m)m.remove();};
+};
+
+window.exportMedallasXLS=function(){
+  const {filas}=_medallasFilas();
+  _xlsxDescargar(_actaNombreArchivo('xlsx').replace(/^Acta_/,'Medallas_'),
+                 'Medallas',filas,[9,38,16,8,10,30,18,10]);
+  showToastLC('Medallas en Excel');
+};
+
+window.exportMedallasPDF=async function(){
+  try{
+    if(!window.jspdf){
+      await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    }
+    if(!window.jspdf.jsPDF.API.autoTable){
+      await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    }
+    const {filas,d}=_medallasFilas();
+    const doc=new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const PW=doc.internal.pageSize.getWidth();
+    doc.setFont('helvetica','bold');doc.setFontSize(13);
+    doc.text(_stripAccentsForPdf('DETALLE DE MEDALLAS'+_actaSufijoDia()),PW/2,15,{align:'center'});
+    doc.setFont('helvetica','normal');doc.setFontSize(9);
+    doc.text(_stripAccentsForPdf((DATA.event==null?void 0:DATA.event.name)||''),PW/2,21,{align:'center'});
+    doc.text('Oro '+d.oro+'  ·  Plata '+d.plata+'  ·  Bronce '+d.bronce+'  ·  Total '+d.total,PW/2,26,{align:'center'});
+    const cuerpo=filas.slice(1).map(f=>f.map(c=>_stripAccentsForPdf(String(c&&c.v!==undefined?c.v:''))));
+    doc.autoTable({
+      startY:31,
+      head:[filas[0].map(c=>_stripAccentsForPdf(String(c.v)))],
+      body:cuerpo,
+      styles:{fontSize:7,cellPadding:1.4},
+      headStyles:{fillColor:[26,22,0],textColor:[212,168,67]},
+      margin:{left:8,right:8}
+    });
+    doc.save(_actaNombreArchivo('pdf').replace(/^Acta_/,'Medallas_'));
+    showToastLC('Medallas en PDF');
+  }catch(e){ console.error('[medallas] pdf',e); showToastLC('No se pudo generar el PDF: '+e.message); }
+};
+
+window.ovSet=function(campo,valor){
+  const o=window._OV, op=_ovOpciones();
+  if(campo==='sexo')o.sexo=valor;
+  else if(campo==='masters'){ o.masters=valor; o.divs=null; }   // las divisiones elegidas cambian de nombre
+  else if(campo==='equipos'){ o.equipos=valor; }
+  else{
+    const todos=campo==='divs'?op.divs:op.mods;
+    if(valor==='*')o[campo]=null;
+    else{
+      let sel=o[campo]?o[campo].slice():todos.slice();
+      sel=sel.indexOf(valor)>=0?sel.filter(x=>x!==valor):sel.concat([valor]);
+      o[campo]=(sel.length===todos.length||!sel.length)?null:sel;
+    }
+  }
+  window.mostrarOverall();
+};
+
+window.mostrarOverall=function(){
+  const op=_ovOpciones();
+  if(!op.divs.length){showToastLC('Todavía no hay resultados');return;}
+  const o=window._OV;
+  if(op.sexos.indexOf(o.sexo)<0)o.sexo=op.sexos[0];
+  const d=_ovDatos();
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const pill=(on,txt,oc)=>'<button onclick="'+oc+'" style="padding:5px 11px;border-radius:999px;border:1px solid '+(on?'var(--gold)':'var(--border)')
+    +';background:'+(on?'rgba(212,168,67,.16)':'transparent')+';color:'+(on?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">'+txt+'</button>';
+  const fila=(lbl,cont)=>'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;min-width:78px">'+lbl+'</span>'+cont+'</div>';
+  let h='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">'
+    +'<div><div class="os" style="font-size:22px;font-weight:700">Overall y '+(d.porPais?'países':'clubes')+'</div>'
+    +'<div style="font-size:12px;color:var(--muted)">GL Points por división y modalidad · clasificación por '+(d.porPais?'país':'club')+' según el reglamento IPF'+esc(_actaSufijoDia())+'</div></div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button class="btn" onclick="exportOverallXLS()" style="background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);font-weight:700">Excel</button>'
+    +'<button class="btn" onclick="exportOverallPDF()" style="background:#fff;border:1px solid #999;color:#111;font-weight:700">PDF</button>'
+    +'<button class="btn" onclick="document.getElementById(\'ovModal\').remove()">Cerrar</button></div></div>';
+  h+=fila('SEXO',op.sexos.slice().sort().map(sx=>pill(o.sexo===sx,sx==='F'?'MUJERES':'HOMBRES',"ovSet('sexo','"+sx+"')")).join(''));
+  h+=fila('DIVISIÓN',pill(!o.divs,'TODAS',"ovSet('divs','*')")+op.divs.map(v=>pill(!!o.divs&&o.divs.indexOf(v)>=0,esc(v).toUpperCase(),"ovSet('divs','"+esc(v)+"')")).join(''));
+  h+=fila('EQUIPOS',pill(!d.porPais,'POR CLUB',"ovSet('equipos','club')")+pill(d.porPais,'POR PAÍS',"ovSet('equipos','pais')"));
+  h+=fila('MASTERS',pill(o.masters!=='sep','JUNTOS',"ovSet('masters','juntos')")+pill(o.masters==='sep','POR DIVISIÓN',"ovSet('masters','sep')"));
+  h+=fila('MODALIDAD',pill(!o.mods,'TODAS',"ovSet('mods','*')")+op.mods.map(v=>pill(!!o.mods&&o.mods.indexOf(v)>=0,esc(_ACTA_MOD_N[v]||v),"ovSet('mods','"+v+"')")).join(''));
+  if(!d.bloques.length)h+='<div style="padding:20px;color:var(--muted);text-align:center">No hay resultados con esa selección.</div>';
+  d.bloques.forEach(b=>{
+    h+='<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin:14px 0">'
+      +'<div class="os" style="font-size:14px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:8px">'+esc(b.titulo)+'</div>'
+      +'<div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:14px">';
+    // Overall
+    h+='<div style="overflow-x:auto"><div style="font-size:10px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">OVERALL · GL POINTS</div>'
+      +'<table class="tbl" style="width:100%;font-size:12px"><tr><th>#</th><th style="text-align:left">Atleta</th><th>Cat.</th><th>PC</th><th>Total</th><th>GL</th><th title="Puntos por equipo según su lugar en la categoría">Pts</th></tr>';
+    b.filas.forEach(f=>{
+      h+='<tr><td>'+(f.lugar||'—')+'</td><td style="text-align:left;white-space:nowrap">'+(d.porPais?_flagImg(_ctry(f.a),12,true):'')+esc(f.a.name||'')
+        +(d.porPais?'':' <span style="color:var(--muted);font-size:10px">'+esc(f.quien)+'</span>')+'</td>'
+        +'<td>'+esc(f.cat)+'</td><td>'+(f.a.bw||'—')+'</td><td style="font-weight:700">'+(f.total>0?f.total:'—')+'</td>'
+        +'<td style="color:var(--gold);font-weight:700">'+(f.total>0?(+f.gl).toFixed(2):'—')+'</td><td>'+(f.pts||'')+'</td></tr>';
+    });
+    h+='</table></div>';
+    // Países
+    h+='<div style="overflow-x:auto"><div style="font-size:10px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">'+(d.porPais?'PAÍSES':'CLUBES')+' · PUNTOS IPF</div>'
+      +'<table class="tbl" style="width:100%;font-size:12px"><tr><th>#</th><th style="text-align:left">'+(d.porPais?'País':'Club')+'</th><th>Pts</th><th>1°</th><th>2°</th><th>3°</th><th title="Atletas que suman (máx. 5) / atletas del país">Suman</th></tr>';
+    b.equipos.forEach(e=>{
+      h+='<tr><td>'+(e.puesto||'—')+'</td><td style="text-align:left;white-space:nowrap">'+(e.cod?_flagImg(e.cod,12,true)+esc(_ctryName(e.cod)):esc(e.quien))+'</td>'
+        +'<td style="color:var(--gold);font-weight:800">'+e.puntos+'</td><td>'+e.lugares[0]+'</td><td>'+e.lugares[1]+'</td><td>'+e.lugares[2]+'</td>'
+        +'<td>'+e.suman+'/'+e.atletas+'</td></tr>';
+    });
+    h+='</table></div></div>';
+    if(b.unis){
+      h+='<div style="overflow-x:auto;margin-top:12px"><div style="font-size:10px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">UNIVERSIDADES · PUNTOS IPF</div>'
+        +'<table class="tbl" style="width:100%;font-size:12px"><tr><th>#</th><th style="text-align:left">Universidad</th><th>País</th><th>Pts</th><th>1°</th><th>2°</th><th>3°</th><th>Mejor GL</th><th>Suman</th></tr>';
+      b.unis.forEach(e=>{
+        h+='<tr><td>'+(e.puesto||'—')+'</td><td style="text-align:left">'+esc(e.quien)+'</td><td>'+(e.pais?_flagImg(e.pais,12,true)+esc(e.pais):'')+'</td>'
+          +'<td style="color:var(--gold);font-weight:800">'+e.puntos+'</td><td>'+e.lugares[0]+'</td><td>'+e.lugares[1]+'</td><td>'+e.lugares[2]+'</td>'
+          +'<td>'+(e.mejorGL?e.mejorGL.toFixed(2):'—')+'</td><td>'+e.suman+'/'+e.atletas+'</td></tr>';
+      });
+      h+='</table></div>';
+    }
+    h+='</div>';
+  });
+  h+='<div style="font-size:10px;color:var(--muted);line-height:1.6;margin-top:6px">Puntos por equipo (Reglamento Técnico IPF): 12, 9, 8, 7, 6, 5, 4, 3 y 2 del 1° al 9° de cada categoría de peso; 1 punto a cada atleta que haga total después del 9°. Cuentan los cinco mejores de cada '+(d.porPais?'país':'club')+'. Empate: más primeros lugares, luego más segundos, y así; si aun así siguen empatados, la mejor marca GL del equipo. En Universitario se clasifica además por universidad.</div>';
+  let m=document.getElementById('ovModal');
+  const y=m?m.scrollTop:0;
+  if(!m){ m=document.createElement('div'); m.id='ovModal';
+    m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.8);z-index:99999;overflow-y:auto;padding:24px';
+    m.onclick=e=>{if(e.target===m)m.remove();}; document.body.appendChild(m); }
+  m.innerHTML='<div style="max-width:1150px;margin:0 auto;background:var(--card,#0F1D33);border:1px solid var(--border);border-radius:14px;padding:20px">'+h+'</div>';
+  m.scrollTop=y;
+};
+
+window.exportOverallXLS=function(){
+  const {filas,d}=_ovFilas();
+  if(!d.bloques.length){showToastLC('No hay resultados con esa selección');return;}
+  _xlsxDescargar(_ovNombre('xlsx'),'Overall',filas,[8,34,20,10,8,10,10,11]);
+  showToastLC('Overall en Excel');
+};
+
+window.exportOverallPDF=async function(){
+  try{
+    const {d}=_ovFilas();
+    if(!d.bloques.length){showToastLC('No hay resultados con esa selección');return;}
+    if(!window.jspdf)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    if(!window.jspdf.jsPDF.API.autoTable)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    const T=x=>_stripAccentsForPdf(String(x==null?'':x));
+    const doc=new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const PW=doc.internal.pageSize.getWidth();
+    doc.setFont('helvetica','bold');doc.setFontSize(13);
+    doc.text(T('OVERALL Y '+(d.porPais?'PAISES':'CLUBES')+' - '+(window._OV.sexo==='F'?'MUJERES':'HOMBRES')+_actaSufijoDia()),PW/2,14,{align:'center'});
+    doc.setFont('helvetica','normal');doc.setFontSize(9);
+    doc.text(T((DATA.event&&DATA.event.name)||''),PW/2,20,{align:'center'});
+    doc.setTextColor(0);
+    let y=26;
+    d.bloques.forEach((b,i)=>{
+      if(i>0&&y>235){doc.addPage();y=14;}
+      doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text(T(b.titulo),8,y);y+=2;
+      doc.autoTable({startY:y,margin:{left:8,right:8},theme:'grid',styles:_OV_PDF_EST.styles,headStyles:_OV_PDF_EST.head,bodyStyles:{fillColor:[255,255,255]},alternateRowStyles:{fillColor:[248,248,248]},
+        head:[['#','Atleta',d.porPais?'Pais':'Club','Cat.','PC','Total','GL','Pts']],
+        body:b.filas.map(f=>[f.lugar||'-',T(f.a.name),T(d.porPais?_ctry(f.a):f.quien),T(f.cat),f.a.bw||'',f.total>0?f.total:'-',f.total>0?(+f.gl).toFixed(2):'-',f.pts||''])});
+      y=doc.lastAutoTable.finalY+3;
+      doc.autoTable({startY:y,margin:{left:8,right:PW/2},theme:'grid',styles:_OV_PDF_EST.styles,headStyles:_OV_PDF_EST.head,bodyStyles:{fillColor:[255,255,255]},alternateRowStyles:{fillColor:[248,248,248]},
+        head:[['#',d.porPais?'Pais':'Club','Pts','1ro','2do','3ro','Suman']],
+        body:b.equipos.map(e=>[e.puesto||'-',T(e.cod?_ctryName(e.cod):e.quien),e.puntos,e.lugares[0],e.lugares[1],e.lugares[2],e.suman+'/'+e.atletas])});
+      if(b.unis){
+        y=doc.lastAutoTable.finalY+3;
+        doc.autoTable({startY:y,margin:{left:8,right:8},theme:'grid',styles:_OV_PDF_EST.styles,headStyles:_OV_PDF_EST.head,bodyStyles:{fillColor:[255,255,255]},alternateRowStyles:{fillColor:[248,248,248]},
+          head:[['#','Universidad','Pais','Pts','1ro','2do','3ro','Mejor GL','Suman']],
+          body:b.unis.map(e=>[e.puesto||'-',T(e.quien),T(e.pais),e.puntos,e.lugares[0],e.lugares[1],e.lugares[2],e.mejorGL?e.mejorGL.toFixed(2):'-',e.suman+'/'+e.atletas])});
+      }
+      y=doc.lastAutoTable.finalY+9;
+    });
+    doc.setFontSize(6.5);doc.setTextColor(110);
+    doc.text(T('Puntos por equipo (Reglamento Tecnico IPF): 12-9-8-7-6-5-4-3-2 del 1 al 9 de cada categoria; 1 punto a cada atleta con total despues del 9. Cuentan los 5 mejores. Empate: mas primeros lugares, luego segundos, etc.; luego la mejor marca GL. En Universitario tambien por universidad.'),8,Math.min(y,288),{maxWidth:PW-16});
+    doc.save(_ovNombre('pdf'));
+    showToastLC('Overall en PDF');
+  }catch(e){ console.error('[overall] pdf',e); showToastLC('No se pudo generar el PDF: '+e.message); }
+};
+
+window.mostrarRecordsBatidos=async function(){
+  showToastLC('Buscando récords batidos…');
+  const suda=_rbSuda(), nac=await _rbNac();
+  window._RB={suda,nac};
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const tabla=(titulo,lista,conPais)=>{
+    if(lista===null)return '<div class="os" style="font-size:15px;font-weight:700;margin:18px 0 6px">'+titulo+'</div><div style="color:var(--orange);font-size:12px">No se pudo leer la tabla de récords.</div>';
+    let h='<div class="os" style="font-size:15px;font-weight:700;margin:18px 0 6px">'+titulo+' <span style="color:var(--gold)">'+lista.length+'</span></div>';
+    if(!lista.length)return h+'<div style="color:var(--muted);font-size:12px">Ninguno en este campeonato.</div>';
+    h+='<div style="overflow-x:auto"><table class="tbl" style="width:100%;font-size:12px"><tr><th>Sexo</th><th>Modalidad</th><th>División</th><th>Cat.</th><th style="text-align:left">Movimiento</th>'
+      +'<th>Nuevo</th><th style="text-align:left">Atleta</th>'+(conPais?'<th>País</th>':'')+'<th>Anterior</th><th style="text-align:left">De</th></tr>';
+    lista.forEach(r=>{
+      h+='<tr><td>'+r.sexo+'</td><td>'+r.mod+'</td><td>'+esc(r.div)+'</td><td>'+esc(r.cat)+'</td><td style="text-align:left">'+r.mov+'</td>'
+        +'<td style="color:#F2C230;font-weight:800">'+r.nuevo+'</td><td style="text-align:left">'+(conPais?_flagImg(r.pais,12,true):'')+esc(r.atleta)+'</td>'
+        +(conPais?'<td>'+esc(r.pais)+'</td>':'')
+        +'<td>'+(r.antes!=null?r.antes:'—')+'</td><td style="text-align:left;color:var(--muted)">'+(r.antes!=null?esc(r.antesQuien)+(r.antesPais?' · '+esc(r.antesPais):''):(r.antesQuien||'sin récord previo'))
+        +(r.guardado===false?' <span style="color:var(--orange);font-size:10px">· falta guardar</span>':'')+'</td></tr>';
+    });
+    return h+'</table></div>';
+  };
+  let h='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">'
+    +'<div><div class="os" style="font-size:22px;font-weight:700">Récords batidos</div>'
+    +'<div style="font-size:12px;color:var(--muted)">'+esc((DATA.event&&DATA.event.name)||'')+' · mejor marca de la competencia en cada casillero</div></div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button class="btn" onclick="exportRecordsBatidosXLS()" style="background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);font-weight:700">Excel</button>'
+    +'<button class="btn" onclick="exportRecordsBatidosPDF()" style="background:#fff;border:1px solid #999;color:#111;font-weight:700">PDF</button>'
+    +'<button class="btn" onclick="document.getElementById(\'rbModal\').remove()">Cerrar</button></div></div>';
+  if(_srOn())h+=tabla('Récords sudamericanos',suda,true);
+  h+=tabla('Récords nacionales de Chile (atletas chilenos)',nac,false);
+  const v=document.getElementById('rbModal'); if(v)v.remove();
+  const m=document.createElement('div'); m.id='rbModal';
+  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.8);z-index:99999;overflow-y:auto;padding:24px';
+  m.innerHTML='<div style="max-width:1150px;margin:0 auto;background:var(--card,#0F1D33);border:1px solid var(--border);border-radius:14px;padding:20px">'+h+'</div>';
+  m.onclick=e=>{if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+};
+
+window.exportRecordsBatidosXLS=function(){
+  const filas=[[{v:'RÉCORDS BATIDOS — '+((DATA.event&&DATA.event.name)||''),s:5}],[]];
+  _rbSecciones().forEach(sec=>{
+    filas.push([{v:sec.titulo+' ('+sec.lista.length+')',s:1}]);
+    filas.push(['Sexo','Modalidad','División','Cat.','Movimiento','Nuevo','Atleta'].concat(sec.pais?['País']:[]).concat(['Anterior','De']).map(v=>({v,s:8})));
+    sec.lista.forEach(r=>filas.push([r.sexo,r.mod,r.div,r.cat,r.mov,{n:r.nuevo},r.atleta].concat(sec.pais?[r.pais]:[])
+      .concat([r.antes!=null?{n:r.antes}:'—',r.antes!=null?(r.antesQuien+(r.antesPais?' · '+r.antesPais:'')):'sin récord previo'])
+      .map(x=>x&&x.n!==undefined?{v:x.n,s:7}:{v:x,s:6})));
+    filas.push([]);
+  });
+  _xlsxDescargar(_rbNombre('xlsx'),'Records',filas,[11,12,12,7,26,9,34,8,9,34]);
+  showToastLC('Récords en Excel');
+};
+
+window.exportRecordsBatidosPDF=async function(){
+  try{
+    if(!window.jspdf)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    if(!window.jspdf.jsPDF.API.autoTable)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    const T=x=>_stripAccentsForPdf(String(x==null?'':x));
+    const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+    const PW=doc.internal.pageSize.getWidth();
+    doc.setTextColor(0);doc.setFont('helvetica','bold');doc.setFontSize(13);
+    doc.text(T('RECORDS BATIDOS'),PW/2,14,{align:'center'});
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(T((DATA.event&&DATA.event.name)||''),PW/2,20,{align:'center'});
+    let y=27;
+    _rbSecciones().forEach(sec=>{
+      if(y>180){doc.addPage();y=14;}
+      doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text(T(sec.titulo+' ('+sec.lista.length+')'),8,y);y+=2;
+      const head=['Sexo','Modalidad','Division','Cat.','Movimiento','Nuevo','Atleta'].concat(sec.pais?['Pais']:[]).concat(['Anterior','De']);
+      const body=sec.lista.length?sec.lista.map(r=>[r.sexo,r.mod,r.div,r.cat,r.mov,r.nuevo,r.atleta].concat(sec.pais?[r.pais]:[])
+        .concat([r.antes!=null?r.antes:'-',r.antes!=null?(r.antesQuien+(r.antesPais?' - '+r.antesPais:'')):'sin record previo']).map(T))
+        :[[{content:T('Ninguno en este campeonato'),colSpan:head.length}]];
+      doc.autoTable({startY:y,margin:{left:8,right:8},theme:'grid',styles:_OV_PDF_EST.styles,headStyles:_OV_PDF_EST.head,
+        bodyStyles:{fillColor:[255,255,255]},alternateRowStyles:{fillColor:[248,248,248]},head:[head.map(T)],body,
+        didParseCell:d=>{ if(d.section==='body'&&d.column.index===5&&sec.lista.length){d.cell.styles.fillColor=[247,214,58];d.cell.styles.fontStyle='bold';} }});
+      y=doc.lastAutoTable.finalY+10;
+    });
+    doc.save(_rbNombre('pdf'));
+    showToastLC('Récords en PDF');
+  }catch(e){ console.error('[récords batidos] pdf',e); showToastLC('No se pudo generar el PDF: '+e.message); }
+};
+
+window.mostrarRecordsNac=async function(trasCerrar){
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  showToastLC('Comparando con la tabla de récords nacionales…');
+  let tabla; try{ tabla=await _rnCargarTabla(); }catch(e){ alert('No se pudo leer la tabla de récords: '+e.message); return; }
+  const lista=_rnDetectar(tabla);
+  window._RN={lista,tabla};
+  if(!lista.length){ if(!trasCerrar)alert('Ningún chileno superó un récord nacional en esta competencia.'); return; }
+  const TN={classic:'Classic',equipped:'Equipado',universitario:'Universitario'};
+  let h='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:10px">'
+    +'<div><div class="os" style="font-size:22px;font-weight:700">Récords nacionales</div>'
+    +'<div style="font-size:12px;color:var(--muted);max-width:620px;line-height:1.5">Marcas de atletas chilenos que superan la tabla nacional. Revisa, desmarca lo que no corresponda y guarda. '
+    +'Los casilleros sin récord previo vienen desmarcados.</div></div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button class="btn" onclick="guardarRecordsNac()" style="background:rgba(34,197,94,.14);border:1px solid var(--green);color:var(--green);font-weight:700">Guardar en la tabla de récords</button>'
+    +'<button class="btn" onclick="document.getElementById(\'rnModal\').remove()">Cerrar</button></div></div>';
+  h+='<div style="overflow-x:auto"><table class="tbl" style="width:100%;font-size:12px"><tr><th></th><th style="text-align:left">Modalidad</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Movimiento</th>'
+    +'<th style="text-align:left">Récord actual</th><th style="text-align:left">Nuevo récord</th></tr>';
+  lista.forEach((r,i)=>{
+    h+='<tr><td><input type="checkbox" '+(r.marcado?'checked':'')+' onchange="window._RN.lista['+i+'].marcado=this.checked"></td>'
+      +'<td style="text-align:left">'+TN[r.tipo]+'</td><td>'+(r.sexo==='Mujer'?'F':'M')+'</td><td>'+esc(r.div)+'</td><td>'+esc(r.cat)+'</td><td>'+r.lbl+'</td>'
+      +'<td style="text-align:left">'+(r.act?'<b>'+r.act.marca+'</b> · '+esc(r.act.nombre||''):'<span style="color:var(--orange)">sin récord previo</span>')+'</td>'
+      +'<td style="text-align:left"><b style="color:#F2C230">'+r.w+'</b> · '+esc(r.a.name)+'</td></tr>';
+  });
+  h+='</table></div>';
+  const v=document.getElementById('rnModal'); if(v)v.remove();
+  const m=document.createElement('div'); m.id='rnModal';
+  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.8);z-index:99999;overflow-y:auto;padding:24px';
+  m.innerHTML='<div style="max-width:1100px;margin:0 auto;background:var(--card,#0F1D33);border:1px solid var(--border);border-radius:14px;padding:20px">'+h+'</div>';
+  m.onclick=e=>{if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+};
+
+window.guardarRecordsNac=async function(){
+  const rn=window._RN; if(!rn)return;
+  const elegidos=rn.lista.filter(r=>r.marcado);
+  if(!elegidos.length){ alert('No hay ningún récord marcado.'); return; }
+  if(!confirm('Se actualizarán '+elegidos.length+' récords nacionales en la tabla que publica yourlift.cl.\n\n¿Confirmar?'))return;
+  try{
+    const hechos=await _rnAplicar(elegidos);
+    alert(hechos.length+' récords nacionales actualizados. Ya se ven en yourlift.cl.');
+    const m=document.getElementById('rnModal'); if(m)m.remove();
+  }catch(e){ alert('No se pudo guardar: '+(e.code||e.message)); }
+};

@@ -556,3 +556,15 @@ function catRankBySub(athlete){
   const idx=withSub.findIndex(x=>x.id===athlete.id);
   return{pos:idx>=0?idx+1:0,of:withSub.length};
 }
+
+// ── Acciones de los botones (window.…) ──────────────────────────────────────
+// Las llaman los onclick de la pantalla. Asignarlas acá, antes de arranque.js,
+// solo las deja listas un poco antes: ninguna se ejecuta al cargar.
+
+window.setResF=function(campo,val){
+  const F=window._RES_F||(window._RES_F={sex:'',cat:'',div:'',mod:''});
+  if(campo in F)F[campo]=val||'';
+  R();
+};
+
+window.limpiarResF=function(){ window._RES_F={sex:'',cat:'',div:'',mod:''}; R(); };

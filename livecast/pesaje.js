@@ -733,3 +733,66 @@ function _nomChips(a,sc,enLinea){
   h+=chip(modal, bench?'#a78bfa':'var(--green)', bench?'rgba(167,139,250,.12)':'rgba(34,197,94,.12)', bench?'rgba(167,139,250,.4)':'rgba(34,197,94,.4)','Modalidad');
   return h+cierra;
 }
+
+// ── Acciones de los botones (window.…) ──────────────────────────────────────
+// Las llaman los onclick de la pantalla. Asignarlas acá, antes de arranque.js,
+// solo las deja listas un poco antes: ninguna se ejecuta al cargar.
+
+// Borra el pesaje del atleta: BW, racks y todos los intentos (vuelve a "sin pesar")
+window.clearWeighIn = function(id){
+  const a = DATA.athletes.find(x=>x.id===id);
+  if(!a) return;
+  const msg = `¿Borrar el pesaje de ${a.name}?\n\nSe borrarán:\n• Peso corporal (BW)\n• Alturas de rack (SQ y BP)\n• Todos los intentos cargados\n\nEsto NO borra al atleta del evento. Solo le reinicia el pesaje.`;
+  if(!confirm(msg)) return;
+  a.bw = 0;
+  a.rackSQ = '';
+  a.rackBP = '';
+  a.sqAbat = ''; a.bpSeg = ''; a.bpPalm = '';
+  a.weighedIn = false;
+  _markAtt(id,'meta');
+  // Limpiar intentos del atleta (pesos y resultados). Igual que en el confirmar:
+  // sin marcar cada celda, el borrado no viajaba y el primer snapshot del
+  // servidor le devolvía los intentos al atleta.
+  ['sq','bp','dl'].forEach(l=>{
+    if(a.att && a.att[l]){
+      a.att[l].forEach((at,r)=>{at.w=0; at.r=null; _markAtt(id,'att_'+l+'_'+r);});
+    }
+  });
+  // Limpiar cualquier change timer activo del atleta
+  Object.keys(DATA.changeTimers).forEach(k=>{
+    if(k.startsWith(id+'_')) delete DATA.changeTimers[k];
+  });
+  saveNow();
+  const modal = document.getElementById('weighInModal');
+  if(modal) modal.remove();
+  R();
+  showToastLC('Pesaje borrado: '+a.name);
+};
+
+window.manBuscar=function(v){
+  window._MAN_F.q=String(v||'');
+  R();
+  // Devolver el cursor al buscador y al final del texto, que si no hay que
+  // volver a hacer clic entre letra y letra.
+  const i=document.getElementById('manQ');
+  if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}
+};
+
+window.manTanda=function(f){ window._MAN_F.flight=(window._MAN_F.flight===f)?'':f; R(); };
+
+window.manLimpiar=function(){ window._MAN_F={q:'',flight:''}; R(); };
+
+window.setCtCellScale=function(v){
+  window._CT_CELL_SCALE=Math.max(0.7,Math.min(2.2,parseFloat(v)||1));
+  try{localStorage.setItem('yl_ct_cellscale',window._CT_CELL_SCALE)}catch(e){}
+  R();
+};
+
+window.nudgeCtCellScale=function(d){window.setCtCellScale(window._CT_CELL_SCALE+d)};
+
+window.toggleCtAutoScroll=function(){
+  window._ctAutoScroll=!window._ctAutoScroll;
+  try{localStorage.setItem('yl_ct_autoscroll',window._ctAutoScroll?'1':'0')}catch(e){}
+  if(window._ctAutoScroll)window._ctScrollKey=null; // forzar un reacomodo al reactivar
+  R();
+};

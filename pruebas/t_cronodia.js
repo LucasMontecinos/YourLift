@@ -7,6 +7,9 @@
 // "domingo"), salía alfabético: domingo antes que sábado, al revés de como se corre.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_cronodia.js
 const fs = require('fs');
+// La regla vive en compartido/dias.js: se carga acá igual que en la página.
+globalThis.window = globalThis.window || globalThis;
+require('../compartido/dias.js');
 const { chromium } = require('playwright');
 const idx = fs.readFileSync(__dirname + '/../index.html', 'utf8');
 const adm = require('./apoyo/fuente').admin();

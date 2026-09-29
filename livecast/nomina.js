@@ -324,3 +324,161 @@ async function loadLiveAthletes(ev){
     }
   });
 }
+
+// ── Acciones de los botones (window.…) ──────────────────────────────────────
+// Las llaman los onclick de la pantalla. Asignarlas acá, antes de arranque.js,
+// solo las deja listas un poco antes: ninguna se ejecuta al cargar.
+
+window.recargarNomina=async function(){
+  if(!isAdmin){alert('Solo un admin puede volver a cargar la n\u00f3mina');return}
+  if(!DATA.event){alert('No hay campeonato activo');return}
+  if(!fbReady){
+    alert('Sin conexi\u00f3n con el servidor.\n\nNo se carg\u00f3 nada: si cambiara la n\u00f3mina solo en esta pantalla, quedar\u00eda distinta del resto.');
+    return;
+  }
+  if(!window.IS_CONTROLLER){
+    if(!confirm('Esta pantalla est\u00e1 en modo ESPECTADOR: no puede guardar en el servidor.\n\n\u00bfCambiarla a CONTROLADOR y continuar?'))return;
+    setSyncMode(true);
+  }
+  let ev;
+  try{
+    const j=await fetch('nominas.json',{cache:'no-cache'}).then(r=>r.json());
+    const le=DATA.event;
+    ev=(j.events||[]).find(e=>(le.id&&String(e.id)===String(le.id))||(le.name&&e.name===le.name));
+  }catch(e){ alert('No se pudo leer la n\u00f3mina: '+(e.message||e)); return; }
+  if(!ev||!Array.isArray(ev.athletes)||!ev.athletes.length){
+    alert('Este campeonato no tiene su n\u00f3mina en el archivo.\n\nLos que se arman con inscripciones se actualizan solos desde el panel; esto es para los que traen la n\u00f3mina en nominas.json, como el Sudamericano.');
+    return;
+  }
+  const cronoKey='fechipo_crono_'+(ev.name||'').replace(/\s+/g,'_');
+  let flightMap=null;
+  try{const s=localStorage.getItem(cronoKey);if(s){const dd=JSON.parse(s);if(dd.map)flightMap=dd.map}}catch(e){}
+  const nuevos=ev.athletes.map((a,j)=>_evAthlete(a,j,flightMap));
+
+  // El cruce va por nombre: el lote puede haber cambiado, y el id se reparte al
+  // leer el archivo, as\u00ed que ninguno de los dos identifica a una persona.
+  const viejosPorN={}; (DATA.athletes||[]).forEach(a=>{ viejosPorN[_nnCrono(a.name)]=a; });
+  const nuevosN=new Set(nuevos.map(a=>_nnCrono(a.name)));
+  const cargado=a=>!!(a.bw||a.bombed||['sq','bp','dl'].some(l=>(a.att&&a.att[l]||[]).some(x=>x&&x.w)));
+  const entran=nuevos.filter(a=>!viejosPorN[_nnCrono(a.name)]);
+  const salen=(DATA.athletes||[]).filter(a=>!nuevosN.has(_nnCrono(a.name)));
+  const salenConDatos=salen.filter(cargado);
+  if(!entran.length&&!salen.length){
+    if(!confirm('La n\u00f3mina del archivo tiene a los mismos '+nuevos.length+' atletas.\n\nIgual se vuelven a leer tandas y lotes, por si alguno cambi\u00f3. \u00bfContinuar?'))return;
+  }else{
+    const lista=(t,arr)=>arr.length?('\n'+t+' ('+arr.length+'):\n'+arr.slice(0,12).map(a=>'  \u2022 '+a.name+(a.lot?' \u00b7 lote '+a.lot:'')).join('\n')+(arr.length>12?'\n  \u2026 y '+(arr.length-12)+' m\u00e1s':'')+'\n'):'';
+    let msg='VOLVER A CARGAR LA N\u00d3MINA de:\n"'+(ev.name||'')+'"\n'
+      +'\nQuedan '+nuevos.length+' atletas (ahora hay '+(DATA.athletes||[]).length+').\n'
+      +lista('ENTRAN',entran)+lista('SALEN',salen)
+      +'\nSE CONSERVA de los que siguen: peso corporal, racks, intentos y bombed.'
+      +'\nSE VUELVE A LEER del archivo: tanda, lote, categor\u00eda, divisi\u00f3n y club.'
+      +'\n\nEsto sobreescribe el servidor para todos los dispositivos y widgets.';
+    if(salenConDatos.length){
+      msg+='\n\nOJO: '+salenConDatos.length+' de los que salen YA TIENEN datos cargados ('
+        +salenConDatos.slice(0,5).map(a=>a.name).join(', ')+(salenConDatos.length>5?'\u2026':'')
+        +'). Si sacarlos no es lo que quieres, cancela.';
+    }
+    if(!confirm(msg))return;
+  }
+  const CONSERVAR=['bw','rackSQ','rackBP','bombed','att'];
+  let heredados=0;
+  nuevos.forEach(a=>{
+    const v=viejosPorN[_nnCrono(a.name)];
+    if(!v)return;
+    if(cargado(v))heredados++;
+    CONSERVAR.forEach(f=>{ if(v[f]!==undefined) a[f]=JSON.parse(JSON.stringify(v[f])); });
+  });
+  DATA.athletes=nuevos;
+  // Los ids se reparten de nuevo, as\u00ed que cualquier marca de "edit\u00e9 esto reci\u00e9n"
+  // apuntar\u00eda a otra persona.
+  try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
+  const flAct=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort(_cmpFl);
+  if(flAct.length&&flAct.indexOf(DATA.flight)<0)DATA.flight=flAct[0];
+  // Escritura autoritativa: reemplaza el documento remoto. Con un merge normal,
+  // el servidor devolver\u00eda a los que acaban de salir.
+  window._forceFullWrite=true;
+  saveNow();
+  R();
+  _confirmarPublicado(
+    ()=>alert('N\u00f3mina al d\u00eda: '+DATA.athletes.length+' atletas'
+        +(entran.length?' \u00b7 '+entran.length+' entran':'')
+        +(salen.length?' \u00b7 '+salen.length+' salen':'')
+        +(heredados?'\n\nSe conservaron los datos de tarima de '+heredados+' atleta'+(heredados>1?'s':'')+'.':'')),
+    ()=>alert('La n\u00f3mina se carg\u00f3 en ESTA pantalla pero NO se pudo guardar en el servidor.\n\nEl p\u00fablico y los widgets siguen con la anterior. Revisa el indicador SYNC y vuelve a intentar.'));
+};
+
+// Elimina el 4º intento de un lift (por si se agregó por error o el jurado lo
+// revoca). Solo saca el índice 3, nunca los 3 base. Pide confirmación porque
+// borra datos. El 4º vive dentro de su ronda concedida (no hay "INT 4"), así
+// que basta con quitarlo del array; la cola deja de mostrarlo automáticamente.
+// ── Sacar atletas que no son de este campeonato ────────────────────
+// Si por un cruce de pantallas entraron atletas de OTRO evento (pasó entre el
+// Sudamericano de prueba y el Regional Centro Sur), acá se sacan sin tener que
+// abrir la consola. La referencia es el CRONOGRAMA del evento, que es la lista
+// oficial de quién compite. No toca nada de los que sí corresponden: pesos,
+// intentos, pesaje y racks quedan igual. Se deshace con Ctrl+Z.
+window.limpiarAtletasAjenos=async function(){
+  const map=window._cronoFlightMap;
+  if(!map||!Object.keys(map).length){
+    alert('No hay Cronograma cargado para este campeonato, así que no tengo con qué comparar.\n\n'
+      +'Cárgalo en Admin → Cronograma y vuelve a entrar.');
+    return;
+  }
+  const fuera=DATA.athletes.filter(a=>!_cronoLookup(map,a.name));
+  if(!fuera.length){ alert('Todo en orden: los '+DATA.athletes.length+' atletas cargados están en el Cronograma.'); return; }
+  if(!window.IS_CONTROLLER){
+    alert('Esta pantalla está en modo LECTURA, no puede guardar.\n\nCambia a CONTROLADOR desde el menú y vuelve a intentar.');
+    return;
+  }
+  const det=fuera.slice(0,30).map(a=>'• '+a.name+'  ('+(a.div||'')+' '+(a.cat||'')+', tanda '+(a.flight||'')+')').join('\n')
+    +(fuera.length>30?'\n… y '+(fuera.length-30)+' más':'');
+  if(!confirm('Hay '+fuera.length+' atleta(s) que NO están en el Cronograma de "'+((DATA.event&&DATA.event.name)||'')+'":\n\n'+det
+    +'\n\nSe eliminan y quedan '+(DATA.athletes.length-fuera.length)+'.\n¿Confirmas?'))return;
+  const ids=new Set(fuera.map(a=>a.id));
+  DATA.athletes=DATA.athletes.filter(a=>!ids.has(a.id));
+  Object.keys(DATA.changeTimers||{}).forEach(k=>{ if(ids.has(parseInt(k,10)))delete DATA.changeTimers[k]; });
+  if(DATA.forcedCurrent!=null&&ids.has(DATA.forcedCurrent))DATA.forcedCurrent=null;
+  try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
+  R();
+  // Escritura AUTORITATIVA + verificación: un borrado tiene que reemplazar el
+  // documento, si no el merge devuelve a los que saqué.
+  let ok=false;
+  for(let i=1;i<=3&&!ok;i++){
+    window._forceFullWrite=true;
+    try{ await syncToFB(); }catch(e){ console.warn('[limpiar] escritura',e); }
+    await new Promise(r=>setTimeout(r,1200));
+    try{
+      const snap=await window._fb.getDoc(window._fb.doc(fbDB,'livecast_sync',fbDocId()));
+      const rem=JSON.parse((snap.data()||{}).athletes||'[]');
+      ok=rem.length===DATA.athletes.length&&rem.every(a=>!!_cronoLookup(map,a.name));
+    }catch(e){ console.warn('[limpiar] verificación',e); break; }
+  }
+  alert((ok?'Listo y verificado en el servidor.':'Se aplicó en esta pantalla, pero el servidor no confirmó. Revisa la conexión y vuelve a intentar.')
+    +'\n\n'+fuera.length+' eliminado(s)\n'+DATA.athletes.length+' atletas quedan cargados.');
+};
+
+window.remove4thAttempt=function(id,l){
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  if(!a.att[l]||a.att[l].length<4){window._attMenuOpen=null;R();return;}
+  const at4=a.att[l][3];
+  const detalle=at4&&(at4.w||at4.r)?' (tiene '+(at4.w||'—')+'kg'+(at4.r==='g'?' · VÁLIDO':at4.r==='n'?' · NULO':'')+')':'';
+  window._attMenuOpen=null;
+  if(!confirm('¿Eliminar el 4º intento de '+a.name+' en '+LIFT_S[l]+'?'+detalle+'\n\nSe borra ese intento extra.')){R();return;}
+  a.att[l].pop();
+  _markAtt(id,'att_'+l+'_3');
+  // limpiar cualquier change timer colgado de ese índice
+  const ck=id+'_'+l+'_3';if(DATA.changeTimers[ck])delete DATA.changeTimers[ck];
+  // limpiar el tiempo compensatorio si era de este 4º
+  if(DATA.compTimer&&DATA.compTimer.id===id&&DATA.compTimer.lift===l)DATA.compTimer=null;
+  saveNow();R();
+  showToastLC('4º intento eliminado: '+a.name+' — '+LIFT_S[l]);
+};
+
+// Cierra el tiempo compensatorio a la vista (manual).
+window.clearCompTimer=function(){ DATA.compTimer=null; saveNow(); R(); };
+
+window.toggleAttMenu=function(id,l,j){
+  const key=id+'_'+l+'_'+j;
+  window._attMenuOpen=(window._attMenuOpen===key)?null:key;
+  R();
+};

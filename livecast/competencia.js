@@ -872,3 +872,145 @@ function renderCompete(){
    }}
   return h;
 }
+
+// ── Acciones de los botones (window.…) ──────────────────────────────────────
+// Las llaman los onclick de la pantalla. Asignarlas acá, antes de arranque.js,
+// solo las deja listas un poco antes: ninguna se ejecuta al cargar.
+
+// Toggle manual del reloj de 1:00 (para iniciarlo cuando se va a tirar un intento
+// extra, o pausarlo/reanudarlo cuando haga falta). Re-renderiza para actualizar el botón.
+window.toggleMainTimer=function(){ if(DATA.timerOn)pauseTimer(); else startTimer(); R(); };
+
+// Fuerza un intento específico como "el actual" en Control en Vivo, saltándose el orden
+// automático de la cola — para corregir cuando se pasó por alto a un atleta. Cambia
+// también DATA.flight/lift/round para que la tarjeta, Control TX y las luces de jueces
+// sigan a este atleta. Se limpia solo apenas se marca GOOD/NO LIFT (ver overrideResult).
+// Corregir el nombre de un atleta con la competencia andando.
+//
+// Llegan mal escritos desde la inscripción —falta un apellido, una letra
+// cambiada, todo en mayúsculas— y ese nombre se ve en la tarima, en la
+// transmisión y queda en el acta. Hasta ahora había que salir a Admin a
+// arreglarlo mientras la competencia seguía.
+//
+// Corrige el nombre para ESTA competencia: la tarima, el acta, los widgets y el
+// público lo ven al toque. No reescribe la inscripción ni la base de atletas —
+// eso se sigue haciendo en Admin, con calma, después.
+window.renameAthlete=function(id){
+  const a=DATA.athletes.find(x=>x.id===id);
+  if(!a)return;
+  if(!isAdmin){showToastLC('Solo el que opera puede corregir el nombre');return;}
+  const v=prompt('Nombre del atleta\n\nSe corrige en la tarima, el acta y la transmisión.\n(La inscripción en Admin no cambia.)',a.name||'');
+  if(v===null)return;                       // canceló
+  const nuevo=String(v).trim().replace(/\s+/g,' ');
+  if(!nuevo){showToastLC('El nombre no puede quedar vacío');return;}
+  if(nuevo===a.name)return;
+  const antes=a.name;
+  // El nombre con el que vino queda guardado: la sincronización reconoce a la
+  // persona por su nombre, y sin esto la corrección parecía "otro atleta" y el
+  // servidor le devolvía el nombre viejo en la siguiente escritura.
+  if(!a.nombreOrig)a.nombreOrig=antes;
+  a.name=nuevo;
+  if('nombre' in a)a.nombre=nuevo;          // el campo con el que vino de la inscripción
+  _markAtt(id,'meta');                      // edición mía: que el merge la respete
+  saveNow();R();
+  showToastLC('Nombre corregido: '+antes+' → '+nuevo);
+};
+
+window.forceCurrentAttempt=function(id,l,r){
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  DATA.flight=a.flight;DATA.lift=l;DATA.round=r;DATA.forcedCurrent=id;
+  save();R();
+  showToastLC('Marcado como actual: '+a.name+' — '+LIFT_S[l]+(r+1));
+};
+
+// Añade un 4º intento a un lift de un atleta (índice 3). Se concede cuando el
+// jurado otorga un intento compensatorio por un error ajeno (carga, equipo,
+// cronómetro, arbitraje) — reglamento IPF. Cuenta para el mejor levantamiento
+// igual que los otros (bestOf recorre todos los válidos). Solo un 4º por lift.
+//   mode 'self'     → se sigue a sí mismo: el atleta repite enseguida. Se le da
+//                     un tiempo compensatorio (0-5 min) que corre a la vista
+//                     (NO bloquea el válido/nulo). Queda como "actual" en INT 4.
+//   mode 'endround' → el 4º se toma al final de la ronda (uso IPF habitual).
+window.add4thAttempt=function(id,l,mode){
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  if(!a.att[l]){showToastLC('Lift inválido');return;}
+  if(a.att[l].length>=4){showToastLC(a.name+' ya tiene un intento extra en '+LIFT_S[l]);window._attMenuOpen=null;R();return;}
+  window._attMenuOpen=null;
+  mode=(mode==='self')?'self':'endround';
+  // Ventanita emergente para elegir el tiempo compensatorio a dar.
+  _openCompModal(id,l,mode);
+};
+
+// Modal de tiempo compensatorio (ventanita emergente) al agregar un 4º intento.
+//   'self'     → default 4 min (intento de récord, peso muerto 3ª ronda,
+//                only bench 3ª ronda). El descanso compensatorio es completo.
+//   'endround' → 4/3/2 min según posición (último/penúltimo/antepenúltimo),
+//                porque el minuto normal de descanso ya está considerado.
+window._openCompModal=function(id,l,mode){
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  const ex=document.getElementById('compModal');if(ex)ex.remove();
+  const m=document.createElement('div');m.id='compModal';
+  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100000;padding:16px';
+  // Nombre según la ronda en que se concede: 3ª ronda = "4º intento"; 1ª/2ª = "intento extra".
+  const grNow=(l===DATA.lift)?DATA.round:2;
+  const nom=(grNow>=2)?'4º INTENTO':'INTENTO EXTRA';
+  const title=mode==='self'?nom+' — SE SIGUE A SÍ MISMO':nom+' — AL FINAL DE LA RONDA';
+  const desc=mode==='self'
+    ?'Tiempo compensatorio de descanso completo (4 min por defecto).'
+    :'El tiempo depende de la posición del atleta en la ronda (el minuto normal de descanso ya está considerado).';
+  const opts=(mode==='self')
+    ?[{min:4,label:'4 min · por defecto',def:true},{min:3,label:'3 min'},{min:2,label:'2 min'},{min:5,label:'5 min'},{min:0,label:'Sin tiempo compensatorio'}]
+    :[{min:4,label:'Último de la ronda · 4 min',def:true},{min:3,label:'Penúltimo · 3 min'},{min:2,label:'Antepenúltimo · 2 min'},{min:0,label:'Sigue la competencia · sin tiempo'}];
+  let h='<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:22px 24px;width:min(460px,95vw)">';
+  h+='<div style="font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:1px;color:var(--gold)"><i class=yl-i-reloj></i> '+title+'</div>';
+  h+='<div style="font-size:12px;color:var(--muted);margin:6px 0 14px;line-height:1.5"><b style="color:var(--text)">'+esc(a.name)+' · '+LIFT_S[l]+' — repite su '+['1er','2do','3er'][grNow]+' intento</b> — '+desc+'</div>';
+  h+='<div style="font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:8px">TIEMPO COMPENSATORIO A DAR:</div>';
+  h+='<div style="display:flex;flex-direction:column;gap:8px">';
+  opts.forEach(o=>{
+    h+='<button onclick="_confirmComp('+id+',\''+l+'\',\''+mode+'\','+o.min+')" style="padding:12px 16px;border-radius:10px;border:2px solid '+(o.def?'var(--gold)':'var(--border)')+';background:'+(o.def?'rgba(212,168,67,.12)':'transparent')+';color:'+(o.def?'var(--gold)':'var(--text)')+';font-family:Oswald;font-size:14px;font-weight:'+(o.def?700:600)+';cursor:pointer;text-align:left">'+o.label+'</button>';
+  });
+  h+='</div>';
+  h+='<button onclick="document.getElementById(\'compModal\').remove()" style="width:100%;margin-top:14px;padding:10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:12px;cursor:pointer">Cancelar</button>';
+  h+='</div>';
+  m.innerHTML=h;
+  m.onclick=function(e){if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+};
+
+window._confirmComp=function(id,l,mode,compMin){
+  const m=document.getElementById('compModal');if(m)m.remove();
+  _do4thAttempt(id,l,mode,compMin);
+};
+
+// Tiempo compensatorio MANUAL — para casos fuera de las dos opciones del 4º
+// (ej. un atleta abre 1º y 2º de sentadilla seguidos → se le dan 4 min). No crea
+// un 4º intento, solo arranca el cronómetro compensatorio para el atleta actual.
+window.openManualComp=function(){
+  const cur=liftQueue()[0];
+  const who=cur||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
+  if(!who){showToastLC('No hay atleta en tarima para asignarle tiempo');return;}
+  const ex=document.getElementById('compModal');if(ex)ex.remove();
+  const m=document.createElement('div');m.id='compModal';
+  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100000;padding:16px';
+  let h='<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:22px 24px;width:min(440px,95vw)">';
+  h+='<div style="font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:1px;color:var(--gold)"><i class=yl-i-reloj></i> TIEMPO COMPENSATORIO MANUAL</div>';
+  h+='<div style="font-size:12px;color:var(--muted);margin:6px 0 14px;line-height:1.5"><b style="color:var(--text)">'+esc(who.name)+'</b> — para cuando le corresponde descanso extra sin ser un 4º intento (ej. abre dos intentos seguidos).</div>';
+  h+='<div style="display:flex;flex-direction:column;gap:8px">';
+  [{min:4,def:true},{min:3},{min:2},{min:1},{min:5}].forEach(o=>{
+    h+='<button onclick="_startManualComp('+who.id+',\''+DATA.lift+'\','+o.min+')" style="padding:12px 16px;border-radius:10px;border:2px solid '+(o.def?'var(--gold)':'var(--border)')+';background:'+(o.def?'rgba(212,168,67,.12)':'transparent')+';color:'+(o.def?'var(--gold)':'var(--text)')+';font-family:Oswald;font-size:14px;font-weight:'+(o.def?700:600)+';cursor:pointer;text-align:left">'+o.min+' min</button>';
+  });
+  h+='</div>';
+  h+='<button onclick="document.getElementById(\'compModal\').remove()" style="width:100%;margin-top:14px;padding:10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:12px;cursor:pointer">Cancelar</button>';
+  h+='</div>';
+  m.innerHTML=h;
+  m.onclick=function(e){if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+};
+
+window._startManualComp=function(id,l,min){
+  const m=document.getElementById('compModal');if(m)m.remove();
+  DATA.compTimer={id:id,lift:l,min:Math.max(1,Math.min(5,min)),startedAt:Date.now()};
+  saveNow();R();
+  const a=DATA.athletes.find(x=>x.id===id);
+  showToastLC(min+' min compensatorios para '+(a?a.name:'atleta'));
+};

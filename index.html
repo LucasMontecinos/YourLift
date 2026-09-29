@@ -441,6 +441,8 @@ function setBgForSection(section){
 (function(){const w=document.querySelector('#initLoader > div:last-of-type');if(w){w.innerHTML='<div class="skel"></div><div class="skel" style="opacity:.7"></div><div class="skel" style="opacity:.45"></div>'}})();
 </script>
 </div>
+<script src="compartido/dias.js?v=650043b9"></script>
+<script src="compartido/gl.js?v=47a36058"></script>
 <script src="compartido/clubs.js?v=deffa3c5"></script>
 <script src="compartido/qr.js?v=d5a40029"></script>
 <script src="compartido/ediciones.js?v=477f1b0a"></script>
@@ -2195,24 +2197,9 @@ async function loadCronoSection(ev){
 // "sábado"…), así que hay que entender las tres formas. Con el nombre del día suelto
 // el orden alfabético dejaba el domingo ANTES del sábado, que es justo al revés de
 // como se corre un fin de semana.
-const _DIAS_SEMANA=['lunes','martes','miercoles','jueves','viernes','sabado','domingo'];
-function _cronoDiaKey(d){
-  const s=String(d||'').trim();
-  if(!s)return [3,Infinity,''];                                  // sin día: al final
-  const n=s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  let i=_DIAS_SEMANA.findIndex(x=>n.indexOf(x)>=0);              // "sábado", "Sábado 8"
-  // Abreviaturas, con borde de palabra para no confundir "mar" con "marzo".
-  if(i<0){const m=n.match(/\b(lun|mar|mie|jue|vie|sab|dom)\b/);
-          if(m)i=['lun','mar','mie','jue','vie','sab','dom'].indexOf(m[1]);}
-  if(i>=0)return [0,i,n];
-  const num=n.match(/\d+/);
-  if(num)return [1,parseInt(num[0],10),n];                       // "Día 1", "8 de agosto"
-  return [2,0,n];                                                // texto suelto: alfabético
-}
-function _cronoCmpDia(a,b){
-  const ka=_cronoDiaKey(a),kb=_cronoDiaKey(b);
-  return (ka[0]-kb[0])||(ka[1]-kb[1])||ka[2].localeCompare(kb[2]);
-}
+const _DIAS_SEMANA=YLDias.SEMANA;
+function _cronoDiaKey(d){ return YLDias.clave(d); }   // compartido/dias.js
+function _cronoCmpDia(a,b){ return YLDias.comparar(a,b); }
 function cronoRender(ev,rows,HMAP,hide){
   if(!rows.length) return '<div style="color:var(--muted);padding:14px">Sin atletas en este cronograma.</div>';
   const _nn=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
@@ -2253,27 +2240,14 @@ function cronoRender(ev,rows,HMAP,hide){
 // CALCULADORA GL POINTS (IPF Good Lift Points 2020)
 // Fórmula oficial: GL = 100 × Total / (a - b × e^(-c × BW))
 // ═══════════════════════════════════════════════════════════════
-const GL_COEFS = {
-  // Powerlifting Classic
-  pl_m:  {a:1199.72839, b:1025.18162, c:0.00921},
-  pl_f:  {a:610.32796,  b:1045.59282, c:0.03048},
-  // Powerlifting Equipped
-  ple_m: {a:1236.25115, b:1449.21864, c:0.01644},
-  ple_f: {a:758.63878,  b:949.31382,  c:0.02435},
-  // Bench Only Classic
-  bo_m:  {a:320.98041,  b:281.40258,  c:0.01008},
-  bo_f:  {a:142.40398,  b:442.52671,  c:0.04724},
-  // Bench Only Equipped
-  boe_m: {a:381.22073,  b:733.79378,  c:0.02398},
-  boe_f: {a:221.82209,  b:357.00377,  c:0.02937},
-};
+// Los coeficientes están en compartido/gl.js (una sola tabla para todo el sitio).
+const GL_COEFS = YLGL.COEF;
 
 function calcGL(bw, total, coefKey){
   if(!bw||!total||bw<=0||total<=0)return null;
-  const c=GL_COEFS[coefKey];if(!c)return null;
   // Procedimiento oficial IPF GL: coef redondeado a 6 decimales, luego × total, redondeo a 6 dec.
-  const denomRaw=c.a - c.b * Math.exp(-c.c * bw);
-  if(denomRaw<=0)return null;
+  const denomRaw=YLGL.divisor(coefKey,bw);
+  if(denomRaw===null)return null;
   const coef=Math.round(100/denomRaw*1e6)/1e6;
   return Math.round(coef*total*1e6)/1e6;
 }

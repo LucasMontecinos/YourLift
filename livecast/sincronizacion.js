@@ -1347,3 +1347,62 @@ function exportBackupJSON(){
   a.href=u;a.download='backup_livecast_'+((DATA.event==null?void 0:DATA.event.short)||'compe').replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,16).replace(/:/g,'-')+'.json';
   a.click();
 }
+
+// ── Acciones de los botones (window.…) ──────────────────────────────────────
+// Las llaman los onclick de la pantalla. Asignarlas acá, antes de arranque.js,
+// solo las deja listas un poco antes: ninguna se ejecuta al cargar.
+
+window.aplicarFondoLC=function(k){
+  const f=LC_FONDOS[k]||LC_FONDOS.azul;
+  const r=document.documentElement.style;
+  r.setProperty('--bg',f.bg); r.setProperty('--card',f.card);
+  r.setProperty('--border',f.border); r.setProperty('--side',f.side);
+};
+
+window.setFondoLC=function(k){
+  if(!LC_FONDOS[k])return;
+  window.lcFondo=k;
+  try{localStorage.setItem('yl_lc_fondo',k)}catch(e){}
+  window.aplicarFondoLC(k);
+  try{if(typeof R==='function')R();}catch(e){}
+};
+
+   // último cursor que publicó la tarima
+window.setNavLibre=function(v){
+  window.NAV_LIBRE=!!v;
+  // No se guarda: dura lo que dura esta pestaña abierta.
+  // Al volver a seguir la tarima, saltar de una a donde está ella.
+  if(!window.NAV_LIBRE&&window._NAV_REMOTA){
+    const n=window._NAV_REMOTA;
+    if(n.lift)DATA.lift=n.lift;
+    if(typeof n.round==='number')DATA.round=n.round;
+    if(n.flight)DATA.flight=n.flight;
+    DATA.forcedCurrent=(n.forcedCurrent!==undefined)?n.forcedCurrent:null;
+  }
+  try{if(typeof R==='function')R();}catch(e){}
+};
+
+// Cambiar entre Controlador (escribe+lee, sincronizado con otros) y Espectador
+// (solo lee/espeja, ej. PC de OBS o pantalla). Recarga para reiniciar el listener.
+window.setSyncMode=function(on){
+  try{localStorage.setItem('yl_controller', on?'1':'0')}catch(e){}
+  location.reload();
+};
+
+window.histUndo=function(){
+  if(!window._histUndo.length){showToastLC('Nada para deshacer');return;}
+  window._histRedo.push(window._histCur);
+  const prev=window._histUndo.pop();
+  window._histCur=prev;
+  _histApply(prev);
+  showToastLC('↶ Deshecho ('+window._histUndo.length+' más atrás · '+window._histRedo.length+' adelante)');
+};
+
+window.histRedo=function(){
+  if(!window._histRedo.length){showToastLC('Nada para rehacer');return;}
+  window._histUndo.push(window._histCur);
+  const next=window._histRedo.pop();
+  window._histCur=next;
+  _histApply(next);
+  showToastLC('↷ Rehecho ('+window._histUndo.length+' atrás · '+window._histRedo.length+' adelante)');
+};

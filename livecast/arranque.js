@@ -203,14 +203,6 @@ window.ADMIN_ROLE=null;
 // Transmisión, Widgets OBS y Pantalla de Tarima). No entra a Atletas & Pesaje ni a
 // Control en Vivo, así que no puede tocar la competencia por accidente.
 const _PAGS_STREAMING=['setup','transmision','obsTx','director','remote','screen','results','atletaInfo','liveView'];
-window._esStreaming=function(){return window.ADMIN_ROLE==='streaming';};
-window._canAccess=function(page){
-  const role=window.ADMIN_ROLE;
-  if(role==='streaming')return _PAGS_STREAMING.indexOf(page)>=0;
-  if(role==='transmision'&&page==='compete')return false;
-  if(role==='juez'&&page==='director')return false;
-  return true;
-};
 // ══════════════════════════════════════════════
 // FIREBASE REAL-TIME SYNC
 // ══════════════════════════════════════════════
@@ -249,19 +241,6 @@ const LC_FONDOS={
   gris: {n:'Gris',               bg:'#1b1e23', card:'#252930', border:'#3b414b', side:'#171a1f'},
 };
 window.lcFondo=(()=>{try{return LC_FONDOS[localStorage.getItem('yl_lc_fondo')]?localStorage.getItem('yl_lc_fondo'):'azul'}catch(e){return 'azul'}})();
-window.aplicarFondoLC=function(k){
-  const f=LC_FONDOS[k]||LC_FONDOS.azul;
-  const r=document.documentElement.style;
-  r.setProperty('--bg',f.bg); r.setProperty('--card',f.card);
-  r.setProperty('--border',f.border); r.setProperty('--side',f.side);
-};
-window.setFondoLC=function(k){
-  if(!LC_FONDOS[k])return;
-  window.lcFondo=k;
-  try{localStorage.setItem('yl_lc_fondo',k)}catch(e){}
-  window.aplicarFondoLC(k);
-  try{if(typeof R==='function')R();}catch(e){}
-};
 try{window.aplicarFondoLC(window.lcFondo);}catch(e){}
 // Vista libre: esta pantalla se queda en la tanda y el movimiento que está mirando,
 // aunque la tarima avance. Lo que NO puede quedarse pegado es un widget de OBS o la
@@ -288,26 +267,6 @@ Object.defineProperty(window,'NAV_LIBRE',{
   configurable:true
 });
 window._NAV_REMOTA=null;
-   // último cursor que publicó la tarima
-window.setNavLibre=function(v){
-  window.NAV_LIBRE=!!v;
-  // No se guarda: dura lo que dura esta pestaña abierta.
-  // Al volver a seguir la tarima, saltar de una a donde está ella.
-  if(!window.NAV_LIBRE&&window._NAV_REMOTA){
-    const n=window._NAV_REMOTA;
-    if(n.lift)DATA.lift=n.lift;
-    if(typeof n.round==='number')DATA.round=n.round;
-    if(n.flight)DATA.flight=n.flight;
-    DATA.forcedCurrent=(n.forcedCurrent!==undefined)?n.forcedCurrent:null;
-  }
-  try{if(typeof R==='function')R();}catch(e){}
-};
-// Cambiar entre Controlador (escribe+lee, sincronizado con otros) y Espectador
-// (solo lee/espeja, ej. PC de OBS o pantalla). Recarga para reiniciar el listener.
-window.setSyncMode=function(on){
-  try{localStorage.setItem('yl_controller', on?'1':'0')}catch(e){}
-  location.reload();
-};
 let _lastFbUpdate=0;
 // Event ID → name mapping (must match inscripcion.html EVENTS)
 let LIVE_EVENTS={'regional_centro_2026':'Campeonato Regional Centro FECHIPO 2026','universitario_2026':'Primer Campeonato Nacional Universitario FECHIPO 2026','Campeonato_de_debutantes':'Campeonato de Debutantes'};
@@ -568,22 +527,6 @@ window._histUndo=[];
  window._histCur=null;
 window._histApplying=false;
 const _HIST_MAX=10;
-window.histUndo=function(){
-  if(!window._histUndo.length){showToastLC('Nada para deshacer');return;}
-  window._histRedo.push(window._histCur);
-  const prev=window._histUndo.pop();
-  window._histCur=prev;
-  _histApply(prev);
-  showToastLC('↶ Deshecho ('+window._histUndo.length+' más atrás · '+window._histRedo.length+' adelante)');
-};
-window.histRedo=function(){
-  if(!window._histRedo.length){showToastLC('Nada para rehacer');return;}
-  window._histUndo.push(window._histCur);
-  const next=window._histRedo.pop();
-  window._histCur=next;
-  _histApply(next);
-  showToastLC('↷ Rehecho ('+window._histUndo.length+' atrás · '+window._histRedo.length+' adelante)');
-};
 // Atajos de teclado: Ctrl/Cmd+Z = deshacer, Ctrl/Cmd+Y o Ctrl/Cmd+Shift+Z = rehacer.
 // No dispara si se está escribiendo en un campo de texto.
 document.addEventListener('keydown',(e)=>{
@@ -645,50 +588,6 @@ document.addEventListener('keydown',function(e){
     if(typeof openLoginModal==='function')openLoginModal();
   }
 });
-// ── LOGIN EN EL LIVECAST ──────────────────────────────────────────
-// Mismas cuentas del panel admin (Firebase Auth). Evita tener que pasar por
-// admin.html: el juez/controlador inicia sesión acá mismo. La verificación de
-// rol la hace onAuthStateChanged (lee admins/{uid}) igual que siempre.
-window.openLoginModal=function(){
-  const ex=document.getElementById('lcLogin'); if(ex)ex.remove();
-  const m=document.createElement('div'); m.id='lcLogin';
-  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(4,10,20,.85);display:flex;align-items:center;justify-content:center;z-index:100001;padding:16px';
-  m.innerHTML='<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:24px;width:min(360px,94vw)">'
-    +'<div style="font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:4px"><i class=yl-i-candado></i> INICIAR SESI\u00d3N</div>'
-    +'<div style="font-size:11px;color:var(--muted);margin-bottom:14px">Cuenta de administrador / juez (la misma del panel admin).</div>'
-    +'<input id="lcLoginEmail" type="email" autocomplete="username" placeholder="Email" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:13px;margin-bottom:8px">'
-    +'<input id="lcLoginPass" type="password" autocomplete="current-password" placeholder="Contrase\u00f1a" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:13px;margin-bottom:6px">'
-    +'<div id="lcLoginErr" style="color:var(--red);font-size:11px;min-height:14px;margin-bottom:6px"></div>'
-    +'<button onclick="doLcLogin()" style="width:100%;padding:11px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">ENTRAR</button>'
-    +'<button onclick="document.getElementById(\'lcLogin\').remove()" style="width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;cursor:pointer">Cancelar</button>'
-    +'</div>';
-  m.onclick=e=>{if(e.target===m)m.remove();};
-  m.addEventListener('keydown',e=>{if(e.key==='Enter')doLcLogin();});
-  document.body.appendChild(m);
-  setTimeout(()=>{const e=document.getElementById('lcLoginEmail');if(e)e.focus();},50);
-};
-window.doLcLogin=async function(){
-  const err=document.getElementById('lcLoginErr');
-  const email=((document.getElementById('lcLoginEmail')||{}).value||'').trim();
-  const pass=(document.getElementById('lcLoginPass')||{}).value||'';
-  if(!email||!pass){if(err)err.textContent='Completa el correo y la contrase\u00f1a';return;}
-  if(!fbReady||!window._fbAuth||!window._fbAuth.signInWithEmailAndPassword){if(err)err.textContent='Conectando con el servidor\u2026 prueba de nuevo en unos segundos';return;}
-  try{
-    if(err)err.textContent='';
-    await window._fbAuth.signInWithEmailAndPassword(fbAuth,email,pass);
-    const m=document.getElementById('lcLogin'); if(m)m.remove();
-    showToastLC('Sesi\u00f3n iniciada');
-  }catch(e){
-    const code=(e&&e.code)||'';
-    if(err)err.textContent=/invalid-credential|wrong-password|user-not-found|invalid-email/.test(code)?'Email o contrase\u00f1a incorrectos':'Error: '+(code||e.message);
-  }
-};
-window.ensayoToggleRole=function(){
-  if(!window._ensayoFree)return;
-  if(isAdmin){isAdmin=false;DATA.phase='liveView';}
-  else{isAdmin=true;if(DATA.phase==='liveView')DATA.phase='compete';}
-  R();
-};
 let judgeMode=false,judgeLights={izq:null,central:null,der:null},judgeUnsub=null,_lastTimerSignal=0;
 let RECORDS=null;
 // ── Países (código IPF de 3 letras → ISO2 para bandera + nombre) ──────────────
@@ -782,22 +681,10 @@ let RECMUNDIAL=null;
 // El operador lo prende desde Control en Vivo si lo necesita. Con él apagado,
 // las celdas no muestran el reloj y se carga el próximo peso directo.
 window._CT_ENABLED = localStorage.getItem('yl_ct')==='1';
-window.toggleChangeTimers=function(){
-  window._CT_ENABLED=!window._CT_ENABLED;
-  try{localStorage.setItem('yl_ct', window._CT_ENABLED?'1':'0')}catch(e){}
-  if(!window._CT_ENABLED) DATA.changeTimers={}; // limpiar los timers activos al apagar
-  if(typeof saveNow==='function')saveNow();
-  if(typeof R==='function')R();
-};
 // Auto-relleno del próximo intento al vencer el tiempo de cambio — switch
 // aparte, APAGADO por defecto, solo tiene efecto si el timer de cambio
 // (_CT_ENABLED) también está prendido. Nulo → mismo peso. Válido → +2.5kg.
 window._CT_AUTOFILL_ENABLED = localStorage.getItem('yl_ct_autofill')==='1';
-window.toggleChangeTimerAutofill=function(){
-  window._CT_AUTOFILL_ENABLED=!window._CT_AUTOFILL_ENABLED;
-  try{localStorage.setItem('yl_ct_autofill', window._CT_AUTOFILL_ENABLED?'1':'0')}catch(e){}
-  if(typeof R==='function')R();
-};
 // Canal en que se está escuchando a los jueces. Si cambia el campeonato cambia
 // el canal, y hay que volver a engancharse (ver R()).
 let _judgeDoc=null,_timerUnsub=null;
@@ -863,36 +750,6 @@ window.NSUDA_FOTOS_LC=window.NSUDA_FOTOS_LC||{};
 // mayoría de las pantallas no le sirven.
 window.NSUDA_MARCAS=window.NSUDA_MARCAS||null;
 let _nsudaMarcasPidiendo=false;
-// Borra el pesaje del atleta: BW, racks y todos los intentos (vuelve a "sin pesar")
-window.clearWeighIn = function(id){
-  const a = DATA.athletes.find(x=>x.id===id);
-  if(!a) return;
-  const msg = `¿Borrar el pesaje de ${a.name}?\n\nSe borrarán:\n• Peso corporal (BW)\n• Alturas de rack (SQ y BP)\n• Todos los intentos cargados\n\nEsto NO borra al atleta del evento. Solo le reinicia el pesaje.`;
-  if(!confirm(msg)) return;
-  a.bw = 0;
-  a.rackSQ = '';
-  a.rackBP = '';
-  a.sqAbat = ''; a.bpSeg = ''; a.bpPalm = '';
-  a.weighedIn = false;
-  _markAtt(id,'meta');
-  // Limpiar intentos del atleta (pesos y resultados). Igual que en el confirmar:
-  // sin marcar cada celda, el borrado no viajaba y el primer snapshot del
-  // servidor le devolvía los intentos al atleta.
-  ['sq','bp','dl'].forEach(l=>{
-    if(a.att && a.att[l]){
-      a.att[l].forEach((at,r)=>{at.w=0; at.r=null; _markAtt(id,'att_'+l+'_'+r);});
-    }
-  });
-  // Limpiar cualquier change timer activo del atleta
-  Object.keys(DATA.changeTimers).forEach(k=>{
-    if(k.startsWith(id+'_')) delete DATA.changeTimers[k];
-  });
-  saveNow();
-  const modal = document.getElementById('weighInModal');
-  if(modal) modal.remove();
-  R();
-  showToastLC('Pesaje borrado: '+a.name);
-};
 // El Cronograma ahora puede traer el DÍA además de la jornada (campeonatos de dos
 // o más días, como el Regional Norte). Viajan juntos en la misma etiqueta —
 // "Día 1 · AM" — porque `jornada` solo se muestra, no se compara con nada.
@@ -908,83 +765,6 @@ const _CRONO_DIVS=['Sub-Junior','Junior','Open','Master I','Master II','Master I
 // acordarse de tocar "Re-sincronizar nómina" cada vez.
 let _cronoFlightUnsub=null;
 window.isDQ=isDQ;
-window.recargarNomina=async function(){
-  if(!isAdmin){alert('Solo un admin puede volver a cargar la n\u00f3mina');return}
-  if(!DATA.event){alert('No hay campeonato activo');return}
-  if(!fbReady){
-    alert('Sin conexi\u00f3n con el servidor.\n\nNo se carg\u00f3 nada: si cambiara la n\u00f3mina solo en esta pantalla, quedar\u00eda distinta del resto.');
-    return;
-  }
-  if(!window.IS_CONTROLLER){
-    if(!confirm('Esta pantalla est\u00e1 en modo ESPECTADOR: no puede guardar en el servidor.\n\n\u00bfCambiarla a CONTROLADOR y continuar?'))return;
-    setSyncMode(true);
-  }
-  let ev;
-  try{
-    const j=await fetch('nominas.json',{cache:'no-cache'}).then(r=>r.json());
-    const le=DATA.event;
-    ev=(j.events||[]).find(e=>(le.id&&String(e.id)===String(le.id))||(le.name&&e.name===le.name));
-  }catch(e){ alert('No se pudo leer la n\u00f3mina: '+(e.message||e)); return; }
-  if(!ev||!Array.isArray(ev.athletes)||!ev.athletes.length){
-    alert('Este campeonato no tiene su n\u00f3mina en el archivo.\n\nLos que se arman con inscripciones se actualizan solos desde el panel; esto es para los que traen la n\u00f3mina en nominas.json, como el Sudamericano.');
-    return;
-  }
-  const cronoKey='fechipo_crono_'+(ev.name||'').replace(/\s+/g,'_');
-  let flightMap=null;
-  try{const s=localStorage.getItem(cronoKey);if(s){const dd=JSON.parse(s);if(dd.map)flightMap=dd.map}}catch(e){}
-  const nuevos=ev.athletes.map((a,j)=>_evAthlete(a,j,flightMap));
-
-  // El cruce va por nombre: el lote puede haber cambiado, y el id se reparte al
-  // leer el archivo, as\u00ed que ninguno de los dos identifica a una persona.
-  const viejosPorN={}; (DATA.athletes||[]).forEach(a=>{ viejosPorN[_nnCrono(a.name)]=a; });
-  const nuevosN=new Set(nuevos.map(a=>_nnCrono(a.name)));
-  const cargado=a=>!!(a.bw||a.bombed||['sq','bp','dl'].some(l=>(a.att&&a.att[l]||[]).some(x=>x&&x.w)));
-  const entran=nuevos.filter(a=>!viejosPorN[_nnCrono(a.name)]);
-  const salen=(DATA.athletes||[]).filter(a=>!nuevosN.has(_nnCrono(a.name)));
-  const salenConDatos=salen.filter(cargado);
-  if(!entran.length&&!salen.length){
-    if(!confirm('La n\u00f3mina del archivo tiene a los mismos '+nuevos.length+' atletas.\n\nIgual se vuelven a leer tandas y lotes, por si alguno cambi\u00f3. \u00bfContinuar?'))return;
-  }else{
-    const lista=(t,arr)=>arr.length?('\n'+t+' ('+arr.length+'):\n'+arr.slice(0,12).map(a=>'  \u2022 '+a.name+(a.lot?' \u00b7 lote '+a.lot:'')).join('\n')+(arr.length>12?'\n  \u2026 y '+(arr.length-12)+' m\u00e1s':'')+'\n'):'';
-    let msg='VOLVER A CARGAR LA N\u00d3MINA de:\n"'+(ev.name||'')+'"\n'
-      +'\nQuedan '+nuevos.length+' atletas (ahora hay '+(DATA.athletes||[]).length+').\n'
-      +lista('ENTRAN',entran)+lista('SALEN',salen)
-      +'\nSE CONSERVA de los que siguen: peso corporal, racks, intentos y bombed.'
-      +'\nSE VUELVE A LEER del archivo: tanda, lote, categor\u00eda, divisi\u00f3n y club.'
-      +'\n\nEsto sobreescribe el servidor para todos los dispositivos y widgets.';
-    if(salenConDatos.length){
-      msg+='\n\nOJO: '+salenConDatos.length+' de los que salen YA TIENEN datos cargados ('
-        +salenConDatos.slice(0,5).map(a=>a.name).join(', ')+(salenConDatos.length>5?'\u2026':'')
-        +'). Si sacarlos no es lo que quieres, cancela.';
-    }
-    if(!confirm(msg))return;
-  }
-  const CONSERVAR=['bw','rackSQ','rackBP','bombed','att'];
-  let heredados=0;
-  nuevos.forEach(a=>{
-    const v=viejosPorN[_nnCrono(a.name)];
-    if(!v)return;
-    if(cargado(v))heredados++;
-    CONSERVAR.forEach(f=>{ if(v[f]!==undefined) a[f]=JSON.parse(JSON.stringify(v[f])); });
-  });
-  DATA.athletes=nuevos;
-  // Los ids se reparten de nuevo, as\u00ed que cualquier marca de "edit\u00e9 esto reci\u00e9n"
-  // apuntar\u00eda a otra persona.
-  try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
-  const flAct=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort(_cmpFl);
-  if(flAct.length&&flAct.indexOf(DATA.flight)<0)DATA.flight=flAct[0];
-  // Escritura autoritativa: reemplaza el documento remoto. Con un merge normal,
-  // el servidor devolver\u00eda a los que acaban de salir.
-  window._forceFullWrite=true;
-  saveNow();
-  R();
-  _confirmarPublicado(
-    ()=>alert('N\u00f3mina al d\u00eda: '+DATA.athletes.length+' atletas'
-        +(entran.length?' \u00b7 '+entran.length+' entran':'')
-        +(salen.length?' \u00b7 '+salen.length+' salen':'')
-        +(heredados?'\n\nSe conservaron los datos de tarima de '+heredados+' atleta'+(heredados>1?'s':'')+'.':'')),
-    ()=>alert('La n\u00f3mina se carg\u00f3 en ESTA pantalla pero NO se pudo guardar en el servidor.\n\nEl p\u00fablico y los widgets siguen con la anterior. Revisa el indicador SYNC y vuelve a intentar.'));
-};
 const ctIntervals={};
 // Master tick: updates ALL change timers every second, no matter which tab
 setInterval(()=>{
@@ -1099,210 +879,8 @@ setInterval(()=>{
   }
 },1000);
 let mainTI=null;
-// Toggle manual del reloj de 1:00 (para iniciarlo cuando se va a tirar un intento
-// extra, o pausarlo/reanudarlo cuando haga falta). Re-renderiza para actualizar el botón.
-window.toggleMainTimer=function(){ if(DATA.timerOn)pauseTimer(); else startTimer(); R(); };
-// Fuerza un intento específico como "el actual" en Control en Vivo, saltándose el orden
-// automático de la cola — para corregir cuando se pasó por alto a un atleta. Cambia
-// también DATA.flight/lift/round para que la tarjeta, Control TX y las luces de jueces
-// sigan a este atleta. Se limpia solo apenas se marca GOOD/NO LIFT (ver overrideResult).
-// Corregir el nombre de un atleta con la competencia andando.
-//
-// Llegan mal escritos desde la inscripción —falta un apellido, una letra
-// cambiada, todo en mayúsculas— y ese nombre se ve en la tarima, en la
-// transmisión y queda en el acta. Hasta ahora había que salir a Admin a
-// arreglarlo mientras la competencia seguía.
-//
-// Corrige el nombre para ESTA competencia: la tarima, el acta, los widgets y el
-// público lo ven al toque. No reescribe la inscripción ni la base de atletas —
-// eso se sigue haciendo en Admin, con calma, después.
-window.renameAthlete=function(id){
-  const a=DATA.athletes.find(x=>x.id===id);
-  if(!a)return;
-  if(!isAdmin){showToastLC('Solo el que opera puede corregir el nombre');return;}
-  const v=prompt('Nombre del atleta\n\nSe corrige en la tarima, el acta y la transmisión.\n(La inscripción en Admin no cambia.)',a.name||'');
-  if(v===null)return;                       // canceló
-  const nuevo=String(v).trim().replace(/\s+/g,' ');
-  if(!nuevo){showToastLC('El nombre no puede quedar vacío');return;}
-  if(nuevo===a.name)return;
-  const antes=a.name;
-  // El nombre con el que vino queda guardado: la sincronización reconoce a la
-  // persona por su nombre, y sin esto la corrección parecía "otro atleta" y el
-  // servidor le devolvía el nombre viejo en la siguiente escritura.
-  if(!a.nombreOrig)a.nombreOrig=antes;
-  a.name=nuevo;
-  if('nombre' in a)a.nombre=nuevo;          // el campo con el que vino de la inscripción
-  _markAtt(id,'meta');                      // edición mía: que el merge la respete
-  saveNow();R();
-  showToastLC('Nombre corregido: '+antes+' → '+nuevo);
-};
-window.forceCurrentAttempt=function(id,l,r){
-  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  DATA.flight=a.flight;DATA.lift=l;DATA.round=r;DATA.forcedCurrent=id;
-  save();R();
-  showToastLC('Marcado como actual: '+a.name+' — '+LIFT_S[l]+(r+1));
-};
-// Añade un 4º intento a un lift de un atleta (índice 3). Se concede cuando el
-// jurado otorga un intento compensatorio por un error ajeno (carga, equipo,
-// cronómetro, arbitraje) — reglamento IPF. Cuenta para el mejor levantamiento
-// igual que los otros (bestOf recorre todos los válidos). Solo un 4º por lift.
-//   mode 'self'     → se sigue a sí mismo: el atleta repite enseguida. Se le da
-//                     un tiempo compensatorio (0-5 min) que corre a la vista
-//                     (NO bloquea el válido/nulo). Queda como "actual" en INT 4.
-//   mode 'endround' → el 4º se toma al final de la ronda (uso IPF habitual).
-window.add4thAttempt=function(id,l,mode){
-  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  if(!a.att[l]){showToastLC('Lift inválido');return;}
-  if(a.att[l].length>=4){showToastLC(a.name+' ya tiene un intento extra en '+LIFT_S[l]);window._attMenuOpen=null;R();return;}
-  window._attMenuOpen=null;
-  mode=(mode==='self')?'self':'endround';
-  // Ventanita emergente para elegir el tiempo compensatorio a dar.
-  _openCompModal(id,l,mode);
-};
-// Modal de tiempo compensatorio (ventanita emergente) al agregar un 4º intento.
-//   'self'     → default 4 min (intento de récord, peso muerto 3ª ronda,
-//                only bench 3ª ronda). El descanso compensatorio es completo.
-//   'endround' → 4/3/2 min según posición (último/penúltimo/antepenúltimo),
-//                porque el minuto normal de descanso ya está considerado.
-window._openCompModal=function(id,l,mode){
-  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  const ex=document.getElementById('compModal');if(ex)ex.remove();
-  const m=document.createElement('div');m.id='compModal';
-  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100000;padding:16px';
-  // Nombre según la ronda en que se concede: 3ª ronda = "4º intento"; 1ª/2ª = "intento extra".
-  const grNow=(l===DATA.lift)?DATA.round:2;
-  const nom=(grNow>=2)?'4º INTENTO':'INTENTO EXTRA';
-  const title=mode==='self'?nom+' — SE SIGUE A SÍ MISMO':nom+' — AL FINAL DE LA RONDA';
-  const desc=mode==='self'
-    ?'Tiempo compensatorio de descanso completo (4 min por defecto).'
-    :'El tiempo depende de la posición del atleta en la ronda (el minuto normal de descanso ya está considerado).';
-  const opts=(mode==='self')
-    ?[{min:4,label:'4 min · por defecto',def:true},{min:3,label:'3 min'},{min:2,label:'2 min'},{min:5,label:'5 min'},{min:0,label:'Sin tiempo compensatorio'}]
-    :[{min:4,label:'Último de la ronda · 4 min',def:true},{min:3,label:'Penúltimo · 3 min'},{min:2,label:'Antepenúltimo · 2 min'},{min:0,label:'Sigue la competencia · sin tiempo'}];
-  let h='<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:22px 24px;width:min(460px,95vw)">';
-  h+='<div style="font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:1px;color:var(--gold)"><i class=yl-i-reloj></i> '+title+'</div>';
-  h+='<div style="font-size:12px;color:var(--muted);margin:6px 0 14px;line-height:1.5"><b style="color:var(--text)">'+esc(a.name)+' · '+LIFT_S[l]+' — repite su '+['1er','2do','3er'][grNow]+' intento</b> — '+desc+'</div>';
-  h+='<div style="font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:8px">TIEMPO COMPENSATORIO A DAR:</div>';
-  h+='<div style="display:flex;flex-direction:column;gap:8px">';
-  opts.forEach(o=>{
-    h+='<button onclick="_confirmComp('+id+',\''+l+'\',\''+mode+'\','+o.min+')" style="padding:12px 16px;border-radius:10px;border:2px solid '+(o.def?'var(--gold)':'var(--border)')+';background:'+(o.def?'rgba(212,168,67,.12)':'transparent')+';color:'+(o.def?'var(--gold)':'var(--text)')+';font-family:Oswald;font-size:14px;font-weight:'+(o.def?700:600)+';cursor:pointer;text-align:left">'+o.label+'</button>';
-  });
-  h+='</div>';
-  h+='<button onclick="document.getElementById(\'compModal\').remove()" style="width:100%;margin-top:14px;padding:10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:12px;cursor:pointer">Cancelar</button>';
-  h+='</div>';
-  m.innerHTML=h;
-  m.onclick=function(e){if(e.target===m)m.remove();};
-  document.body.appendChild(m);
-};
-window._confirmComp=function(id,l,mode,compMin){
-  const m=document.getElementById('compModal');if(m)m.remove();
-  _do4thAttempt(id,l,mode,compMin);
-};
-// Tiempo compensatorio MANUAL — para casos fuera de las dos opciones del 4º
-// (ej. un atleta abre 1º y 2º de sentadilla seguidos → se le dan 4 min). No crea
-// un 4º intento, solo arranca el cronómetro compensatorio para el atleta actual.
-window.openManualComp=function(){
-  const cur=liftQueue()[0];
-  const who=cur||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
-  if(!who){showToastLC('No hay atleta en tarima para asignarle tiempo');return;}
-  const ex=document.getElementById('compModal');if(ex)ex.remove();
-  const m=document.createElement('div');m.id='compModal';
-  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100000;padding:16px';
-  let h='<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:22px 24px;width:min(440px,95vw)">';
-  h+='<div style="font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:1px;color:var(--gold)"><i class=yl-i-reloj></i> TIEMPO COMPENSATORIO MANUAL</div>';
-  h+='<div style="font-size:12px;color:var(--muted);margin:6px 0 14px;line-height:1.5"><b style="color:var(--text)">'+esc(who.name)+'</b> — para cuando le corresponde descanso extra sin ser un 4º intento (ej. abre dos intentos seguidos).</div>';
-  h+='<div style="display:flex;flex-direction:column;gap:8px">';
-  [{min:4,def:true},{min:3},{min:2},{min:1},{min:5}].forEach(o=>{
-    h+='<button onclick="_startManualComp('+who.id+',\''+DATA.lift+'\','+o.min+')" style="padding:12px 16px;border-radius:10px;border:2px solid '+(o.def?'var(--gold)':'var(--border)')+';background:'+(o.def?'rgba(212,168,67,.12)':'transparent')+';color:'+(o.def?'var(--gold)':'var(--text)')+';font-family:Oswald;font-size:14px;font-weight:'+(o.def?700:600)+';cursor:pointer;text-align:left">'+o.min+' min</button>';
-  });
-  h+='</div>';
-  h+='<button onclick="document.getElementById(\'compModal\').remove()" style="width:100%;margin-top:14px;padding:10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:12px;cursor:pointer">Cancelar</button>';
-  h+='</div>';
-  m.innerHTML=h;
-  m.onclick=function(e){if(e.target===m)m.remove();};
-  document.body.appendChild(m);
-};
-window._startManualComp=function(id,l,min){
-  const m=document.getElementById('compModal');if(m)m.remove();
-  DATA.compTimer={id:id,lift:l,min:Math.max(1,Math.min(5,min)),startedAt:Date.now()};
-  saveNow();R();
-  const a=DATA.athletes.find(x=>x.id===id);
-  showToastLC(min+' min compensatorios para '+(a?a.name:'atleta'));
-};
-// Elimina el 4º intento de un lift (por si se agregó por error o el jurado lo
-// revoca). Solo saca el índice 3, nunca los 3 base. Pide confirmación porque
-// borra datos. El 4º vive dentro de su ronda concedida (no hay "INT 4"), así
-// que basta con quitarlo del array; la cola deja de mostrarlo automáticamente.
-// ── Sacar atletas que no son de este campeonato ────────────────────
-// Si por un cruce de pantallas entraron atletas de OTRO evento (pasó entre el
-// Sudamericano de prueba y el Regional Centro Sur), acá se sacan sin tener que
-// abrir la consola. La referencia es el CRONOGRAMA del evento, que es la lista
-// oficial de quién compite. No toca nada de los que sí corresponden: pesos,
-// intentos, pesaje y racks quedan igual. Se deshace con Ctrl+Z.
-window.limpiarAtletasAjenos=async function(){
-  const map=window._cronoFlightMap;
-  if(!map||!Object.keys(map).length){
-    alert('No hay Cronograma cargado para este campeonato, así que no tengo con qué comparar.\n\n'
-      +'Cárgalo en Admin → Cronograma y vuelve a entrar.');
-    return;
-  }
-  const fuera=DATA.athletes.filter(a=>!_cronoLookup(map,a.name));
-  if(!fuera.length){ alert('Todo en orden: los '+DATA.athletes.length+' atletas cargados están en el Cronograma.'); return; }
-  if(!window.IS_CONTROLLER){
-    alert('Esta pantalla está en modo LECTURA, no puede guardar.\n\nCambia a CONTROLADOR desde el menú y vuelve a intentar.');
-    return;
-  }
-  const det=fuera.slice(0,30).map(a=>'• '+a.name+'  ('+(a.div||'')+' '+(a.cat||'')+', tanda '+(a.flight||'')+')').join('\n')
-    +(fuera.length>30?'\n… y '+(fuera.length-30)+' más':'');
-  if(!confirm('Hay '+fuera.length+' atleta(s) que NO están en el Cronograma de "'+((DATA.event&&DATA.event.name)||'')+'":\n\n'+det
-    +'\n\nSe eliminan y quedan '+(DATA.athletes.length-fuera.length)+'.\n¿Confirmas?'))return;
-  const ids=new Set(fuera.map(a=>a.id));
-  DATA.athletes=DATA.athletes.filter(a=>!ids.has(a.id));
-  Object.keys(DATA.changeTimers||{}).forEach(k=>{ if(ids.has(parseInt(k,10)))delete DATA.changeTimers[k]; });
-  if(DATA.forcedCurrent!=null&&ids.has(DATA.forcedCurrent))DATA.forcedCurrent=null;
-  try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(e){}
-  R();
-  // Escritura AUTORITATIVA + verificación: un borrado tiene que reemplazar el
-  // documento, si no el merge devuelve a los que saqué.
-  let ok=false;
-  for(let i=1;i<=3&&!ok;i++){
-    window._forceFullWrite=true;
-    try{ await syncToFB(); }catch(e){ console.warn('[limpiar] escritura',e); }
-    await new Promise(r=>setTimeout(r,1200));
-    try{
-      const snap=await window._fb.getDoc(window._fb.doc(fbDB,'livecast_sync',fbDocId()));
-      const rem=JSON.parse((snap.data()||{}).athletes||'[]');
-      ok=rem.length===DATA.athletes.length&&rem.every(a=>!!_cronoLookup(map,a.name));
-    }catch(e){ console.warn('[limpiar] verificación',e); break; }
-  }
-  alert((ok?'Listo y verificado en el servidor.':'Se aplicó en esta pantalla, pero el servidor no confirmó. Revisa la conexión y vuelve a intentar.')
-    +'\n\n'+fuera.length+' eliminado(s)\n'+DATA.athletes.length+' atletas quedan cargados.');
-};
-window.remove4thAttempt=function(id,l){
-  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  if(!a.att[l]||a.att[l].length<4){window._attMenuOpen=null;R();return;}
-  const at4=a.att[l][3];
-  const detalle=at4&&(at4.w||at4.r)?' (tiene '+(at4.w||'—')+'kg'+(at4.r==='g'?' · VÁLIDO':at4.r==='n'?' · NULO':'')+')':'';
-  window._attMenuOpen=null;
-  if(!confirm('¿Eliminar el 4º intento de '+a.name+' en '+LIFT_S[l]+'?'+detalle+'\n\nSe borra ese intento extra.')){R();return;}
-  a.att[l].pop();
-  _markAtt(id,'att_'+l+'_3');
-  // limpiar cualquier change timer colgado de ese índice
-  const ck=id+'_'+l+'_3';if(DATA.changeTimers[ck])delete DATA.changeTimers[ck];
-  // limpiar el tiempo compensatorio si era de este 4º
-  if(DATA.compTimer&&DATA.compTimer.id===id&&DATA.compTimer.lift===l)DATA.compTimer=null;
-  saveNow();R();
-  showToastLC('4º intento eliminado: '+a.name+' — '+LIFT_S[l]);
-};
-// Cierra el tiempo compensatorio a la vista (manual).
-window.clearCompTimer=function(){ DATA.compTimer=null; saveNow(); R(); };
 // Menú de tres puntitos (⋮) por intento — estado global, se abre/cierra con toggle.
 window._attMenuOpen=null;
-window.toggleAttMenu=function(id,l,j){
-  const key=id+'_'+l+'_'+j;
-  window._attMenuOpen=(window._attMenuOpen===key)?null:key;
-  R();
-};
 // Cerrar el menú al hacer click fuera de él (una sola vez).
 if(!window._attMenuInit){
   window._attMenuInit=true;
@@ -1374,13 +952,9 @@ const _ACTA_DIVORD={'Sub-Junior':0,'Subjunior':0,'Junior':1,'Universitario':2,'O
 //
 // El dato ya está: el Cronograma del admin guarda día + sesión, y el livecast lo
 // deja en cada atleta como jornada = "Sábado · AM". Acá se separa esa mitad.
-const _DIAS_ACTA=['lunes','martes','miercoles','jueves','viernes','sabado','domingo'];
+const _DIAS_ACTA=YLDias.SEMANA;   // compartido/dias.js
 // Día elegido para el acta. Vacío = el campeonato entero, que es como salía antes.
 window._ACTA_DIA='';
-window.setActaDia=function(d){
-  window._ACTA_DIA=_diasDelEvento().indexOf(d)>=0?d:'';
-  R();
-};
 // ════════════════════════════════════════════════════════════════
 // DETALLE DE MEDALLAS
 //
@@ -1401,134 +975,7 @@ window.setActaDia=function(d){
 const _MED_LBL={total:'TOTAL',sq:'SENTADILLA',bp:'PRESS DE BANCA',dl:'PESO MUERTO'};
 const _MED_MET=['Oro','Plata','Bronce'];
 window._MED_POR_TANDA=window._MED_POR_TANDA||false;
-window.medPorTanda=function(v){
-  window._MED_POR_TANDA=!!v;
-  const m=document.getElementById('medModal'); const y=m?m.scrollTop:0;
-  if(m)m.remove();
-  window.mostrarMedallas();
-  const n=document.getElementById('medModal'); if(n)n.scrollTop=y;
-};
 const _MED_COL={0:'#D4A843',1:'#C0C0C0',2:'#CD7F32'};
-window.mostrarMedallas=function(){
-  const d=_medallasDetalle();
-  if(!d.total){showToastLC('Todavía no hay resultados para repartir medallas');return;}
-  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  let h='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
-    +'<div><div class="os" style="font-size:22px;font-weight:700">Detalle de medallas</div>'
-    +'<div style="font-size:12px;color:var(--muted)">'+d.grupos.length+' categorías'+esc(_actaSufijoDia())+'</div></div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-    +'<button class="btn" onclick="exportMedallasXLS()" style="background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);font-weight:700">Excel</button>'
-    +'<button class="btn" onclick="exportMedallasPDF()" style="background:#fff;border:1px solid #999;color:#111;font-weight:700">PDF</button>'
-    +'<button class="btn" onclick="document.getElementById(\'medModal\').remove()">Cerrar</button></div></div>';
-
-  // Resumen: lo que hay que mandar a hacer.
-  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">';
-  [['Oro',d.oro,0],['Plata',d.plata,1],['Bronce',d.bronce,2],['Total',d.total,null]].forEach(([lbl,n,i])=>{
-    h+='<div style="flex:1;min-width:110px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:12px 14px">'
-      +'<div class="os" style="font-size:30px;font-weight:800;color:'+(i===null?'var(--text)':_MED_COL[i])+'">'+n+'</div>'
-      +'<div style="font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">'+lbl+'</div></div>';
-  });
-  h+='</div>';
-  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:16px">Por modalidad: '
-    +Object.entries(d.porMod).sort((a,b)=>b[1].total-a[1].total)
-      .map(([m,v])=>esc(_ACTA_MOD_N[m]||m)+' <b style="color:var(--text)">'+v.total+'</b>').join(' · ')+'</div>';
-
-  // Medallero por país o club.
-  h+='<div class="os" style="font-size:15px;font-weight:700;margin:18px 0 6px">Medallero por '+(d.porPais?'país':'club')+'</div>';
-  h+='<div style="overflow-x:auto"><table class="tbl" style="width:100%"><tr><th style="text-align:left">'+(d.porPais?'País':'Club')+'</th><th>Oro</th><th>Plata</th><th>Bronce</th><th>Total</th></tr>';
-  d.tabla.forEach((r,i)=>{
-    h+='<tr><td style="text-align:left">'+(i+1)+'. '+(r.cod?_flagImg(r.cod,14,true):'')+esc(r.quien)+'</td>'
-      +'<td style="color:'+_MED_COL[0]+';font-weight:700">'+r.oro+'</td>'
-      +'<td style="color:'+_MED_COL[1]+';font-weight:700">'+r.plata+'</td>'
-      +'<td style="color:'+_MED_COL[2]+';font-weight:700">'+r.bronce+'</td>'
-      +'<td style="font-weight:700">'+r.total+'</td></tr>';
-  });
-  h+='</table></div>';
-
-  // Listado para la premiación: por categoría, o agrupado por tanda (se premia al
-  // terminar cada una).
-  const _pt=!!window._MED_POR_TANDA;
-  const _btn=(on,txt,v)=>'<button onclick="medPorTanda('+v+')" style="padding:5px 12px;border-radius:999px;border:1px solid '+(on?'var(--gold)':'var(--border)')
-    +';background:'+(on?'rgba(212,168,67,.16)':'transparent')+';color:'+(on?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">'+txt+'</button>';
-  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:22px 0 6px">'
-    +'<div class="os" style="font-size:15px;font-weight:700;margin-right:6px">Premiación</div>'
-    +_btn(!_pt,'POR CATEGORÍA',0)+_btn(_pt,'POR TANDA',1)+'</div>';
-  const _secciones=_pt?_medallasPorTanda(d.grupos):[{tanda:null,grupos:d.grupos}];
-  _secciones.forEach(sec=>{
-  if(sec.tanda!==null){
-    h+='<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:18px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--gold)">'
-      +'<span class="os" style="font-size:18px;font-weight:800;color:var(--gold);letter-spacing:1px">TANDA '+esc(sec.tanda)+'</span>'
-      +(sec.dia?'<span style="font-size:11px;color:var(--muted)">Día '+esc(sec.dia)+'</span>':'')
-      +'<span style="font-size:12px;color:var(--muted)">'+sec.grupos.length+' categorías · '
-      +'<b style="color:'+_MED_COL[0]+'">'+sec.oro+' oro</b> · <b style="color:'+_MED_COL[1]+'">'+sec.plata+' plata</b> · <b style="color:'+_MED_COL[2]+'">'+sec.bronce+' bronce</b></span></div>';
-  }
-  sec.grupos.forEach(gr=>{
-    h+='<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'
-      +'<div class="os" style="font-size:13px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:8px">'+esc(gr.titulo)
-        +(sec.tanda===null?' <span style="color:var(--muted);font-weight:400;font-size:11px">· tanda '+esc(gr.tanda)+'</span>':'')+'</div>'
-      +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px">';
-    gr.podios.forEach(p=>{
-      if(!p.top.length)return;
-      h+='<div><div style="font-size:10px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">'+p.label+'</div>';
-      p.top.forEach((x,i)=>{
-        h+='<div style="display:flex;align-items:center;gap:7px;font-size:12px;padding:2px 0">'
-          +'<span style="width:16px;height:16px;flex-shrink:0;border-radius:50%;background:'+_MED_COL[i]+';color:#0A1628;font-weight:800;font-size:10px;display:flex;align-items:center;justify-content:center">'+(i+1)+'</span>'
-          // La bandera va DENTRO del bloque del nombre y no como otro elemento
-          // de la fila: si fuera hermana, el hueco entre el número y la bandera
-          // y el que queda hasta el nombre saldrían distintos.
-          +'<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
-            +(d.porPais?_flagImg(_ctry(x.a),13,true):'')+esc(x.a.name||'')+'</span>'
-          +'<b>'+(+x.valor).toFixed(1)+'</b></div>';
-      });
-      h+='</div>';
-    });
-    h+='</div></div>';
-  });
-  });
-
-  const _vieja=document.getElementById('medModal'); if(_vieja)_vieja.remove();
-  const m=document.createElement('div');
-  m.id='medModal';
-  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.8);z-index:99999;overflow-y:auto;padding:24px';
-  m.innerHTML='<div style="max-width:1000px;margin:0 auto;background:var(--card,#0F1D33);border:1px solid var(--border);border-radius:14px;padding:20px">'+h+'</div>';
-  document.body.appendChild(m);
-  m.onclick=e=>{if(e.target===m)m.remove();};
-};
-window.exportMedallasXLS=function(){
-  const {filas}=_medallasFilas();
-  _xlsxDescargar(_actaNombreArchivo('xlsx').replace(/^Acta_/,'Medallas_'),
-                 'Medallas',filas,[9,38,16,8,10,30,18,10]);
-  showToastLC('Medallas en Excel');
-};
-window.exportMedallasPDF=async function(){
-  try{
-    if(!window.jspdf){
-      await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
-    }
-    if(!window.jspdf.jsPDF.API.autoTable){
-      await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
-    }
-    const {filas,d}=_medallasFilas();
-    const doc=new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const PW=doc.internal.pageSize.getWidth();
-    doc.setFont('helvetica','bold');doc.setFontSize(13);
-    doc.text(_stripAccentsForPdf('DETALLE DE MEDALLAS'+_actaSufijoDia()),PW/2,15,{align:'center'});
-    doc.setFont('helvetica','normal');doc.setFontSize(9);
-    doc.text(_stripAccentsForPdf((DATA.event==null?void 0:DATA.event.name)||''),PW/2,21,{align:'center'});
-    doc.text('Oro '+d.oro+'  ·  Plata '+d.plata+'  ·  Bronce '+d.bronce+'  ·  Total '+d.total,PW/2,26,{align:'center'});
-    const cuerpo=filas.slice(1).map(f=>f.map(c=>_stripAccentsForPdf(String(c&&c.v!==undefined?c.v:''))));
-    doc.autoTable({
-      startY:31,
-      head:[filas[0].map(c=>_stripAccentsForPdf(String(c.v)))],
-      body:cuerpo,
-      styles:{fontSize:7,cellPadding:1.4},
-      headStyles:{fillColor:[26,22,0],textColor:[212,168,67]},
-      margin:{left:8,right:8}
-    });
-    doc.save(_actaNombreArchivo('pdf').replace(/^Acta_/,'Medallas_'));
-    showToastLC('Medallas en PDF');
-  }catch(e){ console.error('[medallas] pdf',e); showToastLC('No se pudo generar el PDF: '+e.message); }
-};
 // ════════════════════════════════════════════════════════════════
 // OVERALL Y PAÍSES
 //
@@ -1549,137 +996,9 @@ window.exportMedallasPDF=async function(){
 const _OV_PTS=[12,9,8,7,6,5,4,3,2];
 const _OV_MODORD=['classic','equipped','ob_classic','ob_equipped','oe'];
 window._OV=window._OV||{sexo:'F',divs:null,mods:null};
-window.ovSet=function(campo,valor){
-  const o=window._OV, op=_ovOpciones();
-  if(campo==='sexo')o.sexo=valor;
-  else if(campo==='masters'){ o.masters=valor; o.divs=null; }   // las divisiones elegidas cambian de nombre
-  else if(campo==='equipos'){ o.equipos=valor; }
-  else{
-    const todos=campo==='divs'?op.divs:op.mods;
-    if(valor==='*')o[campo]=null;
-    else{
-      let sel=o[campo]?o[campo].slice():todos.slice();
-      sel=sel.indexOf(valor)>=0?sel.filter(x=>x!==valor):sel.concat([valor]);
-      o[campo]=(sel.length===todos.length||!sel.length)?null:sel;
-    }
-  }
-  window.mostrarOverall();
-};
-window.mostrarOverall=function(){
-  const op=_ovOpciones();
-  if(!op.divs.length){showToastLC('Todavía no hay resultados');return;}
-  const o=window._OV;
-  if(op.sexos.indexOf(o.sexo)<0)o.sexo=op.sexos[0];
-  const d=_ovDatos();
-  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const pill=(on,txt,oc)=>'<button onclick="'+oc+'" style="padding:5px 11px;border-radius:999px;border:1px solid '+(on?'var(--gold)':'var(--border)')
-    +';background:'+(on?'rgba(212,168,67,.16)':'transparent')+';color:'+(on?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer">'+txt+'</button>';
-  const fila=(lbl,cont)=>'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;min-width:78px">'+lbl+'</span>'+cont+'</div>';
-  let h='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">'
-    +'<div><div class="os" style="font-size:22px;font-weight:700">Overall y '+(d.porPais?'países':'clubes')+'</div>'
-    +'<div style="font-size:12px;color:var(--muted)">GL Points por división y modalidad · clasificación por '+(d.porPais?'país':'club')+' según el reglamento IPF'+esc(_actaSufijoDia())+'</div></div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-    +'<button class="btn" onclick="exportOverallXLS()" style="background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);font-weight:700">Excel</button>'
-    +'<button class="btn" onclick="exportOverallPDF()" style="background:#fff;border:1px solid #999;color:#111;font-weight:700">PDF</button>'
-    +'<button class="btn" onclick="document.getElementById(\'ovModal\').remove()">Cerrar</button></div></div>';
-  h+=fila('SEXO',op.sexos.slice().sort().map(sx=>pill(o.sexo===sx,sx==='F'?'MUJERES':'HOMBRES',"ovSet('sexo','"+sx+"')")).join(''));
-  h+=fila('DIVISIÓN',pill(!o.divs,'TODAS',"ovSet('divs','*')")+op.divs.map(v=>pill(!!o.divs&&o.divs.indexOf(v)>=0,esc(v).toUpperCase(),"ovSet('divs','"+esc(v)+"')")).join(''));
-  h+=fila('EQUIPOS',pill(!d.porPais,'POR CLUB',"ovSet('equipos','club')")+pill(d.porPais,'POR PAÍS',"ovSet('equipos','pais')"));
-  h+=fila('MASTERS',pill(o.masters!=='sep','JUNTOS',"ovSet('masters','juntos')")+pill(o.masters==='sep','POR DIVISIÓN',"ovSet('masters','sep')"));
-  h+=fila('MODALIDAD',pill(!o.mods,'TODAS',"ovSet('mods','*')")+op.mods.map(v=>pill(!!o.mods&&o.mods.indexOf(v)>=0,esc(_ACTA_MOD_N[v]||v),"ovSet('mods','"+v+"')")).join(''));
-  if(!d.bloques.length)h+='<div style="padding:20px;color:var(--muted);text-align:center">No hay resultados con esa selección.</div>';
-  d.bloques.forEach(b=>{
-    h+='<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin:14px 0">'
-      +'<div class="os" style="font-size:14px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:8px">'+esc(b.titulo)+'</div>'
-      +'<div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:14px">';
-    // Overall
-    h+='<div style="overflow-x:auto"><div style="font-size:10px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">OVERALL · GL POINTS</div>'
-      +'<table class="tbl" style="width:100%;font-size:12px"><tr><th>#</th><th style="text-align:left">Atleta</th><th>Cat.</th><th>PC</th><th>Total</th><th>GL</th><th title="Puntos por equipo según su lugar en la categoría">Pts</th></tr>';
-    b.filas.forEach(f=>{
-      h+='<tr><td>'+(f.lugar||'—')+'</td><td style="text-align:left;white-space:nowrap">'+(d.porPais?_flagImg(_ctry(f.a),12,true):'')+esc(f.a.name||'')
-        +(d.porPais?'':' <span style="color:var(--muted);font-size:10px">'+esc(f.quien)+'</span>')+'</td>'
-        +'<td>'+esc(f.cat)+'</td><td>'+(f.a.bw||'—')+'</td><td style="font-weight:700">'+(f.total>0?f.total:'—')+'</td>'
-        +'<td style="color:var(--gold);font-weight:700">'+(f.total>0?(+f.gl).toFixed(2):'—')+'</td><td>'+(f.pts||'')+'</td></tr>';
-    });
-    h+='</table></div>';
-    // Países
-    h+='<div style="overflow-x:auto"><div style="font-size:10px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">'+(d.porPais?'PAÍSES':'CLUBES')+' · PUNTOS IPF</div>'
-      +'<table class="tbl" style="width:100%;font-size:12px"><tr><th>#</th><th style="text-align:left">'+(d.porPais?'País':'Club')+'</th><th>Pts</th><th>1°</th><th>2°</th><th>3°</th><th title="Atletas que suman (máx. 5) / atletas del país">Suman</th></tr>';
-    b.equipos.forEach(e=>{
-      h+='<tr><td>'+(e.puesto||'—')+'</td><td style="text-align:left;white-space:nowrap">'+(e.cod?_flagImg(e.cod,12,true)+esc(_ctryName(e.cod)):esc(e.quien))+'</td>'
-        +'<td style="color:var(--gold);font-weight:800">'+e.puntos+'</td><td>'+e.lugares[0]+'</td><td>'+e.lugares[1]+'</td><td>'+e.lugares[2]+'</td>'
-        +'<td>'+e.suman+'/'+e.atletas+'</td></tr>';
-    });
-    h+='</table></div></div>';
-    if(b.unis){
-      h+='<div style="overflow-x:auto;margin-top:12px"><div style="font-size:10px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">UNIVERSIDADES · PUNTOS IPF</div>'
-        +'<table class="tbl" style="width:100%;font-size:12px"><tr><th>#</th><th style="text-align:left">Universidad</th><th>País</th><th>Pts</th><th>1°</th><th>2°</th><th>3°</th><th>Mejor GL</th><th>Suman</th></tr>';
-      b.unis.forEach(e=>{
-        h+='<tr><td>'+(e.puesto||'—')+'</td><td style="text-align:left">'+esc(e.quien)+'</td><td>'+(e.pais?_flagImg(e.pais,12,true)+esc(e.pais):'')+'</td>'
-          +'<td style="color:var(--gold);font-weight:800">'+e.puntos+'</td><td>'+e.lugares[0]+'</td><td>'+e.lugares[1]+'</td><td>'+e.lugares[2]+'</td>'
-          +'<td>'+(e.mejorGL?e.mejorGL.toFixed(2):'—')+'</td><td>'+e.suman+'/'+e.atletas+'</td></tr>';
-      });
-      h+='</table></div>';
-    }
-    h+='</div>';
-  });
-  h+='<div style="font-size:10px;color:var(--muted);line-height:1.6;margin-top:6px">Puntos por equipo (Reglamento Técnico IPF): 12, 9, 8, 7, 6, 5, 4, 3 y 2 del 1° al 9° de cada categoría de peso; 1 punto a cada atleta que haga total después del 9°. Cuentan los cinco mejores de cada '+(d.porPais?'país':'club')+'. Empate: más primeros lugares, luego más segundos, y así; si aun así siguen empatados, la mejor marca GL del equipo. En Universitario se clasifica además por universidad.</div>';
-  let m=document.getElementById('ovModal');
-  const y=m?m.scrollTop:0;
-  if(!m){ m=document.createElement('div'); m.id='ovModal';
-    m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.8);z-index:99999;overflow-y:auto;padding:24px';
-    m.onclick=e=>{if(e.target===m)m.remove();}; document.body.appendChild(m); }
-  m.innerHTML='<div style="max-width:1150px;margin:0 auto;background:var(--card,#0F1D33);border:1px solid var(--border);border-radius:14px;padding:20px">'+h+'</div>';
-  m.scrollTop=y;
-};
-window.exportOverallXLS=function(){
-  const {filas,d}=_ovFilas();
-  if(!d.bloques.length){showToastLC('No hay resultados con esa selección');return;}
-  _xlsxDescargar(_ovNombre('xlsx'),'Overall',filas,[8,34,20,10,8,10,10,11]);
-  showToastLC('Overall en Excel');
-};
 // Fondo blanco y cuadrícula gris, igual que el Acta FESUPO.
 const _OV_PDF_EST={styles:{fontSize:7,cellPadding:1.1,textColor:[0,0,0],lineColor:[170,170,170],lineWidth:.15,fillColor:[255,255,255]},
   head:{fillColor:[235,235,235],textColor:[0,0,0],fontStyle:'bold',halign:'center'}};
-window.exportOverallPDF=async function(){
-  try{
-    const {d}=_ovFilas();
-    if(!d.bloques.length){showToastLC('No hay resultados con esa selección');return;}
-    if(!window.jspdf)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
-    if(!window.jspdf.jsPDF.API.autoTable)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
-    const T=x=>_stripAccentsForPdf(String(x==null?'':x));
-    const doc=new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const PW=doc.internal.pageSize.getWidth();
-    doc.setFont('helvetica','bold');doc.setFontSize(13);
-    doc.text(T('OVERALL Y '+(d.porPais?'PAISES':'CLUBES')+' - '+(window._OV.sexo==='F'?'MUJERES':'HOMBRES')+_actaSufijoDia()),PW/2,14,{align:'center'});
-    doc.setFont('helvetica','normal');doc.setFontSize(9);
-    doc.text(T((DATA.event&&DATA.event.name)||''),PW/2,20,{align:'center'});
-    doc.setTextColor(0);
-    let y=26;
-    d.bloques.forEach((b,i)=>{
-      if(i>0&&y>235){doc.addPage();y=14;}
-      doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text(T(b.titulo),8,y);y+=2;
-      doc.autoTable({startY:y,margin:{left:8,right:8},theme:'grid',styles:_OV_PDF_EST.styles,headStyles:_OV_PDF_EST.head,bodyStyles:{fillColor:[255,255,255]},alternateRowStyles:{fillColor:[248,248,248]},
-        head:[['#','Atleta',d.porPais?'Pais':'Club','Cat.','PC','Total','GL','Pts']],
-        body:b.filas.map(f=>[f.lugar||'-',T(f.a.name),T(d.porPais?_ctry(f.a):f.quien),T(f.cat),f.a.bw||'',f.total>0?f.total:'-',f.total>0?(+f.gl).toFixed(2):'-',f.pts||''])});
-      y=doc.lastAutoTable.finalY+3;
-      doc.autoTable({startY:y,margin:{left:8,right:PW/2},theme:'grid',styles:_OV_PDF_EST.styles,headStyles:_OV_PDF_EST.head,bodyStyles:{fillColor:[255,255,255]},alternateRowStyles:{fillColor:[248,248,248]},
-        head:[['#',d.porPais?'Pais':'Club','Pts','1ro','2do','3ro','Suman']],
-        body:b.equipos.map(e=>[e.puesto||'-',T(e.cod?_ctryName(e.cod):e.quien),e.puntos,e.lugares[0],e.lugares[1],e.lugares[2],e.suman+'/'+e.atletas])});
-      if(b.unis){
-        y=doc.lastAutoTable.finalY+3;
-        doc.autoTable({startY:y,margin:{left:8,right:8},theme:'grid',styles:_OV_PDF_EST.styles,headStyles:_OV_PDF_EST.head,bodyStyles:{fillColor:[255,255,255]},alternateRowStyles:{fillColor:[248,248,248]},
-          head:[['#','Universidad','Pais','Pts','1ro','2do','3ro','Mejor GL','Suman']],
-          body:b.unis.map(e=>[e.puesto||'-',T(e.quien),T(e.pais),e.puntos,e.lugares[0],e.lugares[1],e.lugares[2],e.mejorGL?e.mejorGL.toFixed(2):'-',e.suman+'/'+e.atletas])});
-      }
-      y=doc.lastAutoTable.finalY+9;
-    });
-    doc.setFontSize(6.5);doc.setTextColor(110);
-    doc.text(T('Puntos por equipo (Reglamento Tecnico IPF): 12-9-8-7-6-5-4-3-2 del 1 al 9 de cada categoria; 1 punto a cada atleta con total despues del 9. Cuentan los 5 mejores. Empate: mas primeros lugares, luego segundos, etc.; luego la mejor marca GL. En Universitario tambien por universidad.'),8,Math.min(y,288),{maxWidth:PW-16});
-    doc.save(_ovNombre('pdf'));
-    showToastLC('Overall en PDF');
-  }catch(e){ console.error('[overall] pdf',e); showToastLC('No se pudo generar el PDF: '+e.message); }
-};
 // ════════════════════════════════════════════════════════════════
 // RÉCORDS BATIDOS — lista para descargar
 //
@@ -1692,124 +1011,6 @@ window.exportOverallPDF=async function(){
 // Solo se lee: no escribe nada.
 // ════════════════════════════════════════════════════════════════
 const _RB_MOV={sq:'Sentadilla',bp:'Press de banca',bpsl:'Press de banca (Only Bench)',dl:'Peso muerto',total:'Total'};
-window.mostrarRecordsBatidos=async function(){
-  showToastLC('Buscando récords batidos…');
-  const suda=_rbSuda(), nac=await _rbNac();
-  window._RB={suda,nac};
-  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const tabla=(titulo,lista,conPais)=>{
-    if(lista===null)return '<div class="os" style="font-size:15px;font-weight:700;margin:18px 0 6px">'+titulo+'</div><div style="color:var(--orange);font-size:12px">No se pudo leer la tabla de récords.</div>';
-    let h='<div class="os" style="font-size:15px;font-weight:700;margin:18px 0 6px">'+titulo+' <span style="color:var(--gold)">'+lista.length+'</span></div>';
-    if(!lista.length)return h+'<div style="color:var(--muted);font-size:12px">Ninguno en este campeonato.</div>';
-    h+='<div style="overflow-x:auto"><table class="tbl" style="width:100%;font-size:12px"><tr><th>Sexo</th><th>Modalidad</th><th>División</th><th>Cat.</th><th style="text-align:left">Movimiento</th>'
-      +'<th>Nuevo</th><th style="text-align:left">Atleta</th>'+(conPais?'<th>País</th>':'')+'<th>Anterior</th><th style="text-align:left">De</th></tr>';
-    lista.forEach(r=>{
-      h+='<tr><td>'+r.sexo+'</td><td>'+r.mod+'</td><td>'+esc(r.div)+'</td><td>'+esc(r.cat)+'</td><td style="text-align:left">'+r.mov+'</td>'
-        +'<td style="color:#F2C230;font-weight:800">'+r.nuevo+'</td><td style="text-align:left">'+(conPais?_flagImg(r.pais,12,true):'')+esc(r.atleta)+'</td>'
-        +(conPais?'<td>'+esc(r.pais)+'</td>':'')
-        +'<td>'+(r.antes!=null?r.antes:'—')+'</td><td style="text-align:left;color:var(--muted)">'+(r.antes!=null?esc(r.antesQuien)+(r.antesPais?' · '+esc(r.antesPais):''):(r.antesQuien||'sin récord previo'))
-        +(r.guardado===false?' <span style="color:var(--orange);font-size:10px">· falta guardar</span>':'')+'</td></tr>';
-    });
-    return h+'</table></div>';
-  };
-  let h='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">'
-    +'<div><div class="os" style="font-size:22px;font-weight:700">Récords batidos</div>'
-    +'<div style="font-size:12px;color:var(--muted)">'+esc((DATA.event&&DATA.event.name)||'')+' · mejor marca de la competencia en cada casillero</div></div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-    +'<button class="btn" onclick="exportRecordsBatidosXLS()" style="background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green);font-weight:700">Excel</button>'
-    +'<button class="btn" onclick="exportRecordsBatidosPDF()" style="background:#fff;border:1px solid #999;color:#111;font-weight:700">PDF</button>'
-    +'<button class="btn" onclick="document.getElementById(\'rbModal\').remove()">Cerrar</button></div></div>';
-  if(_srOn())h+=tabla('Récords sudamericanos',suda,true);
-  h+=tabla('Récords nacionales de Chile (atletas chilenos)',nac,false);
-  const v=document.getElementById('rbModal'); if(v)v.remove();
-  const m=document.createElement('div'); m.id='rbModal';
-  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.8);z-index:99999;overflow-y:auto;padding:24px';
-  m.innerHTML='<div style="max-width:1150px;margin:0 auto;background:var(--card,#0F1D33);border:1px solid var(--border);border-radius:14px;padding:20px">'+h+'</div>';
-  m.onclick=e=>{if(e.target===m)m.remove();};
-  document.body.appendChild(m);
-};
-window.exportRecordsBatidosXLS=function(){
-  const filas=[[{v:'RÉCORDS BATIDOS — '+((DATA.event&&DATA.event.name)||''),s:5}],[]];
-  _rbSecciones().forEach(sec=>{
-    filas.push([{v:sec.titulo+' ('+sec.lista.length+')',s:1}]);
-    filas.push(['Sexo','Modalidad','División','Cat.','Movimiento','Nuevo','Atleta'].concat(sec.pais?['País']:[]).concat(['Anterior','De']).map(v=>({v,s:8})));
-    sec.lista.forEach(r=>filas.push([r.sexo,r.mod,r.div,r.cat,r.mov,{n:r.nuevo},r.atleta].concat(sec.pais?[r.pais]:[])
-      .concat([r.antes!=null?{n:r.antes}:'—',r.antes!=null?(r.antesQuien+(r.antesPais?' · '+r.antesPais:'')):'sin récord previo'])
-      .map(x=>x&&x.n!==undefined?{v:x.n,s:7}:{v:x,s:6})));
-    filas.push([]);
-  });
-  _xlsxDescargar(_rbNombre('xlsx'),'Records',filas,[11,12,12,7,26,9,34,8,9,34]);
-  showToastLC('Récords en Excel');
-};
-window.exportRecordsBatidosPDF=async function(){
-  try{
-    if(!window.jspdf)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
-    if(!window.jspdf.jsPDF.API.autoTable)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
-    const T=x=>_stripAccentsForPdf(String(x==null?'':x));
-    const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
-    const PW=doc.internal.pageSize.getWidth();
-    doc.setTextColor(0);doc.setFont('helvetica','bold');doc.setFontSize(13);
-    doc.text(T('RECORDS BATIDOS'),PW/2,14,{align:'center'});
-    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(T((DATA.event&&DATA.event.name)||''),PW/2,20,{align:'center'});
-    let y=27;
-    _rbSecciones().forEach(sec=>{
-      if(y>180){doc.addPage();y=14;}
-      doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text(T(sec.titulo+' ('+sec.lista.length+')'),8,y);y+=2;
-      const head=['Sexo','Modalidad','Division','Cat.','Movimiento','Nuevo','Atleta'].concat(sec.pais?['Pais']:[]).concat(['Anterior','De']);
-      const body=sec.lista.length?sec.lista.map(r=>[r.sexo,r.mod,r.div,r.cat,r.mov,r.nuevo,r.atleta].concat(sec.pais?[r.pais]:[])
-        .concat([r.antes!=null?r.antes:'-',r.antes!=null?(r.antesQuien+(r.antesPais?' - '+r.antesPais:'')):'sin record previo']).map(T))
-        :[[{content:T('Ninguno en este campeonato'),colSpan:head.length}]];
-      doc.autoTable({startY:y,margin:{left:8,right:8},theme:'grid',styles:_OV_PDF_EST.styles,headStyles:_OV_PDF_EST.head,
-        bodyStyles:{fillColor:[255,255,255]},alternateRowStyles:{fillColor:[248,248,248]},head:[head.map(T)],body,
-        didParseCell:d=>{ if(d.section==='body'&&d.column.index===5&&sec.lista.length){d.cell.styles.fillColor=[247,214,58];d.cell.styles.fontStyle='bold';} }});
-      y=doc.lastAutoTable.finalY+10;
-    });
-    doc.save(_rbNombre('pdf'));
-    showToastLC('Récords en PDF');
-  }catch(e){ console.error('[récords batidos] pdf',e); showToastLC('No se pudo generar el PDF: '+e.message); }
-};
-window.mostrarRecordsNac=async function(trasCerrar){
-  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  showToastLC('Comparando con la tabla de récords nacionales…');
-  let tabla; try{ tabla=await _rnCargarTabla(); }catch(e){ alert('No se pudo leer la tabla de récords: '+e.message); return; }
-  const lista=_rnDetectar(tabla);
-  window._RN={lista,tabla};
-  if(!lista.length){ if(!trasCerrar)alert('Ningún chileno superó un récord nacional en esta competencia.'); return; }
-  const TN={classic:'Classic',equipped:'Equipado',universitario:'Universitario'};
-  let h='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:10px">'
-    +'<div><div class="os" style="font-size:22px;font-weight:700">Récords nacionales</div>'
-    +'<div style="font-size:12px;color:var(--muted);max-width:620px;line-height:1.5">Marcas de atletas chilenos que superan la tabla nacional. Revisa, desmarca lo que no corresponda y guarda. '
-    +'Los casilleros sin récord previo vienen desmarcados.</div></div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-    +'<button class="btn" onclick="guardarRecordsNac()" style="background:rgba(34,197,94,.14);border:1px solid var(--green);color:var(--green);font-weight:700">Guardar en la tabla de récords</button>'
-    +'<button class="btn" onclick="document.getElementById(\'rnModal\').remove()">Cerrar</button></div></div>';
-  h+='<div style="overflow-x:auto"><table class="tbl" style="width:100%;font-size:12px"><tr><th></th><th style="text-align:left">Modalidad</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Movimiento</th>'
-    +'<th style="text-align:left">Récord actual</th><th style="text-align:left">Nuevo récord</th></tr>';
-  lista.forEach((r,i)=>{
-    h+='<tr><td><input type="checkbox" '+(r.marcado?'checked':'')+' onchange="window._RN.lista['+i+'].marcado=this.checked"></td>'
-      +'<td style="text-align:left">'+TN[r.tipo]+'</td><td>'+(r.sexo==='Mujer'?'F':'M')+'</td><td>'+esc(r.div)+'</td><td>'+esc(r.cat)+'</td><td>'+r.lbl+'</td>'
-      +'<td style="text-align:left">'+(r.act?'<b>'+r.act.marca+'</b> · '+esc(r.act.nombre||''):'<span style="color:var(--orange)">sin récord previo</span>')+'</td>'
-      +'<td style="text-align:left"><b style="color:#F2C230">'+r.w+'</b> · '+esc(r.a.name)+'</td></tr>';
-  });
-  h+='</table></div>';
-  const v=document.getElementById('rnModal'); if(v)v.remove();
-  const m=document.createElement('div'); m.id='rnModal';
-  m.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.8);z-index:99999;overflow-y:auto;padding:24px';
-  m.innerHTML='<div style="max-width:1100px;margin:0 auto;background:var(--card,#0F1D33);border:1px solid var(--border);border-radius:14px;padding:20px">'+h+'</div>';
-  m.onclick=e=>{if(e.target===m)m.remove();};
-  document.body.appendChild(m);
-};
-window.guardarRecordsNac=async function(){
-  const rn=window._RN; if(!rn)return;
-  const elegidos=rn.lista.filter(r=>r.marcado);
-  if(!elegidos.length){ alert('No hay ningún récord marcado.'); return; }
-  if(!confirm('Se actualizarán '+elegidos.length+' récords nacionales en la tabla que publica yourlift.cl.\n\n¿Confirmar?'))return;
-  try{
-    const hechos=await _rnAplicar(elegidos);
-    alert(hechos.length+' récords nacionales actualizados. Ya se ven en yourlift.cl.');
-    const m=document.getElementById('rnModal'); if(m)m.remove();
-  }catch(e){ alert('No se pudo guardar: '+(e.code||e.message)); }
-};
 let _txLastLifter=null;
 // ─── LBAUTO (leaderboard que aparece 10s al terminar cada ronda) ─
 let _txLbAutoLastKey=null;
@@ -1919,43 +1120,6 @@ const TX_SCOREBOARD_DURATION=20000;
 // ════════════════════════════════════════════════════════════════
 // ─── Panel de control de la Pantalla de Tarima (admin) ──────────
 window._SCREEN_LOCAL={mode:'jornada',flights:[],nameScale:1,fondo:'bandera',luces:false,veloBandera:0.55};
-window.screenSetMode=function(m){window._SCREEN_LOCAL.mode=m;_screenPush();R();};
-// Fondo del modo "Atleta en barra": bandera del país · logo del campeonato · azul.
-window.screenSetFondo=function(f){window._SCREEN_LOCAL.fondo=f;_screenPush();R();};
-// Difuminado de la bandera de fondo. Sin R(): un re-render en medio del arrastre
-// corta el deslizador, igual que pasaba con el del tamaño de los nombres.
-window.screenSetVelo=function(v){
-  let n=parseFloat(v); if(isNaN(n))n=0.55;
-  n=Math.max(0.15,Math.min(0.85,n)); n=Math.round(n*100)/100;
-  window._SCREEN_LOCAL.veloBandera=n;
-  _screenPush();
-  const sl=document.getElementById('scrVeloRange'); if(sl&&parseFloat(sl.value)!==n)sl.value=n;
-  const lb=document.getElementById('scrVeloPct'); if(lb)lb.textContent=Math.round(n*100)+'%';
-};
-// Luces de jueces en la pantalla de tarima. Es un espejo: no da válido ni nulo.
-window.screenToggleLuces=function(){
-  window._SCREEN_LOCAL.luces=!window._SCREEN_LOCAL.luces;_screenPush();R();
-};
-window.screenSetNameScale=function(v){
-  let n=parseFloat(v)||1; n=Math.max(0.6,Math.min(2.2,n)); n=Math.round(n*100)/100;
-  window._SCREEN_LOCAL.nameScale=n; window._JORNADA_NAMESCALE=n;
-  _screenPush();
-  // Actualizar el panel SIN re-render (para no cortar el arrastre del slider)
-  const sl=document.getElementById('scrNameRange'); if(sl&&parseFloat(sl.value)!==n)sl.value=n;
-  const lb=document.getElementById('scrNamePct'); if(lb)lb.textContent=Math.round(n*100)+'%';
-  const pv=document.getElementById('scrNamePrev'); if(pv)pv.style.fontSize=Math.round(15*n)+'px';
-};
-window.screenNudgeNameScale=function(d){window.screenSetNameScale((window._SCREEN_LOCAL.nameScale||1)+d);};
-window.screenToggleFlight=function(f){
-  const arr=window._SCREEN_LOCAL.flights;
-  const i=arr.indexOf(f);
-  if(i>=0)arr.splice(i,1);else arr.push(f);
-  _screenPush();R();
-};
-window.screenAllFlights=function(){
-  const all=[...new Set(DATA.athletes.map(a=>a.flight))].sort(_cmpFl);
-  window._SCREEN_LOCAL.flights=all;_screenPush();R();
-};
 window._SCREEN_STATE={mode:'jornada',flights:null,fondo:'bandera',luces:false};
 let _screenUnsub=null, _screenFirstSnap=true;
 // ════════════════════════════════════════════════════════════════
@@ -2066,16 +1230,6 @@ const PI_DEFAULT_LAYOUT={
 const _RX_LOGO_N=/^(b?)[Ll]ogoN(\d+)$/;
 window._piLayout=_piLoadLayout();
 window._piSelected=null;
-window.piResetLayout=function(){
-  if(!confirm('¿Restablecer las posiciones y tamaños de la Pantalla de Intentos a los valores por defecto?'))return;
-  // Las de "Atleta en barra" son las que empiezan con b y mayúscula (bSigla,
-  // bPeso…). 'barbell' es de esta pantalla, por eso se pide la mayúscula.
-  _piResetClaves(k=>!/^b[A-Z]/.test(k));
-};
-window.barraResetLayout=function(){
-  if(!confirm('¿Volver a dejar "Atleta en barra" como venía de fábrica?\nSe pierden las posiciones y tamaños que acomodaste en esta pantalla.'))return;
-  _piResetClaves(k=>/^b[A-Z]/.test(k));
-};
 // Ajustes de pantalla: mostrar/ocultar cronómetro y colores personalizados
 // (fondo/acento/texto), para adaptarse a la iluminación de cada recinto.
 // Se guardan por navegador/pantalla, igual que la disposición de bloques.
@@ -2090,22 +1244,6 @@ const PI_SETTINGS_KEY='yl_pant_intentos_settings';
 const PI_DEFAULT_SETTINGS={showTimer:false,fondoBandera:true,bgColor:'',accentColor:'#D4A843',textColor:'#ffffff'};
 window._piSettings=_piLoadSettings();
 window._piPanelOpen=false;
-window.piSetSetting=function(key,val){
-  window._piSettings[key]=val;
-  _piSaveSettings();
-  if(typeof R==='function')R();
-};
-window.piToggleSettingsPanel=function(){
-  window._piPanelOpen=!window._piPanelOpen;
-  if(typeof R==='function')R();
-};
-window.piResetColors=function(){
-  window._piSettings.bgColor=PI_DEFAULT_SETTINGS.bgColor;
-  window._piSettings.accentColor=PI_DEFAULT_SETTINGS.accentColor;
-  window._piSettings.textColor=PI_DEFAULT_SETTINGS.textColor;
-  _piSaveSettings();
-  if(typeof R==='function')R();
-};
 // Handlers globales de click/arrastre/redimensión — se registran una sola vez,
 // funcionan sobre cualquier .pi-block presente en el DOM en cada momento.
 if(!window._piHandlersInit){
@@ -2214,27 +1352,6 @@ if(!window._piHandlersInit){
     if(window._piResize){_piSaveLayout();window._piResize=null;}
   });
 }
-window.descPoner=function(min){
-  const seg=Math.round(Number(min)*60);
-  if(!(seg>0))return;
-  const rot=(document.getElementById('descTexto')||{}).value;
-  _descEscribe({active:true,startedAt:Date.now(),durationSec:seg,
-    label:(rot||'').trim(),pausedAt:0,videos:[],movement:'',style:_descEstiloPrevio()});
-};
-window.descPausar=function(){
-  const bt=_descBT(); if(!bt)return;
-  if(bt.pausedAt){
-    // Seguir: se corre el arranque tanto como duró la pausa, así no se pierde
-    // el tiempo que estuvo detenido.
-    _descEscribe(Object.assign({},bt,{startedAt:bt.startedAt+(Date.now()-bt.pausedAt),pausedAt:0}));
-  } else {
-    _descEscribe(Object.assign({},bt,{pausedAt:Date.now()}));
-  }
-};
-window.descQuitar=function(){
-  _descEscribe({active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,
-    videos:[],movement:'',style:_descEstiloPrevio()});
-};
 // Los minutos que se usan de verdad entre tandas y para arrancar la jornada.
 const DESC_MINUTOS=[5,10,15,20,30];
 // La Pantalla de Intentos tiene su panel de ajustes completo y ahí el descanso va
@@ -2243,58 +1360,6 @@ const DESC_MINUTOS=[5,10,15,20,30];
 // descanso solo se podía poner estando en la Pantalla de Intentos, y el operador
 // de la tarima no siempre está en esa.
 window._descPanelOpen=false;
-window.descTogglePanel=function(){
-  window._descPanelOpen=!window._descPanelOpen;
-  if(typeof renderTxWidget==='function'&&TX_MODE)renderTxWidget();
-  else if(typeof R==='function')R();
-};
-// Re-sincroniza la nómina con el admin. Trae todos los atletas aprobados/pendientes
-// desde Firestore y reconcilia: agrega nuevos, elimina los que ya no están (sin datos)
-// y avisa de los borrados que tienen pesos/intentos cargados.
-window.resyncFromAdmin=async function(){
-  if(!fbReady||!window._fb){alert('Firebase no listo todavía. Espera unos segundos y vuelve a intentar.');return}
-  if(!DATA.event){alert('No hay competencia activa');return}
-  if(!confirm('Re-sincronizar la nómina con el admin?\n\n• Trae atletas nuevos\n• Borra los que ya no están en admin (si NO tienen pesos/intentos cargados acá)\n• Avisa de los borrados que sí tienen datos para revisarlos a mano\n• Toma tanda, división, categoría y modalidad de la pestaña Cronograma\n\nLotes y pesaje se conservan. La categoría de los que ya están pesados no se toca.'))return;
-  const evId=Object.keys(LIVE_EVENTS).find(k=>LIVE_EVENTS[k]===DATA.event.name)||DATA.event.id||DATA.event.name;
-  try{
-    const q=window._fb.query(
-      window._fb.collection(fbDB,'inscripciones'),
-      window._fb.where('evento','==',evId),
-      window._fb.where('status','in',['approved','pending'])
-    );
-    const snap=await window._fb.getDocs(q);
-    const flightMap=await _loadCronoFlightMap(evId);
-    const fbAthletes=snap.docs
-      .map(d=>({...d.data(),id:d.id}))
-      .sort((a,b)=>((a.timestamp==null?void 0:a.timestamp.seconds)||0)-((b.timestamp==null?void 0:b.timestamp.seconds)||0))
-      .map((ins,j)=>_inscToAthlete(ins,j,flightMap));
-    if(!fbAthletes.length){alert('No hay inscripciones aprobadas/pendientes en Firestore para este campeonato.');return}
-    _mergeFirebaseAthletes(fbAthletes);
-    // Forzar nuevo render para que los toasts se ordenen
-    showToastLC('Re-sincronización completa: '+fbAthletes.length+' atletas en Firestore');
-  }catch(e){alert('Error sincronizando: '+(e.message||e));console.error(e)}
-};
-// Editar el lote a mano. Si el número nuevo ya lo tenía otro atleta,
-// hace un swap (intercambia los lotes entre los dos).
-window.setLot=function(id,val){
-  const n=parseInt(val,10);
-  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
-  if(!Number.isFinite(n)||n<1){
-    showToastLC('Lote inválido — debe ser un número entero ≥ 1');
-    R();return;
-  }
-  if(n===a.lot){R();return}
-  const other=DATA.athletes.find(x=>x.lot===n&&x.id!==id);
-  if(other){
-    // Swap: el otro recibe el lote anterior
-    other.lot=a.lot;
-    a.lot=n;
-  } else {
-    a.lot=n;
-  }
-  _markAtt(id,'meta');
-  save();R();
-};
 // ─── OBS WEBSOCKET (Stream Deck → OBS → Panel) ─────────────────
 // Permite controlar el director con cualquier botón de Stream Deck que
 // envíe un "Custom Event" a OBS via WebSocket. El panel escucha los
@@ -2302,28 +1367,6 @@ window.setLot=function(id,val){
 let _obsWs=null, _obsWsConnected=false, _obsWsError='';
 let _obsWsSettings=(()=>{try{return JSON.parse(localStorage.getItem('obs_ws_settings')||'')}catch(e){}return{host:'localhost',port:4455,password:'',autoConnect:false}})();
 let _obsWsLog=[];
-window.obsWsSaveAndConnect=function(){
-  _obsWsSettings={
-    host:(__o=>__o==null?void 0:__o.value)(document.getElementById('obsWsHost'))||'localhost',
-    port:parseInt((__o=>__o==null?void 0:__o.value)(document.getElementById('obsWsPort')),10)||4455,
-    password:(__o=>__o==null?void 0:__o.value)(document.getElementById('obsWsPass'))||'',
-    autoConnect:(__o=>__o==null?void 0:__o.checked)(document.getElementById('obsWsAuto'))||false
-  };
-  try{localStorage.setItem('obs_ws_settings',JSON.stringify(_obsWsSettings))}catch(e){}
-  obsWsConnect();
-};
-window.obsWsToggleConnection=function(){
-  if(_obsWsConnected)obsWsDisconnect();else obsWsConnect();
-};
-// Envía un CustomEvent a través de OBS para verificar el roundtrip.
-// OBS lo broadcastea, nuestro listener lo recibe → toggle profile.
-window.obsWsTestEvent=async function(){
-  if(!_obsWs||!_obsWsConnected){alert('Conecta primero a OBS WebSocket');return}
-  try{
-    await _obsWs.call('BroadcastCustomEvent',{eventData:{action:'toggle',component:'profile',_test:true}});
-    alert('Evento enviado a OBS. Si la conexión está bien, el perfil debería togglearse en pantalla en 1-2s. Mira el log de abajo, "Últimos eventos recibidos".');
-  }catch(e){alert('Error enviando evento: '+(e.message||e))}
-};
 // Auto-conectar al cargar (si está habilitado)
 if(_obsWsSettings.autoConnect){
   // Esperar a que la lib esté lista
@@ -2338,462 +1381,19 @@ let _dirBtDrag=null;
 let _dirBtVideoList=null;
  // null=no cargado aún, []=cargado vacío, [{name,url},...]=ok
 let _dirBtVideoUploading=false;
-window.dirBtLoadVideos=function(){_dirLoadBtVideos();};
-window.dirBtUploadVideo=async function(){
-  if(_dirBtVideoUploading)return;
-  const inp=document.createElement('input');inp.type='file';inp.accept='video/mp4,video/webm,video/mov,.mp4,.webm,.mov';inp.multiple=true;
-  inp.onchange=async()=>{
-    if(!inp.files||!inp.files.length)return;
-    if(!window._fbSt||!window._fbStInst){alert('Storage no disponible');return;}
-    _dirBtVideoUploading=true;R();
-    const {ref,uploadBytes}=window._fbSt;
-    const errs=[];
-    for(const f of inp.files){
-      try{
-        const r=ref(window._fbStInst,'videos/break/'+f.name);
-        await uploadBytes(r,f,{contentType:f.type||'video/mp4'});
-      }catch(e){errs.push(f.name+': '+e.message);}
-    }
-    _dirBtVideoUploading=false;
-    if(errs.length)alert('Errores:\n'+errs.join('\n'));
-    await _dirLoadBtVideos(); // refresh list
-  };
-  inp.click();
-};
-// Logo DEL CAMPEONATO (no del break timer): persiste en Firestore eventos/{evId}.logoUrl
-// y se muestra en scoreboard, perfil, tabla actual y en el barrido de transición.
-window.dirUploadChampionshipLogo=async function(){
-  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía');return;}
-  if(!DATA.event){alert('Primero elige un evento');return;}
-  const evId = DATA.event.id || DATA.event.name;
-  const inp=document.createElement('input');inp.type='file';inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
-  inp.onchange=async()=>{
-    const f=inp.files&&inp.files[0];if(!f)return;
-    const btn=document.getElementById('dirChampLogoBtn');if(btn)btn.textContent='Subiendo...';
-    try{
-      // Si el logo trae un fondo liso alrededor —el caso normal cuando llega como
-      // JPG— se ofrece sacarlo. Sobre el barrido o el scoreboard, ese cuadrado se
-      // ve encima de todo.
-      let subir=f, nombre=f.name, tipo=f.type;
-      if(!/svg/i.test(f.type)){
-        try{
-          if(btn)btn.textContent='Revisando…';
-          const sin=await _logoSinFondo(f);
-          if(sin){
-            const pct=Math.round(sin.quitados/sin.total*100);
-            const col='rgb('+sin.fondo.r+', '+sin.fondo.g+', '+sin.fondo.b+')';
-            if(confirm('Este logo tiene un fondo liso ('+col+') que ocupa el '+pct+'% de la imagen.\n\n'
-              +'¿Quitarlo y dejarlo transparente?\n\nSe recomienda: sobre el barrido y el scoreboard, '
-              +'ese fondo se ve como un cuadrado encima de la transmisión.')){
-              subir=sin.blob; tipo='image/png';
-              nombre=f.name.replace(/\.[^.]+$/,'')+'_sinfondo.png';
-            }
-          }
-        }catch(e){ console.warn('[logo] no se pudo revisar el fondo',e); }
-      }
-      if(btn)btn.textContent='Subiendo...';
-      const {ref,uploadBytes,getDownloadURL}=window._fbSt;
-      const safeId=evId.replace(/[^a-zA-Z0-9_]/g,'_');
-      const r=ref(window._fbStInst,'logos/event/'+safeId+'_'+nombre);
-      await uploadBytes(r,subir,{contentType:tipo});
-      const url=await getDownloadURL(r);
-      // Guardar en el doc del evento
-      await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{logoUrl:url});
-      DATA.event.logoUrl=url;
-      // Forzar sync inmediato a livecast_sync para que los widgets de OBS lo vean
-      try{ if(typeof syncToFB==='function') await syncToFB(); }catch(e){}
-      R();
-      if(btn)btn.textContent='Subido';
-      setTimeout(()=>{if(btn)btn.textContent='Cambiar logo'},2000);
-    }catch(e){alert('Error subiendo logo: '+e.message); if(btn)btn.textContent='Cambiar logo';}
-  };
-  inp.click();
-};
-window.screenLogosSubir=async function(){
-  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía');return;}
-  if(!DATA.event){alert('Primero elige un campeonato');return;}
-  const inp=document.createElement('input');
-  inp.type='file';inp.multiple=true;
-  inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
-  inp.onchange=async()=>{
-    const files=[...(inp.files||[])]; if(!files.length)return;
-    const btn=document.getElementById('scrLogosBtn');
-    const rot=btn?btn.textContent:'';
-    try{
-      const {ref,uploadBytes,getDownloadURL}=window._fbSt;
-      const safeId=_evIdActual().replace(/[^a-zA-Z0-9_]/g,'_');
-      const lista=(Array.isArray(DATA.event.logosPantalla)?DATA.event.logosPantalla:[]).slice();
-      for(let i=0;i<files.length;i++){
-        const f=files[i];
-        if(btn)btn.textContent='Subiendo '+(i+1)+'/'+files.length+'…';
-        const limpio=f.name.replace(/[^A-Za-z0-9._-]/g,'_');
-        const r=ref(window._fbStInst,'logos/pantalla/'+safeId+'_'+Date.now()+'_'+limpio);
-        await uploadBytes(r,f,{contentType:f.type||'image/png'});
-        lista.push({url:await getDownloadURL(r),nombre:f.name});
-      }
-      await _guardaLogosPantalla(lista);
-      showToastLC(files.length+(files.length>1?' logos agregados':' logo agregado'));
-    }catch(e){ alert('Error subiendo: '+(e.message||e)); }
-    finally{ if(btn)btn.textContent=rot||'Agregar logos'; }
-  };
-  inp.click();
-};
-window.screenLogoBorrar=async function(i){
-  const lista=(Array.isArray(DATA.event&&DATA.event.logosPantalla)?DATA.event.logosPantalla:[]).slice();
-  const q=lista[i]; if(!q)return;
-  if(!confirm('¿Sacar "'+(q.nombre||'este logo')+'" de la pantalla?'))return;
-  lista.splice(i,1);
-  // El archivo se queda en Storage a propósito: si fue un error, se vuelve a
-  // agregar desde el mismo link sin tener que buscarlo de nuevo en el
-  // computador. Ocupa unos KB.
-  try{ await _guardaLogosPantalla(lista); showToastLC('Logo sacado de la pantalla'); }
-  catch(e){ alert('Error: '+(e.message||e)); }
-};
-window.screenLogoMover=async function(i,paso){
-  const lista=(Array.isArray(DATA.event&&DATA.event.logosPantalla)?DATA.event.logosPantalla:[]).slice();
-  const j=i+paso;
-  if(!lista[i]||j<0||j>=lista.length)return;
-  const t=lista[i];lista[i]=lista[j];lista[j]=t;
-  try{ await _guardaLogosPantalla(lista); }catch(e){ alert('Error: '+(e.message||e)); }
-};
-// Qué logo va en el barrido. Se guarda con el campeonato, así que queda elegido
-// para la próxima vez sin tener que acordarse.
-window.dirSetBarridoLogo=async function(cual){
-  if(!DATA.event){alert('Primero elige un evento');return;}
-  const val=cual==='campeonato'?'campeonato':'yourlift';
-  DATA.event.barridoLogo=val;
-  R();
-  try{
-    const evId=DATA.event.id||DATA.event.name;
-    await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{barridoLogo:val});
-    if(typeof syncToFB==='function')await syncToFB();   // que los widgets de OBS lo vean ya
-  }catch(e){ console.warn('[barrido] no se pudo guardar la elección',e); }
-};
-window.dirClearChampionshipLogo=async function(){
-  if(!DATA.event)return;
-  if(!confirm('¿Quitar el logo del campeonato?'))return;
-  const evId = DATA.event.id || DATA.event.name;
-  try{
-    await window._fb.updateDoc(window._fb.doc(fbDB,'eventos',evId),{logoUrl:''});
-    DATA.event.logoUrl='';
-    try{ if(typeof syncToFB==='function') await syncToFB(); }catch(e){}
-    R();
-  }catch(e){alert('Error: '+e.message);}
-};
-window.dirBtUploadEventLogo=async function(){
-  if(!window._fbSt||!window._fbStInst){alert('Storage no disponible todavía');return;}
-  const inp=document.createElement('input');inp.type='file';inp.accept='image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
-  inp.onchange=async()=>{
-    const f=inp.files&&inp.files[0];if(!f)return;
-    const btn=document.getElementById('dirBtEvLogoBtn');if(btn)btn.textContent='Subiendo...';
-    try{
-      const {ref,uploadBytes,getDownloadURL}=window._fbSt;
-      const r=ref(window._fbStInst,'logos/event/'+f.name);
-      await uploadBytes(r,f,{contentType:f.type});
-      const url=await getDownloadURL(r);
-      // Guardar en el estilo inmediatamente
-      if(!_dirState)_dirState={};
-      if(!_dirState.breakTimer)_dirState.breakTimer={};
-      if(!_dirState.breakTimer.style)_dirState.breakTimer.style={};
-      _dirState.breakTimer.style.eventLogoUrl=url;
-      await _dirPush();R();
-    }catch(e){alert('Error subiendo logo: '+e.message);}
-    if(btn)btn.textContent='SUBIR';
-  };
-  inp.click();
-};
-window.dirBtClearEventLogo=async function(){
-  if(!(_dirState==null?void 0:(_dirState.breakTimer==null?void 0:_dirState.breakTimer.style)))return;
-  _dirState.breakTimer.style.eventLogoUrl='';
-  await _dirPush();R();
-};
-window.dirBtDeleteVideo=async function(name){
-  if(!confirm('¿Eliminar '+name+'?'))return;
-  if(!window._fbSt||!window._fbStInst)return;
-  try{
-    const {ref,deleteObject}=window._fbSt;
-    await deleteObject(ref(window._fbStInst,'videos/break/'+name));
-    await _dirLoadBtVideos();
-  }catch(e){alert('Error al eliminar: '+e.message);}
-};
 let _dirUnsubDocId=null;
 // Broadcastea datos de competencia vía OBS para el widget (no depende de Firestore).
 // El widget en OBS no puede leer Firestore, pero sí recibe obsCustomEvent.
 let _obsWsSyncInterval=null;
-window.dirShow=async function(comp,seconds,opts){
-  if(!_dirState)_dirState={};
-  const until=seconds>0?Date.now()+seconds*1000:0;
-  // Mutual exclusion entre componentes fullscreen (profile y leaderboard).
-  // Si activo uno y el otro está prendido, lo apago automáticamente.
-  const FULLSCREEN_EXCLUSIVE = ['profile','leaderboard'];
-  if(FULLSCREEN_EXCLUSIVE.includes(comp)){
-    FULLSCREEN_EXCLUSIVE.forEach(other=>{
-      if(other!==comp){
-        const o=_dirState[other];
-        if(o && o.active){
-          _dirState[other]=Object.assign({},o,{active:false,until:0});
-        }
-      }
-    });
-    // Al activar un fullscreen (perfil/leaderboard), apagar tambien la Tabla Actual.
-    // Asi cuando se quite el fullscreen la tabla NO reaparece sola; debe re-activarse a mano.
-    const ta=_dirState.tablaActual;
-    if(ta && ta.active){
-      _dirState.tablaActual=Object.assign({},ta,{active:false,until:0});
-    }
-  }
-  // El medallero es una banda de abajo, no un fullscreen, así que quedaba tapado
-  // por el Perfil, la Tabla Actual o el Break Timer — y el panel igual mostraba
-  // "EN PANTALLA" en verde. Se activa a propósito para premiar, así que ahora
-  // apaga lo que lo taparía: apretar MEDALLERO muestra el medallero.
-  if(comp==='medals'){
-    ['profile','leaderboard','breakTimer'].forEach(otro=>{
-      const o=_dirState[otro];
-      if(o&&o.active)_dirState[otro]=Object.assign({},o,{active:false,until:0});
-    });
-  }
-  _dirState[comp]=Object.assign({},_dirState[comp]||{},{active:true,until},opts||{});
-  await _dirPush();R();
-};
-window.dirHide=async function(comp){
-  if(!_dirState)return;
-  _dirState[comp]=Object.assign({},_dirState[comp]||{},{active:false,until:0});
-  await _dirPush();R();
-};
-window.dirHideAll=async function(){
-  ['profile','scoreboard','leaderboard','timer','slam','tablaActual','medals','luces'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
-  await _dirPush();R();
-};
-window.dirShowLb=async function(cat,seconds){
-  await window.dirShow('leaderboard',seconds,{cat:cat||''});
-};
 // ── Medallero: selects en cascada (modalidad → sexo → división → categoría) ──
 // Todo sale de DATA.athletes, ya cargado local en memoria — NO dispara ninguna
 // lectura nueva a Firestore. Selección local (_mdSel), se re-renderiza el panel
 // con R() igual que el resto del Control TX (sin listeners ni docs extra).
 window._mdSel={mod:'',sex:'',div:'',cat:'',tipo:'total'};
-window.dirMdSet=function(field,val){
-  window._mdSel[field]=val;
-  if(field==='tipo'){/* el tipo no toca la selección: es la misma categoría, otro premio */}
-  else if(field==='mod'){window._mdSel.sex='';window._mdSel.div='';window._mdSel.cat='';}
-  else if(field==='sex'){window._mdSel.div='';window._mdSel.cat='';}
-  else if(field==='div'){window._mdSel.cat='';}
-  R();
-};
-window.dirToggleMedals=async function(){
-  const c=_dirState&&_dirState.medals;
-  const isOn=c&&c.active&&(!c.until||c.until>Date.now());
-  if(isOn){await window.dirHide('medals');return;}
-  const{mod,sex,div,cat,tipo}=window._mdSel;
-  if(!mod||!sex||!div||!cat){showToastLC('Elige modalidad, sexo, división y categoría primero');return;}
-  await window.dirShow('medals',0,{mod,sex,div,cat,tipo:tipo||'total'});
-};
-window.dirShowSlam=async function(type){
-  await window.dirShow('slam',2,{type});
-};
-// Toggle ON/OFF (mismo botón / misma tecla = on si está off, off si está on)
-window.dirToggle=async function(comp){
-  const c=_dirState&&_dirState[comp];
-  const isOn=c&&c.active&&(!c.until||c.until>Date.now());
-  if(isOn) await window.dirHide(comp);
-  else await window.dirShow(comp,0); // permanente
-};
-window.dirToggleLb=async function(){
-  const c=_dirState&&_dirState.leaderboard;
-  const isOn=c&&c.active&&(!c.until||c.until>Date.now());
-  if(isOn) await window.dirHide('leaderboard');
-  else {
-    // Usa la categoría seleccionada en el dropdown (vacía = auto = cat del lifter actual)
-    const cat=(__o=>__o==null?void 0:__o.value)(document.getElementById('dirLbCat'))||'';
-    await window.dirShowLb(cat,0);
-  }
-};
-window.dirSetScale=async function(comp,scale){
-  if(!_dirState)_dirState={};
-  const s=Math.max(0.5,Math.min(2.0,parseFloat(scale)||1));
-  _dirState[comp]=Object.assign({},_dirState[comp]||{},{scale:s});
-  await _dirPush();
-  // Solo re-render si está activo (cambia visual en pantalla)
-  if(DATA.phase==='director')R();
-};
-window.dirResetScale=async function(comp){await window.dirSetScale(comp,1)};
-window.dirSetColor=async function(key,val){
-  if(!_dirState)_dirState={};
-  if(!_dirState.colors)_dirState.colors={};
-  _dirState.colors[key]=val;
-  _txColorsLS=Object.assign({},_txColorsLS,{[key]:val});
-  try{localStorage.setItem('fechipo_tx_colors',JSON.stringify(_dirState.colors))}catch(e){}
-  await _dirPush();
-  if(DATA.phase==='director')R();
-};
-window.dirResetColors=async function(){
-  if(!_dirState)return;
-  _dirState.colors={};_dirState.palette=null;
-  _txColorsLS={};
-  try{localStorage.removeItem('fechipo_tx_colors')}catch(e){}
-  await _dirPush();
-  if(DATA.phase==='director')R();
-};
-window.setTxProfileMedia=function(type){
-  _txProfileMediaType=type;
-  try{localStorage.setItem('fechipo_tx_prof_media',type)}catch(e){}
-  if(_dirState){_dirState.profileMediaType=type;_dirPush();}
-  if(typeof renderTxWidget==='function')renderTxWidget();
-  if(typeof R==='function')R();
-};
-window.dirApplyPalette=async function(name){
-  const p=_TX_COLOR_PALETTES[name];if(!p)return;
-  if(!_dirState)_dirState={};
-  _dirState.colors={...p.colors};
-  _dirState.palette=name;
-  _txColorsLS={...p.colors};
-  try{localStorage.setItem('fechipo_tx_colors',JSON.stringify(_dirState.colors))}catch(e){}
-  try{localStorage.setItem('fechipo_tx_palette',name)}catch(e){}
-  await _dirPush();
-  if(DATA.phase==='director')R();
-};
-window.dirToggleBreak=async function(){
-  const bt=_dirState&&_dirState.breakTimer;
-  if(bt&&bt.active){await window.dirBreakHide();return}
-  // Si los inputs existen y tienen valor los usa; si no, default 10 min
-  const mEl=document.getElementById('dirBreakMin');
-  const sEl=document.getElementById('dirBreakSec');
-  const m=parseInt((mEl==null?void 0:mEl.value)||'0',10)||10;
-  const s=parseInt((sEl==null?void 0:sEl.value)||'0',10)||0;
-  if(mEl)mEl.value=m;
-  if(sEl)sEl.value=s;
-  await window.dirBreakStart();
-};
-// Atajos de teclado para Stream Deck
-window._dirKeyHandler=function(e){
-  // Atajos del director (Stream Deck): funcionan desde CUALQUIER vista admin del
-  // LiveCast (Control en Vivo, Control TX, etc.) — no solo en la vista Director.
-  // Así puedes prender/apagar la Tabla Actual del stream con el Stream Deck mientras
-  // operás la competencia. Requiere ser admin y NO tener foco en un input.
-  if(!isAdmin)return;
-  // Ignorar si hay foco en un input/textarea/select (no pisar la edición de pesos)
-  const tag=((document.activeElement==null?void 0:document.activeElement.tagName)||'').toUpperCase();
-  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;
-  // Solo teclas simples sin modificadores (evita pisar atajos del navegador/SO)
-  if(e.ctrlKey||e.altKey||e.metaKey)return;
-  const k=(e.key||'').toLowerCase();
-  const map={p:'profile',s:'scoreboard',t:'timer'};
-  if(map[k]){e.preventDefault();window.dirToggle(map[k]);return}
-  if(k==='l'){e.preventDefault();window.dirToggleLb();return}
-  if(k==='a'){e.preventDefault();window.dirToggle('tablaActual');return}
-  if(k==='u'){e.preventDefault();window.dirToggle('luces');return}
-  if(k==='m'){e.preventDefault();window.dirToggleMedals();return}
-  if(k==='g'){e.preventDefault();window.dirShowSlam('g');return}
-  if(k==='n'){e.preventDefault();window.dirShowSlam('n');return}
-  if(k==='b'){e.preventDefault();window.dirToggleBreak();return}
-  if(k==='0'||k==='escape'){e.preventDefault();window.dirHideAll();return}
-};
 if(typeof window!=='undefined'&&!window._dirKeyBound){
   window.addEventListener('keydown',function(e){if(window._dirKeyHandler)window._dirKeyHandler(e)});
   window._dirKeyBound=true;
 }
-// ── Break timer (descanso configurable) ─────────────────────
-window.dirBreakStart=async function(){
-  const m=parseInt((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakMin'))||'0',10)||0;
-  const s=parseInt((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakSec'))||'0',10)||0;
-  const label=((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakLabel'))||'').trim();
-  const movement=((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakMovement'))||'').trim();
-  // Videos seleccionados en la lista dinámica
-  const videos=(_dirBtVideoList||[]).filter((_,i)=>(__o=>__o==null?void 0:__o.checked)(document.getElementById('dirBtVid_'+i))).map(v=>v.url);
-  const durationSec=m*60+s;
-  if(durationSec<=0){alert('Ingresa al menos 1 segundo');return}
-  if(!_dirState)_dirState={};
-  const currentStyle=(_dirState==null?void 0:(_dirState.breakTimer==null?void 0:_dirState.breakTimer.style))||{};
-  _dirState.breakTimer={active:true,startedAt:Date.now(),durationSec,label,pausedAt:0,videos,movement,style:currentStyle};
-  await _dirPush();R();
-};
-window.dirBreakPause=async function(){
-  if(!(_dirState==null?void 0:(_dirState.breakTimer==null?void 0:_dirState.breakTimer.active)))return;
-  if(_dirState.breakTimer.pausedAt)return; // ya pausado
-  _dirState.breakTimer.pausedAt=Date.now();
-  await _dirPush();R();
-};
-window.dirBreakResume=async function(){
-  const bt=(_dirState==null?void 0:_dirState.breakTimer);
-  if(!(bt==null?void 0:bt.active)||!bt.pausedAt)return;
-  // Compensar el tiempo de pausa: empujar startedAt por el tiempo pausado
-  bt.startedAt+=Date.now()-bt.pausedAt;
-  bt.pausedAt=0;
-  await _dirPush();R();
-};
-window.dirBreakHide=async function(){
-  if(!_dirState)return;
-  const prevStyle=(_dirState.breakTimer==null?void 0:_dirState.breakTimer.style)||{};
-  _dirState.breakTimer={active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,videos:[],movement:'',style:prevStyle};
-  await _dirPush();R();
-};
-// ── Break timer visual editor — drag & drop ─────────────────────────────
-window.dirBtDown=function(e,type){
-  e.preventDefault();
-  const cv=document.getElementById('dirBtCanvas');if(!cv)return;
-  const r=cv.getBoundingClientRect();
-  const stl=((_dirState==null?void 0:(_dirState.breakTimer==null?void 0:_dirState.breakTimer.style)))||{};
-  _dirBtDrag={type,
-    mx0:(e.clientX-r.left)/r.width*100,
-    my0:(e.clientY-r.top)/r.height*100,
-    sv:{
-      videoX:stl.videoX!=null?stl.videoX:0,videoY:stl.videoY!=null?stl.videoY:5,
-      videoW:stl.videoW!=null?stl.videoW:40,videoH:stl.videoH!=null?stl.videoH:80,
-      textX:stl.textX!=null?stl.textX:44,textY:stl.textY!=null?stl.textY:10
-    }
-  };
-  if(e.target&&e.target.style)e.target.style.cursor='grabbing';
-};
-window.dirBtMove=function(e){
-  if(!_dirBtDrag)return;
-  const cv=document.getElementById('dirBtCanvas');if(!cv)return;
-  const r=cv.getBoundingClientRect();
-  const mx=(e.clientX-r.left)/r.width*100;
-  const my=(e.clientY-r.top)/r.height*100;
-  const dx=mx-_dirBtDrag.mx0,dy=my-_dirBtDrag.my0;
-  const sv=_dirBtDrag.sv;
-  if(!(_dirState==null?void 0:_dirState.breakTimer))return;
-  const s=(_dirState.breakTimer.style=(_dirState.breakTimer.style||{}));
-  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  if(_dirBtDrag.type==='vid'){s.videoX=clamp(sv.videoX+dx,0,80);s.videoY=clamp(sv.videoY+dy,0,80);}
-  else if(_dirBtDrag.type==='vid-resize'){s.videoW=clamp(sv.videoW+dx,5,95);s.videoH=clamp(sv.videoH+dy,5,100);}
-  else if(_dirBtDrag.type==='vid-w'){s.videoW=clamp(sv.videoW+dx,5,95);}
-  else if(_dirBtDrag.type==='vid-h'){s.videoH=clamp(sv.videoH+dy,5,100);}
-  else if(_dirBtDrag.type==='txt'){s.textX=clamp(sv.textX+dx,0,92);s.textY=clamp(sv.textY+dy,0,90);}
-  // Actualizar preview en tiempo real
-  const vid=document.getElementById('dirBtVid');
-  const txt=document.getElementById('dirBtTxt');
-  if(vid){vid.style.left=s.videoX+'%';vid.style.top=s.videoY+'%';vid.style.width=s.videoW+'%';vid.style.height=s.videoH+'%';}
-  if(txt){txt.style.left=s.textX+'%';txt.style.top=s.textY+'%';txt.style.maxWidth=(100-s.textX-1)+'%';}
-};
-window.dirBtUp=function(){_dirBtDrag=null;};
-window.dirBtPreviewBg=function(color){
-  const cv=document.getElementById('dirBtCanvas');if(cv)cv.style.background=color;
-};
-window.dirBtApplyStyle=async function(){
-  if(!_dirState)return;
-  if(!_dirState.breakTimer)_dirState.breakTimer={};
-  const s=_dirState.breakTimer.style||{};
-  _dirState.breakTimer.style={
-    ...s,
-    bgColor:(__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtBgColor'))||s.bgColor||'#0A1628',
-    accentColor:(__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtAccent'))||s.accentColor||'#C41E3A',
-    titleSize:Number((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtTS'))||s.titleSize||8),
-    movSize:Number((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtMS'))||s.movSize||5),
-    timerSize:Number((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtTmr'))||s.timerSize||12),
-    blurAmount:Number((__n=>__n!=null?__n:(24))((__n=>__n!=null?__n:(s.blurAmount))((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtBlur'))))),
-    overlayOpacity:Number((__n=>__n!=null?__n:(0.65))((__n=>__n!=null?__n:(s.overlayOpacity))((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBtOv'))))),
-    showLogos:(__o=>__o==null?void 0:__o.checked)(document.getElementById('dirBtShowLogos'))!==false,
-    eventLogoUrl:(__n=>__n!=null?__n:(''))((__n=>__n!=null?__n:(s.eventLogoUrl))((__o=>__o==null?void 0:__o.dataset.url)(document.getElementById('dirBtEvLogo')))),
-  };
-  await _dirPush();R();
-};
-window.dirBreakAdd=async function(secs){
-  const bt=(_dirState==null?void 0:_dirState.breakTimer);
-  if(!(bt==null?void 0:bt.active))return;
-  bt.durationSec=Math.max(1,(bt.durationSec||0)+secs);
-  await _dirPush();R();
-};
 // ═══════════════════════════════════════════════════════════════════
 // CONTROL REMOTO (phone-first) — alternativa al Stream Deck / OBS WebSocket.
 // Grilla de botones grandes que empujan los MISMOS comandos a Firestore
@@ -2807,94 +1407,24 @@ window.dirBreakAdd=async function(secs){
 // mostrar, y el descanso CUÁNTOS minutos. Sin eso, apretarlos no hacía nada útil.
 // Ahora abren su menú en el mismo teléfono.
 window._remoteMenu='';
-window.remoteMenu=function(cual){
-  window._remoteMenu = (window._remoteMenu===cual) ? '' : cual;
-  R();
-  // Los botones ocupan toda la pantalla, así que el menú se abre debajo: se lo
-  // trae a la vista para que no parezca que el botón no hizo nada.
-  if(window._remoteMenu)setTimeout(function(){
-    const p=document.getElementById('rmPanel');
-    if(p)p.scrollIntoView({behavior:'smooth',block:'nearest'});
-  },60);
-};
 addEventListener('resize',function(){
   if(DATA.phase!=='remote')return;
   clearTimeout(window._rmResTO);
   window._rmResTO=setTimeout(function(){ try{R();_rmMedir();}catch(e){} },120);
 },{passive:true});
-window.remoteOrdenar=function(){ window._rmOrdenar=!window._rmOrdenar; window._rmSel=null; window._remoteMenu=''; R(); };
-window.remoteOrdenTap=function(id){
-  if(!window._rmSel){ window._rmSel=id; R(); return; }
-  if(window._rmSel!==id){
-    const ids=['profile','scoreboard','tablaActual','luces','leaderboard','timer','medals','descanso','good','nolift','esconder'];
-    const o=_rmOrden(ids), i=o.indexOf(window._rmSel), j=o.indexOf(id);
-    if(i>=0&&j>=0){ o[i]=id; o[j]=window._rmSel; try{ localStorage.setItem('yl_remoteOrden',JSON.stringify(o)); }catch(e){} }
-  }
-  window._rmSel=null; R();
-};
-window.remoteOrdenReset=function(){
-  try{ localStorage.removeItem('yl_remoteOrden'); }catch(e){}
-  window._rmSel=null; R();
-};
-// Arranca el descanso con los minutos del remoto, sin depender de los campos del
-// Control TX: en el teléfono esos inputs no existen.
-window.remoteBreakStart=async function(min){
-  let m=min;
-  if(!m){ m=parseInt((document.getElementById('remoteBreakMin')||{}).value||'0',10); }
-  if(!m||m<1){ showToastLC('Elige cuántos minutos'); return; }
-  if(!_dirState)_dirState={};
-  const previo=_dirState.breakTimer||{};
-  // Se arma igual que en el Control TX, pero conservando lo que ya estaba
-  // configurado ahí —el estilo, los videos, el texto— para que el cartel se vea
-  // igual se dispare desde donde se dispare.
-  _dirState.breakTimer=Object.assign({},previo,{
-    active:true, startedAt:Date.now(), durationSec:m*60, pausedAt:0,
-  });
-  await _dirPush();
-  window._remoteMenu='';
-  R();
-  showToastLC('Descanso de '+m+' min en pantalla');
-};
-window.remoteToggleBreak=async function(){
-  const bt=_dirState&&_dirState.breakTimer;
-  if(bt&&bt.active){ await window.dirBreakHide(); window._remoteMenu=''; R(); return; }
-  window.remoteMenu('break');
-};
 // ── Buscar y filtrar en Atletas & Pesaje ────────────────────────────────────
 // Con 552 atletas y tandas hasta la Z, la tabla de corrido no sirve: en el cuarto
 // día encontrar a alguien es bajar por quinientas filas. Esto filtra SOLO lo que
 // se dibuja — los lotes, el orden y todo lo que se calcula siguen viendo la nómina
 // completa.
 window._MAN_F={q:'',flight:''};
-window.manBuscar=function(v){
-  window._MAN_F.q=String(v||'');
-  R();
-  // Devolver el cursor al buscador y al final del texto, que si no hay que
-  // volver a hacer clic entre letra y letra.
-  const i=document.getElementById('manQ');
-  if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}
-};
-window.manTanda=function(f){ window._MAN_F.flight=(window._MAN_F.flight===f)?'':f; R(); };
-window.manLimpiar=function(){ window._MAN_F={q:'',flight:''}; R(); };
 // Celda de un intento (peso + botones) para la tabla de "Todas las tandas" de Control en Vivo.
 // isCurrentCell = es el intento que se está juzgando ahora mismo (tanda+lift+round activos y atleta en tarima).
 // Tamaño de las casillas de intentos en "Todas las tandas" — ajustable por el operador
 // (útil en pantallas grandes o para tocar más fácil en touch). Persiste en localStorage.
 window._CT_CELL_SCALE=parseFloat(localStorage.getItem('yl_ct_cellscale')||'1')||1;
-window.setCtCellScale=function(v){
-  window._CT_CELL_SCALE=Math.max(0.7,Math.min(2.2,parseFloat(v)||1));
-  try{localStorage.setItem('yl_ct_cellscale',window._CT_CELL_SCALE)}catch(e){}
-  R();
-};
-window.nudgeCtCellScale=function(d){window.setCtCellScale(window._CT_CELL_SCALE+d)};
 // Auto-scroll de "TODAS LAS TANDAS" al atleta en tarima (por defecto ENCENDIDO).
 window._ctAutoScroll=localStorage.getItem('yl_ct_autoscroll')!=='0';
-window.toggleCtAutoScroll=function(){
-  window._ctAutoScroll=!window._ctAutoScroll;
-  try{localStorage.setItem('yl_ct_autoscroll',window._ctAutoScroll?'1':'0')}catch(e){}
-  if(window._ctAutoScroll)window._ctScrollKey=null; // forzar un reacomodo al reactivar
-  R();
-};
 // Orden de divisiones (helper global)
 const _DIV_ORDER=function(d){
   const x=(d||'').toLowerCase().replace(/[\s-]/g,'');
@@ -2913,12 +1443,6 @@ const _DIV_ORDER=function(d){
 // pantalla: no se sincroniza con el resto del equipo y no toca las actas, que
 // siguen saliendo con el campeonato completo.
 window._RES_F={sex:'',cat:'',div:'',mod:''};
-window.setResF=function(campo,val){
-  const F=window._RES_F||(window._RES_F={sex:'',cat:'',div:'',mod:''});
-  if(campo in F)F[campo]=val||'';
-  R();
-};
-window.limpiarResF=function(){ window._RES_F={sex:'',cat:'',div:'',mod:''}; R(); };
 // Las cuatro tablas de Resultados, para el filtro de modalidad.
 const _RES_MODS=[['classic','Powerlifting Classic'],['equipped','Powerlifting Equipado'],
   ['bench','Only Bench'],['oe','Olimpiadas Especiales']];
@@ -2949,53 +1473,6 @@ let DB_FULL=[];
 // MODO PRÁCTICA (?practica=1) — roster ficticio + bootstrap
 // ══════════════════════════════════════════════
 const PRACTICE_EVENT_NAME='PRÁCTICA — Jueces (datos ficticios, no oficial)';
-// Rellena los 3 intentos de cada atleta con pesos declarados (sin resultado), para
-// practicar en la Pantalla de Tarima / Control en Vivo. Ejecutable desde la consola:
-//   fillPracticeWeights()            → 3 intentos por levantamiento
-//   fillPracticeWeights({results:true}) → además marca válidos/nulos realistas
-window.fillPracticeWeights=function(opts){
-  opts=opts||{};
-  if(!DATA.athletes||!DATA.athletes.length){showToastLC('No hay atletas cargados');return;}
-  const rnd25=v=>Math.round(v/2.5)*2.5;
-  const isM=a=>(a.sex==='Hombre'||a.sex==='Masculino'||a.sex==='M');
-  DATA.athletes.forEach(a=>{
-    // Solo los dígitos de la categoría: con el formato real '-59 kg (Hombre)'
-    // parseFloat daba -59 (negativo) y los pesos generados quedaban negativos
-    // → la cola de tarima salía vacía.
-    const catNum=parseFloat((String(a.cat).match(/\d+(\.\d+)?/)||[])[0])||100;
-    const factor=isM(a)?1:0.62;
-    const base={
-      sq:rnd25((a.att.sq&&a.att.sq[0]&&a.att.sq[0].w)||catNum*0.85*factor),
-      bp:rnd25((a.att.bp&&a.att.bp[0]&&a.att.bp[0].w)||catNum*0.55*factor),
-      dl:rnd25((a.att.dl&&a.att.dl[0]&&a.att.dl[0].w)||catNum*1.0*factor)
-    };
-    ['sq','bp','dl'].forEach(l=>{
-      const o=base[l], step=(l==='bp')?2.5:5;
-      const ws=[o,o+step,o+2*step];
-      a.att[l]=ws.map((w,i)=>{
-        let r=null;
-        if(opts.results){ r=(i<2)?'g':(Math.random()<0.5?'g':'n'); } // 1º y 2º válidos, 3º al azar
-        return {w,r};
-      });
-    });
-  });
-  DATA.lift='sq';DATA.round=0;
-  saveNow();R();
-  showToastLC('Pesos de práctica cargados en '+DATA.athletes.length+' atletas'+(opts.results?' (con resultados)':''));
-  return 'OK — '+DATA.athletes.length+' atletas con pesos';
-};
-// Link de la vista de ESPECTADOR de la práctica (lo que ve el público). Se copia
-// al portapapeles para mandárselo a la gente que quiere ir mirando.
-window.practiceViewerUrl=function(){
-  // El espectador debe leer el MISMO sandbox que el admin: si es práctica con
-  // nómina real, el link lleva &real=1 (usa la clave de localStorage real).
-  return location.origin+location.pathname.replace(/[^/]*$/,'')+'livecast.html?practica=1'+(PRACTICE_REAL?'&real=1':'')+'&espectador=1';
-};
-window.copyPracticeViewerLink=function(){
-  const url=practiceViewerUrl();
-  if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>showToastLC('Link de espectador copiado')).catch(()=>showToastLC(url));}
-  else showToastLC(url);
-};
 if(PRACTICE_MODE){
   _initPracticeMode();
   _initPracticeSync();
@@ -3224,7 +1701,6 @@ applyEventURLParam();
 // vuelto a empezar cada pocos segundos.
 // ══════════════════════════════════════════════════════════════════
 window._ytOculto=false;
-window.ytToggle=function(){ window._ytOculto=!window._ytOculto; _ytSync(); };
 let _ytMontado='';
 // Solo el público y solo donde mirar tiene sentido. En una pantalla de
 // operación el video estorba, y el audio se mete en la sala.
@@ -3249,19 +1725,7 @@ window._DIA_SEL = window._DIA_SEL || {};
 // Orden de los días escritos a mano, con el mismo criterio que el Cronograma del
 // panel: por nombre de día de la semana, si no por el primer número, si no
 // alfabético. (Con el nombre suelto, "domingo" quedaba antes que "sábado".)
-const _DIAS_SEM_LC=['lunes','martes','miercoles','jueves','viernes','sabado','domingo'];
-window.verDia=function(zona,d){ window._DIA_SEL[zona]=d; try{R();}catch(e){} };
-window.liveVerTanda=function(f){
-  // AUTOMÁTICO (o IR A LA TARIMA) también vuelve a seguir al que está levantando.
-  if(!f){ setNavLibre(false); window._siguiendoTarima=true; window._liveLastKey=null; }
-  else { window.setNavLibre(true); DATA.flight=f; }
-  try{ R(); }catch(e){}
-};
-window.liveSeguirTarima=function(){
-  window._siguiendoTarima=true; window._liveLastKey=null;
-  if(window.NAV_LIBRE){ window.liveVerTanda(null); return; }
-  try{ R(); }catch(e){}
-};
+const _DIAS_SEM_LC=YLDias.SEMANA;
 // Girar el tablet cruza el umbral: se redibuja una sola vez, y solo si de verdad
 // cambió de lado. Sin esto la vista se queda con el formato del ancho anterior.
 addEventListener('resize',function(){

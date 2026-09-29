@@ -34,24 +34,9 @@ window.cronoSet=function(i,field,val){
   if(field==='tarima'||field==='flight'||field==='jornada'||field==='dia')setTimeout(()=>{if(ST.view==='cronograma')render();},50);
 };
 
-function _cronoDiaKey(d){
-  const s=String(d||'').trim();
-  if(!s)return [3,Infinity,''];                                  // sin día: al final
-  const n=s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  let i=_DIAS_SEMANA.findIndex(x=>n.indexOf(x)>=0);              // "sábado", "Sábado 8"
-  // Abreviaturas, con borde de palabra para no confundir "mar" con "marzo".
-  if(i<0){const m=n.match(/\b(lun|mar|mie|jue|vie|sab|dom)\b/);
-          if(m)i=['lun','mar','mie','jue','vie','sab','dom'].indexOf(m[1]);}
-  if(i>=0)return [0,i,n];
-  const num=n.match(/\d+/);
-  if(num)return [1,parseInt(num[0],10),n];                       // "Día 1", "8 de agosto"
-  return [2,0,n];                                                // texto suelto: alfabético
-}
+function _cronoDiaKey(d){ return YLDias.clave(d); }   // compartido/dias.js
 
-function _cronoCmpDia(a,b){
-  const ka=_cronoDiaKey(a),kb=_cronoDiaKey(b);
-  return (ka[0]-kb[0])||(ka[1]-kb[1])||ka[2].localeCompare(kb[2]);
-}
+function _cronoCmpDia(a,b){ return YLDias.comparar(a,b); }
 
 // Poner el mismo día a todo un flight de una — es como se arma en la práctica:
 // el día se decide por tanda, no atleta por atleta.

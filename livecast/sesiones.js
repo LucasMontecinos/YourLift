@@ -176,3 +176,23 @@ function _filaDias(zona, tandas, diaEnTarima){
   h+='</div>';
   return {html:h, tandas:porDia[sel]};
 }
+
+// ── Acciones de los botones (window.…) ──────────────────────────────────────
+// Las llaman los onclick de la pantalla. Asignarlas acá, antes de arranque.js,
+// solo las deja listas un poco antes: ninguna se ejecuta al cargar.
+
+   // compartido/dias.js
+window.verDia=function(zona,d){ window._DIA_SEL[zona]=d; try{R();}catch(e){} };
+
+window.liveVerTanda=function(f){
+  // AUTOMÁTICO (o IR A LA TARIMA) también vuelve a seguir al que está levantando.
+  if(!f){ setNavLibre(false); window._siguiendoTarima=true; window._liveLastKey=null; }
+  else { window.setNavLibre(true); DATA.flight=f; }
+  try{ R(); }catch(e){}
+};
+
+window.liveSeguirTarima=function(){
+  window._siguiendoTarima=true; window._liveLastKey=null;
+  if(window.NAV_LIBRE){ window.liveVerTanda(null); return; }
+  try{ R(); }catch(e){}
+};

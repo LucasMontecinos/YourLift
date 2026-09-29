@@ -580,3 +580,9 @@ function renderAtletaInfo(){
   h+='</div></div>';
   return h;
 }
+
+// ── Acciones de los botones (window.…) ──────────────────────────────────────
+// Las llaman los onclick de la pantalla. Asignarlas acá, antes de arranque.js,
+// solo las deja listas un poco antes: ninguna se ejecuta al cargar.
+
+window.ytToggle=function(){ window._ytOculto=!window._ytOculto; _ytSync(); };
