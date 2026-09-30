@@ -160,7 +160,7 @@ function render(){
           ?` <img src="YourLift_logo.png" style="height:13px;object-fit:contain;vertical-align:middle;margin-left:4px;filter:drop-shadow(0 0 4px rgba(196,30,58,.9)) brightness(1.2)" title="YourLift Owner" onerror="this.outerHTML='<span style=color:var(--accent);font-family:Oswald;font-size:10px;margin-left:3px>YL</span>'">`
           :'');
         const roleHtml=isOwner
-          ?`<span style="font-size:9px;font-family:Oswald;letter-spacing:1px;background:linear-gradient(90deg,#C41E3A,#D4A843);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:700"><i class=yl-i-estrella></i> OWNER · YOURLIFT</span>`
+          ?`<span style="font-size:9px;font-family:Oswald;letter-spacing:1px;color:#D4A843;font-weight:700"><i class=yl-i-estrella></i> OWNER · YOURLIFT</span>`
           :`<span style="opacity:.7;font-size:9px">${ST.adminInfo?.role||'admin'}</span>`;
         const borderStyle=isOwner?'border:1px solid rgba(196,30,58,.45);background:linear-gradient(135deg,rgba(196,30,58,.08),rgba(212,168,67,.08))':'';
         return `<div class="user" style="${borderStyle}">${nameHtml}<br>${roleHtml}</div>`;

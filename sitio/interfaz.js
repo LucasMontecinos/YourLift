@@ -892,16 +892,15 @@ function home(){
 
   let h=`
   <div style="position:relative;margin:-90px calc(-50vw + 50%) 0;width:100vw;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;padding:96px 0 26px">
-    <div id="heroSolidBg" style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,#142a4d 0%,#0a1628 45%,#06101f 100%);transition:opacity .4s"></div>
-    <div style="position:absolute;inset:0;background:radial-gradient(circle at 20% 30%,rgba(196,30,58,.18) 0%,transparent 45%),radial-gradient(circle at 80% 70%,rgba(212,168,67,.14) 0%,transparent 45%)"></div>
-    <div id="heroFadeBg" style="position:absolute;inset:0;background:linear-gradient(180deg,transparent 60%,#06101f 100%);transition:opacity .4s"></div>
+    <div id="heroSolidBg" style="position:absolute;inset:0;background:transparent;transition:opacity .4s"></div>
+    <div id="heroFadeBg" style="position:absolute;inset:0;background:transparent;transition:opacity .4s"></div>
     <div style="position:relative;z-index:2;text-align:center;padding:70px 20px">
       <img src="yourlift_logo_hd.png" alt="YourLift" style="height:clamp(88px,13vw,170px);width:auto;margin:0 auto 16px;display:block;filter:drop-shadow(0 8px 36px rgba(0,0,0,.7))">
       <p style="font-size:clamp(15px,2.5vw,20px);color:rgba(235,242,250,.95);max-width:680px;margin:0 auto 32px;line-height:1.6;text-shadow:0 2px 12px rgba(0,0,0,.6)">La tecnología del powerlifting chileno: inscripciones, nóminas, ranking nacional, récords y transmisión en vivo, todo en un solo lugar.</p>
       <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-        <button onclick="sv('insc')" style="padding:15px 30px;background:var(--green);color:#fff;border:none;border-radius:10px;font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer;box-shadow:0 8px 24px rgba(34,197,94,.35)">INSCRIBIRME</button>
-        <button onclick="sv('nominas')" style="padding:15px 30px;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:10px;font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer;backdrop-filter:blur(6px)">VER NÓMINAS</button>
-        <button onclick="sv('rank')" style="padding:15px 30px;background:var(--gold);color:#000;border:none;border-radius:10px;font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer;box-shadow:0 8px 24px rgba(212,168,67,.35)">RANKING</button>
+        <button onclick="sv('insc')" style="padding:15px 30px;background:var(--green);color:#fff;border:none;border-radius:10px;font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer;">INSCRIBIRME</button>
+        <button onclick="sv('nominas')" style="padding:15px 30px;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:10px;font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer">VER NÓMINAS</button>
+        <button onclick="sv('rank')" style="padding:15px 30px;background:var(--gold);color:#000;border:none;border-radius:10px;font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer;">RANKING</button>
       </div>
       <a href="https://instagram.com/yourlift_oficial" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;margin-top:26px;color:rgba(235,242,250,.9);text-decoration:none;font-family:Oswald;font-size:13px;letter-spacing:2px;padding:8px 16px;border:1px solid rgba(255,255,255,.25);border-radius:30px;background:rgba(255,255,255,.06);backdrop-filter:blur(6px);transition:all .15s" onmouseover="this.style.borderColor='#E1306C';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(255,255,255,.25)';this.style.color='rgba(235,242,250,.9)'">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>

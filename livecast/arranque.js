@@ -79,6 +79,7 @@ if(TX_MODE){
   const css=document.createElement('style');
   css.textContent=`
     html,body{background:transparent!important;overflow:hidden!important;margin:0}
+    body::before,body::after{display:none!important} /* el fondo común (bg-fechipo.css) no va en OBS */
     body.tx-opaque{background:linear-gradient(135deg,#0A1628 0%,#0E1F3A 50%,#0A1628 100%)!important}
     #R{display:none!important}
     #txWidget{position:fixed;top:0;right:0;bottom:0;left:0;font-family:'Oswald',sans-serif;color:#fff;z-index:2}
