@@ -191,9 +191,19 @@ a{color:var(--accent);text-decoration:none}
 .yl-plates i:nth-child(3){background:var(--d15)}.yl-plates i:nth-child(4){background:var(--d10)}.yl-plates i:nth-child(5){background:var(--d5)}
 .yl-hero{position:relative;margin:0 calc(-50vw + 50%) clamp(28px,4vw,48px);width:100vw;min-height:clamp(560px,82vh,900px);display:flex;align-items:flex-end;overflow:hidden}
 .yl-hero picture,.yl-hero picture img{position:absolute;inset:0;width:100%;height:100%}
-.yl-hero picture img{object-fit:cover;object-position:55% 0%}
+/* La posición la puede mover el owner desde el panel (Portada): --hm-* en teléfono y tablet, --hpc-* en computador. */
+.yl-hero picture img{object-fit:cover;object-position:var(--hm-x,50%) var(--hm-y,50%)}
 .yl-hero::after{content:"";position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(90deg,rgba(7,11,20,.96) 0%,rgba(7,11,20,.78) 38%,rgba(7,11,20,.08) 74%),linear-gradient(0deg,#0A1628 0%,transparent 32%)}
+/* En pantallas más anchas que la foto, la foto va solo a la derecha y el texto
+   a la izquierda, sobre fondo oscuro: si ocupara todo el ancho, el título caería
+   encima de la cara del atleta. El borde izquierdo de la foto se funde con el fondo. */
+@media (min-width:1024px){
+  .yl-hero{background:#070B14}
+  .yl-hero picture{left:auto;right:0;width:clamp(55%,72vh,66%)}
+  .yl-hero picture img{object-position:var(--hpc-x,30%) var(--hpc-y,0%)}
+  .yl-hero::after{background:linear-gradient(90deg,#070B14 0%,#070B14 34%,rgba(7,11,20,.55) 46%,rgba(7,11,20,0) 60%),linear-gradient(0deg,#0A1628 0%,transparent 28%)}
+}
 .yl-hero-c{position:relative;z-index:2;width:100%;max-width:1400px;margin:0 auto;padding:110px clamp(16px,4vw,56px) clamp(36px,6vh,80px)}
 .yl-hero-logo{height:clamp(56px,6vw,96px);width:auto;display:block;margin-bottom:18px}
 .yl-kick{font-family:'Barlow Condensed',Oswald,sans-serif;font-weight:700;font-size:clamp(14px,1.3vw,19px);letter-spacing:.3em;text-transform:uppercase;color:var(--d15)}
@@ -232,12 +242,14 @@ a{color:var(--accent);text-decoration:none}
 /* Tablet */
 @media (max-width:1100px){.yl-lid-w{grid-template-columns:1fr}}
 /* Teléfono: la foto arriba y el texto debajo, botones a todo el ancho */
-@media (max-width:640px){
+@media (max-width:1023px){
   .yl-hero{display:block;min-height:0}
   .yl-hero picture{position:relative;display:block;height:auto;aspect-ratio:1.42}
   .yl-hero::after{height:calc(100vw / 1.42);bottom:auto;background:linear-gradient(0deg,#0A1628 0%,rgba(10,22,40,.15) 65%)}
   .yl-hero-c{padding:0 16px 30px;margin-top:-36px}
   .yl-hero-logo{display:none}
+}
+@media (max-width:640px){
   .yl-cta .yl-btn{flex:1 1 100%}
   .yl-lid-h{flex-direction:column;align-items:flex-start;gap:6px}
   .yl-ld{padding:22px 20px 0}.yl-ld-bar{margin:20px -20px 0}
@@ -364,6 +376,7 @@ window._BG_VIDEOS={};
         _fsSetCache('bgSettings',s);
       }
     }catch(e){window._BG_SETTINGS=window._BG_SETTINGS||{}}
+    if(typeof _aplicarPortada==='function')_aplicarPortada();
     // Solo videos de sections (gestionados desde admin). Sin fallback automático a break/.
     setBgForSection(typeof ST!=='undefined'?ST.v:'nominas');
   }catch(e){console.warn('[bgVideo]',e.message);}
@@ -501,14 +514,14 @@ function setBgForSection(section){
 <script src="compartido/clubs.js?v=deffa3c5"></script>
 <script src="compartido/qr.js?v=d5a40029"></script>
 <script src="compartido/ediciones.js?v=477f1b0a"></script>
-<script src="sitio/interfaz.js?v=3a943d84"></script>
+<script src="sitio/interfaz.js?v=491d3c4c"></script>
 <script src="sitio/visitas.js?v=41fc0043"></script>
 <script src="sitio/atletas.js?v=30af7fe9"></script>
 <script src="sitio/nominas.js?v=093c1778"></script>
 <script src="sitio/entrenadores.js?v=19784749"></script>
 <script src="sitio/records.js?v=eb1a178d"></script>
 <script src="sitio/medios.js?v=26bca281"></script>
-<script src="sitio/inicio.js?v=a4884247"></script>
+<script src="sitio/inicio.js?v=2c92fea4"></script>
 <script src="sitio/arranque.js?v=1f6b3f05"></script>
 <script>
 if('serviceWorker' in navigator){

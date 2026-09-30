@@ -172,6 +172,7 @@ function render(){
       ${_statsPuede()?`<button class="side-btn ${ST.view==='stats'?'active':''}" onclick="go('stats')">Estadísticas</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='publisher'?'active':''}" onclick="go('publisher')">Editor publicaciones</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='sponsors'?'active':''}" onclick="go('sponsors')">Auspiciadores</button>`:''}
+      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='portada'?'active':''}" onclick="go('portada')">Portada</button>`:''}
       <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')">Revisión inscripciones</button>
       <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')">Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
       <button class="side-btn ${ST.view==='entrenadoresDB'?'active':''}" onclick="go('entrenadoresDB')">Base Entrenadores</button>
@@ -214,6 +215,7 @@ function render(){
   // cada uno lo sigue decidiendo renderStats().
   else if(ST.view==='stats'){if(_statsPuede())content=renderStats();else go('athletes');}
   else if(ST.view==='sponsors'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderSponsors();else go('athletes');}
+  else if(ST.view==='portada'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderPortada();else go('athletes');}
   else if(ST.view==='publisher'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderPublisher();else go('athletes');}
   else if(ST.view==='approvals')content=renderApprovals();
   else if(ST.view==='editRequests')content=renderEditRequests();
@@ -245,6 +247,7 @@ function render(){
   
   app.innerHTML=`<div class="shell"><div class="nav-backdrop" onclick="admNav(false)"></div>${sidebar}<div class="corner-stack"><img src="YourLift_logo.png" alt="YourLift" class="corner-logo" onclick="location.href='index.html'" title="Volver al sitio" onerror="this.style.display='none'"></div><div class="main"><button class="adm-burger" onclick="admNav(true)"><i class=yl-i-menu></i> Menú</button>${content}</div></div>`;
   if(ST.view==='sponsors'&&!ST._sponsorsLoaded)setTimeout(loadSponsors,0);
+  if(ST.view==='portada'&&!ST._portadaLoaded)setTimeout(loadPortada,0);
   if(ST.view==='stats'){
     const _st=ST.statsTab||'deporte';
     if(_st==='web') setTimeout(loadWebAnalytics,0);

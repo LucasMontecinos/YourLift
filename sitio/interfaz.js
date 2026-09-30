@@ -913,7 +913,7 @@ function home(){
   let h=`
   <div class="yl-plates" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
   <header class="yl-hero">
-    <picture><source media="(max-width:640px)" srcset="portada/portada_movil.jpg"><img src="portada/portada.jpg" alt="Atleta en sentadilla en el Sudamericano 2026" fetchpriority="high"></picture>
+    <picture><source media="(max-width:640px)" srcset="portada/portada_movil.jpg?v=e949b0fa"><img src="portada/portada.jpg?v=ee0a781a" alt="Atleta en sentadilla en el Sudamericano 2026" fetchpriority="high"></picture>
     <div class="yl-hero-c">
       <img class="yl-hero-logo" src="yourlift_logo_hd.png" alt="YourLift">
       <div class="yl-kick">El powerlifting de Chile</div>
@@ -1307,7 +1307,7 @@ function glcalc(){
       </div>
     </div>
   </div>`;
-  app.innerHTML=h;if(!ST.sel&&ST.v==="list"){const i=app.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}
+  app.innerHTML=h;if(ST.v==='home'&&typeof _aplicarPortada==='function')_aplicarPortada();if(!ST.sel&&ST.v==="list"){const i=app.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}
   const cs=document.querySelector('.corner-stack');
   if(cs)cs.style.display='flex';
   const clogo=document.querySelector('.corner-stack .corner-logo');

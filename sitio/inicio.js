@@ -93,3 +93,20 @@ setInterval(function(){
   if(p>=1){_lideresIr(_LID.i+1);return;}
   var b=document.getElementById('ylLidBar'); if(b)b.style.width=(p*100)+'%';
 },100);
+
+// ── Foto de la portada: la que eligió el owner en el panel ─────────────────
+// site_backgrounds/portada: {foto, pc:{x,y}, movil:{x,y}} (x e y en %). Llega con
+// el resto de la configuración de fondos (con caché), así que no suma lecturas.
+// Sin configuración, queda la foto del sitio con su encuadre por defecto.
+function _aplicarPortada(){
+  var c=((window._BG_SETTINGS||{}).portada)||{};
+  var r=document.documentElement.style;
+  var pc=c.pc||{},mv=c.movil||{};
+  if(pc.x!=null)r.setProperty('--hpc-x',pc.x+'%'); if(pc.y!=null)r.setProperty('--hpc-y',pc.y+'%');
+  if(mv.x!=null)r.setProperty('--hm-x',mv.x+'%'); if(mv.y!=null)r.setProperty('--hm-y',mv.y+'%');
+  if(c.foto){
+    var img=document.querySelector('.yl-hero picture img'),src=document.querySelector('.yl-hero picture source');
+    if(img&&img.getAttribute('src')!==c.foto)img.setAttribute('src',c.foto);
+    if(src&&src.getAttribute('srcset')!==c.foto)src.setAttribute('srcset',c.foto);
+  }
+}
