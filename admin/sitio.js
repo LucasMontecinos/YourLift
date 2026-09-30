@@ -218,38 +218,55 @@ window.uploadClubLogo=async function(club,slug,input){
 // lecturas. En computador la foto va a la derecha del texto; en teléfono y
 // tablet, arriba. Por eso el encuadre se elige por separado para cada uno.
 // ══════════════════════════════════════════════════════════════════
-const _PORTADA_DEF={foto:'',pc:{x:30,y:0},movil:{x:50,y:50}};
+const _PT_FOTO=()=>({url:'',pc:{x:30,y:0},movil:{x:50,y:50}});
 async function loadPortada(){
-  try{ const s=await getDoc(doc(db,'site_backgrounds','portada')); const d=s.exists()?s.data():{};
-    ST.portada={foto:d.foto||'',pc:{..._PORTADA_DEF.pc,...(d.pc||{})},movil:{..._PORTADA_DEF.movil,...(d.movil||{})}}; }
-  catch(e){ ST.portada=JSON.parse(JSON.stringify(_PORTADA_DEF)); }
+  let d={};
+  try{ const s=await getDoc(doc(db,'site_backgrounds','portada')); d=s.exists()?s.data():{}; }catch(e){}
+  // Formato viejo (una sola foto: {foto,pc,movil}) → lista de una.
+  let fotos=Array.isArray(d.fotos)?d.fotos:((d.foto||d.pc||d.movil)?[{url:d.foto||'',pc:d.pc,movil:d.movil}]:[]);
+  if(!fotos.length)fotos=[_PT_FOTO()];
+  ST.portada={intervalo:+d.intervalo||6,fotos:fotos.map(f=>({url:f.url||'',pc:{..._PT_FOTO().pc,...(f.pc||{})},movil:{..._PT_FOTO().movil,...(f.movil||{})}}))};
   ST._portadaLoaded=true; if(ST.view==='portada')render();
 }
 // Mueve la vista previa en vivo, sin volver a dibujar la pantalla (el control
 // deslizante perdería el foco a cada paso).
-window.ptMover=function(cual,eje,v){
-  if(!ST.portada)return; ST.portada[cual][eje]=+v;
-  const img=document.getElementById('pt_img_'+cual); if(img)img.style.objectPosition=ST.portada[cual].x+'% '+ST.portada[cual].y+'%';
-  const n=document.getElementById('pt_val_'+cual+'_'+eje); if(n)n.textContent=v+'%';
+window.ptMover=function(i,cual,eje,v){
+  const f=ST.portada&&ST.portada.fotos[i]; if(!f)return; f[cual][eje]=+v;
+  const img=document.getElementById('pt_img_'+i+'_'+cual); if(img)img.style.objectPosition=f[cual].x+'% '+f[cual].y+'%';
+  const n=document.getElementById('pt_val_'+i+'_'+cual+'_'+eje); if(n)n.textContent=v+'%';
 };
 window.ptSubir=async function(inp){
-  const f=inp.files&&inp.files[0]; if(!f)return;
-  const st=document.getElementById('pt_status'); if(st)st.textContent='Subiendo…';
+  const archivos=[...(inp.files||[])]; if(!archivos.length)return;
+  const st=document.getElementById('pt_status');
   try{
     const storage=getStorage(app);
-    const fc=await compressImg(f,1800,0.82);
-    const sref=storageRef(storage,'logos/portada/'+Date.now()+'.webp');
-    await uploadBytes(sref,fc,{contentType:'image/webp'});
-    ST.portada.foto=await getDownloadURL(sref); render();
-    showToast('Foto subida. Ajusta el encuadre y aprieta Guardar.');
+    for(let k=0;k<archivos.length;k++){
+      if(st)st.textContent='Subiendo '+(k+1)+' de '+archivos.length+'…';
+      const fc=await compressImg(archivos[k],1800,0.82);
+      const sref=storageRef(storage,'logos/portada/'+Date.now()+'_'+k+'.webp');
+      await uploadBytes(sref,fc,{contentType:'image/webp'});
+      ST.portada.fotos.push({..._PT_FOTO(),url:await getDownloadURL(sref)});
+    }
+    render(); showToast('Listo. Ajusta el encuadre de cada foto y aprieta Guardar.');
   }catch(e){ if(st)st.textContent='Error: '+e.message; }
 };
-window.ptOriginal=function(){ if(!ST.portada)return; ST.portada.foto=''; render(); };
+window.ptQuitar=function(i){
+  if(ST.portada.fotos.length<2){showToast('Tiene que quedar al menos una foto',null,true);return;}
+  if(!confirm('¿Sacar esta foto de la portada?'))return;
+  ST.portada.fotos.splice(i,1); render();
+};
+window.ptMoverOrden=function(i,d){
+  const L=ST.portada.fotos,j=i+d; if(j<0||j>=L.length)return;
+  [L[i],L[j]]=[L[j],L[i]]; render();
+};
+window.ptOriginal=function(){ if(ST.portada.fotos.some(f=>!f.url))return; ST.portada.fotos.unshift(_PT_FOTO()); render(); };
 window.ptSave=async function(){
   if(ST.adminInfo?.role!=='owner'&&!ST.adminInfo?.bootstrap){ showToast('Solo el Owner puede cambiar la portada',null,true); return; }
   try{
-    const p=ST.portada;
-    await setDoc(doc(db,'site_backgrounds','portada'),{foto:p.foto||'',pc:{x:+p.pc.x,y:+p.pc.y},movil:{x:+p.movil.x,y:+p.movil.y},updatedAt:serverTimestamp()},{merge:true});
+    const p=ST.portada, iv=document.getElementById('pt_int'); if(iv)p.intervalo=Math.max(3,Math.min(60,+iv.value||6));
+    await setDoc(doc(db,'site_backgrounds','portada'),{
+      fotos:p.fotos.map(f=>({url:f.url||'',pc:{x:+f.pc.x,y:+f.pc.y},movil:{x:+f.movil.x,y:+f.movil.y}})),
+      intervalo:p.intervalo,foto:null,pc:null,movil:null,updatedAt:serverTimestamp()},{merge:true});
     // El sitio guarda la configuración 24 h en este navegador: se borra acá para
     // que el owner vea el cambio al tiro. El resto la ve cuando se le venza.
     try{ localStorage.removeItem('_yfc_bgSettings'); }catch(_){}
@@ -258,36 +275,48 @@ window.ptSave=async function(){
 };
 function renderPortada(){
   const p=ST.portada; if(!p)return '<div class="h1">Portada</div><p class="subtitle">Cargando…</p>';
-  const foto=p.foto||'portada/portada.jpg';
-  const fotoMv=p.foto||'portada/portada_movil.jpg';
-  const ctl=(cual,eje,lbl)=>`<label style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)">
-      <span style="width:92px">${lbl}</span>
-      <input type="range" min="0" max="100" step="1" value="${p[cual][eje]}" oninput="ptMover('${cual}','${eje}',this.value)" style="flex:1">
-      <b id="pt_val_${cual}_${eje}" style="width:40px;text-align:right;color:var(--text)">${p[cual][eje]}%</b></label>`;
+  const n=p.fotos.length;
+  const ctl=(i,f,cual,eje,lbl)=>`<label style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)">
+      <span style="width:80px">${lbl}</span>
+      <input type="range" min="0" max="100" step="1" value="${f[cual][eje]}" oninput="ptMover(${i},'${cual}','${eje}',this.value)" style="flex:1">
+      <b id="pt_val_${i}_${cual}_${eje}" style="width:40px;text-align:right;color:var(--text)">${f[cual][eje]}%</b></label>`;
   // Las vistas previas reproducen el recorte real: en computador la foto ocupa la
-  // derecha de una franja ancha y el texto tapa la izquierda; en teléfono va arriba.
+  // derecha y se funde con el fondo; en teléfono y tablet va arriba.
+  const tarjeta=(f,i)=>{
+    const u=f.url||'portada/portada.jpg', um=f.url||'portada/portada_movil.jpg';
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <b style="font-family:Oswald;letter-spacing:2px;color:var(--gold)">FOTO ${i+1}${f.url?'':' · ORIGINAL'}</b>
+        <span style="flex:1"></span>
+        <button class="btn" style="padding:5px 10px" ${i?'':'disabled'} onclick="ptMoverOrden(${i},-1)" title="Subir">↑</button>
+        <button class="btn" style="padding:5px 10px" ${i<n-1?'':'disabled'} onclick="ptMoverOrden(${i},1)" title="Bajar">↓</button>
+        <button class="btn btn-r" style="padding:5px 10px" onclick="ptQuitar(${i})">Sacar</button>
+      </div>
+      <div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:18px;align-items:start">
+        <div>
+          <div style="font-size:11px;letter-spacing:2px;color:var(--muted);margin-bottom:6px">COMPUTADOR</div>
+          <div style="position:relative;aspect-ratio:1.9;background:#070B14;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+            <img id="pt_img_${i}_pc" src="${esc(u)}" style="position:absolute;right:0;top:0;width:60%;height:100%;object-fit:cover;object-position:${f.pc.x}% ${f.pc.y}%;-webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 32%);mask-image:linear-gradient(90deg,transparent 0%,#000 32%)">
+            <div style="position:absolute;left:5%;bottom:14%;font-family:Oswald;font-weight:700;color:#fff;font-size:clamp(16px,2.6vw,30px);line-height:.95">CADA KILO<br><span style="color:#E62832">CUENTA.</span></div>
+          </div>
+          <div style="display:grid;gap:6px;margin-top:8px">${ctl(i,f,'pc','x','Horizontal')}${ctl(i,f,'pc','y','Vertical')}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;letter-spacing:2px;color:var(--muted);margin-bottom:6px">TELÉFONO Y TABLET</div>
+          <div style="position:relative;aspect-ratio:1.42;background:#070B14;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+            <img id="pt_img_${i}_movil" src="${esc(um)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:${f.movil.x}% ${f.movil.y}%">
+          </div>
+          <div style="display:grid;gap:6px;margin-top:8px">${ctl(i,f,'movil','x','Horizontal')}${ctl(i,f,'movil','y','Vertical')}</div>
+        </div>
+      </div></div>`;
+  };
   return `<div class="h1">Portada</div>
-    <p class="subtitle">La foto de la portada de yourlift.cl. Muévela para que no se corte la cara: en computador va a la derecha del texto y en el teléfono arriba.</p>
-    <div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:20px;margin:16px 0;align-items:start">
-      <div>
-        <div style="font-family:Oswald;font-size:13px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">COMPUTADOR</div>
-        <div style="position:relative;aspect-ratio:1.9;background:#070B14;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-          <img id="pt_img_pc" src="${esc(foto)}" style="position:absolute;right:0;top:0;width:60%;height:100%;object-fit:cover;object-position:${p.pc.x}% ${p.pc.y}%;-webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 32%);mask-image:linear-gradient(90deg,transparent 0%,#000 32%)">
-          <div style="position:absolute;left:5%;bottom:14%;font-family:Oswald;font-weight:700;color:#fff;font-size:clamp(18px,3vw,34px);line-height:.95">CADA KILO<br><span style="color:#E62832">CUENTA.</span></div>
-        </div>
-        <div style="display:grid;gap:6px;margin-top:10px">${ctl('pc','x','Horizontal')}${ctl('pc','y','Vertical')}</div>
-      </div>
-      <div>
-        <div style="font-family:Oswald;font-size:13px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">TELÉFONO Y TABLET</div>
-        <div style="position:relative;aspect-ratio:1.42;background:#070B14;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-          <img id="pt_img_movil" src="${esc(fotoMv)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:${p.movil.x}% ${p.movil.y}%">
-        </div>
-        <div style="display:grid;gap:6px;margin-top:10px">${ctl('movil','x','Horizontal')}${ctl('movil','y','Vertical')}</div>
-      </div>
-    </div>
+    <p class="subtitle">Las fotos de la portada de yourlift.cl. Con más de una, van pasando solas. Muévelas para que no se corte la cara: en computador van a la derecha del texto y en el teléfono arriba.</p>
+    <div style="margin:16px 0">${p.fotos.map(tarjeta).join('')}</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-      <label class="btn" style="cursor:pointer">Subir otra foto<input type="file" accept="image/*" onchange="ptSubir(this)" style="display:none"></label>
-      ${p.foto?'<button class="btn" onclick="ptOriginal()">Volver a la foto original</button>':''}
+      <label class="btn" style="cursor:pointer">+ Agregar fotos<input type="file" accept="image/*" multiple onchange="ptSubir(this)" style="display:none"></label>
+      ${p.fotos.some(f=>!f.url)?'':'<button class="btn" onclick="ptOriginal()">Agregar la foto original</button>'}
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">Cambiar cada <input id="pt_int" class="inp" type="number" min="3" max="60" value="${p.intervalo}" style="width:64px"> segundos</label>
       <button class="btn btn-g" onclick="ptSave()">Guardar</button>
       <span id="pt_status" style="font-size:11px;color:var(--muted)"></span>
     </div>

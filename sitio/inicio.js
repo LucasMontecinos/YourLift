@@ -94,19 +94,41 @@ setInterval(function(){
   var b=document.getElementById('ylLidBar'); if(b)b.style.width=(p*100)+'%';
 },100);
 
-// ── Foto de la portada: la que eligió el owner en el panel ─────────────────
-// site_backgrounds/portada: {foto, pc:{x,y}, movil:{x,y}} (x e y en %). Llega con
-// el resto de la configuración de fondos (con caché), así que no suma lecturas.
-// Sin configuración, queda la foto del sitio con su encuadre por defecto.
-function _aplicarPortada(){
+// ── Fotos de la portada: las que eligió el owner en el panel ──────────────
+// site_backgrounds/portada: {fotos:[{url,pc:{x,y},movil:{x,y}}], intervalo}.
+// `url` vacía es la foto original del sitio. Cada foto trae su encuadre para
+// computador (--hpc-*) y para teléfono (--hm-*). Con más de una, van pasando con
+// un fundido. Llega con el resto de la configuración de fondos (con caché), así
+// que no suma lecturas. Acepta también el formato viejo {foto,pc,movil}.
+var _PORT={i:0,t0:0};
+function _portadaFotos(){
   var c=((window._BG_SETTINGS||{}).portada)||{};
-  var r=document.documentElement.style;
-  var pc=c.pc||{},mv=c.movil||{};
-  if(pc.x!=null)r.setProperty('--hpc-x',pc.x+'%'); if(pc.y!=null)r.setProperty('--hpc-y',pc.y+'%');
-  if(mv.x!=null)r.setProperty('--hm-x',mv.x+'%'); if(mv.y!=null)r.setProperty('--hm-y',mv.y+'%');
-  if(c.foto){
-    var img=document.querySelector('.yl-hero picture img'),src=document.querySelector('.yl-hero picture source');
-    if(img&&img.getAttribute('src')!==c.foto)img.setAttribute('src',c.foto);
-    if(src&&src.getAttribute('srcset')!==c.foto)src.setAttribute('srcset',c.foto);
-  }
+  if(Array.isArray(c.fotos)&&c.fotos.length)return c.fotos;
+  if(c.foto||c.pc||c.movil)return [{url:c.foto||'',pc:c.pc,movil:c.movil}];
+  return null;
 }
+function _aplicarPortada(){
+  var F=_portadaFotos(); var pic=document.querySelector('.yl-hero picture'); if(!F||!pic)return;
+  var base=pic.getAttribute('data-orig')||(pic.querySelector('img')&&pic.querySelector('img').getAttribute('src'))||'portada/portada.jpg';
+  pic.setAttribute('data-orig',base);
+  if(_PORT.i>=F.length)_PORT.i=0;
+  var h='';
+  F.forEach(function(f,k){
+    var pc=f.pc||{},mv=f.movil||{};
+    var st='--hpc-x:'+(pc.x!=null?pc.x:30)+'%;--hpc-y:'+(pc.y!=null?pc.y:0)+'%;--hm-x:'+(mv.x!=null?mv.x:50)+'%;--hm-y:'+(mv.y!=null?mv.y:50)+'%';
+    h+='<img class="yl-sl'+(k===_PORT.i?' on':'')+'" src="'+String(f.url||base).replace(/"/g,'&quot;')+'" alt="" style="'+st+'"'+(k?' loading="lazy"':' fetchpriority="high"')+'>';
+  });
+  // La primera vez se reemplaza la foto fija; después se respeta lo que hay para
+  // no recargar las imágenes cada vez que la portada se vuelve a dibujar.
+  var firma=JSON.stringify(F);
+  if(pic.getAttribute('data-firma')!==firma){pic.innerHTML=h;pic.setAttribute('data-firma',firma);}
+  var c=((window._BG_SETTINGS||{}).portada)||{};
+  _PORT.ms=Math.max(3,+c.intervalo||6)*1000;
+  if(!_PORT.t0)_PORT.t0=Date.now();
+}
+setInterval(function(){
+  var sl=document.querySelectorAll('.yl-hero .yl-sl'); if(sl.length<2||document.hidden)return;
+  if(Date.now()-_PORT.t0<(_PORT.ms||6000))return;
+  _PORT.t0=Date.now(); _PORT.i=(_PORT.i+1)%sl.length;
+  sl.forEach(function(x,k){x.classList.toggle('on',k===_PORT.i);});
+},500);

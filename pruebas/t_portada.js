@@ -1,4 +1,4 @@
-// Portada: el owner elige la foto y la mueve, por separado en computador y teléfono.
+// Portada: el owner elige las fotos (van pasando) y mueve cada una, por separado en computador y teléfono.
 //
 // En un computador ancho la foto tapaba la cara del atleta con el título, y cada
 // ajuste pasaba por el código. Ahora el panel tiene "Portada": el owner mueve la
@@ -59,17 +59,20 @@ async function panel(b, admin, portada) {
 
   console.log('\nEl owner tiene la pantalla Portada; el resto de los admins no');
   {
-    const { p, ctx, errs } = await panel(b, { id: 'u1', email: 'x@y.cl', role: 'owner' }, { pc: { x: 70, y: 10 }, movil: { x: 40, y: 60 } });
+    const { p, ctx, errs } = await panel(b, { id: 'u1', email: 'x@y.cl', role: 'owner' }, { intervalo: 4, fotos: [{ url: '', pc: { x: 70, y: 10 }, movil: { x: 40, y: 60 } }, { url: 'portada/portada_movil.jpg', pc: { x: 20, y: 5 }, movil: { x: 60, y: 30 } }] });
     ok(/PORTADA/.test(await p.evaluate(() => document.body.innerText)), 'el owner ve "Portada" en el menú');
     await p.evaluate(() => go('portada')); await p.waitForTimeout(700);
     const v = await p.evaluate(() => ({
-      pc: document.getElementById('pt_img_pc') && document.getElementById('pt_img_pc').style.objectPosition,
-      mv: document.getElementById('pt_img_movil') && document.getElementById('pt_img_movil').style.objectPosition,
-      rangos: document.querySelectorAll('input[type=range]').length }));
-    ok(v.pc === '70% 10%' && v.mv === '40% 60%', 'abre con el encuadre guardado: computador ' + v.pc + ', teléfono ' + v.mv);
-    ok(v.rangos === 4, 'con controles horizontal y vertical para cada uno: ' + v.rangos);
-    await p.evaluate(() => ptMover('pc', 'x', 55));
-    ok(await p.evaluate(() => document.getElementById('pt_img_pc').style.objectPosition) === '55% 10%', 'al mover el control, la vista previa se mueve al tiro');
+      f0: document.getElementById('pt_img_0_pc') && document.getElementById('pt_img_0_pc').style.objectPosition,
+      f1: document.getElementById('pt_img_1_movil') && document.getElementById('pt_img_1_movil').style.objectPosition,
+      rangos: document.querySelectorAll('input[type=range]').length, int: document.getElementById('pt_int').value }));
+    ok(v.f0 === '70% 10%' && v.f1 === '60% 30%', 'abre las dos fotos con su propio encuadre: ' + v.f0 + ' · ' + v.f1);
+    ok(v.rangos === 8, 'cuatro controles por foto (horizontal y vertical, computador y teléfono): ' + v.rangos);
+    ok(v.int === '4', 'y cada cuántos segundos cambian: ' + v.int);
+    await p.evaluate(() => ptMover(1, 'pc', 'x', 55));
+    ok(await p.evaluate(() => document.getElementById('pt_img_1_pc').style.objectPosition) === '55% 5%', 'al mover el control, la vista previa se mueve al tiro');
+    await p.evaluate(() => ptMoverOrden(1, -1));
+    ok(await p.evaluate(() => ST.portada.fotos[0].url) === 'portada/portada_movil.jpg', 'se pueden reordenar');
     ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs[0] : ''));
     await ctx.close();
   }
@@ -79,21 +82,26 @@ async function panel(b, admin, portada) {
     await ctx.close();
   }
 
-  console.log('\nEl sitio aplica lo que eligió el owner');
-  for (const [ancho, varX, esperado] of [[1440, '--hpc-x', '70%'], [390, '--hm-x', '40%']]) {
+  console.log('\nEl sitio muestra las fotos del owner, cada una con su encuadre, y van pasando');
+  for (const [ancho, esperado] of [[1440, ['70%', '20%']], [390, ['40%', '60%']]]) {
     const ctx = await b.newContext({ viewport: { width: ancho, height: 900 }, serviceWorkers: 'block' });
     await montarFirebase(ctx);
     const p = await ctx.newPage();
     await p.goto(`http://localhost:${PUERTO}/index.html`, { waitUntil: 'domcontentloaded' });
     await p.waitForFunction(() => document.querySelector('.yl-hero picture img'), null, { timeout: 15000 });
+    const quien = ancho > 1000 ? 'computador' : 'teléfono';
     const r = await p.evaluate(() => {
-      window._BG_SETTINGS = { portada: { foto: 'portada/portada_movil.jpg', pc: { x: 70, y: 10 }, movil: { x: 40, y: 60 } } };
-      _aplicarPortada();
-      const img = document.querySelector('.yl-hero picture img');
-      return { pos: getComputedStyle(img).objectPosition, src: img.getAttribute('src') };
+      window._BG_SETTINGS = { portada: { intervalo: 3, fotos: [
+        { url: '', pc: { x: 70, y: 10 }, movil: { x: 40, y: 60 } },
+        { url: 'portada/portada_movil.jpg', pc: { x: 20, y: 5 }, movil: { x: 60, y: 30 } }] } };
+      _PORT.t0 = 0; _aplicarPortada();
+      const sl = [...document.querySelectorAll('.yl-hero .yl-sl')];
+      return { n: sl.length, pos: sl.map(x => getComputedStyle(x).objectPosition.split(' ')[0]), on: sl.findIndex(x => x.classList.contains('on')) };
     });
-    ok(r.pos.startsWith(esperado), (ancho > 1000 ? 'computador' : 'teléfono') + ': la foto usa el encuadre del owner (' + r.pos + ')');
-    ok(r.src === 'portada/portada_movil.jpg', (ancho > 1000 ? 'computador' : 'teléfono') + ': y la foto que subió');
+    ok(r.n === 2 && r.on === 0, quien + ': las dos fotos, empezando por la primera');
+    ok(r.pos[0] === esperado[0] && r.pos[1] === esperado[1], quien + ': cada una con su encuadre (' + r.pos.join(' · ') + ')');
+    await p.waitForTimeout(3800);
+    ok(await p.evaluate(() => [...document.querySelectorAll('.yl-hero .yl-sl')].findIndex(x => x.classList.contains('on'))) === 1, quien + ': y a los 3 segundos pasa a la segunda');
     await ctx.close();
   }
 
