@@ -313,7 +313,24 @@ function renderPasadasPub(){
   h+=`</div>`;
   return h;
 }
-function embedded(url){return `<iframe src="${url}?embedded=1" style="width:100%;height:calc(100vh - 110px);min-height:600px;border:0;background:transparent;display:block" loading="lazy"></iframe>`}
+// Ranking, atletas e inscripción son páginas propias que el inicio muestra
+// adentro. Antes el recuadro tenía un alto fijo y su propia barra de scroll:
+// se veía como una pestaña metida en la página. Ahora crece al alto de lo que
+// muestra (misma dirección, así que se puede medir), y se desplaza con el
+// inicio como una sección más.
+function embedded(url){return `<iframe src="${url}?embedded=1" scrolling="no" onload="_ajustarEmbebido(this)" style="width:100%;height:calc(100vh - 110px);min-height:600px;border:0;background:transparent;display:block;overflow:hidden"></iframe>`}
+function _ajustarEmbebido(f){
+  try{
+    const d=f.contentDocument; if(!d||!d.body) return;
+    const medir=()=>{ const h=Math.max(d.body.scrollHeight,d.documentElement.scrollHeight); if(h>0) f.style.height=(h+8)+'px'; };
+    medir();
+    if(f._ro) f._ro.disconnect();
+    f._ro=new ResizeObserver(medir); f._ro.observe(d.body);
+  }catch(e){}
+}
+// El onload del iframe corre en el ámbito global: esta función vive adentro de
+// otra, así que se deja a mano en window.
+window._ajustarEmbebido=_ajustarEmbebido;
 
 // ── Solicitud de certificado (público, moderado) ──
 function _certNorm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}

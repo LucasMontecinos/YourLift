@@ -18,7 +18,7 @@
 <link rel="stylesheet" href="compartido/paleta.css?v=64e812b1">
 <link rel="stylesheet" href="compartido/iconos.css?v=10cfc8ba">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="bg-fechipo.css?v=4d7d2bc7">
+<link rel="stylesheet" href="bg-fechipo.css?v=67587424">
 <script src="compartido/gl.js?v=47a36058"></script>
 <script src="compartido/divisiones.js?v=a9a6dcfc"></script>
 <script src="compartido/ediciones.js?v=477f1b0a"></script>
@@ -77,6 +77,11 @@ html.embedded .nav-hamburger{display:none!important}
 .tb.act.sm{background:var(--m);border-color:var(--m);color:#000;text-shadow:none}
 @media(max-width:600px){.tb{font-size:12px;padding:10px 14px;letter-spacing:1px}}
 
+.vista{display:inline-flex;margin:4px 0 16px;border:2px solid var(--border);border-radius:8px;overflow:hidden}
+.vb{padding:9px 18px;background:transparent;border:0;color:var(--muted);font-family:'Oswald';font-size:14px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer}
+.vb+.vb{border-left:2px solid var(--border)}
+.vb.act{background:var(--gold);color:#0A1628}
+.rt td.cat{text-align:center;font-family:'Oswald';font-size:12px;color:var(--muted);white-space:nowrap}
 .stats{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
 .sc{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;flex:1;min-width:90px;text-align:center}
 .sc .v{font-family:'Oswald';font-size:24px;font-weight:700;color:var(--gold)}
@@ -170,6 +175,7 @@ html.embedded .tabs button,html.embedded .tab,html.embedded button.tab{font-weig
              transition:border-color .15s"
       onfocus="this.style.borderColor='#c41e3a'" onblur="this.style.borderColor='#1e1e2e'">
   </div>
+  <div class="vista" id="vista"><button class="vb act" data-v="cat" onclick="setVista('cat')">Por categoría</button><button class="vb" data-v="ov" onclick="setVista('ov')">Overall · GL</button></div>
   <div id="st"></div>
   <div id="ct"></div>
 </div>
@@ -231,6 +237,7 @@ var TABS=[
 
 var DO={'Sub Junior':0,'Junior':1,'Open':2,'Master I':3,'Master II':4,'Master III':5,'Master IV':6,'Universitario':7};
 var CUR='cl_m';
+var VISTA='cat'; // 'cat' = por categoría de peso · 'ov' = overall por GL
 
 // ════════════════════════════════════════════════════════════════
 // EL CICLO DEL RANKING
@@ -558,6 +565,30 @@ var K=Object.keys(G).sort(function(a,b){
   return(DO[ca[1]]||9)-(DO[cb[1]]||9)
 });
 
+// ── Overall: todos los de la pestaña juntos, sin separar por peso, ordenados
+// por puntos GL (que es justamente lo que permite comparar a un -59 con un
+// +120). Cada atleta una vez, con su mejor GL.
+if(VISTA==='ov'){
+  var mejor={};
+  E.forEach(function(e){var n=_normName(e.n);var v=e.dt||0;if(!mejor[n]||v>(mejor[n].dt||0)||(v===(mejor[n].dt||0)&&(e.tt||0)>(mejor[n].tt||0)))mejor[n]=e;});
+  var L=Object.keys(mejor).map(function(k){return mejor[k];}).sort(function(a,b){return ((b.dt||0)-(a.dt||0))||((b.tt||0)-(a.tt||0))||((a.bw||0)-(b.bw||0));});
+  document.getElementById('st').innerHTML='<div class="stats"><div class="sc"><div class="v">'+L.length+'</div><div class="l">Atletas</div></div></div>';
+  if(!L.length){document.getElementById('ct').innerHTML='<div class="empty">Sin resultados en esta modalidad</div>';return}
+  var o='<div class="cs"><div class="ch"><span>Overall · todas las categorías · por puntos GL</span><span class="cn">'+L.length+'</span></div>';
+  o+='<table class="rt"><thead><tr><th class="c">#</th><th>Atleta</th><th class="n">Cat.</th><th class="n">Div.</th><th class="n">BW</th>';
+  o+=ib?'<th class="n">BP</th>':'<th class="n">SQ</th><th class="n">BP</th><th class="n">DL</th>';
+  o+='<th class="n">Total</th><th class="n">GL Points</th></tr></thead><tbody>';
+  L.forEach(function(e,i){
+    var pos=i+1,cl=pos===1?'p1':pos===2?'p2':pos===3?'p3':'';
+    o+='<tr class="'+cl+'"><td class="c">'+pos+'</td>';
+    o+='<td><a href="atleta.html?q='+encodeURIComponent(e.n)+'" style="color:var(--text);text-decoration:none"><strong>'+e.n+'</strong></a><span class="cl">'+e.t+'</span></td>';
+    o+='<td class="cat">'+e.c+'</td><td class="cat">'+_divVigente(e)+'</td><td class="n">'+e.bw+'</td>';
+    o+=ib?'<td class="n">'+e.bp+'</td>':'<td class="n">'+e.sq+'</td><td class="n">'+e.bp+'</td><td class="n">'+e.dl+'</td>';
+    o+='<td class="n tc">'+e.tt+'</td><td class="n dc" style="font-size:13px">'+(e.dt||0).toFixed(1)+'</td></tr>';
+  });
+  document.getElementById('ct').innerHTML=o+'</tbody></table></div>';
+  return;
+}
 document.getElementById('st').innerHTML='<div class="stats"><div class="sc"><div class="v">'+E.length+'</div><div class="l">Atletas</div></div><div class="sc"><div class="v">'+K.length+'</div><div class="l">Categorías</div></div></div>';
 
 if(!K.length){document.getElementById('ct').innerHTML='<div class="empty">Sin resultados en esta modalidad</div>';return}
@@ -622,6 +653,12 @@ function filterRanking(q){
   });
 }
 
+function setVista(v){
+  VISTA=v;_allRows=null;
+  const si=document.getElementById('searchRanking');if(si)si.value='';
+  document.querySelectorAll('.vb').forEach(function(b){b.classList.toggle('act',b.dataset.v===v)});
+  R();
+}
 function setTab(id){
   CUR=id;_allRows=null;
   const si=document.getElementById('searchRanking');if(si)si.value='';
