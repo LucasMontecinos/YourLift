@@ -907,29 +907,34 @@ function home(){
     insClosed.push({...e,name:bn});
   });
 
+  // Portada: una foto real de tarima a todo el ancho, con el mismo texto,
+  // los mismos botones y el Instagram de siempre. En el teléfono la foto va
+  // arriba y el texto debajo (ver .yl-hero en index.html).
   let h=`
-  <div style="position:relative;margin:-90px calc(-50vw + 50%) 0;width:100vw;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;padding:96px 0 26px">
-    <div id="heroSolidBg" style="position:absolute;inset:0;background:transparent;transition:opacity .4s"></div>
-    <div id="heroFadeBg" style="position:absolute;inset:0;background:transparent;transition:opacity .4s"></div>
-    <div style="position:relative;z-index:2;text-align:center;padding:70px 20px">
-      <img src="yourlift_logo_hd.png" alt="YourLift" style="height:clamp(88px,13vw,170px);width:auto;margin:0 auto 16px;display:block;filter:drop-shadow(0 8px 36px rgba(0,0,0,.7))">
-      <p style="font-size:clamp(15px,2.5vw,20px);color:rgba(235,242,250,.95);max-width:680px;margin:0 auto 32px;line-height:1.6;text-shadow:0 2px 12px rgba(0,0,0,.6)">La tecnología del powerlifting chileno: inscripciones, nóminas, ranking nacional, récords y transmisión en vivo, todo en un solo lugar.</p>
-      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-        <button onclick="sv('insc')" style="padding:15px 30px;background:var(--green);color:#fff;border:none;border-radius:10px;font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer;">INSCRIBIRME</button>
-        <button onclick="sv('nominas')" style="padding:15px 30px;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:10px;font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer">VER NÓMINAS</button>
-        <button onclick="sv('rank')" style="padding:15px 30px;background:var(--gold);color:#000;border:none;border-radius:10px;font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer;">RANKING</button>
+  <div class="yl-plates" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+  <header class="yl-hero">
+    <picture><source media="(max-width:640px)" srcset="portada/portada_movil.jpg"><img src="portada/portada.jpg" alt="Atleta en sentadilla en el Sudamericano 2026" fetchpriority="high"></picture>
+    <div class="yl-hero-c">
+      <img class="yl-hero-logo" src="yourlift_logo_hd.png" alt="YourLift">
+      <div class="yl-kick">El powerlifting de Chile</div>
+      <h1 class="yl-h1">Cada kilo<br><span>cuenta.</span></h1>
+      <p class="yl-hero-p">La tecnología del powerlifting chileno: inscripciones, nóminas, ranking nacional, récords y transmisión en vivo, todo en un solo lugar.</p>
+      <div class="yl-cta">
+        <button class="yl-btn yl-b-g" onclick="sv('insc')">Inscribirme</button>
+        <button class="yl-btn yl-b-o" onclick="sv('nominas')">Ver nóminas</button>
+        <button class="yl-btn yl-b-y" onclick="sv('rank')">Ranking</button>
       </div>
-      <a href="https://instagram.com/yourlift_oficial" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;margin-top:26px;color:rgba(235,242,250,.9);text-decoration:none;font-family:Oswald;font-size:13px;letter-spacing:2px;padding:8px 16px;border:1px solid rgba(255,255,255,.25);border-radius:30px;background:rgba(255,255,255,.06);backdrop-filter:blur(6px);transition:all .15s" onmouseover="this.style.borderColor='#E1306C';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(255,255,255,.25)';this.style.color='rgba(235,242,250,.9)'">
+      <a href="https://instagram.com/yourlift_oficial" target="_blank" rel="noopener" class="yl-ig" onmouseover="this.style.borderColor='#E1306C';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(255,255,255,.25)';this.style.color='rgba(235,242,250,.9)'">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
         @yourlift_oficial
       </a>
     </div>
-  </div>
+  </header>
 
   ${sponsorStrip()}
   ${liveEmbed()}
   <div style="margin-bottom:34px">
-    <h2 style="font-family:Oswald;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:18px">Próximo Campeonato</h2>`;
+    <h2 class="yl-h2" style="margin-bottom:18px">Próximo Campeonato</h2>`;
   if(!next){
     h+=`<div style="background:rgba(17,34,59,.4);border:1px solid var(--border);border-radius:12px;padding:30px;text-align:center;color:var(--muted)">No hay campeonatos programados por el momento.</div>`;
   }else{
@@ -969,7 +974,7 @@ function home(){
 
   if(insOpen.length){
     h+=`<div style="margin-bottom:30px">
-      <h2 style="font-family:Oswald;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:6px">Inscripciones Abiertas</h2>
+      <h2 class="yl-h2" style="margin-bottom:6px">Inscripciones Abiertas</h2>
       <p style="font-size:12px;color:var(--muted);margin-bottom:18px">Campeonatos con inscripciones disponibles ahora</p>
       <div style="display:flex;flex-direction:column;gap:10px">`;
     insOpen.forEach(ev=>{
@@ -1000,7 +1005,7 @@ function home(){
 
   if(insClosed.length){
     h+=`<div style="margin-bottom:30px">
-      <h2 style="font-family:Oswald;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:6px">Próximos Campeonatos</h2>
+      <h2 class="yl-h2" style="margin-bottom:6px">Próximos Campeonatos</h2>
       <p style="font-size:12px;color:var(--muted);margin-bottom:18px">Con inscripciones cerradas — ya en preparación</p>
       <div style="display:flex;flex-direction:column;gap:10px">`;
     insClosed.forEach(ev=>{
@@ -1026,6 +1031,7 @@ function home(){
     });
     h+=`</div></div>`;
   }
+  h+=`<section class="yl-lid" id="ylLideres">${typeof _lideresHtml==='function'?_lideresHtml():''}</section>`;
   return h;
 }
 
