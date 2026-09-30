@@ -471,10 +471,19 @@ function applyEdit(o){
         // los resultados publicados desde el livecast ya traen. Si no viene, el
         // ranking lo busca en la tabla de nacimientos por nombre.
         var _an=(typeof ylAnioNac==='function')?ylAnioNac(data.anioNac||data.fechaNac||0):0;
+        // En Bench el total es la banca. Quien hizo powerlifting y banca en el
+        // mismo campeonato trae en el resultado el total de los tres
+        // movimientos: tomarlo tal cual lo ponía en el ranking de Bench con su
+        // total de Classic. Por lo mismo, su GL guardado es el de powerlifting
+        // y no sirve acá (glNormalizar lo recalcula con el peso corporal).
+        var _combinado=isBench&&((r.sq||0)>0||(r.dl||0)>0);
+        var _ttC=isBench?((r.bp||0)||(_combinado?0:(r.total||0))):(r.total||0);
+        var _glC=_combinado?0:glp;
+        if(!(_ttC>0))return;
         // El glp que viene del resultado se usa solo si no hay peso corporal: si
         // lo hay, el GL se calcula con los coeficientes de ESTA tabla, que es lo
         // único que garantiza que un equipado no quede medido como clásico.
-        liveEntries.push(glNormalizar(applyEdit({n:_aliasNombre(data.nombre||''),t:data.club||'',rut:data.rut||'',codigo:data.codigo||'',c:cat,d:_normDiv(data.division)||'Open',bw:_bwC,sq:isBench?0:(r.sq||0),bp:r.bp||0,dl:isBench?0:(r.dl||0),tt:r.total||0,dt:glp,tab:tab,p:99,fecha:data.fecha||'',an:_an,_live:true,_ev:data.evento||''})));
+        liveEntries.push(glNormalizar(applyEdit({n:_aliasNombre(data.nombre||''),t:data.club||'',rut:data.rut||'',codigo:data.codigo||'',c:cat,d:_normDiv(data.division)||'Open',bw:_bwC,sq:isBench?0:(r.sq||0),bp:r.bp||0,dl:isBench?0:(r.dl||0),tt:_ttC,dt:_glC,tab:tab,p:99,fecha:data.fecha||'',an:_an,_live:true,_ev:data.evento||''})));
       });
       liveEntries.forEach(function(le){
         var nName=_normName(le.n);
