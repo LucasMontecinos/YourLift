@@ -200,9 +200,14 @@ a{color:var(--accent);text-decoration:none}
    encima de la cara del atleta. El borde izquierdo de la foto se funde con el fondo. */
 @media (min-width:1024px){
   .yl-hero{background:#070B14}
-  .yl-hero picture{left:auto;right:0;width:clamp(55%,72vh,66%)}
+  .yl-hero picture{left:auto;right:0;width:clamp(55%,72vh,66%);
+    /* El difuminado va en el borde de la foto misma: así se funde con el fondo
+       sea cual sea el ancho que le toque (en una ventana ancha y baja la foto
+       queda más angosta, y un degradado fijo sobre la portada dejaba un corte). */
+    -webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 32%),linear-gradient(0deg,transparent 0%,#000 22%);
+    -webkit-mask-composite:source-in;mask-image:linear-gradient(90deg,transparent 0%,#000 32%),linear-gradient(0deg,transparent 0%,#000 22%);mask-composite:intersect}
   .yl-hero picture img{object-position:var(--hpc-x,30%) var(--hpc-y,0%)}
-  .yl-hero::after{background:linear-gradient(90deg,#070B14 0%,#070B14 34%,rgba(7,11,20,.55) 46%,rgba(7,11,20,0) 60%),linear-gradient(0deg,#0A1628 0%,transparent 28%)}
+  .yl-hero::after{background:linear-gradient(0deg,#0A1628 0%,transparent 22%)}
 }
 .yl-hero-c{position:relative;z-index:2;width:100%;max-width:1400px;margin:0 auto;padding:110px clamp(16px,4vw,56px) clamp(36px,6vh,80px)}
 .yl-hero-logo{height:clamp(56px,6vw,96px);width:auto;display:block;margin-bottom:18px}
@@ -291,7 +296,7 @@ body iframe{background:transparent !important}
   </div>
 </div>
 <style>
-.corner-stack{position:fixed;top:14px;left:18px;z-index:100;display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.corner-stack{position:fixed;top:14px;left:18px;z-index:100;display:flex;flex-direction:row;align-items:center;gap:14px}
 .corner-stack .corner-logo{position:static;height:42px;width:auto}
 .fechipo-mini{display:flex;align-items:center;gap:6px;cursor:pointer;line-height:1;position:relative;padding:3px 0;user-select:none}
 .fechipo-logo{height:30px;width:auto;display:block;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))}

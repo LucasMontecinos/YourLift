@@ -272,8 +272,7 @@ function renderPortada(){
       <div>
         <div style="font-family:Oswald;font-size:13px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">COMPUTADOR</div>
         <div style="position:relative;aspect-ratio:1.9;background:#070B14;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-          <img id="pt_img_pc" src="${esc(foto)}" style="position:absolute;right:0;top:0;width:60%;height:100%;object-fit:cover;object-position:${p.pc.x}% ${p.pc.y}%">
-          <div style="position:absolute;inset:0;background:linear-gradient(90deg,#070B14 0%,#070B14 34%,rgba(7,11,20,.55) 46%,rgba(7,11,20,0) 60%)"></div>
+          <img id="pt_img_pc" src="${esc(foto)}" style="position:absolute;right:0;top:0;width:60%;height:100%;object-fit:cover;object-position:${p.pc.x}% ${p.pc.y}%;-webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 32%);mask-image:linear-gradient(90deg,transparent 0%,#000 32%)">
           <div style="position:absolute;left:5%;bottom:14%;font-family:Oswald;font-weight:700;color:#fff;font-size:clamp(18px,3vw,34px);line-height:.95">CADA KILO<br><span style="color:#E62832">CUENTA.</span></div>
         </div>
         <div style="display:grid;gap:6px;margin-top:10px">${ctl('pc','x','Horizontal')}${ctl('pc','y','Vertical')}</div>
