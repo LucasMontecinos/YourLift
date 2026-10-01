@@ -462,6 +462,8 @@ function applyEdit(o){
     // se llegó a publicar.
     function _esDePrueba(x){ return !!x&&(/ensayo/i.test(String(x.evento_id||''))||/ensayo/i.test(String(x.id||''))||/^\s*ensayo\b/i.test(String(x.evento||''))); }
     function _applyCompRes(docs){
+      // El panel espera esto para exportar: con los resultados nuevos ya puestos.
+      window._rkLive=(window._rkLive||0)+1;
       var liveEntries=[];
       docs=(docs||[]).filter(function(x){return !_esDePrueba(x);});
       // Cierre publicado dos veces (Sudamericano): si existe {id}_uni, el {id}
@@ -563,21 +565,18 @@ function rkNoDioPeso(cat,bw){
   return lim>0&&bw>lim;
 }
 
-function R(){
+// Los grupos de una pestaña tal como los muestra el ranking: categoría de peso
+// + división vigente, un atleta por grupo con su mejor marca, ordenados. Lo usa
+// R() para dibujar y el panel (Exports → Ranking en Excel) para exportar: así el
+// Excel es exactamente lo publicado.
+function rkGrupos(tab,peso){
 // `_baja` son las fichas dadas de baja desde el panel —repetidas, casi siempre—.
 // Se filtran acá, junto al ciclo, y por el mismo motivo: nada se borra del
 // arreglo, así que deshacer la baja las devuelve sin recargar.
-var E=D.filter(function(e){return e.tab===CUR&&e.tt>0&&e.p<99&&!e._baja&&_enCiclo(e)});
-var ib=CUR.indexOf('bench')>=0;
-// Filtro por categoría de peso. Las opciones salen de lo que hay en la pestaña;
-// si la elegida no existe acá (se cambió de pestaña), vuelve a "Todas".
-var _cats=[];E.forEach(function(e){if(_cats.indexOf(e.c)<0)_cats.push(e.c)});
-_cats.sort(function(a,b){return cn(a)-cn(b)||(a<b?-1:1)});
-if(PESO&&_cats.indexOf(PESO)<0)PESO='';
-var _pz='<button class="pz'+(PESO?'':' act')+'" onclick="setPeso(\'\')">Todas</button>';
-_cats.forEach(function(c){_pz+='<button class="pz'+(c===PESO?' act':'')+'" onclick="setPeso(\''+c+'\')">'+c+(/^\d/.test(c)?' kg':'')+'</button>';});
-document.getElementById('pesos').innerHTML=_cats.length>1?_pz:'';
-if(PESO)E=E.filter(function(e){return e.c===PESO});
+var E=D.filter(function(e){return e.tab===tab&&e.tt>0&&e.p<99&&!e._baja&&_enCiclo(e)});
+var cats=[];E.forEach(function(e){if(cats.indexOf(e.c)<0)cats.push(e.c)});
+cats.sort(function(a,b){return cn(a)-cn(b)||(a<b?-1:1)});
+if(peso)E=E.filter(function(e){return e.c===peso});
 var G={};
 E.forEach(function(e){var k=e.c+'|'+_divVigente(e);if(!G[k])G[k]=[];G[k].push(e)});
 // Un atleta, una fila por grupo. Antes esto no hacía falta: cada división
@@ -588,6 +587,11 @@ Object.keys(G).forEach(function(k){
   var vistos={},limpio=[];
   G[k].slice().sort(function(a,b){return ((b.tt||0)-(a.tt||0))||((b.dt||0)-(a.dt||0));})
     .forEach(function(e){var n=_normName(e.n);if(vistos[n])return;vistos[n]=1;limpio.push(e);});
+  // La posición se numera acá y no se lee la que viene guardada: al recalcular
+  // la división, un atleta puede caer en un grupo distinto del que tenía cuando
+  // se generó el archivo, y arrastraría un número que ya no significa nada.
+  limpio.sort(function(a,b){return ((b.tt||0)-(a.tt||0))||((b.dt||0)-(a.dt||0))||((a.bw||0)-(b.bw||0));});
+  limpio.forEach(function(e,i){e._pos=i+1});
   G[k]=limpio;
 });
 var K=Object.keys(G).sort(function(a,b){
@@ -595,6 +599,23 @@ var K=Object.keys(G).sort(function(a,b){
   if(cn(ca[0])!==cn(cb[0]))return cn(ca[0])-cn(cb[0]);
   return(DO[ca[1]]||9)-(DO[cb[1]]||9)
 });
+return {E:E,G:G,K:K,cats:cats,bench:tab.indexOf('bench')>=0,
+  grupos:K.map(function(k){var p=k.split('|');return {cat:p[0],div:p[1],filas:G[k]};})};
+}
+window.rkGrupos=rkGrupos;
+
+function R(){
+var _rg=rkGrupos(CUR,'');
+var _cats=_rg.cats;
+var ib=_rg.bench;
+// Filtro por categoría de peso. Las opciones salen de lo que hay en la pestaña;
+// si la elegida no existe acá (se cambió de pestaña), vuelve a "Todas".
+if(PESO&&_cats.indexOf(PESO)<0)PESO='';
+var _pz='<button class="pz'+(PESO?'':' act')+'" onclick="setPeso(\'\')">Todas</button>';
+_cats.forEach(function(c){_pz+='<button class="pz'+(c===PESO?' act':'')+'" onclick="setPeso(\''+c+'\')">'+c+(/^\d/.test(c)?' kg':'')+'</button>';});
+document.getElementById('pesos').innerHTML=_cats.length>1?_pz:'';
+if(PESO)_rg=rkGrupos(CUR,PESO);
+var E=_rg.E,G=_rg.G,K=_rg.K;
 
 // ── Overall: todos los de la pestaña juntos, sin separar por peso, ordenados
 // por puntos GL (que es justamente lo que permite comparar a un -59 con un

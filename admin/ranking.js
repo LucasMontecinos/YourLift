@@ -1159,6 +1159,11 @@ function renderExports(){
             ${ST.eventos.filter(e=>e.status!=='archived').map(ev=>`<button class='btn' onclick='exportOPL("${ev.id}")' style='text-align:left;padding:10px;font-size:12px;background:transparent;border:1px solid var(--border)'>OPL — ${ev.name}</button>`).join('')}
           </div>
         </div>
+        ${isOwner?`<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-family:Oswald;letter-spacing:1px">RANKING</div>
+          <button class="btn btn-w" id="btnExportRanking" onclick="exportRankingExcel(this)" style="text-align:left;padding:14px;width:100%">Descargar el ranking en Excel</button>
+          <p style="font-size:10px;color:var(--muted);margin-top:6px">Una hoja por pestaña del ranking (Classic Masculino, Classic Femenino, Bench…) y adentro cada categoría de peso y división por separado, igual que en el sitio.</p>
+        </div>`:''}
         <button class="btn btn-b" onclick="exportInscripciones()" style="text-align:left;padding:14px">inscripciones.json (${ST.inscripciones.length} entradas)</button>
         <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-family:Oswald;letter-spacing:1px">BASE DE DATOS HISTÓRICA</div>
@@ -1752,3 +1757,122 @@ window.exportDataExcel = async function(){
 };
 
 window.render=render;
+
+// ── Ranking en Excel ─────────────────────────────────────────────────────────
+// Sale de ranking.html, abierto por dentro en un marco oculto, con su propio
+// cálculo (rkGrupos): alias de nombres, división del año, banca contada como
+// banca, resultados recién publicados y un atleta por grupo. Si el Excel se
+// armara acá con otra cuenta, tarde o temprano no calzaría con lo publicado.
+function _rkAbrirRanking(){
+  return new Promise((res,rej)=>{
+    const f=document.createElement('iframe');
+    f.style.cssText='position:fixed;left:-9999px;top:0;width:1200px;height:800px;border:0;visibility:hidden';
+    f.src='ranking.html?exportar=1';
+    let listo=false;
+    const fin=(ok,err)=>{ if(listo)return; listo=true; clearInterval(t); ok?res(f):(f.remove(),rej(err)); };
+    const desde=Date.now();
+    // Espera a que estén los resultados de Firestore; si no llegan en 20 s se
+    // exporta con lo del archivo, que es lo que vería cualquiera sin conexión.
+    const t=setInterval(()=>{
+      try{
+        const w=f.contentWindow;
+        if(!w||typeof w.rkGrupos!=='function'||!w.D)return;
+        if(w._rkLive||Date.now()-desde>20000)fin(true);
+      }catch(e){ fin(false,e); }
+    },300);
+    setTimeout(()=>fin(false,new Error('El ranking no cargó')),40000);
+    document.body.appendChild(f);
+  });
+}
+
+window.exportRankingExcel=async function(btn){
+  const isOwner=ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap;
+  if(!isOwner){ showToast('Solo el Owner puede exportar el ranking',null,true); return; }
+  const txt=btn?btn.textContent:'';
+  if(btn){ btn.textContent='Generando...'; btn.disabled=true; }
+  let marco=null;
+  try{
+    if(!window.ExcelJS){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+        s.onload=res; s.onerror=rej; document.head.appendChild(s);
+      });
+    }
+    marco=await _rkAbrirRanking();
+    const w=marco.contentWindow;
+    const anio=((w.document.getElementById('rkAnio')||{}).textContent||String(new Date().getFullYear())).trim();
+    const wb=new window.ExcelJS.Workbook();
+    wb.creator='YourLift';
+
+    const thin={style:'thin',color:{argb:'FFBFBFBF'}};
+    const borde={top:thin,left:thin,bottom:thin,right:thin};
+    const relleno=c=>({type:'pattern',pattern:'solid',fgColor:{argb:c}});
+    const PODIO={1:'FFFFE699',2:'FFE7E6E6',3:'FFF8CBAD'};
+    const hoy=new Date().toLocaleDateString('es-CL');
+    const resumen=[];
+    // La hoja de inicio va primero; se llena al final, con lo que trae el archivo.
+    const ri=wb.addWorksheet('Resumen');
+
+    w.TABS.forEach(t=>{
+      const rg=w.rkGrupos(t.id,'');
+      if(!rg.grupos.length)return;
+      const cols=rg.bench
+        ?[['#',5],['ATLETA',36],['CLUB',28],['PESO CORP.',12],['BP',10],['GL POINTS',12]]
+        :[['#',5],['ATLETA',36],['CLUB',28],['PESO CORP.',12],['SQ',10],['BP',10],['DL',10],['TOTAL',11],['GL POINTS',12]];
+      // Los nombres de hoja de Excel: hasta 31 caracteres y sin / \ ? * [ ]
+      const ws=wb.addWorksheet(t.lb.replace(/[\/\\?*\[\]:]/g,'').slice(0,31),{views:[{state:'frozen',ySplit:2}]});
+      ws.columns=cols.map(c=>({width:c[1]}));
+      const n=cols.length;
+      const fila1=ws.addRow(['RANKING '+anio+' · '+t.lb.toUpperCase()]);
+      ws.mergeCells(1,1,1,n);
+      fila1.getCell(1).font={name:'Calibri',size:14,bold:true};
+      const fila2=ws.addRow(['Ranking FECHIPO · yourlift.cl · descargado el '+hoy]);
+      ws.mergeCells(2,1,2,n);
+      fila2.getCell(1).font={name:'Calibri',size:10,italic:true,color:{argb:'FF7F7F7F'}};
+      let atletas=0;
+      rg.grupos.forEach(g=>{
+        ws.addRow([]);
+        const tit=ws.addRow([g.cat+(/^\d/.test(g.cat)?' kg':'')+' — '+g.div+'  ('+g.filas.length+')']);
+        ws.mergeCells(tit.number,1,tit.number,n);
+        tit.getCell(1).font={name:'Calibri',size:12,bold:true,color:{argb:'FFFFFFFF'}};
+        tit.getCell(1).fill=relleno('FF0A1628');
+        const cab=ws.addRow(cols.map(c=>c[0]));
+        cab.eachCell(c=>{ c.font={name:'Calibri',size:10,bold:true}; c.fill=relleno('FFD6DCE4'); c.border=borde;
+          c.alignment={horizontal:c.col<=3?'left':'center'}; });
+        g.filas.forEach(e=>{
+          const pos=e._pos||e.p;
+          const v=rg.bench
+            ?[pos,e.n,e.t||'',e.bw||'',e.bp||0,+((e.dt||0).toFixed(2))]
+            :[pos,e.n,e.t||'',e.bw||'',e.sq||0,e.bp||0,e.dl||0,e.tt||0,+((e.dt||0).toFixed(2))];
+          const r=ws.addRow(v);
+          r.eachCell({includeEmpty:true},c=>{ c.border=borde; c.font={name:'Calibri',size:11,bold:c.col===2||c.col===n-1};
+            c.alignment={horizontal:c.col===2||c.col===3?'left':'center'};
+            if(PODIO[pos])c.fill=relleno(PODIO[pos]); });
+          atletas++;
+        });
+      });
+      resumen.push([t.lb,rg.grupos.length,atletas]);
+    });
+
+    if(!resumen.length)throw new Error('El ranking no tiene resultados');
+    ri.columns=[{width:32},{width:14},{width:12}];
+    ri.addRow(['RANKING FECHIPO '+anio]).getCell(1).font={name:'Calibri',size:14,bold:true};
+    ri.addRow(['Descargado el '+hoy+' desde el panel de YourLift']).getCell(1).font={italic:true,color:{argb:'FF7F7F7F'}};
+    ri.addRow([]);
+    const hc=ri.addRow(['PESTAÑA','CATEGORÍAS','ATLETAS']);
+    hc.eachCell(c=>{ c.font={bold:true}; c.fill=relleno('FFD6DCE4'); c.border=borde; });
+    resumen.forEach(x=>ri.addRow(x).eachCell(c=>{ c.border=borde; }));
+
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download='Ranking_FECHIPO_'+anio+'.xlsx';
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
+    const tot=resumen.reduce((s,x)=>s+x[2],0);
+    showToast('Ranking exportado: '+resumen.length+' pestañas, '+tot+' atletas');
+    await logAction('export_ranking','ranking_'+anio,'',resumen.length+' hojas');
+  }catch(e){ console.error(e); showToast('Error al exportar el ranking: '+e.message,null,true); }
+  finally{ if(marco)marco.remove(); if(btn){ btn.textContent=txt; btn.disabled=false; } }
+};
