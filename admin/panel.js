@@ -7226,6 +7226,11 @@ function renderExports(){
           <button class="btn btn-w" id="btnExportRanking" onclick="exportRankingExcel(this)" style="text-align:left;padding:14px;width:100%">Descargar el ranking en Excel</button>
           <p style="font-size:10px;color:var(--muted);margin-top:6px">Una hoja por pestaña del ranking (Classic Masculino, Classic Femenino, Bench…) y adentro cada categoría de peso y división por separado, igual que en el sitio. Con nombre, club, año de nacimiento, marcas y el campeonato donde las hizo.</p>
         </div>`:''}
+        ${isOwner?`<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-family:Oswald;letter-spacing:1px">RESULTADOS DE CAMPEONATOS</div>
+          <button class="btn btn-w" id="btnExportResultados" onclick="exportResultadosExcel(this)" style="text-align:left;padding:14px;width:100%">Descargar los resultados en Excel (${_expResEventos().length} campeonatos)</button>
+          <p style="font-size:10px;color:var(--muted);margin-top:6px">Una pestaña por campeonato cerrado en YourLift (${_expResEventos().map(e=>e.corto).join(' · ')||'cargando…'}). Adentro, cada modalidad, categoría y división por separado, con lugar, atleta, club, año de nacimiento, marcas, total y GL.</p>
+        </div>`:''}
         <button class="btn btn-b" onclick="exportInscripciones()" style="text-align:left;padding:14px">inscripciones.json (${ST.inscripciones.length} entradas)</button>
         <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-family:Oswald;letter-spacing:1px">BASE DE DATOS HISTÓRICA</div>
@@ -7977,6 +7982,176 @@ window.exportRankingExcel=async function(btn){
     await logAction('export_ranking','ranking_'+anio,'',resumen.length+' hojas');
   }catch(e){ console.error(e); showToast('Error al exportar el ranking: '+e.message,null,true); }
   finally{ if(marco)marco.remove(); if(btn){ btn.textContent=txt; btn.disabled=false; } }
+};
+
+// ── Resultados de los campeonatos en Excel ──────────────────────────────────
+// Lo que cerró el livecast (competition_results), una pestaña por campeonato.
+// Quedan fuera los resultados subidos a mano de campeonatos del extranjero (los
+// mundiales): no son un campeonato corrido acá, son un dato suelto del atleta.
+const _ER_NN=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
+// Las dos tarimas del mismo campeonato son un solo campeonato.
+const _erNombre=ev=>String(ev||'').replace(/\s*-\s*Tarima\s*\d+\s*$/i,'').replace(/\s+/g,' ').trim();
+// Un nombre de pestaña de Excel: hasta 31 caracteres y sin / \ ? * [ ] :
+function _erCorto(nombre){
+  let n=_erNombre(nombre).replace(/\bPrimer\b/i,'1er').replace(/\bCampeonato\b/ig,'').replace(/\bFECHIPO\b/ig,'')
+    .replace(/[\/\\?*\[\]:]/g,'').replace(/\s+/g,' ').trim();
+  n=n.split(' ').map(w=>w.length>3&&w===w.toUpperCase()?w[0]+w.slice(1).toLowerCase():w).join(' ');
+  return n.slice(0,31).trim();
+}
+function _erDocs(){
+  const todos=(ST.allCompResults||[]).filter(d=>d&&d.evento_id&&d.source!=='manual');
+  // Un cierre publicado dos veces dejó {id} y {id}_uni con el mismo resultado:
+  // vale el _uni (ver t_cierredoble.js).
+  const ids=new Set(todos.map(d=>d.id));
+  return todos.filter(d=>!ids.has(String(d.id)+'_uni'));
+}
+function _expResEventos(){
+  const m={};
+  _erDocs().forEach(d=>{
+    const k=_erNombre(d.evento);
+    if(!m[k])m[k]={nombre:k,corto:_erCorto(k),fecha:d.fecha||'',docs:[]};
+    m[k].docs.push(d);
+    if(d.fecha&&(!m[k].fecha||d.fecha<m[k].fecha))m[k].fecha=d.fecha;
+  });
+  // La fecha de un resultado es la del cierre (el Sudamericano cerró el 29);
+  // si el campeonato está en la lista del panel, vale su fecha.
+  Object.values(m).forEach(e=>{
+    const id=(e.docs[0]||{}).evento_id;
+    const cfg=(ST.eventos||[]).find(x=>x.id===id||_erNombre(x.name)===e.nombre);
+    if(cfg&&/^\d{4}-\d{2}-\d{2}/.test(String(cfg.date||'')))e.fecha=String(cfg.date).slice(0,10);
+  });
+  return Object.values(m).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+}
+
+window.exportResultadosExcel=async function(btn){
+  const isOwner=ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap;
+  if(!isOwner){ showToast('Solo el Owner puede exportar los resultados',null,true); return; }
+  const eventos=_expResEventos();
+  if(!eventos.length){ showToast('Todavía no cargan los resultados. Prueba en unos segundos.',null,true); return; }
+  const txt=btn?btn.textContent:'';
+  if(btn){ btn.textContent='Generando...'; btn.disabled=true; }
+  try{
+    if(!window.ExcelJS){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+        s.onload=res; s.onerror=rej; document.head.appendChild(s);
+      });
+    }
+    // Año de nacimiento y universidad: del resultado, de la base de atletas o
+    // de la inscripción (por código, RUT o nombre).
+    const porCod={}, porNom={};
+    (ST.data||[]).forEach(a=>{ if(a.codigo)porCod[a.codigo]=a; porNom[_ER_NN(a.nombre)]=a; });
+    const uniIns={};
+    (ST.inscripciones||[]).forEach(i=>{ if(!i.universidad)return;
+      if(i.rut)uniIns['r'+String(i.rut).replace(/[^0-9kK]/g,'').toUpperCase()]=i.universidad;
+      if(i.nombre)uniIns['n'+_ER_NN(i.nombre)]=i.universidad; });
+    const ficha=d=>(d.codigo&&porCod[d.codigo])||porNom[_ER_NN(d.nombre)]||null;
+    const anioDe=d=>{ const f=ficha(d);
+      const v=String(d.anioNac||(f&&(f.anioNac||f.fechaNac))||'').match(/(19|20)\d{2}/); return v?parseInt(v[0],10):''; };
+    const uniDe=d=>{ const f=ficha(d);
+      return uniIns['r'+String(d.rut||'').replace(/[^0-9kK]/g,'').toUpperCase()]||uniIns['n'+_ER_NN(d.nombre)]
+        ||(f&&f.universidad)||(/univ/i.test(String(d.club||''))?d.club:''); };
+
+    const num=x=>{ const n=parseFloat(x); return isNaN(n)?0:n; };
+    const catDe=d=>{ const c=String(d.categoria||'').replace(/\s*\(.*\)/,'').replace(/kg/i,'').replace(/^-/,'').trim();
+      const n=num(c); const f=/^(f|muj|w)/i.test(String(d.sexo||''));
+      if(c.indexOf('+')>=0)return c.replace(/\s+/g,'');
+      if(n===84&&f&&num((d.resultado||{}).bw)>84)return '84+';
+      if(n===120&&!f&&num((d.resultado||{}).bw)>120)return '120+';
+      return c; };
+    const ORD_MOD=m=>/special|olimp/i.test(m)?4:/bench/i.test(m)?(/equip/i.test(m)?6:5):/universitari/i.test(m)?2:/equip/i.test(m)?3:1;
+    const ORD_DIV={'sub junior':0,'sub-junior':0,'junior':1,'open':2,'master i':3,'master ii':4,'master iii':5,'master iv':6,'universitario':7};
+    const ordDiv=x=>{ const k=String(x||'').toLowerCase().trim(); return k in ORD_DIV?ORD_DIV[k]:8; };
+    const catNum=c=>num(c)+(String(c).indexOf('+')>=0?.5:0);
+
+    const wb=new window.ExcelJS.Workbook();
+    wb.creator='YourLift';
+    const thin={style:'thin',color:{argb:'FFBFBFBF'}};
+    const borde={top:thin,left:thin,bottom:thin,right:thin};
+    const relleno=c=>({type:'pattern',pattern:'solid',fgColor:{argb:c}});
+    const PODIO={1:'FFFFE699',2:'FFE7E6E6',3:'FFF8CBAD'};
+    const hoy=new Date().toLocaleDateString('es-CL');
+    const ri=wb.addWorksheet('Resumen');
+    const resumen=[], usados={};
+
+    eventos.forEach(ev=>{
+      // Grupos: modalidad · sexo · categoría · división, como el acta.
+      const G={};
+      ev.docs.forEach(d=>{
+        const mod=String(d.modalidad||'')||(d.view==='bench'?'Only Bench Classic':'Powerlifting Classic');
+        const k=[mod,d.sexo||'',catDe(d),d.division||''].join('|');
+        (G[k]=G[k]||[]).push(d);
+      });
+      const claves=Object.keys(G).sort((a,b)=>{ const x=a.split('|'), y=b.split('|');
+        return (ORD_MOD(x[0])-ORD_MOD(y[0]))||((/^(f|muj)/i.test(y[1])?1:0)-(/^(f|muj)/i.test(x[1])?1:0))
+          ||(catNum(x[2])-catNum(y[2]))||(ordDiv(x[3])-ordDiv(y[3])); });
+      let nom=ev.corto||'Campeonato', i=2; while(usados[nom])nom=ev.corto.slice(0,28)+' '+(i++); usados[nom]=1;
+      const ws=wb.addWorksheet(nom,{views:[{state:'frozen',ySplit:2}]});
+      const hayUni=ev.docs.some(d=>/univ/i.test(String(d.division||'')+' '+String(d.modalidad||'')));
+      const colsPL=[['LUGAR',7],['ATLETA',36],['CLUB',28],...(hayUni?[['UNIVERSIDAD',30]]:[]),['AÑO NAC.',10],['PESO CORP.',12],['SQ',9],['BP',9],['DL',9],['TOTAL',10],['GL POINTS',11]];
+      ws.columns=colsPL.map(c=>({width:c[1]}));
+      const n=colsPL.length;
+      const t1=ws.addRow([ev.nombre.toUpperCase()]); ws.mergeCells(1,1,1,n);
+      t1.getCell(1).font={name:'Calibri',size:14,bold:true};
+      const t2=ws.addRow(['Resultados oficiales · '+(ev.fecha?ev.fecha.split('-').reverse().join('-'):'')+' · yourlift.cl · descargado el '+hoy]); ws.mergeCells(2,1,2,n);
+      t2.getCell(1).font={name:'Calibri',size:10,italic:true,color:{argb:'FF7F7F7F'}};
+      let atletas=0;
+      claves.forEach(k=>{
+        const [mod,sexo,cat,div]=k.split('|');
+        const bench=/bench/i.test(mod);
+        const filas=G[k].slice().sort((a,b)=>{ const ra=a.resultado||{}, rb=b.resultado||{};
+          const da=ra.status==='DQ'||!(num(ra.total)>0), db=rb.status==='DQ'||!(num(rb.total)>0);
+          if(da!==db)return da?1:-1;
+          const pa=num(a.posicion), pb=num(b.posicion);
+          if(pa&&pb&&pa!==pb)return pa-pb;
+          return (num(rb.total)-num(ra.total))||(num(ra.bw)-num(rb.bw)); });
+        ws.addRow([]);
+        const tit=ws.addRow([mod+' · '+(/^(f|muj)/i.test(sexo)?'Mujeres':'Hombres')+' · '+cat+(/^\d/.test(cat)?' kg':'')+(div?' · '+div:'')+'  ('+filas.length+')']);
+        ws.mergeCells(tit.number,1,tit.number,n);
+        tit.getCell(1).font={name:'Calibri',size:12,bold:true,color:{argb:'FFFFFFFF'}};
+        tit.getCell(1).fill=relleno('FF0A1628');
+        const cab=ws.addRow(colsPL.map(c=>c[0]));
+        cab.eachCell(c=>{ c.font={name:'Calibri',size:10,bold:true}; c.fill=relleno('FFD6DCE4'); c.border=borde;
+          c.alignment={horizontal:c.col>=2&&c.col<=(hayUni?4:3)?'left':'center'}; });
+        let lugar=0;
+        filas.forEach(d=>{
+          const r=d.resultado||{};
+          const dq=r.status==='DQ'||!(num(r.total)>0);
+          lugar++;
+          const pos=dq?'DQ':(num(d.posicion)||lugar);
+          const v=[pos,d.nombre||'',d.club||'',...(hayUni?[uniDe(d)]:[]),anioDe(d),num(r.bw)||'',
+            bench?'':num(r.sq),num(r.bp),bench?'':num(r.dl),dq?0:num(r.total),dq?'':+num(r.glp).toFixed(2)];
+          const row=ws.addRow(v);
+          const colTotal=n-1;
+          row.eachCell({includeEmpty:true},c=>{ c.border=borde;
+            c.font={name:'Calibri',size:11,bold:c.col===2||c.col===colTotal,color:dq?{argb:'FF9C0006'}:undefined};
+            c.alignment={horizontal:c.col>=2&&c.col<=(hayUni?4:3)?'left':'center'};
+            if(!dq&&PODIO[pos])c.fill=relleno(PODIO[pos]); });
+          atletas++;
+        });
+      });
+      resumen.push([ev.nombre,ev.fecha?ev.fecha.split('-').reverse().join('-'):'',claves.length,atletas]);
+    });
+
+    ri.columns=[{width:52},{width:12},{width:14},{width:12}];
+    ri.addRow(['RESULTADOS DE CAMPEONATOS']).getCell(1).font={name:'Calibri',size:14,bold:true};
+    ri.addRow(['Descargado el '+hoy+' desde el panel de YourLift. Solo los atletas con resultado publicado (en el Sudamericano, los chilenos).']).getCell(1).font={italic:true,color:{argb:'FF7F7F7F'}};
+    ri.addRow([]);
+    const hc=ri.addRow(['CAMPEONATO','FECHA','CATEGORÍAS','RESULTADOS']);
+    hc.eachCell(c=>{ c.font={bold:true}; c.fill=relleno('FFD6DCE4'); c.border=borde; });
+    resumen.forEach(x=>ri.addRow(x).eachCell(c=>{ c.border=borde; }));
+
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download='Resultados_Campeonatos_'+new Date().getFullYear()+'.xlsx';
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
+    showToast('Resultados exportados: '+resumen.length+' campeonatos');
+    await logAction('export_resultados','competition_results','',resumen.length+' campeonatos');
+  }catch(e){ console.error(e); showToast('Error al exportar los resultados: '+e.message,null,true); }
+  finally{ if(btn){ btn.textContent=txt; btn.disabled=false; } }
 };
 
 // ═══════════════════════ admin/estadisticas.js ═══════════════════════
