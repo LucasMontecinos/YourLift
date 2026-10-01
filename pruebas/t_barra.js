@@ -69,11 +69,13 @@ const MONTAR = `(pais,logo,fondo)=>{
     renderTxWidget();
     const t = document.body.innerText;
     const r = { club: /Black Bars/.test(t), codigo: /\bCHI\b/.test(t),
-                logo: !!document.querySelector('img[src*="clubs/"]') };
+                // Con fondo de bandera, en un solo país el logo del club va grande
+                // de fondo (la bandera sería la misma para todos), no chico al lado.
+                logo: [...document.querySelectorAll('[style]')].some(e => /clubs\/Blackbars/.test(e.getAttribute('style'))) };
     return r;
   });
   ok(nac.club && !nac.codigo, 'con un solo país, en su lugar va el club y no "CHI"');
-  ok(nac.logo, 'con su logo');
+  ok(nac.logo, 'con su logo de fondo');
   ok(/83/.test(txt) && /OPN|Open/i.test(txt), 'la categoría y la división: ' + (txt.match(/83[^\n]*/)||[''])[0]);
 
   console.log('\n  Y lo que se sacó a propósito');

@@ -88,6 +88,19 @@ function _veloBandera(){
 // prender la bandera le borraría ese color al operador.
 function _fondoBarra(a,modo,base){
   const AZUL=base?_hexRgba(base,1):'linear-gradient(160deg,#0d2141,#0A1628 55%,#060d1a)';
+  // En un campeonato de un solo país (nacional, regional, clasificatorio) la
+  // bandera sería la misma para todos y no identifica a nadie: va de fondo el
+  // logo del club del atleta. Sin logo de club, el del campeonato o el azul.
+  if(modo==='bandera'&&!_variosPaises()){
+    const club=(a&&a.club&&window.clubLogo)?window.clubLogo(a.club):'';
+    if(club){
+      // Más tapado que la bandera: un logo tiene letras y dibujo propios que
+      // compiten con el nombre del atleta escrito encima.
+      const v=Math.min(.9,_veloBandera()+.25);
+      return 'linear-gradient(rgba(10,22,40,'+v+'),rgba(10,22,40,'+v+')),url(\''+String(club).replace(/'/g,'%27')+'\') center/auto 72% no-repeat,'+AZUL;
+    }
+    modo='logo';
+  }
   if(modo==='bandera'){
     // La bandera ENTERA de fondo, centrada y estirada hasta las esquinas. Antes se
     // dibujaban franjas diagonales con sus colores, y así Chile perdía la estrella y

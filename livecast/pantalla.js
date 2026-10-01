@@ -607,8 +607,8 @@ function renderScreenBarra(a){
 
     ${B('bPais',`<div style="display:flex;align-items:center;gap:1.1vw;white-space:nowrap;font-size:clamp(16px,2.6vw,40px);font-weight:700;letter-spacing:.06em">
       ${_variosPaises()?`${_flagImg(_ctry(a),34,true)}<span>${esc(_ctry(a))}</span>`
-        :`${_logoClub(a,56,'margin-right:0;background:rgba(10,22,40,.25);padding:3px;border-radius:8px;')}<span>${esc(a.club||'')}</span>`}
-    </div>`)}
+        :`${modo==='bandera'?'':_logoClub(a,56,'margin-right:0;background:rgba(10,22,40,.25);padding:3px;border-radius:8px;')}<span>${esc(a.club||'')}</span>`}
+    </div>`,!_variosPaises())}
 
     ${B('bDatos',`<div style="white-space:nowrap;font-size:clamp(15px,2.4vw,36px);font-weight:600;letter-spacing:.1em;opacity:.9;text-align:center">
       ${esc(cat)} <span style="opacity:.6">·</span> ${esc(divS)}${modS?` <span style="opacity:.6">·</span> ${esc(modS)}`:''}
@@ -713,11 +713,15 @@ function _piLogoBloque(key,url,maxAlto,maxAncho){
     +';object-fit:contain;display:block" onerror="this.style.display=\'none\'">');
 }
 
-function _piBlock(key,innerHtml){
+// `izq`: el bloque crece hacia la derecha desde su borde izquierdo en vez de
+// hacia los dos lados. Lo usa el nombre del club en "Atleta en barra": centrado
+// en el 10 % de la pantalla, un nombre largo se salía por la izquierda.
+function _piBlock(key,innerHtml,izq){
   const pos=_piPos(key);
   const selected=window._piSelected===key;
-  let h='<div class="pi-block" data-pi-key="'+key+'" style="position:absolute;left:'+pos.x+'%;top:'+pos.y+'%;transform:translate(-50%,-50%);padding:10px;border-radius:8px;'+(selected?'outline:2px dashed #D4A843;background:rgba(212,168,67,.08);':'')+'cursor:'+(selected?'move':'pointer')+'">';
-  h+='<div class="pi-inner" style="transform:scale('+((pos.scale||100)/100)+');transform-origin:center center">'+innerHtml+'</div>';
+  const left=izq?Math.max(0,pos.x-5):pos.x;
+  let h='<div class="pi-block" data-pi-key="'+key+'" style="position:absolute;left:'+left+'%;top:'+pos.y+'%;transform:translate('+(izq?'0':'-50%')+',-50%);padding:10px;border-radius:8px;'+(selected?'outline:2px dashed #D4A843;background:rgba(212,168,67,.08);':'')+'cursor:'+(selected?'move':'pointer')+'">';
+  h+='<div class="pi-inner" style="transform:scale('+((pos.scale||100)/100)+');transform-origin:'+(izq?'left':'center')+' center">'+innerHtml+'</div>';
   if(selected){
     h+='<div class="pi-resize" data-pi-key="'+key+'" title="Arrastra para agrandar o achicar" style="position:absolute;right:-15px;bottom:-15px;width:26px;height:26px;background:#D4A843;border:3px solid #0A1628;border-radius:50%;cursor:nwse-resize;box-shadow:0 2px 8px rgba(0,0,0,.5)"></div>';
   }

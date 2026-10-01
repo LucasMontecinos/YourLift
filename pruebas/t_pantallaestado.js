@@ -106,6 +106,7 @@ const MONTAR = `(()=>{
   {
     await recibir({ mode: 'barra', fondo: 'bandera', luces: false });
     const r = await p.evaluate(() => {
+      window._VARIOS_PAISES = true; window._VARIOS_PAISES_N = DATA.athletes.length;  // internacional: va la bandera
       const html = renderScreenBarra(DATA.athletes[0]);
       return { bandera: /data:image\/svg\+xml/.test(html), azulSolo: /background:linear-gradient\(160deg/.test(html) };
     });
@@ -201,6 +202,7 @@ const MONTAR = `(()=>{
     const opac = async v => {
       await recibir({ mode: 'barra', fondo: 'bandera', veloBandera: v });
       return p.evaluate(() => {
+        window._VARIOS_PAISES = true; window._VARIOS_PAISES_N = DATA.athletes.length;  // internacional: va la bandera
         const f = _fondoBarra(DATA.athletes[0], 'bandera');
         const m = f.match(/rgba\(10,22,40,([\d.]+)\)/);
         return m ? parseFloat(m[1]) : null;

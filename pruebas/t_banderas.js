@@ -172,6 +172,23 @@ const MONTAR = `(paisRaro)=>{
     ok((txt.match(/CHI/g) || []).length <= 1, 'el código aparece una sola vez');
   }
 
+  console.log('\nUn solo país: de fondo va el logo del club, no la bandera');
+  {
+    const { p } = await abrir();
+    const r = await p.evaluate(() => {
+      const a = { name: 'Ana Pérez', country: 'CHI', club: 'Club Bushido Lifting' };
+      const b = { name: 'Bea Soto', country: 'CHI', club: 'Club sin logo' };
+      DATA.athletes = [a, b]; window._VARIOS_PAISES = undefined;
+      const nac = _fondoBarra(a, 'bandera'), sinLogo = _fondoBarra(b, 'bandera');
+      DATA.athletes = [a, { name: 'X', country: 'ARG' }]; window._VARIOS_PAISES = undefined;
+      const intl = _fondoBarra(a, 'bandera');
+      return { nac, sinLogo, intl };
+    });
+    ok(/clubs\/Bushido\.png/.test(r.nac) && !/svg/.test(r.nac), 'nacional: el logo del club del atleta');
+    ok(!/svg/.test(r.sinLogo), 'sin logo de club, tampoco la bandera');
+    ok(/svg/.test(r.intl) && !/Bushido/.test(r.intl), 'internacional: sigue la bandera');
+  }
+
   console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');
   await b.close();
   process.exit(fallas ? 1 : 0);
