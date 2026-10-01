@@ -39,7 +39,7 @@ const MODULOS = {
 };
 
 const RES = [{ id: 'prueba_x_meet', nombre: 'Atleta Excel Prueba', club: 'Club Prueba', sexo: 'Hombre', categoria: '83', division: 'Open',
-  modalidad: 'Powerlifting Classic', view: 'meet', evento: 'Regional de Prueba 2026', fecha: '2026-11-08',
+  modalidad: 'Powerlifting Classic', view: 'meet', evento: 'Regional de Prueba 2026', fecha: '2026-11-08', anioNac: '1999',
   resultado: { bw: 82.5, sq: 400, bp: 300, dl: 420, total: 1120, glp: 150 } }];
 
 async function abrir(b, rol) {
@@ -100,9 +100,18 @@ async function abrir(b, rol) {
     ok(tit.length > 5, 'dentro de la hoja, cada categoría y división aparte (' + tit.length + ': ' + tit.slice(0, 3).join(' · ') + '…)');
     const iTit = r.filas.findIndex(f => /^83 kg — Open/.test(f[0] || ''));
     const prim = r.filas[iTit + 2] || [];
-    ok(prim[0] === 1 && prim[1] === 'Atleta Excel Prueba' && prim[7] === 1120, 'trae el resultado recién publicado, primero en 83 kg Open: ' + prim.slice(0, 3).join(' · '));
+    ok(prim[0] === 1 && prim[1] === 'Atleta Excel Prueba' && prim[8] === 1120, 'trae el resultado recién publicado, primero en 83 kg Open: ' + prim.slice(0, 3).join(' · '));
+    ok(prim[2] === 'Club Prueba' && prim[3] === 1999, 'con club y año de nacimiento: ' + prim[2] + ' · ' + prim[3]);
+    ok(prim[10] === 'Regional de Prueba 2026', 'y el campeonato donde hizo la marca: ' + prim[10]);
+    const cab = r.filas.find(f => f[0] === '#') || [];
+    ok(cab.join('|') === '#|ATLETA|CLUB|AÑO NAC.|PESO CORP.|SQ|BP|DL|TOTAL|GL POINTS|CAMPEONATO', 'columnas: ' + cab.join(' | '));
+    // Los del archivo del ranking no traen el campeonato: sale de la base de atletas.
+    const conCamp = r.filas.filter(f => typeof f[0] === 'number' && f[10]).length, total = r.filas.filter(f => typeof f[0] === 'number').length;
+    ok(conCamp / total > 0.8, 'casi todos con su campeonato, también los del archivo (' + conCamp + ' de ' + total + ')');
+    const conAnio = r.filas.filter(f => typeof f[0] === 'number' && f[3]).length;
+    ok(conAnio / total > 0.8, 'y con su año de nacimiento (' + conAnio + ' de ' + total + ')');
     ok(r.filas.every(f => f[1] !== 'Atleta Excel Prueba' || f[0] === 1) && r.filas.filter(f => f[1] === 'Atleta Excel Prueba').length === 1, 'una sola vez');
-    ok(/^#\|ATLETA\|CLUB\|PESO CORP\.\|BP\|GL POINTS$/.test(r.cabBench), 'en Bench, solo la banca: ' + r.cabBench);
+    ok(/^#\|ATLETA\|CLUB\|AÑO NAC\.\|PESO CORP\.\|BP\|GL POINTS\|CAMPEONATO$/.test(r.cabBench), 'en Bench, solo la banca: ' + r.cabBench);
   }
   ok(!(await p.$('iframe[src*="ranking.html"]')), 'el marco del ranking se cierra al terminar');
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs[0] : ''));

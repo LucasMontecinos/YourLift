@@ -7224,7 +7224,7 @@ function renderExports(){
         ${isOwner?`<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-family:Oswald;letter-spacing:1px">RANKING</div>
           <button class="btn btn-w" id="btnExportRanking" onclick="exportRankingExcel(this)" style="text-align:left;padding:14px;width:100%">Descargar el ranking en Excel</button>
-          <p style="font-size:10px;color:var(--muted);margin-top:6px">Una hoja por pestaña del ranking (Classic Masculino, Classic Femenino, Bench…) y adentro cada categoría de peso y división por separado, igual que en el sitio.</p>
+          <p style="font-size:10px;color:var(--muted);margin-top:6px">Una hoja por pestaña del ranking (Classic Masculino, Classic Femenino, Bench…) y adentro cada categoría de peso y división por separado, igual que en el sitio. Con nombre, club, año de nacimiento, marcas y el campeonato donde las hizo.</p>
         </div>`:''}
         <button class="btn btn-b" onclick="exportInscripciones()" style="text-align:left;padding:14px">inscripciones.json (${ST.inscripciones.length} entradas)</button>
         <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">
@@ -7876,12 +7876,49 @@ window.exportRankingExcel=async function(btn){
     // La hoja de inicio va primero; se llena al final, con lo que trae el archivo.
     const ri=wb.addWorksheet('Resumen');
 
+    // De dónde salió cada marca y el año de nacimiento. Los resultados
+    // publicados desde el livecast traen el campeonato (_ev); los del archivo
+    // del ranking no, y se buscan en la base de atletas por nombre y marca.
+    const _nn=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
+    const _evIdx={}, _anIdx={};
+    (ST.data||[]).forEach(a=>{
+      const k=_nn(a.nombre);
+      const an=parseInt(String(a.anioNac||a.fechaNac||'').match(/(19|20)\d{2}/)?.[0]||0,10);
+      if(an&&!_anIdx[k])_anIdx[k]=an;
+      (a.competencias||[]).forEach(c=>{
+        const r=c.resultado||{}, f=String(c.fecha||'');
+        const pon=(clave)=>{ const prev=_evIdx[clave]; if(!prev||f>prev.f)_evIdx[clave]={ev:c.evento||'',f}; };
+        if(parseFloat(r.total)>0)pon(k+'|t|'+parseFloat(r.total));
+        if(parseFloat(r.bp)>0)pon(k+'|bp|'+parseFloat(r.bp));
+      });
+    });
+    // Si el nombre no calza exacto ("Yohan Pérez Coñuñir" / "Yohan Alejandro
+    // Pérez Coñuñir"), el mismo criterio del ranking: todas las palabras del más
+    // corto (al menos dos) están en el más largo, y apunta a UNA persona.
+    const _nombres=Object.keys(_anIdx).concat(Object.keys(_evIdx).map(k=>k.split('|')[0]))
+      .filter((x,i,arr)=>arr.indexOf(x)===i).map(x=>({k:x,t:x.split(' ')}));
+    const _cacheNom={};
+    const _nombreBase=n=>{
+      const k=_nn(n); if(k in _cacheNom)return _cacheNom[k];
+      const t=k.split(' ');
+      const c=_nombres.filter(o=>{ const ch=o.t.length<=t.length?o.t:t, gr=o.t.length<=t.length?t:o.t;
+        return ch.length>=2&&ch.every(p=>gr.indexOf(p)>=0); });
+      return (_cacheNom[k]=c.length===1?c[0].k:k);
+    };
+    const campeonatoDe=(e,bench)=>{
+      if(e._ev)return String(e._ev).replace(/\s*-\s*Tarima\s*\d+\s*$/i,'');
+      const marca=bench?'|bp|'+parseFloat(e.bp):'|t|'+parseFloat(e.tt);
+      const x=_evIdx[_nn(e.n)+marca]||_evIdx[_nombreBase(e.n)+marca];
+      return x?x.ev:'';
+    };
+    const anioDe=e=>e.an||(typeof w._anioPorNombre==='function'?w._anioPorNombre(e.n):0)||_anIdx[_nn(e.n)]||_anIdx[_nombreBase(e.n)]||'';
+
     w.TABS.forEach(t=>{
       const rg=w.rkGrupos(t.id,'');
       if(!rg.grupos.length)return;
       const cols=rg.bench
-        ?[['#',5],['ATLETA',36],['CLUB',28],['PESO CORP.',12],['BP',10],['GL POINTS',12]]
-        :[['#',5],['ATLETA',36],['CLUB',28],['PESO CORP.',12],['SQ',10],['BP',10],['DL',10],['TOTAL',11],['GL POINTS',12]];
+        ?[['#',5],['ATLETA',36],['CLUB',28],['AÑO NAC.',10],['PESO CORP.',12],['BP',10],['GL POINTS',12],['CAMPEONATO',44]]
+        :[['#',5],['ATLETA',36],['CLUB',28],['AÑO NAC.',10],['PESO CORP.',12],['SQ',10],['BP',10],['DL',10],['TOTAL',11],['GL POINTS',12],['CAMPEONATO',44]];
       // Los nombres de hoja de Excel: hasta 31 caracteres y sin / \ ? * [ ]
       const ws=wb.addWorksheet(t.lb.replace(/[\/\\?*\[\]:]/g,'').slice(0,31),{views:[{state:'frozen',ySplit:2}]});
       ws.columns=cols.map(c=>({width:c[1]}));
@@ -7901,15 +7938,18 @@ window.exportRankingExcel=async function(btn){
         tit.getCell(1).fill=relleno('FF0A1628');
         const cab=ws.addRow(cols.map(c=>c[0]));
         cab.eachCell(c=>{ c.font={name:'Calibri',size:10,bold:true}; c.fill=relleno('FFD6DCE4'); c.border=borde;
-          c.alignment={horizontal:c.col<=3?'left':'center'}; });
+          c.alignment={horizontal:(c.col<=3||c.col===n)?'left':'center'}; });
         g.filas.forEach(e=>{
           const pos=e._pos||e.p;
+          const an=anioDe(e), camp=campeonatoDe(e,rg.bench);
           const v=rg.bench
-            ?[pos,e.n,e.t||'',e.bw||'',e.bp||0,+((e.dt||0).toFixed(2))]
-            :[pos,e.n,e.t||'',e.bw||'',e.sq||0,e.bp||0,e.dl||0,e.tt||0,+((e.dt||0).toFixed(2))];
+            ?[pos,e.n,e.t||'',an,e.bw||'',e.bp||0,+((e.dt||0).toFixed(2)),camp]
+            :[pos,e.n,e.t||'',an,e.bw||'',e.sq||0,e.bp||0,e.dl||0,e.tt||0,+((e.dt||0).toFixed(2)),camp];
           const r=ws.addRow(v);
-          r.eachCell({includeEmpty:true},c=>{ c.border=borde; c.font={name:'Calibri',size:11,bold:c.col===2||c.col===n-1};
-            c.alignment={horizontal:c.col===2||c.col===3?'left':'center'};
+          // Total (o la banca en Bench) en negrita: es la marca que ordena.
+          const colMarca=rg.bench?6:9;
+          r.eachCell({includeEmpty:true},c=>{ c.border=borde; c.font={name:'Calibri',size:11,bold:c.col===2||c.col===colMarca};
+            c.alignment={horizontal:(c.col===2||c.col===3||c.col===n)?'left':'center'};
             if(PODIO[pos])c.fill=relleno(PODIO[pos]); });
           atletas++;
         });
