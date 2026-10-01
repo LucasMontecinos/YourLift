@@ -81,6 +81,11 @@ html.embedded .nav-hamburger{display:none!important}
 .vb{padding:9px 18px;background:transparent;border:0;color:var(--muted);font-family:'Oswald';font-size:14px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer}
 .vb+.vb{border-left:2px solid var(--border)}
 .vb.act{background:var(--gold);color:#0A1628}
+/* Filtro por categoría de peso: una fila que se desliza en el teléfono */
+.pesos{display:flex;gap:6px;overflow-x:auto;margin:-6px 0 16px;padding-bottom:4px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.pz{flex:0 0 auto;padding:7px 12px;background:transparent;border:1px solid var(--border);border-radius:999px;color:var(--muted);font-family:'Oswald';font-size:13px;font-weight:600;letter-spacing:.5px;cursor:pointer;font-variant-numeric:tabular-nums}
+.pz.act{background:var(--gold);border-color:var(--gold);color:#0A1628}
+.pz:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .rt td.cat{text-align:center;font-family:'Oswald';font-size:12px;color:var(--muted);white-space:nowrap}
 .stats{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
 .sc{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;flex:1;min-width:90px;text-align:center}
@@ -176,6 +181,7 @@ html.embedded .tabs button,html.embedded .tab,html.embedded button.tab{font-weig
       onfocus="this.style.borderColor='#c41e3a'" onblur="this.style.borderColor='#1e1e2e'">
   </div>
   <div class="vista" id="vista"><button class="vb act" data-v="cat" onclick="setVista('cat')">Por categoría</button><button class="vb" data-v="ov" onclick="setVista('ov')">Overall · GL</button></div>
+  <div class="pesos" id="pesos" role="group" aria-label="Filtrar por categoría de peso"></div>
   <div id="st"></div>
   <div id="ct"></div>
 </div>
@@ -238,6 +244,7 @@ var TABS=[
 var DO={'Sub Junior':0,'Junior':1,'Open':2,'Master I':3,'Master II':4,'Master III':5,'Master IV':6,'Universitario':7};
 var CUR='cl_m';
 var VISTA='cat'; // 'cat' = por categoría de peso · 'ov' = overall por GL
+var PESO=''; // categoría de peso elegida en el filtro ('' = todas)
 
 // ════════════════════════════════════════════════════════════════
 // EL CICLO DEL RANKING
@@ -558,6 +565,15 @@ function R(){
 // arreglo, así que deshacer la baja las devuelve sin recargar.
 var E=D.filter(function(e){return e.tab===CUR&&e.tt>0&&e.p<99&&!e._baja&&_enCiclo(e)});
 var ib=CUR.indexOf('bench')>=0;
+// Filtro por categoría de peso. Las opciones salen de lo que hay en la pestaña;
+// si la elegida no existe acá (se cambió de pestaña), vuelve a "Todas".
+var _cats=[];E.forEach(function(e){if(_cats.indexOf(e.c)<0)_cats.push(e.c)});
+_cats.sort(function(a,b){return cn(a)-cn(b)||(a<b?-1:1)});
+if(PESO&&_cats.indexOf(PESO)<0)PESO='';
+var _pz='<button class="pz'+(PESO?'':' act')+'" onclick="setPeso(\'\')">Todas</button>';
+_cats.forEach(function(c){_pz+='<button class="pz'+(c===PESO?' act':'')+'" onclick="setPeso(\''+c+'\')">'+c+(/^\d/.test(c)?' kg':'')+'</button>';});
+document.getElementById('pesos').innerHTML=_cats.length>1?_pz:'';
+if(PESO)E=E.filter(function(e){return e.c===PESO});
 var G={};
 E.forEach(function(e){var k=e.c+'|'+_divVigente(e);if(!G[k])G[k]=[];G[k].push(e)});
 // Un atleta, una fila por grupo. Antes esto no hacía falta: cada división
@@ -585,7 +601,7 @@ if(VISTA==='ov'){
   var L=Object.keys(mejor).map(function(k){return mejor[k];}).sort(function(a,b){return ((b.dt||0)-(a.dt||0))||((b.tt||0)-(a.tt||0))||((a.bw||0)-(b.bw||0));});
   document.getElementById('st').innerHTML='<div class="stats"><div class="sc"><div class="v">'+L.length+'</div><div class="l">Atletas</div></div></div>';
   if(!L.length){document.getElementById('ct').innerHTML='<div class="empty">Sin resultados en esta modalidad</div>';return}
-  var o='<div class="cs"><div class="ch"><span>Overall · todas las categorías · por puntos GL</span><span class="cn">'+L.length+'</span></div>';
+  var o='<div class="cs"><div class="ch"><span>Overall · '+(PESO?PESO+' kg':'todas las categorías')+' · por puntos GL</span><span class="cn">'+L.length+'</span></div>';
   o+='<table class="rt"><thead><tr><th class="c">#</th><th>Atleta</th><th class="n">Cat.</th><th class="n">Div.</th><th class="n">BW</th>';
   o+=ib?'<th class="n">BP</th>':'<th class="n">SQ</th><th class="n">BP</th><th class="n">DL</th>';
   o+='<th class="n">Total</th><th class="n">GL Points</th></tr></thead><tbody>';
@@ -664,6 +680,11 @@ function filterRanking(q){
   });
 }
 
+function setPeso(c){
+  PESO=c;_allRows=null;
+  const si=document.getElementById('searchRanking');if(si)si.value='';
+  R();
+}
 function setVista(v){
   VISTA=v;_allRows=null;
   const si=document.getElementById('searchRanking');if(si)si.value='';
