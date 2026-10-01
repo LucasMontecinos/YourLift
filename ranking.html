@@ -464,6 +464,10 @@ function applyEdit(o){
     function _applyCompRes(docs){
       var liveEntries=[];
       docs=(docs||[]).filter(function(x){return !_esDePrueba(x);});
+      // Cierre publicado dos veces (Sudamericano): si existe {id}_uni, el {id}
+      // viejo es el mismo resultado y no cuenta.
+      var _ids={};docs.forEach(function(x){_ids[x.id]=1;});
+      docs=docs.filter(function(x){return !_ids[String(x.id)+'_uni'];});
       docs.forEach(function(data){
         var r=data.resultado||{};
         if((r.status||'')==='DQ'||(r.total||0)<=0)return;
@@ -516,7 +520,7 @@ function applyEdit(o){
     }).then(_applyEdits).catch(function(e){console.warn('edits',e);});
     // competition_results: caché 30min
     var _crOk=false;
-    try{var _cc=localStorage.getItem('_rkCR');if(_cc){var _co=JSON.parse(_cc);if(Date.now()-_co.ts<1800000){_applyCompRes(_co.d);_crOk=true;}}}catch(e){}
+    try{var _cc=localStorage.getItem('_rkCR2');if(_cc){var _co=JSON.parse(_cc);if(Date.now()-_co.ts<1800000){_applyCompRes(_co.d);_crOk=true;}}}catch(e){}
     // El ciclo del ranking. Es un solo documento y se lee siempre fresco: si el
     // Nacional acaba de cerrarse, el corte tiene que verse enseguida.
     fb.getDoc(fb.doc(db,'ranking_config','ciclo')).then(function(s){
@@ -543,7 +547,7 @@ function applyEdit(o){
       });
       if(docs.length)_applyCompRes(docs);
     }).catch(function(e){console.warn('data.json',e);});
-    if(!_crOk){fb.getDocs(fb.collection(db,'competition_results')).then(function(s){var a=s.docs.map(function(d){return d.data();});try{localStorage.setItem('_rkCR',JSON.stringify({ts:Date.now(),d:a}));}catch(e){}_applyCompRes(a);}).catch(function(e){console.warn('compres',e);});}
+    if(!_crOk){fb.getDocs(fb.collection(db,'competition_results')).then(function(s){var a=s.docs.map(function(d){var x=d.data();x.id=d.id;return x;});try{localStorage.setItem('_rkCR2',JSON.stringify({ts:Date.now(),d:a}));}catch(e){}_applyCompRes(a);}).catch(function(e){console.warn('compres',e);});}
   }catch(e){console.warn('Firestore ranking load failed',e)}
 })();
 

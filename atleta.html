@@ -290,7 +290,13 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
 
     // Resultados de competencias cerradas en livecast (en vivo, sin redeploy).
     // Mergea cada doc en el atleta correspondiente como nueva competencia.
+    // El cierre del Sudamericano se publicó dos veces: la primera dejó a los
+    // universitarios como "Powerlifting Classic" ({evento}_{código}_meet) y la
+    // segunda como "Classic Universitario" (…_meet_uni), sin borrar la primera.
+    // Si existe la versión _uni, la vieja no cuenta.
+    const _sinCierreViejo=docs=>{const ids=new Set(docs.map(d=>d.id));return docs.filter(d=>!ids.has(String(d.id)+'_uni'));};
     const _applyResults=docs=>{
+      docs=_sinCierreViejo(docs||[]);
       const _catPlus=(c,bw,sx)=>{var s=String(c||'').trim();if(s.indexOf('+')>=0)return s;var m=s.match(/(\d+(?:\.\d+)?)/);if(!m)return s;var n=parseFloat(m[1]);var f=/^(f|muj|w)/i.test(String(sx||''));if(n===84&&f&&(bw||0)>84)return '84+';if(n===120&&!f&&(bw||0)>120)return '120+';return s;};
       const _placeTab=(sx,mod,view)=>{const s=/^(f|muj|w)/i.test(String(sx||''))?'f':'m';const m=String(mod||'');const isOE=/special olympics|olimpiadas|\bOE\b/i.test(m);const isEq=/equipado|equipped/i.test(m);const isUni=/universitar/i.test(m);const isBench=view==='bench'||/only ?bench/i.test(m);if(isUni&&!isBench&&!isOE)return 'uni_'+s;if(isOE)return 'oe_'+s;if(isBench)return (isEq?'bch_eq_':'bch_cl_')+s;return (isEq?'eq_':'cl_')+s;};
       const _grp={};
@@ -637,7 +643,23 @@ window.showProfile=function(codigo){
     const g=r.glp||r.gl||0;
     if(g>bl.glp)bl.glp=g;
   });
-  const compsWithResults=allComps.filter(c=>c.resultado&&(c.resultado.total>0||c.resultado.status==='DQ'));
+  const _conRes=allComps.filter(c=>c.resultado&&(c.resultado.total>0||c.resultado.status==='DQ'));
+  // Classic + Universitario: el mismo levantamiento cuenta en su división y en la
+  // tabla universitaria, y llega como dos resultados con los mismos números. En
+  // el historial es UNA competencia: la universitaria se pega a la otra como un
+  // segundo lugar. (El resultado universitario se queda: lo usa el ranking.)
+  const _mismo=(x,y)=>['sq','bp','dl','total'].every(k=>parseFloat(x[k]||0)===parseFloat(y[k]||0));
+  const _esUni=c=>/universitari/i.test(String(c.modalidad||''));
+  _conRes.forEach(c=>{ delete c._uni; });
+  const compsWithResults=_conRes.filter(c=>{
+    if(!_esUni(c))return true;
+    const base=_conRes.find(o=>o!==c&&!_esUni(o)&&o.evento===c.evento&&_mismo(o.resultado||{},c.resultado||{}));
+    if(!base)return true;
+    base._uni={posicion:c.posicion||null,categoria:c.categoria||''};
+    return false;
+  });
+  // Las universitarias pegadas a su par no cuentan como otra competencia.
+  const _nComp=allComps.length-(_conRes.length-compsWithResults.length);
   const sorted=[...compsWithResults].sort((x,y)=>fechaOrden(y).localeCompare(fechaOrden(x)));
 
   // Sex from most recent comp
@@ -773,7 +795,7 @@ window.showProfile=function(codigo){
         +entrenadorBadge
         +juezBadge
         +(sexRaw?'<span class="badge '+sexBadge+'">'+sexLabel+'</span>':'')
-        +'<span class="badge b-y">'+allComps.length+' competencia'+(allComps.length!==1?'s':'')+'</span>'
+        +'<span class="badge b-y">'+_nComp+' competencia'+(_nComp!==1?'s':'')+'</span>'
         +(compsWithResults.length?'<span class="badge b-g">'+compsWithResults.length+' resultado'+(compsWithResults.length!==1?'s':'')+'</span>':'')
       +'</div>'
     +'</div>'
@@ -1061,6 +1083,8 @@ window.showProfile=function(codigo){
       const _histOv=window._HIST_POS?.[codigo+'__'+c.evento];
       const _pos=c.posicion||(_histOv?.posicion)||(_placeRec>0?_placeRec:null);
       const _posCol=_pos===1?'#D4A843':_pos===2?'#c0c0c0':_pos===3?'#cd7f32':'var(--muted)';
+      const _uniBadge=(u,dq)=>{ const p=u.posicion; const col=p===1?'#D4A843':p===2?'#c0c0c0':p===3?'#cd7f32':'#60a5fa';
+        return '<span style="display:inline-block;background:'+col+'22;border:1px solid '+col+';color:'+col+';font-family:Oswald;font-weight:700;font-size:11px;letter-spacing:1px;padding:2px 9px;border-radius:5px">UNIVERSITARIO'+((p&&!dq)?' · '+(p<=3?p+'° LUGAR':'#'+p):'')+'</span>'; };
       const posBadge=(_pos&&!isDQ)?'<span style="display:inline-block;background:'+_posCol+'22;border:1px solid '+_posCol+';color:'+_posCol+';font-family:Oswald;font-weight:700;font-size:11px;letter-spacing:1px;padding:2px 9px;border-radius:5px">'+(_pos<=3?_pos+'° LUGAR':'#'+_pos+' LUGAR')+'</span>':'';
       h+='<div class="comp-row"'+(isDQ?' style="opacity:.85"':'')+'>'
         +'<div style="flex:1;min-width:0">'
@@ -1068,7 +1092,7 @@ window.showProfile=function(codigo){
             +'<span style="overflow:hidden;text-overflow:ellipsis">'+c.evento+'</span>'
             +(c.invitado?' <span style="font-family:DM Sans;font-weight:400;font-size:11px;color:var(--gold);flex-shrink:0">Invitado</span>':'')
           +'</div>'
-          +(posBadge?'<div style="margin-top:4px">'+posBadge+'</div>':'')
+          +((posBadge||c._uni)?'<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">'+posBadge+(c._uni?_uniBadge(c._uni,isDQ):'')+'</div>':'')
           +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+(c.division||'—')+' · '+(c.categoria||'—')+(c.modalidad?' · '+c.modalidad:'')+'</div>'
           +(c.fecha?'<div style="font-size:10px;color:var(--muted)">'+c.fecha+'</div>':'')
           +'<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">'
