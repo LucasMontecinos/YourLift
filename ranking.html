@@ -462,8 +462,6 @@ function applyEdit(o){
     // se llegó a publicar.
     function _esDePrueba(x){ return !!x&&(/ensayo/i.test(String(x.evento_id||''))||/ensayo/i.test(String(x.id||''))||/^\s*ensayo\b/i.test(String(x.evento||''))); }
     function _applyCompRes(docs){
-      // El panel espera esto para exportar: con los resultados nuevos ya puestos.
-      window._rkLive=(window._rkLive||0)+1;
       var liveEntries=[];
       docs=(docs||[]).filter(function(x){return !_esDePrueba(x);});
       // Cierre publicado dos veces (Sudamericano): si existe {id}_uni, el {id}
@@ -521,8 +519,11 @@ function applyEdit(o){
       });
     }).then(_applyEdits).catch(function(e){console.warn('edits',e);});
     // competition_results: caché 30min
+    // window._rkResultados: 'ok' cuando ya están puestos los resultados de
+    // competition_results. El panel lo espera para exportar el ranking a Excel:
+    // los de data.json llegan antes y no alcanzan.
     var _crOk=false;
-    try{var _cc=localStorage.getItem('_rkCR2');if(_cc){var _co=JSON.parse(_cc);if(Date.now()-_co.ts<1800000){_applyCompRes(_co.d);_crOk=true;}}}catch(e){}
+    try{var _cc=localStorage.getItem('_rkCR2');if(_cc){var _co=JSON.parse(_cc);if(Date.now()-_co.ts<1800000){_applyCompRes(_co.d);_crOk=true;window._rkResultados='ok';}}}catch(e){}
     // El ciclo del ranking. Es un solo documento y se lee siempre fresco: si el
     // Nacional acaba de cerrarse, el corte tiene que verse enseguida.
     fb.getDoc(fb.doc(db,'ranking_config','ciclo')).then(function(s){
@@ -549,7 +550,7 @@ function applyEdit(o){
       });
       if(docs.length)_applyCompRes(docs);
     }).catch(function(e){console.warn('data.json',e);});
-    if(!_crOk){fb.getDocs(fb.collection(db,'competition_results')).then(function(s){var a=s.docs.map(function(d){var x=d.data();x.id=d.id;return x;});try{localStorage.setItem('_rkCR2',JSON.stringify({ts:Date.now(),d:a}));}catch(e){}_applyCompRes(a);}).catch(function(e){console.warn('compres',e);});}
+    if(!_crOk){fb.getDocs(fb.collection(db,'competition_results')).then(function(s){var a=s.docs.map(function(d){var x=d.data();x.id=d.id;return x;});try{localStorage.setItem('_rkCR2',JSON.stringify({ts:Date.now(),d:a}));}catch(e){}_applyCompRes(a);window._rkResultados='ok';}).catch(function(e){window._rkResultados='error';console.warn('compres',e);});}
   }catch(e){console.warn('Firestore ranking load failed',e)}
 })();
 

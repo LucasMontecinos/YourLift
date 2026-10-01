@@ -7838,13 +7838,12 @@ function _rkAbrirRanking(){
     let listo=false;
     const fin=(ok,err)=>{ if(listo)return; listo=true; clearInterval(t); ok?res(f):(f.remove(),rej(err)); };
     const desde=Date.now();
-    // Espera a que estén los resultados de Firestore; si no llegan en 20 s se
-    // exporta con lo del archivo, que es lo que vería cualquiera sin conexión.
+    // Espera a que estén los resultados de Firestore (hasta 25 s).
     const t=setInterval(()=>{
       try{
         const w=f.contentWindow;
         if(!w||typeof w.rkGrupos!=='function'||!w.D)return;
-        if(w._rkLive||Date.now()-desde>20000)fin(true);
+        if(w._rkResultados||Date.now()-desde>25000)fin(true);
       }catch(e){ fin(false,e); }
     },300);
     setTimeout(()=>fin(false,new Error('El ranking no cargó')),40000);
@@ -7868,6 +7867,9 @@ window.exportRankingExcel=async function(btn){
     }
     marco=await _rkAbrirRanking();
     const w=marco.contentWindow;
+    // Sin los resultados publicados el Excel saldría con el ranking a medias
+    // (solo lo del archivo): mejor no bajar nada y decirlo.
+    if(w._rkResultados!=='ok')throw new Error('no cargaron los resultados publicados de los campeonatos. Revisa la conexión y vuelve a intentar.');
     const anio=((w.document.getElementById('rkAnio')||{}).textContent||String(new Date().getFullYear())).trim();
     const wb=new window.ExcelJS.Workbook();
     wb.creator='YourLift';

@@ -24,7 +24,9 @@ const MODULOS = {
     export const initializeFirestore=()=>({}); export const getFirestore=()=>({});
     export const persistentLocalCache=()=>({}); export const persistentMultipleTabManager=()=>({});
     export const collection=(_d,n)=>({__n:n}); export const doc=(_d,n,i)=>({__n:n,__i:i});
-    export const getDocs=async q=>snap(busca(q));
+    // competition_results llega tarde, como en un teléfono con mala señal: el
+    // Excel no puede salir antes de tenerlo (los de data.json llegan primero).
+    export const getDocs=async q=>{ if(q&&(q.__n||(q.__q&&q.__q.__n))==='competition_results')await new Promise(r=>setTimeout(r,3000)); return snap(busca(q)); };
     export const getDoc=async r=>{const d=(busca(r)||[]).find(x=>x.id===r.__i);return{exists:()=>!!d,data:()=>d||{},id:r.__i};};
     export const setDoc=async()=>{}; export const updateDoc=async()=>{}; export const deleteDoc=async()=>{};
     export const deleteField=()=>null; export const addDoc=async()=>({id:'x'});
