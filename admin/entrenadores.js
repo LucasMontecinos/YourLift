@@ -293,7 +293,11 @@ function renderEntInsc(){
     const nomDoc=k=>{
       const fo=(ST.formEnt||[]).find(x=>x.id===e.formulario)||{};
       const d=(fo.documentos||[]).find(x=>'e_'+x.key===k);
-      return d?d.label:k;
+      if(d)return d.label;
+      // Los cinco de Olimpiadas Especiales no están en el formulario: se suman
+      // solos cuando el entrenador lleva un atleta OE. Su nombre sale del catálogo.
+      const oe=(window.DOCS_OE_ENTRENADOR||{})[k];
+      return oe?oe.label:k;
     };
     const st=e.status||'pending';
     const badge=st==='approved'?'<span class="badge b-g">Aprobado</span>'

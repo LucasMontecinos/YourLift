@@ -279,6 +279,30 @@ global.EVENTOS_G = EVENTOS;
     ok(/Se saca en el Registro Civil/.test(r.texto), 'con el texto que se le escribió');
     ok(r.trancado, 'y sin subirlo no se puede seguir');
   }
+  console.log('\n  Con un atleta de Olimpiadas Especiales, un buzón por cada certificado');
+  {
+    const r = await p.evaluate((ats) => {
+      window._atletas(ats);
+      const f = { documentos: [{ key: 'ant1', label: 'Certificado de antecedentes' }] };
+      _estado.atletas = [];
+      const sinOE = Object.keys(docsEntrenador(f));
+      _estado.atletas = ['111111111'];   // Ana Soto, Olimpiadas Especiales
+      const conOE = docsEntrenador(f);
+      _estado.step = 3; _estado.archivos = {}; _estado.nombres = {}; render();
+      const zonas = document.querySelectorAll('.upload-zone input[type=file]').length;
+      return { sinOE, claves: Object.keys(conOE), labels: Object.values(conOE).map(d => d.label),
+               zonas, texto: document.body.textContent };
+    }, ATLETAS);
+    ok(r.sinOE.length === 1, 'sin atleta OE no se piden los certificados');
+    ok(r.claves.length === 6 && r.zonas === 6, 'con uno, se suman cinco buzones aparte');
+    ['Certificado Entrenamiento de Operación Salvaguarda',
+     'Certificado Curso Coaching – Level 1 Sport Assistant',
+     'Certificado Curso Coaching – Level 2 Coaching Assistant',
+     'Certificado Curso Coaching – Level 3 Coach Online Module',
+     'Certificado Curso Coaching – Unified Sports Coaching Course'].forEach(t =>
+      ok(r.labels.includes(t) && r.texto.includes(t), 'buzón: ' + t));
+    await p.evaluate(() => { _estado.atletas = []; });
+  }
   {
     // Un campeonato que no le pide nada al entrenador no lo deja trancado.
     const r = await p.evaluate(() => {

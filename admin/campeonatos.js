@@ -219,16 +219,16 @@ function renderCampeonatos(){
                   <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Modalidades</div>
                   <textarea id="ef_modsx" rows="4" placeholder="Juegos Especiales&#10;Otra modalidad"
                     style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px;font-family:inherit">${(editing.modsExtra||[]).join('\n')}</textarea>
-                  <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:5px;cursor:pointer">
-                    <input type="checkbox" id="ef_modsSolo" ${editing.modsSolo?'checked':''}> solo estas
+                  <label style="display:flex;align-items:center;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text);margin-top:6px;cursor:pointer;text-transform:none;letter-spacing:0">
+                    <input type="checkbox" id="ef_modsSolo" ${editing.modsSolo?'checked':''} style="width:16px;height:16px;flex:none;margin:0"> Usar solo estas modalidades (ocultar las de siempre)
                   </label>
                 </div>
                 <div>
                   <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Divisiones</div>
                   <textarea id="ef_divsx" rows="4" placeholder="Nivel 1&#10;Nivel 2"
                     style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px;font-family:inherit">${(editing.divsExtra||[]).join('\n')}</textarea>
-                  <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:5px;cursor:pointer">
-                    <input type="checkbox" id="ef_divsSolo" ${editing.divsSolo?'checked':''}> solo estas
+                  <label style="display:flex;align-items:center;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text);margin-top:6px;cursor:pointer;text-transform:none;letter-spacing:0">
+                    <input type="checkbox" id="ef_divsSolo" ${editing.divsSolo?'checked':''} style="width:16px;height:16px;flex:none;margin:0"> Usar solo estas divisiones (ocultar las de siempre)
                   </label>
                 </div>
               </div>

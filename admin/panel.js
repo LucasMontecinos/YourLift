@@ -3185,7 +3185,11 @@ function renderEntInsc(){
     const nomDoc=k=>{
       const fo=(ST.formEnt||[]).find(x=>x.id===e.formulario)||{};
       const d=(fo.documentos||[]).find(x=>'e_'+x.key===k);
-      return d?d.label:k;
+      if(d)return d.label;
+      // Los cinco de Olimpiadas Especiales no están en el formulario: se suman
+      // solos cuando el entrenador lleva un atleta OE. Su nombre sale del catálogo.
+      const oe=(window.DOCS_OE_ENTRENADOR||{})[k];
+      return oe?oe.label:k;
     };
     const st=e.status||'pending';
     const badge=st==='approved'?'<span class="badge b-g">Aprobado</span>'
@@ -4228,16 +4232,16 @@ function renderCampeonatos(){
                   <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Modalidades</div>
                   <textarea id="ef_modsx" rows="4" placeholder="Juegos Especiales&#10;Otra modalidad"
                     style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px;font-family:inherit">${(editing.modsExtra||[]).join('\n')}</textarea>
-                  <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:5px;cursor:pointer">
-                    <input type="checkbox" id="ef_modsSolo" ${editing.modsSolo?'checked':''}> solo estas
+                  <label style="display:flex;align-items:center;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text);margin-top:6px;cursor:pointer;text-transform:none;letter-spacing:0">
+                    <input type="checkbox" id="ef_modsSolo" ${editing.modsSolo?'checked':''} style="width:16px;height:16px;flex:none;margin:0"> Usar solo estas modalidades (ocultar las de siempre)
                   </label>
                 </div>
                 <div>
                   <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Divisiones</div>
                   <textarea id="ef_divsx" rows="4" placeholder="Nivel 1&#10;Nivel 2"
                     style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:#0a1628;color:var(--text);font-size:12px;font-family:inherit">${(editing.divsExtra||[]).join('\n')}</textarea>
-                  <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:5px;cursor:pointer">
-                    <input type="checkbox" id="ef_divsSolo" ${editing.divsSolo?'checked':''}> solo estas
+                  <label style="display:flex;align-items:center;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text);margin-top:6px;cursor:pointer;text-transform:none;letter-spacing:0">
+                    <input type="checkbox" id="ef_divsSolo" ${editing.divsSolo?'checked':''} style="width:16px;height:16px;flex:none;margin:0"> Usar solo estas divisiones (ocultar las de siempre)
                   </label>
                 </div>
               </div>
@@ -13898,11 +13902,11 @@ window.DOCS_OE_ATLETA = {
 };
 // Y los cinco del entrenador que declara a un atleta de Olimpiadas Especiales.
 window.DOCS_OE_ENTRENADOR = {
-  e_oe_salvaguarda: { label: 'Entrenamiento de Operación Salvaguarda', icon: '', desc: 'Certificado del curso' },
-  e_oe_lvl1:        { label: 'Coaching Level 1 — Sport Assistant', icon: '', desc: 'Certificado del curso' },
-  e_oe_lvl2:        { label: 'Coaching Level 2 — Coaching Assistant', icon: '', desc: 'Certificado del curso' },
-  e_oe_lvl3:        { label: 'Coaching Level 3 — Coach Online Module', icon: '', desc: 'Certificado del curso' },
-  e_oe_unified:     { label: 'Unified Sports Coaching Course', icon: '', desc: 'Certificado del curso' }
+  e_oe_salvaguarda: { label: 'Certificado Entrenamiento de Operación Salvaguarda', icon: '', desc: 'Certificado del curso' },
+  e_oe_lvl1:        { label: 'Certificado Curso Coaching – Level 1 Sport Assistant', icon: '', desc: 'Certificado del curso' },
+  e_oe_lvl2:        { label: 'Certificado Curso Coaching – Level 2 Coaching Assistant', icon: '', desc: 'Certificado del curso' },
+  e_oe_lvl3:        { label: 'Certificado Curso Coaching – Level 3 Coach Online Module', icon: '', desc: 'Certificado del curso' },
+  e_oe_unified:     { label: 'Certificado Curso Coaching – Unified Sports Coaching Course', icon: '', desc: 'Certificado del curso' }
 };
 Object.assign(window.DOC_TYPES_CATALOG, window.DOCS_OE_ATLETA, window.DOCS_OE_ENTRENADOR);
 // Las modalidades y divisiones de la federación (espejo de inscripcion.html).

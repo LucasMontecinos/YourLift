@@ -465,11 +465,11 @@ window.DOCS_OE_ATLETA = {
 };
 // Y los cinco del entrenador que declara a un atleta de Olimpiadas Especiales.
 window.DOCS_OE_ENTRENADOR = {
-  e_oe_salvaguarda: { label: 'Entrenamiento de Operación Salvaguarda', icon: '', desc: 'Certificado del curso' },
-  e_oe_lvl1:        { label: 'Coaching Level 1 — Sport Assistant', icon: '', desc: 'Certificado del curso' },
-  e_oe_lvl2:        { label: 'Coaching Level 2 — Coaching Assistant', icon: '', desc: 'Certificado del curso' },
-  e_oe_lvl3:        { label: 'Coaching Level 3 — Coach Online Module', icon: '', desc: 'Certificado del curso' },
-  e_oe_unified:     { label: 'Unified Sports Coaching Course', icon: '', desc: 'Certificado del curso' }
+  e_oe_salvaguarda: { label: 'Certificado Entrenamiento de Operación Salvaguarda', icon: '', desc: 'Certificado del curso' },
+  e_oe_lvl1:        { label: 'Certificado Curso Coaching – Level 1 Sport Assistant', icon: '', desc: 'Certificado del curso' },
+  e_oe_lvl2:        { label: 'Certificado Curso Coaching – Level 2 Coaching Assistant', icon: '', desc: 'Certificado del curso' },
+  e_oe_lvl3:        { label: 'Certificado Curso Coaching – Level 3 Coach Online Module', icon: '', desc: 'Certificado del curso' },
+  e_oe_unified:     { label: 'Certificado Curso Coaching – Unified Sports Coaching Course', icon: '', desc: 'Certificado del curso' }
 };
 Object.assign(window.DOC_TYPES_CATALOG, window.DOCS_OE_ATLETA, window.DOCS_OE_ENTRENADOR);
 // Las modalidades y divisiones de la federación (espejo de inscripcion.html).
