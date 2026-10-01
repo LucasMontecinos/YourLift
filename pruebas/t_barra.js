@@ -116,8 +116,8 @@ const MONTAR = `(pais,logo,fondo)=>{
         .find(e => /linear-gradient/.test(e.getAttribute('style') || ''));
       return d ? d.getAttribute('style') : '';
     });
-    ok(/0A1628/i.test(fondoXXX) && !/rgba\(0, ?57, ?166/.test(fondoXXX),
-       'un país sin tabla cae al azul YourLift');
+    ok(/#000/i.test(fondoXXX) && !/rgba\(0, ?57, ?166/.test(fondoXXX),
+       'un país sin tabla cae al fondo negro');
   }
   {
     const conLogo = await montar('CHI', 'https://ejemplo.cl/logo.png', 'logo');
@@ -131,8 +131,8 @@ const MONTAR = `(pais,logo,fondo)=>{
         .find(e => /linear-gradient/.test(e.getAttribute('style') || ''));
       return d ? d.getAttribute('style') : '';
     });
-    ok(!/url\(/.test(sinLogo) && /0A1628/i.test(sinLogo),
-       'con fondo "logo" y sin logo cargado, cae al azul YourLift');
+    ok(!/url\(/.test(sinLogo) && /#000/i.test(sinLogo),
+       'con fondo "logo" y sin logo cargado, cae al fondo negro');
     const azul = await montar('CHI', 'https://ejemplo.cl/logo.png', 'yourlift');
     ok(/0A1628/i.test(azul), 'y el azul se puede elegir a mano');
   }

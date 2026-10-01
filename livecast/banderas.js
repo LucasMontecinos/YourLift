@@ -87,7 +87,9 @@ function _veloBandera(){
 // intentos tiene su propio color elegible en el engranaje, y si no se respetara,
 // prender la bandera le borraría ese color al operador.
 function _fondoBarra(a,modo,base){
-  const AZUL=base?_hexRgba(base,1):'linear-gradient(160deg,#0d2141,#0A1628 55%,#060d1a)';
+  // Negro de fondo: en el televisor del gimnasio el azul se veía lavado y el
+  // negro hace resaltar el nombre, el peso y los discos.
+  const AZUL=base?_hexRgba(base,1):'linear-gradient(160deg,#141414,#000 55%,#000)';
   // En un campeonato de un solo país (nacional, regional, clasificatorio) la
   // bandera sería la misma para todos y no identifica a nadie: va de fondo el
   // logo del club del atleta. Sin logo de club, el del campeonato o el azul.
@@ -97,7 +99,7 @@ function _fondoBarra(a,modo,base){
       // Más tapado que la bandera: un logo tiene letras y dibujo propios que
       // compiten con el nombre del atleta escrito encima.
       const v=Math.min(.9,_veloBandera()+.25);
-      return 'linear-gradient(rgba(10,22,40,'+v+'),rgba(10,22,40,'+v+')),url(\''+String(club).replace(/'/g,'%27')+'\') center/auto 72% no-repeat,'+AZUL;
+      return 'linear-gradient(rgba(0,0,0,'+v+'),rgba(0,0,0,'+v+')),url(\''+String(club).replace(/'/g,'%27')+'\') center/auto 72% no-repeat,'+AZUL;
     }
     modo='logo';
   }
@@ -117,12 +119,14 @@ function _fondoBarra(a,modo,base){
     const uri=_flagDataUri(_ctry(a));
     const v=_veloBandera();
     const medio=Math.min(.97,v+.33);
-    const velo='linear-gradient(rgba(10,22,40,'+v+'),rgba(10,22,40,'+medio+') 34%,rgba(10,22,40,'+medio+') 66%,rgba(10,22,40,'+v+'))';
+    const velo='linear-gradient(rgba(0,0,0,'+v+'),rgba(0,0,0,'+medio+') 34%,rgba(0,0,0,'+medio+') 66%,rgba(0,0,0,'+v+'))';
     if(uri)return velo+',url('+uri+') center/cover no-repeat,'+AZUL;
     return AZUL;
   }
+  // El azul YourLift sigue disponible si el operador lo elige a mano.
+  if(modo==='yourlift'&&!base)return 'linear-gradient(160deg,#0d2141,#0A1628 55%,#060d1a)';
   if(modo==='logo'&&_logoCamp()){
-    return 'linear-gradient(0deg,rgba(10,22,40,.86),rgba(10,22,40,.86)),url('+_logoCamp()+') center/contain no-repeat,'+AZUL;
+    return 'linear-gradient(0deg,rgba(0,0,0,.86),rgba(0,0,0,.86)),url('+_logoCamp()+') center/contain no-repeat,'+AZUL;
   }
   return AZUL;
 }

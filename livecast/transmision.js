@@ -1561,6 +1561,7 @@ function renderTxProfile(cur){
   const pb=txPB(full,liftKey);
   const pbLabel={sq:'MEJOR MARCA SENTADILLA',bp:'MEJOR MARCA PRESS BANCA',dl:'MEJOR MARCA PESO MUERTO'}[liftKey]||'MEJOR MARCA';
   const clubLogoHtml=(window.clubLogoImg?window.clubLogoImg(club,52,'background:rgba(10,22,40,.6);padding:3px;margin-right:18px;vertical-align:middle;'):'');
+  const chipClub=(window.clubLogoImg&&club)?window.clubLogoImg(club,48,'display:block;background:rgba(10,22,40,.35);padding:2px;'):'';
   const clubCell=clubLogoHtml?('<span style="display:inline-flex;align-items:center;gap:0;justify-content:flex-end">'+clubLogoHtml+'<span>'+(club||'—')+'</span></span>'):(club||'—');
   // En un internacional lo que se muestra es el PAÍS (con su bandera), no el club:
   // en la nómina de FESUPO el "club" es el país escrito a mano, y la fila decía
@@ -1574,6 +1575,17 @@ function renderTxProfile(cur){
   if(age!==null)rows.push(['EDAD',age+'']);
   if(years!==null)rows.push(['AÑOS COMPITIENDO',years+'']);
   if(pb)rows.push([pbLabel,pb.toFixed(1)]);
+  // Al lado del nombre: la bandera y el código del país. En un campeonato de un
+  // solo país serían iguales para todos, así que va el logo del club (sin logo,
+  // nada).
+  const chipNombre=_variosPaises()
+    ?`<div style="background:rgba(0,0,0,.2);padding:clamp(6px,0.7vw,10px) clamp(10px,1.2vw,16px);border-radius:5px;display:flex;align-items:center;gap:clamp(8px,0.9vw,14px)">
+              <div style="width:clamp(44px,5vw,72px);height:clamp(30px,3.3vw,48px);position:relative;overflow:hidden;border-radius:2px;flex-shrink:0;box-shadow:0 1px 8px rgba(0,0,0,.5);background:#0a1628">
+                ${FLAG_SVG[_ctry(cur)]?`<svg viewBox="0 0 30 20" preserveAspectRatio="none" role="img" aria-label="${_ctry(cur)}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%">${FLAG_SVG[_ctry(cur)]}</svg>`:''}
+              </div>
+              <span style="font-family:Oswald;font-weight:700;font-size:clamp(13px,1.4vw,22px);color:${_txC('nameText')};letter-spacing:2px">${_ctry(cur)}</span>
+            </div>`
+    :(chipClub?`<div style="background:rgba(0,0,0,.2);padding:clamp(4px,0.5vw,8px);border-radius:5px;display:flex;align-items:center">${chipClub}</div>`:'');
   const initials=parts.map(p=>p[0]||'').slice(0,2).join('').toUpperCase();
   const useGif=_txProfileMediaType==='gif'&&!!media.gif_url;
   const gifIsImg=useGif&&String(media.gif_url||'').toLowerCase().split('?')[0].endsWith('.gif');
@@ -1588,12 +1600,7 @@ function renderTxProfile(cur){
       <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(8px,1.5vh,22px);max-width:1400px;width:100%;margin:auto">
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:clamp(6px,1vh,16px)">
           <div style="background:${_txC('nameBg')};padding:clamp(10px,1.6vw,18px) clamp(18px,2.2vw,28px);border-radius:6px;display:flex;align-items:center;gap:clamp(10px,1.5vw,18px);box-shadow:0 4px 20px rgba(212,168,67,.35)">
-            <div style="background:rgba(0,0,0,.2);padding:clamp(6px,0.7vw,10px) clamp(10px,1.2vw,16px);border-radius:5px;display:flex;align-items:center;gap:clamp(8px,0.9vw,14px)">
-              <div style="width:clamp(44px,5vw,72px);height:clamp(30px,3.3vw,48px);position:relative;overflow:hidden;border-radius:2px;flex-shrink:0;box-shadow:0 1px 8px rgba(0,0,0,.5);background:#0a1628">
-                ${FLAG_SVG[_ctry(cur)]?`<svg viewBox="0 0 30 20" preserveAspectRatio="none" role="img" aria-label="${_ctry(cur)}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%">${FLAG_SVG[_ctry(cur)]}</svg>`:''}
-              </div>
-              <span style="font-family:Oswald;font-weight:700;font-size:clamp(13px,1.4vw,22px);color:${_txC('nameText')};letter-spacing:2px">${_ctry(cur)}</span>
-            </div>
+            ${chipNombre}
             <div style="font-family:Oswald;font-size:clamp(26px,3.2vw,44px);font-weight:700;letter-spacing:2px;color:${_txC('nameText')}">
               ${firstName?firstName+' ':''}${lastName}
             </div>

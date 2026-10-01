@@ -204,7 +204,7 @@ const MONTAR = `(()=>{
       return p.evaluate(() => {
         window._VARIOS_PAISES = true; window._VARIOS_PAISES_N = DATA.athletes.length;  // internacional: va la bandera
         const f = _fondoBarra(DATA.athletes[0], 'bandera');
-        const m = f.match(/rgba\(10,22,40,([\d.]+)\)/);
+        const m = f.match(/rgba\(0,0,0,([\d.]+)\)/);
         return m ? parseFloat(m[1]) : null;
       });
     };
@@ -214,7 +214,7 @@ const MONTAR = `(()=>{
     ok(claro === 0.2 && tapado === 0.85, 'y llega a los dos extremos');
     const porDefecto = await p.evaluate(() => {
       window._SCREEN_STATE = { mode: 'barra', fondo: 'bandera' };  // sin el dato
-      const m = _fondoBarra(DATA.athletes[0], 'bandera').match(/rgba\(10,22,40,([\d.]+)\)/);
+      const m = _fondoBarra(DATA.athletes[0], 'bandera').match(/rgba\(0,0,0,([\d.]+)\)/);
       return parseFloat(m[1]);
     });
     ok(porDefecto === 0.55, 'y si el campeonato es viejo y no lo tiene guardado, queda en el normal');

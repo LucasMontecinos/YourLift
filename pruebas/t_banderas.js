@@ -189,6 +189,26 @@ const MONTAR = `(paisRaro)=>{
     ok(/svg/.test(r.intl) && !/Bushido/.test(r.intl), 'internacional: sigue la bandera');
   }
 
+  console.log('\nPerfil del Control TX: con un solo país, club en vez de país');
+  {
+    const { p } = await abrir();
+    const r = await p.evaluate(() => {
+      const a = DATA.athletes[0];
+      a.country = 'CHI'; a.club = 'Club Bushido Lifting';
+      DATA.athletes = [a, Object.assign({}, a, { id: 99, name: 'Otro Chileno' })]; window._VARIOS_PAISES = undefined;
+      const nac = renderTxProfile(a);
+      DATA.athletes = [a, Object.assign({}, a, { id: 98, country: 'ARG' })]; window._VARIOS_PAISES = undefined;
+      const intl = renderTxProfile(a);
+      const txt = h => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent; };
+      return { nacClub: /CLUB/.test(txt(nac)) && !/PAÍS/.test(txt(nac)), nacLogo: /clubs\/Bushido/.test(nac),
+               nacBandera: /<svg[^>]*aria-label="CHI"/.test(nac), intlPais: /PAÍS/.test(txt(intl)),
+               intlBandera: /<svg[^>]*aria-label="CHI"/.test(intl) };
+    });
+    ok(r.nacClub, 'nacional: la fila dice CLUB y no PAÍS');
+    ok(r.nacLogo && !r.nacBandera, 'y al lado del nombre va el logo del club, no la bandera');
+    ok(r.intlPais && r.intlBandera, 'internacional: país y bandera, como siempre');
+  }
+
   console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');
   await b.close();
   process.exit(fallas ? 1 : 0);

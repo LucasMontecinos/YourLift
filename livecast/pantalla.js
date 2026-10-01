@@ -881,7 +881,7 @@ function _piSettingsPanelHtml(){
         <input type="checkbox" ${piSet.showTimer===true?'checked':''} onchange="piSetSetting('_timerElegido',true);piSetSetting('showTimer',this.checked)"> Mostrar cronómetro
       </label>
       <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:Oswald;font-size:12px;color:#fff">
-        Fondo <input type="color" value="${piSet.bgColor||'#0A1628'}" onchange="piSetSetting('bgColor',this.value)" style="width:36px;height:24px;padding:0;border:1px solid rgba(212,225,245,.3);border-radius:4px;background:none;cursor:pointer">
+        Fondo <input type="color" value="${piSet.bgColor||'#000000'}" onchange="piSetSetting('bgColor',this.value)" style="width:36px;height:24px;padding:0;border:1px solid rgba(212,225,245,.3);border-radius:4px;background:none;cursor:pointer">
       </label>
       <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:Oswald;font-size:12px;color:#fff">
         Acento <input type="color" value="${piSet.accentColor||'#D4A843'}" onchange="piSetSetting('accentColor',this.value)" style="width:36px;height:24px;padding:0;border:1px solid rgba(212,225,245,.3);border-radius:4px;background:none;cursor:pointer">
@@ -1107,7 +1107,7 @@ function renderScreenIntentos(cur,nxt){
   // Se apaga desde el engranaje de abajo a la izquierda.
   const _fondoPant=(piSet.fondoBandera!==false)
     ? _fondoBarra(cur,'bandera',piSet.bgColor||'')
-    : (piSet.bgColor||'');
+    : (piSet.bgColor||'#000');
   return `<div class="pi-canvas" style="position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden${_fondoPant?';background:'+_fondoPant:''}" id="pantIntentosBox">
     ${compHtml}
     ${piSet.showTimer===true?`<div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`:''}
