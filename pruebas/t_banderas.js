@@ -182,11 +182,20 @@ const MONTAR = `(paisRaro)=>{
       const nac = _fondoBarra(a, 'bandera'), sinLogo = _fondoBarra(b, 'bandera');
       DATA.athletes = [a, { name: 'X', country: 'ARG' }]; window._VARIOS_PAISES = undefined;
       const intl = _fondoBarra(a, 'bandera');
-      return { nac, sinLogo, intl };
+      DATA.athletes = [a, b]; window._VARIOS_PAISES = undefined;
+      window._SCREEN_STATE = Object.assign({}, window._SCREEN_STATE, { tamLogoClub: 110 });
+      const grande = _fondoBarra(a, 'bandera');
+      window._SCREEN_STATE.tamLogoClub = 500;
+      const tope = _fondoBarra(a, 'bandera');
+      delete window._SCREEN_STATE.tamLogoClub;
+      return { nac, sinLogo, intl, grande, tope };
     });
     ok(/clubs\/Bushido\.png/.test(r.nac) && !/svg/.test(r.nac), 'nacional: el logo del club del atleta');
     ok(!/svg/.test(r.sinLogo), 'sin logo de club, tampoco la bandera');
     ok(/svg/.test(r.intl) && !/Bushido/.test(r.intl), 'internacional: sigue la bandera');
+    ok(/auto 72%/.test(r.nac), 'el logo va al 72 % del alto si nadie lo cambió');
+    ok(/auto 110%/.test(r.grande), 'y se agranda desde el panel');
+    ok(/auto 130%/.test(r.tope), 'con un tope, para que no se salga de madre');
   }
 
   console.log('\nPerfil del Control TX: con un solo país, club en vez de país');

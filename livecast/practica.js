@@ -74,7 +74,7 @@ function _initPracticeMode(){
     if(sc){
       window._SCREEN_STATE={mode:sc.mode||'jornada',flights:Array.isArray(sc.flights)?sc.flights:null,nameScale:typeof sc.nameScale==='number'?sc.nameScale:1,
         fondo:sc.fondo||'bandera',luces:!!sc.luces,
-        veloBandera:typeof sc.veloBandera==='number'?sc.veloBandera:0.55};
+        veloBandera:typeof sc.veloBandera==='number'?sc.veloBandera:0.55,tamLogoClub:typeof sc.tamLogoClub==='number'?sc.tamLogoClub:72};
       window._JORNADA_FLIGHTS=window._SCREEN_STATE.flights;
       window._JORNADA_NAMESCALE=window._SCREEN_STATE.nameScale;
       if(window._SCREEN_LOCAL){window._SCREEN_LOCAL.mode=window._SCREEN_STATE.mode;if(Array.isArray(sc.flights))window._SCREEN_LOCAL.flights=sc.flights;window._SCREEN_LOCAL.nameScale=window._SCREEN_STATE.nameScale;}
@@ -135,12 +135,12 @@ function _initPracticeSync(){
       try{const d=JSON.parse(e.newValue);
         window._SCREEN_STATE={mode:d.mode||'jornada',flights:Array.isArray(d.flights)?d.flights:null,nameScale:typeof d.nameScale==='number'?d.nameScale:1,
           fondo:d.fondo||'bandera',luces:!!d.luces,
-        veloBandera:typeof d.veloBandera==='number'?d.veloBandera:0.55};
+        veloBandera:typeof d.veloBandera==='number'?d.veloBandera:0.55,tamLogoClub:typeof d.tamLogoClub==='number'?d.tamLogoClub:72};
         window._JORNADA_FLIGHTS=window._SCREEN_STATE.flights;
         window._JORNADA_NAMESCALE=window._SCREEN_STATE.nameScale;
         if(window._SCREEN_LOCAL){window._SCREEN_LOCAL.mode=window._SCREEN_STATE.mode;if(Array.isArray(d.flights))window._SCREEN_LOCAL.flights=d.flights;window._SCREEN_LOCAL.nameScale=window._SCREEN_STATE.nameScale;
           window._SCREEN_LOCAL.fondo=window._SCREEN_STATE.fondo;window._SCREEN_LOCAL.luces=window._SCREEN_STATE.luces;
-          window._SCREEN_LOCAL.veloBandera=window._SCREEN_STATE.veloBandera;}
+          window._SCREEN_LOCAL.veloBandera=window._SCREEN_STATE.veloBandera;window._SCREEN_LOCAL.tamLogoClub=window._SCREEN_STATE.tamLogoClub;}
       }catch(_){}
     } else return;
     if(TX_MODE){if(typeof _txLastLifter!=='undefined')_txLastLifter=null;}

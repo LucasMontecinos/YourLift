@@ -1120,7 +1120,7 @@ const TX_SCOREBOARD_DURATION=20000;
 // distancia desde el panel "Pantalla Tarima".
 // ════════════════════════════════════════════════════════════════
 // ─── Panel de control de la Pantalla de Tarima (admin) ──────────
-window._SCREEN_LOCAL={mode:'jornada',flights:[],nameScale:1,fondo:'bandera',luces:false,veloBandera:0.55};
+window._SCREEN_LOCAL={mode:'jornada',flights:[],nameScale:1,fondo:'bandera',luces:false,veloBandera:0.55,tamLogoClub:72};
 window._SCREEN_STATE={mode:'jornada',flights:null,fondo:'bandera',luces:false};
 let _screenUnsub=null, _screenFirstSnap=true;
 // ════════════════════════════════════════════════════════════════

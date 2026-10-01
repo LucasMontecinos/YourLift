@@ -29,7 +29,8 @@ const RECIBIR = `(doc)=>{
     flights:Array.isArray(d.flights)?d.flights:null,
     nameScale:typeof d.nameScale==='number'?d.nameScale:1,
     fondo:d.fondo||'bandera',luces:!!d.luces,
-    veloBandera:typeof d.veloBandera==='number'?d.veloBandera:0.55};
+    veloBandera:typeof d.veloBandera==='number'?d.veloBandera:0.55,
+    tamLogoClub:typeof d.tamLogoClub==='number'?d.tamLogoClub:72};
   return window._SCREEN_STATE;
 }`;
 

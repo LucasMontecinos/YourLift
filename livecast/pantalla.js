@@ -15,6 +15,7 @@ async function _screenPush(){
       nameScale:window._SCREEN_LOCAL.nameScale||1,
       fondo:window._SCREEN_LOCAL.fondo||'bandera',
       veloBandera:typeof window._SCREEN_LOCAL.veloBandera==='number'?window._SCREEN_LOCAL.veloBandera:0.55,
+      tamLogoClub:typeof window._SCREEN_LOCAL.tamLogoClub==='number'?window._SCREEN_LOCAL.tamLogoClub:72,
       luces:!!window._SCREEN_LOCAL.luces,
       ts:Date.now()
     }));}catch(e){}
@@ -29,6 +30,7 @@ async function _screenPush(){
       nameScale:window._SCREEN_LOCAL.nameScale||1,
       fondo:window._SCREEN_LOCAL.fondo||'bandera',
       veloBandera:typeof window._SCREEN_LOCAL.veloBandera==='number'?window._SCREEN_LOCAL.veloBandera:0.55,
+      tamLogoClub:typeof window._SCREEN_LOCAL.tamLogoClub==='number'?window._SCREEN_LOCAL.tamLogoClub:72,
       luces:!!window._SCREEN_LOCAL.luces,
       ts:Date.now()
     });
@@ -163,7 +165,9 @@ function renderScreenControl(){
       +lbl+(fondo===f?' ●':'')+'<div style="font-size:10px;font-weight:400;letter-spacing:0;opacity:.75;margin-top:3px">'+nota+'</div></button>';
     h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:12px">FONDO DE LA PANTALLA</div>';
     h+='<div style="display:flex;gap:10px;flex-wrap:wrap">';
-    h+=fb2('bandera','BANDERA DEL PAÍS','Los colores del país del atleta, muy diluidos');
+    // Con un solo país esa misma opción pone el logo del club del atleta.
+    h+=_variosPaises()?fb2('bandera','BANDERA DEL PAÍS','Los colores del país del atleta, muy diluidos')
+      :fb2('bandera','LOGO DEL CLUB','Un solo país: el logo del club de cada atleta');
     h+=fb2('logo','LOGO DEL CAMPEONATO',hayLogo?'El logo que subiste en Campeonatos':'Este campeonato no tiene logo cargado → queda azul');
     h+=fb2('yourlift','AZUL YOURLIFT','El fondo de siempre');
     h+='</div>';
@@ -173,14 +177,28 @@ function renderScreenControl(){
     if(fondo==='bandera'){
       const vb=typeof window._SCREEN_LOCAL.veloBandera==='number'?window._SCREEN_LOCAL.veloBandera:0.55;
       h+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
-      h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">QUÉ TAN DIFUMINADA VA LA BANDERA</div>';
+      h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">'+(_variosPaises()?'QUÉ TAN DIFUMINADA VA LA BANDERA':'QUÉ TAN DIFUMINADO VA EL LOGO DEL CLUB')+'</div>';
       h+='<p style="font-size:11px;color:var(--muted);margin-bottom:12px">A la izquierda la bandera se ve más; a la derecha queda más tapada y el nombre resalta más. Se aplica en vivo — muévelo mirando la pantalla.</p>';
       h+='<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
-      h+='<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">BANDERA</span>';
+      h+='<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">'+(_variosPaises()?'BANDERA':'LOGO')+'</span>';
       h+='<input id="scrVeloRange" type="range" min="0.15" max="0.85" step="0.05" value="'+vb+'" oninput="screenSetVelo(this.value)" style="flex:1;min-width:200px;accent-color:#a855f7;cursor:pointer">';
       h+='<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">NOMBRE</span>';
       h+='<span id="scrVeloPct" style="font-family:Oswald;font-size:16px;font-weight:700;color:#a855f7;min-width:56px;text-align:center">'+Math.round(vb*100)+'%</span>';
       h+='<button onclick="screenSetVelo(0.55)" style="padding:8px 14px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:8px;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">NORMAL</button>';
+      h+='</div></div>';
+    }
+    // Con un solo país el fondo es el logo del club del atleta: se puede agrandar.
+    if(fondo==='bandera'&&!_variosPaises()){
+      const tl=typeof window._SCREEN_LOCAL.tamLogoClub==='number'?window._SCREEN_LOCAL.tamLogoClub:72;
+      h+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+      h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">TAMAÑO DEL LOGO DEL CLUB</div>';
+      h+='<p style="font-size:11px;color:var(--muted);margin-bottom:12px">Campeonato de un solo país: detrás de "Atleta en barra" y de la pantalla de intento va el logo del club de cada atleta. Agrándalo o achícalo mirando la pantalla.</p>';
+      h+='<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
+      h+='<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">CHICO</span>';
+      h+='<input id="scrTamLogoRange" type="range" min="30" max="130" step="2" value="'+tl+'" oninput="screenSetTamLogo(this.value)" style="flex:1;min-width:200px;accent-color:#a855f7;cursor:pointer">';
+      h+='<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">GRANDE</span>';
+      h+='<span id="scrTamLogoPct" style="font-family:Oswald;font-size:16px;font-weight:700;color:#a855f7;min-width:56px;text-align:center">'+tl+'%</span>';
+      h+='<button onclick="screenSetTamLogo(72)" style="padding:8px 14px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:8px;font-family:Oswald;font-size:11px;font-weight:700;cursor:pointer">NORMAL</button>';
       h+='</div></div>';
     }
     h+='</div>';
@@ -283,7 +301,7 @@ function subscribeScreenChannel(){
       // siempre azul aunque el fondo estuviera en bandera.
       window._SCREEN_STATE={mode:d.mode||'jornada',flights:Array.isArray(d.flights)?d.flights:null,nameScale:typeof d.nameScale==='number'?d.nameScale:1,
         fondo:d.fondo||'bandera',luces:!!d.luces,
-        veloBandera:typeof d.veloBandera==='number'?d.veloBandera:0.55};
+        veloBandera:typeof d.veloBandera==='number'?d.veloBandera:0.55,tamLogoClub:typeof d.tamLogoClub==='number'?d.tamLogoClub:72};
       window._JORNADA_FLIGHTS=window._SCREEN_STATE.flights;
       window._JORNADA_NAMESCALE=window._SCREEN_STATE.nameScale;
       if(window._SCREEN_LOCAL){
@@ -291,7 +309,7 @@ function subscribeScreenChannel(){
         if(window._SCREEN_STATE.mode)window._SCREEN_LOCAL.mode=window._SCREEN_STATE.mode;
         if(window._SCREEN_STATE.fondo)window._SCREEN_LOCAL.fondo=window._SCREEN_STATE.fondo;
         window._SCREEN_LOCAL.luces=!!window._SCREEN_STATE.luces;
-        window._SCREEN_LOCAL.veloBandera=window._SCREEN_STATE.veloBandera;
+        window._SCREEN_LOCAL.veloBandera=window._SCREEN_STATE.veloBandera;window._SCREEN_LOCAL.tamLogoClub=window._SCREEN_STATE.tamLogoClub;
         if(Array.isArray(window._SCREEN_STATE.flights))window._SCREEN_LOCAL.flights=window._SCREEN_STATE.flights;
       }
       if(TX_MODE==='screen'||TX_MODE==='jornada')R();
@@ -1231,6 +1249,16 @@ window.screenSetVelo=function(v){
   _screenPush();
   const sl=document.getElementById('scrVeloRange'); if(sl&&parseFloat(sl.value)!==n)sl.value=n;
   const lb=document.getElementById('scrVeloPct'); if(lb)lb.textContent=Math.round(n*100)+'%';
+};
+
+// Tamaño del logo del club de fondo. Sin R(), como el del difuminado.
+window.screenSetTamLogo=function(v){
+  let n=parseInt(v,10); if(isNaN(n))n=72;
+  n=Math.max(30,Math.min(130,n));
+  window._SCREEN_LOCAL.tamLogoClub=n;
+  _screenPush();
+  const sl=document.getElementById('scrTamLogoRange'); if(sl&&parseInt(sl.value,10)!==n)sl.value=n;
+  const lb=document.getElementById('scrTamLogoPct'); if(lb)lb.textContent=n+'%';
 };
 
 // Luces de jueces en la pantalla de tarima. Es un espejo: no da válido ni nulo.

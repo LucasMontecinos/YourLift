@@ -83,6 +83,15 @@ function _veloBandera(){
   return Math.max(0.05,Math.min(0.92,v));
 }
 
+// Qué tan grande va el logo del club de fondo, en % del alto de la pantalla.
+// Se elige desde el panel de Pantalla de Tarima: hay logos apaisados que a 72 %
+// se ven chicos, y otros altos que conviene achicar.
+function _tamLogoClub(){
+  const st=window._SCREEN_STATE||{};
+  const v=typeof st.tamLogoClub==='number'?st.tamLogoClub:72;
+  return Math.max(30,Math.min(130,Math.round(v)));
+}
+
 // `base` deja poner otro color de fondo debajo de la bandera: la pantalla de
 // intentos tiene su propio color elegible en el engranaje, y si no se respetara,
 // prender la bandera le borraría ese color al operador.
@@ -99,7 +108,7 @@ function _fondoBarra(a,modo,base){
       // Más tapado que la bandera: un logo tiene letras y dibujo propios que
       // compiten con el nombre del atleta escrito encima.
       const v=Math.min(.9,_veloBandera()+.25);
-      return 'linear-gradient(rgba(0,0,0,'+v+'),rgba(0,0,0,'+v+')),url(\''+String(club).replace(/'/g,'%27')+'\') center/auto 72% no-repeat,'+AZUL;
+      return 'linear-gradient(rgba(0,0,0,'+v+'),rgba(0,0,0,'+v+')),url(\''+String(club).replace(/'/g,'%27')+'\') center/auto '+_tamLogoClub()+'% no-repeat,'+AZUL;
     }
     modo='logo';
   }
