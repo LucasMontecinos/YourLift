@@ -1005,7 +1005,8 @@ function renderTxDirector(container){
     +'|'+((_txDirState.profile==null?void 0:_txDirState.profile.until)||0)+'|'+((_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.until)||0)+'|'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.until)||0)+'|'+((_txDirState.slam==null?void 0:_txDirState.slam.until)||0)
     +'|bt-'+(bt.startedAt||0)+'-'+(bt.durationSec||0)+'-'+(bt.pausedAt||0)+'-'+(bt.label||'')+'-'+(bt.videos||[]).length+'-'+(bt.movement||'')+'-'+JSON.stringify(bt.style||{})
     +'|sc-'+((_txDirState.profile==null?void 0:_txDirState.profile.scale)||1)+'-'+((_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.scale)||1)+'-'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.scale)||1)+'-'+((_txDirState.timer==null?void 0:_txDirState.timer.scale)||1)+'-'+((_txDirState.slam==null?void 0:_txDirState.slam.scale)||1)+'-'+((_txDirState.breakTimer==null?void 0:_txDirState.breakTimer.scale)||1)+'-'+((_txDirState.tablaActual==null?void 0:_txDirState.tablaActual.scale)||1)+'-'+((_txDirState.medals==null?void 0:_txDirState.medals.scale)||1)+'-'+((_txDirState.luces==null?void 0:_txDirState.luces.scale)||1)
-    +'|col-'+JSON.stringify(_txDirState.colors||{});
+    +'|col-'+JSON.stringify(_txDirState.colors||{})
+    +'|jur-'+(_txDirActive('jurado')?1:0)+'-'+((_txJurado&&Date.now()<_txJuradoHasta)?_txJuradoTs:0)+'-'+((_txDirState.jurado==null?void 0:_txDirState.jurado.scale)||1);
   if(sig===_txDirLastSig){
     // Updates in-place sin re-render para evitar flicker
     const tm=document.getElementById('cerTimer');
@@ -1167,6 +1168,17 @@ function renderTxDirector(container){
           +(lzScale!==1?'<div style="position:absolute;top:0;right:0;bottom:0;left:0;transform:scale('+lzScale+');transform-origin:bottom left">'+lzHtml+'</div>':lzHtml)
           +'</div>';
       }
+    }
+  }
+  // Decisión del jurado — esquina superior izquierda. Igual que las luces, se
+  // deja prendido: no se ve nada hasta que el jurado revierte un intento desde
+  // el panel de jueces, y ahí aparece unos segundos.
+  if(_txDirActive('jurado')){
+    _txStartLightsListener();
+    if(_txJurado&&Date.now()<_txJuradoHasta){
+      const jsc=(_txDirState.jurado==null?void 0:_txDirState.jurado.scale)||1;
+      html+='<div style="position:fixed;top:0;left:0;pointer-events:none;'+(jsc!==1?'transform:scale('+jsc+');transform-origin:top left;':'')+'">'
+        +renderTxJurado(_txJurado)+'</div>';
     }
   }
   // Medallero (Top 3) — banda inferior-centro, entra/sale deslizando desde abajo
@@ -1366,9 +1378,44 @@ function _txStartLightsListener(){
       const d=snap.data();
       _txLights={izq:d.izq||null,central:d.central||null,der:d.der||null};
       _txLightsResetTs=d.reset_ts||0;
+      // Decisión del jurado: se muestra JURADO_MS desde que llega. La que ya
+      // estaba en el documento al abrir la transmisión es vieja y no sale.
+      { const j=d.jurado, ts=(j&&j.ts)||0;
+        if(_txJuradoTs===null)_txJuradoTs=ts;
+        else if(ts&&ts!==_txJuradoTs){
+          _txJuradoTs=ts; _txJurado=j; _txJuradoHasta=Date.now()+JURADO_MS;
+          setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},JURADO_MS+80);
+        } }
       if(typeof renderTxWidget==='function')renderTxWidget();
     });
   }catch(e){console.warn('[TX] lights subscribe fail',e)}
+}
+
+// Cuánto queda en pantalla la decisión del jurado.
+const JURADO_MS=12000;
+
+// "JURY HAS OVERRULED · Decisión del jurado", con la luz como la de los jueces:
+// blanca si quedó válido, roja con el punto de la tarjeta debajo si quedó nulo.
+function renderTxJurado(j){
+  const v=j.res==='g'?'white':(j.card||'red');
+  const e=_luzEstilo(v);
+  const a=(DATA.athletes||[]).find(x=>x.id===j.id);
+  const nombre=(a&&a.name)||j.name||'';
+  const intento=(LIFT_S[j.lift]||'')+' '+((j.round|0)+1);
+  return '<div style="margin:clamp(18px,2.4vw,40px);display:flex;align-items:center;gap:clamp(14px,1.6vw,26px);'
+    +'padding:clamp(12px,1.3vw,20px) clamp(16px,1.8vw,30px);background:rgba(10,22,40,.94);border-left:6px solid #D4A843;border-radius:10px;'
+    +'box-shadow:0 10px 40px rgba(0,0,0,.55);animation:txSlideInLeft .6s cubic-bezier(.2,.85,.3,1) both;font-family:Oswald,sans-serif">'
+    +'<div style="display:flex;flex-direction:column;align-items:center;gap:8px">'
+      +'<div style="width:clamp(46px,4.2vw,72px);height:clamp(46px,4.2vw,72px);border-radius:50%;background:'+e.bg+';border:4px solid '+e.bd+';box-shadow:'+e.glow+'"></div>'
+      +(e.chip?'<div style="width:clamp(16px,1.4vw,24px);height:clamp(16px,1.4vw,24px);border-radius:50%;background:'+e.chip+';box-shadow:0 0 14px '+e.chip+'"></div>'
+              :'<div style="height:clamp(16px,1.4vw,24px)"></div>')
+    +'</div>'
+    +'<div>'
+      +'<div style="font-size:clamp(22px,2.4vw,40px);font-weight:700;letter-spacing:2px;color:#fff;line-height:1">JURY HAS OVERRULED</div>'
+      +'<div style="font-size:clamp(12px,1.05vw,17px);letter-spacing:4px;color:#D4A843;margin-top:6px">DECISIÓN DEL JURADO · '+(j.res==='g'?'GOOD LIFT':'NO LIFT')+'</div>'
+      +(nombre?'<div style="font-size:clamp(13px,1.1vw,18px);color:rgba(220,230,245,.85);margin-top:8px;letter-spacing:1px">'+nombre+' · '+intento+'</div>':'')
+    +'</div>'
+  +'</div>';
 }
 
 // Cómo se ve una luz. El juez marca cuatro cosas, no dos: blanco (válido) y tres
@@ -2374,6 +2421,7 @@ function renderDirector(){
   h+='<button class="btn '+(lbActive?'btn-r':'btn-g')+'" onclick="dirToggleLb()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(lbActive?'<i class=yl-i-pausa></i> DESACTIVAR':'<i class=yl-i-reproducir></i> ACTIVAR')+'</button>';
   h+='</div>'+scaleSlider('leaderboard')+'</div>';
   h+=compToggle('luces','','Luces de jueces','Los tres círculos abajo a la izquierda, con el nombre del atleta y el intento. El tamaño se ajusta acá abajo. Se deja prendido toda la competencia: mientras no hay decisión no se ve nada, y aparece solo cuando los jueces marcan. Es un espejo — el válido o el nulo se sigue dando en Control en Vivo o en la planilla.','U','dirToggle(\'luces\')');
+  h+=compToggle('jurado','','Decisión del jurado (esquina superior izquierda)','"JURY HAS OVERRULED · Decisión del jurado" con la luz blanca o roja y el color de la tarjeta debajo. Se deja prendido: no se ve nada hasta que el jurado revierte un intento desde el panel de jueces (posición JURY), y ahí aparece '+(JURADO_MS/1000)+' segundos.','','dirToggle(\'jurado\')');
   h+=compToggle('tablaActual','','Tabla actual (corner)','Ranking de la categoría del lifter actual, esquina inferior derecha. Entra desde abajo, queda fijo. El levantador en pantalla se resalta y muestra la flecha de proyección (pos actual → pos si lo levanta).','A','dirToggle(\'tablaActual\')');
   // Medallero (Top 3) — selects en cascada: modalidad → sexo → división → categoría.
   // Todo se calcula desde DATA.athletes (ya cargado local): cero lecturas nuevas a Firestore.
@@ -3247,7 +3295,7 @@ window.dirHide=async function(comp){
 };
 
 window.dirHideAll=async function(){
-  ['profile','scoreboard','leaderboard','timer','slam','tablaActual','medals','luces'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
+  ['profile','scoreboard','leaderboard','timer','slam','tablaActual','medals','luces','jurado'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
   await _dirPush();R();
 };
 

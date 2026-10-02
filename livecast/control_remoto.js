@@ -189,6 +189,7 @@ function renderRemote(){
     // Las luces se dejan prendidas toda la competencia: mientras no hay decisión
     // no se ve nada, y aparecen solas cuando los jueces marcan.
     luces:      oc=>bigBtn('LUCES', on('luces')?'ARMADO · aparece al decidir':'luces de jueces', on('luces'), oc||"dirToggle('luces')"),
+    jurado:     oc=>bigBtn('JURADO', on('jurado')?'ARMADO · aparece al revertir':'decisión del jurado', on('jurado'), oc||"dirToggle('jurado')"),
     leaderboard:oc=>bigBtn('CLASIFICACIÓN', on('leaderboard')?'EN PANTALLA':'ranking cat.', on('leaderboard'), oc||"dirToggleLb()"),
     timer:      oc=>bigBtn('TIMER', on('timer')?'EN PANTALLA':'cronómetro', on('timer'), oc||"dirToggle('timer')"),
     // MEDALLERO abre el menú en vez de disparar: sin categoría elegida no hay
@@ -248,7 +249,7 @@ window.remoteOrdenar=function(){ window._rmOrdenar=!window._rmOrdenar; window._r
 window.remoteOrdenTap=function(id){
   if(!window._rmSel){ window._rmSel=id; R(); return; }
   if(window._rmSel!==id){
-    const ids=['profile','scoreboard','tablaActual','luces','leaderboard','timer','medals','descanso','good','nolift','esconder'];
+    const ids=['profile','scoreboard','tablaActual','luces','jurado','leaderboard','timer','medals','descanso','good','nolift','esconder'];
     const o=_rmOrden(ids), i=o.indexOf(window._rmSel), j=o.indexOf(id);
     if(i>=0&&j>=0){ o[i]=id; o[j]=window._rmSel; try{ localStorage.setItem('yl_remoteOrden',JSON.stringify(o)); }catch(e){} }
   }

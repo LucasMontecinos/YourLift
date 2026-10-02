@@ -105,6 +105,11 @@ function _escucharLucesHistorial(){
     _lucesHistUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',_lucesHistDoc),(snap)=>{
       if(!snap.exists())return;
       const d=snap.data();
+      // La decisión del jurado (panel de jueces → JURY). Se aplica una vez por
+      // su hora; la que ya estaba en el documento al abrir esta pantalla es vieja.
+      { const j=d.jurado;
+        if(_juradoVisto===null)_juradoVisto=(j&&j.ts)||0;
+        else if(j&&j.ts&&j.ts>_juradoVisto){ _juradoVisto=j.ts; _aplicarJurado(j); } }
       const L={izq:d.izq||null,central:d.central||null,der:d.der||null};
       const cuantas=[L.izq,L.central,L.der].filter(Boolean).length;
       if(cuantas===0){_lucesHistDestino=null;return;}      // se apagaron: listo para el próximo
@@ -147,15 +152,31 @@ function _lucesDeIntento(at,px){
     +pt(L.izq)+pt(L.central)+pt(L.der)+'</span>';
 }
 
+// El último intento juzgado en la tanda: el que el jurado puede revertir. Se
+// sabe por la hora que cada intento guarda en su último cambio (at.t).
+function _ultimoJuzgado(){
+  let best=null;
+  (DATA.athletes||[]).forEach(a=>{
+    if(!a||a.flight!==DATA.flight)return;
+    ['sq','bp','dl'].forEach(l=>((a.att&&a.att[l])||[]).forEach((at,r)=>{
+      if(!at||(at.r!=='g'&&at.r!=='n')||!at.t)return;
+      if(!best||at.t>best.ts)best={id:a.id,name:a.name||'',lift:l,round:r,r:at.r,w:at.w||0,ts:at.t};
+    }));
+  });
+  return best;
+}
+
 async function _avisarAtletaAJueces(){
   if(!fbReady||!fbDB||!window._fb)return;
   try{
     const cur=liftQueue()[0];
     const lift=LIFT_S[DATA.lift]||'';
-    const firma=juezDocId()+'|'+(cur?cur.name:'')+'|'+lift+'|'+DATA.round;
+    const ult=_ultimoJuzgado();
+    const firma=juezDocId()+'|'+(cur?cur.name:'')+'|'+lift+'|'+DATA.round
+      +'|'+(ult?ult.id+'-'+ult.lift+'-'+ult.round+'-'+ult.r:'');
     if(firma===_juezUltAtleta)return;
     _juezUltAtleta=firma;
-    await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions',juezDocId()),{
+    const campos={
       // El panel de los jueces muestra de qué campeonato es: con dos a la misma
       // hora, el juez ve que abrió el link correcto.
       evento:(DATA.event&&DATA.event.name)||'',
@@ -163,7 +184,9 @@ async function _avisarAtletaAJueces(){
       athlete_weight:cur?(cur.att[DATA.lift][DATA.round]||{}).w||0:0,
       athlete_lift:lift,
       athlete_round:DATA.round
-    },{merge:true});
+    };
+    if(ult)campos.ultimo=ult;
+    await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions',juezDocId()),campos,{merge:true});
   }catch(e){console.warn('[jueces] no se pudo avisar el atleta en barra',e);}
 }
 
@@ -184,4 +207,23 @@ async function resetJudgeLights(){
       athlete_round:DATA.round
     });
   }catch(e){console.warn('Reset judge lights error',e)}
+}
+
+// El jurado revierte un intento ya juzgado. Manda el jurado: no se pregunta, no
+// se mueve ningún reloj (como cualquier corrección) y queda anotado en el
+// intento con su tarjeta, para el acta y la transmisión. Si dos equipos de la
+// mesa lo reciben, los dos escriben lo mismo.
+let _juradoVisto=null;
+function _aplicarJurado(j){
+  const a=DATA.athletes.find(x=>x.id===j.id);
+  const at=a&&a.att&&a.att[j.lift]&&a.att[j.lift][j.round];
+  if(!at||(j.res!=='g'&&j.res!=='n'))return;
+  const antes=at.r;
+  at.r=j.res;
+  at.jurado={res:j.res,card:j.card||null,ts:j.ts};
+  _markAtt(a.id,'att_'+j.lift+'_'+j.round);
+  a.bombed=a.att.sq.every(x=>x.r==='n')&&a.att.bp.every(x=>x.r==='n')&&a.att.dl.every(x=>x.r==='n');
+  if(j.res==='g'&&antes!=='g'){ try{checkRecord(a,j.lift,j.round);}catch(e){} }
+  saveNow();R();
+  showToastLC('Decisión del jurado: '+a.name+' — '+(LIFT_S[j.lift]||j.lift)+(j.round+1)+' → '+(j.res==='g'?'VÁLIDO':'NULO'));
 }

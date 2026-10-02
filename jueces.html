@@ -32,6 +32,28 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 .pick-btn.izq:hover{border-color:#3b82f6}
 .pick-btn.cen:hover{border-color:#f0f0f0}
 .pick-btn.der:hover{border-color:#3b82f6}
+.pick-btn.jury{border-color:rgba(212,168,67,.45)}
+.pick-btn.jury:hover{border-color:var(--gold)}
+.pick-btn.plan{border-color:rgba(34,197,94,.4);font-size:18px}
+.pick-btn.plan:hover{border-color:var(--green)}
+.pick-sep{font-size:11px;color:var(--muted);letter-spacing:2px;margin-top:6px}
+
+/* ── Jurado ───────────────────────────────────────── */
+.jury-box{width:100%;max-width:360px;display:none;flex-direction:column;gap:10px}
+.jury-box.on{display:flex}
+.jury-tit{font-size:11px;color:var(--muted);letter-spacing:2px;text-align:center}
+.jury-ult{border:2px solid var(--border);border-radius:12px;padding:12px;text-align:center;font-size:18px;letter-spacing:1px;line-height:1.3}
+.jury-ult .dec{display:inline-block;margin-top:6px;padding:3px 10px;border-radius:6px;font-size:13px;letter-spacing:2px}
+.jury-btn{display:flex;align-items:center;justify-content:center;gap:12px;padding:16px;border-radius:12px;border:2px solid var(--border);background:var(--card);color:var(--text);font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:2px;cursor:pointer}
+.jury-btn:active{transform:scale(.97)}
+.jury-btn.valido{border-color:#f0f0f0}
+.jury-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.jury-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border-radius:12px;border:2px solid #ef4444;background:rgba(239,68,68,.08);color:var(--text);font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer}
+.jury-card:active{transform:scale(.96)}
+.jdot{width:34px;height:34px;border-radius:50%;background:#ef4444;box-shadow:0 0 14px rgba(239,68,68,.6)}
+.jdot.w{background:#f0f0f0;box-shadow:0 0 14px rgba(240,240,240,.6)}
+.jchip{width:13px;height:13px;border-radius:50%}
+.jury-estado{font-size:12px;color:var(--muted);text-align:center;min-height:16px}
 
 /* ── Login ────────────────────────────────────────── */
 .log-in{width:min(320px,88vw);padding:16px;border-radius:12px;border:2px solid var(--border);background:var(--card);color:var(--text);font-family:Oswald;font-size:17px;letter-spacing:1px;outline:none}
@@ -211,6 +233,9 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
   <button class="pick-btn izq" onclick="selectPos('izq')"><i class=yl-i-anterior></i> JUEZ IZQ</button>
   <button class="pick-btn cen" onclick="selectPos('central')"><i class=yl-i-punto></i> JUEZ CENTRAL</button>
   <button class="pick-btn der" onclick="selectPos('der')">JUEZ DER <i class=yl-i-reproducir></i></button>
+  <div class="pick-sep">MESA</div>
+  <button class="pick-btn jury" onclick="selectPos('jury')">JURY · JURADO</button>
+  <button class="pick-btn plan" onclick="selectPos('planilla')">PLANILLA · TIEMPOS</button>
 </div>
 
 <!-- ══ PANEL SCREEN ═════════════════════════════════════════ -->
@@ -250,6 +275,20 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
       <span class="chev" id="motChev">▾</span>
     </div>
     <div class="motivos-body" id="motBody"></div>
+  </div>
+
+  <!-- Jurado: revierte la decisión del último intento juzgado -->
+  <div class="jury-box" id="juryBox">
+    <div class="jury-tit">ÚLTIMO INTENTO JUZGADO</div>
+    <div class="jury-ult" id="juryUlt">Esperando el primer intento juzgado…</div>
+    <button class="jury-btn valido" onclick="juryDecide('g',null)"><span class="jdot w"></span> REVERTIR A VÁLIDO</button>
+    <div class="jury-tit" style="margin-top:4px">REVERTIR A NULO · ELIGE LA TARJETA</div>
+    <div class="jury-cards">
+      <button class="jury-card" onclick="juryDecide('n','red')"><span class="jdot"></span><span class="jchip" style="background:#ef4444"></span>ROJA</button>
+      <button class="jury-card" onclick="juryDecide('n','blue')"><span class="jdot"></span><span class="jchip" style="background:#3b82f6"></span>AZUL</button>
+      <button class="jury-card" onclick="juryDecide('n','yellow')"><span class="jdot"></span><span class="jchip" style="background:#f59e0b"></span>AMARILLA</button>
+    </div>
+    <div class="jury-estado" id="juryEstado"></div>
   </div>
 
   <!-- Vote buttons -->
@@ -471,9 +510,9 @@ window.entrar=async function(){
 };
 
 // ══ State ══════════════════════════════════════════════════
-let myPos=null;     // 'izq' | 'central' | 'der'
+let myPos=null;     // 'izq' | 'central' | 'der' | 'jury' | 'planilla'
 let myVote=null;    // 'white' | 'red' | 'blue' | 'yellow' | null
-const POS_LABEL={izq:'JUEZ IZQ',central:'JUEZ CENTRAL',der:'JUEZ DER'};
+const POS_LABEL={izq:'JUEZ IZQ',central:'JUEZ CENTRAL',der:'JUEZ DER',jury:'JURY',planilla:'PLANILLA'};
 const LIFT_LABEL={sq:'SQUAT',bp:'BENCH PRESS',dl:'DEADLIFT'};
 const VOTE_COLOR={white:'#f0f0f0',red:'#ef4444',blue:'#3b82f6',yellow:'#f59e0b'};
 
@@ -596,6 +635,49 @@ window.selectPos=function(pos){
   // Timer button only for central judge
   const btn=document.getElementById('btnTimer');
   if(btn)btn.style.display=pos==='central'?'block':'none';
+  // El jurado y la planilla no votan: tienen su propia pantalla.
+  const juez=(pos==='izq'||pos==='central'||pos==='der');
+  ['.preview','#motivos','.vote-grid','.action-bar'].forEach(q=>{ const el=document.querySelector(q); if(el)el.style.display=juez?'':'none'; });
+  const jb=document.getElementById('juryBox'); if(jb)jb.classList.toggle('on',pos==='jury');
+  const pb=document.getElementById('planBox'); if(pb)pb.classList.toggle('on',pos==='planilla');
+  _pintarUltimo();
+};
+
+// ══ Jurado ══════════════════════════════════════════════════
+// El jurado revierte la decisión del último intento juzgado. Lo que manda queda
+// en el campo `jurado` del mismo documento de los jueces: la mesa lo aplica al
+// intento (una sola vez, por su hora) y la transmisión lo muestra en la esquina.
+let _ultimo=null;   // {id,name,lift,round,r,ts} — lo anota la mesa
+const LIFT_CORTO={sq:'SQ',bp:'BP',dl:'DL'};
+function _pintarUltimo(){
+  const el=document.getElementById('juryUlt'); if(!el)return;
+  if(!_ultimo||!_ultimo.name){ el.innerHTML='Esperando el primer intento juzgado…'; return; }
+  const v=_ultimo.r==='g';
+  el.innerHTML='<div>'+_esc(_ultimo.name)+'</div>'
+    +'<div style="font-size:14px;color:var(--muted)">'+(LIFT_CORTO[_ultimo.lift]||_ultimo.lift||'')+' · Intento '+((_ultimo.round|0)+1)+(_ultimo.w?' · '+_ultimo.w+' kg':'')+'</div>'
+    +'<span class="dec" style="border:2px solid '+(v?'#22c55e':'#ef4444')+';color:'+(v?'#22c55e':'#ef4444')+'">'+(v?'VÁLIDO':'NULO')+'</span>';
+}
+function _esc(t){ return String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+window.juryDecide=async function(res,card){
+  if(myPos!=='jury')return;
+  if(!_ultimo||!_ultimo.name){ showPulse('Todavía no hay un intento juzgado','#ef4444'); return; }
+  const CARD={red:'roja',blue:'azul',yellow:'amarilla'};
+  const txt=res==='g'?'VÁLIDO':'NULO (tarjeta '+CARD[card]+')';
+  if(!confirm('¿Revertir a '+txt+'?\n\n'+_ultimo.name+' — '+(LIFT_CORTO[_ultimo.lift]||'')+' intento '+((_ultimo.round|0)+1)))return;
+  if(!fbReady){ showPulse('Sin conexión','#ef4444'); return; }
+  try{
+    await window._fb.updateDoc(window._fb.doc(fbDB,'judge_decisions',JUEZ_DOC),{
+      jurado:{ts:Date.now(),res,card:card||null,id:_ultimo.id,lift:_ultimo.lift,round:_ultimo.round,name:_ultimo.name}
+    });
+    const es=document.getElementById('juryEstado');
+    if(es)es.textContent='Enviado: '+txt+' · '+new Date().toLocaleTimeString('es-CL');
+    showPulse('Decisión del jurado enviada','#22c55e');
+  }catch(e){
+    const sinPermiso=e&&(e.code==='permission-denied'||/permission/i.test(e.message||''));
+    showPulse(sinPermiso?'Sin permiso — inicia sesión':'Error al enviar','#ef4444');
+    if(sinPermiso&&!fbSesion)abrirLogin();
+    console.error(e);
+  }
 };
 
 // ══ Campeonato (cuando el link no lo trae) ══════════════════
@@ -674,6 +756,8 @@ function startAthleteListener(){
     if(d.athlete_lift)document.getElementById('athLiftLabel').textContent=(LIFT_LABEL[d.athlete_lift]||d.athlete_lift)+' · Intento '+(d.athlete_round!=null?d.athlete_round+1:'—');
     // Los motivos siguen al movimiento que está en la tarima.
     if(d.athlete_lift&&d.athlete_lift!==_liftActual){_liftActual=d.athlete_lift;pintarMotivos(_liftActual);}
+    // Lo último que juzgó la mesa: es lo que el jurado puede revertir.
+    if(d.ultimo){ _ultimo=d.ultimo; _pintarUltimo(); }
     // Y si ya votaron los tres, se programa el apagado.
     _programarLimpieza(d);
   });
