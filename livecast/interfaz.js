@@ -187,6 +187,8 @@ function R(){
     try{_avisarAtletaAJueces();}catch(e){}
     // Y se anotan las luces en cada intento, para poder mostrarlas después.
     try{_escucharLucesHistorial();}catch(e){}
+    // Y las órdenes de reloj del panel de jueces (juez central y Planilla).
+    try{_escucharTimerControl();}catch(e){}
   }
   // Con el modo jueces encendido y otro campeonato elegido, el canal cambió.
   if(judgeMode&&judgeUnsub&&_judgeDoc!==juezDocId()){try{startJudgeListener();}catch(e){}}

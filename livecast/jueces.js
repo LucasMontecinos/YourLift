@@ -37,22 +37,8 @@ function startJudgeListener(){
   // encendía el modo jueces se sumaba otro, y quedaban escuchando el canal viejo.
   if(_timerUnsub){try{_timerUnsub()}catch(e){} _timerUnsub=null;}
   _judgeDoc=juezDocId();
-  // Also listen for timer-start signals from judge panel
-  let _timerListenerFirst=true;
-  _timerUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'timer_control',_judgeDoc),(snap)=>{
-    if(!snap.exists())return;
-    const d=snap.data();
-    // First snapshot: just record current ts to ignore stale signals already in Firestore
-    if(_timerListenerFirst){
-      _timerListenerFirst=false;
-      if(d.ts)_lastTimerSignal=d.ts;
-      return;
-    }
-    if(d.action==='start'&&d.ts&&d.ts>_lastTimerSignal){
-      _lastTimerSignal=d.ts;
-      if(!DATA.timerOn)startTimer();
-    }
-  });
+  // Las órdenes de reloj (INICIAR TIMER del juez central, y la Planilla) ya no
+  // dependen del modo jueces: las escucha siempre _escucharTimerControl().
   // Cada votación se aplica UNA vez, y al intento que estaba en barra cuando
   // llegó la primera luz. Antes se aplicaba en CADA cambio del documento con las
   // tres luces puestas —y el documento cambia solo, por ejemplo cuando la mesa
@@ -226,4 +212,58 @@ function _aplicarJurado(j){
   if(j.res==='g'&&antes!=='g'){ try{checkRecord(a,j.lift,j.round);}catch(e){} }
   saveNow();R();
   showToastLC('Decisión del jurado: '+a.name+' — '+(LIFT_S[j.lift]||j.lift)+(j.round+1)+' → '+(j.res==='g'?'VÁLIDO':'NULO'));
+}
+
+// ── Órdenes de reloj desde el panel de jueces ────────────────
+// El juez central (INICIAR TIMER) y la Planilla mandan órdenes al documento
+// timer_control del canal. Antes se escuchaban solo con el modo jueces
+// encendido —que no se usa—, así que el botón no hacía nada. Ahora el puesto que
+// opera las escucha siempre:
+//   start     → el minuto del intento desde 60, y se muestra en la transmisión
+//               y en las pantallas de tarima (relojVisible)
+//   stop      → se detiene donde va (el atleta empezó)
+//   hide      → deja de mostrarse
+//   break     → el "Ya volvemos" con esos minutos (el mismo de Control TX)
+//   breakOff  → se quita el "Ya volvemos"
+// La orden que ya estaba en el documento al abrir esta pantalla es vieja.
+let _tcUnsub=null,_tcDoc=null,_tcVisto=null;
+function _escucharTimerControl(){
+  if(!fbReady||!window._fb||!fbDB)return;
+  if(_tcUnsub&&_tcDoc===juezDocId())return;
+  if(_tcUnsub){try{_tcUnsub()}catch(e){} _tcUnsub=null;}
+  _tcDoc=juezDocId(); _tcVisto=null;
+  try{
+    _tcUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'timer_control',_tcDoc),(snap)=>{
+      const d=snap.exists()?snap.data():{};
+      if(_tcVisto===null){ _tcVisto=d.ts||0; return; }
+      if(!d.ts||d.ts<=_tcVisto)return;
+      _tcVisto=d.ts;
+      _ordenReloj(d);
+    },(e)=>console.warn('[reloj] no se pudo escuchar',e.message));
+  }catch(e){console.warn('[reloj] no se pudo escuchar',e);}
+}
+
+function _ordenReloj(d){
+  const a=d.action;
+  if(a==='start'){
+    DATA.relojVisible=true;
+    if(mainTI){clearInterval(mainTI);mainTI=null;}
+    DATA.timer=60; DATA.timerOn=false; DATA.timerStartedAt=0;
+    startTimer();
+    showToastLC('Reloj del intento iniciado'+(d.by==='planilla'?' (planilla)':''));
+  }else if(a==='stop'){
+    if(DATA.timerOn)pauseTimer(); else syncToFB();
+    showToastLC('Reloj del intento detenido');
+  }else if(a==='hide'){
+    DATA.relojVisible=false; syncToFB(); R();
+  }else if(a==='break'){
+    const min=Math.max(1,Math.min(120,parseInt(d.min,10)||0));
+    if(!min)return;
+    const prev=(typeof _descBT==='function'&&_descBT())||{};
+    _descEscribe({active:true,startedAt:Date.now(),durationSec:min*60,label:prev.label||'',pausedAt:0,
+      videos:prev.videos||[],movement:prev.movement||'',style:_descEstiloPrevio()});
+    showToastLC('Ya volvemos: '+min+' min (planilla)');
+  }else if(a==='breakOff'){
+    _descEscribe({active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,videos:[],movement:'',style:_descEstiloPrevio()});
+  }
 }

@@ -422,7 +422,7 @@ async function syncToFB(){
           round:(_nv&&typeof _nv.round==='number')?_nv.round:DATA.round,
           flight:(_nv&&_nv.flight)||DATA.flight,
           changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,
-          timer:DATA.timer,timerOn:DATA.timerOn,timerStartedAt:DATA.timerStartedAt||0,
+          timer:DATA.timer,timerOn:DATA.timerOn,timerStartedAt:DATA.timerStartedAt||0,relojVisible:!!DATA.relojVisible,
           forcedCurrent:_nv?(_nv.forcedCurrent||null):(DATA.forcedCurrent||null),
           compTimer:DATA.compTimer||null,ts:Date.now(),tsAth:Date.now(),writer:window._WRITER_ID});
         // Huella de lo que se va a escribir, sin la hora ni el firmante: si es
@@ -592,7 +592,7 @@ function _flashEscribir(){
       flight:(nv&&nv.flight)||DATA.flight||null,
       forcedCurrent:nv?(nv.forcedCurrent||null):(DATA.forcedCurrent||null),
       changeTimers:JSON.stringify(DATA.changeTimers||{}),compTimer:DATA.compTimer||null,
-      timer:typeof DATA.timer==='number'?DATA.timer:0,timerOn:!!DATA.timerOn,timerStartedAt:DATA.timerStartedAt||0,
+      timer:typeof DATA.timer==='number'?DATA.timer:0,timerOn:!!DATA.timerOn,timerStartedAt:DATA.timerStartedAt||0,relojVisible:!!DATA.relojVisible,
       lotsGenerated:!!DATA.lotsGenerated};
     const h=JSON.stringify(p);
     if(h===_flashUltHuella)return;       // igual a lo último mandado: no se repite
@@ -632,6 +632,7 @@ function _flashAplicarDatos(d,sinCursor){
   DATA.lotsGenerated=!!d.lotsGenerated;
   if(typeof d.timer==='number'){
     DATA.timerOn=d.timerOn||false;
+    DATA.relojVisible=!!d.relojVisible;
     if(DATA.timerOn&&d.timerStartedAt){
       DATA.timerStartedAt=d.timerStartedAt;
       DATA.timer=Math.max(0,60-Math.floor((_ahora()-DATA.timerStartedAt)/1000));
@@ -681,7 +682,8 @@ function _flashEscuchar(id){
     const lu=window._localUlt; if(lu&&lu.w===d.writer&&d.ts<lu.t)return;
     window._flashUlt=d;
     const firma=()=>JSON.stringify(DATA.athletes||[])+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
-      +'|'+(DATA.forcedCurrent==null?'':DATA.forcedCurrent)+'|'+JSON.stringify(DATA.compTimer||null);
+      +'|'+(DATA.forcedCurrent==null?'':DATA.forcedCurrent)+'|'+JSON.stringify(DATA.compTimer||null)
+      +'|'+(DATA.relojVisible?1:0);
     _fbSyncing=true;
     try{
       const antes=firma();
@@ -762,7 +764,9 @@ function startFBSync(){
       // redibujaba y el Control TX, el perfil y el marcador seguían mostrando al
       // atleta anterior.
       const _firma=()=>JSON.stringify(DATA.athletes||[])+'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
-        +'|'+(DATA.forcedCurrent==null?'':DATA.forcedCurrent)+'|'+JSON.stringify(DATA.compTimer||null);
+        +'|'+(DATA.forcedCurrent==null?'':DATA.forcedCurrent)+'|'+JSON.stringify(DATA.compTimer||null)
+        // El reloj de la Planilla aparece y desaparece en las pantallas.
+        +'|'+(DATA.relojVisible?1:0);
       const prevSig = _firma();
       DATA.event=d.event||DATA.event;
       // NO pisar lo que acabo de editar localmente si la acción local fue hace <2.5s.
@@ -849,6 +853,9 @@ function startFBSync(){
       }catch(e){}
       if(typeof d.timer==='number'){
         DATA.timerOn=d.timerOn||false;
+        // El reloj del intento en la transmisión y en las pantallas de tarima:
+        // solo si lo inició la Planilla (panel de jueces).
+        DATA.relojVisible=!!d.relojVisible;
         // Con la hora de arranque, esta pantalla descuenta sola: no necesita que
         // le manden el segundo. Si el documento es viejo y no la trae, se cae al
         // comportamiento anterior (tomar el valor tal cual).

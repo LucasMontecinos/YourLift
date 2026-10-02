@@ -116,6 +116,8 @@ function setResult(id,l,r,res){
   if(res==='g')checkRecord(a,l,r);
   // Reset judge lights for next athlete
   if(judgeMode)resetJudgeLights();
+  // El reloj que mostró la Planilla era de este intento: con la decisión se va.
+  if(!_corrige)DATA.relojVisible=false;
   saveNow();R();
   // Auto-advance: if liftQueue is now empty, round is done
   const snapLift=DATA.lift,snapRound=DATA.round;
@@ -176,6 +178,8 @@ function overrideResult(id,l,r,res){
     setTimeout(()=>{if(typeof startTimer==='function')startTimer();},150);
     // Si los jueces también estaban votando, sus luces se apagan para el siguiente.
     if(judgeMode)resetJudgeLights();
+    // El reloj que mostró la Planilla era de este intento: con la decisión se va.
+    DATA.relojVisible=false;
   }
   saveNow();R();
   // Auto-advance: si la cola de levantamientos quedó vacía, avanzar de ronda automáticamente
@@ -265,7 +269,7 @@ function showChangeExpiredAlert(name,lift,rnd){
 
 // Arrancar dos veces no deja dos relojes corriendo: el segundo intervalo quedaba
 // suelto, seguía descontando aunque se pausara y el reloj parecía pegado.
-function startTimer(isLocal){if(mainTI){clearInterval(mainTI);mainTI=null;}window._iOwnTimer=(isLocal!==false);DATA.timerOn=true;if(window._iOwnTimer)DATA.timerStartedAt=_ahora()-((60-(DATA.timer||60))*1000);if(!DATA.timerStartedAt)DATA.timerStartedAt=_ahora();if(window._iOwnTimer){_ultLatidoTimer=0;syncToFB();}mainTI=setInterval(()=>{DATA.timer=Math.max(0,60-Math.floor((_ahora()-DATA.timerStartedAt)/1000));const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}const txp=document.getElementById('txTimerPanel');if(txp){txp.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');txp.style.color=DATA.timer<=10?'#ef4444':DATA.timer<=30?'#f59e0b':'#ffffff'}const pit=document.getElementById('pantIntentosTimer');if(pit){pit.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');pit.style.color=DATA.timerOn&&DATA.timer<=10?'#ef4444':DATA.timerOn&&DATA.timer<=30?'#f59e0b':'#22c55e'}if(window._iOwnTimer)syncTimerOnlyToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;if(window._iOwnTimer)syncToFB()}},1000)}
+function startTimer(isLocal){if(mainTI){clearInterval(mainTI);mainTI=null;}window._iOwnTimer=(isLocal!==false);DATA.timerOn=true;if(window._iOwnTimer)DATA.timerStartedAt=_ahora()-((60-(DATA.timer||60))*1000);if(!DATA.timerStartedAt)DATA.timerStartedAt=_ahora();if(window._iOwnTimer){_ultLatidoTimer=0;syncToFB();}mainTI=setInterval(()=>{DATA.timer=Math.max(0,60-Math.floor((_ahora()-DATA.timerStartedAt)/1000));const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}const txp=document.getElementById('txTimerPanel');if(txp){txp.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');txp.style.color=DATA.timer<=10?'#ef4444':DATA.timer<=30?'#f59e0b':'#ffffff'}const pit=document.getElementById('pantIntentosTimer');if(pit){pit.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');pit.style.color=DATA.timerOn&&DATA.timer<=10?'#ef4444':DATA.timerOn&&DATA.timer<=30?'#f59e0b':'#22c55e'}['sbRelojTx','pantBarraTimer','pantIntRelojPlan'].forEach(id=>{const r=document.getElementById(id);if(r){r.textContent=_relojTxt();r.style.color=_relojColor();}});if(window._iOwnTimer)syncTimerOnlyToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;if(window._iOwnTimer)syncToFB()}},1000)}
 
 function pauseTimer(){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}
 

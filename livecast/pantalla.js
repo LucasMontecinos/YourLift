@@ -621,6 +621,8 @@ function renderScreenBarra(a){
       font-size:clamp(14px,2.2vw,32px);font-weight:700;letter-spacing:.22em;color:#D4A843;
       animation:barraParpadeo 1.05s ease-in-out infinite" class="barra-rec">${etiqRec}</span>`):''}
 
+    ${DATA.relojVisible?`<div id="pantBarraTimer" style="position:fixed;top:2.6vh;left:50%;transform:translateX(-50%);font-size:clamp(34px,6.2vw,96px);font-weight:800;letter-spacing:.04em;line-height:1;color:${_relojColor()};font-variant-numeric:tabular-nums;text-shadow:0 3px 14px rgba(0,0,0,.6)">${_relojTxt()}</div>`:''}
+
     ${B('bLinea',`<div style="width:90vw;height:2px;background:rgba(255,255,255,.22)"></div>`)}
 
     ${B('bPais',`<div style="display:flex;align-items:center;gap:1.1vw;white-space:nowrap;font-size:clamp(16px,2.6vw,40px);font-weight:700;letter-spacing:.06em">
@@ -1128,7 +1130,7 @@ function renderScreenIntentos(cur,nxt){
     : (piSet.bgColor||'#000');
   return `<div class="pi-canvas" style="position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden${_fondoPant?';background:'+_fondoPant:''}" id="pantIntentosBox">
     ${compHtml}
-    ${piSet.showTimer===true?`<div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`:''}
+    ${(piSet.showTimer===true||DATA.relojVisible)?`<div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`:''}
     ${_piBlock('liftLabel',liftLabelHtml)}
     ${recordHtml?_piBlock('record',recordHtml):''}
     ${_piBlock('weight',weightHtml)}

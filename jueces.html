@@ -55,6 +55,19 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 .jchip{width:13px;height:13px;border-radius:50%}
 .jury-estado{font-size:12px;color:var(--muted);text-align:center;min-height:16px}
 
+/* ── Planilla ─────────────────────────────────────── */
+.plan-box{width:100%;max-width:360px;display:none;flex-direction:column;gap:10px}
+.plan-box.on{display:flex}
+.plan-reloj{font-size:clamp(64px,22vw,110px);font-weight:700;text-align:center;line-height:1;font-variant-numeric:tabular-nums;color:var(--muted)}
+.plan-fila{display:grid;grid-template-columns:2fr 1fr;gap:8px}
+.plan-btn{padding:16px 10px;border-radius:12px;border:2px solid var(--border);background:var(--card);color:var(--text);font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer}
+.plan-btn:active{transform:scale(.97)}
+.plan-btn.go{border-color:var(--green);color:var(--green);background:rgba(34,197,94,.1)}
+.plan-btn.stop{border-color:#ef4444;color:#ef4444}
+.plan-sep{border-top:1px solid var(--border);margin:6px 0 2px}
+.plan-min{display:flex;align-items:center;gap:8px}
+.plan-min input{width:90px;padding:12px;border-radius:10px;border:2px solid var(--border);background:var(--card);color:var(--text);font-family:Oswald;font-size:22px;text-align:center}
+
 /* ── Login ────────────────────────────────────────── */
 .log-in{width:min(320px,88vw);padding:16px;border-radius:12px;border:2px solid var(--border);background:var(--card);color:var(--text);font-family:Oswald;font-size:17px;letter-spacing:1px;outline:none}
 .log-in:focus{border-color:var(--gold)}
@@ -289,6 +302,29 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
       <button class="jury-card" onclick="juryDecide('n','yellow')"><span class="jdot"></span><span class="jchip" style="background:#f59e0b"></span>AMARILLA</button>
     </div>
     <div class="jury-estado" id="juryEstado"></div>
+  </div>
+
+  <!-- Planilla: el minuto del intento y el "Ya volvemos" -->
+  <div class="plan-box" id="planBox">
+    <div class="jury-tit">MINUTO DEL INTENTO</div>
+    <div class="plan-reloj" id="planReloj">1:00</div>
+    <div class="jury-tit" style="margin-top:-4px">Se muestra en la transmisión y en las pantallas de tarima solo mientras lo inicies acá.</div>
+    <div class="plan-fila">
+      <button class="plan-btn go" onclick="planOrden('start')">▶ INICIAR TIMER</button>
+      <button class="plan-btn stop" onclick="planOrden('stop')">■ DETENER</button>
+    </div>
+    <button class="plan-btn" onclick="planOrden('hide')" style="font-size:13px">QUITAR EL RELOJ DE LA PANTALLA</button>
+    <div class="plan-sep"></div>
+    <div class="jury-tit">YA VOLVEMOS · DESCANSO</div>
+    <div class="plan-min">
+      <input id="planMin" type="number" inputmode="numeric" min="1" max="120" value="10">
+      <span style="color:var(--muted);font-size:14px;letter-spacing:1px">MINUTOS</span>
+    </div>
+    <div class="plan-fila">
+      <button class="plan-btn go" onclick="planBreak()">INICIAR YA VOLVEMOS</button>
+      <button class="plan-btn" onclick="planOrden('breakOff')">QUITAR</button>
+    </div>
+    <div class="jury-estado" id="planEstado"></div>
   </div>
 
   <!-- Vote buttons -->
@@ -838,6 +874,50 @@ window.clearVote=async function(){
     await window._fb.updateDoc(window._fb.doc(fbDB,'judge_decisions',JUEZ_DOC),{[myPos]:null});
     showPulse('Voto limpiado','#8A9BB2');
   }catch(e){console.warn('Clear vote error',e);}
+};
+
+// ══ Planilla ════════════════════════════════════════════════
+// Manda órdenes al mismo documento que el INICIAR TIMER del juez central
+// (timer_control). Las cumple el puesto que opera el livecast: el minuto del
+// intento —que entonces aparece en la transmisión y en las pantallas de tarima—
+// y el "Ya volvemos" de Control TX, con los minutos de acá.
+let _planHasta=0,_planTick=null,_planParado=null;
+function _planPintar(){
+  const el=document.getElementById('planReloj'); if(!el)return;
+  let t=60, on=false;
+  if(_planParado!==null){ t=_planParado; }
+  else if(_planHasta){ t=Math.max(0,Math.ceil((_planHasta-Date.now())/1000)); on=t>0; }
+  el.textContent=Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
+  el.style.color=!_planHasta&&_planParado===null?'var(--muted)':(t<=10?'#ef4444':t<=30?'#f59e0b':'#22c55e');
+  if(!on&&_planTick&&_planParado===null&&_planHasta&&t===0){ clearInterval(_planTick); _planTick=null; }
+}
+async function _planManda(campos,msg){
+  if(myPos!=='planilla')return false;
+  if(!fbReady){ showPulse('Sin conexión','#ef4444'); return false; }
+  try{
+    await window._fb.setDoc(window._fb.doc(fbDB,'timer_control',JUEZ_DOC),Object.assign({ts:Date.now(),by:'planilla'},campos));
+    const es=document.getElementById('planEstado'); if(es)es.textContent=msg+' · '+new Date().toLocaleTimeString('es-CL');
+    showPulse(msg,'#22c55e');
+    return true;
+  }catch(e){
+    const sinPermiso=e&&(e.code==='permission-denied'||/permission/i.test(e.message||''));
+    showPulse(sinPermiso?'Sin permiso — inicia sesión':'Error al enviar','#ef4444');
+    if(sinPermiso&&!fbSesion)abrirLogin();
+    console.error(e); return false;
+  }
+}
+window.planOrden=async function(accion){
+  const MSG={start:'Reloj iniciado',stop:'Reloj detenido',hide:'Reloj quitado de la pantalla',breakOff:'Ya volvemos quitado'};
+  if(!(await _planManda({action:accion},MSG[accion]||accion)))return;
+  if(accion==='start'){ _planParado=null; _planHasta=Date.now()+60000; if(!_planTick)_planTick=setInterval(_planPintar,250); }
+  if(accion==='stop'&&_planHasta){ _planParado=Math.max(0,Math.ceil((_planHasta-Date.now())/1000)); if(_planTick){clearInterval(_planTick);_planTick=null;} }
+  if(accion==='hide'){ _planHasta=0; _planParado=null; if(_planTick){clearInterval(_planTick);_planTick=null;} }
+  _planPintar();
+};
+window.planBreak=async function(){
+  const m=parseInt((document.getElementById('planMin')||{}).value,10);
+  if(!(m>=1&&m<=120)){ showPulse('Pon entre 1 y 120 minutos','#ef4444'); return; }
+  await _planManda({action:'break',min:m},'Ya volvemos: '+m+' min');
 };
 
 // ══ Timer signal ════════════════════════════════════════════

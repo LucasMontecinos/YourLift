@@ -66,11 +66,11 @@ async function abrir(b, tarima) {
   // rompía al sumar un acceso nuevo, aunque estuviera bien escrito.
   //
   // Los oyentes guardan el canal en que quedaron escuchando (_judgeDoc,
-  // _lucesHistDoc, _txLightsDoc) para volver a engancharse si cambia el
+  // _lucesHistDoc, _txLightsDoc, _tcDoc) para volver a engancharse si cambia el
   // campeonato: valen si esas variables salen también de juezDocId().
-  const VARS = ['_judgeDoc', '_lucesHistDoc', '_txLightsDoc'];
+  const VARS = ['_judgeDoc', '_lucesHistDoc', '_txLightsDoc', '_tcDoc'];
   const todos = (src.match(/'judge_decisions',|'timer_control',/g) || []).length;
-  const conId = (src.match(/'(judge_decisions|timer_control)',(juezDocId\(\)|_judgeDoc|_lucesHistDoc|_txLightsDoc)\)/g) || []).length;
+  const conId = (src.match(/'(judge_decisions|timer_control)',(juezDocId\(\)|_judgeDoc|_lucesHistDoc|_txLightsDoc|_tcDoc)\)/g) || []).length;
   ok(todos > 0 && todos === conId,
      'y todos los accesos del livecast pasan por ahí (' + conId + ' de ' + todos + ')');
   const asignaciones = VARS.map(v => (src.match(new RegExp(v + '=([^;,]+)', 'g')) || []))

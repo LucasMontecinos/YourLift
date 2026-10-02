@@ -413,6 +413,17 @@ function _sbRowAnim(animDir,row){
   }
 }
 
+// El minuto del intento como texto (m:ss) y su color: verde, naranjo en los
+// últimos 30 s, rojo en los últimos 10. Lo usan el scoreboard de la
+// transmisión y las pantallas de tarima; startTimer() lo actualiza cada segundo
+// por id, sin redibujar.
+function _relojTxt(){ const t=Math.max(0,DATA.timer||0); return Math.floor(t/60)+':'+String(t%60).padStart(2,'0'); }
+function _relojColor(){ const t=Math.max(0,DATA.timer||0); return !DATA.timerOn?'#ffffff':t<=10?'#ef4444':t<=30?'#f59e0b':'#22c55e'; }
+function _relojChip(id,px){
+  return '<span id="'+id+'" style="font-family:Oswald;font-size:'+px+'px;font-weight:800;letter-spacing:1px;padding:0 10px;border-radius:4px;'
+    +'background:rgba(0,0,0,.35);color:'+_relojColor()+';font-variant-numeric:tabular-nums">'+_relojTxt()+'</span>';
+}
+
 function _renderTxCerScoreboardBL(cur,opts){
   opts=opts||{};
   const scale=opts.scale||1;
@@ -464,7 +475,11 @@ function _renderTxCerScoreboardBL(cur,opts){
           return x.hay?'<span class="sr-parpadea" style="background:#F2C230;color:#fff;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:1.5px;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.55);box-shadow:0 0 14px rgba(242,194,48,.6)">'+_srIntentoTexto(x)+'</span>':'';
         })()
       +'</div>'
-      +'<div style="font-family:Oswald;font-size:18px;font-weight:800;color:'+_forecastColor+';letter-spacing:2px">'+_forecastTxt+'</div>'
+      +'<div style="display:flex;align-items:center;gap:14px">'
+        // El minuto del intento: solo si lo inició la Planilla (panel de jueces).
+        +(DATA.relojVisible?_relojChip('sbRelojTx',22):'')
+        +'<div style="font-family:Oswald;font-size:18px;font-weight:800;color:'+_forecastColor+';letter-spacing:2px">'+_forecastTxt+'</div>'
+      +'</div>'
     +'</div>'
     +'<div style="'+_sbRowAnim(animDir,1)+'background:linear-gradient(90deg,'+_txC('nameBg')+','+_txC('nameBg2')+');padding:5px 14px;display:flex;align-items:center;gap:10px">'
       // Bandera + código del país DEL ATLETA. Antes acá decía "CHI" escrito a mano,
@@ -1006,6 +1021,7 @@ function renderTxDirector(container){
     +'|bt-'+(bt.startedAt||0)+'-'+(bt.durationSec||0)+'-'+(bt.pausedAt||0)+'-'+(bt.label||'')+'-'+(bt.videos||[]).length+'-'+(bt.movement||'')+'-'+JSON.stringify(bt.style||{})
     +'|sc-'+((_txDirState.profile==null?void 0:_txDirState.profile.scale)||1)+'-'+((_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.scale)||1)+'-'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.scale)||1)+'-'+((_txDirState.timer==null?void 0:_txDirState.timer.scale)||1)+'-'+((_txDirState.slam==null?void 0:_txDirState.slam.scale)||1)+'-'+((_txDirState.breakTimer==null?void 0:_txDirState.breakTimer.scale)||1)+'-'+((_txDirState.tablaActual==null?void 0:_txDirState.tablaActual.scale)||1)+'-'+((_txDirState.medals==null?void 0:_txDirState.medals.scale)||1)+'-'+((_txDirState.luces==null?void 0:_txDirState.luces.scale)||1)
     +'|col-'+JSON.stringify(_txDirState.colors||{})
+    +'|rv-'+(DATA.relojVisible?1:0)
     +'|jur-'+(_txDirActive('jurado')?1:0)+'-'+((_txJurado&&Date.now()<_txJuradoHasta)?_txJuradoTs:0)+'-'+((_txDirState.jurado==null?void 0:_txDirState.jurado.scale)||1);
   if(sig===_txDirLastSig){
     // Updates in-place sin re-render para evitar flicker
