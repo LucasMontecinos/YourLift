@@ -781,16 +781,28 @@ setInterval(()=>{
   // puede estar refrescando la pantalla completa cada vez que uno vence.
   let needsRerender=false;
   Object.keys(DATA.changeTimers).forEach(k=>{
-    const ct=DATA.changeTimers[k];if(!ct||ct.expired)return;
-    // Se recalcula desde startedAt (reloj real) en vez de restar 1 por tick — así el
-    // conteo nunca se desincroniza aunque el tab haya estado bloqueado (ej. mientras
-    // estaba abierto el prompt() para cargar un peso) o en segundo plano. Con varios
-    // timers corriendo a la vez esto tiene que dar siempre el valor correcto.
-    if(typeof ct.startedAt!=='number')ct.startedAt=Date.now()-((60-(ct.remaining||60))*1000);
-    ct.remaining=Math.max(0,60-Math.floor((Date.now()-ct.startedAt)/1000));
+    const ct=DATA.changeTimers[k];if(!ct)return;
+    // Un intento que ya tiene su peso no tiene minuto que contar. Pasaba que el
+    // peso se cargaba y el reloj volvía igual —lo reponía otro equipo que todavía
+    // lo tenía— y quedaba pegado en "TIEMPO" para siempre.
+    {const pp=k.split('_'), a0=DATA.athletes.find(x=>x.id===parseInt(pp[0],10));
+     const at0=a0&&a0.att&&a0.att[pp[1]]&&a0.att[pp[1]][parseInt(pp[2],10)];
+     if(!a0||(at0&&at0.w>0)){ delete DATA.changeTimers[k]; return; }}
+    if(ct.expired)return;
+    // Se recalcula desde startedAt en vez de restar 1 por tick — así el conteo
+    // nunca se desincroniza aunque el tab haya estado bloqueado (ej. mientras
+    // estaba abierto el prompt() para cargar un peso) o en segundo plano.
+    // Con el reloj COMÚN (_ahora), no con la hora de este equipo: el minuto se
+    // arranca en un equipo y se cuenta en todos, y con las horas descuadradas uno
+    // lo veía pegado y otro lo daba por vencido segundos antes de tiempo.
+    if(typeof ct.startedAt!=='number')ct.startedAt=_ahora()-((60-(ct.remaining||60))*1000);
+    ct.remaining=Math.max(0,60-Math.floor((_ahora()-ct.startedAt)/1000));
     anyActive=true;
     const justExpired=ct.remaining<=0;
-    if(justExpired){ct.expired=true;changed=true;}
+    // Vencer no se guarda: cada pantalla lo calcula sola desde startedAt. Antes
+    // cada equipo escribía su copia de los relojes al vencer uno, y con eso podía
+    // volver a subir un reloj que otro ya había cerrado al cargar el peso.
+    if(justExpired){ct.expired=true;}
     // Update manage tab element
     const el=document.getElementById('ct_'+k);
     if(el){

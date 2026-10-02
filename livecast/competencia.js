@@ -14,9 +14,15 @@ function setAtt(id,l,r,val){
   // Warn if change timer expired but still allow entry
   const key=id+'_'+l+'_'+r;
   const ct=DATA.changeTimers[key];
-  if(ct&&ct.expired){
+  // A tiempo es lo que se EMPEZÓ a escribir antes de que venciera: el peso se
+  // guarda al salir de la casilla, y quien lo tecleó con 2 s restantes lo
+  // terminaba de cargar ya vencido y le salía el aviso.
+  const empezo=(window._ctEmpezoEn||{})[key];
+  const aTiempo=ct&&typeof ct.startedAt==='number'&&empezo&&empezo<=ct.startedAt+60000;
+  if(ct&&ct.expired&&!aTiempo){
     showToastLC('Timer expirado — peso ingresado igual');
   }
+  if(window._ctEmpezoEn)delete window._ctEmpezoEn[key];
   if(w>0){
     // Rule: each attempt must be ≥ all previous attempts (successful or not)
     for(let prev=r-1;prev>=0;prev--){
@@ -49,6 +55,15 @@ function setAtt(id,l,r,val){
   if(typeof R==='function')R();
 }
 
+// Cuándo se empezó a escribir el peso de un intento con minuto corriendo (la
+// primera tecla). setAtt lo usa para no dar por tarde un peso que se empezó a
+// cargar a tiempo.
+function _ctEmpezo(key){
+  const ct=DATA.changeTimers[key]; if(!ct||ct.expired)return;
+  window._ctEmpezoEn=window._ctEmpezoEn||{};
+  if(!window._ctEmpezoEn[key])window._ctEmpezoEn[key]=_ahora();
+}
+
 // ¿Este atleta tiene un intento EXTRA todavía sin levantar en este movimiento?
 function _extraPendienteDe(a,l){ const at=(a&&a.att&&a.att[l]||[])[3]; return !!(at&&at.extra&&at.r===null); }
 
@@ -70,7 +85,7 @@ function _armarChangeTimer(a,l,rSig,corrige){
   const key=a.id+'_'+l+'_'+rSig;
   const yaTienePeso=a.att[l][rSig]&&a.att[l][rSig].w;
   if(window._CT_ENABLED && !yaTienePeso && !_extraPendienteDe(a,l)){
-    DATA.changeTimers[key]={remaining:60,expired:false,startedAt:Date.now()};
+    DATA.changeTimers[key]={remaining:60,expired:false,startedAt:_ahora()};
     startCT(key);
   } else if(DATA.changeTimers[key]){
     delete DATA.changeTimers[key];
@@ -225,7 +240,7 @@ function _compInfo(){
   if(!c||!c.startedAt)return null;
   const a=DATA.athletes.find(x=>x.id===c.id);
   if(!a)return null;
-  const remaining=(c.min*60)-Math.floor((Date.now()-c.startedAt)/1000);
+  const remaining=(c.min*60)-Math.floor((_ahora()-c.startedAt)/1000);
   const neg=remaining<0;const abs=Math.abs(remaining);
   const mmss=(neg?'-':'')+Math.floor(abs/60)+':'+String(abs%60).padStart(2,'0');
   return {a,lift:c.lift,min:c.min,remaining,mmss,neg};
@@ -248,7 +263,9 @@ function showChangeExpiredAlert(name,lift,rnd){
   setTimeout(()=>{if(div.parentElement)div.remove();},8000);
 }
 
-function startTimer(isLocal){window._iOwnTimer=(isLocal!==false);DATA.timerOn=true;if(window._iOwnTimer)DATA.timerStartedAt=_ahora()-((60-(DATA.timer||60))*1000);if(!DATA.timerStartedAt)DATA.timerStartedAt=_ahora();if(window._iOwnTimer){_ultLatidoTimer=0;syncToFB();}mainTI=setInterval(()=>{DATA.timer=Math.max(0,60-Math.floor((_ahora()-DATA.timerStartedAt)/1000));const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}const txp=document.getElementById('txTimerPanel');if(txp){txp.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');txp.style.color=DATA.timer<=10?'#ef4444':DATA.timer<=30?'#f59e0b':'#ffffff'}const pit=document.getElementById('pantIntentosTimer');if(pit){pit.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');pit.style.color=DATA.timerOn&&DATA.timer<=10?'#ef4444':DATA.timerOn&&DATA.timer<=30?'#f59e0b':'#22c55e'}if(window._iOwnTimer)syncTimerOnlyToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;if(window._iOwnTimer)syncToFB()}},1000)}
+// Arrancar dos veces no deja dos relojes corriendo: el segundo intervalo quedaba
+// suelto, seguía descontando aunque se pausara y el reloj parecía pegado.
+function startTimer(isLocal){if(mainTI){clearInterval(mainTI);mainTI=null;}window._iOwnTimer=(isLocal!==false);DATA.timerOn=true;if(window._iOwnTimer)DATA.timerStartedAt=_ahora()-((60-(DATA.timer||60))*1000);if(!DATA.timerStartedAt)DATA.timerStartedAt=_ahora();if(window._iOwnTimer){_ultLatidoTimer=0;syncToFB();}mainTI=setInterval(()=>{DATA.timer=Math.max(0,60-Math.floor((_ahora()-DATA.timerStartedAt)/1000));const el=document.getElementById('mainTimer');if(el){const c=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)';el.style.color=c;el.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');el.style.animation=DATA.timer<=10?'pulse 1s infinite':'none'}const sb=document.getElementById('sbTimer');if(sb){sb.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');sb.style.color=DATA.timer<=10?'var(--red)':DATA.timer<=30?'var(--orange)':'var(--green)'}const tx=document.getElementById('txTimer');if(tx){tx.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');tx.style.color=DATA.timer<=10?'#ef4444':'#fff'}const txp=document.getElementById('txTimerPanel');if(txp){txp.textContent=String(Math.floor(DATA.timer/60)).padStart(2,'0')+':'+String(DATA.timer%60).padStart(2,'0');txp.style.color=DATA.timer<=10?'#ef4444':DATA.timer<=30?'#f59e0b':'#ffffff'}const pit=document.getElementById('pantIntentosTimer');if(pit){pit.textContent=Math.floor(DATA.timer/60)+':'+String(DATA.timer%60).padStart(2,'0');pit.style.color=DATA.timerOn&&DATA.timer<=10?'#ef4444':DATA.timerOn&&DATA.timer<=30?'#f59e0b':'#22c55e'}if(window._iOwnTimer)syncTimerOnlyToFB();if(DATA.timer<=0){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;if(window._iOwnTimer)syncToFB()}},1000)}
 
 function pauseTimer(){DATA.timerOn=false;clearInterval(mainTI);mainTI=null;syncToFB()}
 
@@ -387,7 +404,7 @@ function _do4thAttempt(id,l,mode,compMin){
   // 1:00; el operador lo inicia (botón ▶) cuando el extra se va a TIRAR.
   DATA.timer=60; DATA.timerOn=false; if(mainTI){clearInterval(mainTI);mainTI=null;}
   // Tiempo compensatorio a la vista (Control en Vivo + Pantalla de Tarima). No bloquea.
-  DATA.compTimer=compMin>0?{id:id,lift:l,min:compMin,startedAt:Date.now()}:null;
+  DATA.compTimer=compMin>0?{id:id,lift:l,min:compMin,startedAt:_ahora()}:null;
   // Nos aseguramos de estar viendo la tanda/lift/ronda donde aparece el extra.
   DATA.flight=a.flight;DATA.lift=l;DATA.round=gr;DATA.forcedCurrent=null;
   saveNow();R();
@@ -1015,7 +1032,7 @@ window.openManualComp=function(){
 
 window._startManualComp=function(id,l,min){
   const m=document.getElementById('compModal');if(m)m.remove();
-  DATA.compTimer={id:id,lift:l,min:Math.max(1,Math.min(5,min)),startedAt:Date.now()};
+  DATA.compTimer={id:id,lift:l,min:Math.max(1,Math.min(5,min)),startedAt:_ahora()};
   saveNow();R();
   const a=DATA.athletes.find(x=>x.id===id);
   showToastLC(min+' min compensatorios para '+(a?a.name:'atleta'));
