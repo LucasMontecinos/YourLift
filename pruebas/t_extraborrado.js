@@ -34,6 +34,7 @@ const _MERGE_HOLD_MS = 4000;
 const _MERGE_META_FIELDS = ['bw','rackSQ','rackBP','sqAbat','bpSeg','bpPalm','mod','country',
   'flight','lot','bombed','weighedIn','jornada','name','div','cat','sex','club','uni'];
 eval(sacar('_markAtt'));
+eval(sacar('_celdaMiaGana'));
 eval(sacar('_nnCrono'));
 eval(sacar('_mismaPersona'));
 eval(sacar('_mergeAthletes'));

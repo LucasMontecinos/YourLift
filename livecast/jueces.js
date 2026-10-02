@@ -53,23 +53,41 @@ function startJudgeListener(){
       if(!DATA.timerOn)startTimer();
     }
   });
+  // Cada votación se aplica UNA vez, y al intento que estaba en barra cuando
+  // llegó la primera luz. Antes se aplicaba en CADA cambio del documento con las
+  // tres luces puestas —y el documento cambia solo, por ejemplo cuando la mesa
+  // le avisa a los jueces quién está en barra—: si se revertía una decisión, al
+  // rato volvía la original, o le caía a quien estuviera primero en la cola.
+  let _juezPrimera=true;
   judgeUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',_judgeDoc),(snap)=>{
     if(!snap.exists())return;
     const d=snap.data();
     judgeLights={izq:d.izq||null,central:d.central||null,der:d.der||null};
-    // Check if all 3 judges voted
-    if(judgeLights.izq&&judgeLights.central&&judgeLights.der){
-      // Determine result by majority
-      const votes=[judgeLights.izq,judgeLights.central,judgeLights.der];
-      const goods=votes.filter(v=>v==='white').length;
-      const result=goods>=2?'g':'n';
-      // Auto-apply result to current athlete
-      const queue=liftQueue();
-      if(queue.length>0){
-        const cur=queue[0];
-        setTimeout(()=>{
-          setResult(cur.id,DATA.lift,DATA.round,result);
-        },2000); // 2s delay to show lights before advancing
+    const votos=[judgeLights.izq,judgeLights.central,judgeLights.der];
+    const cuantas=votos.filter(Boolean).length;
+    const ronda=String(d.reset_ts||'');
+    // Al encender el modo jueces, lo que ya estaba en el documento es viejo.
+    if(_juezPrimera){ _juezPrimera=false; if(cuantas===3)_juezAplicada=ronda+'|'+votos.join(','); R(); return; }
+    if(cuantas===0){ _juezDestino=null; R(); return; }
+    if(!_juezDestino||_juezDestino.ronda!==ronda){
+      const cur=liftQueue()[0];
+      _juezDestino=cur?{ronda,id:cur.id,lift:DATA.lift,round:DATA.round,r4:!!cur.__is4}:null;
+    }
+    if(cuantas===3&&_juezDestino){
+      const firma=ronda+'|'+votos.join(',');
+      if(firma!==_juezAplicada){
+        _juezAplicada=firma;
+        const goods=votos.filter(v=>v==='white').length;
+        const result=goods>=2?'g':'n';
+        const dst=_juezDestino;
+        setTimeout(()=>{   // 2 s para que se vean las luces antes de avanzar
+          const a=DATA.athletes.find(x=>x.id===dst.id);
+          const rr=dst.r4?3:dst.round;
+          const at=a&&a.att[dst.lift]&&a.att[dst.lift][rr];
+          // Si la mesa ya lo juzgó a mano, o lo corrigió, manda la mesa.
+          if(!at||at.r!==null)return;
+          setResult(dst.id,dst.lift,rr,result);
+        },2000);
       }
     }
     R();

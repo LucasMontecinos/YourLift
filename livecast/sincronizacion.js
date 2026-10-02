@@ -1048,6 +1048,25 @@ function _histUpdateButtons(){
 
 function _markAtt(id, field){
   try{ window._recentAtt[id+'|'+field]=Date.now(); window._pendingEdits.add(id+'|'+field); }catch(e){}
+  // Cada intento lleva la hora (del reloj común, _ahora) de su último cambio.
+  // Es lo que decide entre dos equipos que tocaron la misma casilla: gana el
+  // cambio más nuevo. Sin esto ganaba el que tenía la edición PENDIENTE: un
+  // equipo con la red caída guardaba su decisión vieja como pendiente, ignoraba
+  // la corrección que llegaba de la mesa y, al recuperar la red minutos después,
+  // la volvía a escribir encima. Así se "des-revertían" las decisiones.
+  try{
+    const m=/^att_(sq|bp|dl)_(\d)$/.exec(field||'');
+    if(m){ const a=(DATA.athletes||[]).find(x=>x&&x.id===id); const at=a&&a.att&&a.att[m[1]]&&a.att[m[1]][+m[2]];
+      if(at)at.t=_ahora(); }
+  }catch(e){}
+}
+
+// ¿La casilla de este equipo le gana a la que llegó del servidor? Solo si no es
+// más vieja. Las que no traen hora (datos de antes de este cambio) cuentan como 0.
+function _celdaMiaGana(lc,rc){
+  if(!lc)return true;
+  if(!rc)return true;
+  return (lc.t||0)>=(rc.t||0);
 }
 
 // Merge para ESCRITURA: parte del estado REMOTO (lo que hicieron los otros
@@ -1081,7 +1100,12 @@ function _mergeForWrite(localArr, remoteArr){
       const lL=(la.att&&la.att[l])||[], lR=(m.att&&m.att[l])||[];
       const n=Math.max(lL.length,lR.length), arr=[];
       for(let r=0;r<n;r++){
-        if(pend.has(ra.id+'|att_'+l+'_'+r)){ if(lL[r])arr[r]=lL[r]; }  // mío (incluye borrar el 4º)
+        const kp=ra.id+'|att_'+l+'_'+r;
+        // Mío (incluye borrar el 4º) — salvo que el servidor ya traiga un cambio
+        // MÁS NUEVO de esa casilla, hecho en otro equipo: ese manda y mi edición
+        // pendiente se descarta.
+        if(pend.has(kp)&&!_celdaMiaGana(lL[r],lR[r])){ arr[r]=lR[r]; try{pend.delete(kp)}catch(_){} }
+        else if(pend.has(kp)){ if(lL[r])arr[r]=lL[r]; }
         else if(lR[r]!==undefined)arr[r]=lR[r];
         // Sin la condición de arriba, un intento extra que otro control ya borró
         // volvía a subir desde acá y le revivía a todo el equipo. Lo que tengo
@@ -1145,12 +1169,17 @@ function _mergeAthletes(localArr, remoteArr){
         // cualquier eco que llegara con el estado anterior borraba el peso. El
         // operador lo volvía a escribir y a veces se perdía otra vez, hasta que
         // una escritura ganaba la carrera.
-        const heldR=held[kCel]||pend.has(kCel);
+        let heldR=held[kCel]||pend.has(kCel);
+        // Lo del servidor es más nuevo que lo mío (otro equipo corrigió después):
+        // manda el servidor, y mi edición deja de estar pendiente.
+        if(heldR&&lLocal[r]&&lRemote[r]&&!_celdaMiaGana(lLocal[r],lRemote[r])){
+          heldR=false; try{pend.delete(kCel)}catch(_){} delete window._recentAtt[kCel];
+        }
         if(heldR){
           // Yo toqué esta celda hace poco → mi versión manda. Si la BORRÉ (ej.
           // eliminé el 4º intento: lLocal[r] ya no existe) NO la re-agrego desde el
           // remoto — así la eliminación no "revive" por un snapshot de otro control.
-          if(lLocal[r]){ arr[r]={w:lLocal[r].w,r:lLocal[r].r}; }
+          if(lLocal[r]){ arr[r]=Object.assign({},lRemote[r]||{},lLocal[r]); }
           overrode=true;
         }
         else if(lRemote[r]!==undefined){ arr[r]=lRemote[r]; }
@@ -1162,7 +1191,7 @@ function _mergeAthletes(localArr, remoteArr){
         // acá seguía en memoria y ganaba en cada snapshot. Por eso, al borrar el
         // extra o reiniciar los datos en vivo, el público lo seguía viendo.
         else if(lLocal[r]!==undefined && pend.has(ra.id+'|att_'+l+'_'+r)){
-          arr[r]={w:lLocal[r].w,r:lLocal[r].r}; overrode=true;
+          arr[r]=Object.assign({},lLocal[r]); overrode=true;
         }
       }
       // Sacar huecos finales (ej. borré el último índice estando held).

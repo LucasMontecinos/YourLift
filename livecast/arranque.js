@@ -590,6 +590,8 @@ document.addEventListener('keydown',function(e){
   }
 });
 let judgeMode=false,judgeLights={izq:null,central:null,der:null},judgeUnsub=null,_lastTimerSignal=0;
+// La votación en curso del panel de jueces: a qué intento va y cuál ya se aplicó.
+let _juezDestino=null,_juezAplicada='';
 let RECORDS=null;
 // ── Países (código IPF de 3 letras → ISO2 para bandera + nombre) ──────────────
 // Para campeonatos internacionales (ej. Sudamericano). Default CHI.

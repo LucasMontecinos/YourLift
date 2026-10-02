@@ -57,17 +57,19 @@ function _extraPendienteDe(a,l){ const at=(a&&a.att&&a.att[l]||[])[3]; return !!
 // ese intento sabe con cuánto seguir, así que pedirle el peso antes —y hacerle
 // sonar la alarma a los 60s— no tiene sentido. Cuando el extra se juzga, el
 // minuto arranca ahí.
-// Tampoco corre si el peso del siguiente ya estaba cargado —salvo que esto sea
-// una CORRECCIÓN de una decisión ya tomada (corrige=true). Ahí el minuto vuelve a
-// arrancar aunque el peso esté declarado: la decisión cambió, así que el atleta
-// puede querer cambiar ese peso y tiene su minuto desde la nueva decisión. Antes
-// este caso BORRABA el timer, y el cuadrado naranjo desaparecía en vez de
-// reiniciarse.
+// Tampoco corre si el peso del siguiente ya estaba cargado.
+//
+// Una CORRECCIÓN de una decisión ya tomada (corrige=true) no toca el minuto: ni
+// lo reinicia ni lo borra. Antes lo volvía a arrancar desde 60 —se pensó que el
+// atleta podía querer cambiar su peso—, pero en la mesa eso le regalaba un
+// minuto entero a quien ya venía con el reloj corriendo, y descuadraba la
+// entrega del intento siguiente. Pedido así por la mesa.
 function _armarChangeTimer(a,l,rSig,corrige){
   if(!a||!(rSig>=0)||rSig>2)return;
+  if(corrige)return;
   const key=a.id+'_'+l+'_'+rSig;
   const yaTienePeso=a.att[l][rSig]&&a.att[l][rSig].w;
-  if(window._CT_ENABLED && (corrige||!yaTienePeso) && !_extraPendienteDe(a,l)){
+  if(window._CT_ENABLED && !yaTienePeso && !_extraPendienteDe(a,l)){
     DATA.changeTimers[key]={remaining:60,expired:false,startedAt:Date.now()};
     startCT(key);
   } else if(DATA.changeTimers[key]){
@@ -86,9 +88,8 @@ function setResult(id,l,r,res){
   if(_hoyAntes)_srAvisarSubidas(_srSubirDeclarados(_hoyAntes));
   _clearCompIfJudged(id,l,r);
   // Al juzgar el EXTRA, el minuto del intento siguiente arranca recién ahora.
-  // Y corregir una decisión —de válido a nulo, o al revés— lo vuelve a arrancar:
-  // la mesa acaba de decidir de nuevo, así que el minuto para declarar el
-  // intento siguiente empieza desde ahí. Es a propósito.
+  // Corregir una decisión —de válido a nulo, o al revés— no lo toca (ver
+  // _armarChangeTimer).
   if(r===3) _armarChangeTimer(a,l,((__n=>__n!=null?__n:(DATA.round))((a.att[l][3]||{}).grantedRound))+1,_corrige);
   else if(r<2) _armarChangeTimer(a,l,r+1,_corrige);
   // NOTA: si falla los 3 intentos de un lift, queda DQ para el total
@@ -148,13 +149,18 @@ function overrideResult(id,l,r,res){
   a.bombed=a.att.sq.every(x=>x.r==='n')&&a.att.bp.every(x=>x.r==='n')&&a.att.dl.every(x=>x.r==='n');
   // Si MARCAMOS un resultado (no limpiamos), arrancar timer para el siguiente atleta.
   // Si era el current lifter en current round, también activar change timer para el próximo intento.
-  if(!wasSame && res){
+  // Si MARCAMOS la primera decisión del intento, arranca el reloj del atleta
+  // siguiente. Una CORRECCIÓN no toca ningún reloj: ni el de tarima ni el minuto
+  // de entrega del intento siguiente (antes los dos volvían a 60).
+  if(!wasSame && res && !_corrige){
     // Igual que en setResult: al juzgar el EXTRA arranca el minuto del siguiente,
     // y mientras el extra siga pendiente no arranca ninguno.
-    if(r===3) _armarChangeTimer(a,l,((__n=>__n!=null?__n:(DATA.round))((a.att[l][3]||{}).grantedRound))+1,_corrige);
-    else if(l===DATA.lift && r===DATA.round && r<2) _armarChangeTimer(a,l,r+1,_corrige);
+    if(r===3) _armarChangeTimer(a,l,((__n=>__n!=null?__n:(DATA.round))((a.att[l][3]||{}).grantedRound))+1,false);
+    else if(l===DATA.lift && r===DATA.round && r<2) _armarChangeTimer(a,l,r+1,false);
     DATA.timer=60;DATA.timerOn=false;clearInterval(mainTI);mainTI=null;
     setTimeout(()=>{if(typeof startTimer==='function')startTimer();},150);
+    // Si los jueces también estaban votando, sus luces se apagan para el siguiente.
+    if(judgeMode)resetJudgeLights();
   }
   saveNow();R();
   // Auto-advance: si la cola de levantamientos quedó vacía, avanzar de ronda automáticamente

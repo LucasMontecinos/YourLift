@@ -38,45 +38,40 @@ const {chromium}=require('playwright');
    const Z=DATA.athletes[2]; Z.flight='A';
    Z.att.sq[0].w=100; Z.att.sq[1].w=110; setResult(Z.id,'sq',0,'g');
    out['7_con_peso_ya_declarado_no_arranca']=!DATA.changeTimers[Z.id+'_sq_1'];
-   // CORREGIR una decisión —válido a nulo, o al revés— VUELVE A ARRANCAR el
-   // minuto para declarar el intento siguiente. Es a propósito: la mesa acaba de
-   // decidir de nuevo, y el atleta cuenta su minuto desde esa decisión, no desde
-   // la que quedó sin efecto. Queda escrito acá para que nadie lo "arregle"
-   // pensando que es un error.
+   // CORREGIR una decisión —válido a nulo, o al revés— NO toca el minuto para
+   // declarar el intento siguiente: sigue corriendo desde donde iba. (Antes lo
+   // volvía a poner en 60; la mesa pidió que no, porque le regalaba un minuto
+   // entero al atleta y descuadraba la entrega.)
    const W=DATA.athletes[3]; W.flight='A';
    W.att.sq=[{w:100,r:null},{w:0,r:null},{w:0,r:null}];
    delete DATA.changeTimers[W.id+'_sq_1'];
    setResult(W.id,'sq',0,'g');
    const t1=DATA.changeTimers[W.id+'_sq_1'];
    out['8_al_juzgar_arranca']=!!t1;
+   const inicio=t1.startedAt;
    t1.remaining=17;                       // como si ya hubieran pasado 43 segundos
    setResult(W.id,'sq',0,'n');            // se corrige: era nulo
    const t2=DATA.changeTimers[W.id+'_sq_1'];
-   out['9_al_corregir_vuelve_a_60']=!!t2&&t2.remaining===60;
+   out['9_al_corregir_sigue_donde_iba']=!!t2&&t2.remaining===17&&t2.startedAt===inicio;
    out['9_segundos_tras_corregir']=(t2||{}).remaining;
    // y al revés: de nulo a válido, lo mismo
    DATA.changeTimers[W.id+'_sq_1'].remaining=8;
    setResult(W.id,'sq',0,'g');
-   out['10_y_al_volver_a_valido_tambien']=(DATA.changeTimers[W.id+'_sq_1']||{}).remaining===60;
+   out['10_y_al_volver_a_valido_tampoco']=(DATA.changeTimers[W.id+'_sq_1']||{}).remaining===8;
    // ── El CUADRADO NARANJO de Control en Vivo ────────────────────────────
-   // Corregir una decisión desde Control en Vivo no pasa por setResult sino por
-   // overrideResult, que arma el minuto solo si el intento corregido es del
-   // movimiento y la ronda que se están compitiendo.
+   // Corregir desde Control en Vivo pasa por overrideResult: tampoco arma ni
+   // reinicia nada.
    const V=DATA.athletes[4]; V.flight='A';
    DATA.lift='sq';DATA.round=0;
    V.att.sq=[{w:100,r:'g'},{w:0,r:null},{w:0,r:null}];
    delete DATA.changeTimers[V.id+'_sq_1'];
    overrideResult(V.id,'sq',0,'n');                 // válido -> nulo
-   out['11_override_sin_peso_arranca']=(DATA.changeTimers[V.id+'_sq_1']||{}).remaining===60;
-   // MISMO caso pero con el peso del siguiente YA declarado: acá está el reporte.
+   out['11_override_no_arma_minuto_nuevo']=!DATA.changeTimers[V.id+'_sq_1'];
    const U=DATA.athletes[5]; U.flight='A';
    U.att.sq=[{w:100,r:'g'},{w:110,r:null},{w:0,r:null}];
    DATA.changeTimers[U.id+'_sq_1']={remaining:22,expired:false,startedAt:Date.now()-38000};
    overrideResult(U.id,'sq',0,'n');
-   // Antes acá el timer se BORRABA: el cuadrado naranjo desaparecía en vez de
-   // volver a 60. Corregida la decisión, el atleta puede querer cambiar ese peso,
-   // así que el minuto arranca de nuevo.
-   out['12_override_con_peso_declarado_vuelve_a_60']=(DATA.changeTimers[U.id+'_sq_1']||{}).remaining===60;
+   out['12_override_deja_el_minuto_como_iba']=(DATA.changeTimers[U.id+'_sq_1']||{}).remaining===22;
    // Corrección de un intento de OTRA ronda: no arma nada (queda como está).
    const T=DATA.athletes[6]; T.flight='A';
    T.att.sq=[{w:100,r:'g'},{w:110,r:'g'},{w:0,r:null}];
@@ -96,8 +91,8 @@ const {chromium}=require('playwright');
  const ok=r['1_normal_arranca']&&r['2_al_conceder_extra_se_corta']&&r['3_no_arranca_con_extra_pendiente']
    &&r['4_tras_el_extra_arranca']&&r['5_self_se_corta']&&r['6_self_tras_el_extra_arranca']
    &&r['7_con_peso_ya_declarado_no_arranca']&&r['8_al_juzgar_arranca']
-   &&r['9_al_corregir_vuelve_a_60']&&r['10_y_al_volver_a_valido_tambien']
-   &&r['11_override_sin_peso_arranca']&&r['12_override_con_peso_declarado_vuelve_a_60']
+   &&r['9_al_corregir_sigue_donde_iba']&&r['10_y_al_volver_a_valido_tampoco']
+   &&r['11_override_no_arma_minuto_nuevo']&&r['12_override_deja_el_minuto_como_iba']
    &&r['13_otra_ronda_no_arranca']&&r['14_primera_decision_con_peso_no_arranca'];
  console.log('\nTODO CORRECTO:', ok);
  console.log('errores:',errs.length?errs.slice(0,3):'ninguno');
