@@ -338,7 +338,7 @@ function renderLiveView(){
     // debajo de eso el que mira tendría que arrastrar la tabla a lo ancho para
     // llegar al peso muerto. Ahí se queda apilado, que es lo que conviene cuando
     // lo que sobra es alto y lo que falta es ancho.
-    h += '<td style="padding:'+(_enLinea?'3px':'5px')+' 8px;border-right:1px solid var(--border)">';
+    h += '<td class="lv-atl" style="padding:'+(_enLinea?'3px':'5px')+' 8px;border-right:1px solid var(--border)">';
     if(_enLinea) h += '<div style="display:flex;align-items:center;gap:6px;white-space:nowrap">';
     if(isOnPlatform) h += '<span style="background:'+liftColor+';color:#fff;padding:1px 6px;border-radius:3px;font-size:8px;font-family:Oswald;letter-spacing:1px;'+(_enLinea?'flex-shrink:0':'display:inline-block;margin-bottom:2px')+'"><i class=yl-i-reproducir></i> EN TARIMA</span>'+(_enLinea?'':'<br>');
     // La bandera del país, al lado del nombre, como en las tablas de Resultados
