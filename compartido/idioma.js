@@ -13,7 +13,7 @@
 // siempre.
 (function(){
   'use strict';
-  var VDIC='31bbce25';   // lo pone herramientas/armar_idioma.js: cambia cuando cambian los diccionarios
+  var VDIC='7b70dae1';   // lo pone herramientas/armar_idioma.js: cambia cuando cambian los diccionarios
   var IDIOMAS=['es','en','pt'];
   var CLAVE='yl_idioma';
   var actual='es';
