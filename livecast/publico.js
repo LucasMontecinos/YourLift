@@ -111,7 +111,8 @@ function renderLiveView(){
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">';
   h += '<div><h2 class="os" style="font-size:22px;letter-spacing:2px">COMPETENCIA EN VIVO</h2>';
   h += '<p style="color:var(--muted);font-size:12px">'+((DATA.event==null?void 0:DATA.event.name)||'')+'</p></div>';
-  h += '<div style="display:flex;gap:6px;align-items:center">';
+  h += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
+  h += '<div data-yl-idioma style="margin-right:6px"></div>';
   h += '<span style="font-size:11px;color:var(--muted)">'+(libre?'Estás mirando:':'Tanda activa:')+'</span>';
   h += '<span style="background:'+(FL_C[currentFlight]||'#666')+';color:#fff;padding:4px 12px;border-radius:6px;font-family:Oswald;font-weight:700">'+(currentFlight||'—')+'</span>';
   h += '</div></div>';

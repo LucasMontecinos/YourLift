@@ -104,6 +104,7 @@ function renderStreamingShell(){
       <div class="side-label">Sistema</div>
       <a href="livecast.html?operar=1" target="_blank" class="side-btn" style="text-decoration:none" title="Abre el livecast para transmitir">YourLift <span style="opacity:.55;font-size:11px">(LiftingCast)</span></a>
       <div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">
+        <div data-yl-idioma style="margin:8px 8px 10px"></div>
         <a href="index.html" class="side-btn" style="text-decoration:none"><span class="icon">←</span>Volver al sitio</a>
         <button class="side-btn" onclick="doLogout()" style="color:var(--red)">Cerrar sesión</button>
       </div>
@@ -199,6 +200,7 @@ function render(){
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='certificados'?'active':''}" onclick="go('certificados')">Certificados YourLift</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='admins'?'active':''}" onclick="go('admins')">Gestión Admin</button>`:''}
       <div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">
+        <div data-yl-idioma style="margin:8px 8px 10px"></div>
         <a href="index.html" class="side-btn" style="text-decoration:none"><span class="icon">←</span>Volver al sitio</a>
         <button class="side-btn" onclick="doLogout()" style="color:var(--red)">Cerrar sesión</button>
       </div>

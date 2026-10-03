@@ -482,12 +482,14 @@ function renderShell(){
   if(_nomAplica())h+='<button class="side-btn" onclick="recargarNomina()" title="Vuelve a leer la nómina del archivo: entran los que se agregaron, salen los que se dieron de baja y se corrigen tandas y lotes. Conserva pesaje e intentos de los que siguen."><span class="icon">↻</span>Volver a cargar la nómina</button>';
   h+='<button class="side-btn" onclick="resetLiveData()" style="color:#ff8a8a"><span class="icon"></span>Reiniciar datos en vivo</button>';
   }
+  h+='<div data-yl-idioma style="margin:8px 8px 10px"></div>';
   h+='<button class="side-btn" onclick="doLogout()"><span class="icon"><i class=yl-i-candado></i></span>Cerrar sesi\u00f3n</button>';
   h+='</div>';
   }else{
   h+='<div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">';
   h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'<i class=yl-i-video></i> Datos en vivo':'<i class=yl-i-espera></i> Conectando...')+'</div>';
   h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon"><i class=yl-i-trofeo></i></span>Selecci\u00f3n de Campeonato</button>';
+  h+='<div data-yl-idioma style="margin:8px 8px 10px"></div>';
   // El bot\u00f3n de iniciar sesi\u00f3n sali\u00f3 de la barra: esta pantalla la mira el
   // p\u00fablico y no corresponde ofrecerle entrar. Pero la raz\u00f3n por la que estaba
   // sigue en pie: si al operador se le vence la sesi\u00f3n EN MEDIO de la competencia,
