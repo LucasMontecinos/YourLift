@@ -92,6 +92,23 @@ function _armarChangeTimer(a,l,rSig,corrige){
   }
 }
 
+// Cuando se CAMBIA una decisión ya dada (válido ↔ nulo, desde la mesa o por el
+// jurado), el atleta vuelve a tener el minuto completo para declarar el intento
+// siguiente: la decisión con la que lo iba a pensar ya no es la misma. Se pidió
+// así después de usarlo en competencia (antes la corrección no lo tocaba).
+// Solo si ese intento siguiente todavía no tiene peso, y si es de la ronda que
+// se está compitiendo o la que recién terminó: corregir un intento de una ronda
+// que todavía no se juega no arma ningún reloj.
+function _reiniciarEntregaTrasCorreccion(a,l,r){
+  if(!a||!a.att||!a.att[l])return;
+  const rSig=(r===3)?((((a.att[l][3]||{}).grantedRound)!=null?a.att[l][3].grantedRound:DATA.round)+1):r+1;
+  if(!(rSig>=1)||rSig>2)return;
+  const key=a.id+'_'+l+'_'+rSig;
+  const cerca=l===DATA.lift&&(r===DATA.round||r===DATA.round-1||r===3);
+  if(!DATA.changeTimers[key]&&!cerca)return;
+  _armarChangeTimer(a,l,rSig,false);
+}
+
 function setResult(id,l,r,res){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   // Foto de los récords ANTES de esta decisión: si la marca los mueve, hay que
@@ -105,8 +122,9 @@ function setResult(id,l,r,res){
   // Al juzgar el EXTRA, el minuto del intento siguiente arranca recién ahora.
   // Corregir una decisión —de válido a nulo, o al revés— no lo toca (ver
   // _armarChangeTimer).
-  if(r===3) _armarChangeTimer(a,l,((__n=>__n!=null?__n:(DATA.round))((a.att[l][3]||{}).grantedRound))+1,_corrige);
-  else if(r<2) _armarChangeTimer(a,l,r+1,_corrige);
+  if(_corrige) _reiniciarEntregaTrasCorreccion(a,l,r);
+  else if(r===3) _armarChangeTimer(a,l,((__n=>__n!=null?__n:(DATA.round))((a.att[l][3]||{}).grantedRound))+1,false);
+  else if(r<2) _armarChangeTimer(a,l,r+1,false);
   // NOTA: si falla los 3 intentos de un lift, queda DQ para el total
   // pero NO bombed (sigue compitiendo en los lifts siguientes).
   // bombed solo si falla los 9 intentos del meet completo.
@@ -167,8 +185,7 @@ function overrideResult(id,l,r,res){
   // Si MARCAMOS un resultado (no limpiamos), arrancar timer para el siguiente atleta.
   // Si era el current lifter en current round, también activar change timer para el próximo intento.
   // Si MARCAMOS la primera decisión del intento, arranca el reloj del atleta
-  // siguiente. Una CORRECCIÓN no toca ningún reloj: ni el de tarima ni el minuto
-  // de entrega del intento siguiente (antes los dos volvían a 60).
+  // siguiente. Una CORRECCIÓN no toca el reloj de tarima.
   if(!wasSame && res && !_corrige){
     // Igual que en setResult: al juzgar el EXTRA arranca el minuto del siguiente,
     // y mientras el extra siga pendiente no arranca ninguno.
@@ -181,6 +198,9 @@ function overrideResult(id,l,r,res){
     // El reloj que mostró la Planilla era de este intento: con la decisión se va.
     DATA.relojVisible=false;
   }
+  // Una corrección no toca el reloj de tarima, pero sí le devuelve al atleta el
+  // minuto completo para declarar el siguiente.
+  if(!wasSame && res && _corrige) _reiniciarEntregaTrasCorreccion(a,l,r);
   saveNow();R();
   // Auto-advance: si la cola de levantamientos quedó vacía, avanzar de ronda automáticamente
   if(!wasSame && res){
@@ -198,16 +218,18 @@ function overrideResult(id,l,r,res){
   }
 }
 
-// Cambiar / revocar la decisión de un intento YA juzgado (corrección del jurado),
-// SIN efectos colaterales: no reinicia el cronómetro de tarima, no arranca change
-// timers ni auto-avanza la ronda. Alterna: tocar la misma decisión la borra.
+// Cambiar / revocar la decisión de un intento YA juzgado (corrección del jurado):
+// no reinicia el cronómetro de tarima ni auto-avanza la ronda. Si cambia de
+// válido a nulo o al revés, el minuto de entrega del siguiente vuelve a 60. Alterna: tocar la misma decisión la borra.
 function changeResult(id,l,r,res){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   if(!_confirmDecisionChange(a,l,r,res))return;
   const wasSame=(a.att[l][r].r===res);
+  const _corrige=!wasSame&&(a.att[l][r].r==='g'||a.att[l][r].r==='n');
   a.att[l][r].r=wasSame?null:res;
   _markAtt(id,'att_'+l+'_'+r);
   if(!wasSame && res)_clearCompIfJudged(id,l,r);
+  if(_corrige) _reiniciarEntregaTrasCorreccion(a,l,r);
   a.bombed=a.att.sq.every(x=>x.r==='n')&&a.att.bp.every(x=>x.r==='n')&&a.att.dl.every(x=>x.r==='n');
   saveNow();R();
   showToastLC(wasSame?'↺ '+a.name+' — '+LIFT_S[l]+(r+1)+': decisión revocada'

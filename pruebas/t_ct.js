@@ -38,40 +38,49 @@ const {chromium}=require('playwright');
    const Z=DATA.athletes[2]; Z.flight='A';
    Z.att.sq[0].w=100; Z.att.sq[1].w=110; setResult(Z.id,'sq',0,'g');
    out['7_con_peso_ya_declarado_no_arranca']=!DATA.changeTimers[Z.id+'_sq_1'];
-   // CORREGIR una decisión —válido a nulo, o al revés— NO toca el minuto para
-   // declarar el intento siguiente: sigue corriendo desde donde iba. (Antes lo
-   // volvía a poner en 60; la mesa pidió que no, porque le regalaba un minuto
-   // entero al atleta y descuadraba la entrega.)
+   // CORREGIR una decisión —válido a nulo, o al revés— le devuelve al atleta el
+   // minuto completo para declarar el intento siguiente. (Hubo una etapa en que
+   // no lo tocaba; en competencia se pidió que sí se reinicie.)
    const W=DATA.athletes[3]; W.flight='A';
    W.att.sq=[{w:100,r:null},{w:0,r:null},{w:0,r:null}];
    delete DATA.changeTimers[W.id+'_sq_1'];
    setResult(W.id,'sq',0,'g');
    const t1=DATA.changeTimers[W.id+'_sq_1'];
    out['8_al_juzgar_arranca']=!!t1;
-   const inicio=t1.startedAt;
-   t1.remaining=17;                       // como si ya hubieran pasado 43 segundos
+   t1.remaining=17; t1.startedAt=_ahora()-43000;   // como si ya hubieran pasado 43 segundos
    setResult(W.id,'sq',0,'n');            // se corrige: era nulo
    const t2=DATA.changeTimers[W.id+'_sq_1'];
-   out['9_al_corregir_sigue_donde_iba']=!!t2&&t2.remaining===17&&t2.startedAt===inicio;
-   out['9_segundos_tras_corregir']=(t2||{}).remaining;
+   out['9_al_corregir_vuelve_a_60']=!!t2&&t2.remaining===60&&_ahora()-t2.startedAt<1000;
    // y al revés: de nulo a válido, lo mismo
-   DATA.changeTimers[W.id+'_sq_1'].remaining=8;
+   DATA.changeTimers[W.id+'_sq_1'].remaining=8; DATA.changeTimers[W.id+'_sq_1'].startedAt=_ahora()-52000;
    setResult(W.id,'sq',0,'g');
-   out['10_y_al_volver_a_valido_tampoco']=(DATA.changeTimers[W.id+'_sq_1']||{}).remaining===8;
+   out['10_y_al_volver_a_valido_tambien']=(DATA.changeTimers[W.id+'_sq_1']||{}).remaining===60;
    // ── El CUADRADO NARANJO de Control en Vivo ────────────────────────────
-   // Corregir desde Control en Vivo pasa por overrideResult: tampoco arma ni
-   // reinicia nada.
+   // Corregir desde Control en Vivo pasa por overrideResult: el minuto vuelve a
+   // 60 aunque ya hubiera vencido, y el reloj de tarima no se toca.
    const V=DATA.athletes[4]; V.flight='A';
    DATA.lift='sq';DATA.round=0;
    V.att.sq=[{w:100,r:'g'},{w:0,r:null},{w:0,r:null}];
-   delete DATA.changeTimers[V.id+'_sq_1'];
+   DATA.changeTimers[V.id+'_sq_1']={remaining:0,expired:true,startedAt:_ahora()-70000};
+   const relojAntes=DATA.timer;
    overrideResult(V.id,'sq',0,'n');                 // válido -> nulo
-   out['11_override_no_arma_minuto_nuevo']=!DATA.changeTimers[V.id+'_sq_1'];
+   const tv=DATA.changeTimers[V.id+'_sq_1']||{};
+   out['11_override_vuelve_a_60']=tv.remaining===60&&!tv.expired;
+   out['11b_reloj_de_tarima_igual']=DATA.timer===relojAntes;
+   // Con el peso siguiente ya declarado no se arma nada.
    const U=DATA.athletes[5]; U.flight='A';
    U.att.sq=[{w:100,r:'g'},{w:110,r:null},{w:0,r:null}];
-   DATA.changeTimers[U.id+'_sq_1']={remaining:22,expired:false,startedAt:Date.now()-38000};
+   delete DATA.changeTimers[U.id+'_sq_1'];
    overrideResult(U.id,'sq',0,'n');
-   out['12_override_deja_el_minuto_como_iba']=(DATA.changeTimers[U.id+'_sq_1']||{}).remaining===22;
+   out['12_con_peso_declarado_no_arma']=!DATA.changeTimers[U.id+'_sq_1'];
+   // Ronda que recién terminó (se compite la 2ª, se corrige la 1ª): también.
+   const Q=DATA.athletes[8]||DATA.athletes[1]; Q.flight='A';
+   DATA.round=1;
+   Q.att.sq=[{w:100,r:'n'},{w:0,r:null},{w:0,r:null}];
+   delete DATA.changeTimers[Q.id+'_sq_1'];
+   changeResult(Q.id,'sq',0,'g');
+   out['12b_ronda_anterior_arranca']=(DATA.changeTimers[Q.id+'_sq_1']||{}).remaining===60;
+   DATA.round=0;
    // Corrección de un intento de OTRA ronda: no arma nada (queda como está).
    const T=DATA.athletes[6]; T.flight='A';
    T.att.sq=[{w:100,r:'g'},{w:110,r:'g'},{w:0,r:null}];
@@ -91,8 +100,8 @@ const {chromium}=require('playwright');
  const ok=r['1_normal_arranca']&&r['2_al_conceder_extra_se_corta']&&r['3_no_arranca_con_extra_pendiente']
    &&r['4_tras_el_extra_arranca']&&r['5_self_se_corta']&&r['6_self_tras_el_extra_arranca']
    &&r['7_con_peso_ya_declarado_no_arranca']&&r['8_al_juzgar_arranca']
-   &&r['9_al_corregir_sigue_donde_iba']&&r['10_y_al_volver_a_valido_tampoco']
-   &&r['11_override_no_arma_minuto_nuevo']&&r['12_override_deja_el_minuto_como_iba']
+   &&r['9_al_corregir_vuelve_a_60']&&r['10_y_al_volver_a_valido_tambien']
+   &&r['11_override_vuelve_a_60']&&r['11b_reloj_de_tarima_igual']&&r['12_con_peso_declarado_no_arma']&&r['12b_ronda_anterior_arranca']
    &&r['13_otra_ronda_no_arranca']&&r['14_primera_decision_con_peso_no_arranca'];
  console.log('\nTODO CORRECTO:', ok);
  console.log('errores:',errs.length?errs.slice(0,3):'ninguno');

@@ -210,6 +210,7 @@ function _aplicarJurado(j){
   _markAtt(a.id,'att_'+j.lift+'_'+j.round);
   a.bombed=a.att.sq.every(x=>x.r==='n')&&a.att.bp.every(x=>x.r==='n')&&a.att.dl.every(x=>x.r==='n');
   if(j.res==='g'&&antes!=='g'){ try{checkRecord(a,j.lift,j.round);}catch(e){} }
+  if((antes==='g'||antes==='n')&&antes!==j.res)_reiniciarEntregaTrasCorreccion(a,j.lift,j.round);
   saveNow();R();
   showToastLC('Decisión del jurado: '+a.name+' — '+(LIFT_S[j.lift]||j.lift)+(j.round+1)+' → '+(j.res==='g'?'VÁLIDO':'NULO'));
 }
