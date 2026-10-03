@@ -1412,6 +1412,8 @@ const JURADO_MS=12000;
 
 // "JURY HAS OVERRULED · Decisión del jurado", con la luz como la de los jueces:
 // blanca si quedó válido, roja con el punto de la tarjeta debajo si quedó nulo.
+// Con los colores del scoreboard (fondo de su encabezado y color de acento), así
+// combina con lo que se elija en Control TX.
 function renderTxJurado(j){
   const v=j.res==='g'?'white':(j.card||'red');
   const e=_luzEstilo(v);
@@ -1419,7 +1421,7 @@ function renderTxJurado(j){
   const nombre=(a&&a.name)||j.name||'';
   const intento=(LIFT_S[j.lift]||'')+' '+((j.round|0)+1);
   return '<div style="margin:clamp(18px,2.4vw,40px);display:flex;align-items:center;gap:clamp(14px,1.6vw,26px);'
-    +'padding:clamp(12px,1.3vw,20px) clamp(16px,1.8vw,30px);background:rgba(10,22,40,.94);border-left:6px solid #D4A843;border-radius:10px;'
+    +'padding:clamp(12px,1.3vw,20px) clamp(16px,1.8vw,30px);background:'+_txC('headerBg')+';border-left:6px solid '+_txC('accent')+';border-radius:10px;'
     +'box-shadow:0 10px 40px rgba(0,0,0,.55);animation:txSlideInLeft .6s cubic-bezier(.2,.85,.3,1) both;font-family:Oswald,sans-serif">'
     +'<div style="display:flex;flex-direction:column;align-items:center;gap:8px">'
       +'<div style="width:clamp(46px,4.2vw,72px);height:clamp(46px,4.2vw,72px);border-radius:50%;background:'+e.bg+';border:4px solid '+e.bd+';box-shadow:'+e.glow+'"></div>'
@@ -1428,7 +1430,7 @@ function renderTxJurado(j){
     +'</div>'
     +'<div>'
       +'<div style="font-size:clamp(22px,2.4vw,40px);font-weight:700;letter-spacing:2px;color:#fff;line-height:1">JURY HAS OVERRULED</div>'
-      +'<div style="font-size:clamp(12px,1.05vw,17px);letter-spacing:4px;color:#D4A843;margin-top:6px">DECISIÓN DEL JURADO · '+(j.res==='g'?'GOOD LIFT':'NO LIFT')+'</div>'
+      +'<div style="font-size:clamp(12px,1.05vw,17px);letter-spacing:4px;color:'+_txC('accent')+';margin-top:6px">DECISIÓN DEL JURADO · '+(j.res==='g'?'GOOD LIFT':'NO LIFT')+'</div>'
       +(nombre?'<div style="font-size:clamp(13px,1.1vw,18px);color:rgba(220,230,245,.85);margin-top:8px;letter-spacing:1px">'+nombre+' · '+intento+'</div>':'')
     +'</div>'
   +'</div>';
