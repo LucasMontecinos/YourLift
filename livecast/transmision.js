@@ -320,7 +320,7 @@ function renderTxCeremony(container){
   // El timer se actualiza in-place via #cerTimer, NO disparar re-render por DATA.timer.
   const slamActive=Date.now()<_txCerSlamUntil;
   const recordActive=Date.now()<_txCerRecordUntil&&_txCerRecordData;
-  const sig=_txCerState+'|'+(cur?cur.id+'|'+cur.cat+'|'+((cur.att==null?void 0:cur.att[DATA.lift])||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
+  const sig=_txCerState+'|'+(cur?cur.id+'|'+cur.cat+'|'+((cur.att==null?void 0:cur.att[DATA.lift])||[]).map(a=>a.w+'-'+(a.r||'')+'-'+(a.cambios||0)).join(','):'')
     +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
     +'|'+(slamActive?_txCerSlamType+'-'+_txCerSlamUntil:'_')
     +'|'+(recordActive?'rec-'+_txCerRecordUntil:'_');
@@ -1013,7 +1013,7 @@ function renderTxDirector(container){
   const md=_txDirState.medals||{};
   const sig=[showProf,showSb,showLb,showTm,showSlam,showBreak,_txDirActive('tablaActual'),showMedals,_txDirActive('luces')].join('|')
     +'|luz-'+(_txLights.izq||'')+(_txLights.central||'')+(_txLights.der||'')
-    +'|'+(cur?cur.id+'|'+((cur.att==null?void 0:cur.att[DATA.lift])||[]).map(a=>a.w+'-'+(a.r||'')).join(','):'')
+    +'|'+(cur?cur.id+'|'+((cur.att==null?void 0:cur.att[DATA.lift])||[]).map(a=>a.w+'-'+(a.r||'')+'-'+(a.cambios||0)).join(','):'')
     +'|'+DATA.lift+'|'+DATA.round+'|'+DATA.flight
     +'|'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.cat)||'')+'|'+((_txDirState.slam==null?void 0:_txDirState.slam.type)||'')
     +'|md-'+(md.mod||'')+'-'+(md.sex||'')+'-'+(md.div||'')+'-'+(md.cat||'')+'-'+(md.tipo||'')+'-'+(md.until||0)
@@ -1229,6 +1229,14 @@ function renderTxDirector(container){
       html+=_renderTxCerSlamCorner(slamType,(_txDirState.slam==null?void 0:_txDirState.slam.scale)||1);
       setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},Math.max(50,slamUntil-Date.now()+50));
     }
+  }
+  // Cambio de intento (3er peso muerto, o banca de quien compite solo en banca):
+  // cartel amarillo abajo a la derecha, sin el nombre — el nombre ya está en el
+  // marcador. Si la Tabla Actual ocupa esa esquina, sube arriba a la derecha.
+  // Se apaga solo cuando el intento se juzga.
+  if(cur&&!_fsVisible&&_cambiosIntentoActual(cur)){
+    html+='<div style="position:fixed;'+(_txDirActive('tablaActual')?'top:24px':'bottom:24px')+';right:24px;pointer-events:none;animation:txSlideInBottom .45s ease-out">'
+      +_cartelCambioHtml('26px')+'</div>';
   }
   c.innerHTML=html;
   _txDirScheduleHide();

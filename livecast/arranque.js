@@ -1224,6 +1224,7 @@ const PI_DEFAULT_LAYOUT={
   // que es donde no estorban a nada de lo que ya había.
   logoFed:{x:8,y:9,scale:100},
   logoCamp:{x:92,y:9,scale:100},
+  cambio:{x:85,y:24,scale:100},       // CAMBIO DE INTENTO (3er peso muerto)
   // "Atleta en barra" usa el mismo editor. Las claves llevan b- adelante para no
   // pisarse con las de arriba: las dos disposiciones conviven en el mismo archivo
   // guardado, y cada pantalla dibuja las suyas.
@@ -1233,6 +1234,7 @@ const PI_DEFAULT_LAYOUT={
   bPeso:{x:91,y:12,scale:100},        // 92 KG
   bNombre:{x:50,y:45,scale:100},
   bRecord:{x:50,y:60,scale:100},      // INTENTO DE RÉCORD
+  bCambio:{x:80,y:28,scale:100},      // CAMBIO DE INTENTO (3er peso muerto)
   bLinea:{x:50,y:68,scale:100},
   bPais:{x:10,y:75,scale:100},        // bandera + ARG
   bDatos:{x:50,y:75,scale:100},       // -63 kg · JR · Classic

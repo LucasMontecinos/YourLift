@@ -444,6 +444,66 @@ function editAtt(id,l,r){
   }
 }
 
+// ── Cambio de intento (reglamento IPF) ──────────────────────────────────────
+// El 3er intento de peso muerto —y el 3er de banca de quien compite solo en
+// banca— se puede cambiar hasta dos veces después de declarado. Se lleva la
+// cuenta en la casilla (`cambios`) y SOLO suma con la opción "Cambio de intento":
+// tocar la casilla para corregir o volver a mandar el peso no cuenta, porque eso
+// es arreglar un dato y no un cambio pedido por el atleta.
+const CAMBIOS_MAX=2;
+function _soloBancaCambio(a){
+  const m=String(a&&a.mod||'');
+  if(m==='onlybench'||m==='oe_bench')return true;
+  return m==='equipped_bench'&&!(typeof _isPlusBench==='function'&&_isPlusBench(a));
+}
+function _admiteCambio(a,l,j){
+  if(j!==2)return false;
+  return l==='dl'||(l==='bp'&&_soloBancaCambio(a));
+}
+function cambioIntento(id,l,j){
+  const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
+  const at=a.att[l]&&a.att[l][j];
+  window._attMenuOpen=null;
+  if(!at||!_admiteCambio(a,l,j)){R();return;}
+  if(at.r!=null){showToastLC('Ese intento ya fue juzgado: ya no se puede cambiar');R();return;}
+  if(!(at.w>0)){showToastLC('Primero se declara el peso: el cambio es sobre un peso ya declarado');R();return;}
+  const n=at.cambios||0;
+  if(n>=CAMBIOS_MAX){showToastLC(a.name+' ya usó sus '+CAMBIOS_MAX+' cambios de intento');R();return;}
+  const v=prompt(a.name+' — '+LIFT_S[l]+' Int '+(j+1)+'\nCAMBIO DE INTENTO '+(n+1)+' de '+CAMBIOS_MAX+'\nPeso actual: '+at.w+'\nNuevo peso (kg):',at.w);
+  if(v===null){R();return;}
+  const w=parseFloat(String(v).replace(',','.'));
+  if(!(w>0)){showToastLC('Peso inválido');R();return;}
+  if(w===at.w){showToastLC('Es el mismo peso: no cuenta como cambio');R();return;}
+  const prev=(a.att[l][j-1]&&a.att[l][j-1].w)||0;
+  if(prev&&w<prev&&!confirm(w+' kg es menos que el intento anterior ('+prev+' kg). ¿Confirmar igual?')){R();return;}
+  at.w=w; at.cambios=n+1; at.cambioTs=_ahora();
+  _markAtt(id,'att_'+l+'_'+j);
+  const key=id+'_'+l+'_'+j;
+  if(DATA.changeTimers[key])delete DATA.changeTimers[key];
+  saveNow();R();
+  showToastLC('Cambio de intento '+(n+1)+'/'+CAMBIOS_MAX+': '+a.name+' → '+w+' kg');
+}
+// Cuántos cambios lleva el intento que está por levantar `c` (el atleta en
+// tarima, o el clon de su 4º). 0 si no hubo o si ya se juzgó: el cartel de
+// CAMBIO DE INTENTO de la pantalla y la transmisión se apaga con la decisión.
+function _cambiosIntentoActual(c){
+  try{
+    if(!c)return 0;
+    const ra=(typeof _realAth==='function')?_realAth(c):c;
+    const r=(typeof curAtt==='function')?curAtt(c):DATA.round;
+    const at=ra.att[DATA.lift][r];
+    return (at&&at.r==null&&at.w>0)?(at.cambios||0):0;
+  }catch(e){ return 0; }
+}
+
+// El cartel amarillo de CAMBIO DE INTENTO, el mismo en la pantalla de tarima y
+// en la transmisión (como el "ATTEMPT CHANGE" de las transmisiones de la IPF).
+function _cartelCambioHtml(px){
+  return '<span class="cambio-int" style="display:inline-flex;align-items:center;gap:.35em;background:#F2C230;color:#111;'
+    +'font-family:Oswald,sans-serif;font-weight:800;letter-spacing:.06em;line-height:1.05;padding:.28em .6em;border-radius:4px;'
+    +'font-size:'+px+';white-space:nowrap;box-shadow:0 0 18px rgba(242,194,48,.5)">⟳ CAMBIO DE INTENTO</span>';
+}
+
 function _attCellCompete(a,l,j,isCurrentCell){
   const sc=window._CT_CELL_SCALE||1;
   const at=a.att[l][j];
@@ -454,6 +514,16 @@ function _attCellCompete(a,l,j,isCurrentCell){
   const ctRem = (ct && !ct.expired && ct.remaining>0) ? ct.remaining : null;
   const ctExpired = ct && ct.expired;
   let cell='<td style="padding:'+Math.round(3*sc)+'px;vertical-align:top">';
+  // Cambio de intento: botón amarillo arriba de la casilla del 3er peso muerto
+  // (o banca de Only Bench) mientras haya un peso declarado sin juzgar.
+  if(_admiteCambio(a,l,j)&&at.w>0&&at.r==null){
+    const nc=at.cambios||0, lleno=nc>=CAMBIOS_MAX;
+    cell+='<button class="att-cambio" onclick="event.stopPropagation();cambioIntento('+a.id+',\''+l+'\','+j+')"'
+      +' title="'+(lleno?'Ya usó los '+CAMBIOS_MAX+' cambios':'Cambio de intento ('+nc+' de '+CAMBIOS_MAX+' usados)')+'"'
+      +' style="width:100%;margin-bottom:2px;padding:'+Math.round(2*sc)+'px 0;border-radius:4px;border:1px solid #F2C230;'
+      +'background:'+(nc?'rgba(242,194,48,.22)':'transparent')+';color:#F2C230;font-family:Oswald;font-size:'+Math.round(9*sc)+'px;font-weight:700;letter-spacing:.5px;cursor:pointer;'
+      +(lleno?'opacity:.5;':'')+'line-height:1.2">⟳ CAMBIO '+nc+'/'+CAMBIOS_MAX+'</button>';
+  }
   if(ctRem!==null){
     cell+='<div id="ctcell_'+ctKey+'" class="att att-p" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:'+Math.round(14*sc)+'px;font-weight:700;padding:'+Math.round(8*sc)+'px 4px;background:rgba(245,158,11,.15);border:2px solid var(--orange);color:var(--orange);text-align:center" title="Tiene '+ctRem+'s para declarar el peso">'+ctRem+'s</div>';
   } else if(ctExpired && !at.w){
@@ -527,6 +597,12 @@ function _attMenuHtml(a,l,j,sc){
     const TIP_REMOVE='Quita el intento extra / 4º (si se agregó por error o el jurado lo revoca). Solo borra el intento extra; los 3 base quedan intactos.';
     h+='<div class="att-menu" onclick="event.stopPropagation()" style="position:absolute;z-index:60;top:calc(100% + 3px);left:0;min-width:210px;background:var(--card);border:1px solid var(--gold);border-radius:8px;box-shadow:0 8px 26px rgba(0,0,0,.6);overflow:hidden">';
     h+='<div style="padding:6px 10px;font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--muted);border-bottom:1px solid rgba(29,49,80,.4);background:rgba(29,49,80,.25)">'+a.name+' · '+LIFT_S[l]+(j+1)+'</div>';
+    if(_admiteCambio(a,l,j)&&at.w>0&&at.r==null){
+      const nc=at.cambios||0;
+      h+=nc>=CAMBIOS_MAX
+        ?'<div style="padding:8px 10px;font-family:Oswald;font-size:12px;color:rgba(242,194,48,.55);border-bottom:1px solid rgba(29,49,80,.25)">⟳ Cambio de intento · sin cambios ('+nc+'/'+CAMBIOS_MAX+')</div>'
+        :item('cambioIntento('+a.id+',\''+l+'\','+j+')','⟳','Cambio de intento ('+nc+'/'+CAMBIOS_MAX+')','#F2C230','El atleta cambia el peso declarado. En el 3er intento de peso muerto (y de banca en Only Bench) se puede hasta '+CAMBIOS_MAX+' veces. Corregir el peso tocando la casilla no cuenta como cambio.');
+    }
     if(at.r===null)
       h+=item('window._attMenuOpen=null;forceCurrentAttempt('+a.id+',\''+l+'\','+j+')','<i class=yl-i-reproducir></i>','Marcar como actual','var(--gold)','Salta la cola y pone este intento como el que está en tarima ahora (por si se pasó por alto al atleta).');
     if(!has4th){
