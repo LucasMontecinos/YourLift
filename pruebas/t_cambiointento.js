@@ -69,9 +69,15 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     const cartel = [...caja.children].find(d => /CAMBIO DE INTENTO/.test(d.textContent));
     out.tx = !!cartel && /bottom:24px/.test(cartel.getAttribute('style')) && /right:24px/.test(cartel.getAttribute('style'));
     out.txSinNombre = !!cartel && cartel.textContent.indexOf(pl.name) < 0;
+    // Pasados 3 segundos del cambio, el cartel se va solo (el intento sigue sin juzgar).
+    const ts0 = pl.att.dl[2].cambioTs;
+    out.parpadea = /cambioParpadeo/.test(renderScreenBarra(cur));
+    pl.att.dl[2].cambioTs = _ahora() - 3500;
+    out.vencido = [_cambiosIntentoActual(cur), /CAMBIO DE INTENTO/.test(renderScreenBarra(cur))];
+    pl.att.dl[2].cambioTs = ts0;
     // Juzgado: el cartel se apaga.
     pl.att.dl[2].r = 'g';
-    out.juzgado = [_cambiosIntentoActual(cur), /CAMBIO DE INTENTO/.test(renderScreenBarra(cur)), /att-cambio/.test(celda(pl, 'dl', 2))];
+    out.juzgado = [!!_cambiosIntentoActual(cur), /CAMBIO DE INTENTO/.test(renderScreenBarra(cur)), /att-cambio/.test(celda(pl, 'dl', 2))];
     return out;
   });
 
@@ -88,12 +94,12 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
   ok(r.uno[0] === 205 && r.uno[1] === 1 && r.boton1, 'primer cambio: 205 kg, botón dice 1/2');
   ok(r.dos[0] === 207.5 && r.dos[1] === 2 && r.avisoLleno, 'segundo cambio: 207.5 kg; un tercero no entra');
   console.log('\nEl cartel');
-  ok(r.cur && r.cuenta === 2, 'el atleta en tarima tiene el intento cambiado');
+  ok(r.cur && r.cuenta === true, 'el atleta en tarima tiene el intento cambiado');
   ok(r.barra, 'pantalla de tarima: CAMBIO DE INTENTO');
   ok(r.tx, 'transmisión: CAMBIO DE INTENTO abajo a la derecha');
   ok(!r.txSb, 'no va dentro del marcador');
   ok(r.txSinNombre, 'el cartel no lleva el nombre del atleta');
-  ok(r.juzgado[0] === 0 && !r.juzgado[1] && !r.juzgado[2], 'con la decisión, el cartel y el botón se van');
+  ok(!r.juzgado[0] && !r.juzgado[1] && !r.juzgado[2], 'con la decisión, el cartel y el botón se van');
   ok(errs.length === 0, 'sin errores de página' + (errs.length ? ': ' + errs.join(' | ') : ''));
 
   await b.close();

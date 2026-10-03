@@ -483,17 +483,32 @@ function cambioIntento(id,l,j){
   saveNow();R();
   showToastLC('Cambio de intento '+(n+1)+'/'+CAMBIOS_MAX+': '+a.name+' → '+w+' kg');
 }
-// Cuántos cambios lleva el intento que está por levantar `c` (el atleta en
-// tarima, o el clon de su 4º). 0 si no hubo o si ya se juzgó: el cartel de
-// CAMBIO DE INTENTO de la pantalla y la transmisión se apaga con la decisión.
-function _cambiosIntentoActual(c){
+// El cartel de CAMBIO DE INTENTO de la pantalla y la transmisión es un aviso,
+// no un estado: sale CAMBIO_CARTEL_MS después de cada cambio, parpadeando, y se
+// va solo. Devuelve los milisegundos que le quedan al cartel del intento que
+// está por levantar `c` (el atleta en tarima, o el clon de su 4º); 0 si no hay.
+const CAMBIO_CARTEL_MS=3000;
+function _cartelCambioRestante(c){
   try{
     if(!c)return 0;
     const ra=(typeof _realAth==='function')?_realAth(c):c;
     const r=(typeof curAtt==='function')?curAtt(c):DATA.round;
     const at=ra.att[DATA.lift][r];
-    return (at&&at.r==null&&at.w>0)?(at.cambios||0):0;
+    if(!at||at.r!=null||!(at.cambios>0)||!at.cambioTs)return 0;
+    return Math.max(0,CAMBIO_CARTEL_MS-(_ahora()-at.cambioTs));
   }catch(e){ return 0; }
+}
+function _cambiosIntentoActual(c){
+  const ms=_cartelCambioRestante(c);
+  if(ms>0){
+    // Un redibujo al vencer, para que el cartel se vaya aunque no cambie nada más.
+    clearTimeout(window._cartelCambioTO);
+    window._cartelCambioTO=setTimeout(()=>{
+      if(typeof TX_MODE!=='undefined'&&TX_MODE&&typeof renderTxWidget==='function'){ _txDirLastSig=null; renderTxWidget(); }
+      else if(typeof R==='function')R();
+    },ms+60);
+  }
+  return ms>0;
 }
 
 // El cartel amarillo de CAMBIO DE INTENTO, el mismo en la pantalla de tarima y
@@ -501,7 +516,7 @@ function _cambiosIntentoActual(c){
 function _cartelCambioHtml(px){
   return '<span class="cambio-int" style="display:inline-flex;align-items:center;gap:.35em;background:#F2C230;color:#111;'
     +'font-family:Oswald,sans-serif;font-weight:800;letter-spacing:.06em;line-height:1.05;padding:.28em .6em;border-radius:4px;'
-    +'font-size:'+px+';white-space:nowrap;box-shadow:0 0 18px rgba(242,194,48,.5)">⟳ CAMBIO DE INTENTO</span>';
+    +'font-size:'+px+';white-space:nowrap;box-shadow:0 0 18px rgba(242,194,48,.5);animation:cambioParpadeo .5s steps(1,end) infinite">⟳ CAMBIO DE INTENTO</span>';
 }
 
 function _attCellCompete(a,l,j,isCurrentCell){
