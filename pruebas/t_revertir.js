@@ -58,7 +58,8 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     return { llega, sigue, escribe, mio, mioEscribe, conLuces };
   });
   ok(m.llega === 'n', 'la corrección de la mesa llega aunque acá hubiera un válido pendiente');
-  ok(!m.sigue, 'y el válido viejo deja de estar pendiente');
+  // La marca de pendiente ya no se suelta al juntar: se suelta cuando la
+  // escritura sale bien. Lo que importa es lo que se escribe (la línea de abajo).
   ok(m.escribe === 'n', 'al guardar, este equipo ya no vuelve a escribir el válido viejo');
   ok(m.mio === 'g' && m.mioEscribe === 'g', 'si lo de acá es más nuevo, manda lo de acá (como siempre)');
   ok(m.conLuces, 'la casilla conserva las luces que traía');

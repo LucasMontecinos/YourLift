@@ -417,7 +417,7 @@ async function syncToFB(){
         // vio de la tarima. Si no, al guardar un peso arrastraría a la tarima, a
         // los widgets y al público hasta donde está mirando ella.
         const _nv=(window.NAV_LIBRE&&window._NAV_REMOTA)||null;
-        const _mkPayload=(ath)=>({event:DATA.event,athletes:JSON.stringify(ath||DATA.athletes),
+        const _mkPayload=(ath)=>({event:DATA.event,athletes:_jsonAth(ath||DATA.athletes),
           lift:(_nv&&_nv.lift)||DATA.lift,
           round:(_nv&&typeof _nv.round==='number')?_nv.round:DATA.round,
           flight:(_nv&&_nv.flight)||DATA.flight,
@@ -442,6 +442,14 @@ async function syncToFB(){
         const _huella=(p)=>{const {ts,tsAth,writer,timer,...r}=p;return JSON.stringify(r);};
         // Ediciones que estoy por confirmar (se limpian solo si la escritura sale bien)
         const sent=[...(window._pendingEdits||[])];
+        // Y en qué versión estaba cada una. Si se vuelve a tocar mientras esta
+        // escritura viaja (válido y enseguida nulo), al terminar NO se da por
+        // guardada: lo que se mandó era la versión anterior. Antes se borraba la
+        // marca igual, la corrección quedaba como "ya escrita", la siguiente
+        // escritura tomaba la casilla del servidor —el válido— y el público y las
+        // demás pantallas se quedaban con el válido mientras la mesa veía nulo.
+        const _verEsta={}; sent.forEach(k=>{ _verEsta[k]=(window._pendVer||{})[k]; });
+        const _soltar=()=>sent.forEach(k=>{ try{ if((window._pendVer||{})[k]===_verEsta[k]) window._pendingEdits.delete(k); }catch(_){} });
         // Lo que se va a mandar, CONGELADO acá.
         //
         // Esto arregla la pérdida de pesos que se veía cargando rápido: "pongo
@@ -464,6 +472,14 @@ async function syncToFB(){
         // el remoto (que todavía tiene los datos viejos) los devolvería y el reinicio
         // nunca llegaría al público.
         if(window._forceFullWrite){
+          // Cada casilla sale con la hora de ahora: lo que todavía ande viajando
+          // de antes del reinicio (de otra mesa, del canal rápido) es más viejo y
+          // ya no le puede ganar a esto en ninguna pantalla.
+          try{ const T=Date.now(); (DATA.athletes||[]).forEach(a=>['sq','bp','dl'].forEach(l=>((a&&a.att&&a.att[l])||[]).forEach(at=>{
+            if(!at)return; at.t=Math.max(T,(at.t||0)+1); at.tw=at.tr=at.t; at._pw=at.w; at._pr=at.r==null?null:at.r; }))); }catch(_){}
+          Object.assign(_pay,_mkPayload());
+          _athJson=_pay.athletes;
+          _pay.autoritativo=window._ultAutoritativo=window._WRITER_ID+':'+Date.now();
           await window._fb.setDoc(ref,_pay);
           window._forceFullWrite=false;
         }else if(_huellaEsta===window._ultHuella){
@@ -471,7 +487,7 @@ async function syncToFB(){
           // Pero lo pendiente igual se suelta: si quedaba una marca de algo que
           // no viaja en el payload, se quedaba ahí para siempre y esta pantalla
           // no volvía a dar por guardado nada.
-          sent.forEach(k=>{ try{window._pendingEdits.delete(k)}catch(_){} });
+          _soltar();
           window._lastSyncedSig=_sigEsta;
           _fbLastOk=Date.now(); _syncWriteOk();
           return;
@@ -488,13 +504,13 @@ async function syncToFB(){
             // Los atletas van mergeados con lo remoto, pero el resto del payload
             // es el congelado: el cursor y el reloj que se mandan son los del
             // momento en que se decidió escribir.
-            _athJson=JSON.stringify(ath);
+            _athJson=_jsonAth(ath);
             tx.set(ref,Object.assign({},_pay,{athletes:_athJson}));
           });
         }else{
           await window._fb.setDoc(ref,_pay);
         }
-        sent.forEach(k=>{ try{window._pendingEdits.delete(k)}catch(_){} });
+        _soltar();
         window._lastSyncedSig=_sigEsta;
         window._ultHuella=_huellaEsta;
         try{ _flashFijarBase(JSON.parse(_athJson)); }catch(_){}
@@ -565,8 +581,12 @@ async function syncTimerOnlyToFB(forzar){
   }catch(e){/* silencioso: si el doc no existe el setDoc completo lo crea */}
 }
 
+// Los atletas como texto para mandar: sin _pw/_pr, que son anotaciones locales
+// de cada pantalla (ver _sellarCeldas) y cada una las rearma al recibir.
+function _jsonAth(x){ return JSON.stringify(x,(k,v)=>(k==='_pw'||k==='_pr')?undefined:v); }
+
 function _flashFijarBase(arr){
-  const b={}; (arr||[]).forEach(a=>{ if(a&&a.id!=null) b[a.id]=JSON.stringify(a); });
+  const b={}; (arr||[]).forEach(a=>{ if(a&&a.id!=null) b[a.id]=_jsonAth(a); });
   window._flashBase=b;
 }
 
@@ -575,7 +595,7 @@ function _flashEscribir(){
     if(PRACTICE_MODE||!fbReady||!window._fb||!fbDB||!isAdmin||!window.IS_CONTROLLER||_fbSyncing||!DATA.event)return;
     const id=fbDocId(); if(!id)return;
     const base=window._flashBase, lista=DATA.athletes||[];
-    let cambios=base?lista.filter(a=>a&&base[a.id]!==JSON.stringify(a)):null;
+    let cambios=base?lista.filter(a=>a&&base[a.id]!==_jsonAth(a)):null;
     // Sin base todavía, o demasiados cambios juntos (ej. se regeneró la nómina):
     // se manda la tanda en tarima, que es lo que está mirando todo el mundo.
     if(!cambios||cambios.length>60){
@@ -586,7 +606,7 @@ function _flashEscribir(){
     }
     const nv=(window.NAV_LIBRE&&window._NAV_REMOTA)||null;
     const p={ev:{id:String(DATA.event.id||''),name:String(DATA.event.name||'')},
-      ath:JSON.stringify(cambios),
+      ath:_jsonAth(cambios),
       lift:(nv&&nv.lift)||DATA.lift||null,
       round:(nv&&typeof nv.round==='number')?nv.round:(typeof DATA.round==='number'?DATA.round:0),
       flight:(nv&&nv.flight)||DATA.flight||null,
@@ -612,9 +632,11 @@ function _flashAplicarDatos(d,sinCursor){
   patch.forEach(a=>{ if(a&&a.id!=null&&!vistos[a.id]) remoto.push(a); });
   // Quien opera conserva las casillas que acaba de tocar (mismo merge que el
   // documento completo); el resto de las pantallas toma lo que llega.
-  if(isAdmin&&window.IS_CONTROLLER&&!TX_MODE){
-    try{ DATA.athletes=_mergeAthletes(DATA.athletes,remoto); }catch(e){ return; }
-  }else DATA.athletes=remoto;
+  // Todas las pantallas juntan casilla por casilla (gana lo más nuevo de cada
+  // campo). Antes el público reemplazaba el atleta entero con lo que traía el
+  // canal rápido, y un parche atrasado de otra mesa le devolvía una decisión ya
+  // corregida.
+  try{ DATA.athletes=_mergeAthletes(DATA.athletes,remoto); }catch(e){ DATA.athletes=remoto; }
   if(sinCursor)return;
   window._NAV_REMOTA={lift:d.lift||null,round:(typeof d.round==='number')?d.round:null,
     flight:d.flight||null,forcedCurrent:(typeof d.forcedCurrent!=='undefined')?d.forcedCurrent:null};
@@ -728,7 +750,14 @@ function startFBSync(){
     // descuento del reloj, que ahora se calcula acá con la hora de arranque.
     if(typeof d.ts==='number'&&d.writer&&d.writer!==window._WRITER_ID){
       const s=Date.now()-d.ts;
-      window._skewMs=(typeof window._skewMs==='number')?Math.round(window._skewMs*0.7+s*0.3):s;
+      // Solo cuenta un documento recién escrito. El primero que llega al abrir la
+      // pantalla es el que quedó guardado —puede tener horas o días—, y tomar esa
+      // antigüedad como diferencia de reloj dejaba la hora "común" de esta
+      // pantalla días atrás: sus correcciones perdían contra cualquier cambio
+      // viejo y los relojes de 60 s salían corridos. Dos relojes de verdad no se
+      // separan dos minutos; una muestra así es un documento viejo y se descarta.
+      if(Math.abs(s)<=120000)
+        window._skewMs=(typeof window._skewMs==='number')?Math.round(window._skewMs*0.7+s*0.3):s;
     }
     // Multi-controlador: ignorar SOLO el eco de mi propia escritura (evita parpadeo),
     // pero SÍ aplicar lo que escribieron los demás controladores → todos sincronizados.
@@ -751,6 +780,12 @@ function startFBSync(){
     // cursor estaba en una casilla se perdía para siempre en esa pantalla: los
     // válidos y nulos del control remoto, el movimiento, la ronda, la tanda. El
     // dibujo se hace apenas suelta el campo (_soltoElCampo).
+    // Llegó algo escrito por OTRO equipo: el servidor ya no tiene lo último que
+    // escribí yo, así que "es igual a lo que ya mandé" deja de querer decir "no
+    // hace falta escribir". Sin esto, si la otra mesa corregía a nulo y acá se
+    // volvía a poner válido —lo mismo que esta mesa había escrito antes—, la
+    // escritura se salteaba y el público se quedaba con el nulo.
+    window._ultHuella=null; try{ _flashUltHuella=''; }catch(_){}
     const focused=document.activeElement;
     const editando=!!(focused&&(focused.tagName==='INPUT'||focused.tagName==='SELECT'||focused.tagName==='TEXTAREA'));
     _fbSyncing=true;
@@ -808,6 +843,13 @@ function startFBSync(){
       }
       if(_viejoLocal){
         // Nada: ya tiene algo más nuevo de este mismo escritor.
+      }else if(d.autoritativo&&d.autoritativo!==window._ultAutoritativo){
+        // Reinicio de datos, borrado de atletas, re-sorteo: lo del servidor
+        // reemplaza todo lo que haya acá, sin mezclar.
+        window._ultAutoritativo=d.autoritativo;
+        DATA.athletes=_remoteAth;
+        try{ window._flashPend={ath:{},cur:null}; }catch(_){}
+        try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(_){}
       }else if(!_mismoEv){
         console.warn('[FB] El roster local es de otro campeonato — se toma el del servidor sin mezclar');
         DATA.athletes=_remoteAth;
@@ -1011,7 +1053,18 @@ function _normExtraAtts(list){
       if(Array.isArray(arr)&&arr.length>=4&&arr[3]&&!arr[3].extra)arr[3].extra=true;
     });
   });
+  _sellarCeldas(list);
   return list;
+}
+
+// Anota en cada casilla el peso y la decisión que tiene ahora (_pw, _pr), sin
+// ponerle hora. Así, al editarla, _markAtt sabe QUÉ cambió —el peso, la
+// decisión o los dos— y le pone hora solo a eso. Sin el sello, la primera
+// decisión de una casilla le ponía hora también al peso, y ese peso viejo le
+// ganaba a un cambio de peso hecho en otro equipo un segundo antes.
+function _sellarCeldas(list){
+  (list||[]).forEach(a=>{ if(!a||!a.att)return; ['sq','bp','dl'].forEach(l=>{ (a.att[l]||[]).forEach(at=>{
+    if(!at)return; if(!('_pw' in at))at._pw=at.w; if(!('_pr' in at))at._pr=at.r==null?null:at.r; }); }); });
 }
 
  // guardar solo las últimas 10 acciones (liviano para la mesa de control)
@@ -1038,7 +1091,25 @@ function _histCommit(){
 
 function _histApply(snap){
   const d=JSON.parse(snap);
-  DATA.athletes=d.a; DATA.lift=d.l; DATA.round=d.r; DATA.flight=d.f;
+  // Las casillas que el deshacer cambia cuentan como editadas recién: llevan la
+  // hora de ahora y quedan pendientes de escribir. Si no, la escritura partía del
+  // servidor (que tenía el valor deshecho) y el deshacer nunca salía de esta
+  // pantalla; o volvía solo con el siguiente documento que llegaba.
+  const antes={}; (DATA.athletes||[]).forEach(a=>{ if(a&&a.id!=null)antes[a.id]=a; });
+  DATA.athletes=d.a;
+  try{
+    const limpia=c=>{ if(!c)return ''; const {t,tw,tr,_pw,_pr,...r}=c; return JSON.stringify(r); };
+    (DATA.athletes||[]).forEach(a=>{
+      const v=antes[a.id]; if(!v)return;
+      ['sq','bp','dl'].forEach(l=>{
+        const n=Math.max(((a.att||{})[l]||[]).length,((v.att||{})[l]||[]).length);
+        for(let r=0;r<n;r++){ const c=(a.att[l]||[])[r];
+          if(limpia(c)!==limpia(((v.att||{})[l]||[])[r])){ if(c){ delete c._pw; delete c._pr; } _markAtt(a.id,'att_'+l+'_'+r); } }
+      });
+      if(_MERGE_META_FIELDS.some(f=>JSON.stringify(a[f])!==JSON.stringify(v[f])))_markAtt(a.id,'meta');
+    });
+  }catch(e){}
+  DATA.lift=d.l; DATA.round=d.r; DATA.flight=d.f;
   DATA.forcedCurrent=d.fc||null; DATA.compTimer=d.ct||null;
   window._histApplying=true;
   try{ saveNow(); R(); }
@@ -1054,8 +1125,11 @@ function _histUpdateButtons(){
 }
 
 function _markAtt(id, field){
-  try{ window._recentAtt[id+'|'+field]=Date.now(); window._pendingEdits.add(id+'|'+field); }catch(e){}
-  // Cada intento lleva la hora (del reloj común, _ahora) de su último cambio.
+  try{ window._recentAtt[id+'|'+field]=Date.now(); window._pendingEdits.add(id+'|'+field);
+    // Cuántas veces se tocó esta casilla: una escritura solo la da por guardada si
+    // nadie la volvió a tocar mientras viajaba (ver syncToFB).
+    const V=window._pendVer||(window._pendVer={}); V[id+'|'+field]=(V[id+'|'+field]||0)+1; }catch(e){}
+  // Cada intento lleva la hora (del equipo) de su último cambio.
   // Es lo que decide entre dos equipos que tocaron la misma casilla: gana el
   // cambio más nuevo. Sin esto ganaba el que tenía la edición PENDIENTE: un
   // equipo con la red caída guardaba su decisión vieja como pendiente, ignoraba
@@ -1064,7 +1138,22 @@ function _markAtt(id, field){
   try{
     const m=/^att_(sq|bp|dl)_(\d)$/.exec(field||'');
     if(m){ const a=(DATA.athletes||[]).find(x=>x&&x.id===id); const at=a&&a.att&&a.att[m[1]]&&a.att[m[1]][+m[2]];
-      if(at)at.t=_ahora(); }
+      // Siempre hacia adelante: si la diferencia de hora estimada cambió entre un
+      // cambio y el siguiente, el segundo igual tiene que ganarle al primero.
+      if(at){
+        // Con la hora del equipo, no con _ahora(): la diferencia de reloj que
+        // estima _ahora arrastra la demora de la red (uno o dos segundos en un
+        // recinto), bastante más que lo que se separan dos relojes de verdad,
+        // que se ponen en hora solos. Con _ahora, una corrección hecha un
+        // segundo después en otra mesa podía quedar "antes" y perder.
+        at.t=Math.max(Date.now(),(at.t||0)+1);
+        // Y la hora de cada campo que cambió desde la última vez (ver _fusionCelda).
+        // Sin sello (casilla que nunca pasó por _sellarCeldas) no se sabe qué
+        // cambió: se le pone hora a los dos, como antes.
+        const sinSello=!('_pw' in at);
+        if(sinSello||at.w!==at._pw){ at.tw=at.t; at._pw=at.w; }
+        if(sinSello||(at.r==null?null:at.r)!==(at._pr==null?null:at._pr)){ at.tr=at.t; at._pr=at.r==null?null:at.r; }
+      } }
   }catch(e){}
 }
 
@@ -1074,6 +1163,28 @@ function _celdaMiaGana(lc,rc){
   if(!lc)return true;
   if(!rc)return true;
   return (lc.t||0)>=(rc.t||0);
+}
+
+// Junta dos versiones de la misma casilla campo por campo. El peso y la decisión
+// llevan cada uno su hora (tw, tr; ver _markAtt): si un equipo cambió el peso
+// —un cambio de intento— y otro, con la casilla todavía vieja, marcó válido, se
+// quedan las dos cosas. Antes ganaba la casilla entera más nueva y el peso
+// nuevo se perdía. Lo demás (luces, jurado, cambios…) va con la más nueva.
+function _fusionCelda(a,b){
+  if(!a)return b; if(!b)return a;
+  // a = lo de esta pantalla, b = lo que llegó. Si empatan (o ninguna tiene
+  // hora) manda lo que llegó, como siempre.
+  const ta=a.t||0, tb=b.t||0;
+  const nuevo=ta>tb?a:b, viejo=nuevo===a?b:a;
+  // Lo que trae solo la versión vieja (por ejemplo las luces de los jueces) se
+  // conserva; lo que traen las dos, manda la nueva.
+  const out=Object.assign({},viejo,nuevo);
+  [['w','tw','_pw'],['r','tr','_pr']].forEach(([f,tf,pf])=>{
+    // Sin hora de ese campo no hay con qué discutir: queda el de la más nueva.
+    const tn=nuevo[tf], tv=viejo[tf];
+    if(tv!=null&&(tn==null||tv>tn)&&viejo[f]!==nuevo[f]){ out[f]=viejo[f]; out[tf]=viejo[tf]; out[pf]=viejo[f]; if(f==='w'&&viejo.cambios!=null)out.cambios=viejo.cambios; }
+  });
+  return out;
 }
 
 // Merge para ESCRITURA: parte del estado REMOTO (lo que hicieron los otros
@@ -1111,8 +1222,12 @@ function _mergeForWrite(localArr, remoteArr){
         // Mío (incluye borrar el 4º) — salvo que el servidor ya traiga un cambio
         // MÁS NUEVO de esa casilla, hecho en otro equipo: ese manda y mi edición
         // pendiente se descarta.
-        if(pend.has(kp)&&!_celdaMiaGana(lL[r],lR[r])){ arr[r]=lR[r]; try{pend.delete(kp)}catch(_){} }
-        else if(pend.has(kp)){ if(lL[r])arr[r]=lL[r]; }
+        // (La marca de pendiente NO se borra acá: esto corre dentro de una
+        // transacción que Firestore puede repetir si otro equipo escribió en el
+        // medio, y en la repetición la edición tiene que seguir contando. Se
+        // suelta recién cuando la escritura sale bien.)
+        if(pend.has(kp)&&!_celdaMiaGana(lL[r],lR[r])){ arr[r]=_fusionCelda(lL[r],lR[r]); }
+        else if(pend.has(kp)){ if(lL[r])arr[r]=lR[r]?_fusionCelda(lL[r],lR[r]):lL[r]; }
         else if(lR[r]!==undefined)arr[r]=lR[r];
         // Sin la condición de arriba, un intento extra que otro control ya borró
         // volvía a subir desde acá y le revivía a todo el equipo. Lo que tengo
@@ -1179,16 +1294,24 @@ function _mergeAthletes(localArr, remoteArr){
         let heldR=held[kCel]||pend.has(kCel);
         // Lo del servidor es más nuevo que lo mío (otro equipo corrigió después):
         // manda el servidor, y mi edición deja de estar pendiente.
-        if(heldR&&lLocal[r]&&lRemote[r]&&!_celdaMiaGana(lLocal[r],lRemote[r])){
-          heldR=false; try{pend.delete(kCel)}catch(_){} delete window._recentAtt[kCel];
-        }
+        // (Si lo del servidor es más nuevo, igual se junta campo por campo con
+        // _fusionCelda: lo que yo cambié en el otro campo sigue pendiente y sale
+        // en la próxima escritura. Antes acá se soltaba la marca y ese cambio
+        // podía no llegar nunca al servidor.)
         if(heldR){
           // Yo toqué esta celda hace poco → mi versión manda. Si la BORRÉ (ej.
           // eliminé el 4º intento: lLocal[r] ya no existe) NO la re-agrego desde el
           // remoto — así la eliminación no "revive" por un snapshot de otro control.
-          if(lLocal[r]){ arr[r]=Object.assign({},lRemote[r]||{},lLocal[r]); }
+          if(lLocal[r]){ arr[r]=lRemote[r]?_fusionCelda(lLocal[r],lRemote[r]):Object.assign({},lLocal[r]); }
           overrode=true;
         }
+        // Lo que tengo acá es un cambio MÁS NUEVO que lo que trae este documento
+        // (lleva una hora posterior): el documento viene atrasado —otro equipo lo
+        // escribió antes de recibir mi cambio— y llegó tarde. Se conserva lo mío;
+        // el servidor ya lo tiene, porque mi escritura salió. Sin esto, el equipo
+        // que cargó un peso se quedaba con la casilla vacía para siempre: su propio
+        // eco se ignora, así que nada le devolvía el peso.
+        else if(lLocal[r]&&lRemote[r]){ arr[r]=_fusionCelda(lLocal[r],lRemote[r]); }
         else if(lRemote[r]!==undefined){ arr[r]=lRemote[r]; }
         // El remoto viene más corto que lo que tengo acá: o alguien borró ese
         // intento extra, o yo lo acabo de agregar y todavía no salió de este

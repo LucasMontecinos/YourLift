@@ -171,6 +171,7 @@ function showToastLC(msg){
 }
 
 function R(){
+  try{ _sellarCeldas(DATA.athletes); }catch(e){}
   // Los récords logrados hoy se recalculan una vez por dibujado: los consulta cada
   // casilla de la tabla, pero tienen que reflejar lo último (incluido lo que
   // acaba de llegar de otro controlador).

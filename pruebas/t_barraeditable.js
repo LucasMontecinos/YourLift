@@ -172,10 +172,10 @@ const CAJA = `(k)=>{
   console.log('\nLas luces siguen siendo un espejo');
   {
     await montar(false);
-    const antes = await p.evaluate(() => JSON.stringify(DATA.athletes[0].att.bp[2]));
+    const antes = await p.evaluate(() => { const c = DATA.athletes[0].att.bp[2]; return JSON.stringify({ w: c.w, r: c.r }); });
     await p.click('.pi-block[data-pi-key="bLuces"]');
     await p.mouse.click(1150, 380);
-    const despues = await p.evaluate(() => JSON.stringify(DATA.athletes[0].att.bp[2]));
+    const despues = await p.evaluate(() => { const c = DATA.athletes[0].att.bp[2]; return JSON.stringify({ w: c.w, r: c.r }); });
     ok(antes === despues, 'moverlas no juzga el intento: ' + despues);
   }
   {
