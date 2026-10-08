@@ -13647,7 +13647,7 @@ function renderAdmins(){
 
   return `
   <div class="h1">Gestión de Administradores</div>
-  <p class="subtitle">Crea y gestiona las cuentas que pueden acceder a este panel. Las cuentas se guardan en Firebase.</p>
+  <p class="subtitle">Crea y gestiona las cuentas que pueden acceder a este panel. <b>Desactivar</b> le cierra el acceso sin borrar la cuenta: se vuelve a activar con el mismo rol. <b>Revocar</b> la saca de la lista.</p>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
 
@@ -13667,7 +13667,7 @@ function renderAdmins(){
         <label style="font-size:11px;color:var(--muted)">Rol
           <select class="inp" id="naRole" style="margin-top:4px">
             <option value="admin">Admin — acceso completo al panel</option>
-            <option value="superadmin">Superadmin — puede crear/eliminar admins</option>
+            <option value="superadmin">Superadmin — acceso completo al panel</option>
             <option value="mesa">Mesa técnica — solo YourLift, con la competencia completa</option>
             <option value="streaming">Streaming — solo YourLift, únicamente pantallas de transmisión</option>
             <option value="transmision">Transmisión — en YourLift no entra a Control en Vivo</option>
@@ -13683,24 +13683,28 @@ function renderAdmins(){
     <!-- Existing admins -->
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="h2">Admins activos</div>
+        <div>
+          <div class="h2">Cuentas</div>
+          ${_adminsList.length?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${_adminsList.filter(a=>!a.disabled).length} activas${_adminsList.some(a=>a.disabled)?' · '+_adminsList.filter(a=>a.disabled).length+' desactivadas':''}</div>`:''}
+        </div>
         <button class="btn" onclick="refreshAdmins()" style="padding:6px 12px;font-size:11px;background:transparent;border:1px solid var(--border);color:var(--muted)">↻ Recargar</button>
       </div>
       ${_adminsList.length===0
         ? '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Cargando...</div>'
         : _adminsList.map(a=>`
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(29,49,80,.3)">
-            <div>
-              <div style="font-weight:600;font-size:13px">${a.nombre||a.email||a.uid}</div>
+          <div class="adm-cuenta${a.disabled?' adm-off':''}" data-uid="${a.uid}" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(29,49,80,.3)">
+            <div style="${a.disabled?'opacity:.55':''}">
+              <div style="font-weight:600;font-size:13px">${a.nombre||a.email||a.uid}${a.disabled?' <span class="adm-estado" style="font-size:10px;font-weight:700;letter-spacing:.5px;padding:2px 7px;border-radius:4px;background:rgba(239,68,68,.15);color:var(--red);vertical-align:middle">DESACTIVADA</span>':''}</div>
               <div style="font-size:11px;color:var(--muted);margin-top:2px">${a.email||'—'}</div>
               <span style="font-size:10px;padding:2px 8px;border-radius:4px;background:${a.role==='superadmin'?'rgba(196,30,58,.15)':(a.col==='jueces'?'rgba(34,197,94,.15)':'rgba(59,130,246,.15)')};color:${a.role==='superadmin'?'var(--accent)':(a.col==='jueces'?'var(--green)':'var(--blue)')}">${a.role||'admin'}${a.col==='jueces'?' · solo luces':''}${a.bootstrap?' ':''}</span>
               ${a.col!=='jueces'&&a.role==='juez'
                 ? `<div style="font-size:10px;color:var(--red);margin-top:4px;line-height:1.4"><i class=yl-i-alerta></i> Cuenta de juez guardada entre los admins: para Firestore tiene acceso completo. Revocala y creala de nuevo como "Juez" para que quede cerrada.</div>`
                 : ''}
             </div>
-            <div style="display:flex;gap:6px">
+            <div style="display:flex;gap:6px;flex-shrink:0">
               ${a.uid!==ST.user?.uid
-                ? `<button onclick="revokeAdmin('${a.uid}','${(a.nombre||a.email||'').replace(/'/g,"\\'")}','${a.col||'admins'}')" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:transparent;color:var(--red);font-size:11px;cursor:pointer">Revocar</button>`
+                ? `<button class="adm-activar" onclick="toggleAdminActivo('${a.uid}','${a.col||'admins'}',${a.disabled?'true':'false'})" style="padding:4px 10px;border-radius:6px;border:1px solid ${a.disabled?'rgba(34,197,94,.45)':'rgba(212,168,67,.45)'};background:transparent;color:${a.disabled?'var(--green)':'var(--gold)'};font-size:11px;cursor:pointer">${a.disabled?'Activar':'Desactivar'}</button>
+                   <button onclick="revokeAdmin('${a.uid}','${(a.nombre||a.email||'').replace(/'/g,"\\'")}','${a.col||'admins'}')" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:transparent;color:var(--red);font-size:11px;cursor:pointer">Revocar</button>`
                 : '<span style="font-size:10px;color:var(--muted);padding:4px 8px">(tú)</span>'}
             </div>
           </div>`).join('')}
@@ -13792,6 +13796,33 @@ window.revokeAdmin = async function(uid, nombre, col){
   }catch(e){ showToast('Error: '+e.message, null, true); }
 };
 
+// Desactivar no borra nada: deja disabled:true en la ficha y las reglas de
+// Firestore dejan de tratarla como admin (o como juez). Activar la devuelve tal
+// cual estaba, con su rol. Si la persona tiene el panel abierto, la saca al
+// instante (ver _vigilarCuentaPropia en arranque.js).
+window.toggleAdminActivo = async function(uid, col, estabaDesactivada){
+  col = col==='jueces' ? 'jueces' : 'admins';
+  if(uid===ST.user?.uid){ showToast('No puedes desactivar tu propia cuenta', null, true); return; }
+  const a = _adminsList.find(x=>x.uid===uid&&x.col===col) || {};
+  const nombre = a.nombre||a.email||uid;
+  const activar = !!estabaDesactivada;
+  if(!activar && !confirm('¿Desactivar la cuenta de '+nombre+'?\n'
+      +(col==='jueces'
+        ? 'Sus luces dejan de llegar a la tarima hasta que la vuelvas a activar.'
+        : 'No podrá entrar al panel ni al control en vivo hasta que la vuelvas a activar. Si lo tiene abierto, se le cierra.'))) return;
+  try{
+    await updateDoc(doc(db,col,uid), activar
+      ? {disabled:false, enabledAt:new Date().toISOString(), enabledBy:ST.user.email}
+      : {disabled:true, disabledAt:new Date().toISOString(), disabledBy:ST.user.email});
+    await logAction(activar?'enable_admin':'disable_admin', uid, nombre, activar?'activa':'desactivada', {by:ST.user.email, col});
+    showToast((activar?'Cuenta activada: ':'Cuenta desactivada: ')+nombre);
+    await refreshAdmins();
+  }catch(e){
+    const negado = e && (e.code==='permission-denied' || /permission/i.test(e.message||''));
+    showToast(negado ? 'Sin permiso: solo el owner puede activar o desactivar cuentas' : 'Error: '+e.message, null, true);
+  }
+};
+
 window.refreshAdmins = async function(){
   await loadAdminsList();
   if(ST.view==='admins') render();
@@ -13846,6 +13877,30 @@ setTimeout(()=>{
   if(app&&(app.innerHTML.includes('Cargando')||app.innerHTML.trim()===''))
     {ST.user=null;render();}
 },5000);
+// Si el owner desactiva (o revoca) una cuenta mientras esa persona tiene el
+// panel abierto, se le cierra en el momento. Las reglas ya le cortan el acceso a
+// los datos, pero sin esto seguiría viendo la pantalla y cada botón fallaría sin
+// decir por qué. Es una sola ficha escuchada: una lectura al entrar y otra por
+// cambio.
+let _cuentaPropiaOff=null;
+function _vigilarCuentaPropia(uid){
+  try{ if(_cuentaPropiaOff)_cuentaPropiaOff(); }catch(e){}
+  _cuentaPropiaOff=null;
+  try{
+    _cuentaPropiaOff=onSnapshot(doc(db,'admins',uid),s=>{
+      if(!s||typeof s.exists!=='function'||!ST.user||ST.user.uid!==uid)return;
+      const d=s.exists()?s.data():null;
+      if(d&&!d.disabled){ ST.adminInfo=Object.assign({},ST.adminInfo,d); return; }
+      try{ if(_cuentaPropiaOff)_cuentaPropiaOff(); }catch(e){}
+      _cuentaPropiaOff=null;
+      signOut(auth).catch(()=>{});
+      ST.user=null;ST.adminInfo=null;
+      alert(d?'Tu cuenta fue desactivada.\n\nPídele al administrador de YourLift que la vuelva a activar.'
+             :'Tu acceso al panel fue revocado.');
+      render();
+    },()=>{});
+  }catch(e){}
+}
 onAuthStateChanged(auth,async(u)=>{window._authFired=true;
   if(!u){ST.user=null;ST.adminInfo=null;render();return}
   try{
@@ -13868,9 +13923,17 @@ onAuthStateChanged(auth,async(u)=>{window._authFired=true;
         : 'Acceso denegado.\nUID: '+u.uid+'\n\nAgrega este UID a Firestore → admins/'+u.uid+' con campo role:"superadmin"');
       render();return;
     }
+    // Desactivada por el owner (Gestión Admin): la ficha sigue, pero no entra.
+    if(adminDoc.data()?.disabled){
+      await signOut(auth);
+      ST.user=null;ST.adminInfo=null;
+      alert('Tu cuenta está desactivada.\n\nPídele al administrador de YourLift que la vuelva a activar.');
+      render();return;
+    }
     ST.user=u;
     ST.adminInfo=adminDoc.data();
     sessionStorage.setItem('fechipo_admin_session','1');
+    _vigilarCuentaPropia(u.uid);
     // ── bootstrap one-time: logro YourLift Owner para Lucas ──────────────
     (async()=>{
       try{

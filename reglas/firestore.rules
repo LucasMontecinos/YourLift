@@ -22,9 +22,13 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Una cuenta DESACTIVADA (disabled:true, desde Admin → Gestión Admin) deja de
+    // ser admin para todo: no lee ni escribe nada que pida admin. Se desactiva en
+    // vez de borrarse para poder volver a activarla con su mismo rol y nombre.
     function isAdmin() {
       return isSignedIn() &&
-             exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('disabled', false) != true;
     }
 
     // El OWNER es el admin cuyo documento dice role:'owner'. Es una condición más
@@ -52,7 +56,8 @@ service cloud.firestore {
     // y el control en vivo lo rechazan solos, sin que haya que acordarse de nada.
     function esJuez() {
       return isSignedIn() &&
-             exists(/databases/$(database)/documents/jueces/$(request.auth.uid));
+             exists(/databases/$(database)/documents/jueces/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/jueces/$(request.auth.uid)).data.get('disabled', false) != true;
     }
 
     // Los eventos de ENSAYO (livecast de prueba) se operan SIN iniciar sesión: su
@@ -94,15 +99,27 @@ service cloud.firestore {
     match /judge_decisions/{doc}   { allow read: if true; allow write: if isAdmin() || esJuez() || esEnsayo(doc); }
     match /timer_control/{doc}     { allow read: if true; allow write: if isAdmin() || esJuez() || esEnsayo(doc); }
 
+    // Las cuentas del panel las maneja SOLO el owner: crearlas, revocarlas,
+    // desactivarlas y volver a activarlas. Si cualquier admin pudiera escribir
+    // acá, uno desactivado podría ser reactivado por otro, o alguien podría
+    // desactivar al owner. Cada uno puede leer su propia ficha, aunque esté
+    // desactivada, para que el panel le diga eso y no "acceso denegado".
+    // El owner no puede desactivarse a sí mismo: quedaría fuera sin nadie que
+    // lo vuelva a activar.
     match /admins/{uid} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      allow create, delete: if isOwner();
+      allow update: if isOwner() &&
+                    !(uid == request.auth.uid && request.resource.data.get('disabled', false) == true);
     }
 
     // Un juez puede leer su propia ficha (para saber que su cuenta sigue vigente);
-    // crearlas y borrarlas es cosa del admin.
+    // crearlas y borrarlas es cosa del admin. Desactivarlas y activarlas, del owner.
     match /jueces/{uid} {
       allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
-      allow write: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() &&
+                    (isOwner() || request.resource.data.get('disabled', false) == resource.data.get('disabled', false));
     }
 
     match /eventos/{id} {

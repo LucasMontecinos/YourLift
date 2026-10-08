@@ -175,7 +175,13 @@ async function initFB(){
         // Verify this user is an admin in Firestore
         fb.getDoc(fb.doc(fbDB,'admins',u.uid)).then(snap=>{
           window._AUTH_LISTO=true;
-          if(snap.exists()){
+          // Desactivada desde Admin → Gestión Admin: entra como público.
+          const _desact=snap.exists()&&!!(snap.data()||{}).disabled;
+          if(_desact){
+            isAdmin=false; window.ADMIN_ROLE=null;
+            console.log('[LiveCast] Cuenta desactivada:',u.email);
+            try{showToastLC('Tu cuenta está desactivada: entras como público');}catch(e){}
+          } else if(snap.exists()){
             isAdmin=true;
             try{_padronPrivadoLC();}catch(e){}   // RUT del padrón, que el público no ve
             window.ADMIN_ROLE=(__o=>__o==null?void 0:__o.role)(snap.data())||'admin';

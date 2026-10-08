@@ -31,10 +31,11 @@ async function initFirebase() {
       if (!user) { state.adminAuth = false; if (state.view === 'admin') render(); return; }
       try {
         const adminDoc = await getDoc(doc(db, 'admins', user.uid));
-        state.adminAuth = adminDoc.exists();
-        if (!adminDoc.exists()) {
+        const desactivada = adminDoc.exists() && !!(adminDoc.data() || {}).disabled;
+        state.adminAuth = adminDoc.exists() && !desactivada;
+        if (!state.adminAuth) {
           await signOut(authInstance);
-          alert('Acceso denegado: tu cuenta no está registrada como admin.');
+          alert(desactivada ? 'Tu cuenta está desactivada.' : 'Acceso denegado: tu cuenta no está registrada como admin.');
         } else {
           loadInscripciones();
         }

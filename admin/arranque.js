@@ -46,6 +46,30 @@ setTimeout(()=>{
   if(app&&(app.innerHTML.includes('Cargando')||app.innerHTML.trim()===''))
     {ST.user=null;render();}
 },5000);
+// Si el owner desactiva (o revoca) una cuenta mientras esa persona tiene el
+// panel abierto, se le cierra en el momento. Las reglas ya le cortan el acceso a
+// los datos, pero sin esto seguiría viendo la pantalla y cada botón fallaría sin
+// decir por qué. Es una sola ficha escuchada: una lectura al entrar y otra por
+// cambio.
+let _cuentaPropiaOff=null;
+function _vigilarCuentaPropia(uid){
+  try{ if(_cuentaPropiaOff)_cuentaPropiaOff(); }catch(e){}
+  _cuentaPropiaOff=null;
+  try{
+    _cuentaPropiaOff=onSnapshot(doc(db,'admins',uid),s=>{
+      if(!s||typeof s.exists!=='function'||!ST.user||ST.user.uid!==uid)return;
+      const d=s.exists()?s.data():null;
+      if(d&&!d.disabled){ ST.adminInfo=Object.assign({},ST.adminInfo,d); return; }
+      try{ if(_cuentaPropiaOff)_cuentaPropiaOff(); }catch(e){}
+      _cuentaPropiaOff=null;
+      signOut(auth).catch(()=>{});
+      ST.user=null;ST.adminInfo=null;
+      alert(d?'Tu cuenta fue desactivada.\n\nPídele al administrador de YourLift que la vuelva a activar.'
+             :'Tu acceso al panel fue revocado.');
+      render();
+    },()=>{});
+  }catch(e){}
+}
 onAuthStateChanged(auth,async(u)=>{window._authFired=true;
   if(!u){ST.user=null;ST.adminInfo=null;render();return}
   try{
@@ -68,9 +92,17 @@ onAuthStateChanged(auth,async(u)=>{window._authFired=true;
         : 'Acceso denegado.\nUID: '+u.uid+'\n\nAgrega este UID a Firestore → admins/'+u.uid+' con campo role:"superadmin"');
       render();return;
     }
+    // Desactivada por el owner (Gestión Admin): la ficha sigue, pero no entra.
+    if(adminDoc.data()?.disabled){
+      await signOut(auth);
+      ST.user=null;ST.adminInfo=null;
+      alert('Tu cuenta está desactivada.\n\nPídele al administrador de YourLift que la vuelva a activar.');
+      render();return;
+    }
     ST.user=u;
     ST.adminInfo=adminDoc.data();
     sessionStorage.setItem('fechipo_admin_session','1');
+    _vigilarCuentaPropia(u.uid);
     // ── bootstrap one-time: logro YourLift Owner para Lucas ──────────────
     (async()=>{
       try{
