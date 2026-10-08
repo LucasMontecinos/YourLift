@@ -132,7 +132,10 @@ window.DOC_TYPES = DOC_TYPES;
 // La cédula de identidad de su lista es el carnet que el formulario ya pide
 // siempre, así que no se duplica.
 const DOCS_OE_DEF = [
-  { key:'oe_ficha', oe:true, icon:'<i class=yl-i-archivo></i>',
+  // porDefecto:false → no se pide salvo que el campeonato lo active en Admin →
+  // Campeonatos (se pidió sacarla de las inscripciones, pero poder volver a
+  // pedirla en un campeonato puntual).
+  { key:'oe_ficha', oe:true, porDefecto:false, icon:'<i class=yl-i-archivo></i>',
     label:'Ficha médica · Olimpiadas Especiales',
     desc:'Formulario de ficha médica de Olimpiadas Especiales, completado y firmado',
     linkUrl:'https://docs.google.com/forms/d/e/1FAIpQLSdOhb4H-1WeYmK19dQlPNewQFlQYa98Gv-B4NafjmD2QfOHbQ/viewform',
@@ -146,6 +149,15 @@ const DOCS_OE_DEF = [
     desc:'Copia del certificado de discapacidad intelectual o del documento de acreditación' }
 ];
 const DOCS_OE_KEYS = DOCS_OE_DEF.map(d => 'x_' + d.key);
+// ¿Este campeonato le pide este papel de Olimpiadas Especiales? Lo decide la
+// ficha del campeonato (oeDocs: {x_oe_ficha:true, …}); si no dice nada, vale
+// lo de siempre de cada papel (porDefecto).
+function _oePide(evObj, k) {
+  const o = evObj && evObj.oeDocs;
+  if (o && typeof o[k] === 'boolean') return o[k];
+  const d = DOCS_OE_DEF.find(x => 'x_' + x.key === k);
+  return !d || d.porDefecto !== false;
+}
 const CATEGORIES_M = ["-53 kg","-59 kg","-66 kg","-74 kg","-83 kg","-93 kg","-105 kg","-120 kg","+120 kg"];
 const CATEGORIES_F = ["-43 kg","-47 kg","-52 kg","-57 kg","-63 kg","-69 kg","-76 kg","-84 kg","+84 kg"];
 const DIVISIONS = ["Sub-Junior","Junior","Open","Master I","Master II","Master III","Master IV","Universitario"];

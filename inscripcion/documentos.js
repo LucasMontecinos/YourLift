@@ -75,7 +75,7 @@ function _oeDocsAparte(evObj){
   if (!esModalidadOE(_modalidadActual())) return [];
   const cat = docsDelEvento(evObj);
   const tmpl = (evObj && evObj.docTemplates) || {};
-  return DOCS_OE_KEYS.map(k => ({ key:k, meta:cat[k], tmpl:tmpl[k] })).filter(x => x.meta);
+  return DOCS_OE_KEYS.filter(k => _oePide(evObj, k)).map(k => ({ key:k, meta:cat[k], tmpl:tmpl[k] })).filter(x => x.meta);
 }
 
 function _oeBloqueHtml(evObj){
@@ -141,7 +141,7 @@ function docsRequeridos(evObj, fechaNac, modalidad, division) {
   // Los de Olimpiadas Especiales se suman SIEMPRE, y sin repetir si el
   // campeonato además los tenía marcados a mano.
   if (esModalidadOE(mod)) {
-    porModalidad = porModalidad.concat(DOCS_OE_KEYS.filter(k => porModalidad.indexOf(k) < 0));
+    porModalidad = porModalidad.concat(DOCS_OE_KEYS.filter(k => porModalidad.indexOf(k) < 0 && _oePide(evObj, k)));
   }
   if (requiereConsentimientoMenor(fechaNac)) return porModalidad;
   return porModalidad.filter(k => k !== 'menorConsent');

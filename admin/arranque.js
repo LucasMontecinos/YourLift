@@ -459,7 +459,8 @@ window.DOC_TYPES_CATALOG = {
 // acá para que la revisión y el ZIP de documentos los muestren con su nombre y
 // no con la clave cruda, y para poder avisarlo en la lista de más abajo.
 window.DOCS_OE_ATLETA = {
-  x_oe_ficha:       { label: 'Ficha médica · Olimpiadas Especiales', icon: '', desc: 'Formulario de OE, completado y firmado' },
+  // porDefecto:false → apagado salvo que el campeonato lo active (ver inscripcion/arranque.js).
+  x_oe_ficha:       { label: 'Ficha médica · Olimpiadas Especiales', icon: '', desc: 'Formulario de OE, completado y firmado', porDefecto: false },
   x_oe_exoneracion: { label: 'Exoneración · Olimpiadas Especiales', icon: '', desc: 'Atleta y compañeros unificados · uso de imagen' },
   x_oe_di:          { label: 'Certificado de DI o acreditación', icon: '', desc: 'Discapacidad intelectual o documento de acreditación' }
 };

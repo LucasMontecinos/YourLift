@@ -52,6 +52,8 @@ function renderCampeonatos(){
       window._efDocsX = (Array.isArray(editing.docsExtra)?editing.docsExtra:[]).map(d=>Object.assign({},d));
       // Y a quién se le pide cada documento, por la misma razón: copiado, no apuntado.
       window._efDocsCond = {};
+      // Qué papeles de Olimpiadas Especiales pide este campeonato.
+      window._efOeDocs = Object.assign({}, editing.oeDocs||{});
       Object.entries(editing.docsCond||{}).forEach(([k,c])=>{
         window._efDocsCond[k] = {mods:(c&&c.mods||[]).slice(), divs:(c&&c.divs||[]).slice()};
       });
@@ -466,20 +468,35 @@ window.renderDocsChecklist = function(){
     </label>`;
   });
   // El aviso va al final, y sin casilla: no hay nada que decidir acá.
-  const _oeA = Object.values(window.DOCS_OE_ATLETA||{}).map(m=>m.label);
+  // Olimpiadas Especiales: el formulario se los pide solo a quien elige esa
+  // modalidad. Cada uno se puede apagar o prender para este campeonato; la ficha
+  // médica viene apagada (se pidió sacarla de las inscripciones).
+  const _oePideAdm = k => { const o=window._efOeDocs||{}; if(typeof o[k]==='boolean')return o[k];
+    return ((window.DOCS_OE_ATLETA||{})[k]||{}).porDefecto!==false; };
   const _oeE = Object.values(window.DOCS_OE_ENTRENADOR||{}).map(m=>m.label);
-  if(_oeA.length){
+  const _oeKeys = Object.keys(window.DOCS_OE_ATLETA||{});
+  if(_oeKeys.length){
     h += `<div style="padding:10px 12px;border:1px dashed rgba(212,168,67,.5);border-radius:6px;background:rgba(212,168,67,.06)">
-      <div style="font-weight:600;font-size:13px;color:var(--gold)">Olimpiadas Especiales · se piden solos</div>
+      <div style="font-weight:600;font-size:13px;color:var(--gold)">Olimpiadas Especiales</div>
       <div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.5">
-        No hay que marcarlos ni agregarlos: en cuanto alguien elige la modalidad <b>Olimpiadas Especiales</b>,
-        el formulario le suma estos a lo que ya pida este campeonato.<br>
-        <b>Al atleta:</b> ${_oeA.map(esc).join(' · ')}. La cédula de identidad de su lista es el carnet que ya se pide.<br>
-        <b>Al entrenador</b> que declare a uno de ellos: ${_oeE.map(esc).join(' · ')}.
+        Se le piden <b>solo</b> a quien elige la modalidad <b>Olimpiadas Especiales</b>, además de lo que pida este campeonato.
+        Marca cuáles pedir en este campeonato. La cédula de identidad de su lista es el carnet que ya se pide.
       </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+        ${_oeKeys.map(k=>{ const m=window.DOCS_OE_ATLETA[k];
+          return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px">
+            <input type="checkbox" class="ef-oedoc" data-oe-doc="${k}" ${_oePideAdm(k)?'checked':''} onchange="efOeDocMarcado(this,'${k}')" style="width:15px;height:15px;cursor:pointer;flex-shrink:0">
+            <span><b>${esc(m.label)}</b> <span style="color:var(--muted)">· ${esc(m.desc||'')}</span></span></label>`; }).join('')}
+      </div>
+      ${_oeE.length?`<div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5"><b>Al entrenador</b> que declare a uno de ellos: ${_oeE.map(esc).join(' · ')}.</div>`:''}
     </div>`;
   }
   cont.innerHTML = h;
+};
+
+window.efOeDocMarcado = function(inp, k){
+  window._efOeDocs = window._efOeDocs || {};
+  window._efOeDocs[k] = !!inp.checked;
 };
 
 // Marcar o desmarcar tiene que quedar en ST antes de volver a dibujar: el
@@ -844,7 +861,9 @@ window.saveEvento = async function(){
   const streamLogoUrl = (document.getElementById('ef_streamLogoUrl')?.value||'').trim();
   const streamInstagram = (document.getElementById('ef_streamIg')?.value||'').trim().replace(/^@/,'');
   // NUEVO: leer los checkboxes de documentos requeridos
-  const requiredDocs = Array.from(document.querySelectorAll('#ef_docs_container input[type="checkbox"]:checked'))
+  // Solo las casillas de documentos (data-doc-key): las de Olimpiadas
+  // Especiales van aparte, en oeDocs.
+  const requiredDocs = Array.from(document.querySelectorAll('#ef_docs_container input[data-doc-key]:checked'))
     .map(cb => cb.getAttribute('data-doc-key'));
   const docsExtra = efDocLeer('x');
   // Una por línea, sin vacías ni repetidas.
@@ -876,6 +895,7 @@ window.saveEvento = async function(){
     requiredDocs,    // array de docKeys requeridos
     docsCond,        // a qué modalidades/divisiones se le pide cada uno (vacío = a todas)
     docsExtra,       // documentos propios del campeonato (nombre, PDF y link)
+    oeDocs: Object.assign({}, window._efOeDocs||{}),   // papeles de Olimpiadas Especiales que pide (los no marcados usan su valor de siempre)
     modsExtra, modsSolo, divsExtra, divsSolo,   // modalidades y divisiones propias
     updatedAt: serverTimestamp()};
   if(isNew) data.createdAt = serverTimestamp();
