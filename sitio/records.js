@@ -78,6 +78,10 @@ window.recBuscar=function(v){
 // Esas tablas tienen un solo movimiento.
 const REC_TIPOS=[["classic","Clásico"],["equipped","Equipado"],["bench","Only Bench Clásico"],["bench_eq","Only Bench Equipado"],["universitario","Universitario"]];
 const REC_SOLO_BANCA={bench:1,bench_eq:1};
+// Las tablas de Only Bench todavía se están armando en el panel: hasta que
+// estén revisadas no se muestran en el sitio. Para publicarlas, poner true.
+window.YL_REC_BANCA_PUBLICA=false;
+function recTiposVisibles(){ return REC_TIPOS.filter(t=>window.YL_REC_BANCA_PUBLICA||!REC_SOLO_BANCA[t[0]]); }
 
 function recFilas(){
   const arr=(R[ST.rt]&&R[ST.rt][ST.rl])||[];
@@ -108,7 +112,8 @@ function recLista(){
 }
 
 function rec(){
-  const ts=REC_TIPOS;
+  const ts=recTiposVisibles();
+  if(!ts.some(t=>t[0]===ST.rt))ST.rt=ts[0][0];
   const ls=REC_SOLO_BANCA[ST.rt]?[["bp","Press Banca"]]:[["sq","Sentadilla"],["bp","Press Banca"],["dl","Peso Muerto"],["total","Total"]];
   if(!ls.some(l=>l[0]===ST.rl))ST.rl=ls[0][0];
   const sx=[["F","Mujeres"],["M","Hombres"]];

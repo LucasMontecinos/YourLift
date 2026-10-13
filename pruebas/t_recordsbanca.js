@@ -54,6 +54,18 @@ const TABLA = {
     const errs = []; p.on('pageerror', e => errs.push(e.message));
     await p.goto(`http://localhost:${PUERTO}/index.html`, { waitUntil: 'domcontentloaded' });
     await p.waitForFunction(() => typeof rec === 'function' && typeof sinRetiradas === 'function', null, { timeout: 25000 });
+    console.log('\nMientras no se publiquen, el sitio no muestra Only Bench');
+    {
+      const r = await p.evaluate(tabla => {
+        R = sinRetiradas(tabla); ST.v = 'records'; ST.rt = 'bench'; ST.rl = 'bp'; ST.rs = 'F';
+        const h = document.createElement('div'); h.innerHTML = rec();
+        return { botones: [...h.querySelectorAll('button')].map(x => x.textContent.trim()), rt: ST.rt, texto: h.textContent };
+      }, TABLA);
+      ok(!r.botones.includes('Only Bench Clásico') && !r.botones.includes('Only Bench Equipado'), 'no aparecen las pestañas de Only Bench');
+      ok(r.rt === 'classic' && !/Banca Récord/.test(r.texto), 'y si alguien llega con Only Bench elegido, ve Clásico');
+    }
+    // De acá en adelante, como se verá cuando se publiquen.
+    await p.evaluate(() => { window.YL_REC_BANCA_PUBLICA = true; });
     const ver = (tipo, sexo) => p.evaluate(([t, tabla, sx]) => {
       R = sinRetiradas(tabla); ST.v = 'records'; ST.rt = t; ST.rl = 'sq'; ST.rs = sx; ST.rd = ''; ST.rc = ''; ST.rq = '';
       const h = document.createElement('div'); h.innerHTML = rec();
@@ -61,7 +73,7 @@ const TABLA = {
       return { botones, rl: ST.rl, texto: h.textContent.replace(/\s+/g, ' ') };
     }, [tipo, TABLA, sexo]);
 
-    console.log('\nEl sitio tiene las pestañas de Only Bench');
+    console.log('\nCuando se publiquen, el sitio tiene las pestañas de Only Bench');
     {
       const r = await ver('classic', 'F');
       ok(r.botones.includes('Only Bench Clásico') && r.botones.includes('Only Bench Equipado'), 'las dos pestañas nuevas');
