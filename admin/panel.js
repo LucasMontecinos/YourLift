@@ -4081,7 +4081,7 @@ function renderCampeonatos(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <label class="field" style="grid-column:span 2">
           <span>Nombre del campeonato</span>
-          <input class="inp" id="ef_name" value="${editing.name||''}" placeholder="ej: Campeonato Regional Centro 2027">
+          <input class="inp" id="ef_name" value="${editing.name||''}" placeholder="ej: Campeonato Regional Centro 2027" oninput="efRecordsAviso()">
         </label>
         <label class="field">
           <span>ID (slug único, sin espacios)</span>
@@ -4162,13 +4162,18 @@ function renderCampeonatos(){
             <option value="universidad" ${(editing.extraCols||[]).includes('universidad')?'selected':''}>Universidad</option>
           </select>
         </label>
-        <label class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(212,168,67,.05);border:1px solid rgba(212,168,67,.3);border-radius:8px">
-          <input type="checkbox" id="ef_recordsEnabled" ${(editing.recordsEnabled!==false)?'checked':''} style="width:18px;height:18px;cursor:pointer">
-          <div>
-            <div style="font-weight:600;color:var(--text)">Detectar récords nacionales</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">Si está activo, en cada good lift se compara contra <code>records.json</code> y se muestra alerta + badge giratorio en OBS. <b>Desactiva para Universitario u otros torneos sin récords oficiales.</b></div>
+        <div class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(212,168,67,.05);border:1px solid rgba(212,168,67,.3);border-radius:8px">
+          <div style="flex:1">
+            <div style="font-weight:600;color:var(--text)">Récords nacionales</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5">Solo los ponen los campeonatos <b>Nacionales, Sudamericanos, Mundiales y Bolivarianos</b>: un zonal o un regional no. Donde corresponde, el control en vivo avisa cada récord y al cerrar la competencia se actualiza la tabla.</div>
+            <select class="inp" id="ef_recordsNac" onchange="efRecordsAviso()" style="margin-top:6px;font-size:12px">
+              <option value="" ${!editing.recordsNac&&editing.recordsEnabled!==false?'selected':''}>Según el nombre del campeonato</option>
+              <option value="si" ${editing.recordsNac==='si'?'selected':''}>Sí, este campeonato pone récords</option>
+              <option value="no" ${editing.recordsNac==='no'||(!editing.recordsNac&&editing.recordsEnabled===false)?'selected':''}>No pone récords</option>
+            </select>
+            <div id="ef_recordsAviso" style="font-size:11px;margin-top:4px">${_efRecordsAvisoTxt(editing.name, editing.recordsNac||(editing.recordsEnabled===false?'no':''))}</div>
           </div>
-        </label>
+        </div>
         <label class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.3);border-radius:8px">
           <input type="checkbox" id="ef_cronogramaPublic" ${(editing.cronogramaPublic!==false)?'checked':''} style="width:18px;height:18px;cursor:pointer">
           <div>
@@ -4507,6 +4512,21 @@ window.renderDocsChecklist = function(){
     </div>`;
   }
   cont.innerHTML = h;
+};
+
+// Cómo queda el campeonato con lo elegido: lo dice al lado del selector, y
+// cambia mientras se escribe el nombre.
+function _efRecordsAvisoTxt(nombre, modo){
+  const yl=window.YLCampeonato;
+  const si=modo==='si'?true:modo==='no'?false:!!(yl&&yl.daRecord(nombre));
+  const porNombre=!modo;
+  return si
+    ? `<span style="color:var(--green)">Pone récords nacionales${porNombre?' (el nombre lo dice)':''}.</span>`
+    : `<span style="color:var(--muted)">No pone récords nacionales${porNombre?(String(nombre||'').trim()?' (por el nombre no es Nacional, Sudamericano, Mundial ni Bolivariano)':''):''}.</span>`;
+}
+window.efRecordsAviso = function(){
+  const el=document.getElementById('ef_recordsAviso'); if(!el) return;
+  el.innerHTML=_efRecordsAvisoTxt(document.getElementById('ef_name')?.value, document.getElementById('ef_recordsNac')?.value||'');
 };
 
 window.efOeDocMarcado = function(inp, k){
@@ -4850,7 +4870,10 @@ window.saveEvento = async function(){
   const org       = organizers.map(o=>o.name).join(' · ');
   const days      = document.getElementById('ef_days').value.trim();
   const extra     = document.getElementById('ef_extra').value;
-  const recordsEnabled = document.getElementById('ef_recordsEnabled').checked;
+  // '' = según el nombre; 'si' / 'no' = decidido a mano. recordsEnabled queda
+  // como el interruptor de antes, para lo que todavía lo lea.
+  const recordsNac = (document.getElementById('ef_recordsNac')?.value)||'';
+  const recordsEnabled = recordsNac!=='no';
   const cronogramaPublic = document.getElementById('ef_cronogramaPublic')?.checked !== false;
   const requiereFoto = !!document.getElementById('ef_requiereFoto')?.checked;
   const livecastVisible = document.getElementById('ef_livecastVisible')?.checked !== false;
@@ -4903,7 +4926,7 @@ window.saveEvento = async function(){
   const bloqueaClaves = Array.from(document.querySelectorAll('.ef-bloq:checked'))
     .map(cb=>cb.getAttribute('data-clave'));
   const data = {id, name, date, closeDate, preNominaCloseAt, nominaCloseAt, location, org, days, status, bloqueaClaves,
-    extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, posNac2026, youtubeUrl,
+    extraCols: [extra], recordsEnabled, recordsNac, cronogramaPublic, requiereFoto, livecastVisible, posNac2026, youtubeUrl,
     youtubeDesde, youtubeDias: youtubeDiasOk,   // fecha del link actual + los de los días anteriores
     organizers, logoUrl, logoFedUrl, instagram,    // organizadores (con IG) + logo del campeonato y de la federación
     streamLogoUrl, streamInstagram,    // logo de productora + IG para la tarjeta de Transmisiones
@@ -12162,6 +12185,57 @@ window.recSave=async function(){
   finally{ if(btn){btn.textContent='Guardar en la web';btn.disabled=false;} render(); }
 };
 
+// Propuesta de récords de Only Bench desde los resultados guardados (data.json):
+// la mejor banca de cada casillero —división, categoría y sexo—, solo de los
+// campeonatos que ponen récord (Nacionales, Sudamericanos, Mundiales y
+// Bolivarianos). Cuenta la banca de quien compite solo en banca y la de quien
+// hace powerlifting y banca. Como en el cierre, el que no es Open compite
+// también por el Open.
+function _recDivBanca(d){
+  const v=String(d||'').toLowerCase().replace(/only\s*bench/g,'').replace(/[\s\-_]/g,'');
+  if(v.startsWith('sub'))return 'Sub-Junior';
+  if(v.startsWith('jun'))return 'Junior';
+  if(v.startsWith('open'))return 'Open';
+  if(/master(4|iv)/.test(v))return 'Master IV';
+  if(/master(3|iii)/.test(v))return 'Master III';
+  if(/master(2|ii)/.test(v))return 'Master II';
+  if(/master(1|i)/.test(v))return 'Master I';
+  return '';
+}
+function _recPropuestaBanca(tipo){
+  const eq=tipo==='bench_eq', yl=window.YLCampeonato, mejor=new Map();
+  const fuera=c=>(typeof CATS_RETIRADAS!=='undefined')&&CATS_RETIRADAS.includes(String(c).replace('+',''));
+  (ST.data||[]).forEach(a=>(a.competencias||[]).forEach(c=>{
+    const mod=String(c.modalidad||'').toLowerCase();
+    if(!/bench/.test(mod)||/special|olimp/.test(mod)||/equip/.test(mod)!==eq)return;
+    if(!(yl&&yl.daRecord(c.evento)))return;
+    const r=c.resultado||{}, bp=+r.bp||0; if(!(bp>0))return;
+    const m=String(r.categoria||c.categoria||'').match(/(\d+(?:[.,]\d+)?)/); if(!m)return;
+    const cat=m[1]+(/\+/.test(String(r.categoria||c.categoria))?'+':''); if(fuera(cat))return;
+    const div=_recDivBanca(r.division||c.division); if(!div)return;
+    const sexo=/^(muj|f|dam)/i.test(String(c.sexo||''))?'Mujer':'Hombre';
+    [div].concat(div==='Open'?[]:['Open']).forEach(dv=>{
+      const k=dv+'|'+cat+'|'+sexo, y=mejor.get(k);
+      if(y&&(y.marca>bp||(y.marca===bp&&String(y.fecha||'')<=String(c.fecha||''))))return;
+      mejor.set(k,{nombre:a.nombre,division:dv,categoria:cat,sexo,campeonato:c.evento||'',marca:bp,fecha:c.fecha||''});
+    });
+  }));
+  return [...mejor.values()];
+}
+window.recProponerBanca=function(tipo){
+  if(!confirm('Se proponen los récords de esta modalidad desde los resultados guardados, solo de Nacionales, Sudamericanos, Mundiales y Bolivarianos.\n\nAlgunos campeonatos no tienen sus resultados guardados, así que la lista puede quedar incompleta. Solo se agregan casilleros vacíos o marcas más altas que las que ya están.\n\nNada se publica hasta que aprietes "Guardar en la web".'))return;
+  ST.recR=ST.recR||JSON.parse(JSON.stringify(REC_EMPTY));
+  ST.recR[tipo]=ST.recR[tipo]||{}; const lista=ST.recR[tipo].bp=ST.recR[tipo].bp||[];
+  let nuevos=0, subidos=0;
+  _recPropuestaBanca(tipo).forEach(x=>{
+    const i=lista.findIndex(y=>String(y.division||'')===x.division&&String(y.categoria)===x.categoria);
+    if(i<0){ lista.push(x); nuevos++; }
+    else if(x.marca>(parseFloat(lista[i].marca)||0)){ lista[i]=x; subidos++; }
+  });
+  ST.recDirty=ST.recDirty||nuevos+subidos>0; render();
+  showToast(nuevos+subidos?`${nuevos} récords propuestos${subidos?` y ${subidos} subidos`:''}: revísalos y aprieta "Guardar en la web"`:'No hay resultados nuevos para proponer');
+};
+
 function renderRecordsEditor(){
   if(ST._recLoaded!==true){ setTimeout(recEnsureLoaded,0); return '<div class="h1">Récords nacionales</div><p class="subtitle">Cargando récords…</p>'; }
   const tipo=ST.recTipo||'classic';
@@ -12192,7 +12266,11 @@ function renderRecordsEditor(){
     <div><div style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:4px">MOVIMIENTO</div>
       <div style="display:flex;gap:4px">${LIFTS.map(([k,l])=>`<button onclick="recSetLift('${k}')" class="btn ${lift===k?'btn-g':'btn-b'}" style="padding:6px 12px;font-size:12px">${l}</button>`).join('')}</div></div>
   </div>
-  <button onclick="recAdd('${tipo}','${lift}')" class="btn btn-b" style="padding:6px 12px;font-size:12px;margin-bottom:10px">+ Agregar récord</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+    <button onclick="recAdd('${tipo}','${lift}')" class="btn btn-b" style="padding:6px 12px;font-size:12px">+ Agregar récord</button>
+    ${soloBanca?`<button onclick="recProponerBanca('${tipo}')" class="btn btn-b" style="padding:6px 12px;font-size:12px" title="La mejor banca de cada categoría en Nacionales, Sudamericanos, Mundiales y Bolivarianos">Proponer desde resultados</button>`:''}
+  </div>
+  <p style="font-size:11px;color:var(--muted);margin:-4px 0 10px">Solo valen marcas de campeonatos Nacionales, Sudamericanos, Mundiales y Bolivarianos: no de zonales ni regionales.</p>
   <div class="card" style="padding:0;overflow-x:auto">
     <table class="tbl">
       <tr><th>Atleta</th><th>División</th><th>Cat.</th><th>Campeonato</th><th>Marca (kg)</th><th></th></tr>

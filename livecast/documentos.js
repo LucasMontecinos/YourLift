@@ -1409,7 +1409,7 @@ function _rbSuda(){
 
 async function _rbNac(){
   const ev=(DATA.event&&DATA.event.name)||'';
-  if(/regional/i.test(ev))return [];
+  if(!_recNacHabilitado())return [];
   const TN=REC_NAC_TN;
   const FEM=['43','47','52','57','63','69','76','84','84+'];
   try{
@@ -2384,6 +2384,10 @@ window.exportRecordsBatidosPDF=async function(){
 
 window.mostrarRecordsNac=async function(trasCerrar){
   const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  if(!_recNacHabilitado()){
+    if(!trasCerrar)alert('Este campeonato no pone récords nacionales: solo los Nacionales, Sudamericanos, Mundiales y Bolivarianos.\n\nSi este sí corresponde, márcalo en Admin → Campeonatos → Récords nacionales.');
+    return;
+  }
   showToastLC('Comparando con la tabla de récords nacionales…');
   let tabla; try{ tabla=await _rnCargarTabla(); }catch(e){ alert('No se pudo leer la tabla de récords: '+e.message); return; }
   const lista=_rnDetectar(tabla);

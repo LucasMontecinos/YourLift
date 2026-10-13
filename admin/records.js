@@ -87,6 +87,57 @@ window.recSave=async function(){
   finally{ if(btn){btn.textContent='Guardar en la web';btn.disabled=false;} render(); }
 };
 
+// Propuesta de récords de Only Bench desde los resultados guardados (data.json):
+// la mejor banca de cada casillero —división, categoría y sexo—, solo de los
+// campeonatos que ponen récord (Nacionales, Sudamericanos, Mundiales y
+// Bolivarianos). Cuenta la banca de quien compite solo en banca y la de quien
+// hace powerlifting y banca. Como en el cierre, el que no es Open compite
+// también por el Open.
+function _recDivBanca(d){
+  const v=String(d||'').toLowerCase().replace(/only\s*bench/g,'').replace(/[\s\-_]/g,'');
+  if(v.startsWith('sub'))return 'Sub-Junior';
+  if(v.startsWith('jun'))return 'Junior';
+  if(v.startsWith('open'))return 'Open';
+  if(/master(4|iv)/.test(v))return 'Master IV';
+  if(/master(3|iii)/.test(v))return 'Master III';
+  if(/master(2|ii)/.test(v))return 'Master II';
+  if(/master(1|i)/.test(v))return 'Master I';
+  return '';
+}
+function _recPropuestaBanca(tipo){
+  const eq=tipo==='bench_eq', yl=window.YLCampeonato, mejor=new Map();
+  const fuera=c=>(typeof CATS_RETIRADAS!=='undefined')&&CATS_RETIRADAS.includes(String(c).replace('+',''));
+  (ST.data||[]).forEach(a=>(a.competencias||[]).forEach(c=>{
+    const mod=String(c.modalidad||'').toLowerCase();
+    if(!/bench/.test(mod)||/special|olimp/.test(mod)||/equip/.test(mod)!==eq)return;
+    if(!(yl&&yl.daRecord(c.evento)))return;
+    const r=c.resultado||{}, bp=+r.bp||0; if(!(bp>0))return;
+    const m=String(r.categoria||c.categoria||'').match(/(\d+(?:[.,]\d+)?)/); if(!m)return;
+    const cat=m[1]+(/\+/.test(String(r.categoria||c.categoria))?'+':''); if(fuera(cat))return;
+    const div=_recDivBanca(r.division||c.division); if(!div)return;
+    const sexo=/^(muj|f|dam)/i.test(String(c.sexo||''))?'Mujer':'Hombre';
+    [div].concat(div==='Open'?[]:['Open']).forEach(dv=>{
+      const k=dv+'|'+cat+'|'+sexo, y=mejor.get(k);
+      if(y&&(y.marca>bp||(y.marca===bp&&String(y.fecha||'')<=String(c.fecha||''))))return;
+      mejor.set(k,{nombre:a.nombre,division:dv,categoria:cat,sexo,campeonato:c.evento||'',marca:bp,fecha:c.fecha||''});
+    });
+  }));
+  return [...mejor.values()];
+}
+window.recProponerBanca=function(tipo){
+  if(!confirm('Se proponen los récords de esta modalidad desde los resultados guardados, solo de Nacionales, Sudamericanos, Mundiales y Bolivarianos.\n\nAlgunos campeonatos no tienen sus resultados guardados, así que la lista puede quedar incompleta. Solo se agregan casilleros vacíos o marcas más altas que las que ya están.\n\nNada se publica hasta que aprietes "Guardar en la web".'))return;
+  ST.recR=ST.recR||JSON.parse(JSON.stringify(REC_EMPTY));
+  ST.recR[tipo]=ST.recR[tipo]||{}; const lista=ST.recR[tipo].bp=ST.recR[tipo].bp||[];
+  let nuevos=0, subidos=0;
+  _recPropuestaBanca(tipo).forEach(x=>{
+    const i=lista.findIndex(y=>String(y.division||'')===x.division&&String(y.categoria)===x.categoria);
+    if(i<0){ lista.push(x); nuevos++; }
+    else if(x.marca>(parseFloat(lista[i].marca)||0)){ lista[i]=x; subidos++; }
+  });
+  ST.recDirty=ST.recDirty||nuevos+subidos>0; render();
+  showToast(nuevos+subidos?`${nuevos} récords propuestos${subidos?` y ${subidos} subidos`:''}: revísalos y aprieta "Guardar en la web"`:'No hay resultados nuevos para proponer');
+};
+
 function renderRecordsEditor(){
   if(ST._recLoaded!==true){ setTimeout(recEnsureLoaded,0); return '<div class="h1">Récords nacionales</div><p class="subtitle">Cargando récords…</p>'; }
   const tipo=ST.recTipo||'classic';
@@ -117,7 +168,11 @@ function renderRecordsEditor(){
     <div><div style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:4px">MOVIMIENTO</div>
       <div style="display:flex;gap:4px">${LIFTS.map(([k,l])=>`<button onclick="recSetLift('${k}')" class="btn ${lift===k?'btn-g':'btn-b'}" style="padding:6px 12px;font-size:12px">${l}</button>`).join('')}</div></div>
   </div>
-  <button onclick="recAdd('${tipo}','${lift}')" class="btn btn-b" style="padding:6px 12px;font-size:12px;margin-bottom:10px">+ Agregar récord</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+    <button onclick="recAdd('${tipo}','${lift}')" class="btn btn-b" style="padding:6px 12px;font-size:12px">+ Agregar récord</button>
+    ${soloBanca?`<button onclick="recProponerBanca('${tipo}')" class="btn btn-b" style="padding:6px 12px;font-size:12px" title="La mejor banca de cada categoría en Nacionales, Sudamericanos, Mundiales y Bolivarianos">Proponer desde resultados</button>`:''}
+  </div>
+  <p style="font-size:11px;color:var(--muted);margin:-4px 0 10px">Solo valen marcas de campeonatos Nacionales, Sudamericanos, Mundiales y Bolivarianos: no de zonales ni regionales.</p>
   <div class="card" style="padding:0;overflow-x:auto">
     <table class="tbl">
       <tr><th>Atleta</th><th>División</th><th>Cat.</th><th>Campeonato</th><th>Marca (kg)</th><th></th></tr>

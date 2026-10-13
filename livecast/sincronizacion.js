@@ -103,9 +103,11 @@ async function initFB(){
         }
         // Archivado = fuera de la lista del operador y de los conteos.
         if(!_oculto){ evs[d.id]=e.name; activeIds.push(d.id); }
-        const recordsEnabled=(typeof e.recordsEnabled==='boolean')
-          ? e.recordsEnabled
-          : !/universitar/i.test(e.name||'');
+        // Récords nacionales: solo Nacionales, Sudamericanos, Mundiales y
+        // Bolivarianos, salvo que el campeonato diga otra cosa (compartido/campeonatos.js).
+        const recordsEnabled=(window.YLCampeonato&&YLCampeonato.daRecordEvento)
+          ? YLCampeonato.daRecordEvento(e)
+          : e.recordsEnabled!==false;
         // Pero archivado Y publicado para el público es un caso real —el
         // Sudamericano es justo eso— y sus datos SÍ se registran acá.
         //
@@ -122,6 +124,7 @@ async function initFB(){
         }
         if((!_oculto||e.publicoVisible===true)&&DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
           DATA.event.recordsEnabled=recordsEnabled;
+          if(e.recordsNac)DATA.event.recordsNac=e.recordsNac; else delete DATA.event.recordsNac;
           // El logo se BORRA solo si viene del documento exacto de este
           // campeonato. Por nombre pueden calzar dos documentos —el del
           // campeonato y alguna copia con el mismo nombre—, y el que llegara

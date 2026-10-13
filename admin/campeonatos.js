@@ -66,7 +66,7 @@ function renderCampeonatos(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <label class="field" style="grid-column:span 2">
           <span>Nombre del campeonato</span>
-          <input class="inp" id="ef_name" value="${editing.name||''}" placeholder="ej: Campeonato Regional Centro 2027">
+          <input class="inp" id="ef_name" value="${editing.name||''}" placeholder="ej: Campeonato Regional Centro 2027" oninput="efRecordsAviso()">
         </label>
         <label class="field">
           <span>ID (slug único, sin espacios)</span>
@@ -147,13 +147,18 @@ function renderCampeonatos(){
             <option value="universidad" ${(editing.extraCols||[]).includes('universidad')?'selected':''}>Universidad</option>
           </select>
         </label>
-        <label class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(212,168,67,.05);border:1px solid rgba(212,168,67,.3);border-radius:8px">
-          <input type="checkbox" id="ef_recordsEnabled" ${(editing.recordsEnabled!==false)?'checked':''} style="width:18px;height:18px;cursor:pointer">
-          <div>
-            <div style="font-weight:600;color:var(--text)">Detectar récords nacionales</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">Si está activo, en cada good lift se compara contra <code>records.json</code> y se muestra alerta + badge giratorio en OBS. <b>Desactiva para Universitario u otros torneos sin récords oficiales.</b></div>
+        <div class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(212,168,67,.05);border:1px solid rgba(212,168,67,.3);border-radius:8px">
+          <div style="flex:1">
+            <div style="font-weight:600;color:var(--text)">Récords nacionales</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5">Solo los ponen los campeonatos <b>Nacionales, Sudamericanos, Mundiales y Bolivarianos</b>: un zonal o un regional no. Donde corresponde, el control en vivo avisa cada récord y al cerrar la competencia se actualiza la tabla.</div>
+            <select class="inp" id="ef_recordsNac" onchange="efRecordsAviso()" style="margin-top:6px;font-size:12px">
+              <option value="" ${!editing.recordsNac&&editing.recordsEnabled!==false?'selected':''}>Según el nombre del campeonato</option>
+              <option value="si" ${editing.recordsNac==='si'?'selected':''}>Sí, este campeonato pone récords</option>
+              <option value="no" ${editing.recordsNac==='no'||(!editing.recordsNac&&editing.recordsEnabled===false)?'selected':''}>No pone récords</option>
+            </select>
+            <div id="ef_recordsAviso" style="font-size:11px;margin-top:4px">${_efRecordsAvisoTxt(editing.name, editing.recordsNac||(editing.recordsEnabled===false?'no':''))}</div>
           </div>
-        </label>
+        </div>
         <label class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.3);border-radius:8px">
           <input type="checkbox" id="ef_cronogramaPublic" ${(editing.cronogramaPublic!==false)?'checked':''} style="width:18px;height:18px;cursor:pointer">
           <div>
@@ -492,6 +497,21 @@ window.renderDocsChecklist = function(){
     </div>`;
   }
   cont.innerHTML = h;
+};
+
+// Cómo queda el campeonato con lo elegido: lo dice al lado del selector, y
+// cambia mientras se escribe el nombre.
+function _efRecordsAvisoTxt(nombre, modo){
+  const yl=window.YLCampeonato;
+  const si=modo==='si'?true:modo==='no'?false:!!(yl&&yl.daRecord(nombre));
+  const porNombre=!modo;
+  return si
+    ? `<span style="color:var(--green)">Pone récords nacionales${porNombre?' (el nombre lo dice)':''}.</span>`
+    : `<span style="color:var(--muted)">No pone récords nacionales${porNombre?(String(nombre||'').trim()?' (por el nombre no es Nacional, Sudamericano, Mundial ni Bolivariano)':''):''}.</span>`;
+}
+window.efRecordsAviso = function(){
+  const el=document.getElementById('ef_recordsAviso'); if(!el) return;
+  el.innerHTML=_efRecordsAvisoTxt(document.getElementById('ef_name')?.value, document.getElementById('ef_recordsNac')?.value||'');
 };
 
 window.efOeDocMarcado = function(inp, k){
@@ -835,7 +855,10 @@ window.saveEvento = async function(){
   const org       = organizers.map(o=>o.name).join(' · ');
   const days      = document.getElementById('ef_days').value.trim();
   const extra     = document.getElementById('ef_extra').value;
-  const recordsEnabled = document.getElementById('ef_recordsEnabled').checked;
+  // '' = según el nombre; 'si' / 'no' = decidido a mano. recordsEnabled queda
+  // como el interruptor de antes, para lo que todavía lo lea.
+  const recordsNac = (document.getElementById('ef_recordsNac')?.value)||'';
+  const recordsEnabled = recordsNac!=='no';
   const cronogramaPublic = document.getElementById('ef_cronogramaPublic')?.checked !== false;
   const requiereFoto = !!document.getElementById('ef_requiereFoto')?.checked;
   const livecastVisible = document.getElementById('ef_livecastVisible')?.checked !== false;
@@ -888,7 +911,7 @@ window.saveEvento = async function(){
   const bloqueaClaves = Array.from(document.querySelectorAll('.ef-bloq:checked'))
     .map(cb=>cb.getAttribute('data-clave'));
   const data = {id, name, date, closeDate, preNominaCloseAt, nominaCloseAt, location, org, days, status, bloqueaClaves,
-    extraCols: [extra], recordsEnabled, cronogramaPublic, requiereFoto, livecastVisible, posNac2026, youtubeUrl,
+    extraCols: [extra], recordsEnabled, recordsNac, cronogramaPublic, requiereFoto, livecastVisible, posNac2026, youtubeUrl,
     youtubeDesde, youtubeDias: youtubeDiasOk,   // fecha del link actual + los de los días anteriores
     organizers, logoUrl, logoFedUrl, instagram,    // organizadores (con IG) + logo del campeonato y de la federación
     streamLogoUrl, streamInstagram,    // logo de productora + IG para la tarjeta de Transmisiones

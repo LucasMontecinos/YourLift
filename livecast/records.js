@@ -385,25 +385,28 @@ function _recTablasNac(a){
   return {pl:m==='equipped'?'equipped':'classic',banca:null};
 }
 
+// ¿Este campeonato pone récords nacionales? Solo Nacionales, Sudamericanos,
+// Mundiales y Bolivarianos (compartido/campeonatos.js); un zonal o un regional no.
+function _recNacHabilitado(){
+  const e=DATA.event; if(!e)return false;
+  if(window.YLCampeonato&&YLCampeonato.daRecordEvento)return YLCampeonato.daRecordEvento(e);
+  return e.recordsEnabled!==false;
+}
+
 function checkRecord(athlete,lift,round){
   if(!RECORDS)return;
-  if(DATA.event && DATA.event.recordsEnabled===false)return;
+  if(!_recNacHabilitado())return;
   const weight=athlete.att[lift][round].w;if(!weight)return;
   const mod=athlete.mod||'classic';
   const cat=_normCat(athlete.cat||'');
   const div=_normDiv(athlete.div||'');
-  // Competencia universitaria → todo buen intento es primer récord (modalidad nueva)
-  const isUniv=((DATA.event==null?void 0:DATA.event.name)||'').toLowerCase().includes('universitario');
-  if(isUniv){
-    showRecordAlert(athlete.name,lift,round,weight,0,'Sin récord previo',cat,div,'universitario');
-    pushRecordToFB({athName:athlete.name,lift,round,newMark:weight,oldMark:0,holder:'Sin récord previo',cat,div,mod:'universitario',ts:Date.now()});
-    return;
-  }
+  // Universitario: antes, como no había tabla, todo buen intento se avisaba como
+  // primer récord. Ahora la tabla existe y se compara contra ella, como el cierre.
   // La tabla de powerlifting para sus tres movimientos y, en la banca, también
   // la de Only Bench si compite ahí. Se avisa el primero que rompe.
   const T=_recTablasNac(athlete);
   const tablas=[];
-  if(T.pl)tablas.push(T.pl);
+  if(T.pl)tablas.push(/univ/i.test(String(athlete.div||''))?'universitario':T.pl);
   if(T.banca&&lift==='bp')tablas.push(T.banca);
   for(const tabla of tablas){
     const recs=(RECORDS[tabla]&&RECORDS[tabla][lift])||[];

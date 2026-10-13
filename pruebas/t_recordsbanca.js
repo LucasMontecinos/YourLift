@@ -13,7 +13,11 @@
 //  · el panel deja editar las dos tablas nuevas, solo con press banca,
 //  · en vivo y al cerrar, el de Only Bench se mide contra su tabla; quien hace
 //    powerlifting y banca, contra las dos; el de powerlifting solo, contra la
-//    suya.
+//    suya,
+//  · solo ponen récord los Nacionales, Sudamericanos, Mundiales y Bolivarianos:
+//    un zonal o un regional no, salvo que en Admin → Campeonatos se marque a mano,
+//  · "Proponer desde resultados" arma la tabla de Only Bench solo con esos
+//    campeonatos, para revisarla antes de guardar.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_recordsbanca.js
 const { chromium } = require('playwright');
 const PUERTO = process.env.PUERTO || '8972';
@@ -107,6 +111,7 @@ const TABLA = {
     });
     const p = await ctx.newPage();
     const errs = []; p.on('pageerror', e => errs.push(e.message));
+    p.on('dialog', d => d.accept().catch(() => {}));
     await p.addInitScript(() => { window.__AUTH = { uid: 'u1', email: 'x@y.cl' }; window.__FAKE = { admins: [{ id: 'u1', role: 'owner' }] }; });
     await p.goto(`http://localhost:${PUERTO}/admin.html`, { waitUntil: 'domcontentloaded' });
     await p.waitForFunction(() => typeof ST !== 'undefined' && typeof window.recAdd === 'function' && typeof window.render === 'function'
@@ -129,8 +134,78 @@ const TABLA = {
     ok(r.nombres.includes('Banca Récord') && !r.nombres.includes('Clásica Récord'), 'y muestra los récords de esa tabla');
     ok(r.agregado === 1, 'se puede agregar un récord aunque la tabla no existiera');
     ok(r.vacio === '{"bp":[]}{"bp":[]}', 'la tabla vacía de arranque ya trae las dos');
+
+    console.log('\nProponer desde resultados: solo campeonatos que ponen récord');
+    {
+      const comp = (evento, modalidad, division, categoria, sexo, bp) => ({ evento, modalidad, division, categoria, sexo, fecha: '2026-02-22',
+        resultado: { bp, categoria, division } });
+      const q = await p.evaluate(datos => {
+        ST.data = datos; ST.recR = { bench: { bp: [{ nombre: 'Ya Estaba', division: 'Open', categoria: '74', campeonato: 'Nacional', marca: 200 }] } };
+        recProponerBanca('bench');
+        const banca = ST.recR.bench.bp.map(x => x.division + '|' + x.categoria + '|' + x.nombre + '|' + x.marca);
+        recProponerBanca('bench_eq');
+        const eq = (ST.recR.bench_eq.bp || []).map(x => x.division + '|' + x.categoria + '|' + x.nombre + '|' + x.marca);
+        return { banca, eq, dirty: ST.recDirty };
+      }, [
+        { nombre: 'Nacional Junior', competencias: [comp('Campeonato Nacional FECHIPO 2026', 'Only Bench Classic IPF', 'Junior Only Bench', '-74 kg (Hombre)', 'Hombre', 150)] },
+        { nombre: 'Zonal Fuerte', competencias: [comp('III Campeonato Zona Sur FECHIPO 2025', 'Only Bench Classic', 'Open', '74', 'Hombre', 190)] },
+        { nombre: 'Regional Fuerte', competencias: [comp('Regional Centro 2025', 'Only Bench Classic', 'Open', '63', 'Mujer', 120)] },
+        { nombre: 'Las Dos Sudamericano', competencias: [comp('Campeonato Sudamericano de Powerlifting Classic 2023', 'Powerlifting Classic + Only Bench Classic', 'Open', '63', 'Mujer', 95)] },
+        { nombre: 'Solo Powerlifting', competencias: [comp('Campeonato Nacional FECHIPO 2026', 'Powerlifting Classic', 'Open', '57', 'Mujer', 99)] },
+        { nombre: 'Equipado Mundial', competencias: [comp('IPF World Classic Powerlifting Championships 2026', 'Only Bench Equipado IPF', 'Open', '105', 'Hombre', 210)] },
+      ]);
+      ok(q.banca.includes('Junior|74|Nacional Junior|150'), 'un Nacional entra, con la división limpia ("Junior Only Bench" → Junior)');
+      ok(q.banca.includes('Open|74|Ya Estaba|200'), 'en el Open no reemplaza una marca más alta que ya estaba');
+      ok(!q.banca.some(x => /Zonal Fuerte|Regional Fuerte/.test(x)), 'un zonal y un regional no entran, aunque tengan la marca más alta');
+      ok(q.banca.includes('Open|63|Las Dos Sudamericano|95'), 'un Sudamericano sí, y cuenta la banca de quien hace powerlifting y banca');
+      ok(!q.banca.some(x => /Solo Powerlifting/.test(x)), 'la de quien hace solo powerlifting no');
+      ok(q.eq.length === 1 && q.eq[0] === 'Open|105|Equipado Mundial|210', 'el equipado va a su tabla, desde un Mundial');
+      ok(q.dirty === true, 'queda como cambio sin guardar: nada se publica solo');
+    }
+
+    console.log('\nEn Admin → Campeonatos se ve si el campeonato pone récords');
+    {
+      const f = await p.evaluate(() => {
+        const ev = { id: 'reg', name: 'Regional Centro 2027', status: 'open' };
+        ST.eventos = [ev]; ST.view = 'campeonatos'; editEvento('reg');
+        const sel = document.getElementById('ef_recordsNac');
+        const aviso = () => (document.getElementById('ef_recordsAviso') || {}).textContent || '';
+        const a1 = aviso();
+        document.getElementById('ef_name').value = 'Campeonato Nacional FECHIPO 2027'; efRecordsAviso();
+        const a2 = aviso();
+        document.getElementById('ef_name').value = 'Regional Centro 2027'; sel.value = 'si'; efRecordsAviso();
+        const a3 = aviso();
+        return { hay: !!sel, opciones: sel ? [...sel.options].map(o => o.value).join(',') : '', a1, a2, a3 };
+      });
+      ok(f.hay && f.opciones === ',si,no', 'el selector: según el nombre, sí o no');
+      ok(/No pone récords/.test(f.a1), 'un regional dice que no pone récords');
+      ok(/Pone récords nacionales/.test(f.a2), 'al escribir "Nacional" en el nombre cambia a que sí');
+      ok(/Pone récords nacionales/.test(f.a3) && !/el nombre lo dice/.test(f.a3), 'y marcado a mano, un regional puede ponerlos (excepción)');
+      const fuente = require('fs').readFileSync(__dirname + '/../admin/campeonatos.js', 'utf8');
+      ok(/recordsEnabled, recordsNac, cronogramaPublic/.test(fuente), 'lo elegido se guarda en el campeonato (recordsNac)');
+    }
     ok(!errs.length, 'el panel sin errores de página' + (errs.length ? ': ' + errs[0] : ''));
     await ctx.close();
+  }
+
+  // ── La regla de los campeonatos ────────────────────────────────
+  console.log('\nQué campeonatos ponen récord');
+  {
+    const vm = require('vm'); const ctxR = { window: {} };
+    vm.runInNewContext(require('fs').readFileSync(__dirname + '/../compartido/campeonatos.js', 'utf8'), ctxR);
+    const Y = ctxR.window.YLCampeonato;
+    const si = ['Campeonato Nacional FECHIPO 2026', 'VIII Campeonato Nacional FECHIPO 2024', 'Primer Campeonato Nacional Universitario FECHIPO 2026',
+      'XII Campeonato Sudamericano 2025', 'XI Campeonato Sudamericaco de Powerlifting Classic 2024', 'South American Championships 2025',
+      'IPF World Classic Powerlifting Championships 2026', 'Mundial Junior 2027', 'I Juegos Bolivarianos Bicentenario Ayacucho 2024'];
+    const no = ['Regional Centro 2025', 'VI Campeonato Zona Centro FECHIPO 2025', 'III Campeonato Zona Sur FECHIPO 2025',
+      'Campeonato Debutantes All Power CD 2026', '"EL DESHIELO" Torneo Debutantes II y Nacional Olimpiadas Especiales (OE)',
+      '“Primavera Open” Regional Centro Noviembre 2026', 'Campeonato Panamericano de Powerlifting Classic 2019', 'Copa Internacional 2026'];
+    const malSi = si.filter(n => !Y.daRecord(n)), malNo = no.filter(n => Y.daRecord(n));
+    ok(!malSi.length, 'Nacionales, Sudamericanos, Mundiales y Bolivarianos ponen récord' + (malSi.length ? ': falla ' + malSi.join(' / ') : ''));
+    ok(!malNo.length, 'zonales, regionales y debutantes no' + (malNo.length ? ': falla ' + malNo.join(' / ') : ''));
+    ok(Y.daRecordEvento({ name: 'Regional Centro 2026', recordsNac: 'si' }) === true, 'un regional marcado a mano sí');
+    ok(Y.daRecordEvento({ name: 'Campeonato Nacional 2027', recordsNac: 'no' }) === false, 'un nacional marcado que no, no');
+    ok(Y.daRecordEvento({ name: 'Campeonato Nacional 2027', recordsEnabled: false }) === false, 'y el interruptor viejo apagado se respeta');
   }
 
   // ── El control en vivo ─────────────────────────────────────────
@@ -164,6 +239,24 @@ const TABLA = {
         bancaEq125: prueba(atleta('be', 'equipped_bench', 125, { plusBench: false })),
         oe: prueba(atleta('oe', 'oe_classic', 200)),
       };
+      // Universitario: contra la tabla universitaria, no "todo es récord".
+      vivo.uni = prueba(Object.assign(atleta('uni', 'classic', 0), { div: 'Universitario', cat: '-120 kg (Hombre)', sex: 'M',
+        att: { sq: [{ w: 310, r: 'g' }, { w: 0, r: null }, { w: 0, r: null }], bp: at(0).bp, dl: at(0).dl } }));
+      avisos.length = 0; checkRecord(Object.assign(atleta('uni2', 'classic', 0), { div: 'Universitario', cat: '-120 kg (Hombre)', sex: 'M',
+        att: { sq: [{ w: 310, r: 'g' }, { w: 0, r: null }, { w: 0, r: null }], bp: at(0).bp, dl: at(0).dl } }), 'sq', 0);
+      vivo.uniSq = avisos.map(x => x.mod + ':' + x.old).join(',') || 'nada';
+      avisos.length = 0; checkRecord(Object.assign(atleta('uni3', 'classic', 0), { div: 'Universitario', cat: '-120 kg (Hombre)', sex: 'M',
+        att: { sq: [{ w: 290, r: 'g' }, { w: 0, r: null }, { w: 0, r: null }], bp: at(0).bp, dl: at(0).dl } }), 'sq', 0);
+      vivo.uniSqBajo = avisos.map(x => x.mod + ':' + x.old).join(',') || 'nada';
+      // Un regional no pone récord; marcado a mano, sí.
+      const nac = DATA.event;
+      DATA.event = Object.assign({}, nac, { name: 'Regional Centro 2026', recordsEnabled: true });
+      vivo.regional = prueba(atleta('rg', 'onlybench', 95));
+      let alerto = false; const _al = window.alert; window.alert = () => { alerto = true; };
+      mostrarRecordsNac(true); vivo.cierreRegionalCalla = !alerto;
+      DATA.event.recordsNac = 'si';
+      vivo.regionalMarcado = prueba(atleta('rg2', 'onlybench', 95));
+      window.alert = _al; DATA.event = nac;
       // Al cerrar: se arma la lista con los que superan la tabla.
       const guardados = DATA.athletes;
       DATA.athletes = [
@@ -188,6 +281,11 @@ const TABLA = {
     ok(r.vivo.ambas101 === 'classic:100', 'y con 101 se avisa el de powerlifting primero');
     ok(r.vivo.bancaEq125 === 'bench_eq:120', 'Only Bench Equipado contra su tabla');
     ok(r.vivo.oe === 'nada', 'Olimpiadas Especiales no tiene tabla');
+    ok(r.vivo.uniSq === 'universitario:300', 'un universitario se mide contra la tabla universitaria (310 > 300)');
+    ok(r.vivo.uniSqBajo === 'nada', 'y si no la supera no se avisa (antes todo buen intento salía como récord)');
+    ok(r.vivo.regional === 'nada', 'en un regional no se avisa ningún récord');
+    ok(r.vivo.cierreRegionalCalla, 'y al cerrarlo no ofrece guardar récords');
+    ok(r.vivo.regionalMarcado === 'bench:90', 'salvo que el campeonato esté marcado a mano como que sí');
 
     console.log('\nAl cerrar la competencia');
     const tiene = s => r.lista.some(x => x.indexOf(s) === 0);
