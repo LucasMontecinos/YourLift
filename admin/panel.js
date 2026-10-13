@@ -12164,9 +12164,14 @@ window.recSave=async function(){
 
 function renderRecordsEditor(){
   if(ST._recLoaded!==true){ setTimeout(recEnsureLoaded,0); return '<div class="h1">Récords nacionales</div><p class="subtitle">Cargando récords…</p>'; }
-  const tipo=ST.recTipo||'classic', lift=ST.recLift||'sq';
-  const TIPOS=[['classic','Classic'],['equipped','Equipado'],['universitario','Universitario']];
-  const LIFTS=[['sq','Sentadilla'],['bp','Press Banca'],['dl','Peso Muerto'],['total','Total']];
+  const tipo=ST.recTipo||'classic';
+  // Only Bench (clásico y equipado) tiene sus propios récords y un solo
+  // movimiento: la banca de quien compite solo en banca no se mide contra la
+  // banca de powerlifting.
+  const TIPOS=[['classic','Classic'],['equipped','Equipado'],['bench','Only Bench Classic'],['bench_eq','Only Bench Equipado'],['universitario','Universitario']];
+  const soloBanca=tipo==='bench'||tipo==='bench_eq';
+  const LIFTS=soloBanca?[['bp','Press Banca']]:[['sq','Sentadilla'],['bp','Press Banca'],['dl','Peso Muerto'],['total','Total']];
+  const lift=LIFTS.some(l=>l[0]===ST.recLift)?ST.recLift:LIFTS[0][0];
   const DIVS=['Open','Sub-Junior','Junior','Master I','Master II','Master III','Master IV'];
   const arr=(ST.recR&&ST.recR[tipo]&&ST.recR[tipo][lift])||[];
   const catW=c=>{const s=String(c||'');if(s.includes('+'))return 1000+(parseFloat(s.replace(/[^0-9.]/g,''))||0);return parseFloat(s.replace(/[^0-9.]/g,''))||999;};
@@ -12183,7 +12188,7 @@ function renderRecordsEditor(){
   <p class="subtitle">Edita en vivo. Al guardar, los récords se publican al instante en yourlift.cl. Cualquier admin puede editar.</p>
   <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">
     <div><div style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:4px">TIPO</div>
-      <div style="display:flex;gap:4px">${TIPOS.map(([k,l])=>`<button onclick="recSetTipo('${k}')" class="btn ${tipo===k?'btn-g':'btn-b'}" style="padding:6px 12px;font-size:12px">${l}</button>`).join('')}</div></div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">${TIPOS.map(([k,l])=>`<button onclick="recSetTipo('${k}')" class="btn ${tipo===k?'btn-g':'btn-b'}" style="padding:6px 12px;font-size:12px">${l}</button>`).join('')}</div></div>
     <div><div style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-bottom:4px">MOVIMIENTO</div>
       <div style="display:flex;gap:4px">${LIFTS.map(([k,l])=>`<button onclick="recSetLift('${k}')" class="btn ${lift===k?'btn-g':'btn-b'}" style="padding:6px 12px;font-size:12px">${l}</button>`).join('')}</div></div>
   </div>
@@ -14585,4 +14590,4 @@ window._pubNameDrag=null;
 // desde esta pantalla quedan borradas también en Firestore. La -72 era la
 // categoría femenina antigua de la IPF y se pidió sacarla.
 const CATS_RETIRADAS=['72'];
-const REC_EMPTY={classic:{sq:[],bp:[],dl:[],total:[]},equipped:{sq:[],bp:[],dl:[],total:[]},universitario:{sq:[],bp:[],dl:[],total:[]}};
+const REC_EMPTY={classic:{sq:[],bp:[],dl:[],total:[]},equipped:{sq:[],bp:[],dl:[],total:[]},bench:{bp:[]},bench_eq:{bp:[]},universitario:{sq:[],bp:[],dl:[],total:[]}};

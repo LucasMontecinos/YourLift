@@ -36,8 +36,13 @@ function sinRetiradas(rec){
   return out;
 }
 
+// El sexo escrito gana; si no está, sale de la categoría. Se escribe de varias
+// formas —'Hombre', 'Mujer', 'M', 'F', 'Masculino'—: antes solo se reconocía la
+// M inicial, así que 'Hombre' (como vienen los universitarios) caía en Mujeres.
 function sexoDeRecord(r){
-  if(r&&r.sexo)return /^m/i.test(r.sexo)&&!/^muj/i.test(r.sexo)?'M':'F';   // 'Mujer' vs 'Masculino'
+  const s=String(r&&r.sexo||'').trim().toLowerCase();
+  if(/^(muj|fem|f$|w)/.test(s))return 'F';
+  if(/^(hom|masc|var|m$|m\b)/.test(s))return 'M';
   const c=String(r&&r.categoria||'').replace('+','');
   if(CAT_F.some(x=>x.replace('+','')===c))return 'F';
   if(CAT_M.some(x=>x.replace('+','')===c))return 'M';
@@ -68,6 +73,12 @@ window.recBuscar=function(v){
   },220);
 };
 
+// Only Bench es una modalidad aparte, con sus propios récords: el press de
+// banca de quien compite solo en banca no se mide contra el de powerlifting.
+// Esas tablas tienen un solo movimiento.
+const REC_TIPOS=[["classic","Clásico"],["equipped","Equipado"],["bench","Only Bench Clásico"],["bench_eq","Only Bench Equipado"],["universitario","Universitario"]];
+const REC_SOLO_BANCA={bench:1,bench_eq:1};
+
 function recFilas(){
   const arr=(R[ST.rt]&&R[ST.rt][ST.rl])||[];
   const q=recNorm(ST.rq||'');
@@ -82,7 +93,10 @@ function recFilas(){
 
 function recLista(){
   const d=recFilas();
-  if(!d.length)return `<div class="emp">No hay récords con estos filtros</div>`;
+  if(!d.length){
+    const vacia=!((R[ST.rt]&&R[ST.rt][ST.rl])||[]).some(r=>sexoDeRecord(r)===(ST.rs||'F'));
+    return `<div class="emp">${vacia&&REC_SOLO_BANCA[ST.rt]?'Todavía no hay récords cargados en esta modalidad':'No hay récords con estos filtros'}</div>`;
+  }
   let h=`<div class="rr rh"><div>#</div><div>Atleta</div><div>División</div><div>Cat.</div><div>Campeonato</div><div>Marca</div></div>`;
   d.forEach((rRaw,i)=>{
     const r=applyEditOverlay({...rRaw});   // overlay: nombre actualizado por RUT/código
@@ -94,8 +108,9 @@ function recLista(){
 }
 
 function rec(){
-  const ts=[["classic","Clásico"],["equipped","Equipado"],["universitario","Universitario"]];
-  const ls=[["sq","Sentadilla"],["bp","Press Banca"],["dl","Peso Muerto"],["total","Total"]];
+  const ts=REC_TIPOS;
+  const ls=REC_SOLO_BANCA[ST.rt]?[["bp","Press Banca"]]:[["sq","Sentadilla"],["bp","Press Banca"],["dl","Peso Muerto"],["total","Total"]];
+  if(!ls.some(l=>l[0]===ST.rl))ST.rl=ls[0][0];
   const sx=[["F","Mujeres"],["M","Hombres"]];
   if(!ST.rs)ST.rs='F';
   // Las opciones de los desplegables salen de lo que HAY en esta pestaña, no de

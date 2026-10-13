@@ -1410,7 +1410,7 @@ function _rbSuda(){
 async function _rbNac(){
   const ev=(DATA.event&&DATA.event.name)||'';
   if(/regional/i.test(ev))return [];
-  const TN={classic:'Classic',equipped:'Equipado',universitario:'Universitario'};
+  const TN=REC_NAC_TN;
   const FEM=['43','47','52','57','63','69','76','84','84+'];
   try{
     const tabla=await _rnCargarTabla();
@@ -1427,7 +1427,7 @@ async function _rbNac(){
     // Los que ya quedaron guardados con este campeonato: después de Cerrar
     // competencia la tabla ya tiene la marca nueva y la comparación de abajo no
     // los vería como "batidos". Se leen de la tabla, con la marca que reemplazaron.
-    Object.keys(TN).forEach(tipo=>['sq','bp','dl','total'].forEach(l=>(((tabla[tipo]||{})[l])||[]).forEach(x=>{
+    Object.keys(TN).forEach(tipo=>(tipo==='bench'||tipo==='bench_eq'?['bp']:['sq','bp','dl','total']).forEach(l=>(((tabla[tipo]||{})[l])||[]).forEach(x=>{
       if((x.campeonato||x.evento)!==ev)return;
       const cat=String(x.categoria), dv=tipo==='universitario'?'Universitario':_normDiv(String(x.division||''));
       const sexo=x.sexo?(x.sexo==='Mujer'?'Damas':'Caballeros'):(FEM.indexOf(cat)>=0?'Damas':'Caballeros');
@@ -1440,7 +1440,7 @@ async function _rbNac(){
       m.set([r.tipo,r.l,r.div,r.cat].join('|'),{sexo:r.sexo==='Mujer'?'Damas':'Caballeros',mod:TN[r.tipo],div:r.div,cat:r.cat,
         mov:_RB_MOV[r.l]||r.l,nuevo:r.w,atleta:r.a.name,pais:'CHI',antes:+r.act.marca,antesQuien:r.act.nombre||'',antesPais:'',guardado:false});
     });
-    const ORD={Classic:0,Equipado:1,Universitario:2}, LO={Sentadilla:0,'Press de banca':1,'Peso muerto':2,Total:3};
+    const ORD={}; Object.keys(TN).forEach(t=>{ORD[TN[t]]=REC_NAC_ORD[t];}); const LO={Sentadilla:0,'Press de banca':1,'Peso muerto':2,Total:3};
     return [...m.values()].sort((x,y)=>(ORD[x.mod]-ORD[y.mod])||(x.sexo<y.sexo?1:x.sexo>y.sexo?-1:0)
       ||(_actaCatN(x.cat)-_actaCatN(y.cat))||String(x.div).localeCompare(String(y.div))||((LO[x.mov]||0)-(LO[y.mov]||0)));
   }catch(e){ console.warn('[récords batidos] nac',e); return null; }
@@ -2389,7 +2389,7 @@ window.mostrarRecordsNac=async function(trasCerrar){
   const lista=_rnDetectar(tabla);
   window._RN={lista,tabla};
   if(!lista.length){ if(!trasCerrar)alert('Ningún chileno superó un récord nacional en esta competencia.'); return; }
-  const TN={classic:'Classic',equipped:'Equipado',universitario:'Universitario'};
+  const TN=REC_NAC_TN;
   let h='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:10px">'
     +'<div><div class="os" style="font-size:22px;font-weight:700">Récords nacionales</div>'
     +'<div style="font-size:12px;color:var(--muted);max-width:620px;line-height:1.5">Marcas de atletas chilenos que superan la tabla nacional. Revisa, desmarca lo que no corresponda y guarda. '

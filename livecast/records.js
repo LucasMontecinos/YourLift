@@ -363,6 +363,28 @@ function _srPanel(){
   return h;
 }
 
+// Contra qué tablas de récords NACIONALES compite un atleta.
+//   pl    → la de powerlifting: classic, equipped o universitario
+//   banca → la de Only Bench: bench (clásico) o bench_eq (equipado)
+// Only Bench tiene récords propios: la banca de quien compite solo en banca no
+// se mide contra la de powerlifting, ni al revés. Quien hace las dos
+// (classic_bench / equipped_bench con plusBench) compite en las dos tablas con la
+// misma banca. Olimpiadas Especiales e invitados no tienen tabla.
+const REC_NAC_TN={classic:'Classic',equipped:'Equipado',bench:'Only Bench Classic',bench_eq:'Only Bench Equipado',universitario:'Universitario'};
+const REC_NAC_ORD={classic:0,equipped:1,bench:2,bench_eq:3,universitario:4};
+function _recTablasNac(a){
+  const m=String(a&&a.mod||'');
+  if(!m||m.indexOf('oe_')===0||m==='invitado')return {pl:null,banca:null};
+  if(m==='universitario')return {pl:'universitario',banca:null};
+  if(m==='onlybench')return {pl:null,banca:'bench'};
+  if(m==='classic_bench'||m==='equipped_bench'){
+    const eq=m==='equipped_bench';
+    const plus=(typeof _isPlusBench==='function')?_isPlusBench(a):true;
+    return {pl:plus?(eq?'equipped':'classic'):null,banca:eq?'bench_eq':'bench'};
+  }
+  return {pl:m==='equipped'?'equipped':'classic',banca:null};
+}
+
 function checkRecord(athlete,lift,round){
   if(!RECORDS)return;
   if(DATA.event && DATA.event.recordsEnabled===false)return;
@@ -377,16 +399,25 @@ function checkRecord(athlete,lift,round){
     pushRecordToFB({athName:athlete.name,lift,round,newMark:weight,oldMark:0,holder:'Sin récord previo',cat,div,mod:'universitario',ts:Date.now()});
     return;
   }
-  const recs=(RECORDS[mod]&&RECORDS[mod][lift])||[];
-  const match=recs.find(rec=>rec.categoria===cat&&_normDiv(rec.division)===div);
-  if(match&&weight>match.marca){
-    showRecordAlert(athlete.name,lift,round,weight,match.marca,match.nombre,cat,div,mod);
-    // Push al doc livecast_record/current para que los widgets OBS muestren el badge
-    pushRecordToFB({
-      athName:athlete.name,lift,round,
-      newMark:weight,oldMark:match.marca,holder:match.nombre,
-      cat,div,mod,ts:Date.now()
-    });
+  // La tabla de powerlifting para sus tres movimientos y, en la banca, también
+  // la de Only Bench si compite ahí. Se avisa el primero que rompe.
+  const T=_recTablasNac(athlete);
+  const tablas=[];
+  if(T.pl)tablas.push(T.pl);
+  if(T.banca&&lift==='bp')tablas.push(T.banca);
+  for(const tabla of tablas){
+    const recs=(RECORDS[tabla]&&RECORDS[tabla][lift])||[];
+    const match=recs.find(rec=>String(rec.categoria)===cat&&_normDiv(rec.division)===div);
+    if(match&&weight>match.marca){
+      showRecordAlert(athlete.name,lift,round,weight,match.marca,match.nombre,cat,div,tabla);
+      // Push al doc livecast_record/current para que los widgets OBS muestren el badge
+      pushRecordToFB({
+        athName:athlete.name,lift,round,
+        newMark:weight,oldMark:match.marca,holder:match.nombre,
+        cat,div,mod:tabla,ts:Date.now()
+      });
+      return;
+    }
   }
 }
 
@@ -408,7 +439,7 @@ function showRecordAlert(athName,lift,round,newMark,oldMark,holder,cat,div,mod){
     +'<div style="font-size:48px;margin-bottom:6px">&#127942;</div>'
     +'<div style="font-family:Oswald;font-size:13px;letter-spacing:4px;color:#C41E3A;margin-bottom:10px">'+(mod==='universitario'?'RÉCORD UNIVERSITARIO':'POSIBLE RÉCORD NACIONAL')+'</div>'
     +'<div style="font-family:Oswald;font-size:28px;font-weight:700;color:#fff;margin-bottom:4px">'+athName+'</div>'
-    +'<div style="font-family:Oswald;font-size:16px;color:#D4A843;margin-bottom:20px">'+LL[lift]+' &middot; -'+cat+'kg &middot; '+div+' &middot; '+(mod==='universitario'?'Universitario':mod==='equipped'?'Equipado':'Classic')+'</div>'
+    +'<div style="font-family:Oswald;font-size:16px;color:#D4A843;margin-bottom:20px">'+LL[lift]+' &middot; -'+cat+'kg &middot; '+div+' &middot; '+(REC_NAC_TN[mod]||'Classic')+'</div>'
     +'<div style="display:flex;justify-content:center;gap:28px;align-items:center;margin-bottom:24px">'
     +'<div><div style="font-size:10px;color:#8A9BB2;letter-spacing:2px;margin-bottom:4px">NUEVA MARCA</div>'
     +'<div style="font-family:Oswald;font-size:52px;font-weight:700;color:#22c55e">'+newMark+'<span style="font-size:22px"> kg</span></div></div>'

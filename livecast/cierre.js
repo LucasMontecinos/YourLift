@@ -203,7 +203,9 @@ async function cerrarCompetencia(evId, evName){
 //
 // Solo los CHILENOS. Cada uno se compara contra la tabla nacional de su
 // modalidad: classic contra classic, equipado contra equipado, universitario
-// contra universitario. Compite por el récord de su división y, si no es Open,
+// contra universitario, y la banca de Only Bench contra Only Bench (clásico o
+// equipado; quien hace powerlifting y banca compite en las dos con la misma
+// banca). Compite por el récord de su división y, si no es Open,
 // también por el Open (un Junior que supera el Open se lleva los dos).
 // Pueden romper récord los campeonatos nacionales e internacionales.
 //
@@ -211,14 +213,13 @@ async function cerrarCompetencia(evId, evName){
 // "Guardar en la tabla de récords" se escribe records/data —el mismo documento
 // que edita Admin → Récords y que lee el sitio—. Un casillero sin récord previo
 // viene desmarcado: la tabla puede no tener esa categoría a propósito.
-// Only Bench no se compara: la tabla nacional no tiene récords de banca sola.
 // ═══════════════════════════════════════════════════════════════
-function _rnTipo(a){
-  const m=String(a.mod||'');
-  if(m.indexOf('oe_')===0||m==='invitado'||m==='onlybench'||m==='classic_bench'&&!_isPlusBench(a))return null;
-  if(/univ/i.test(String(a.div||'')))return 'universitario';
-  if(m==='equipped'||m==='equipped_bench')return 'equipped';
-  return 'classic';
+// Las tablas en que compite, con sus movimientos: [[tabla, [movimientos]], …].
+function _rnTipos(a){
+  const T=_recTablasNac(a), out=[];
+  if(T.pl)out.push([/univ/i.test(String(a.div||''))?'universitario':T.pl,['sq','bp','dl','total']]);
+  if(T.banca)out.push([T.banca,['bp']]);
+  return out;
 }
 
 function _rnCat(a){ const c=_srCat(a); if(!c)return ''; return c[0]==='+'?c.slice(1)+'+':c.slice(1); }
@@ -235,15 +236,15 @@ function _rnDetectar(tabla){
   const LBL={sq:'SENTADILLA',bp:'PRESS DE BANCA',dl:'PESO MUERTO',total:'TOTAL'};
   const mejor=new Map();       // un casillero, un récord: el más alto de esta competencia
   _cierreAtletas().filter(a=>!a.__is4).forEach(a=>{
-    const tipo=_rnTipo(a); if(!tipo)return;
     const cat=_rnCat(a); if(!cat)return;
     const sx=_srSexo(a)==='F'?'Mujer':'Hombre';
+    _rnTipos(a).forEach(([tipo,movs])=>{
     const divPropia=tipo==='universitario'?'Universitario':_normDiv(a.div||'');
     const divs=tipo==='universitario'?['Universitario']:[divPropia].concat(divPropia==='Open'?[]:['Open']);
     // La división de su edad también: un Junior inscrito en Open rompe el Junior.
     { const de=_divPorEdad(a); if(tipo!=='universitario'&&de&&divs.indexOf(de)<0)divs.push(de); }
     const marcas={sq:bestOf(a,'sq'),bp:bestOf(a,'bp'),dl:bestOf(a,'dl'),total:totalOf(a,'meet')};
-    Object.keys(marcas).forEach(l=>{
+    movs.forEach(l=>{
       const w=+marcas[l]||0; if(w<=0)return;
       divs.forEach(dv=>{
         const lista=((tabla[tipo]||{})[l])||[];
@@ -256,8 +257,9 @@ function _rnDetectar(tabla){
         mejor.set(k,{k,tipo,l,lbl:LBL[l],div:dv,cat,sexo:sx,w,a,act,marcado:!!act});
       });
     });
+    });
   });
-  const ORD={classic:0,equipped:1,universitario:2}, LO={sq:0,bp:1,dl:2,total:3};
+  const ORD=REC_NAC_ORD, LO={sq:0,bp:1,dl:2,total:3};
   return [...mejor.values()].sort((x,y)=>(ORD[x.tipo]-ORD[y.tipo])||(x.sexo<y.sexo?-1:x.sexo>y.sexo?1:0)
     ||(_actaCatN(x.cat)-_actaCatN(y.cat))||String(x.div).localeCompare(String(y.div))||(LO[x.l]-LO[y.l]));
 }
@@ -292,7 +294,7 @@ async function _rnAplicar(elegidos){
 }
 
 function _rnResumen(hechos){
-  const TN={classic:'Classic',equipped:'Equipado',universitario:'Universitario'};
+  const TN=REC_NAC_TN;
   return hechos.map(r=>'• '+TN[r.tipo]+' '+(r.sexo==='Mujer'?'F':'M')+' '+r.div+' '+r.cat+' '+r.lbl+': '+r.w+' — '+r.a.name
     +(r.act?' (antes '+r.act.marca+')':'')).join('\n');
 }

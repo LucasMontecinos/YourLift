@@ -754,4 +754,4 @@ window._pubNameDrag=null;
 // desde esta pantalla quedan borradas también en Firestore. La -72 era la
 // categoría femenina antigua de la IPF y se pidió sacarla.
 const CATS_RETIRADAS=['72'];
-const REC_EMPTY={classic:{sq:[],bp:[],dl:[],total:[]},equipped:{sq:[],bp:[],dl:[],total:[]},universitario:{sq:[],bp:[],dl:[],total:[]}};
+const REC_EMPTY={classic:{sq:[],bp:[],dl:[],total:[]},equipped:{sq:[],bp:[],dl:[],total:[]},bench:{bp:[]},bench_eq:{bp:[]},universitario:{sq:[],bp:[],dl:[],total:[]}};
