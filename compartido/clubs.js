@@ -9,7 +9,7 @@ window.CLUBS_LOGOS = {
   'allpower':         'clubs/AllPower.png',
   'atacama':          'clubs/Atacama.png',
   'beersandlifts':    'clubs/BeersLifts.png',
-  'blackbars':        'clubs/Blackbars.jpg',
+  'blackbars':        'clubs/Blackbars.png',
   'bushido':          'clubs/Bushido.png',
   'hannya':           'clubs/Hannya.png',
   'himalaya':         'clubs/Himalaya.png',
