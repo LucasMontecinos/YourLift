@@ -22,9 +22,12 @@ el ícono, el nombre o los permisos.
 
 GitHub la arma sola (pestaña **Actions**):
 
-- **App Android**: corre con cada cambio en `app/`. En *Artifacts* queda
-  `YourLift-prueba-….apk`, que se instala directo en un Android (hay que permitir
-  "instalar apps de origen desconocido").
+- **App Android**: corre con cada cambio en `app/` y publica el APK con un link
+  fijo, para abrir desde el teléfono:
+  https://github.com/LucasMontecinos/YourLift/releases/latest/download/YourLift.apk
+  Se instala directo en un Android (hay que permitir "instalar apps de origen
+  desconocido"). Mientras no esté la firma de Google Play es una versión de
+  prueba: para instalar una más nueva encima hay que desinstalar la anterior.
 - **App iOS**: revisa que el proyecto de iPhone compile. Corre a mano o cuando
   cambia `app/ios/`.
 
