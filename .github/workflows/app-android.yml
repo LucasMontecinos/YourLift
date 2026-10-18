@@ -1,0 +1,86 @@
+# Arma la app de Android.
+#  · Siempre: un APK de prueba (YourLift-prueba.apk) para instalar directo en el teléfono.
+#  · Si están los secretos de la firma: el .aab firmado para subir a Google Play.
+#    ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+# Los archivos quedan en la pestaña Actions → la corrida → Artifacts.
+name: App Android
+
+on:
+  push:
+    branches: [main]
+    paths: ['app/**', '.github/workflows/app-android.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: app-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: app
+    env:
+      YL_VERSION_CODE: ${{ github.run_number }}
+      YL_VERSION_NAME: 1.0.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Dependencias
+        run: npm ci
+
+      - name: Copiar configuración a Android
+        run: npx cap sync android
+
+      - name: APK de prueba
+        working-directory: app/android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Firma para Google Play
+        id: firma
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KS" ]; then echo "hay=no" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "$KS" | base64 -d > "$RUNNER_TEMP/yourlift.keystore"
+          echo "hay=si" >> "$GITHUB_OUTPUT"
+
+      - name: App firmada (.aab y .apk)
+        if: steps.firma.outputs.hay == 'si'
+        working-directory: app/android
+        env:
+          YL_KEYSTORE: ${{ runner.temp }}/yourlift.keystore
+          YL_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          YL_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          YL_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon bundleRelease assembleRelease
+
+      - name: Nombres de los archivos
+        run: |
+          mkdir -p salida
+          cp android/app/build/outputs/apk/debug/app-debug.apk "salida/YourLift-prueba-$YL_VERSION_NAME.apk"
+          if [ -f android/app/build/outputs/bundle/release/app-release.aab ]; then
+            cp android/app/build/outputs/bundle/release/app-release.aab "salida/YourLift-$YL_VERSION_NAME.aab"
+            cp android/app/build/outputs/apk/release/app-release.apk "salida/YourLift-$YL_VERSION_NAME.apk"
+          fi
+          ls -la salida
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: YourLift-android-${{ env.YL_VERSION_NAME }}
+          path: app/salida/*
+          retention-days: 30

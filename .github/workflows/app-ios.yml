@@ -1,0 +1,49 @@
+# Revisa que la app de iPhone compile (para el simulador, sin firma).
+# Para subirla al App Store hace falta la cuenta de Apple Developer y sus
+# certificados; ese paso se agrega cuando estén.
+# Corre a mano (Actions → App iOS → Run workflow) o cuando cambia la parte de iOS,
+# porque las máquinas Mac de GitHub gastan 10 veces más minutos.
+name: App iOS
+
+on:
+  push:
+    branches: [main]
+    paths: ['app/ios/**', 'app/package.json', 'app/package-lock.json', 'app/capacitor.config.json', '.github/workflows/app-ios.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: app-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Dependencias
+        run: npm ci
+
+      - name: Copiar configuración a iOS
+        run: npx cap sync ios
+
+      - name: Compilar para el simulador
+        working-directory: app/ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
