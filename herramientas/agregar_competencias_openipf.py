@@ -51,11 +51,16 @@ def att(*trios):
 
 def comp(evento, fecha, cat, modalidad, serie, bw, sq, bp, dl, place, intentos=None,
          lugar=None, anio=None, source='openpowerlifting', opl=None, internacional=False,
-         division='Open', sexo='Hombre'):
+         division='Open', sexo='Hombre', bw_estimado=False):
+    """bw=None cuando no se sabe el peso corporal: queda sin GL ni DOTS hasta que
+    se cargue. bw_estimado: el peso se dedujo de los puntos GL del tablero."""
     total = round((sq or 0) + (bp or 0) + (dl or 0), 2)
     sx = 'F' if str(sexo).lower().startswith(('muj', 'fem')) else 'M'
     res = {"bw": bw, "sq": sq, "bp": bp, "dl": dl, "total": total,
-           "glp": gl(total, bw, serie, sx), "dots": dots(total, bw, sx)}
+           "glp": gl(total, bw, serie, sx) if bw else None,
+           "dots": dots(total, bw, sx) if bw else None}
+    if bw_estimado:
+        res["bwEstimado"] = True
     if intentos:
         res["intentos"] = intentos
     res.update({"categoria": cat, "division": division, "pesoCorporal": bw})
@@ -117,6 +122,34 @@ FALTAN = {
          lugar="Druskininkai, Lituania", anio=2026, opl="ipf/2603", internacional=True,
          sexo="Mujer"),
   ],
+  # Mundial Master Classic 2026 (Reno, Estados Unidos), Master I. Sale del tablero
+  # de la transmisión de Powerlifting America. El peso de Miguel y Mauricio se
+  # dedujo de sus puntos GL (92,7 y 75,2); el de Fabiola y Nataly no se sabe
+  # todavía. El puesto de ellas es el que mostraba el tablero tras su último intento.
+  '1624MMA-2024': [
+    comp("IPF World Masters Classic Powerlifting Championships 2026", "2026-10-20", "105",
+         "Powerlifting Classic IPF", "cl", 102.5, 297.5, 192.5, 252.5, "3",
+         lugar="Reno, Estados Unidos", anio=2026, source='transmision', internacional=True,
+         division='Master I', bw_estimado=True),
+  ],
+  '1563MHT-2024': [
+    comp("IPF World Masters Classic Powerlifting Championships 2026", "2026-10-20", "105",
+         "Powerlifting Classic IPF", "cl", 104.4, 212.5, 132.5, 262.5, "7",
+         lugar="Reno, Estados Unidos", anio=2026, source='transmision', internacional=True,
+         division='Master I', bw_estimado=True),
+  ],
+  '1358FAO-2023': [
+    comp("IPF World Masters Classic Powerlifting Championships 2026", "2026-10-19", "57",
+         "Powerlifting Classic IPF", "cl", None, 102.5, 55, 137.5, "9",
+         lugar="Reno, Estados Unidos", anio=2026, source='transmision', internacional=True,
+         division='Master I', sexo='Mujer'),
+  ],
+  '1611NMR-2025': [
+    comp("IPF World Masters Classic Powerlifting Championships 2026", "2026-10-19", "63",
+         "Powerlifting Classic IPF", "cl", None, 150, 67.5, 152.5, "9",
+         lugar="Reno, Estados Unidos", anio=2026, source='transmision', internacional=True,
+         division='Master I', sexo='Mujer'),
+  ],
 }
 
 # Competencias que se reemplazan por las de arriba (cambió el nombre del evento o
@@ -170,7 +203,7 @@ def main():
             marca = '  +' if c in agrego else '  = (ya estaba)'
             r = c['resultado']
             print(f"{marca} {c['fecha']}  {c['evento'][:52]:52} {c['modalidad'][:38]:38} "
-                  f"total {r['total']:<7} GL {r['glp']:<7} {c['place']}º")
+                  f"total {r['total']:<7} GL {str(r['glp'] or '—'):<7} {c['place']}º")
         a.setdefault('competencias', []).extend(agrego)
         a['competencias'].sort(key=orden, reverse=True)
 
@@ -185,7 +218,10 @@ def main():
         print(f"     queda con {len(a['competencias'])} competencias")
 
     if aplicar:
-        json.dump(datos, open(RUTA, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+        # Mismo formato que tiene data.json (sangría de 1 y salto al final): con
+        # otro, el archivo entero sale cambiado y no se ve qué se agregó.
+        with open(RUTA, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(datos, ensure_ascii=False, indent=1) + '\n')
         print('\ndata.json escrito.')
     else:
         print('\n(prueba — no se escribió nada; usar --aplicar)')
