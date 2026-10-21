@@ -123,20 +123,19 @@ FALTAN = {
          sexo="Mujer"),
   ],
   # Mundial Master Classic 2026 (Reno, Estados Unidos), Master I. Sale del tablero
-  # de la transmisión de Powerlifting America. El peso de Miguel y Mauricio se
-  # dedujo de sus puntos GL (92,7 y 75,2); el de Fabiola y Nataly no se sabe
-  # todavía. El puesto de ellas es el que mostraba el tablero tras su último intento.
+  # de la transmisión de Powerlifting America; los pesos de Miguel y Mauricio los
+  # confirmó la federación. El de Fabiola y Nataly no se sabe todavía. El puesto de ellas es el que mostraba el tablero tras su último intento.
   '1624MMA-2024': [
     comp("IPF World Masters Classic Powerlifting Championships 2026", "2026-10-20", "105",
-         "Powerlifting Classic IPF", "cl", 102.5, 297.5, 192.5, 252.5, "3",
+         "Powerlifting Classic IPF", "cl", 102.65, 297.5, 192.5, 252.5, "3",
          lugar="Reno, Estados Unidos", anio=2026, source='transmision', internacional=True,
-         division='Master I', bw_estimado=True),
+         division='Master I'),
   ],
   '1563MHT-2024': [
     comp("IPF World Masters Classic Powerlifting Championships 2026", "2026-10-20", "105",
-         "Powerlifting Classic IPF", "cl", 104.4, 212.5, 132.5, 262.5, "7",
+         "Powerlifting Classic IPF", "cl", 104.3, 212.5, 132.5, 262.5, "7",
          lugar="Reno, Estados Unidos", anio=2026, source='transmision', internacional=True,
-         division='Master I', bw_estimado=True),
+         division='Master I'),
   ],
   '1358FAO-2023': [
     comp("IPF World Masters Classic Powerlifting Championships 2026", "2026-10-19", "57",
