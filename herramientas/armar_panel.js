@@ -17,7 +17,7 @@ const DIR = path.join(__dirname, '..', 'admin');
 // que corre al cargar (arranque.js) va al final y en su orden.
 const ORDEN = ['interfaz', 'sesion', 'datos', 'atletas', 'inscripciones', 'entrenadores', 'jueces',
   'campeonatos', 'cronograma', 'nominas', 'ranking', 'estadisticas', 'resultados', 'fotos',
-  'medallero', 'records', 'publicaciones', 'certificados', 'sitio', 'administradores', 'arranque'];
+  'medallero', 'records', 'publicaciones', 'certificados', 'cobros', 'sitio', 'administradores', 'arranque'];
 
 function armar() {
   const sobran = fs.readdirSync(DIR).filter(f => f.endsWith('.js') && f !== 'panel.js' && !ORDEN.includes(f.slice(0, -3)));

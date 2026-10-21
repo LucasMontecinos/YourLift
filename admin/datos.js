@@ -134,7 +134,7 @@ async function loadAll(){
         // que se rehace cuando cambian: si no, aprobar o rechazar una no movía
         // la columna hasta recargar la página.
         window._HIST_ANIO=null;
-        if(ST.view==='nominas'||ST.view==='dashboard'||ST.view==='approvals'||ST.view==='athletes'||ST.view==='stats')render();
+        if(ST.view==='nominas'||ST.view==='dashboard'||ST.view==='approvals'||ST.view==='athletes'||ST.view==='stats'||ST.view==='cobros')render();
       },(e)=>console.warn('[listener] inscripciones:',e.message));
     }catch(e){console.warn('[loadAll] insc listener:',e.message);}
   }
@@ -226,7 +226,7 @@ async function loadAll(){
         }).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
         // Tarjetas de Nóminas arma su lista con ST.eventos, así que también se
         // redibuja: si no, un campeonato recién publicado no aparece hasta recargar.
-        if(ST.view==='campeonatos'||ST.view==='dashboard'||ST.view==='athletes'||ST.view==='nomcards')render();
+        if(ST.view==='campeonatos'||ST.view==='dashboard'||ST.view==='athletes'||ST.view==='nomcards'||ST.view==='cobros')render();
       },(e)=>console.warn('[listener] eventos:',e.message));
     }catch(e){console.warn('[loadAll] eventos listener:',e.message);}
   }

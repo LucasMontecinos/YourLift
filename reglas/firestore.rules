@@ -419,6 +419,12 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Cobros YourLift (panel → Cobros YourLift): montos y datos de clientes de
+    // la plataforma. Solo el owner; ni los otros admins los ven.
+    match /cobros/{id} {
+      allow read, write: if isOwner();
+    }
+
     // El ciclo del ranking: un solo documento (ranking_config/ciclo) con la fecha
     // desde la que cuentan los resultados. Lo escribe el control en vivo al
     // cerrar el Nacional y lo lee la página pública del ranking, así que la

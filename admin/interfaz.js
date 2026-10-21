@@ -198,6 +198,7 @@ function render(){
       <button class="side-btn ${ST.view==='audit'?'active':''}" onclick="go('audit')">Audit Log</button>
       ${ST.pendingResults?`<button class="side-btn ${ST.view==='mergeResults'?'active':''}" onclick="go('mergeResults')" style="border-color:var(--green);color:var(--green)">Resultados Pendientes <span style="background:var(--green);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.pendingResults}</span></button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='certificados'?'active':''}" onclick="go('certificados')">Certificados YourLift</button>`:''}
+      ${_esOwnerAdm()?`<button class="side-btn ${ST.view==='cobros'?'active':''}" onclick="go('cobros')">Cobros YourLift</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='admins'?'active':''}" onclick="go('admins')">Gestión Admin</button>`:''}
       <div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">
         <div data-yl-idioma style="margin:8px 8px 10px"></div>
@@ -243,6 +244,7 @@ function render(){
   else if(ST.view==='exports')content=renderExports();
   else if(ST.view==='audit')content=renderAudit();
   else if(ST.view==='certificados'){if(_esOwnerAdm())content=renderCertificados();else go('athletes');}
+  else if(ST.view==='cobros'){if(_esOwnerAdm())content=renderCobros();else go('athletes');}
   else if(ST.view==='admins'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderAdmins();else go('athletes');}
   else if(ST.view==='mergeResults')content=renderMergeResults();
   else if(ST.view==='athleteProfile')content=renderAthleteProfile();
