@@ -155,6 +155,8 @@ FALTAN = {
 # se separó powerlifting de la banca sola). Se quitan antes de agregar las nuevas.
 QUITAR = {
   '1769FPA-2017': {'Campeonato Sudamericano de Powerlifting y Bench Press Equipado 2023'},
+  # Un resultado de hombres -93 kg de 2017 que se le pegó por error: no es de ella.
+  '1611NMR-2025': {'II Campeonarto Nacional Classic Raw Chile 2017'},
 }
 # Además, campos que hay que corregir en competencias que ya estaban cargadas.
 CORREGIR = {
