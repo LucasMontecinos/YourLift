@@ -154,11 +154,13 @@ const MODULOS = {
     const d = e.data || {};
     ok(e.col === 'inscripciones', 'sobre inscripciones');
     // El id se arma igual que en el formulario público: si no, la misma persona
-    // podría quedar inscrita dos veces con dos ids distintos.
-    ok(e.id === 'Sudamericano_2026_' + String(caro.rut).replace(/[^0-9kK]/g, ''),
-       'el id es {evento}_{rut}, igual que el del formulario público: ' + e.id);
-    ok(d.rut === caro.rut && d.codigo === caro.codigo && d.nombre === caro.nombre,
-       'el nombre, el RUT y el código salen del padrón');
+    // podría quedar inscrita dos veces con dos ids distintos. Es el código de
+    // atleta, no el RUT: el id se ve al listar las inscripciones (Ley 21.719).
+    ok(e.id === 'Sudamericano_2026_' + caro.codigo.toUpperCase(),
+       'el id es {evento}_{código}, igual que el del formulario público: ' + e.id);
+    ok(d.codigo === caro.codigo && d.nombre === caro.nombre && !('rut' in d) && !('fechaNac' in d),
+       'el nombre y el código salen del padrón; la inscripción pública no lleva RUT ni fecha');
+    ok((priv.data || {}).rut === caro.rut, 'el RUT queda en la inscripción privada');
     ok(d.status === 'approved', 'queda aceptada');
     ok(d.categoria === '-69 kg', 'la categoría se guarda con la unidad: ' + d.categoria);
     // Quien la revise después tiene que poder ver que no vino del formulario y

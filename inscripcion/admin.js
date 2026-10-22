@@ -72,7 +72,7 @@ function renderAdmin() {
       h += `<tr>
         <td style="color:var(--muted)">${idx+1}</td>
         <td style="font-weight:600;white-space:nowrap">${esc(i.nombre)}</td>
-        <td style="font-size:11px">${esc(i.rut)}</td>
+        <td style="font-size:11px">${esc(i.rut || (state.rutPriv || {})[i.id] || '')}</td>
         <td style="font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(evName)}</td>
         <td><span class="tag" style="background:rgba(212,168,67,.12);color:var(--gold)">${esc(i.categoria)}</span></td>
         <td style="font-size:11px">${esc(i.club==='Otro'?i.clubOtro:i.club)}</td>
@@ -126,6 +126,13 @@ async function loadInscripciones() {
       const q = window.FB.query(window.FB.collection(db, 'inscripciones'), window.FB.orderBy('timestamp', 'desc'));
       const snap = await window.FB.getDocs(q);
       state.inscripciones = snap.docs.map(d => ({id: d.id, ...d.data()}));
+      // El RUT ya no está en la inscripción pública: el admin lo lee de la
+      // privada (solo para mostrarlo en la tabla; no sale en la exportación).
+      try {
+        const ps = await window.FB.getDocs(window.FB.collection(db, 'inscripciones_private'));
+        state.rutPriv = {};
+        ps.docs.forEach(d => { const x = d.data() || {}; if (x.rut) state.rutPriv[d.id] = x.rut; });
+      } catch (e) { console.warn('[admin] inscripciones_private', e.message); }
     } catch(e) { console.error(e); }
   } else {
     state.inscripciones = demoGetAll().reverse();
@@ -168,11 +175,13 @@ function exportNominas() {
   const byEvent = {};
   approved.forEach(i => {
     if (!byEvent[i.evento]) byEvent[i.evento] = [];
+    // nominas.json se publica: va sin RUT ni fecha de nacimiento (el código de
+    // atleta y el año alcanzan para cruzar y para la división).
     byEvent[i.evento].push({
       nombre: i.nombre,
-      rut: i.rut,
+      codigo: i.codigo || '',
       sexo: i.sexo,
-      dob: i.fechaNac,
+      anioNac: i.anioNac || YLPrivacidad.anio(i.fechaNac),
       division: i.division,
       categoria: i.categoria,
       modalidad: i.modalidad,

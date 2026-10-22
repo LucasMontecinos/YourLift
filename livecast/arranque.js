@@ -732,7 +732,7 @@ window._LC_MEDIA = window._LC_MEDIA || {};
 // mismo doc atleta_fotos/{codigo} pero con id que NO empieza con 'lc_', y traen
 // el RUT del atleta como campo. Se indexan acá por RUT para poder mostrarlas
 // en Control TX / Perfil aunque livecast nunca haya subido nada por su cuenta.
-window._ADMIN_FOTOS_BY_RUT = window._ADMIN_FOTOS_BY_RUT || {};
+window._ADMIN_FOTOS_BY_COD = window._ADMIN_FOTOS_BY_COD || {};
 // ── Fotos de la nómina del Sudamericano ───────────────────────────
 // Se cargaron desde Admin → Fotos Sudamericano a la colección nomina_suda_fotos,
 // con el nombre del atleta como clave (los extranjeros no tienen RUT ni código en
@@ -1145,9 +1145,9 @@ let _screenUnsub=null, _screenFirstSnap=true;
 // categorías de las tandas seleccionadas. Filas con país, año nac,
 // BW, SQ/BP/DL (3 intentos c/u + subtotal), total y GL.
 // Las tandas a mostrar se eligen vía window._JORNADA_FLIGHTS (set
-// por el control de pantalla). Año de nacimiento via BIRTH_BY_RUT.
+// por el control de pantalla). Año de nacimiento via BIRTH_BY_COD.
 // ════════════════════════════════════════════════════════════════
-window.BIRTH_BY_RUT = window.BIRTH_BY_RUT || {};
+window.BIRTH_BY_COD = window.BIRTH_BY_COD || {};
 // ══════════════════════════════════════════════
 // TX: MEDALLERO (Top 3) — banda inferior-centro con el podio de una
 // categoría específica (modalidad + sexo + división + categoría),

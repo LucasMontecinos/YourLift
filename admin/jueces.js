@@ -18,6 +18,8 @@ async function refEnsureLoaded(){
     ST.referees=snap.docs.map(d=>({id:d.id,...d.data()}))
       .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
     ST._refError=null;
+    // La copia pública, por código de atleta y sin RUT (admin/privados.js).
+    _programarPublicacion('jueces',()=>publicarJueces(ST.referees));
   // Si Firestore rechaza la lectura hay que decirlo. Antes se tragaba el error y
   // la pantalla quedaba igual que una base recién creada —"Sin jueces cargados
   // todavía", todos los contadores en cero—, que es exactamente lo que se ve

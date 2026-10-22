@@ -61,6 +61,9 @@ function _bloqueoDetectado(){
   if(!claves.length||!f.rut)return [];
   const rutN=String(formatRut(f.rut)).replace(/[^0-9kK]/g,'').toUpperCase();
   if(rutN.length<5)return [];
+  // Lo recién cerrado y las inscripciones se cruzan por código de atleta: lo
+  // público ya no trae el RUT.
+  const cod=String(f.codigo||'').toUpperCase();
 
   // Se miran las DOS fuentes. data.json se publica cada tanto: cuando se probó
   // esto, el archivo que se sirve a los atletas no tenía a NADIE del Regional
@@ -83,8 +86,8 @@ function _bloqueoDetectado(){
     if(conRes[_evClaveIns(c.evento)] && !_compitioEn(c))return;
     previas.push({evento:c.evento,fecha:c.fecha});
   });
-  (compResDB||[]).forEach(r=>{
-    if(String(r.rut||'').replace(/[^0-9kK]/g,'').toUpperCase()===rutN)
+  if(cod)(compResDB||[]).forEach(r=>{
+    if(String(r.codigo||'').toUpperCase()===cod)
       previas.push({evento:r.evento,fecha:r.fecha});
   });
   // Y las inscripciones que siguen en pie. Acá está la diferencia entre los dos
@@ -94,7 +97,7 @@ function _bloqueoDetectado(){
     // Se filtra al cargar, pero se vuelve a mirar acá: la lista queda cacheada y
     // no conviene que el criterio dependa de cuándo se guardó esa caché.
     if(String(i.status||'')==='rejected')return;
-    if(String(i.rut||'').replace(/[^0-9kK]/g,'').toUpperCase()!==rutN)return;
+    if(!cod||String(i.codigo||'').toUpperCase()!==cod)return;
     previas.push({evento:_nombreDeEvento(i.evento),fecha:''});
   });
 
@@ -149,11 +152,12 @@ function findAthleteByRut(rut) {
   });
   if (a) return a;
   // El padrón público ya no trae RUT: rut_indice (ver cargarDatosDeRut) dice de
-  // qué atleta es este RUT, y su fecha de nacimiento completa.
+  // qué atleta es este RUT. Solo el código: la fecha de nacimiento la escribe el
+  // atleta (quien sabe un RUT ajeno no tiene por qué enterarse de la fecha).
   const ix = window._RUT_IDX && window._RUT_IDX[clean];
   if (!ix || !ix.codigo) return null;
   const b = athleteDB.find(x => x.codigo === ix.codigo);
-  return b ? Object.assign({}, b, { rut: rut, fechaNac: ix.fechaNac || b.fechaNac || '' }) : null;
+  return b ? Object.assign({}, b, { rut: rut }) : null;
 }
 
 function generateCode(rut, nombre) {
@@ -265,14 +269,16 @@ function autoFillCode() {
     return;
   }
 
+  // ATLETA NUEVO que ya se inscribió antes: su código quedó en rut_indice al
+  // enviar la primera vez. Se usa ese y no uno nuevo, para que sea siempre el
+  // mismo (si escribe su nombre distinto, las iniciales cambiarían).
+  const ixN = window._RUT_IDX && window._RUT_IDX[String(rut).replace(/[^0-9kK]/g, '').toUpperCase()];
   // ATLETA NUEVO → necesita el nombre tipeado para generar código
   const nombre = formatName(f.nombre);
-  if (!nombre) return;
-  const code = generateCode(rut, nombre);
-  if (code) {
-    f.codigo = code;
-    f._codigoSource = 'new';
-  }
+  const code = (ixN && ixN.codigo) || (nombre ? generateCode(rut, nombre) : '');
+  if (!code) return;
+  f.codigo = code;
+  f._codigoSource = 'new';
   // Update DOM directly (no rerender, evita perder foco del input)
   const el = document.getElementById('codigoInput');
   const lb = document.getElementById('codigoLabel');
@@ -286,25 +292,21 @@ function autoFillCode() {
   }
 }
 
-// Autorellena ciudad/región (comuna, zona) desde la última inscripción del atleta.
-// El correo NO se autorrellena (es privado). No sobreescribe lo que el atleta ya escribió.
+// Autorellena la región (zona) desde la última inscripción del atleta, buscada
+// por su código. La comuna y el correo NO se autorrellenan: son privados (la
+// comuna vive en inscripciones_private). No sobreescribe lo que ya escribió.
 async function autoFillContact() {
   const f = state.form;
-  const rut = formatRut(f.rut);
-  if (!rut || !firebaseReady) return;
-  if (f.comuna && f.zona) return; // ya tiene ambos, no consultar
+  if (!f.codigo || !firebaseReady) return;
+  if (f.zona) return; // ya la tiene, no consultar
   try {
-    const q = window.FB.query(window.FB.collection(db, 'inscripciones'), window.FB.where('rut', '==', rut));
+    const q = window.FB.query(window.FB.collection(db, 'inscripciones'), window.FB.where('codigo', '==', f.codigo));
     const snap = await window.FB.getDocs(q);
     let cands = [];
     snap.forEach(d => cands.push(d.data()));
-    cands = cands.filter(c => c.status !== 'rejected' && (c.comuna || c.zona));
+    cands = cands.filter(c => c.status !== 'rejected' && c.zona);
     if (!cands.length) return;
     cands.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-    const last = cands[0];
-    let changed = false;
-    if (!f.comuna && last.comuna) { f.comuna = last.comuna; changed = true; }
-    if (!f.zona && last.zona) { f.zona = last.zona; changed = true; }
-    if (changed) render();
+    if (!f.zona) { f.zona = cands[0].zona; render(); }
   } catch (e) { /* silencioso: si falla, el atleta llena a mano */ }
 }

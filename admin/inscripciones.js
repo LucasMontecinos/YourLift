@@ -210,9 +210,13 @@ window.submitInscripcionManual=async function(){
   if(!ST.filterEv){showToast('Selecciona un evento primero',null,true);return}
   const dup=ST.inscripciones.find(i=>i.evento===ST.filterEv&&i.nombre.toLowerCase()===nombre.toLowerCase());
   if(dup&&!confirm(`Ya existe una inscripción de "${nombre}" en este evento. ¿Agregar igual?`))return;
+  // El código de atleta, del padrón (el panel tiene los RUT): es lo que identifica
+  // al atleta en la inscripción pública.
+  const enPadron=rut?(ST.data||[]).find(a=>a.codigo&&YLPrivacidad.norm(a.rut)===YLPrivacidad.norm(rut)):null;
   const data={
     nombre,
     rut,
+    codigo:enPadron?enPadron.codigo:'',
     sexo:document.getElementById('im_sexo').value,
     fechaNac:document.getElementById('im_fechaNac').value.trim(),
     division:document.getElementById('im_division').value,
@@ -226,7 +230,8 @@ window.submitInscripcionManual=async function(){
     _manualAdmin:true
   };
   try{
-    await addDoc(collection(db,'inscripciones'),data);
+    // inscCrear reparte: RUT y fecha a la inscripción privada (admin/privados.js).
+    await inscCrear(null,data);
     await logAction('manual_inscripcion',ST.filterEv,null,nombre);
     showToast(`${nombre} inscrito/a en ${ST.filterEv}`);
     document.getElementById('inscribirModal').remove();
@@ -243,7 +248,7 @@ window.submitInscripcionManual=async function(){
 // personales, ver compartido/privacidad.js).
 window.exportData=function(completo){
   if(ST.adminInfo?.role!=='owner'&&!ST.adminInfo?.bootstrap){showToast('Solo el Owner puede descargar data.json',null,true);return;}
-  const clean=ST.data.map(({_isPending,...a})=>completo?a:YLPrivacidad.publico(a));
+  const clean=ST.data.map(({_isPending,_pendId,...a})=>completo?a:YLPrivacidad.publico(a));
   const blob=new Blob([JSON.stringify(clean,null,2)],{type:'application/json'});
   const u=URL.createObjectURL(blob);
   const l=document.createElement('a');l.href=u;l.download=completo?'respaldo_completo_NO_PUBLICAR.json':'data.json';l.click();
@@ -257,12 +262,11 @@ async function _uploadToStorage(dataArr, recObj){
   const _stg=getStorage(app);
   // public/data.json lo lee cualquiera: va sin RUT ni fecha completa. Esos datos
   // se guardan antes en privado/padron (y el índice de RUT) para no perderlos.
-  // Si todavía no están publicadas las reglas nuevas de Firestore, guardar lo
-  // privado falla: entonces se publica como antes (con los datos), para no dejar
-  // al sitio sin RUT y sin copia privada de ellos.
-  let publico=dataArr;
-  try{ await _guardarPadronPrivado(dataArr); publico=dataArr.map(a=>YLPrivacidad.publico(a)); }
-  catch(e){ console.warn('[padrón privado] no se pudo guardar; se publica como antes:',e.message); }
+  // Si guardar lo privado falla, NO se publica: antes se publicaba "como antes",
+  // con los RUT, y eso es justo lo que no puede pasar (Ley 21.719).
+  try{ await _guardarPadronPrivado(dataArr); }
+  catch(e){ throw new Error('No se pudo guardar el RUT y la fecha en privado ('+(e.code||e.message)+'): no se publicó nada. Revisa que estén publicadas las reglas de Firestore.'); }
+  const publico=dataArr.map(a=>YLPrivacidad.publico(a));
   await uploadBytes(storageRef(_stg,'public/data.json'),
     new Blob([JSON.stringify(publico,null,2)],{type:'application/json'}),
     {contentType:'application/json',cacheControl:'public,max-age=60'});
@@ -279,7 +283,7 @@ window.syncDataJsonToStorage=async function(){
   const btn=document.getElementById('btnSyncStorage');
   if(btn){btn.disabled=true;btn.textContent='Subiendo...';}
   try{
-    const clean=ST.data.map(({_isPending,...a})=>a);
+    const clean=ST.data.map(({_isPending,_pendId,...a})=>a);
     await _uploadToStorage(clean,null);
     showToast(`data.json publicado en Storage (${clean.length} atletas). El sitio lo sirve automáticamente.`);
     await logAction('sync_storage','data.json',null,`${clean.length} athletes`);
@@ -469,16 +473,16 @@ window.crearPerfilDebutante=async function(sid){
     sexo:i.sexo||'',
     fechaNac,
     club:i.club||'',
-    zona:i.comuna||'',
+    zona:i.zona||'',
     debut:true,
     inscripcion_evento:i.evento||'',
-    ts:serverTimestamp(),
   };
   try{
-    await setDoc(doc(db,'atletas_pending',rutClean),pendDoc);
+    // Lo público por código, el RUT y la fecha aparte (admin/privados.js).
+    await pendienteGuardar(pendDoc);
     // Agregar en memoria para que aparezca el banner y en búsquedas
-    ST.data.push({...pendDoc,_isPending:true});
-    await logAction('crear_perfil_debutante',rutClean,null,i.nombre);
+    ST.data.push({...pendDoc,_isPending:true,_pendId:codigo});
+    await logAction('crear_perfil_debutante',codigo,null,i.nombre);
     showToast('Perfil creado para '+i.nombre+' — ya visible en atleta.html');
     render();
   }catch(e){showToast('Error: '+e.message,null,true);}
@@ -491,7 +495,7 @@ window.publicarDataJson=async function(){
   if(!confirm(`¿Incorporar ${pendientes.length} debutante(s) al data.json?\n\n${pendientes.map(a=>a.nombre).join('\n')}\n\nSe publicará automáticamente en el sitio.`))return;
 
   // Build clean data.json: all athletes without internal flags
-  const clean=ST.data.map(({_isPending,...a})=>{
+  const clean=ST.data.map(({_isPending,_pendId,...a})=>{
     // Convert fechaNac yyyy-mm-dd → dd/mm/yyyy if needed (debutants come in HTML date format)
     if(a.debut&&a.fechaNac&&/^\d{4}-\d{2}-\d{2}$/.test(a.fechaNac)){
       const [y,m,d]=a.fechaNac.split('-');
@@ -523,19 +527,18 @@ window.publicarDataJson=async function(){
   }
 
   // Mark as incorporated in Firestore
-  const rutNorm=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
   let marcados=0;
   for(const a of pendientes){
     try{
-      const rut=rutNorm(a.rut);
-      if(!rut)continue;
-      await setDoc(doc(db,'atletas_pending',rut),{incorporated:true,incorporatedAt:serverTimestamp()},{merge:true});
+      const id=a._pendId||a.codigo;
+      if(!id)continue;
+      await setDoc(doc(db,'atletas_pending',id),{incorporated:true,incorporatedAt:serverTimestamp()},{merge:true});
       marcados++;
     }catch(e){console.warn('[publicarDataJson] mark:',e.message);}
   }
 
   // Remove _isPending flag from local state so banner disappears
-  ST.data.forEach(a=>delete a._isPending);
+  ST.data.forEach(a=>{delete a._isPending;delete a._pendId;});
 
   await logAction('publicar_data_json',`${clean.length} atletas`,null,`${pendientes.length} debutantes`);
   showToast(_uploaded?`Publicado automáticamente (${clean.length} atletas). ${marcados} debutante(s) incorporados.`:`Descargado (${clean.length} atletas). ${marcados} debutante(s) incorporados. Sube el archivo al servidor.`);
@@ -580,7 +583,10 @@ window.exportOPL=function(eventoId){
 };
 
 window.exportNominas=function(){
-  const blob=new Blob([JSON.stringify(ST.nominas,null,2)],{type:'application/json'});
+  // nominas.json se publica en el sitio: cada atleta sin RUT ni fecha completa.
+  const n=ST.nominas||{};
+  const limpio={...n,events:(n.events||[]).map(e=>({...e,athletes:(e.athletes||[]).map(a=>YLPrivacidad.publico(a))}))};
+  const blob=new Blob([JSON.stringify(limpio,null,2)],{type:'application/json'});
   const u=URL.createObjectURL(blob);
   const l=document.createElement('a');l.href=u;l.download='nominas.json';l.click();
   URL.revokeObjectURL(u);
@@ -1063,32 +1069,31 @@ window.insBuscar=function(el){
 window.insGuardar=async function(){
   const a=(ST.data||[]).find(x=>x.codigo===_insWork.codigo);
   if(!a||!_insWork.evento){ showToast('Falta el campeonato o el atleta',null,true); return; }
-  const rutLimpio=String(a.rut||'').replace(/[^0-9kK]/g,'');
-  if(!rutLimpio){ showToast('Ese atleta no tiene RUT en el padrón',null,true); return; }
-  // El id se arma igual que en el formulario público: {evento}_{rut sin puntos}.
+  // El id se arma igual que en el formulario público: {evento}_{código}.
   // Si ya existe una inscripción de esa persona en ese campeonato, es la misma
-  // y hay que avisar en vez de pisarla.
-  const id=`${_insWork.evento}_${rutLimpio}`;
-  if((ST.inscripciones||[]).some(i=>i.id===id)){
+  // y hay que avisar en vez de pisarla (también las de antes, que tenían el RUT
+  // en el id).
+  const id=YLPrivacidad.idInscripcion(_insWork.evento,a.codigo);
+  const rutN=YLPrivacidad.norm(a.rut);
+  if((ST.inscripciones||[]).some(i=>i.evento===_insWork.evento&&i.status!=='rejected'
+      &&(i.id===id||i.codigo===a.codigo||(rutN&&YLPrivacidad.norm(i.rut)===rutN)))){
     showToast(a.nombre+' ya tiene inscripción en ese campeonato',null,true); return;
   }
   const cat=String(_insWork.categoria||'').trim();
   try{
-    await setDoc(doc(db,'inscripciones',id),{
-      evento:_insWork.evento, nombre:a.nombre, rut:a.rut, codigo:a.codigo,
+    // inscCrear (admin/privados.js) deja el RUT y la fecha en la inscripción
+    // privada, con un PIN para poder subirle documentos desde el panel.
+    await inscCrear(id,{
+      evento:_insWork.evento, nombre:a.nombre, rut:a.rut||'', codigo:a.codigo,
       sexo:a.sexo||'', club:a.club||'', fechaNac:a.fechaNac||'',
       modalidad:_insWork.modalidad, division:_insWork.division,
       categoria:cat&&!/kg/i.test(cat)?cat+' kg':cat,
       status:'approved', timestamp:serverTimestamp(),
       // Queda anotado que no vino del formulario: no tiene PIN ni documentos, y
-      // el que la revise después tiene que poder saber por qué.
-      origen:'panel', creadaPor:ST.user?.email||'admin',
-    });
-    // Registro privado, para poder subirle documentos desde el panel. Con la
-    // forma que piden las reglas (PIN de 4 dígitos); si falla, no se pierde la
-    // inscripción: se crea solo al subir el primer documento.
-    try{ await setDoc(doc(db,'inscripciones_private',id),{pin:String(Math.floor(1000+Math.random()*9000)),rut:String(a.rut||''),ts:Date.now(),docs:{}}); }
-    catch(e){ console.warn('[insGuardar] registro privado',e); }
+      // el que la revise después tiene que poder saber por qué. Quién la creó
+      // queda en el registro de acciones (no se publica su correo).
+      origen:'panel',
+    },{pin:String(Math.floor(1000+Math.random()*9000)),docs:{}});
     await logAction('crear_inscripcion',id,null,'aceptada',{nombre:a.nombre,evento:_insWork.evento});
     showToast(a.nombre+' agregado a '+_insWork.evento);
     const ov=document.getElementById('insModal'); if(ov)ov.remove();

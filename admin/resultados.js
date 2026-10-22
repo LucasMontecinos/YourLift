@@ -96,10 +96,13 @@ async function _guardarCapa(a,mut,accion,detalle){
   const eds=(a._competencias_edits||[]).map(e=>({...e}));
   const fuera=[...(a._excluded_results||[])];
   mut(eds,fuera);
-  await setDoc(doc(db,'athlete_edits',_editDocId(a)),{
-    rut:a.rut||'', codigo:a.codigo||'', nombre:a.nombre||'',
+  const docId=_editDocId(a);
+  await setDoc(doc(db,'athlete_edits',docId),{
+    codigo:a.codigo||'', nombre:a.nombre||'',
     competencias_edits:eds, excluded_results:fuera, ts:Date.now()
   },{merge:true});
+  await _guardarEditPriv(docId,{rut:a.rut});
+  _recordarEditDoc(a,docId);
   await _marcarEdicion();
   a._competencias_edits=eds;
   a._excluded_results=fuera;
@@ -386,7 +389,8 @@ window.impDoImport = async function(btn){
       if(hasAttempts) data.attempts = a.att;
       if(a.flight) data.flight = a.flight;
       if(a.bw>0) data.bw = a.bw;
-      await setDoc(doc(db,'inscripciones',id), data);
+      // El RUT, si vino en el CSV, va a la inscripción privada.
+      await inscCrear(id, data);
       ok++;
     }catch(e){ console.error('Import row failed:', a.nombre, e); err++; }
   }
@@ -575,7 +579,8 @@ window.procesarMerge = async function(compId){
   }catch(e){
     console.warn('[merge] Storage upload failed:',e.message);
     // Fallback: download locally
-    const dataBlob=new Blob([JSON.stringify(newData,null,2)],{type:'application/json'});
+    // Es el data.json que se publica: sin RUT ni fecha de nacimiento completa.
+    const dataBlob=new Blob([JSON.stringify(newData.map(YLPrivacidad.publico),null,2)],{type:'application/json'});
     const dataUrl=URL.createObjectURL(dataBlob);
     const a1=document.createElement('a');a1.href=dataUrl;a1.download='data.json';a1.click();
     if(recordsUpdated>0){
@@ -590,7 +595,7 @@ window.procesarMerge = async function(compId){
   // Mark as processed in Firestore
   try{
     await setDoc(doc(db,'competition_results',compId),
-      {status:'processed',processedAt:new Date().toISOString(),processedBy:ST.user.email,
+      {status:'processed',processedAt:new Date().toISOString(),processedBy:ST.user.uid,
        summary:{added,updated,recordsUpdated}},
       {merge:true}
     );

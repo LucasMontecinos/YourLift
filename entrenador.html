@@ -169,7 +169,11 @@ async function renderPortal(){
     for(const j of Object.keys(byJ)){
       const n=allowedHandlers(byJ[j]);
       let existing=[];
-      try{ const hd=await getDoc(doc(db,'handlers',c.eventoId+'__'+slug(MYNAME)+'__'+j)); if(hd.exists()&&Array.isArray(hd.data().handlers)) existing=hd.data().handlers; }catch(e){}
+      const hid=c.eventoId+'__'+slug(MYNAME)+'__'+j;
+      try{ const hd=await getDoc(doc(db,'handlers',hid)); if(hd.exists()&&Array.isArray(hd.data().handlers)) existing=hd.data().handlers; }catch(e){}
+      // Los correos van aparte (handlers_priv): handlers lo lee cualquiera.
+      try{ const hp=await getDoc(doc(db,'handlers_priv',hid)); const cs=hp.exists()?(hp.data().correos||[]):[];
+        existing=existing.map((h,k)=>({...h,correo:h.correo||cs[k]||''})); }catch(e){}
       const box=$('hf_'+c.eventoId+'_'+j); if(!box) continue;
       let f='';
       for(let k=0;k<n;k++){ const h=existing[k]||{};
@@ -202,7 +206,11 @@ window.saveHandlers=async function(ev,j,n){
     if(nm||co) handlers.push({nombre:nm,correo:co});
   }
   try{
-    await setDoc(doc(db,'handlers',ev+'__'+slug(MYNAME)+'__'+j),{evento:ev,coach:MYNAME,jornada:j,handlers,by:USER.uid,updatedAt:serverTimestamp()},{merge:true});
+    // handlers/ lo lee el cronograma público: solo los nombres. Los correos, en
+    // handlers_priv/ (los lee el panel y el mismo entrenador).
+    const hid=ev+'__'+slug(MYNAME)+'__'+j;
+    await setDoc(doc(db,'handlers',hid),{evento:ev,coach:MYNAME,jornada:j,handlers:handlers.map(h=>({nombre:h.nombre})),by:USER.uid,updatedAt:serverTimestamp()});
+    await setDoc(doc(db,'handlers_priv',hid),{correos:handlers.map(h=>h.correo||''),by:USER.uid,updatedAt:serverTimestamp()});
     m.style.color='var(--green)'; m.textContent='Guardado';
   }catch(e){ m.style.color='var(--red)'; m.textContent='Error: '+e.message; }
 };

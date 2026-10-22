@@ -190,7 +190,7 @@ function _nrmMod(s){
   return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
 }
 function modsQueLleva(){
-  return ATLETAS.filter(a=>state.atletas.indexOf(a.rut)>=0).map(a=>_nrmMod(a.modalidad));
+  return ATLETAS.filter(a=>state.atletas.indexOf(a.clave)>=0).map(a=>_nrmMod(a.modalidad));
 }
 function _docEntAplica(d){
   const mods=_limpiaLista(d&&d.mods);
@@ -431,21 +431,18 @@ window.buscarRut=async function(){
   if(!rutValido(r)){ state.acred=null; state.error='Ese RUT no es válido. Revísalo.'; render(); return; }
   state.error=''; state.buscandoRut=true; render();
   try{
-    const d=await FB.getDoc(FB.doc(FB.db,'entrenadores',formatRut(r)));
-    let c=d.exists()?d.data():null;
-    // En la base el id es el RUT con puntos, pero hay registros viejos guardados
-    // de otra forma: si no calza al primer intento, se busca por RUT limpio.
-    if(!c){
-      const d2=await FB.getDoc(FB.doc(FB.db,'entrenadores',rutLimpio(r)));
-      if(d2.exists())c=d2.data();
-    }
+    // La base de entrenadores la lee solo un admin (trae RUT y correos). Para
+    // reconocer a quien escribe SU RUT está entrenadores_indice/{rut}: nombre,
+    // club, categoría y acreditaciones; se lee de a uno y no se lista.
+    const d=await FB.getDoc(FB.doc(FB.db,'entrenadores_indice',rutLimpio(r).toUpperCase()));
+    const c=d.exists()?d.data():null;
     if(c){
       const v=acreditacionVigente(c);
       state.acred={encontrado:true, vigente:!!v, hasta:v?v.vence:'',
                    categoria:c.categoria||''};
-      // Se rellena lo que sirve para identificarlo. El CORREO no: la base es de
-      // lectura pública, y devolver el correo de cualquiera que teclee un RUT
-      // convertiría este formulario en un buscador de correos ajenos.
+      // Se rellena lo que sirve para identificarlo. El CORREO no está en el
+      // índice: devolver el correo de cualquiera que teclee un RUT convertiría
+      // este formulario en un buscador de correos ajenos.
       if(!state.ent.nombre) state.ent.nombre=c.nombre||'';
       if(!state.ent.club)   state.ent.club=c.club||'';
       state.ent.categoria=c.categoria||'';
@@ -474,7 +471,9 @@ async function cargarAtletas(){
       // del entrenador corre junto al del atleta y casi todos van a estar
       // pendientes de revisión todavía.
       if(a.status==='rejected')return;
-      ATLETAS.push({rut:rutLimpio(a.rut), nombre:a.nombre||'', club:a.club||'',
+      // Se identifican por su código de atleta: la inscripción pública ya no
+      // trae el RUT. (Una sin código, por el id de la inscripción.)
+      ATLETAS.push({clave:a.codigo||d.id, codigo:a.codigo||'', nombre:a.nombre||'', club:a.club||'',
                     modalidad:a.modalidad||'', division:a.division||'',
                     categoria:a.categoria||'', status:a.status||'pending'});
     });
@@ -534,7 +533,7 @@ function puedeSeguir(){
 
 // ── Enviar ────────────────────────────────────────────────────
 window.enviar=async function(){
-  if(state.enviando)return;
+  if(state.enviando||!state.consiente)return;
   state.enviando=true; state.error=''; render();
   const fo=formActual();
   const rc=rutLimpio(state.ent.rut);
@@ -547,12 +546,15 @@ window.enviar=async function(){
     for(const meta of Object.values(docsEntrenador(fo))){
       const f=state.archivos[meta.key]; if(!f)continue;
       const ext=(String(f.name||'').match(/\.([a-zA-Z0-9]+)$/)||[])[1]||'pdf';
-      const r=FB.ref(FB.storage,`athlete_files/${rc}/entrenador_${meta.key}_${Date.now()}.${ext}`);
+      const ruta=`athlete_files/${rc}/entrenador_${meta.key}_${Date.now()}.${ext}`;
+      const r=FB.ref(FB.storage,ruta);
       await FB.uploadBytes(r,f,{contentType:f.type||'application/octet-stream'});
-      urls[meta.key]=await FB.getDownloadURL(r);
+      // Se guarda dónde quedó, no un enlace: el enlace de descarga solo lo pide
+      // un admin desde el panel (los documentos no son públicos).
+      urls[meta.key]='storage:'+ruta;
     }
-    const elegidos=ATLETAS.filter(a=>state.atletas.indexOf(a.rut)>=0)
-      .map(a=>({rut:a.rut,nombre:a.nombre,modalidad:a.modalidad,division:a.division,categoria:a.categoria}));
+    const elegidos=ATLETAS.filter(a=>state.atletas.indexOf(a.clave)>=0)
+      .map(a=>({codigo:a.codigo,nombre:a.nombre,modalidad:a.modalidad,division:a.division,categoria:a.categoria}));
 
     const pub={
       // El formulario es el dueño de la inscripción. El campeonato va aparte y
@@ -563,13 +565,14 @@ window.enviar=async function(){
       tipo:(fo&&fo.tipo)||'campeonato',
       evento:esDeCampeonato(fo)?fo.evento:'',
       nombre:state.ent.nombre.trim(),
-      rut:formatRut(state.ent.rut),
+      // El RUT va solo en la parte privada (y en el id, que no se puede listar).
       club:state.ent.club.trim(),
       categoria:state.ent.categoria||'',
       acreditado:!!(state.acred&&state.acred.vigente),
       acreditadoHasta:(state.acred&&state.acred.hasta)||'',
       enBase:!!(state.acred&&state.acred.encontrado),
       atletas:elegidos,
+      privacyConsent:true, privacyConsentTs:new Date().toISOString(),
       status:'pending',
       timestamp:FB.serverTimestamp()
     };
@@ -711,9 +714,9 @@ function pasoAtletas(){
       <div class="field"><input class="input" placeholder="Buscar por nombre o club…" value="${esc(state.buscaAtleta)}" oninput="setBusca(this.value)"></div>
       <div style="max-height:420px;overflow-y:auto;margin-bottom:6px">
         ${vis.map(a=>{
-          const s=state.atletas.indexOf(a.rut)>=0;
+          const s=state.atletas.indexOf(a.clave)>=0;
           return `<label class="ath ${s?'sel':''}">
-            <input type="checkbox" ${s?'checked':''} onchange="togglAtleta('${esc(a.rut)}')">
+            <input type="checkbox" ${s?'checked':''} onchange="togglAtleta('${esc(a.clave)}')">
             <div style="flex:1;min-width:0">
               <div class="n">${esc(a.nombre)}</div>
               <div class="d">${esc([a.club,a.modalidad,a.division,a.categoria?a.categoria+' kg':''].filter(Boolean).join(' · '))}</div>
@@ -783,7 +786,7 @@ function pasoConfirmar(){
   const fo=formActual();
   const camp=esDeCampeonato(fo);
   const ev=fo&&EVENTOS.find(e=>e.id===fo.evento);
-  const elegidos=ATLETAS.filter(a=>state.atletas.indexOf(a.rut)>=0);
+  const elegidos=ATLETAS.filter(a=>state.atletas.indexOf(a.clave)>=0);
   const a=state.acred;
   return `<div class="card fade">
     <h2 class="os" style="font-size:18px;letter-spacing:1px;margin-bottom:16px">Revisa antes de enviar</h2>
@@ -805,9 +808,13 @@ function pasoConfirmar(){
       <div class="muted" style="margin-bottom:6px">Documentos</div>
       ${Object.values(docsEntrenador(fo)).map(m=>`<div style="font-size:13px;padding:3px 0">${esc(m.label)}: ${state.nombres[m.key]?'<i class=yl-i-check></i> '+esc(state.nombres[m.key]):'<i class=yl-i-cruz></i> falta'}</div>`).join('')}
     </div>`:''}
+    <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;cursor:pointer;padding:12px;border:1px solid var(--border);border-radius:10px">
+      <input type="checkbox" ${state.consiente?'checked':''} onchange="state.consiente=this.checked;render()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0">
+      <span style="font-size:12px;line-height:1.6">He leído la <a href="index.html#privacidad" target="_blank" style="color:var(--gold)">Política de Privacidad</a> y autorizo a FECHIPO, responsable de los datos, y a YourLift SpA, que opera la plataforma por su encargo, a tratar mis datos y documentos para gestionar mi acreditación e inscripción. En lo público aparecen mi nombre, club y categoría; mi RUT, correo, teléfono y documentos no se publican.</span>
+    </label>
     <div style="display:flex;gap:8px">
       <button class="btn btn-outline" onclick="volver()" ${state.enviando?'disabled':''}>Atrás</button>
-      <button class="btn btn-green" onclick="enviar()" ${state.enviando?'disabled':''}>
+      <button class="btn btn-green" onclick="enviar()" ${state.enviando||!state.consiente?'disabled':''}>
         ${state.enviando?'<span class="sp" style="width:16px;height:16px;border-width:2px"></span> Enviando…':'Enviar inscripción'}</button>
     </div>
   </div>`;
@@ -856,7 +863,7 @@ if(window.FBE) arrancar(); else window.addEventListener('fbe-listo',arrancar);
 // cargar; esto deja mirar el formulario igual.
 window._montar=function(forms,fbFalso,evs){ FORMS=forms||[]; EVENTOS=evs||[]; if(fbFalso)FB=fbFalso; LISTO=true; render(); };
 window._estado=state;
-window._atletas=function(a){ ATLETAS=a||[]; render(); };
+window._atletas=function(a){ ATLETAS=(a||[]).map(x=>Object.assign({clave:x.codigo||x.clave||''},x)); render(); };
 window.docsEntrenador=docsEntrenador;
 window.formAbierto=formAbierto;
 window.esDeCampeonato=esDeCampeonato;

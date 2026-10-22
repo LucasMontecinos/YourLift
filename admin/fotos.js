@@ -904,6 +904,36 @@ function _recordarFoto(codigo, rut, datos){
   return fd;
 }
 
+// atleta_fotos se lee sin sesión. La foto de inscripción de la que salió una
+// foto (o la que se rechazó) está en la carpeta privada de documentos, y su
+// enlace lleva la ruta con el RUT y la llave para abrirla: no se guarda el
+// enlace, se guarda una huella (source_ref / rejected_ref) que alcanza para
+// reconocerla después. Los docs viejos con source_url/rejected_url se siguen
+// entendiendo (y la migración los pasa a huella).
+function _huellaFoto(u){
+  if(!u)return '';
+  let h=0x811c9dc5; const s=String(u);
+  for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; }
+  return 'h'+h.toString(16)+'_'+s.length;
+}
+function _esLaFoto(fd,u){
+  if(!fd||!u)return false;
+  const h=_huellaFoto(u);
+  return fd.foto_url===u||fd.source_url===u||fd.rejected_url===u||fd.source_ref===h||fd.rejected_ref===h;
+}
+// La foto de perfil pública se guarda por código de atleta, nunca con el RUT en
+// el nombre del archivo (el enlace es público). Si viene de la inscripción, se
+// copia a athlete_photos/ y se publica la copia.
+async function _copiarFotoPublica(codigo,url){
+  const blob=await (await fetch(url)).blob();
+  const tipo=blob.type||'image/jpeg';
+  const ext=/webp/.test(tipo)?'webp':/png/.test(tipo)?'png':'jpg';
+  const ruta='athlete_photos/'+String(codigo).replace(/[^0-9a-zA-Z-]/g,'_')+'_'+Date.now()+'.'+ext;
+  const ref=storageRef(getStorage(app),ruta);
+  await uploadBytes(ref,blob,{contentType:tipo});
+  return {url:await getDownloadURL(ref),ruta};
+}
+
 // Cuándo se decidió por última vez sobre la foto de este atleta. Sirve para las
 // fotos viejas, de antes de que se guardara `source_url`: si la decisión es
 // posterior a la subida, ya se miró esa foto.
@@ -931,7 +961,7 @@ function _fotoPendienteDe(a, idx){
   if(!e || !e.url) return null;
   const u = e.url;
   const fd = (ST.fotosByCodigo||{})[a.codigo] || (ST.fotosByRut||{})[_rutFoto(a.rut)];
-  if(fd && (fd.foto_url===u || fd.source_url===u || fd.rejected_url===u)) return null;
+  if(_esLaFoto(fd,u)) return null;
   if(a.foto_url){
     // Ya tiene una publicada: esta solo es "nueva" si la mandó DESPUÉS de que se
     // decidió la que tiene. Sin fecha de decisión —fotos de data.json, docs
@@ -1053,22 +1083,23 @@ window.confirmarFotosBulk = async function(){
     if(!url){ errors++; fallaron.push((a.nombre||codigo)+': no se encontró la foto de su inscripción'); continue; }
     try{
       const docRef = doc(db, 'atleta_fotos', codigo);
-      // `source_url` deja anotado de QUÉ foto de inscripción salió esta. Sin eso
-      // no hay forma de distinguir "ya la revisé" de "mandó otra después", y el
-      // atleta volvía a la lista de pendientes en cada carga.
+      const pub = await _copiarFotoPublica(codigo, url);
+      // `source_ref` deja anotado de QUÉ foto de inscripción salió esta (una
+      // huella, no el enlace). Sin eso no hay forma de distinguir "ya la revisé"
+      // de "mandó otra después", y el atleta volvía a la lista en cada carga.
       const datos = {
-        codigo, rut: a.rut||'', nombre: a.nombre||'',
-        foto_url: url, source_url: url, status: 'approved',
-        approved_by: ST.user?.email || 'admin',
+        codigo, nombre: a.nombre||'',
+        foto_url: pub.url, storage_path: pub.ruta, source_ref: _huellaFoto(url), status: 'approved',
+        approved_by: ST.user?.uid || 'admin',
         source: 'bulk_import_inscripcion',
-        rejected_url: null,
+        rejected_ref: null,
         updated: Date.now()
       };
       await setDoc(docRef, datos, {merge:true});
       // La copia local se guardaba recortada (solo codigo/foto_url/status) y
       // perdía justo la fecha y el origen, así que la fila reaparecía sola.
       _recordarFoto(codigo, a.rut, datos);
-      a.foto_url = url;
+      a.foto_url = pub.url;
       delete F.bulkSel[codigo];
       done++;
     }catch(e){
@@ -1112,13 +1143,12 @@ window.rechazarFotoInscripcion = async function(){
     const docRef = doc(db, 'atleta_fotos', F.selected.codigo);
     const datos = {
       codigo: F.selected.codigo,
-      rut: F.selected.rut||'',
       nombre: F.selected.nombre||'',
       status: 'rejected',
-      rejected_url: F.pendingPhotoUrl,
+      rejected_ref: _huellaFoto(F.pendingPhotoUrl),
       rejected_at: Date.now(),
       updated: Date.now(),
-      rejected_by: ST.user?.email || 'admin'
+      rejected_by: ST.user?.uid || 'admin'
     };
     await setDoc(docRef, datos, {merge:true});
     _recordarFoto(F.selected.codigo, F.selected.rut, datos);
@@ -1305,9 +1335,10 @@ window.guardarFotoAtleta = async function(){
   try{
     const dataUrl = F.preview;
     const blob = await (await fetch(dataUrl)).blob();
-    const rutKey = (F.selected.rut||F.selected.codigo||'unknown').replace(/[^0-9a-zA-Z]/g,'_');
+    // El nombre del archivo va con el código: el enlace de la foto es público.
+    const codKey = (F.selected.codigo||'unknown').replace(/[^0-9a-zA-Z-]/g,'_');
     const ts = Date.now();
-    const path = 'athlete_photos/'+rutKey+'_'+ts+'.jpg';
+    const path = 'athlete_photos/'+codKey+'_'+ts+'.jpg';
     const storage = getStorage(app);
     const ref = storageRef(storage, path);
     await uploadBytes(ref, blob, {contentType:'image/jpeg'});
@@ -1316,16 +1347,16 @@ window.guardarFotoAtleta = async function(){
     const docRef = doc(db, 'atleta_fotos', F.selected.codigo);
     const datos = {
       codigo: F.selected.codigo,
-      rut: F.selected.rut||'',
       nombre: F.selected.nombre||'',
       foto_url: url,
       // De cuál foto de inscripción salió, si salió de una: es lo que después
-      // distingue "ya la revisé" de "el atleta mandó otra".
-      source_url: F.importedFrom || null,
+      // distingue "ya la revisé" de "el atleta mandó otra". Una huella, no el
+      // enlace (ver _huellaFoto).
+      source_ref: F.importedFrom ? _huellaFoto(F.importedFrom) : null,
       storage_path: path,
       status: 'approved',
-      rejected_url: null,
-      approved_by: ST.user?.email || 'admin',
+      rejected_ref: null,
+      approved_by: ST.user?.uid || 'admin',
       updated: ts
     };
     await setDoc(docRef, datos, {merge:true});
@@ -1608,7 +1639,7 @@ window.quitarFondoGif = async function(){
     // 5. Subir WebM procesado
     setAIStatus('Subiendo video procesado...', 90);
     const webmBlob=new Blob(chunks,{type:mimeType});
-    const rutKey=(F.selected.rut||F.selected.codigo||'x').replace(/[^0-9a-zA-Z]/g,'_');
+    const rutKey=(F.selected.codigo||'x').replace(/[^0-9a-zA-Z-]/g,'_');   // por código: el enlace es público
     const ts=Date.now();
     const path='athlete_gifs/'+rutKey+'_'+ts+'_nobg.webm';
     const storage=getStorage(app);
@@ -1679,7 +1710,7 @@ window.subirGifAtleta = async function(input){
   render();
   try{
     const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
-    const rutKey = (F.selected.rut || F.selected.codigo || 'unknown').replace(/[^0-9a-zA-Z]/g,'_');
+    const rutKey = (F.selected.codigo || 'unknown').replace(/[^0-9a-zA-Z-]/g,'_');   // por código: el enlace es público
     const ts = Date.now();
     const path = 'athlete_gifs/'+rutKey+'_'+ts+'.'+ext;
     const storage = getStorage(app);

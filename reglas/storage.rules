@@ -46,6 +46,13 @@ service firebase.storage {
       return request.auth != null
           && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
     }
+    // Los documentos de identidad no los abren las cuentas de transmisión, mesa
+    // técnica ni jueces (igual que en firestore.rules: veDatosPersonales).
+    function veDatosPersonales() {
+      return isAdmin()
+          && !(firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.get('role', '')
+               in ['streaming', 'transmision', 'mesa', 'juez']);
+    }
 
     // ── Logos públicos (clubes, federación, auspiciadores, etc.) ──
     // OJO con {allPaths=**} en vez de {file}: {file} calza UN solo segmento, así
@@ -70,13 +77,18 @@ service firebase.storage {
     // Se ven en la ficha del atleta, en la nómina y en Control TX, así que la
     // lectura es abierta. Las sube el admin desde el panel o desde el livecast, y
     // al reemplazar una foto se borra la anterior: por eso el borrado va aparte.
+    // Se puede abrir cada foto (el enlace está en la ficha), pero no listar la
+    // carpeta: los nombres de archivo viejos llevan el RUT (los nuevos van por
+    // código de atleta, y la migración del panel renombra los viejos).
     match /athlete_photos/{file} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if isAdmin();
       allow create, update: if isAdmin() && request.resource.size < 10 * 1024 * 1024;
       allow delete: if isAdmin();
     }
     match /athlete_gifs/{file} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if isAdmin();
       allow create, update: if isAdmin() && request.resource.size < 30 * 1024 * 1024;
       allow delete: if isAdmin();
     }
@@ -117,15 +129,21 @@ service firebase.storage {
     // menores, fichas médicas. Son datos personales —algunos sensibles—, así que:
     //   · NADIE fuera del panel puede listar la carpeta. Antes read: if true
     //     dejaba listar athlete_files/ entero y bajar los documentos de todos.
-    //   · Leer un archivo exige saber su nombre exacto, que lleva la hora de
-    //     subida en milisegundos: el formulario lo necesita para pedir su link
-    //     (getDownloadURL) justo después de subirlo, y el link queda guardado en
-    //     inscripciones_private, que solo lee un admin.
+    //   · Tampoco se puede abrir un archivo sin ser admin. Antes bastaba con
+    //     saber el nombre exacto: la carpeta es el RUT y el nombre lleva la hora
+    //     de subida, que se podía adivinar con la hora de la inscripción. Ahora
+    //     el formulario guarda DÓNDE quedó el archivo ("storage:athlete_files/…")
+    //     y el panel pide el enlace (compartido/privacidad.js, admin/privados.js).
+    //     Los enlaces que ya estaban guardados siguen funcionando: llevan su
+    //     propia llave y viven en inscripciones_private, que solo lee un admin.
     //   · Se puede crear, no sobrescribir: nadie puede pisar el documento de otro.
+    //     Solo imágenes y PDF, de hasta 20 MB.
     match /athlete_files/{rut}/{file} {
-      allow get: if true;
-      allow list: if isAdmin();
-      allow create: if request.resource.size < 20 * 1024 * 1024;
+      allow get, list: if veDatosPersonales();
+      allow create: if request.resource.size < 20 * 1024 * 1024
+                    && (request.resource.contentType.matches('image/.*')
+                        || request.resource.contentType == 'application/pdf'
+                        || request.resource.contentType == 'application/octet-stream');
       allow update, delete: if isAdmin();
     }
 

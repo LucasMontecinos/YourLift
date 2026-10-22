@@ -47,7 +47,10 @@ export function where(){return{};}
     // medio cargar y deja la carga colgada contra el servidor local.
     const ctx = await b.newContext({ serviceWorkers: 'block' });
     // Caché caliente: es la situación en la que fallaba.
+    // (_yfc_v: la marca de que las copias ya son de después de sacar el RUT;
+    // sin ella compartido/privacidad.js las borra todas una vez.)
     await ctx.addInitScript(r => {
+      localStorage.setItem('_yfc_v', '2');
       localStorage.setItem('_yfc_atl_res', JSON.stringify({ ts: Date.now(), d: [r] }));
     }, RESULTADO);
     const p = await ctx.newPage();

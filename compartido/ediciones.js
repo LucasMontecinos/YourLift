@@ -49,7 +49,10 @@
 (function (window) {
   'use strict';
 
-  var LLAVE = '_yl_edits';          // la copia, compartida por todas las páginas
+  var LLAVE = '_yl_edits2';         // la copia, compartida por todas las páginas
+  // La copia anterior se guardó cuando las ediciones todavía traían el RUT y la
+  // fecha de nacimiento: se borra del navegador.
+  try { localStorage.removeItem('_yl_edits'); } catch (e) {}
   var MARCA = '__version';          // el documento que dice cuándo fue el último cambio
   var TTL = 20 * 60 * 1000;         // solo si no se pudo leer la versión
   var ESPERA = 2500;                // lo que se espera por la versión antes de seguir
@@ -202,11 +205,16 @@
       var idx = -1;
       if (ed.rut) { var k = rutNorm(ed.rut); if (porRut[k] !== undefined) idx = porRut[k]; }
       if (idx < 0 && ed.codigo && porCod[ed.codigo] !== undefined) idx = porCod[ed.codigo];
+      // Si se le cambió el código, data.json sigue con el viejo hasta que se
+      // vuelve a publicar: el sitio lo encuentra por el anterior.
+      if (idx < 0 && ed.codigoAnterior && porCod[ed.codigoAnterior] !== undefined) idx = porCod[ed.codigoAnterior];
       if (idx < 0) return;
       (porPersona[idx] = porPersona[idx] || []).push(ed);
     });
 
-    var CAMPOS = ['nombre', 'club', 'debut', 'rut', 'codigo', 'sexo', 'fechaNac', 'zona', 'comuna'];
+    // rut, fechaNac y comuna solo llegan en el panel (athlete_edits_priv); el
+    // sitio recibe el año de nacimiento.
+    var CAMPOS = ['nombre', 'club', 'debut', 'rut', 'codigo', 'sexo', 'fechaNac', 'anioNac', 'zona', 'comuna'];
     var editados = 0, fuera = {};
 
     Object.keys(porPersona).forEach(function (k) {

@@ -84,7 +84,7 @@ async function cargarCompRes(){
     const snap=await window.FB.getDocs(window.FB.collection(db,'competition_results'));
     // Sin los resultados de eventos de prueba (ensayo).
     compResDB=snap.docs.map(d=>({...d.data(),id:d.id})).filter(x=>!(/ensayo/i.test(String(x.evento_id||''))||/ensayo/i.test(String(x.id||''))||/^\s*ensayo\b/i.test(String(x.evento||''))))
-      .map(x=>({rut:x.rut||'',evento:x.evento||'',fecha:x.fecha||''}));
+      .map(x=>({codigo:x.codigo||'',evento:x.evento||'',fecha:x.fecha||''}));
     _ifsSetCache('ins_compres', compResDB);
     _redibujarPorAviso();
   }catch(e){ console.warn('[aviso] no se pudieron cargar los resultados recientes',e); }
@@ -96,43 +96,42 @@ async function cargarCompRes(){
 // inscripción. Es lo mismo que muestra el perfil del atleta como "inscripciones
 // activas". Una inscripción rechazada no cuenta.
 //
-// Solo importan las del RUT que se está inscribiendo, así que se piden esas,
-// recién cuando el RUT está completo. Antes cada visita al formulario bajaba las
-// 712 inscripciones y las ~500 fotos de todos.
-// Las formas de escribir un RUT que se encuentran guardadas: 12345678-9 casi
-// siempre, pero hay alguna con puntos o sin guion.
-function _formasRutIns(r){
-  const n=String(r||'').replace(/[^0-9kK]/g,'').toUpperCase();
-  if(n.length<2)return [];
-  const c=n.slice(0,-1), dv=n.slice(-1), p=c.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
-  return [...new Set([c+'-'+dv, p+'-'+dv, n, c+'-'+dv.toLowerCase(), p+'-'+dv.toLowerCase(), n.toLowerCase()])];
-}
+// Solo importan las de quien se está inscribiendo, así que se piden esas,
+// recién cuando el RUT está completo y se sabe su código. Antes cada visita al
+// formulario bajaba las 712 inscripciones y las ~500 fotos de todos.
 
 async function cargarDatosDeRut(rut){
   const n=String(rut||'').replace(/[^0-9kK]/g,'').toUpperCase();
   if(n.length<7||n===_rutConDatos||!firebaseReady||!window.FB||!window.FB.where)return;
   if(typeof validateRut==='function'&&!validateRut(formatRut(n)).valid)return;
   _rutConDatos=n;
-  const F=window.FB, formas=_formasRutIns(n);
-  const q=col=>F.getDocs(F.query(F.collection(db,col),F.where('rut','in',formas))).catch(()=>null);
-  // El padrón público ya no trae el RUT (compartido/privacidad.js): quién es
-  // este RUT se pregunta a rut_indice/{rut}, que se lee de a uno y no se lista.
-  const qi=F.getDoc(F.doc(db,'rut_indice',n)).catch(()=>null);
+  const F=window.FB;
   try{
-    const [si,sf,ri]=await Promise.all([q('inscripciones'),q('atleta_fotos'),qi]);
+    // Las inscripciones y las fotos públicas ya no traen el RUT: se identifican
+    // por el código de atleta. Quién es este RUT se pregunta a rut_indice/{rut},
+    // que se lee de a uno y no se lista (compartido/privacidad.js).
+    const ri=await F.getDoc(F.doc(db,'rut_indice',n)).catch(()=>null);
     if(_rutConDatos!==n)return;                     // escribió otro RUT mientras tanto
-    if(ri&&ri.exists&&ri.exists()){
+    const ix=(ri&&ri.exists&&ri.exists())?(ri.data()||{}):null;
+    if(ix){
       window._RUT_IDX=window._RUT_IDX||{};
-      window._RUT_IDX[n]=ri.data()||{};
+      window._RUT_IDX[n]=ix;
       // Si el formulario todavía no lo reconoció, ahora puede autocompletarlo.
       try{ if(state&&state.form&&!state.form.codigo&&typeof autoFillCode==='function')autoFillCode(); }catch(e){}
     }
+    const cod=(ix&&ix.codigo)||'';
+    if(!cod){ insActDB=[]; _redibujarPorAviso(); return; }
+    const [si,sf]=await Promise.all([
+      F.getDocs(F.query(F.collection(db,'inscripciones'),F.where('codigo','==',cod))).catch(()=>null),
+      F.getDoc(F.doc(db,'atleta_fotos',cod)).catch(()=>null),
+    ]);
+    if(_rutConDatos!==n)return;
     if(si)insActDB=si.docs.map(d=>{const x=d.data();
-      return {rut:x.rut||'',evento:x.evento||'',status:x.status||''};})
+      return {codigo:x.codigo||cod,evento:x.evento||'',status:x.status||''};})
       .filter(x=>x.status!=='rejected');
     window.FOTOS_BY_RUT=window.FOTOS_BY_RUT||{};
-    if(sf)sf.docs.forEach(d=>{const x=d.data();
-      if(x.foto_url&&x.status!=='rejected')window.FOTOS_BY_RUT[n.toLowerCase()]=x.foto_url;});
+    if(sf&&sf.exists&&sf.exists()){const x=sf.data()||{};
+      if(x.foto_url&&x.status!=='rejected')window.FOTOS_BY_RUT[n.toLowerCase()]=x.foto_url;}
     _redibujarPorAviso();
   }catch(e){ console.warn('[aviso] no se pudieron cargar los datos del RUT',e); }
 }

@@ -426,7 +426,7 @@ async function syncToFB(){
         // vio de la tarima. Si no, al guardar un peso arrastraría a la tarima, a
         // los widgets y al público hasta donde está mirando ella.
         const _nv=(window.NAV_LIBRE&&window._NAV_REMOTA)||null;
-        const _mkPayload=(ath)=>({event:DATA.event,athletes:_jsonAth(ath||DATA.athletes),
+        const _mkPayload=(ath)=>({event:_evPub(DATA.event),athletes:_jsonAth(ath||DATA.athletes),
           lift:(_nv&&_nv.lift)||DATA.lift,
           round:(_nv&&typeof _nv.round==='number')?_nv.round:DATA.round,
           flight:(_nv&&_nv.flight)||DATA.flight,
@@ -592,7 +592,16 @@ async function syncTimerOnlyToFB(forzar){
 
 // Los atletas como texto para mandar: sin _pw/_pr, que son anotaciones locales
 // de cada pantalla (ver _sellarCeldas) y cada una las rearma al recibir.
-function _jsonAth(x){ return JSON.stringify(x,(k,v)=>(k==='_pw'||k==='_pr')?undefined:v); }
+// Lo que sale a livecast_sync y livecast_flash lo lee cualquiera (pantallas,
+// transmisión, el público): va sin RUT ni fecha de nacimiento completa. El
+// atleta se reconoce por su código (findInDB) y la división usa el año (born).
+const _PRIV_LC={rut:1,dob:1,fechaNac:1,fechanac:1,correo:1,email:1,telefono:1};
+function _jsonAth(x){ return JSON.stringify(x,(k,v)=>(k==='_pw'||k==='_pr'||_PRIV_LC[k])?undefined:v); }
+// El evento a veces trae su propia lista de atletas (la de nominas.json): igual.
+function _evPub(ev){
+  if(!ev||!Array.isArray(ev.athletes))return ev;
+  return Object.assign({},ev,{athletes:JSON.parse(_jsonAth(ev.athletes))});
+}
 
 function _flashFijarBase(arr){
   const b={}; (arr||[]).forEach(a=>{ if(a&&a.id!=null) b[a.id]=_jsonAth(a); });

@@ -113,10 +113,10 @@ async function main() {
 
   console.log('\n  Y el correo sigue siendo solo del panel');
   {
-    const i = rules.indexOf('inscripciones_private');
+    const i = rules.indexOf('match /inscripciones_private/');
     ok(i > 0, 'las rules siguen nombrando inscripciones_private');
     const bloque = rules.slice(i, i + 400);
-    ok(/isAdmin\(\)/.test(bloque), 'inscripciones_private se lee solo con sesión de admin');
+    ok(/allow read: if veDatosPersonales\(\);/.test(bloque), 'inscripciones_private se lee solo con sesión de admin (y no las cuentas de competencia)');
     ok(!/allow read: if true/.test(bloque), 'no queda abierta al público');
   }
 

@@ -73,6 +73,9 @@ const CC={"Campeonato Nacional FECHIPO 2026":{bg:"#fef3c7",b:"#f59e0b",t:"#92400
 // borrados también allá.
 const CATS_RETIRADAS = ['72'];
 let D=[],R={},NM={events:[]},ST={v:"home",s:"",fc:"",fk:"",fl:"",sel:null,p:0,rt:"classic",rl:"sq",ne:0,ns:""};
+// yourlift.cl/#privacidad abre directo la política de privacidad: la enlazan el
+// formulario de inscripción y el de entrenadores.
+if(/^#(privacidad|terminos|derechos)$/.test(location.hash))ST.v='terminos';
 let CERTCFG=null,CERTF={q:'',athlete:null,champId:'',motivo:'fines',destinoId:'',marcas:{sq:'',bp:'',dl:'',total:''},lugar:'',categoria:'',division:'',modalidad:'',ciudad:'',fechas:'',contacto:'',sent:false,err:''};
 // ═══════════════════════════════════════════════════════════════
 // RÉCORDS NACIONALES — buscador

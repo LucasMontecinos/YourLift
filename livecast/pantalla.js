@@ -240,20 +240,22 @@ function renderScreenControl(){
 async function loadBirthYears(){
   if(!fbReady||!DATA.event)return;
   try{
-    // Las inscripciones se buscan por RUT sin filtrar por evento: traemos TODAS
-    // y cruzamos por RUT. Así funciona para sub-tarimas y cualquier evento.
+    // Las inscripciones se buscan sin filtrar por evento: traemos TODAS y
+    // cruzamos por código de atleta (lo público ya no trae el RUT ni la fecha,
+    // solo el año: anioNac). Así funciona para sub-tarimas y cualquier evento.
     // Es la colección entera (unas setecientas), así que se guarda en el equipo
     // doce horas: un televisor que se recarga no la vuelve a pedir.
     const snap=await window._fb.getDocs(window._fb.collection(fbDB,'inscripciones'));
     const m={};
     snap.docs.forEach(d=>{
       const x=d.data();
-      const k=String(x.rut||'').replace(/[^0-9kK]/gi,'').toUpperCase();
-      if(k&&x.fechaNac){ const y=String(x.fechaNac).match(/(\d{4})/); if(y)m[k]=y[1]; }
+      const k=String(x.codigo||'').toUpperCase();
+      const y=x.anioNac||(String(x.fechaNac||'').match(/(\d{4})/)||[])[1];
+      if(k&&y)m[k]=String(y);
     });
-    Object.assign(window.BIRTH_BY_RUT,m);
-    try{localStorage.setItem('yl_nac_rut',JSON.stringify({ts:Date.now(),m:m}));}catch(e){}
-    console.log('[screen] fechaNac cargadas:',Object.keys(window.BIRTH_BY_RUT).length);
+    Object.assign(window.BIRTH_BY_COD,m);
+    try{localStorage.setItem('yl_nac_cod',JSON.stringify({ts:Date.now(),m:m}));}catch(e){}
+    console.log('[screen] años de nacimiento cargados:',Object.keys(window.BIRTH_BY_COD).length);
     if(TX_MODE==='jornada'||TX_MODE==='screen')R();
   }catch(e){console.warn('[screen] loadBirthYears',e.message);}
 }
@@ -265,10 +267,11 @@ function _pedirNacimiento(k){
   if(!window._nacCacheMirada){
     window._nacCacheMirada=true;
     try{
-      const o=JSON.parse(localStorage.getItem('yl_nac_rut')||'null');
+      try{localStorage.removeItem('yl_nac_rut');}catch(e){}   // la de antes, por RUT
+      const o=JSON.parse(localStorage.getItem('yl_nac_cod')||'null');
       if(o&&o.m&&Date.now()-o.ts<12*60*60*1000){
-        Object.assign(window.BIRTH_BY_RUT,o.m);
-        if(window.BIRTH_BY_RUT[k]){ setTimeout(()=>{if(typeof R==='function')R();},0); return; }
+        Object.assign(window.BIRTH_BY_COD,o.m);
+        if(window.BIRTH_BY_COD[k]){ setTimeout(()=>{if(typeof R==='function')R();},0); return; }
       }
     }catch(e){}
   }
@@ -370,15 +373,13 @@ function _renderTxAtletaEnBarra(c,st){
   }
 }
 
-function _rutN(s){return String(s||'').replace(/[^0-9kK]/gi,'').toUpperCase();}
-
 function _yob2(a){
-  // 2 dígitos del año de nacimiento: el de la nómina si viene; si no, por RUT
-  // en BIRTH_BY_RUT (que se carga recién la primera vez que falta uno).
+  // 2 dígitos del año de nacimiento: el de la nómina si viene; si no, por código
+  // de atleta en BIRTH_BY_COD (que se carga recién la primera vez que falta uno).
   const b=String(a.born||'').match(/(\d{4})/);
   if(b) return b[1].slice(2);
-  const k=_rutN(a.rut);
-  let fn=k&&window.BIRTH_BY_RUT[k];
+  const k=String(a.codigo||'').toUpperCase();
+  let fn=k&&window.BIRTH_BY_COD[k];
   if(!fn){ if(k)_pedirNacimiento(k); return ''; }
   const m=String(fn).match(/(\d{4})/);
   if(!m) return '';

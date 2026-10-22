@@ -4,6 +4,8 @@
 //   window.__FAKE      datos por colección: { eventos: [{id, ...campos}], ... }
 //   window.__FAKE_DOC  documento suelto por colección, para onSnapshot(doc)
 //   window.__AUTH      usuario con sesión ({uid, email}); sin él, nadie entró
+//   window.__ESCRITO   lo que se escribió: [{op, col, id, d}] (d = los datos; un
+//                      campo borrado con deleteField() queda en null)
 //
 // Uso:
 //   const { montarFirebase } = require('./apoyo/firebase_falso');
@@ -44,14 +46,15 @@ const FIRESTORE = `
       return()=>L({op:'suelta',col:q.__col,id:q.__id,n:0});}
     const r=filtra(datos(q.__col),q.__f||[]);L({op:'oyente',col:q.__col,filtros:q.__f||[],n:r.length});
     setTimeout(()=>{try{cb(snapDe(r))}catch(e){}},0);return()=>L({op:'suelta',col:q.__col,n:0});};
-  export const setDoc=async(r,d)=>{L({op:'escribe',col:r.__col,id:r.__id,n:0});}; export const updateDoc=async(r)=>{L({op:'escribe',col:r.__col,id:r.__id,n:0});};
-  export const deleteDoc=async()=>{};
-  export const addDoc=async()=>({id:'x'}); export const deleteField=()=>null;
+  const W=(op,r,d)=>{(globalThis.__ESCRITO=globalThis.__ESCRITO||[]).push({op,col:r.__col,id:r.__id,d:d===undefined?null:JSON.parse(JSON.stringify(d))});};
+  export const setDoc=async(r,d)=>{L({op:'escribe',col:r.__col,id:r.__id,n:0});W('set',r,d);}; export const updateDoc=async(r,d)=>{L({op:'escribe',col:r.__col,id:r.__id,n:0});W('update',r,d);};
+  export const deleteDoc=async(r)=>{W('delete',r);};
+  export const addDoc=async(c,d)=>{const r={__col:c.__col,__id:'x'};W('add',r,d);return {id:'x'};}; export const deleteField=()=>null;
   export const serverTimestamp=()=>0; export const increment=n=>n; export const arrayUnion=(...a)=>a;
   // Lo que se escribe dentro de una transacción o de un lote también se anota.
   const E=r=>L({op:'escribe',col:r.__col,id:r.__id,n:0});
-  export const writeBatch=()=>({set(r){E(r);return this},update(r){E(r);return this},delete(){return this},commit:async()=>{}});
-  export const runTransaction=async(_d,fn)=>fn({get:async r=>getDoc(r),set(r){E(r)},update(r){E(r)}});
+  export const writeBatch=()=>({set(r,d){E(r);W('set',r,d);return this},update(r,d){E(r);W('update',r,d);return this},delete(r){W('delete',r);return this},commit:async()=>{}});
+  export const runTransaction=async(_d,fn)=>fn({get:async r=>getDoc(r),set(r,d){E(r);W('set',r,d)},update(r,d){E(r);W('update',r,d)}});
   export const Timestamp={now:()=>({seconds:0})};`;
 
 const MODULOS = {
@@ -60,11 +63,12 @@ const MODULOS = {
     export const getAuth=()=>({currentUser:globalThis.__AUTH||null});
     export const signInWithEmailAndPassword=async()=>({user:{uid:'u'}}); export const signOut=async()=>{};
     export const signInAnonymously=async()=>({user:{uid:'anon'}});
+    export const createUserWithEmailAndPassword=async()=>({user:{uid:'nuevo'}});
     export const onAuthStateChanged=(a,cb)=>{setTimeout(()=>cb(globalThis.__AUTH||null),0);return()=>{};};
     export const setPersistence=async()=>{}; export const browserLocalPersistence={};`,
   'firebase-firestore.js': FIRESTORE,
   'firebase-storage.js': `
-    export const getStorage=()=>({}); export const ref=()=>({}); export const uploadBytes=async()=>({});
+    export const getStorage=()=>({}); export const ref=(_s,p)=>({fullPath:p||''}); export const uploadBytes=async(r)=>({ref:r,metadata:{fullPath:r&&r.fullPath}});
     export const getDownloadURL=async()=>''; export const deleteObject=async()=>{}; export const listAll=async()=>({items:[],prefixes:[]});`,
   'firebase-functions.js': `export const getFunctions=()=>({}); export const httpsCallable=()=>async()=>({data:{}});`,
 };

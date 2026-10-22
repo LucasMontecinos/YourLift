@@ -307,7 +307,7 @@ window.nsResetAll=function(){
 window.nsSave=async function(){
   ST.nsBusy=true; render();
   try{
-    await setDoc(doc(db,'nomina_suda_edits','main'),{items:ST.nsEdits||{},ts:Date.now(),by:(ST.adminInfo?.email||'')},{merge:false});
+    await setDoc(doc(db,'nomina_suda_edits','main'),{items:ST.nsEdits||{},ts:Date.now(),by:(ST.user?.uid||'')},{merge:false});   // se lee sin sesión: sin correo
     ST.nsDirty=false;
     showToast('Nómina actualizada — se ve en yourlift.cl en unos minutos');
   }catch(e){ showToast('No se pudo guardar: '+e.message,null,true); }

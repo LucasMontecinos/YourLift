@@ -75,14 +75,16 @@ window.editInsc=async function(insId,field){
     if(nv===cur)return;
     const old=cur;
     try{
-      await updateDoc(doc(db,'inscripciones',insId),{[field]:nv});
-      await logAction('edit_inscripcion',`${insId}.${field}`,old,nv,{nombre:ins.nombre});
+      // inscGuardar (admin/privados.js): el RUT, la fecha o la comuna van a la
+      // inscripción privada, no a la pública.
+      await inscGuardar(insId,{[field]:nv});
+      await logAction('edit_inscripcion',`${insId}.${field}`,YLPrivacidad.INSC_PRIVADOS.includes(field)?'(privado)':old,YLPrivacidad.INSC_PRIVADOS.includes(field)?'(privado)':nv,{nombre:ins.nombre});
       ins[field]=nv;
       // Corregir el club en la nómina lo corrige también en su ficha, que es lo
       // que ve la gente y lo que propone la próxima inscripción.
       const sync=(field==='club'||field==='clubOtro')?await _clubAlPadron(ins):null;
       showToast(`${field} actualizado: ${ins.nombre}`+(sync?' · y su ficha también':''),async()=>{
-        await updateDoc(doc(db,'inscripciones',insId),{[field]:old});
+        await inscGuardar(insId,{[field]:old});
         ins[field]=old;
         await _clubAlPadronRevertir(sync);
         await logAction('undo_edit_inscripcion',`${insId}.${field}`,nv,old,{nombre:ins.nombre});
@@ -203,6 +205,7 @@ function render(){
       ${ST.pendingResults?`<button class="side-btn ${ST.view==='mergeResults'?'active':''}" onclick="go('mergeResults')" style="border-color:var(--green);color:var(--green)">Resultados Pendientes <span style="background:var(--green);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.pendingResults}</span></button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='certificados'?'active':''}" onclick="go('certificados')">Certificados YourLift</button>`:''}
       ${_esOwnerAdm()?`<button class="side-btn ${ST.view==='cobros'?'active':''}" onclick="go('cobros')">Cobros YourLift</button>`:''}
+      ${_pdPuede()?`<button class="side-btn ${ST.view==='proteccion'?'active':''}" onclick="go('proteccion')">Protección de datos${(()=>{const n=(ST.pdSol||[]).filter(s=>s.status==='recibida').length;return n?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px">${n}</span>`:'';})()}</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='admins'?'active':''}" onclick="go('admins')">Gestión Admin</button>`:''}
       <div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">
         <div data-yl-idioma style="margin:8px 8px 10px"></div>
@@ -249,6 +252,7 @@ function render(){
   else if(ST.view==='audit')content=renderAudit();
   else if(ST.view==='certificados'){if(_esOwnerAdm())content=renderCertificados();else go('athletes');}
   else if(ST.view==='cobros'){if(_esOwnerAdm())content=renderCobros();else go('athletes');}
+  else if(ST.view==='proteccion'){if(_pdPuede())content=renderProteccion();else go('athletes');}
   else if(ST.view==='admins'){if(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)content=renderAdmins();else go('athletes');}
   else if(ST.view==='mergeResults')content=renderMergeResults();
   else if(ST.view==='athleteProfile')content=renderAthleteProfile();
@@ -382,15 +386,20 @@ async function loadAll(){
     ST.data=ST.data||[];
   }
 
-  // Load atletas_pending (debutants who inscribed but aren't in data.json yet)
+  // Load atletas_pending (debutants who inscribed but aren't in data.json yet).
+  // Lo público va por código; el RUT y la fecha, en atletas_pending_priv
+  // (admin/privados.js, pendienteGuardar). _pendId: el documento, para marcarlo
+  // como incorporado (los de antes de la migración tienen el RUT de id).
   try{
-    const pendSnap=await getDocs(collection(db,'atletas_pending'));
+    const [pendSnap,privSnap]=await Promise.all([getDocs(collection(db,'atletas_pending')),
+      getDocs(collection(db,'atletas_pending_priv')).catch(e=>{console.warn('[loadAll] atletas_pending_priv:',e.message);return null;})]);
+    const PP={}; if(privSnap)privSnap.forEach(d=>{PP[d.id]=d.data()||{};});
     const rutNorm=(s)=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
     pendSnap.forEach(d=>{
-      const pd=d.data();
-      const alreadyIn=(ST.data||[]).find(a=>rutNorm(a.rut)===rutNorm(pd.rut));
+      const pd={...d.data(),...(PP[d.id]||{})};
+      const alreadyIn=(ST.data||[]).find(a=>(pd.codigo&&a.codigo===pd.codigo)||(pd.rut&&rutNorm(a.rut)===rutNorm(pd.rut)));
       if(!alreadyIn && pd.nombre && pd.codigo){
-        ST.data.push({...pd, _isPending:true});
+        ST.data.push({...pd, _isPending:true, _pendId:d.id});
       }
     });
   }catch(e){console.warn('[loadAll] atletas_pending:',e.message);}
@@ -405,6 +414,20 @@ async function loadAll(){
       const snap=await getDocs(collection(db,'athlete_edits'));
       return snap.docs.map(d=>({...d.data(),id:d.id}));
     });
+    // Lo privado de cada edición (RUT, fecha, comuna) vive aparte, en
+    // athlete_edits_priv. Se junta acá, en memoria (no en la copia compartida
+    // del navegador), para cruzar por RUT como siempre y saber qué documento
+    // es de quién (admin/atletas.js, _editDocId).
+    ST._edDocPorRut={}; ST._edDocPorCod={};
+    try{
+      const ps=await getDocs(collection(db,'athlete_edits_priv'));
+      const P={}; ps.forEach(d=>{P[d.id]=d.data()||{};});
+      docs.forEach(ed=>{ const p=P[ed.id]; if(!p)return;
+        ['rut','fechaNac','comuna'].forEach(k=>{ if(p[k]&&!ed[k])ed[k]=p[k]; }); });
+    }catch(e){ console.warn('[loadAll] athlete_edits_priv:',e.message); }
+    docs.forEach(ed=>{ if(!ed||ed.id===window.YLEdiciones.MARCA)return;
+      const r=YLPrivacidad.norm(ed.rut); if(r)ST._edDocPorRut[r]=ed.id;
+      if(ed.codigo)ST._edDocPorCod[ed.codigo]=ed.id; if(ed.codigoAnterior&&!ST._edDocPorCod[ed.codigoAnterior])ST._edDocPorCod[ed.codigoAnterior]=ed.id; });
     const r=window.YLEdiciones.aplicar(ST.data,docs);
     if(r.editados||r.borrados)console.log('[edits] '+r.editados+' editados, '+r.borrados+' dados de baja');
   }catch(e){console.warn('[loadAll] athlete_edits:',e.message);}
@@ -455,7 +478,7 @@ async function loadAll(){
       // así que el atleta figuraba sin foto y volvía a la lista de pendientes
       // aunque su foto estuviera publicada. Solo se esconde si lo rechazado es
       // justamente lo que el doc tiene publicado.
-      const rechazadaLaPublicada = data.status==='rejected' && (!data.foto_url || data.foto_url===data.rejected_url);
+      const rechazadaLaPublicada = data.status==='rejected' && (!data.foto_url || data.foto_url===data.rejected_url || (data.rejected_ref&&data.rejected_ref===_huellaFoto(data.foto_url)));
       if(ath && data.foto_url && !rechazadaLaPublicada) ath.foto_url = data.foto_url;
       // Y se deja anotada bajo el código VIGENTE del atleta, para que el panel la
       // muestre como cargada y no ofrezca subirla de nuevo.
@@ -486,8 +509,11 @@ async function loadAll(){
   if(!window._inscListener){
     try{
       window._inscListener=onSnapshot(collection(db,'inscripciones'),(snap)=>{
-        ST.inscripciones=snap.docs.map(d=>({id:d.id,...d.data()}))
+        // Lo público; el RUT, la fecha y lo demás privado se pega desde
+        // inscripciones_private (admin/privados.js).
+        ST._insPub=snap.docs.map(d=>({id:d.id,...d.data()}))
           .sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0));
+        _insMezclar();
         // El índice de participación del año usa las inscripciones vigentes, así
         // que se rehace cuando cambian: si no, aprobar o rechazar una no movía
         // la columna hasta recargar la página.
@@ -498,12 +524,22 @@ async function loadAll(){
   }
   if(!window._privListener){
     try{
-      window._privListener=onSnapshot(collection(db,'inscripciones_private'),(snap)=>{
-        ST.inscripcionesPrivate={};
-        snap.forEach(d=>{ST.inscripcionesPrivate[d.id]=d.data();});
+      window._privListener=onSnapshot(collection(db,'inscripciones_private'),async(snap)=>{
+        const P={};
+        snap.forEach(d=>{P[d.id]=d.data();});
+        // Los documentos nuevos vienen como ubicación en Storage: se cambian por
+        // su enlace antes de mostrarlos (admin/privados.js).
+        await _resolverArchivos(P);
+        ST.inscripcionesPrivate=P;
+        _insMezclar();
+        window._HIST_ANIO=null;
+        if(ST.view==='nominas'||ST.view==='dashboard'||ST.view==='approvals'||ST.view==='athletes'||ST.view==='stats'||ST.view==='cobros')render();
       },(e)=>console.warn('[listener] inscripciones_private:',e.message));
     }catch(e){console.warn('[loadAll] priv listener:',e.message);}
   }
+  // Las solicitudes de los titulares (Ley 21.719): se cargan al entrar para
+  // que el menú muestre cuántas esperan respuesta (admin/proteccion.js).
+  if(_pdPuede()&&!ST._pdCargado)pdCargar().catch(e=>console.warn('[proteccion]',e.message));
   if(!window._editReqListener){
     try{
       window._editReqListener=onSnapshot(collection(db,'edit_requests'),(snap)=>{
@@ -517,6 +553,8 @@ async function loadAll(){
     try{
       window._entListener=onSnapshot(collection(db,'entrenadores'),(snap)=>{
         ST.entrenadores=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+        // La copia pública, sin RUT ni correos (admin/privados.js).
+        _programarPublicacion('entrenadores',()=>publicarEntrenadores(ST.entrenadores));
         if(ST.view==='entrenadoresDB')render();
       },(e)=>console.warn('[listener] entrenadores:',e.message));
     }catch(e){console.warn('[loadAll] ent listener:',e.message);}
@@ -540,10 +578,13 @@ async function loadAll(){
       window._entInscListener=onSnapshot(collection(db,'inscripciones_entrenador'),(snap)=>{
         ST.entInsc=snap.docs.map(d=>({id:d.id,...d.data()}))
           .sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+        _programarPublicacion('entrenadores_nomina',()=>publicarNominaEntrenadores(ST.entInsc));
         if(ST.view==='entInsc')render();
       },(e)=>console.warn('[listener] inscripciones_entrenador:',e.message));
-      window._entInscPrivListener=onSnapshot(collection(db,'inscripciones_entrenador_priv'),(snap)=>{
-        ST.entInscPriv={}; snap.docs.forEach(d=>{ ST.entInscPriv[d.id]=d.data(); });
+      window._entInscPrivListener=onSnapshot(collection(db,'inscripciones_entrenador_priv'),async(snap)=>{
+        const P={}; snap.docs.forEach(d=>{ P[d.id]=d.data(); });
+        await _resolverArchivos(P);
+        ST.entInscPriv=P;
         if(ST.view==='entInsc')render();
       },(e)=>console.warn('[listener] inscripciones_entrenador_priv:',e.message));
     }catch(e){console.warn('[loadAll] entInsc listener:',e.message);}
@@ -757,7 +798,8 @@ async function _guardarPadronPrivado(arr){
   const idx=Object.entries(nuevos).filter(([,p])=>YLPrivacidad.norm(p.rut).length>=5);
   for(let i=0;i<idx.length;i+=450){
     const b=writeBatch(db);
-    idx.slice(i,i+450).forEach(([cod,p])=>b.set(doc(db,'rut_indice',YLPrivacidad.norm(p.rut)),{codigo:cod,fechaNac:p.fechaNac||''}));
+    // Solo el código: quien sabe un RUT ajeno no se entera de su fecha de nacimiento.
+    idx.slice(i,i+450).forEach(([cod,p])=>b.set(doc(db,'rut_indice',YLPrivacidad.norm(p.rut)),{codigo:cod}));
     await b.commit();
   }
   return Object.keys(nuevos).length;
@@ -773,7 +815,7 @@ window.protegerDatosPersonales=async function(){
   const btn=document.getElementById('btnProteger'); if(btn){btn.disabled=true;btn.textContent='Guardando…';}
   try{
     const n=await _guardarPadronPrivado(ST.data);
-    await _uploadToStorage(ST.data.map(({_isPending,...a})=>a),null);
+    await _uploadToStorage(ST.data.map(({_isPending,_pendId,...a})=>a),null);
     const enl=await _enlazarPorCodigo();
     await logAction('proteger_datos','privado/padron',null,n+' atletas',{enlazados:enl});
     ST.padronPrivado=n;
@@ -809,6 +851,164 @@ async function _enlazarPorCodigo(){
     hechos[col]=cambios.length;
   }
   return hechos;
+}
+
+// ═══════════════════════ admin/privados.js ═══════════════════════
+// admin.html — los datos personales de las inscripciones: dónde va cada campo.
+//
+// Fuente del panel. El navegador no carga este archivo: carga admin/panel.js,
+// que se arma juntando estas fuentes (node herramientas/armar_panel.js).
+// Solo define funciones; lo que corre al abrir el panel está en arranque.js.
+//
+// Las inscripciones (inscripciones/) se leen sin sesión: de ahí salen las
+// nóminas, el livecast y el perfil del atleta. Por eso el documento público
+// identifica al atleta solo por su código, y el RUT, la fecha de nacimiento, la
+// comuna y los nombres de archivo viven en inscripciones_private/ (mismo id),
+// que solo lee un admin. La lista de qué es privado está en
+// compartido/privacidad.js (YLPrivacidad.INSC_PRIVADOS).
+//
+// El panel sí necesita todo junto —para cruzar con el padrón, revisar edades,
+// los certificados—, así que al cargar mezcla lo privado en ST.inscripciones
+// (_insMezclar). Y al guardar lo vuelve a repartir (inscGuardar / inscCrear):
+// nada de lo privado se escribe en el documento público. Las reglas de
+// Firestore lo exigen igual, también al admin, por si algún camino se olvida.
+
+// ST.inscripciones = lo público + lo privado de cada una. El PIN no se mezcla:
+// se sigue mirando en ST.inscripcionesPrivate, que es donde lo busca quien lo usa.
+function _insMezclar(){
+  const P=ST.inscripcionesPrivate||{};
+  const campos=YLPrivacidad.INSC_PRIVADOS.filter(k=>k!=='pin');
+  ST.inscripciones=(ST._insPub||[]).map(i=>{
+    const p=P[i.id]; if(!p)return i;
+    const o={...i};
+    campos.forEach(k=>{ if(p[k]!==undefined&&p[k]!==''&&(o[k]===undefined||o[k]===''))o[k]=p[k]; });
+    return o;
+  });
+}
+
+// Guarda cambios de una inscripción que ya existe: cada campo a su documento.
+async function inscGuardar(id,cambios){
+  const {pub,priv}=YLPrivacidad.separarInscripcion(cambios);
+  if(Object.keys(pub).length)await updateDoc(doc(db,'inscripciones',id),pub);
+  if(Object.keys(priv).length)await setDoc(doc(db,'inscripciones_private',id),priv,{merge:true});
+}
+
+// Crea una inscripción desde el panel. El id es el de siempre (campeonato +
+// código de atleta) si se sabe el código; si no, uno al azar. Devuelve el id.
+async function inscCrear(id,datos,privExtra){
+  const {pub,priv}=YLPrivacidad.separarInscripcion(datos);
+  if(!id&&pub.codigo)id=YLPrivacidad.idInscripcion(pub.evento,pub.codigo);
+  if(id)await setDoc(doc(db,'inscripciones',id),pub);
+  else id=(await addDoc(collection(db,'inscripciones'),pub)).id;
+  const p={...priv,...(privExtra||{})};
+  if(Object.keys(p).length)await setDoc(doc(db,'inscripciones_private',id),{...p,ts:serverTimestamp()},{merge:true});
+  return id;
+}
+
+// Los documentos que suben atletas y entrenadores quedan guardados por su
+// ubicación ("storage:athlete_files/…"), porque el enlace de descarga solo lo
+// puede pedir un admin. Acá se cambian por el enlace, en memoria, para que las
+// pantallas del panel los abran como siempre. Lo ya resuelto no se vuelve a pedir.
+const _URL_ARCHIVO={};
+async function _resolverArchivos(docs){
+  const pend=[];
+  const ver=(obj,k)=>{
+    const v=obj&&obj[k];
+    if(!YLPrivacidad.esRutaArchivo(v))return;
+    const ruta=YLPrivacidad.rutaDe(v);
+    if(_URL_ARCHIVO[ruta]){obj[k]=_URL_ARCHIVO[ruta];return;}
+    pend.push(getDownloadURL(storageRef(getStorage(app),ruta))
+      .then(u=>{_URL_ARCHIVO[ruta]=u;obj[k]=u;})
+      .catch(e=>console.warn('[archivo] no se pudo abrir',ruta,e.code||e.message)));
+  };
+  Object.values(docs||{}).forEach(p=>{
+    if(!p)return;
+    Object.keys(p).forEach(k=>{ if(/URL$/.test(k))ver(p,k); });
+    if(p.docs&&typeof p.docs==='object')Object.keys(p.docs).forEach(k=>ver(p.docs,k));
+  });
+  if(pend.length)await Promise.all(pend);
+}
+
+// Un debutante: inscrito por primera vez, todavía no está en data.json. El
+// sitio lo muestra desde atletas_pending/{código} (nombre, club, año), y el RUT
+// y la fecha completa quedan en atletas_pending_priv/{código}, que solo lee un
+// admin. Los de antes estaban guardados por RUT; la migración los pasa.
+async function pendienteGuardar(p){
+  const cod=String(p.codigo||'');
+  if(!cod)throw new Error('Falta el código de atleta');
+  await setDoc(doc(db,'atletas_pending',cod),{
+    nombre:p.nombre||'', codigo:cod, sexo:p.sexo||'',
+    anioNac:p.anioNac||YLPrivacidad.anio(p.fechaNac)||'', club:p.club||'', zona:p.zona||'',
+    debut:true, inscripcion_evento:p.inscripcion_evento||'', ts:serverTimestamp(),
+  });
+  await setDoc(doc(db,'atletas_pending_priv',cod),{rut:p.rut||'',fechaNac:p.fechaNac||'',ts:serverTimestamp()});
+  return cod;
+}
+
+// ── Copias públicas de las bases del panel ──
+// Las bases de entrenadores (entrenadores/) y de jueces (referees/) están
+// guardadas por RUT y traen correos: solo las lee un admin. Lo que el sitio
+// muestra de ellas va en publico/{entrenadores, jueces, entrenadores_nomina},
+// sin RUT ni correos, y el formulario de entrenador reconoce a quien escribe SU
+// RUT en entrenadores_indice/{rut} (se lee de a uno, no se lista). El panel las
+// rehace cuando cambia la base; solo escribe si algo cambió de verdad.
+async function _publicarCopia(id,datos){
+  const firma=JSON.stringify(datos);
+  try{ const s=await getDoc(doc(db,'publico',id)); if(s.exists()&&(s.data()||{}).firma===firma)return false; }catch(e){}
+  await setDoc(doc(db,'publico',id),{...datos,firma,ts:Date.now()});
+  return true;
+}
+
+async function publicarJueces(refs){
+  const lista=(refs||[]).filter(r=>r&&(r.codigoAtleta||r.codigo))
+    .map(r=>({codigoAtleta:r.codigoAtleta||r.codigo,categoria:r.categoria||'',ambito:r.ambito||'nacional'}))
+    .sort((a,b)=>a.codigoAtleta.localeCompare(b.codigoAtleta));
+  return _publicarCopia('jueces',{lista});
+}
+
+async function publicarEntrenadores(ents){
+  const base=(ents||[]).filter(e=>e&&e.nombre);
+  const lista=base.map(e=>({nombre:e.nombre||'',club:e.club||'',categoria:e.categoria||'',codigoAtleta:e.codigoAtleta||''}))
+    .sort((a,b)=>(a.club||'').localeCompare(b.club||'')||a.nombre.localeCompare(b.nombre));
+  // El índice por RUT: lo justo para reconocerlo y saber si su acreditación
+  // está vigente (inscripcion_entrenador.html).
+  const indice={};
+  base.forEach(e=>{ const r=YLPrivacidad.norm(e.rut||e.id); if(r.length<5)return;
+    indice[r]={nombre:e.nombre||'',club:e.club||'',categoria:e.categoria||'',
+      acreditaciones:(e.acreditaciones||[]).map(a=>({vence:a.vence||''})).filter(a=>a.vence)}; });
+  const cambio=await _publicarCopia('entrenadores',{lista,nIndice:Object.keys(indice).length,
+    firmaIndice:JSON.stringify(Object.keys(indice).sort().map(r=>[r,indice[r]]))});
+  if(!cambio)return false;
+  const viejos=new Set();
+  try{ (await getDocs(collection(db,'entrenadores_indice'))).forEach(d=>viejos.add(d.id)); }catch(e){}
+  const ops=[...Object.entries(indice).map(([r,v])=>['set',r,v]),
+    ...[...viejos].filter(r=>!indice[r]).map(r=>['del',r])];
+  for(let i=0;i<ops.length;i+=450){
+    const b=writeBatch(db);
+    ops.slice(i,i+450).forEach(([op,r,v])=>op==='set'?b.set(doc(db,'entrenadores_indice',r),v):b.delete(doc(db,'entrenadores_indice',r)));
+    await b.commit();
+  }
+  return true;
+}
+
+// La nómina de entrenadores de cada campeonato (los aprobados), para la tarjeta
+// del campeonato en yourlift.cl: nombre, club y a qué atletas lleva.
+async function publicarNominaEntrenadores(insc){
+  const porEvento={};
+  (insc||[]).forEach(e=>{
+    if(!e||e.status!=='approved'||!e.evento)return;
+    (porEvento[e.evento]=porEvento[e.evento]||[]).push({nombre:e.nombre||'',club:e.club||'',
+      atletas:(e.atletas||[]).map(a=>({nombre:a.nombre||''}))});
+  });
+  Object.values(porEvento).forEach(l=>l.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')));
+  return _publicarCopia('entrenadores_nomina',{porEvento});
+}
+
+// Se rehacen un rato después del último cambio, no en cada uno.
+const _pubTimers={};
+function _programarPublicacion(clave,fn){
+  clearTimeout(_pubTimers[clave]);
+  _pubTimers[clave]=setTimeout(()=>{ fn().catch(e=>console.warn('[publico] '+clave+':',e.code||e.message)); },2500);
 }
 
 // ═══════════════════════ admin/atletas.js ═══════════════════════
@@ -883,13 +1083,31 @@ window.esc=esc;
 // ═══════════════════════════════════════════
 // EDIT ATHLETES (data.json)
 // ═══════════════════════════════════════════
-// Los athlete_edits se indexan por RUT (que nunca cambia) en vez de código,
-// así editar el código no rompe el matching ni revierte al recargar.
+// athlete_edits se lee sin sesión y su id se ve al listar, así que ni el id ni
+// el documento llevan el RUT: el RUT, la fecha de nacimiento y la comuna van en
+// athlete_edits_priv/{mismo id}, que solo lee un admin. El panel los junta al
+// cargar (ST._edDocPorRut), y así cada persona sigue teniendo UN documento
+// aunque se le corrija el código: se busca primero por RUT, que no cambia.
+// Uno nuevo se llama por el código que tenía el día que se creó.
 function _editDocId(a){
-  const rut=String(a.rut||'').replace(/[^0-9kK]/gi,'').toUpperCase();
-  if(rut) return 'rut_'+rut;
-  // fallback: si no hay rut, usar código (atletas viejos sin rut)
-  return 'cod_'+String(a.codigo||'').replace(/[^a-zA-Z0-9_-]/g,'_');
+  const r=YLPrivacidad.norm(a.rut);
+  if(r&&ST._edDocPorRut&&ST._edDocPorRut[r])return ST._edDocPorRut[r];
+  const c=String(a.codigo||'');
+  if(c&&ST._edDocPorCod&&ST._edDocPorCod[c])return ST._edDocPorCod[c];
+  return 'cod_'+c.replace(/[^a-zA-Z0-9_-]/g,'_');
+}
+function _recordarEditDoc(a,docId){
+  const r=YLPrivacidad.norm(a.rut);
+  if(r)(ST._edDocPorRut=ST._edDocPorRut||{})[r]=docId;
+  if(a.codigo)(ST._edDocPorCod=ST._edDocPorCod||{})[a.codigo]=docId;
+}
+// Lo privado de una edición, aparte. Solo si hay algo que guardar.
+async function _guardarEditPriv(docId,a){
+  const p={};
+  if(a.rut)p.rut=String(a.rut);
+  if(a.fechaNac||a.fecha_nac)p.fechaNac=String(a.fechaNac||a.fecha_nac);
+  if(a.comuna)p.comuna=String(a.comuna);
+  if(Object.keys(p).length)await setDoc(doc(db,'athlete_edits_priv',docId),{...p,ts:Date.now()},{merge:true});
 }
 
 // La hora del último cambio, en un documento aparte de la misma colección.
@@ -905,16 +1123,22 @@ async function _marcarEdicion(){
   }catch(e){console.warn('[edits] no se pudo marcar la versión:',e.message);}
 }
 
-// Guarda el overlay completo del atleta en athlete_edits (snapshot de campos editables)
-async function _saveEdit(a){
-  const docId=_editDocId(a);
+// Guarda el overlay completo del atleta en athlete_edits (snapshot de campos
+// editables). Lo público, con el año de nacimiento; lo privado, aparte. Si se le
+// cambió el código, va también el anterior: el sitio cruza por código, y
+// data.json sigue con el viejo hasta que se vuelva a publicar.
+async function _saveEdit(a,docId,codigoAnterior){
+  docId=docId||_editDocId(a);
   await setDoc(doc(db,'athlete_edits',docId),{
-    rut:a.rut||'', codigo:a.codigo||'', nombre:a.nombre||'',
+    codigo:a.codigo||'', nombre:a.nombre||'',
     club:a.club||'', debut:a.debut||'', sexo:a.sexo||'',
-    fechaNac:a.fechaNac||a.fecha_nac||'', zona:a.zona||'', comuna:a.comuna||'',
+    anioNac:a.anioNac||YLPrivacidad.anio(a.fechaNac||a.fecha_nac)||'', zona:a.zona||'',
+    ...(codigoAnterior&&codigoAnterior!==a.codigo?{codigoAnterior}:{}),
     deleted:false,
     ts:Date.now()
   },{merge:true});
+  await _guardarEditPriv(docId,a);
+  _recordarEditDoc(a,docId);
   await _marcarEdicion();
 }
 
@@ -975,7 +1199,9 @@ window.editAthlete=async function(cod,field){
       // El código también se puede corregir a mano desde acá, no solo con el
       // botón de arreglar código. La foto tiene que irse con él igual.
       if(field==='codigo')await _mudarFoto(old,nv);
-      await _saveEdit(a);   // guarda snapshot completo indexado por RUT
+      // El mismo documento de siempre (se busca por RUT o por el código viejo).
+      const docId=_editDocId(field==='codigo'?{...a,codigo:old}:a);
+      await _saveEdit(a,docId,field==='codigo'?old:'');
       await logAction('edit_athlete',`${a.codigo}.${field}`,old,nv,{nombre:a.nombre});
       render();
       showToast(`${field} actualizado: ${a.nombre}`,async()=>{
@@ -1019,7 +1245,9 @@ async function _mudarFoto(oldCod,newCod){
     const vieja=await getDoc(doc(db,'atleta_fotos',oldCod));
     if(!vieja.exists())return;
     const d=vieja.data();
-    await setDoc(doc(db,'atleta_fotos',newCod),{...d,codigo:newCod},{merge:true});
+    // Sin RUT ni correos (atleta_fotos se lee sin sesión): solo lo de la foto.
+    const {rut:_r,approved_by:_ab,rejected_by:_rb,...resto}=d;
+    await setDoc(doc(db,'atleta_fotos',newCod),{...resto,codigo:newCod},{merge:true});
     await deleteDoc(doc(db,'atleta_fotos',oldCod));
     await logAction('mover_foto',oldCod,oldCod,newCod);
   }catch(e){console.warn('[foto] no se pudo mudar:',e.message);}
@@ -1027,15 +1255,13 @@ async function _mudarFoto(oldCod,newCod){
 
 async function _applyCodigoFix(a,oldCod,newCod,newRut){
   try{
-    // Si el RUT cambia, el docId (basado en RUT) también cambia → borrar el viejo
-    const oldDocId=_editDocId(a);
+    // El documento sigue siendo el mismo aunque cambien el código o el RUT.
+    const docId=_editDocId(a);
     a.codigo=newCod;
     if(newRut)a.rut=newRut;
-    const newDocId=_editDocId(a);
-    if(oldDocId!==newDocId){try{await deleteDoc(doc(db,'athlete_edits',oldDocId))}catch(_){}}
     await _mudarFoto(oldCod,newCod);
-    await _saveEdit(a);   // snapshot completo indexado por RUT
-    await logAction('fix_codigo',oldCod,oldCod,newCod,{nombre:a.nombre,rut:a.rut||''});
+    await _saveEdit(a,docId,oldCod);
+    await logAction('fix_codigo',oldCod,oldCod,newCod,{nombre:a.nombre});
     render();
     showToast('Código corregido: '+newCod);
   }catch(e){a.codigo=oldCod;showToast('Error: '+e.message,null,true);}
@@ -1074,7 +1300,9 @@ window.deleteAthlete=async function(cod){
     // dos documentos que se contradecían y ninguno mandaba sobre el otro.
     const docId=_editDocId(a);
     await setDoc(doc(db,'athlete_edits',docId),
-      {rut:a.rut||'',codigo:cod,deleted:true,nombre:a.nombre,ts:Date.now()},{merge:true});
+      {codigo:cod,deleted:true,nombre:a.nombre,ts:Date.now()},{merge:true});
+    await _guardarEditPriv(docId,a);
+    _recordarEditDoc(a,docId);
     await _marcarEdicion();
     await logAction('delete_athlete',cod,a.nombre,'deleted',{club:a.club||''});
   }catch(e){console.warn('Delete log failed',e)}
@@ -1150,10 +1378,11 @@ window.approveEditRequest=async function(reqId){
     const updates={};
     for(const k of allowed){if(req.changes&&req.changes[k]!==undefined)updates[k]=req.changes[k];}
     if(Object.keys(updates).length){
-      await updateDoc(doc(db,'inscripciones',req.inscripcionId),updates);
+      // La fecha de nacimiento y la comuna van a la inscripción privada.
+      await inscGuardar(req.inscripcionId,updates);
     }
     await deleteDoc(doc(db,'edit_requests',reqId));
-    await logAction('approve_edit_request',req.inscripcionId,JSON.stringify(updates).substring(0,200),'applied',{rut:req.rut});
+    await logAction('approve_edit_request',req.inscripcionId,Object.keys(updates).join(', '),'applied');
     // Si el atleta pidió corregir su club, la ficha se corrige con él.
     let sync=null;
     if(updates.club!==undefined||updates.clubOtro!==undefined){
@@ -1324,11 +1553,13 @@ window.saveCompResult=async function(){
   const slug=s=>String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,40);
   const docId=(codigo||('m_'+slug(nombre)))+'__'+slug(evento)+'__'+slug(modalidad||'cl');
   try{
+    // competition_results se lee sin sesión: va el código, no el RUT; y quién lo
+    // cargó, por su id de cuenta (el correo queda en el registro de acciones).
     await setDoc(doc(db,'competition_results',docId),{
-      codigo,rut,nombre,evento,fecha,sexo,division,categoria,modalidad,
+      codigo,nombre,evento,fecha,sexo,division,categoria,modalidad,
       posicion: posicion!=null ? posicion : deleteField(),
       resultado:{sq,bp,dl,total,bw,pesoCorporal:bw,glp,dots,status:dq?'DQ':'OK',intentos:{sq:att('sq'),bp:att('bp'),dl:att('dl')}},
-      source:'manual', addedBy:(ST.user?.email||'admin'), updatedAt:serverTimestamp()
+      source:'manual', addedBy:(ST.user?.uid||'admin'), updatedAt:serverTimestamp()
     },{merge:true});
     await logAction('add_comp_result',docId,null,evento+' · '+(dq?'DQ ('+liftedTotal+'kg levantados)':total+'kg')+(dq?'':' · GL '+glp),{nombre});
     showToast(dq?('Competencia guardada: '+nombre+' · DQ'):('Competencia guardada: '+nombre+' · '+total+'kg'));
@@ -1947,9 +2178,13 @@ window.submitInscripcionManual=async function(){
   if(!ST.filterEv){showToast('Selecciona un evento primero',null,true);return}
   const dup=ST.inscripciones.find(i=>i.evento===ST.filterEv&&i.nombre.toLowerCase()===nombre.toLowerCase());
   if(dup&&!confirm(`Ya existe una inscripción de "${nombre}" en este evento. ¿Agregar igual?`))return;
+  // El código de atleta, del padrón (el panel tiene los RUT): es lo que identifica
+  // al atleta en la inscripción pública.
+  const enPadron=rut?(ST.data||[]).find(a=>a.codigo&&YLPrivacidad.norm(a.rut)===YLPrivacidad.norm(rut)):null;
   const data={
     nombre,
     rut,
+    codigo:enPadron?enPadron.codigo:'',
     sexo:document.getElementById('im_sexo').value,
     fechaNac:document.getElementById('im_fechaNac').value.trim(),
     division:document.getElementById('im_division').value,
@@ -1963,7 +2198,8 @@ window.submitInscripcionManual=async function(){
     _manualAdmin:true
   };
   try{
-    await addDoc(collection(db,'inscripciones'),data);
+    // inscCrear reparte: RUT y fecha a la inscripción privada (admin/privados.js).
+    await inscCrear(null,data);
     await logAction('manual_inscripcion',ST.filterEv,null,nombre);
     showToast(`${nombre} inscrito/a en ${ST.filterEv}`);
     document.getElementById('inscribirModal').remove();
@@ -1980,7 +2216,7 @@ window.submitInscripcionManual=async function(){
 // personales, ver compartido/privacidad.js).
 window.exportData=function(completo){
   if(ST.adminInfo?.role!=='owner'&&!ST.adminInfo?.bootstrap){showToast('Solo el Owner puede descargar data.json',null,true);return;}
-  const clean=ST.data.map(({_isPending,...a})=>completo?a:YLPrivacidad.publico(a));
+  const clean=ST.data.map(({_isPending,_pendId,...a})=>completo?a:YLPrivacidad.publico(a));
   const blob=new Blob([JSON.stringify(clean,null,2)],{type:'application/json'});
   const u=URL.createObjectURL(blob);
   const l=document.createElement('a');l.href=u;l.download=completo?'respaldo_completo_NO_PUBLICAR.json':'data.json';l.click();
@@ -1994,12 +2230,11 @@ async function _uploadToStorage(dataArr, recObj){
   const _stg=getStorage(app);
   // public/data.json lo lee cualquiera: va sin RUT ni fecha completa. Esos datos
   // se guardan antes en privado/padron (y el índice de RUT) para no perderlos.
-  // Si todavía no están publicadas las reglas nuevas de Firestore, guardar lo
-  // privado falla: entonces se publica como antes (con los datos), para no dejar
-  // al sitio sin RUT y sin copia privada de ellos.
-  let publico=dataArr;
-  try{ await _guardarPadronPrivado(dataArr); publico=dataArr.map(a=>YLPrivacidad.publico(a)); }
-  catch(e){ console.warn('[padrón privado] no se pudo guardar; se publica como antes:',e.message); }
+  // Si guardar lo privado falla, NO se publica: antes se publicaba "como antes",
+  // con los RUT, y eso es justo lo que no puede pasar (Ley 21.719).
+  try{ await _guardarPadronPrivado(dataArr); }
+  catch(e){ throw new Error('No se pudo guardar el RUT y la fecha en privado ('+(e.code||e.message)+'): no se publicó nada. Revisa que estén publicadas las reglas de Firestore.'); }
+  const publico=dataArr.map(a=>YLPrivacidad.publico(a));
   await uploadBytes(storageRef(_stg,'public/data.json'),
     new Blob([JSON.stringify(publico,null,2)],{type:'application/json'}),
     {contentType:'application/json',cacheControl:'public,max-age=60'});
@@ -2016,7 +2251,7 @@ window.syncDataJsonToStorage=async function(){
   const btn=document.getElementById('btnSyncStorage');
   if(btn){btn.disabled=true;btn.textContent='Subiendo...';}
   try{
-    const clean=ST.data.map(({_isPending,...a})=>a);
+    const clean=ST.data.map(({_isPending,_pendId,...a})=>a);
     await _uploadToStorage(clean,null);
     showToast(`data.json publicado en Storage (${clean.length} atletas). El sitio lo sirve automáticamente.`);
     await logAction('sync_storage','data.json',null,`${clean.length} athletes`);
@@ -2206,16 +2441,16 @@ window.crearPerfilDebutante=async function(sid){
     sexo:i.sexo||'',
     fechaNac,
     club:i.club||'',
-    zona:i.comuna||'',
+    zona:i.zona||'',
     debut:true,
     inscripcion_evento:i.evento||'',
-    ts:serverTimestamp(),
   };
   try{
-    await setDoc(doc(db,'atletas_pending',rutClean),pendDoc);
+    // Lo público por código, el RUT y la fecha aparte (admin/privados.js).
+    await pendienteGuardar(pendDoc);
     // Agregar en memoria para que aparezca el banner y en búsquedas
-    ST.data.push({...pendDoc,_isPending:true});
-    await logAction('crear_perfil_debutante',rutClean,null,i.nombre);
+    ST.data.push({...pendDoc,_isPending:true,_pendId:codigo});
+    await logAction('crear_perfil_debutante',codigo,null,i.nombre);
     showToast('Perfil creado para '+i.nombre+' — ya visible en atleta.html');
     render();
   }catch(e){showToast('Error: '+e.message,null,true);}
@@ -2228,7 +2463,7 @@ window.publicarDataJson=async function(){
   if(!confirm(`¿Incorporar ${pendientes.length} debutante(s) al data.json?\n\n${pendientes.map(a=>a.nombre).join('\n')}\n\nSe publicará automáticamente en el sitio.`))return;
 
   // Build clean data.json: all athletes without internal flags
-  const clean=ST.data.map(({_isPending,...a})=>{
+  const clean=ST.data.map(({_isPending,_pendId,...a})=>{
     // Convert fechaNac yyyy-mm-dd → dd/mm/yyyy if needed (debutants come in HTML date format)
     if(a.debut&&a.fechaNac&&/^\d{4}-\d{2}-\d{2}$/.test(a.fechaNac)){
       const [y,m,d]=a.fechaNac.split('-');
@@ -2260,19 +2495,18 @@ window.publicarDataJson=async function(){
   }
 
   // Mark as incorporated in Firestore
-  const rutNorm=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
   let marcados=0;
   for(const a of pendientes){
     try{
-      const rut=rutNorm(a.rut);
-      if(!rut)continue;
-      await setDoc(doc(db,'atletas_pending',rut),{incorporated:true,incorporatedAt:serverTimestamp()},{merge:true});
+      const id=a._pendId||a.codigo;
+      if(!id)continue;
+      await setDoc(doc(db,'atletas_pending',id),{incorporated:true,incorporatedAt:serverTimestamp()},{merge:true});
       marcados++;
     }catch(e){console.warn('[publicarDataJson] mark:',e.message);}
   }
 
   // Remove _isPending flag from local state so banner disappears
-  ST.data.forEach(a=>delete a._isPending);
+  ST.data.forEach(a=>{delete a._isPending;delete a._pendId;});
 
   await logAction('publicar_data_json',`${clean.length} atletas`,null,`${pendientes.length} debutantes`);
   showToast(_uploaded?`Publicado automáticamente (${clean.length} atletas). ${marcados} debutante(s) incorporados.`:`Descargado (${clean.length} atletas). ${marcados} debutante(s) incorporados. Sube el archivo al servidor.`);
@@ -2317,7 +2551,10 @@ window.exportOPL=function(eventoId){
 };
 
 window.exportNominas=function(){
-  const blob=new Blob([JSON.stringify(ST.nominas,null,2)],{type:'application/json'});
+  // nominas.json se publica en el sitio: cada atleta sin RUT ni fecha completa.
+  const n=ST.nominas||{};
+  const limpio={...n,events:(n.events||[]).map(e=>({...e,athletes:(e.athletes||[]).map(a=>YLPrivacidad.publico(a))}))};
+  const blob=new Blob([JSON.stringify(limpio,null,2)],{type:'application/json'});
   const u=URL.createObjectURL(blob);
   const l=document.createElement('a');l.href=u;l.download='nominas.json';l.click();
   URL.revokeObjectURL(u);
@@ -2800,32 +3037,31 @@ window.insBuscar=function(el){
 window.insGuardar=async function(){
   const a=(ST.data||[]).find(x=>x.codigo===_insWork.codigo);
   if(!a||!_insWork.evento){ showToast('Falta el campeonato o el atleta',null,true); return; }
-  const rutLimpio=String(a.rut||'').replace(/[^0-9kK]/g,'');
-  if(!rutLimpio){ showToast('Ese atleta no tiene RUT en el padrón',null,true); return; }
-  // El id se arma igual que en el formulario público: {evento}_{rut sin puntos}.
+  // El id se arma igual que en el formulario público: {evento}_{código}.
   // Si ya existe una inscripción de esa persona en ese campeonato, es la misma
-  // y hay que avisar en vez de pisarla.
-  const id=`${_insWork.evento}_${rutLimpio}`;
-  if((ST.inscripciones||[]).some(i=>i.id===id)){
+  // y hay que avisar en vez de pisarla (también las de antes, que tenían el RUT
+  // en el id).
+  const id=YLPrivacidad.idInscripcion(_insWork.evento,a.codigo);
+  const rutN=YLPrivacidad.norm(a.rut);
+  if((ST.inscripciones||[]).some(i=>i.evento===_insWork.evento&&i.status!=='rejected'
+      &&(i.id===id||i.codigo===a.codigo||(rutN&&YLPrivacidad.norm(i.rut)===rutN)))){
     showToast(a.nombre+' ya tiene inscripción en ese campeonato',null,true); return;
   }
   const cat=String(_insWork.categoria||'').trim();
   try{
-    await setDoc(doc(db,'inscripciones',id),{
-      evento:_insWork.evento, nombre:a.nombre, rut:a.rut, codigo:a.codigo,
+    // inscCrear (admin/privados.js) deja el RUT y la fecha en la inscripción
+    // privada, con un PIN para poder subirle documentos desde el panel.
+    await inscCrear(id,{
+      evento:_insWork.evento, nombre:a.nombre, rut:a.rut||'', codigo:a.codigo,
       sexo:a.sexo||'', club:a.club||'', fechaNac:a.fechaNac||'',
       modalidad:_insWork.modalidad, division:_insWork.division,
       categoria:cat&&!/kg/i.test(cat)?cat+' kg':cat,
       status:'approved', timestamp:serverTimestamp(),
       // Queda anotado que no vino del formulario: no tiene PIN ni documentos, y
-      // el que la revise después tiene que poder saber por qué.
-      origen:'panel', creadaPor:ST.user?.email||'admin',
-    });
-    // Registro privado, para poder subirle documentos desde el panel. Con la
-    // forma que piden las reglas (PIN de 4 dígitos); si falla, no se pierde la
-    // inscripción: se crea solo al subir el primer documento.
-    try{ await setDoc(doc(db,'inscripciones_private',id),{pin:String(Math.floor(1000+Math.random()*9000)),rut:String(a.rut||''),ts:Date.now(),docs:{}}); }
-    catch(e){ console.warn('[insGuardar] registro privado',e); }
+      // el que la revise después tiene que poder saber por qué. Quién la creó
+      // queda en el registro de acciones (no se publica su correo).
+      origen:'panel',
+    },{pin:String(Math.floor(1000+Math.random()*9000)),docs:{}});
     await logAction('crear_inscripcion',id,null,'aceptada',{nombre:a.nombre,evento:_insWork.evento});
     showToast(a.nombre+' agregado a '+_insWork.evento);
     const ov=document.getElementById('insModal'); if(ov)ov.remove();
@@ -3740,6 +3976,8 @@ async function refEnsureLoaded(){
     ST.referees=snap.docs.map(d=>({id:d.id,...d.data()}))
       .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
     ST._refError=null;
+    // La copia pública, por código de atleta y sin RUT (admin/privados.js).
+    _programarPublicacion('jueces',()=>publicarJueces(ST.referees));
   // Si Firestore rechaza la lectura hay que decirlo. Antes se tragaba el error y
   // la pantalla quedaba igual que una base recién creada —"Sin jueces cargados
   // todavía", todos los contadores en cero—, que es exactamente lo que se ve
@@ -5031,6 +5269,7 @@ window.purgarInscripcionesArchivadas = async function(){
     }
     await logAction('purge_inscripciones_archivadas',`${toDelete.length} docs`,null,evNames);
     ST.inscripciones=ST.inscripciones.filter(i=>!archivedIds.has(i.evento));
+    ST._insPub=(ST._insPub||[]).filter(i=>!archivedIds.has(i.evento));
     showToast(`${toDelete.length} inscripciones purgadas`);
     render();
   }catch(e){showToast('Error: '+e.message,null,true);}
@@ -5121,8 +5360,17 @@ window.cronoPickEvent=function(ev){
   ST.cronoEv=ev; ST.cronoRows=null;
   if(window._cronoUnsub){try{window._cronoUnsub()}catch(e){}window._cronoUnsub=null;}
   if(ev){
-    window._cronoUnsub=onSnapshot(doc(db,'cronograma',ev),(d)=>{
-      ST.cronoRows=(d.exists()&&Array.isArray(d.data().rows))?d.data().rows:[];
+    // Los correos de los handlers no están en el cronograma público: se pegan
+    // desde cronograma_priv/{ev} (ver cronoSaveDoc).
+    const priv=getDoc(doc(db,'cronograma_priv',ev)).then(d=>(d.exists()&&d.data().correos)||[]).catch(()=>[]);
+    window._cronoUnsub=onSnapshot(doc(db,'cronograma',ev),async(d)=>{
+      const filas=(d.exists()&&Array.isArray(d.data().rows))?d.data().rows:[];
+      const correos=await priv;
+      filas.forEach((r,i)=>{ const c=correos[i]; if(!c)return;
+        if(c.h1c&&!(r.handler1||{}).correo)r.handler1={...(r.handler1||{}),correo:c.h1c};
+        if(c.h2c&&!(r.handler2||{}).correo)r.handler2={...(r.handler2||{}),correo:c.h2c}; });
+      if(ST.cronoEv!==ev)return;
+      ST.cronoRows=filas;
       ST.cronoHideCoaches=(d.exists()&&d.data().hideCoaches)||false;
       if(ST.view==='cronograma')render();
     },(e)=>{console.warn('[crono]',e.message);ST.cronoRows=[];if(ST.view==='cronograma')render();});
@@ -5130,9 +5378,19 @@ window.cronoPickEvent=function(ev){
   render();
 };
 
+// cronograma/{ev} se lee sin sesión (cronograma.html, el livecast, el sitio):
+// las filas van sin RUT y sin el correo de los handlers. Los correos quedan en
+// cronograma_priv/{ev}, que solo lee un admin, en el mismo orden que las filas.
 async function cronoSaveDoc(){
   if(!ST.cronoEv)return;
-  try{ await setDoc(doc(db,'cronograma',ST.cronoEv),{rows:ST.cronoRows||[],hideCoaches:!!ST.cronoHideCoaches,updatedAt:serverTimestamp()},{merge:true}); }
+  const filas=ST.cronoRows||[];
+  const pub=filas.map(({rut,...r})=>({...r,
+    handler1:{nombre:(r.handler1||{}).nombre||''},handler2:{nombre:(r.handler2||{}).nombre||''}}));
+  const correos=filas.map(r=>({h1c:(r.handler1||{}).correo||'',h2c:(r.handler2||{}).correo||''}));
+  try{
+    await setDoc(doc(db,'cronograma',ST.cronoEv),{rows:pub,hideCoaches:!!ST.cronoHideCoaches,updatedAt:serverTimestamp()},{merge:true});
+    await setDoc(doc(db,'cronograma_priv',ST.cronoEv),{correos,updatedAt:serverTimestamp()});
+  }
   catch(e){ showToast('Error guardando: '+e.message,null,true); }
 }
 
@@ -5457,14 +5715,26 @@ window.cronoAutoDistribute=async function(){
 
 window._entrenadorPorRut=_entrenadorPorRut;
 
+// Por código de atleta: las inscripciones de entrenador nuevas declaran a sus
+// atletas por código. Las de antes los traían por RUT: se traducen al código
+// con las inscripciones (el panel tiene los dos).
 function _entrenadorPorRut(eventoId){
   const m={};
+  const codDeRut={};
+  (ST.inscripciones||[]).forEach(i=>{ const r=_rutN(i.rut); if(r&&i.codigo)codDeRut[r]=i.codigo; });
   (ST.entInsc||[]).forEach(e=>{
     if(e.evento!==eventoId) return;
     if((e.status||'pending')!=='approved') return;
-    (e.atletas||[]).forEach(a=>{ const r=_rutN(a.rut); if(r) m[r]=e.nombre||''; });
+    (e.atletas||[]).forEach(a=>{ const c=a.codigo||codDeRut[_rutN(a.rut)]; if(c) m[c]=e.nombre||''; });
   });
   return m;
+}
+// El código de una fila del cronograma (las de antes traían el RUT).
+function _codFila(r){
+  if(r.codigo)return r.codigo;
+  const k=_rutN(r.rut); if(!k)return '';
+  const i=(ST.inscripciones||[]).find(x=>_rutN(x.rut)===k);
+  return (i&&i.codigo)||'';
 }
 
 // Rellena la columna en un cronograma que YA está armado, sin rehacerlo: el
@@ -5481,7 +5751,7 @@ window.cronoTraerEntrenadores=async function(){
   }
   let puestos=0, distintos=0, sinRut=0;
   (ST.cronoRows||[]).forEach(r=>{
-    const k=_rutN(r.rut);
+    const k=_codFila(r);
     if(!k){ if(!r.entrenador)sinRut++; return; }
     const q=mapa[k]; if(!q) return;
     if(!String(r.entrenador||'').trim()){ r.entrenador=q; puestos++; }
@@ -5491,7 +5761,7 @@ window.cronoTraerEntrenadores=async function(){
   await cronoSaveDoc(); render();
   showToast(`Entrenador puesto en ${puestos} atleta(s)`
     +(distintos?` · ${distintos} ya tenían otro nombre escrito y se dejaron como estaban`:'')
-    +(sinRut?` · ${sinRut} sin RUT en el cronograma, no se pueden cruzar`:''));
+    +(sinRut?` · ${sinRut} sin código de atleta en el cronograma, no se pueden cruzar`:''));
   return {hay:true,puestos,distintos,sinRut};
 };
 
@@ -5512,9 +5782,9 @@ window.cronoLoadFromNomina=async function(){
   // y se escribe a mano.
   const _entPorRut=_entrenadorPorRut(ST.cronoEv);
   ST.cronoRows=list.map(i=>({
-    nombre:i.nombre||'', rut:i.rut||'', division:i.division||'', categoria:i.categoria||'', sexo:_sexoHM(i.sexo),
+    nombre:i.nombre||'', codigo:i.codigo||'', division:i.division||'', categoria:i.categoria||'', sexo:_sexoHM(i.sexo),
     club:i.club||'', modalidad:i.modalidad||'', tarima:'1', flight:(i.flight||'A'), jornada:'',
-    entrenador:_entPorRut[_rutN(i.rut)]||'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
+    entrenador:_entPorRut[i.codigo]||'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
   })).sort((a,b)=>String(a.flight).localeCompare(String(b.flight))||(a.nombre||'').localeCompare(b.nombre||''));
   await cronoSaveDoc();
   showToast('Cargados '+ST.cronoRows.length+' atletas desde la nómina');
@@ -5539,9 +5809,9 @@ window.cronoAddMissingFromNomina=async function(){
   if(!confirm('Agregar '+nuevos.length+' atleta(s) nuevo(s) al cronograma?\n\n'+nuevos.map(i=>'• '+i.nombre).join('\n')+'\n\nEntran en flight "A" sin jornada — los mueves a mano después. No toca a los que ya están ubicados.'))return;
   const _entPorRut=_entrenadorPorRut(ST.cronoEv);
   ST.cronoRows=(ST.cronoRows||[]).concat(nuevos.map(i=>({
-    nombre:i.nombre||'', rut:i.rut||'', division:i.division||'', categoria:i.categoria||'', sexo:_sexoHM(i.sexo),
+    nombre:i.nombre||'', codigo:i.codigo||'', division:i.division||'', categoria:i.categoria||'', sexo:_sexoHM(i.sexo),
     club:i.club||'', modalidad:i.modalidad||'', tarima:'1', flight:'A', jornada:'',
-    entrenador:_entPorRut[_rutN(i.rut)]||'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
+    entrenador:_entPorRut[i.codigo]||'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
   })));
   await cronoSaveDoc();
   showToast('Agregados '+nuevos.length+' atleta(s) nuevo(s) al cronograma');
@@ -5991,7 +6261,7 @@ window.nsResetAll=function(){
 window.nsSave=async function(){
   ST.nsBusy=true; render();
   try{
-    await setDoc(doc(db,'nomina_suda_edits','main'),{items:ST.nsEdits||{},ts:Date.now(),by:(ST.adminInfo?.email||'')},{merge:false});
+    await setDoc(doc(db,'nomina_suda_edits','main'),{items:ST.nsEdits||{},ts:Date.now(),by:(ST.user?.uid||'')},{merge:false});   // se lee sin sesión: sin correo
     ST.nsDirty=false;
     showToast('Nómina actualizada — se ve en yourlift.cl en unos minutos');
   }catch(e){ showToast('No se pudo guardar: '+e.message,null,true); }
@@ -7057,7 +7327,7 @@ window.abrirCicloRanking=async function(){
   if(!confirm(`REINICIAR EL RANKING\n\nEl ranking pasará a mostrar solo los resultados desde el ${e.fecha} — "${e.nombre}" en adelante.\n\nNo se borra nada: los resultados anteriores quedan guardados y se siguen viendo en el perfil de cada atleta. Este corte se puede quitar cuando quieras.\n\n¿Confirmar?`)) return;
   try{
     await setDoc(doc(db,'ranking_config','ciclo'),
-      {desde:e.fecha, evento:e.nombre, evento_id:e.id||'', ts:serverTimestamp(), por:ST.user?.email||''});
+      {desde:e.fecha, evento:e.nombre, evento_id:e.id||'', ts:serverTimestamp(), por:ST.user?.uid||''});   // se lee sin sesión: sin correo
     await logAction('ranking_ciclo_abrir', e.id||e.nombre, null, e.fecha);
     ST.rankingCiclo={desde:e.fecha,evento:e.nombre,evento_id:e.id||''};
     showToast('Ranking reiniciado desde '+e.nombre);
@@ -9443,10 +9713,13 @@ async function _guardarCapa(a,mut,accion,detalle){
   const eds=(a._competencias_edits||[]).map(e=>({...e}));
   const fuera=[...(a._excluded_results||[])];
   mut(eds,fuera);
-  await setDoc(doc(db,'athlete_edits',_editDocId(a)),{
-    rut:a.rut||'', codigo:a.codigo||'', nombre:a.nombre||'',
+  const docId=_editDocId(a);
+  await setDoc(doc(db,'athlete_edits',docId),{
+    codigo:a.codigo||'', nombre:a.nombre||'',
     competencias_edits:eds, excluded_results:fuera, ts:Date.now()
   },{merge:true});
+  await _guardarEditPriv(docId,{rut:a.rut});
+  _recordarEditDoc(a,docId);
   await _marcarEdicion();
   a._competencias_edits=eds;
   a._excluded_results=fuera;
@@ -9733,7 +10006,8 @@ window.impDoImport = async function(btn){
       if(hasAttempts) data.attempts = a.att;
       if(a.flight) data.flight = a.flight;
       if(a.bw>0) data.bw = a.bw;
-      await setDoc(doc(db,'inscripciones',id), data);
+      // El RUT, si vino en el CSV, va a la inscripción privada.
+      await inscCrear(id, data);
       ok++;
     }catch(e){ console.error('Import row failed:', a.nombre, e); err++; }
   }
@@ -9922,7 +10196,8 @@ window.procesarMerge = async function(compId){
   }catch(e){
     console.warn('[merge] Storage upload failed:',e.message);
     // Fallback: download locally
-    const dataBlob=new Blob([JSON.stringify(newData,null,2)],{type:'application/json'});
+    // Es el data.json que se publica: sin RUT ni fecha de nacimiento completa.
+    const dataBlob=new Blob([JSON.stringify(newData.map(YLPrivacidad.publico),null,2)],{type:'application/json'});
     const dataUrl=URL.createObjectURL(dataBlob);
     const a1=document.createElement('a');a1.href=dataUrl;a1.download='data.json';a1.click();
     if(recordsUpdated>0){
@@ -9937,7 +10212,7 @@ window.procesarMerge = async function(compId){
   // Mark as processed in Firestore
   try{
     await setDoc(doc(db,'competition_results',compId),
-      {status:'processed',processedAt:new Date().toISOString(),processedBy:ST.user.email,
+      {status:'processed',processedAt:new Date().toISOString(),processedBy:ST.user.uid,
        summary:{added,updated,recordsUpdated}},
       {merge:true}
     );
@@ -10885,6 +11160,36 @@ function _recordarFoto(codigo, rut, datos){
   return fd;
 }
 
+// atleta_fotos se lee sin sesión. La foto de inscripción de la que salió una
+// foto (o la que se rechazó) está en la carpeta privada de documentos, y su
+// enlace lleva la ruta con el RUT y la llave para abrirla: no se guarda el
+// enlace, se guarda una huella (source_ref / rejected_ref) que alcanza para
+// reconocerla después. Los docs viejos con source_url/rejected_url se siguen
+// entendiendo (y la migración los pasa a huella).
+function _huellaFoto(u){
+  if(!u)return '';
+  let h=0x811c9dc5; const s=String(u);
+  for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; }
+  return 'h'+h.toString(16)+'_'+s.length;
+}
+function _esLaFoto(fd,u){
+  if(!fd||!u)return false;
+  const h=_huellaFoto(u);
+  return fd.foto_url===u||fd.source_url===u||fd.rejected_url===u||fd.source_ref===h||fd.rejected_ref===h;
+}
+// La foto de perfil pública se guarda por código de atleta, nunca con el RUT en
+// el nombre del archivo (el enlace es público). Si viene de la inscripción, se
+// copia a athlete_photos/ y se publica la copia.
+async function _copiarFotoPublica(codigo,url){
+  const blob=await (await fetch(url)).blob();
+  const tipo=blob.type||'image/jpeg';
+  const ext=/webp/.test(tipo)?'webp':/png/.test(tipo)?'png':'jpg';
+  const ruta='athlete_photos/'+String(codigo).replace(/[^0-9a-zA-Z-]/g,'_')+'_'+Date.now()+'.'+ext;
+  const ref=storageRef(getStorage(app),ruta);
+  await uploadBytes(ref,blob,{contentType:tipo});
+  return {url:await getDownloadURL(ref),ruta};
+}
+
 // Cuándo se decidió por última vez sobre la foto de este atleta. Sirve para las
 // fotos viejas, de antes de que se guardara `source_url`: si la decisión es
 // posterior a la subida, ya se miró esa foto.
@@ -10912,7 +11217,7 @@ function _fotoPendienteDe(a, idx){
   if(!e || !e.url) return null;
   const u = e.url;
   const fd = (ST.fotosByCodigo||{})[a.codigo] || (ST.fotosByRut||{})[_rutFoto(a.rut)];
-  if(fd && (fd.foto_url===u || fd.source_url===u || fd.rejected_url===u)) return null;
+  if(_esLaFoto(fd,u)) return null;
   if(a.foto_url){
     // Ya tiene una publicada: esta solo es "nueva" si la mandó DESPUÉS de que se
     // decidió la que tiene. Sin fecha de decisión —fotos de data.json, docs
@@ -11034,22 +11339,23 @@ window.confirmarFotosBulk = async function(){
     if(!url){ errors++; fallaron.push((a.nombre||codigo)+': no se encontró la foto de su inscripción'); continue; }
     try{
       const docRef = doc(db, 'atleta_fotos', codigo);
-      // `source_url` deja anotado de QUÉ foto de inscripción salió esta. Sin eso
-      // no hay forma de distinguir "ya la revisé" de "mandó otra después", y el
-      // atleta volvía a la lista de pendientes en cada carga.
+      const pub = await _copiarFotoPublica(codigo, url);
+      // `source_ref` deja anotado de QUÉ foto de inscripción salió esta (una
+      // huella, no el enlace). Sin eso no hay forma de distinguir "ya la revisé"
+      // de "mandó otra después", y el atleta volvía a la lista en cada carga.
       const datos = {
-        codigo, rut: a.rut||'', nombre: a.nombre||'',
-        foto_url: url, source_url: url, status: 'approved',
-        approved_by: ST.user?.email || 'admin',
+        codigo, nombre: a.nombre||'',
+        foto_url: pub.url, storage_path: pub.ruta, source_ref: _huellaFoto(url), status: 'approved',
+        approved_by: ST.user?.uid || 'admin',
         source: 'bulk_import_inscripcion',
-        rejected_url: null,
+        rejected_ref: null,
         updated: Date.now()
       };
       await setDoc(docRef, datos, {merge:true});
       // La copia local se guardaba recortada (solo codigo/foto_url/status) y
       // perdía justo la fecha y el origen, así que la fila reaparecía sola.
       _recordarFoto(codigo, a.rut, datos);
-      a.foto_url = url;
+      a.foto_url = pub.url;
       delete F.bulkSel[codigo];
       done++;
     }catch(e){
@@ -11093,13 +11399,12 @@ window.rechazarFotoInscripcion = async function(){
     const docRef = doc(db, 'atleta_fotos', F.selected.codigo);
     const datos = {
       codigo: F.selected.codigo,
-      rut: F.selected.rut||'',
       nombre: F.selected.nombre||'',
       status: 'rejected',
-      rejected_url: F.pendingPhotoUrl,
+      rejected_ref: _huellaFoto(F.pendingPhotoUrl),
       rejected_at: Date.now(),
       updated: Date.now(),
-      rejected_by: ST.user?.email || 'admin'
+      rejected_by: ST.user?.uid || 'admin'
     };
     await setDoc(docRef, datos, {merge:true});
     _recordarFoto(F.selected.codigo, F.selected.rut, datos);
@@ -11286,9 +11591,10 @@ window.guardarFotoAtleta = async function(){
   try{
     const dataUrl = F.preview;
     const blob = await (await fetch(dataUrl)).blob();
-    const rutKey = (F.selected.rut||F.selected.codigo||'unknown').replace(/[^0-9a-zA-Z]/g,'_');
+    // El nombre del archivo va con el código: el enlace de la foto es público.
+    const codKey = (F.selected.codigo||'unknown').replace(/[^0-9a-zA-Z-]/g,'_');
     const ts = Date.now();
-    const path = 'athlete_photos/'+rutKey+'_'+ts+'.jpg';
+    const path = 'athlete_photos/'+codKey+'_'+ts+'.jpg';
     const storage = getStorage(app);
     const ref = storageRef(storage, path);
     await uploadBytes(ref, blob, {contentType:'image/jpeg'});
@@ -11297,16 +11603,16 @@ window.guardarFotoAtleta = async function(){
     const docRef = doc(db, 'atleta_fotos', F.selected.codigo);
     const datos = {
       codigo: F.selected.codigo,
-      rut: F.selected.rut||'',
       nombre: F.selected.nombre||'',
       foto_url: url,
       // De cuál foto de inscripción salió, si salió de una: es lo que después
-      // distingue "ya la revisé" de "el atleta mandó otra".
-      source_url: F.importedFrom || null,
+      // distingue "ya la revisé" de "el atleta mandó otra". Una huella, no el
+      // enlace (ver _huellaFoto).
+      source_ref: F.importedFrom ? _huellaFoto(F.importedFrom) : null,
       storage_path: path,
       status: 'approved',
-      rejected_url: null,
-      approved_by: ST.user?.email || 'admin',
+      rejected_ref: null,
+      approved_by: ST.user?.uid || 'admin',
       updated: ts
     };
     await setDoc(docRef, datos, {merge:true});
@@ -11589,7 +11895,7 @@ window.quitarFondoGif = async function(){
     // 5. Subir WebM procesado
     setAIStatus('Subiendo video procesado...', 90);
     const webmBlob=new Blob(chunks,{type:mimeType});
-    const rutKey=(F.selected.rut||F.selected.codigo||'x').replace(/[^0-9a-zA-Z]/g,'_');
+    const rutKey=(F.selected.codigo||'x').replace(/[^0-9a-zA-Z-]/g,'_');   // por código: el enlace es público
     const ts=Date.now();
     const path='athlete_gifs/'+rutKey+'_'+ts+'_nobg.webm';
     const storage=getStorage(app);
@@ -11660,7 +11966,7 @@ window.subirGifAtleta = async function(input){
   render();
   try{
     const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
-    const rutKey = (F.selected.rut || F.selected.codigo || 'unknown').replace(/[^0-9a-zA-Z]/g,'_');
+    const rutKey = (F.selected.codigo || 'unknown').replace(/[^0-9a-zA-Z-]/g,'_');   // por código: el enlace es público
     const ts = Date.now();
     const path = 'athlete_gifs/'+rutKey+'_'+ts+'.'+ext;
     const storage = getStorage(app);
@@ -13830,6 +14136,695 @@ function renderCobros(){
       </div>
       <div style="margin-top:16px"><button class="btn btn-b" onclick="cobroCfgGuardar()">Guardar datos</button></div>
     </div>`;
+}
+
+// ═══════════════════════ admin/proteccion.js ═══════════════════════
+// admin.html — Protección de datos (Ley 21.719): solicitudes de los titulares,
+// dónde están los datos de una persona, conservación a 5 años, registro de
+// incidentes y la migración de los datos guardados antes de la ley.
+//
+// Fuente del panel. El navegador no carga este archivo: carga admin/panel.js,
+// que se arma juntando estas fuentes (node herramientas/armar_panel.js).
+// Solo define funciones; lo que corre al abrir el panel está en arranque.js.
+//
+// FECHIPO es la responsable de los datos; YourLift SpA opera la plataforma por
+// encargo. Lo que se le promete al público está en la política de privacidad
+// (sitio/interfaz.js, renderTerminos) y el detalle de cómo se trabaja, en
+// documentos/PROTECCION_DE_DATOS.md. Si se cambia algo acá, se cambia allá.
+
+const PD_PLAZO_DIAS=30;            // para responder una solicitud (días corridos)
+const PD_CONSERVACION_ANIOS=5;     // documentos: desde la última competencia
+const PD_TIPOS={acceso:'Acceso',rectificacion:'Rectificación',supresion:'Supresión',
+  oposicion:'Oposición',portabilidad:'Portabilidad',bloqueo:'Bloqueo'};
+const PD_ESTADOS={recibida:'Recibida',en_curso:'En curso',respondida:'Respondida',rechazada:'Rechazada'};
+
+// Ven esta pantalla quienes administran de verdad (no la transmisión ni la mesa).
+const _pdPuede=()=>_esOwnerAdm()||ST.adminInfo?.role==='superadmin';
+
+const _pdDia=86400000;
+// Fecha de cualquier forma (Timestamp, ms, "2024-05-03", "03/05/2024") → ms.
+function _pdMs(v){
+  if(!v)return 0;
+  if(typeof v==='number')return v;
+  if(v.seconds)return v.seconds*1000;
+  const s=String(v);
+  let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m)return Date.UTC(+m[1],+m[2]-1,+m[3]);
+  m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/); if(m)return Date.UTC(+m[3],+m[2]-1,+m[1]);
+  const t=Date.parse(s); return isNaN(t)?0:t;
+}
+const _pdFecha=ms=>ms?new Date(ms).toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'numeric'}):'—';
+
+// La ruta en Storage de un archivo guardado ("storage:…" o un enlace de descarga).
+function _pdRutaArchivo(v){
+  if(YLPrivacidad.esRutaArchivo(v))return YLPrivacidad.rutaDe(v);
+  const m=String(v||'').match(/\/o\/([^?]+)/); return m?decodeURIComponent(m[1]):'';
+}
+// Los archivos (documentos) que cuelgan de una inscripción privada.
+function _pdArchivosDe(p){
+  const out=[];
+  Object.keys(p||{}).forEach(k=>{ if(/URL$/.test(k)&&p[k])out.push({campo:k,v:p[k]}); });
+  if(p&&p.docs&&typeof p.docs==='object')Object.keys(p.docs).forEach(k=>{ if(p.docs[k])out.push({campo:'docs.'+k,v:p.docs[k]}); });
+  return out;
+}
+
+// ═══════════ Carga ═══════════
+async function pdCargar(){
+  ST._pdCargado='cargando';
+  const [sol,inc]=await Promise.all([
+    getDocs(collection(db,'solicitudes_datos')).then(s=>s.docs.map(d=>({id:d.id,...d.data()}))).catch(e=>{ST._pdErr=e;return [];}),
+    getDocs(collection(db,'incidentes')).then(s=>s.docs.map(d=>({id:d.id,...d.data()}))).catch(e=>{ST._pdErr=e;return [];}),
+  ]);
+  ST.pdSol=sol.sort((a,b)=>_pdMs(b.ts)-_pdMs(a.ts));
+  ST.pdInc=inc.sort((a,b)=>_pdMs(b.detectado)-_pdMs(a.detectado));
+  ST._pdCargado=true;
+  if(ST.view==='proteccion')render();
+}
+window.pdTab=function(t){ST.pdTab=t;render();};
+
+// ═══════════ Solicitudes de los titulares ═══════════
+const _pdVence=s=>_pdMs(s.ts)+PD_PLAZO_DIAS*_pdDia;
+window.pdSolEstado=async function(id,estado){
+  const s=(ST.pdSol||[]).find(x=>x.id===id); if(!s)return;
+  let nota='';
+  if(estado==='respondida'||estado==='rechazada'){
+    nota=prompt(estado==='rechazada'
+      ?'¿Por qué se rechaza? (queda en el registro y hay que decírselo al titular, con la posibilidad de reclamar ante la Agencia de Protección de Datos Personales)'
+      :'¿Qué se le respondió? (resumen: queda en el registro)','');
+    if(nota===null)return;
+  }
+  try{
+    const upd={status:estado,[estado+'En']:Date.now(),...(nota?{nota}:{})};
+    await updateDoc(doc(db,'solicitudes_datos',id),upd);
+    Object.assign(s,upd);
+    await logAction('solicitud_datos_'+estado,id,null,PD_TIPOS[s.tipo]||s.tipo);
+    showToast('Solicitud: '+PD_ESTADOS[estado]); render();
+  }catch(e){showToast('No se pudo guardar: '+e.message,null,true);}
+};
+window.pdSolTitular=function(id){
+  const s=(ST.pdSol||[]).find(x=>x.id===id); if(!s)return;
+  ST.pdTab='titular'; ST.pdRut=s.rut; render(); pdBuscarTitular(s.rut);
+};
+
+// ═══════════ Dónde están los datos de una persona ═══════════
+// Para responder una solicitud de acceso o portabilidad, o para suprimir: se
+// busca a la persona por su RUT en todo lo que guarda la plataforma.
+window.pdBuscarTitular=async function(rutIn){
+  const rut=rutIn||document.getElementById('pd_rut')?.value||'';
+  const r=YLPrivacidad.norm(rut);
+  if(r.length<5){showToast('Escribe un RUT',null,true);return;}
+  ST.pdRut=rut; ST.pdTitular={cargando:true}; render();
+  const mismo=x=>YLPrivacidad.norm(x)===r;
+  const T={rut:r,secciones:[],archivos:[],datos:{}};
+  const sec=(titulo,donde,items)=>{ if(items&&items.length){T.secciones.push({titulo,donde,n:items.length,items});T.datos[titulo]=items;} };
+  const atl=(ST.data||[]).find(a=>mismo(a.rut));
+  const cod=atl?.codigo||'';
+  if(atl)sec('Padrón de atletas','data.json (público, sin RUT ni fecha) + privado/padron (RUT y fecha)',
+    [{codigo:atl.codigo,nombre:atl.nombre,club:atl.club||'',sexo:atl.sexo||'',fechaNac:atl.fechaNac||'',competencias:(atl.competencias||[]).length}]);
+  const ins=(ST.inscripciones||[]).filter(i=>mismo(i.rut)||(cod&&i.codigo===cod));
+  sec('Inscripciones','inscripciones (público, sin datos personales) + inscripciones_private (solo el panel)',
+    ins.map(i=>{const p=(ST.inscripcionesPrivate||{})[i.id]||{};
+      return {id:i.id,evento:i.evento,estado:i.status,nombre:i.nombre,categoria:i.categoria||'',division:i.division||'',
+        rut:i.rut||'',fechaNac:i.fechaNac||'',comuna:i.comuna||'',correo:p.correo||'',
+        documentos:_pdArchivosDe(p).map(x=>x.campo)};}));
+  const q1=async(col,campo,val)=>val?(await getDocs(query(collection(db,col),where(campo,'==',val)))).docs.map(d=>({id:d.id,...d.data()})):[];
+  const todos=async col=>(await getDocs(collection(db,col))).docs.map(d=>({id:d.id,...d.data()}));
+  const intentar=async(fn)=>{try{return await fn();}catch(e){console.warn('[titular]',e.message);return [];}};
+  const [res,fotos,pend,ents,refs,certs,eds]=await Promise.all([
+    intentar(()=>q1('competition_results','codigo',cod)),
+    intentar(async()=>{ if(!cod)return []; const d=await getDoc(doc(db,'atleta_fotos',cod)); return d.exists()?[{id:d.id,...d.data()}]:[]; }),
+    intentar(async()=>(await todos('atletas_pending_priv')).filter(x=>mismo(x.rut))),
+    intentar(async()=>(ST.entrenadores||await todos('entrenadores')).filter(x=>mismo(x.rut)||mismo(x.id))),
+    intentar(async()=>(await todos('referees')).filter(x=>mismo(x.rut)||mismo(x.id))),
+    intentar(async()=>(await todos('cert_requests')).filter(x=>mismo(x.rut))),
+    intentar(async()=>{ const id=(ST._edDocPorRut||{})[r]; if(!id)return [];
+      const [a,b]=await Promise.all([getDoc(doc(db,'athlete_edits',id)),getDoc(doc(db,'athlete_edits_priv',id))]);
+      return [{id,...(a.exists()?a.data():{}),...(b.exists()?b.data():{})}]; }),
+  ]);
+  sec('Resultados publicados','competition_results (público, por código)',res.map(x=>({evento:x.evento,modalidad:x.modalidad,total:x.resultado?.total})));
+  sec('Foto de perfil','atleta_fotos (público, por código) + Storage athlete_photos/',fotos.map(x=>({codigo:x.id,foto:x.foto_url?'sí':'no',estado:x.status||''})));
+  sec('Ediciones del padrón','athlete_edits (público) + athlete_edits_priv (solo el panel)',eds);
+  sec('Atleta nuevo pendiente','atletas_pending (público, por código) + atletas_pending_priv',pend);
+  sec('Base de entrenadores','entrenadores (solo el panel) + copia pública sin RUT ni correos',ents.map(({acreditaciones,...x})=>({...x,acreditaciones:(acreditaciones||[]).length})));
+  sec('Base de jueces','referees (solo el panel) + copia pública por código',refs);
+  sec('Solicitudes de edición','edit_requests (solo el panel)',(ST.editRequests||[]).filter(x=>mismo(x.rut)).map(({pin,...x})=>x));
+  sec('Solicitudes de certificado','cert_requests (solo el panel)',certs);
+  sec('Solicitudes sobre sus datos','solicitudes_datos (solo el panel)',(ST.pdSol||[]).filter(x=>mismo(x.rut)));
+  // Los archivos en Storage: la carpeta de documentos lleva el RUT.
+  try{
+    const l=await listAll(storageRef(getStorage(app),'athlete_files/'+r));
+    T.archivos=l.items.map(i=>i.fullPath);
+  }catch(e){console.warn('[titular] archivos',e.message);}
+  ST.pdTitular=T; render();
+};
+
+// Sus datos en un archivo, para responder una solicitud de acceso o
+// portabilidad (formato legible por máquina). No van enlaces a los documentos:
+// se nombran; si los pide, se le envían aparte.
+window.pdDescargarTitular=function(){
+  const T=ST.pdTitular; if(!T||!T.rut)return;
+  const out={generado:new Date().toISOString(),responsable:'Federación Chilena de Powerlifting (FECHIPO)',
+    plataforma:'YourLift (YourLift SpA, encargado)',titular:{rut:T.rut},datos:T.datos,documentos_guardados:T.archivos.map(p=>p.split('/').pop())};
+  const b=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='datos_'+T.rut+'.json'; a.click();
+  logAction('titular_exportar',T.rut.slice(0,4)+'…',null,'datos exportados');
+};
+
+// Borra los documentos de identidad de una persona (supresión): los archivos de
+// Storage y los enlaces en sus inscripciones privadas. Lo deportivo (nombre,
+// resultados, récords) no se borra acá: es el historial oficial de la
+// federación; si lo pide, se evalúa y se anonimiza a mano.
+window.pdBorrarDocsTitular=async function(){
+  const T=ST.pdTitular; if(!T||!T.rut)return;
+  if(!_esOwnerAdm()){showToast('Solo el Owner puede borrar documentos',null,true);return;}
+  const ins=(ST.inscripciones||[]).filter(i=>YLPrivacidad.norm(i.rut)===T.rut);
+  if(!confirm('Se borran los documentos de identidad de este RUT: '+T.archivos.length+' archivo(s) en Storage y los enlaces en '+ins.length+' inscripción(es).\n\nNo se puede deshacer. ¿Seguir?'))return;
+  const n=await _pdBorrarDocumentos(ins.map(i=>i.id),T.archivos);
+  await logAction('titular_borrar_documentos',T.rut.slice(0,4)+'…',null,n.archivos+' archivos, '+n.inscripciones+' inscripciones');
+  showToast('Documentos borrados: '+n.archivos+' archivo(s)'); pdBuscarTitular(T.rut);
+};
+
+// Borra los archivos y los campos de documentos (y el correo, la comuna y el
+// PIN) de las inscripciones privadas indicadas. Devuelve cuántos.
+async function _pdBorrarDocumentos(insIds,rutasExtra){
+  const st=getStorage(app); const rutas=new Set(rutasExtra||[]); let ninsc=0;
+  for(const id of insIds){
+    const p=(ST.inscripcionesPrivate||{})[id]; if(!p)continue;
+    const arch=_pdArchivosDe(p);
+    arch.forEach(x=>{const r=_pdRutaArchivo(x.v); if(r)rutas.add(r);});
+    const upd={documentosEliminados:new Date().toISOString().slice(0,10)};
+    Object.keys(p).forEach(k=>{ if(/URL$/.test(k)||['docs','correo','comuna','pin','declaraMayorFecha','carnetName','wadeName'].includes(k))upd[k]=deleteField(); });
+    try{ await updateDoc(doc(db,'inscripciones_private',id),upd); ninsc++; }catch(e){console.warn('[docs] privado',id,e.message);}
+  }
+  let narch=0;
+  for(const r of rutas){ if(!/^athlete_files\//.test(r))continue;
+    try{ await deleteObject(storageRef(st,r)); narch++; }
+    catch(e){ if(e.code==='storage/object-not-found')narch++; else console.warn('[docs] archivo',e.code||e.message); } }
+  return {archivos:narch,inscripciones:ninsc};
+}
+
+// ═══════════ Conservación: 5 años desde la última competencia ═══════════
+// Por persona (RUT): la fecha más nueva entre los campeonatos en que se inscribió
+// y los resultados del padrón. Si pasaron 5 años, sus documentos se borran.
+function pdConservacion(){
+  const lim=Date.now()-PD_CONSERVACION_ANIOS*365.25*_pdDia;
+  const fechaEv={}; (ST.eventos||[]).forEach(e=>{ const f=_pdMs(e.date||e.fecha); if(f){fechaEv[e.id]=f; if(e.name)fechaEv[e.name]=f;} });
+  const ultima={};
+  const sube=(r,f)=>{ if(r&&f&&(!ultima[r]||f>ultima[r]))ultima[r]=f; };
+  (ST.data||[]).forEach(a=>{ const r=YLPrivacidad.norm(a.rut); if(!r)return;
+    (a.competencias||[]).forEach(c=>sube(r,_pdMs(c.fecha))); });
+  (ST.inscripciones||[]).forEach(i=>{ const r=YLPrivacidad.norm(i.rut); if(!r)return;
+    sube(r,fechaEv[i.evento]||_pdMs(i.timestamp)); });
+  const vencidas=[];
+  (ST.inscripciones||[]).forEach(i=>{
+    const p=(ST.inscripcionesPrivate||{})[i.id]; if(!p)return;
+    const docs=_pdArchivosDe(p); if(!docs.length&&!p.correo)return;
+    const r=YLPrivacidad.norm(i.rut);
+    const u=(r&&ultima[r])||fechaEv[i.evento]||_pdMs(i.timestamp);
+    if(u&&u<lim)vencidas.push({id:i.id,nombre:i.nombre,evento:i.evento,ultima:u,docs:docs.length});
+  });
+  // Entrenadores: sus documentos y contactos, desde el campeonato (o la
+  // convocatoria) de esa inscripción.
+  const entVencidas=[];
+  (ST.entInsc||[]).forEach(e=>{
+    const p=(ST.entInscPriv||{})[e.id]; if(!p)return;
+    if(!_pdArchivosDe(p).length&&!p.correo&&!p.telefono)return;
+    const u=fechaEv[e.evento]||_pdMs(e.timestamp)||_pdMs(p.ts);
+    if(u&&u<lim)entVencidas.push({id:e.id,nombre:e.nombre,ultima:u});
+  });
+  return {vencidas:vencidas.sort((a,b)=>a.ultima-b.ultima),entVencidas,limite:lim,fechaEv};
+}
+window.pdPurgarVencidos=async function(){
+  if(!_esOwnerAdm()){showToast('Solo el Owner',null,true);return;}
+  const {vencidas,entVencidas,limite,fechaEv}=pdConservacion();
+  if(!confirm('Se borran los documentos (y el correo, comuna y PIN) de '+vencidas.length+' inscripción(es) de atletas y '+entVencidas.length+' de entrenadores que no compiten hace más de '+PD_CONSERVACION_ANIOS+' años, y los correos de handlers de los campeonatos de esa época.\n\nNo se puede deshacer. ¿Seguir?'))return;
+  const n=await _pdBorrarDocumentos(vencidas.map(v=>v.id),[]);
+  // Entrenadores: archivos y contactos de su inscripción privada.
+  const st=getStorage(app); let nEnt=0;
+  for(const e of entVencidas){
+    const p=(ST.entInscPriv||{})[e.id]||{};
+    for(const x of _pdArchivosDe(p)){ const r=_pdRutaArchivo(x.v); if(/^athlete_files\//.test(r))try{await deleteObject(storageRef(st,r));n.archivos++;}catch(err){} }
+    try{ await updateDoc(doc(db,'inscripciones_entrenador_priv',e.id),{docs:deleteField(),correo:deleteField(),telefono:deleteField(),pin:deleteField(),documentosEliminados:new Date().toISOString().slice(0,10)}); nEnt++; }catch(err){console.warn('[conservación] entrenador',e.id,err.message);}
+  }
+  // Correos de handlers de campeonatos viejos (el id empieza con el del campeonato).
+  let nH=0;
+  for(const col of ['cronograma_priv','handlers_priv']){
+    try{ (await getDocs(collection(db,col))).forEach(d=>{ const ev=d.id.split('__')[0]; const f=fechaEv[ev];
+      if(f&&f<limite){ deleteDoc(doc(db,col,d.id)).catch(()=>{}); nH++; } }); }catch(err){console.warn('[conservación]',col,err.message);}
+  }
+  await logAction('conservacion_purga',null,null,n.inscripciones+' inscripciones, '+nEnt+' entrenadores, '+n.archivos+' archivos, '+nH+' handlers');
+  showToast('Listo: '+n.inscripciones+' inscripciones, '+nEnt+' entrenadores, '+n.archivos+' archivos'); render();
+};
+
+// ═══════════ Incidentes de seguridad ═══════════
+// Lo que pide la ley para reportar una vulneración: qué pasó, qué datos, a
+// cuántos afectó, qué se hizo, y cuándo se avisó a la Agencia y a los titulares.
+// El procedimiento está en documentos/PROTECCION_DE_DATOS.md.
+window.pdIncNuevo=function(){ST.pdIncForm={detectado:new Date().toISOString().slice(0,10),descripcion:'',datos:'',afectados:'',medidas:'',riesgo:'alto',agencia:'',titulares:'',estado:'abierto'};render();};
+window.pdIncEditar=function(id){const x=(ST.pdInc||[]).find(i=>i.id===id); if(x){ST.pdIncForm={...x};render();}};
+window.pdIncCerrarForm=function(){ST.pdIncForm=null;render();};
+window.pdIncGuardar=async function(){
+  const f=ST.pdIncForm; if(!f)return;
+  const v=id=>(document.getElementById(id)?.value||'').trim();
+  Object.assign(f,{detectado:v('pi_det'),descripcion:v('pi_desc'),datos:v('pi_datos'),afectados:v('pi_af'),medidas:v('pi_med'),
+    riesgo:v('pi_riesgo'),agencia:v('pi_ag'),titulares:v('pi_tit'),estado:v('pi_est')});
+  if(!f.descripcion){showToast('Falta describir qué pasó',null,true);return;}
+  const id=f.id||('inc_'+Date.now().toString(36));
+  const {id:_x,...datos}=f;
+  try{
+    await setDoc(doc(db,'incidentes',id),{...datos,actualizado:Date.now(),por:ST.user?.uid||''});
+    await logAction('incidente_'+(f.id?'editado':'registrado'),id,null,f.riesgo+' · '+f.estado);
+    ST.pdIncForm=null; showToast('Incidente guardado'); pdCargar();
+  }catch(e){showToast('No se pudo guardar: '+e.message,null,true);}
+};
+
+// ═══════════ Migración: los datos guardados antes de la ley ═══════════
+// El código nuevo ya escribe todo separado. Esto arregla lo que quedó guardado
+// antes: saca el RUT, la fecha, la comuna y los correos de lo que se lee sin
+// sesión, renombra los documentos que tenían el RUT en el id, mueve las fotos
+// cuyo nombre de archivo llevaba el RUT y rehace el índice por RUT (solo el
+// código). Se puede correr más de una vez: lo que ya está bien no se toca.
+const _PD_RUT_ID=/_(\d{7,8}[0-9K])$/i;
+// Una foto pública que hay que mover: el nombre del archivo lleva el RUT, o es
+// un enlace a la carpeta privada de documentos (fotos tomadas de la inscripción).
+const _PD_RUTA_RUT=/athlete_files(%2F|\/)|(athlete_photos|athlete_gifs)(%2F|\/)(\d{7,8}[0-9kK])_/i;
+const _pdSinPers=o=>{const r={};Object.keys(o||{}).forEach(k=>{if(!YLPrivacidad.INSC_PRIVADOS.includes(k)&&k!=='correos')r[k]=o[k];});return r;};
+const _pdPers=o=>{const r={};YLPrivacidad.INSC_PRIVADOS.concat(['correos']).forEach(k=>{if(o&&o[k]!==undefined&&o[k]!=='')r[k]=o[k];});return r;};
+const _pdBorrar=o=>{const r={};YLPrivacidad.INSC_PRIVADOS.concat(['correos']).forEach(k=>{if(o&&o[k]!==undefined)r[k]=deleteField();});return r;};
+const _pdTieneCorreo=v=>typeof v==='string'&&/@/.test(v);
+const _pdNuevoId=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+
+async function _pdLote(ops){
+  for(let i=0;i<ops.length;i+=400){
+    const b=writeBatch(db);
+    ops.slice(i,i+400).forEach(o=>{
+      if(o.t==='set')b.set(o.ref,o.d,o.merge?{merge:true}:{});
+      else if(o.t==='update')b.update(o.ref,o.d);
+      else b.delete(o.ref);
+    });
+    await b.commit();
+  }
+}
+
+// Arma el plan (qué se escribe) sin escribir nada. Devuelve {ops, fotos, resumen}.
+async function pdMigracionPlan(){
+  const R={}; const sum=(k,n)=>{R[k]=(R[k]||0)+(n==null?1:n);};
+  const ops=[], fotos=[];
+  const set=(col,id,d,merge)=>ops.push({t:'set',ref:doc(db,col,id),d,merge});
+  const upd=(col,id,d)=>{ if(Object.keys(d).length)ops.push({t:'update',ref:doc(db,col,id),d}); };
+  const del=(col,id)=>ops.push({t:'del',ref:doc(db,col,id)});
+  const leer=async col=>(await getDocs(collection(db,col))).docs.map(d=>({id:d.id,x:d.data()||{}}));
+  const codDeRut={}; (ST.data||[]).forEach(a=>{const r=YLPrivacidad.norm(a.rut); if(r&&a.codigo)codDeRut[r]=a.codigo;});
+  const indice={};   // rut → código (el índice nuevo)
+  Object.entries(codDeRut).forEach(([r,c])=>{indice[r]=c;});
+
+  // 1. Inscripciones
+  const [pub,priv,reqs]=await Promise.all([leer('inscripciones'),leer('inscripciones_private'),leer('edit_requests')]);
+  const P={}; priv.forEach(d=>{P[d.id]=d.x;});
+  const ids=new Set(pub.map(d=>d.id));
+  pub.forEach(({id,x})=>{
+    const pers=_pdPers(x); const r=YLPrivacidad.norm(x.rut||P[id]?.rut);
+    const cod=x.codigo||codDeRut[r]||'';
+    const extra={};
+    if(!x.codigo&&cod)extra.codigo=cod;
+    if(!x.anioNac){const y=YLPrivacidad.anio(x.fechaNac||x.fechanac||x.fechanacimiento||x.dob||P[id]?.fechaNac); if(y)extra.anioNac=y;}
+    if(r&&cod&&!indice[r])indice[r]=cod;
+    const nuevo=(_PD_RUT_ID.test(id)&&cod)?YLPrivacidad.idInscripcion(x.evento,cod):id;
+    if(nuevo!==id&&!ids.has(nuevo)){
+      ids.add(nuevo);
+      set('inscripciones',nuevo,{..._pdSinPers(x),...extra});
+      set('inscripciones_private',nuevo,{...(P[id]||{}),...pers},true);
+      del('inscripciones',id); if(P[id])del('inscripciones_private',id);
+      reqs.filter(q=>q.x.inscripcionId===id).forEach(q=>upd('edit_requests',q.id,{inscripcionId:nuevo}));
+      sum('Inscripciones con el RUT en el id (se renombran)');
+    }else{
+      if(nuevo!==id)sum('Inscripciones que no se pudieron renombrar (ya existe otra con ese código)');
+      if(Object.keys(pers).length){ set('inscripciones_private',id,pers,true); sum('Inscripciones con datos personales a la vista'); }
+      upd('inscripciones',id,{..._pdBorrar(x),...extra});
+    }
+  });
+
+  // 2. Debutantes (atletas_pending): por código, lo privado aparte
+  (await leer('atletas_pending')).forEach(({id,x})=>{
+    const pers=_pdPers(x); const cod=x.codigo||'';
+    if(!Object.keys(pers).length&&id===cod)return;
+    const r=YLPrivacidad.norm(x.rut);
+    if(r&&cod&&!indice[r])indice[r]=cod;
+    if(x.incorporated||!cod){ del('atletas_pending',id); sum('Debutantes ya incorporados o sin código (se borra el registro con RUT)'); return; }
+    set('atletas_pending',cod,{nombre:x.nombre||'',codigo:cod,sexo:x.sexo||'',anioNac:YLPrivacidad.anio(x.fechaNac)||x.anioNac||'',
+      club:x.club||'',zona:x.zona||'',debut:true,inscripcion_evento:x.inscripcion_evento||'',...(x.ts?{ts:x.ts}:{})});
+    set('atletas_pending_priv',cod,{rut:x.rut||'',fechaNac:x.fechaNac||''});
+    if(id!==cod)del('atletas_pending',id);
+    sum('Debutantes con RUT y fecha a la vista');
+  });
+
+  // 3. Ediciones del padrón
+  (await leer('athlete_edits')).forEach(({id,x})=>{
+    if(id===window.YLEdiciones.MARCA)return;
+    const pers=_pdPers(x); const conRutId=/^rut_/i.test(id);
+    if(!Object.keys(pers).length&&!conRutId)return;
+    const extra={}; if(!x.anioNac){const y=YLPrivacidad.anio(x.fechaNac||x.fechanac); if(y)extra.anioNac=y;}
+    const nuevo=conRutId?_pdNuevoId('ed_'):id;
+    if(nuevo!==id){ set('athlete_edits',nuevo,{..._pdSinPers(x),...extra}); del('athlete_edits',id); sum('Ediciones con el RUT en el id (se renombran)'); }
+    else{ upd('athlete_edits',id,{..._pdBorrar(x),...extra}); sum('Ediciones con RUT o fecha a la vista'); }
+    if(Object.keys(pers).length)set('athlete_edits_priv',nuevo,pers,true);
+  });
+
+  // 4. Fotos de perfil
+  (await leer('atleta_fotos')).forEach(({id,x})=>{
+    const u={..._pdBorrar(x)};
+    if(_pdTieneCorreo(x.approved_by))u.approved_by='';
+    if(_pdTieneCorreo(x.rejected_by))u.rejected_by='';
+    if(x.source_url){u.source_ref=_huellaFoto(x.source_url);u.source_url=deleteField();}
+    if(x.rejected_url){u.rejected_ref=_huellaFoto(x.rejected_url);u.rejected_url=deleteField();}
+    ['foto_url','gif_url'].forEach(k=>{ if(_PD_RUTA_RUT.test(String(x[k]||'')))fotos.push({id,campo:k,url:x[k],codigo:x.codigo||id}); });
+    if(/^lc_rut_/i.test(id)){
+      const cod=codDeRut[YLPrivacidad.norm(id.slice(7))];
+      const nuevo=cod?'lc_cod_'+cod:_pdNuevoId('lc_x_');
+      const {rut:_r,approved_by:_a,rejected_by:_b,source_url:_s,rejected_url:_q,...resto}=x;
+      set('atleta_fotos',nuevo,{...resto,codigo:nuevo}); del('atleta_fotos',id);
+      sum('Fotos del livecast con el RUT en el id'); return;
+    }
+    if(Object.keys(u).length){ upd('atleta_fotos',id,u); sum('Fotos con RUT, correos o enlaces a documentos'); }
+  });
+  if(fotos.length)sum('Fotos con el RUT en el nombre o tomadas de la carpeta de documentos (se copian con el código)',fotos.length);
+
+  // 5. Resultados publicados
+  (await leer('competition_results')).forEach(({id,x})=>{
+    const u=_pdBorrar(x);
+    ['addedBy','processedBy'].forEach(k=>{ if(_pdTieneCorreo(x[k]))u[k]=''; });
+    if(Object.keys(u).length){ upd('competition_results',id,u); sum('Resultados con RUT o correos'); }
+  });
+
+  // 6. Livecast: la nómina en vivo
+  const limpiaJson=s=>{try{return JSON.stringify(JSON.parse(s||'[]'),(k,v)=>({rut:1,dob:1,fechaNac:1,fechanac:1,correo:1,email:1,telefono:1}[k]?undefined:v));}catch(e){return s;}};
+  (await leer('livecast_sync')).forEach(({id,x})=>{
+    const u={};
+    if(typeof x.athletes==='string'){const n=limpiaJson(x.athletes); if(n!==x.athletes)u.athletes=n;}
+    if(x.event&&Array.isArray(x.event.athletes)){const n=JSON.parse(limpiaJson(JSON.stringify(x.event.athletes)));
+      if(JSON.stringify(n)!==JSON.stringify(x.event.athletes))u['event.athletes']=n;}
+    if(Object.keys(u).length){ upd('livecast_sync',id,u); sum('Nóminas del livecast con RUT o fecha'); }
+  });
+  (await leer('livecast_flash')).forEach(({id,x})=>{
+    if(typeof x.ath!=='string')return; const n=limpiaJson(x.ath);
+    if(n!==x.ath){ upd('livecast_flash',id,{ath:n}); sum('Canal rápido del livecast con RUT o fecha'); }
+  });
+
+  // 7. Cronograma y handlers: sin RUT ni correos a la vista
+  (await leer('cronograma')).forEach(({id,x})=>{
+    const rows=Array.isArray(x.rows)?x.rows:[];
+    const hay=rows.some(r=>r.rut||(r.handler1||{}).correo||(r.handler2||{}).correo);
+    if(!hay)return;
+    const correos=rows.map(r=>({h1c:(r.handler1||{}).correo||'',h2c:(r.handler2||{}).correo||''}));
+    const limpias=rows.map(({rut,...r})=>({...r,codigo:r.codigo||codDeRut[YLPrivacidad.norm(rut)]||'',
+      handler1:{nombre:(r.handler1||{}).nombre||''},handler2:{nombre:(r.handler2||{}).nombre||''}}));
+    set('cronograma_priv',id,{correos});
+    upd('cronograma',id,{rows:limpias}); sum('Cronogramas con RUT o correos');
+  });
+  (await leer('handlers')).forEach(({id,x})=>{
+    const hs=Array.isArray(x.handlers)?x.handlers:[];
+    if(!hs.some(h=>h&&h.correo))return;
+    set('handlers_priv',id,{correos:hs.map(h=>h.correo||''),by:x.by||''});
+    upd('handlers',id,{handlers:hs.map(h=>({nombre:(h&&h.nombre)||''}))}); sum('Handlers con correo a la vista');
+  });
+
+  // 8. Inscripciones de entrenador: sin RUT en lo público
+  (await leer('inscripciones_entrenador')).forEach(({id,x})=>{
+    const u={};
+    if(x.rut!==undefined){u.rut=deleteField(); set('inscripciones_entrenador_priv',id,{rut:x.rut},true);}
+    if(Array.isArray(x.atletas)&&x.atletas.some(a=>a&&a.rut))
+      u.atletas=x.atletas.map(({rut,...a})=>({...a,codigo:a.codigo||codDeRut[YLPrivacidad.norm(rut)]||''}));
+    if(Object.keys(u).length){ upd('inscripciones_entrenador',id,u); sum('Inscripciones de entrenador con RUT'); }
+  });
+
+  // 9. Correos de admins en documentos públicos sueltos
+  for(const [col,id,campo] of [['nomina_suda_edits','main','by'],['ranking_config','ciclo','por']]){
+    try{ const d=await getDoc(doc(db,col,id)); if(d.exists()&&_pdTieneCorreo(d.data()[campo])){ upd(col,id,{[campo]:''}); sum('Correos de admins a la vista'); } }catch(e){}
+  }
+
+  // 10. El índice por RUT: solo el código (antes llevaba la fecha de nacimiento)
+  const indiceOps=Object.entries(indice).map(([r,c])=>({t:'set',ref:doc(db,'rut_indice',r),d:{codigo:c}}));
+  sum('Índice por RUT (se reescribe con solo el código)',indiceOps.length);
+
+  // 11. Los documentos guardados con enlace de descarga (ver _pdRotarDocumentos)
+  const docs=await _pdDocsConEnlace();
+  if(docs.length)sum('Documentos con enlace de descarga (se renuevan: los enlaces viejos dejan de servir)',new Set(docs.map(d=>d.ruta)).size);
+  return {ops,indiceOps,fotos,resumen:R};
+}
+
+window.pdMigracionRevisar=async function(){
+  if(!_esOwnerAdm()){showToast('Solo el Owner',null,true);return;}
+  ST.pdMig={cargando:true}; render();
+  try{ const p=await pdMigracionPlan(); ST.pdMig={plan:p}; }
+  catch(e){ ST.pdMig={error:e.code||e.message}; }
+  render();
+};
+
+// Los enlaces de descarga llevan su propia llave y siguen sirviendo aunque
+// cambien las reglas de Storage. Hubo enlaces a documentos a la vista (fotos de
+// perfil tomadas de la inscripción, versiones viejas de data.json en el
+// repositorio). Para que ninguno sirva más, cada documento se copia a un archivo
+// nuevo, la inscripción privada apunta a la copia por su ubicación
+// ("storage:…", sin llave) y el archivo viejo se borra.
+async function _pdDocsConEnlace(){
+  const out=[];
+  for(const col of ['inscripciones_private','inscripciones_entrenador_priv']){
+    (await getDocs(collection(db,col))).forEach(d=>{
+      _pdArchivosDe(d.data()||{}).forEach(x=>{
+        if(typeof x.v!=='string'||!/^https?:/i.test(x.v))return;
+        const r=_pdRutaArchivo(x.v); if(/^athlete_files\//.test(r))out.push({col,id:d.id,campo:x.campo,url:x.v,ruta:r});
+      });
+    });
+  }
+  return out;
+}
+async function _pdRotarDocumentos(paso){
+  const st=getStorage(app), lista=await _pdDocsConEnlace();
+  const nueva={}, mal=new Set(); let n=0;
+  for(const d of lista){
+    n++; if(n%5===1)paso('Renovando documentos ('+n+'/'+lista.length+')…');
+    try{
+      if(!nueva[d.ruta]&&!mal.has(d.ruta)){
+        const resp=await fetch(d.url); if(!resp.ok)throw new Error('HTTP '+resp.status);
+        const blob=await resp.blob();
+        const ruta=d.ruta.replace(/(\.[a-z0-9]+)?$/i,'_r'+Date.now().toString(36)+'$1');
+        await uploadBytes(storageRef(st,ruta),blob,{contentType:blob.type||'application/octet-stream'});
+        nueva[d.ruta]=ruta;
+      }
+      if(nueva[d.ruta])await updateDoc(doc(db,d.col,d.id),{[d.campo]:YLPrivacidad.rutaArchivo(nueva[d.ruta])});
+    }catch(e){ mal.add(d.ruta); console.warn('[migración] documento',d.ruta,e.message); }
+  }
+  let borrados=0;
+  for(const r of Object.keys(nueva)){ try{ await deleteObject(storageRef(st,r)); borrados++; }catch(e){ if(e.code==='storage/object-not-found')borrados++; } }
+  return {renovados:Object.keys(nueva).length,conError:mal.size,borrados};
+}
+
+// Copia una foto con el RUT en el nombre (o tomada de la carpeta de documentos)
+// a una por código. La vieja se borra si era una foto; si era un documento de
+// la inscripción, se deja (lo renueva _pdRotarDocumentos).
+async function _pdMoverFoto(f){
+  const st=getStorage(app);
+  const vieja=_pdRutaArchivo(f.url);
+  const blob=await (await fetch(f.url)).blob();
+  const ext=(vieja.match(/\.([a-z0-9]+)$/i)||[])[1]||'jpg';
+  const carpeta=f.campo==='gif_url'?'athlete_gifs':'athlete_photos';
+  const ruta=carpeta+'/'+String(f.codigo).replace(/[^0-9a-zA-Z-]/g,'_')+'_'+Date.now()+'.'+ext;
+  const ref=storageRef(st,ruta);
+  await uploadBytes(ref,blob,{contentType:blob.type||'application/octet-stream'});
+  const url=await getDownloadURL(ref);
+  await updateDoc(doc(db,'atleta_fotos',f.id),{[f.campo]:url,...(f.campo==='foto_url'?{storage_path:ruta}:{})});
+  if(vieja&&/^athlete_(photos|gifs)\//.test(vieja))try{await deleteObject(storageRef(st,vieja));}catch(e){}
+  return url;
+}
+
+window.pdMigracionAplicar=async function(){
+  if(!_esOwnerAdm()){showToast('Solo el Owner',null,true);return;}
+  const p=ST.pdMig&&ST.pdMig.plan; if(!p)return;
+  if(!confirm('Se aplican los cambios de la revisión: '+p.ops.length+' escrituras, '+p.fotos.length+' fotos y el índice por RUT.\n\nAntes tienen que estar publicadas las reglas nuevas de Firestore y de Storage.\n\nNo cierres la página hasta que termine. ¿Seguir?'))return;
+  const paso=t=>{ST.pdMig.paso=t;render();};
+  try{
+    paso('Anotando el código de atleta donde faltaba…');
+    await _enlazarPorCodigo();
+    paso('Separando los datos personales ('+p.ops.length+' escrituras)…');
+    await _pdLote(p.ops);
+    paso('Reescribiendo el índice por RUT…');
+    await _pdLote(p.indiceOps);
+    let fOk=0,fMal=0;
+    for(const f of p.fotos){ paso('Moviendo fotos ('+(fOk+fMal+1)+'/'+p.fotos.length+')…');
+      try{ await _pdMoverFoto(f); fOk++; }catch(e){ fMal++; console.warn('[migración] foto',f.id,e.message); } }
+    // Después de mover las fotos (algunas eran documentos de la inscripción).
+    const rot=await _pdRotarDocumentos(paso);
+    paso('Publicando las copias públicas de entrenadores y jueces…');
+    const [ents,refs]=await Promise.all([getDocs(collection(db,'entrenadores')),getDocs(collection(db,'referees'))]);
+    await publicarEntrenadores(ents.docs.map(d=>({id:d.id,...d.data()})));
+    await publicarJueces(refs.docs.map(d=>({id:d.id,...d.data()})));
+    await publicarNominaEntrenadores(ST.entInsc||[]);
+    paso('Volviendo a publicar data.json sin datos personales…');
+    await _uploadToStorage((ST.data||[]).map(({_isPending,_pendId,...a})=>a),null);
+    await _marcarEdicion();
+    await setDoc(doc(db,'config','ley21719'),{migrado:Date.now(),por:ST.user?.uid||'',resumen:p.resumen,fotosMovidas:fOk,fotosConError:fMal,
+      documentosRenovados:rot.renovados,documentosConError:rot.conError});
+    await logAction('ley_21719_migracion',null,null,p.ops.length+' escrituras, '+fOk+' fotos'+(fMal?' ('+fMal+' con error)':'')+', '+rot.renovados+' documentos renovados'+(rot.conError?' ('+rot.conError+' con error)':''));
+    ST.pdMig={hecho:true,fOk,fMal,rot};
+    showToast('Migración terminada'+(fMal||rot.conError?' · revisar errores':''),null,!!(fMal||rot.conError));
+  }catch(e){
+    ST.pdMig={...ST.pdMig,error:(e.code||'')+' '+(e.message||'')};
+    showToast('Se detuvo: '+(e.code||e.message)+'. Se puede volver a revisar y aplicar: lo hecho no se repite.',null,true);
+  }
+  render();
+};
+
+// ═══════════ Pantalla ═══════════
+function renderProteccion(){
+  if(!_pdPuede())return '<div class="h1">Protección de datos</div><p class="subtitle">Solo el Owner y los superadmin.</p>';
+  if(ST._pdCargado!==true){ if(!ST._pdCargado)setTimeout(pdCargar,0); return '<div class="h1">Protección de datos</div><p class="subtitle">Cargando…</p>'; }
+  const tab=ST.pdTab||'resumen';
+  const caja='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin:14px 0';
+  const th='padding:8px 10px;font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)';
+  const td='padding:8px 10px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:top';
+  const chip=(t,c)=>`<span style="font-family:Oswald;font-size:10px;letter-spacing:1px;border:1px solid ${c};color:${c};border-radius:10px;padding:2px 8px;white-space:nowrap">${esc(t)}</span>`;
+  const ahora=Date.now();
+  const abiertas=(ST.pdSol||[]).filter(s=>s.status==='recibida'||s.status==='en_curso');
+  const atrasadas=abiertas.filter(s=>_pdVence(s)<ahora);
+  const cons=pdConservacion();
+  const incAb=(ST.pdInc||[]).filter(i=>i.estado!=='cerrado');
+  const tabs=[['resumen','Resumen'],['solicitudes','Solicitudes'+(abiertas.length?' ('+abiertas.length+')':'')],['titular','Buscar persona'],
+    ['conservacion','Conservación'],['incidentes','Incidentes'],['migracion','Migración']];
+  let h=`<div class="h1">Protección de datos</div>
+    <p class="subtitle">Ley 21.719. FECHIPO es la responsable de los datos; YourLift SpA opera la plataforma por encargo. Lo que se publica de cada atleta es su nombre, club, categoría, resultados y su código; el RUT, la fecha de nacimiento, los documentos y los contactos solo los ve el panel.</p>
+    ${ST._pdErr?`<div style="margin:12px 0;padding:10px 14px;border:1px solid var(--red);border-radius:8px;color:var(--red);font-size:12px">No se pudo leer todo: ${esc(ST._pdErr.message||'')}. Revisa que estén publicadas las reglas de Firestore.</div>`:''}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0">${tabs.map(([k,t])=>`<button class="btn" style="${tab===k?'background:var(--accent);color:#fff;border-color:var(--accent)':''};font-size:11px;padding:7px 12px" onclick="pdTab('${k}')">${t}</button>`).join('')}</div>`;
+
+  if(tab==='resumen'){
+    const tarjeta=(t,v,s,c)=>`<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">
+      <div style="font-family:Oswald;font-size:11px;letter-spacing:1px;color:var(--muted)">${t}</div>
+      <div style="font-family:Oswald;font-size:24px;font-weight:700;color:${c||'var(--text)'};margin-top:4px">${v}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">${s}</div></div>`;
+    h+=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">
+      ${tarjeta('SOLICITUDES ABIERTAS',abiertas.length,atrasadas.length?atrasadas.length+' fuera de plazo':'plazo: '+PD_PLAZO_DIAS+' días corridos',atrasadas.length?'var(--red)':abiertas.length?'var(--gold)':'')}
+      ${tarjeta('DOCUMENTOS VENCIDOS',cons.vencidas.length,'inscripciones de +'+PD_CONSERVACION_ANIOS+' años sin competir',cons.vencidas.length?'var(--gold)':'')}
+      ${tarjeta('INCIDENTES ABIERTOS',incAb.length,(ST.pdInc||[]).length+' registrados',incAb.length?'var(--red)':'')}
+    </div>
+    <div style="${caja}">
+      <div style="font-family:Oswald;font-size:14px;letter-spacing:1px;margin-bottom:8px">SI HAY UN INCIDENTE (filtración, acceso indebido, pérdida de datos)</div>
+      <ol style="font-size:13px;line-height:1.8;padding-left:18px;margin:0">
+        <li>Contener: cambiar claves, desactivar cuentas comprometidas (Gestión Admin), revisar las reglas de Firebase.</li>
+        <li>Registrarlo acá (pestaña Incidentes): qué pasó, qué datos, a cuántas personas, qué se hizo.</li>
+        <li>Si hay riesgo para las personas: avisar a FECHIPO (responsable) y reportar a la Agencia de Protección de Datos Personales sin demora.</li>
+        <li>Si se vieron datos sensibles (salud, discapacidad), de menores o financieros: avisar también a cada persona afectada.</li>
+        <li>Si fue un ataque: denuncia en la PDI (Cibercrimen) o la Fiscalía.</li>
+      </ol>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">El detalle está en documentos/PROTECCION_DE_DATOS.md del repositorio.</div>
+    </div>`;
+  }
+
+  if(tab==='solicitudes'){
+    const filas=(ST.pdSol||[]).map(s=>{
+      const v=_pdVence(s), abierta=s.status==='recibida'||s.status==='en_curso';
+      const c=s.status==='respondida'?'var(--green)':s.status==='rechazada'?'var(--muted)':(abierta&&v<ahora?'var(--red)':'var(--gold)');
+      return `<tr>
+        <td style="${td};white-space:nowrap">${_pdFecha(_pdMs(s.ts))}</td>
+        <td style="${td}"><b>${esc(PD_TIPOS[s.tipo]||s.tipo)}</b><div style="color:var(--muted);font-size:11px;max-width:320px">${esc(s.detalle||'')}</div></td>
+        <td style="${td}">${esc(s.nombre||'')}<div style="color:var(--muted);font-size:11px">${esc(s.rut||'')} · ${esc(s.correo||'')}</div></td>
+        <td style="${td};white-space:nowrap">${abierta?(v<ahora?'<b style="color:var(--red)">Vencida</b> ':'')+_pdFecha(v):'—'}</td>
+        <td style="${td}">${chip(PD_ESTADOS[s.status]||s.status,c)}${s.nota?`<div style="font-size:11px;color:var(--muted);margin-top:4px">${esc(s.nota)}</div>`:''}</td>
+        <td style="${td};white-space:nowrap;text-align:right">
+          <button class="btn" style="font-size:11px;padding:5px 9px" onclick="pdSolTitular('${s.id}')">Ver sus datos</button>
+          ${abierta?`${s.status==='recibida'?`<button class="btn" style="font-size:11px;padding:5px 9px" onclick="pdSolEstado('${s.id}','en_curso')">En curso</button>`:''}
+          <button class="btn btn-g" style="font-size:11px;padding:5px 9px" onclick="pdSolEstado('${s.id}','respondida')">Respondida</button>
+          <button class="btn" style="font-size:11px;padding:5px 9px" onclick="pdSolEstado('${s.id}','rechazada')">Rechazar</button>`:''}
+        </td></tr>`;}).join('');
+    h+=`<div style="${caja}">
+      <div style="font-family:Oswald;font-size:14px;letter-spacing:1px">SOLICITUDES DE LOS TITULARES</div>
+      <p style="font-size:12px;color:var(--muted);margin:6px 0 12px">Llegan desde la página de privacidad de yourlift.cl (o se anotan acá si llegan por correo). Hay ${PD_PLAZO_DIAS} días corridos para responder. Antes de entregar datos, confirma que quien pide es el titular (o su representante): responde al correo con que escribió y, si hay dudas, pide una copia de su carnet.</p>
+      ${filas?`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><tr><th style="${th}">RECIBIDA</th><th style="${th}">QUÉ PIDE</th><th style="${th}">TITULAR</th><th style="${th}">VENCE</th><th style="${th}">ESTADO</th><th style="${th}"></th></tr>${filas}</table></div>`
+        :'<div style="font-size:13px;color:var(--muted)">No hay solicitudes.</div>'}
+    </div>`;
+  }
+
+  if(tab==='titular'){
+    const T=ST.pdTitular;
+    h+=`<div style="${caja}">
+      <div style="font-family:Oswald;font-size:14px;letter-spacing:1px">DÓNDE ESTÁN LOS DATOS DE UNA PERSONA</div>
+      <p style="font-size:12px;color:var(--muted);margin:6px 0 12px">Para responder una solicitud de acceso, portabilidad o supresión. Se busca por RUT en todo lo que guarda la plataforma.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="pd_rut" class="inp" placeholder="RUT" value="${esc(ST.pdRut||'')}" style="max-width:200px" onkeydown="if(event.key==='Enter')pdBuscarTitular()">
+        <button class="btn btn-b" onclick="pdBuscarTitular()">Buscar</button></div>
+      ${T&&T.cargando?'<p style="font-size:13px;color:var(--muted);margin-top:12px">Buscando…</p>':''}
+      ${T&&!T.cargando?`<div style="margin-top:14px">
+        ${T.secciones.length||T.archivos.length?T.secciones.map(s=>`<div style="border-top:1px solid var(--border);padding:10px 0">
+          <div style="font-weight:600">${esc(s.titulo)} <span style="color:var(--muted);font-weight:400">· ${s.n}</span></div>
+          <div style="font-size:11px;color:var(--muted)">${esc(s.donde)}</div></div>`).join('')
+          +(T.archivos.length?`<div style="border-top:1px solid var(--border);padding:10px 0"><div style="font-weight:600">Documentos en Storage <span style="color:var(--muted);font-weight:400">· ${T.archivos.length}</span></div>
+            <div style="font-size:11px;color:var(--muted)">athlete_files/${esc(T.rut)}/ (solo el panel)</div></div>`:'')
+          :'<p style="font-size:13px;color:var(--muted)">No hay datos de ese RUT.</p>'}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="btn" onclick="pdDescargarTitular()">Descargar sus datos (JSON)</button>
+          ${_esOwnerAdm()&&T.archivos.length?`<button class="btn btn-r" onclick="pdBorrarDocsTitular()">Borrar sus documentos de identidad</button>`:''}
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:10px">Los resultados deportivos son el historial oficial de la federación: si la persona pide borrarlos, se evalúa con FECHIPO y se anonimiza a mano.</p>
+      </div>`:''}
+    </div>`;
+  }
+
+  if(tab==='conservacion'){
+    const filas=cons.vencidas.slice(0,200).map(v=>`<tr><td style="${td}">${esc(v.nombre||'')}</td><td style="${td}">${esc(v.evento||'')}</td><td style="${td}">${_pdFecha(v.ultima)}</td><td style="${td};text-align:right">${v.docs}</td></tr>`).join('');
+    h+=`<div style="${caja}">
+      <div style="font-family:Oswald;font-size:14px;letter-spacing:1px">CONSERVACIÓN: ${PD_CONSERVACION_ANIOS} AÑOS DESDE LA ÚLTIMA COMPETENCIA</div>
+      <p style="font-size:12px;color:var(--muted);margin:6px 0 12px">A los ${PD_CONSERVACION_ANIOS} años de la última competencia de una persona se borran sus documentos (carnet, pasaporte, certificados, consentimientos) y su correo, comuna y PIN. Quedan su nombre, sus resultados y, en privado, su RUT y fecha de nacimiento, que identifican su historial deportivo. Se revisa al abrir esta pantalla; conviene borrar una vez al año.</p>
+      ${filas?`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><tr><th style="${th}">ATLETA</th><th style="${th}">INSCRIPCIÓN</th><th style="${th}">ÚLTIMA COMPETENCIA</th><th style="${th};text-align:right">DOCUMENTOS</th></tr>${filas}</table></div>
+        `:`<div style="font-size:13px;color:var(--muted)">No hay documentos de atletas vencidos (de personas que no compiten desde antes del ${_pdFecha(cons.limite)}).</div>`}
+      ${cons.entVencidas.length?`<div style="font-size:13px;margin-top:10px">Entrenadores con documentos vencidos: <b>${cons.entVencidas.length}</b></div>`:''}
+      ${_esOwnerAdm()?`<button class="btn btn-r" style="margin-top:12px" onclick="pdPurgarVencidos()">Borrar lo vencido (${cons.vencidas.length+cons.entVencidas.length})</button>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">También borra los correos de handlers de los campeonatos de hace más de ${PD_CONSERVACION_ANIOS} años.</div>`:''}
+    </div>`;
+  }
+
+  if(tab==='incidentes'){
+    const f=ST.pdIncForm;
+    const campo=(t,id,v,tipo)=>`<label style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px">${t}<input id="${id}" class="inp" type="${tipo||'text'}" value="${esc(v||'')}"></label>`;
+    const area=(t,id,v,ph)=>`<label style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px;grid-column:1/-1">${t}<textarea id="${id}" class="inp" rows="3" placeholder="${esc(ph||'')}">${esc(v||'')}</textarea></label>`;
+    h+=f?`<div style="${caja};border-color:var(--red)">
+      <div style="font-family:Oswald;font-size:14px;letter-spacing:1px;margin-bottom:12px">${f.id?'EDITAR':'REGISTRAR'} INCIDENTE</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+        ${campo('DETECTADO','pi_det',f.detectado,'date')}
+        ${campo('PERSONAS AFECTADAS (APROX.)','pi_af',f.afectados)}
+        <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px">RIESGO PARA LAS PERSONAS<select id="pi_riesgo" class="inp">${['alto','bajo'].map(x=>`<option ${f.riesgo===x?'selected':''}>${x}</option>`).join('')}</select></label>
+        <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px">ESTADO<select id="pi_est" class="inp">${['abierto','cerrado'].map(x=>`<option ${f.estado===x?'selected':''}>${x}</option>`).join('')}</select></label>
+        ${area('QUÉ PASÓ','pi_desc',f.descripcion,'Cómo se detectó, desde cuándo, quién pudo acceder')}
+        ${area('QUÉ DATOS','pi_datos',f.datos,'RUT, fechas, documentos, correos… ¿hay de menores, de salud o financieros?')}
+        ${area('QUÉ SE HIZO','pi_med',f.medidas,'Contención, cambios de clave, reglas, aviso a FECHIPO')}
+        ${campo('REPORTADO A LA AGENCIA (FECHA)','pi_ag',f.agencia,'date')}
+        ${campo('AVISADO A LOS AFECTADOS (FECHA)','pi_tit',f.titulares,'date')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-b" onclick="pdIncGuardar()">Guardar</button><button class="btn" onclick="pdIncCerrarForm()">Cerrar</button></div>
+    </div>`:'';
+    const filas=(ST.pdInc||[]).map(i=>`<tr><td style="${td};white-space:nowrap">${_pdFecha(_pdMs(i.detectado))}</td><td style="${td}">${esc(i.descripcion||'')}</td>
+      <td style="${td}">${esc(i.afectados||'')}</td><td style="${td}">${i.agencia?_pdFecha(_pdMs(i.agencia)):'—'}</td>
+      <td style="${td}">${chip(i.estado||'',i.estado==='cerrado'?'var(--muted)':'var(--red)')}</td>
+      <td style="${td};text-align:right"><button class="btn" style="font-size:11px;padding:5px 9px" onclick="pdIncEditar('${i.id}')">Editar</button></td></tr>`).join('');
+    h+=`<div style="${caja}">
+      <div style="display:flex;align-items:center;gap:12px"><div style="font-family:Oswald;font-size:14px;letter-spacing:1px">REGISTRO DE INCIDENTES</div>
+        ${f?'':'<button class="btn btn-r" style="font-size:12px;padding:6px 12px" onclick="pdIncNuevo()">+ Registrar incidente</button>'}</div>
+      <p style="font-size:12px;color:var(--muted);margin:6px 0 12px">Todo incidente se anota, aunque al final no haya que reportarlo: el registro es lo que demuestra que se actuó a tiempo.</p>
+      ${filas?`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><tr><th style="${th}">DETECTADO</th><th style="${th}">QUÉ PASÓ</th><th style="${th}">AFECTADOS</th><th style="${th}">AGENCIA</th><th style="${th}">ESTADO</th><th style="${th}"></th></tr>${filas}</table></div>`
+        :'<div style="font-size:13px;color:var(--muted)">Sin incidentes registrados.</div>'}
+    </div>`;
+  }
+
+  if(tab==='migracion'){
+    const M=ST.pdMig||{};
+    h+=`<div style="${caja}">
+      <div style="font-family:Oswald;font-size:14px;letter-spacing:1px">MIGRACIÓN DE LOS DATOS GUARDADOS ANTES</div>
+      <p style="font-size:12px;color:var(--muted);margin:6px 0 12px">Lo nuevo ya se guarda separado. Esto arregla lo de antes: saca el RUT, las fechas de nacimiento, la comuna y los correos de lo que se lee sin sesión; renombra lo que tenía el RUT en el identificador; mueve las fotos cuyo nombre de archivo llevaba el RUT; deja el índice por RUT con solo el código; y publica las copias públicas de entrenadores y jueces. Primero hay que publicar las reglas nuevas de Firestore y de Storage. Se puede correr más de una vez.</p>
+      ${!_esOwnerAdm()?'<p style="font-size:13px">Solo el Owner puede correrla.</p>'
+        :M.cargando?'<p style="font-size:13px;color:var(--muted)">Revisando…</p>'
+        :M.paso&&!M.hecho&&!M.error?`<p style="font-size:13px;color:var(--gold)">${esc(M.paso)}</p>`
+        :M.hecho?`<p style="font-size:13px;color:var(--green)">Listo. ${M.fOk} fotos movidas, ${M.rot?M.rot.renovados:0} documentos renovados.${M.fMal||(M.rot&&M.rot.conError)?` <span style="color:var(--red)">${M.fMal||0} fotos y ${(M.rot&&M.rot.conError)||0} documentos no se pudieron copiar (ver la consola del navegador); se puede volver a correr.</span>`:''}</p><button class="btn" onclick="pdMigracionRevisar()">Revisar de nuevo</button>`
+        :M.plan?`<table style="width:100%;border-collapse:collapse;margin-bottom:12px">${Object.entries(M.plan.resumen).map(([k,v])=>`<tr><td style="${td}">${esc(k)}</td><td style="${td};text-align:right;font-family:Oswald">${v}</td></tr>`).join('')||`<tr><td style="${td}">No hay nada que arreglar.</td></tr>`}</table>
+            <button class="btn btn-r" onclick="pdMigracionAplicar()">Aplicar</button> <button class="btn" onclick="pdMigracionRevisar()">Revisar de nuevo</button>`
+        :`${M.error?`<p style="font-size:13px;color:var(--red)">${esc(M.error)}</p>`:''}<button class="btn btn-b" onclick="pdMigracionRevisar()">Revisar qué hay que cambiar</button>`}
+    </div>`;
+  }
+  return h;
 }
 
 // ═══════════════════════ admin/sitio.js ═══════════════════════

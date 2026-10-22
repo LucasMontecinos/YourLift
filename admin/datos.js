@@ -24,15 +24,20 @@ async function loadAll(){
     ST.data=ST.data||[];
   }
 
-  // Load atletas_pending (debutants who inscribed but aren't in data.json yet)
+  // Load atletas_pending (debutants who inscribed but aren't in data.json yet).
+  // Lo público va por código; el RUT y la fecha, en atletas_pending_priv
+  // (admin/privados.js, pendienteGuardar). _pendId: el documento, para marcarlo
+  // como incorporado (los de antes de la migración tienen el RUT de id).
   try{
-    const pendSnap=await getDocs(collection(db,'atletas_pending'));
+    const [pendSnap,privSnap]=await Promise.all([getDocs(collection(db,'atletas_pending')),
+      getDocs(collection(db,'atletas_pending_priv')).catch(e=>{console.warn('[loadAll] atletas_pending_priv:',e.message);return null;})]);
+    const PP={}; if(privSnap)privSnap.forEach(d=>{PP[d.id]=d.data()||{};});
     const rutNorm=(s)=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
     pendSnap.forEach(d=>{
-      const pd=d.data();
-      const alreadyIn=(ST.data||[]).find(a=>rutNorm(a.rut)===rutNorm(pd.rut));
+      const pd={...d.data(),...(PP[d.id]||{})};
+      const alreadyIn=(ST.data||[]).find(a=>(pd.codigo&&a.codigo===pd.codigo)||(pd.rut&&rutNorm(a.rut)===rutNorm(pd.rut)));
       if(!alreadyIn && pd.nombre && pd.codigo){
-        ST.data.push({...pd, _isPending:true});
+        ST.data.push({...pd, _isPending:true, _pendId:d.id});
       }
     });
   }catch(e){console.warn('[loadAll] atletas_pending:',e.message);}
@@ -47,6 +52,20 @@ async function loadAll(){
       const snap=await getDocs(collection(db,'athlete_edits'));
       return snap.docs.map(d=>({...d.data(),id:d.id}));
     });
+    // Lo privado de cada edición (RUT, fecha, comuna) vive aparte, en
+    // athlete_edits_priv. Se junta acá, en memoria (no en la copia compartida
+    // del navegador), para cruzar por RUT como siempre y saber qué documento
+    // es de quién (admin/atletas.js, _editDocId).
+    ST._edDocPorRut={}; ST._edDocPorCod={};
+    try{
+      const ps=await getDocs(collection(db,'athlete_edits_priv'));
+      const P={}; ps.forEach(d=>{P[d.id]=d.data()||{};});
+      docs.forEach(ed=>{ const p=P[ed.id]; if(!p)return;
+        ['rut','fechaNac','comuna'].forEach(k=>{ if(p[k]&&!ed[k])ed[k]=p[k]; }); });
+    }catch(e){ console.warn('[loadAll] athlete_edits_priv:',e.message); }
+    docs.forEach(ed=>{ if(!ed||ed.id===window.YLEdiciones.MARCA)return;
+      const r=YLPrivacidad.norm(ed.rut); if(r)ST._edDocPorRut[r]=ed.id;
+      if(ed.codigo)ST._edDocPorCod[ed.codigo]=ed.id; if(ed.codigoAnterior&&!ST._edDocPorCod[ed.codigoAnterior])ST._edDocPorCod[ed.codigoAnterior]=ed.id; });
     const r=window.YLEdiciones.aplicar(ST.data,docs);
     if(r.editados||r.borrados)console.log('[edits] '+r.editados+' editados, '+r.borrados+' dados de baja');
   }catch(e){console.warn('[loadAll] athlete_edits:',e.message);}
@@ -97,7 +116,7 @@ async function loadAll(){
       // así que el atleta figuraba sin foto y volvía a la lista de pendientes
       // aunque su foto estuviera publicada. Solo se esconde si lo rechazado es
       // justamente lo que el doc tiene publicado.
-      const rechazadaLaPublicada = data.status==='rejected' && (!data.foto_url || data.foto_url===data.rejected_url);
+      const rechazadaLaPublicada = data.status==='rejected' && (!data.foto_url || data.foto_url===data.rejected_url || (data.rejected_ref&&data.rejected_ref===_huellaFoto(data.foto_url)));
       if(ath && data.foto_url && !rechazadaLaPublicada) ath.foto_url = data.foto_url;
       // Y se deja anotada bajo el código VIGENTE del atleta, para que el panel la
       // muestre como cargada y no ofrezca subirla de nuevo.
@@ -128,8 +147,11 @@ async function loadAll(){
   if(!window._inscListener){
     try{
       window._inscListener=onSnapshot(collection(db,'inscripciones'),(snap)=>{
-        ST.inscripciones=snap.docs.map(d=>({id:d.id,...d.data()}))
+        // Lo público; el RUT, la fecha y lo demás privado se pega desde
+        // inscripciones_private (admin/privados.js).
+        ST._insPub=snap.docs.map(d=>({id:d.id,...d.data()}))
           .sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0));
+        _insMezclar();
         // El índice de participación del año usa las inscripciones vigentes, así
         // que se rehace cuando cambian: si no, aprobar o rechazar una no movía
         // la columna hasta recargar la página.
@@ -140,12 +162,22 @@ async function loadAll(){
   }
   if(!window._privListener){
     try{
-      window._privListener=onSnapshot(collection(db,'inscripciones_private'),(snap)=>{
-        ST.inscripcionesPrivate={};
-        snap.forEach(d=>{ST.inscripcionesPrivate[d.id]=d.data();});
+      window._privListener=onSnapshot(collection(db,'inscripciones_private'),async(snap)=>{
+        const P={};
+        snap.forEach(d=>{P[d.id]=d.data();});
+        // Los documentos nuevos vienen como ubicación en Storage: se cambian por
+        // su enlace antes de mostrarlos (admin/privados.js).
+        await _resolverArchivos(P);
+        ST.inscripcionesPrivate=P;
+        _insMezclar();
+        window._HIST_ANIO=null;
+        if(ST.view==='nominas'||ST.view==='dashboard'||ST.view==='approvals'||ST.view==='athletes'||ST.view==='stats'||ST.view==='cobros')render();
       },(e)=>console.warn('[listener] inscripciones_private:',e.message));
     }catch(e){console.warn('[loadAll] priv listener:',e.message);}
   }
+  // Las solicitudes de los titulares (Ley 21.719): se cargan al entrar para
+  // que el menú muestre cuántas esperan respuesta (admin/proteccion.js).
+  if(_pdPuede()&&!ST._pdCargado)pdCargar().catch(e=>console.warn('[proteccion]',e.message));
   if(!window._editReqListener){
     try{
       window._editReqListener=onSnapshot(collection(db,'edit_requests'),(snap)=>{
@@ -159,6 +191,8 @@ async function loadAll(){
     try{
       window._entListener=onSnapshot(collection(db,'entrenadores'),(snap)=>{
         ST.entrenadores=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+        // La copia pública, sin RUT ni correos (admin/privados.js).
+        _programarPublicacion('entrenadores',()=>publicarEntrenadores(ST.entrenadores));
         if(ST.view==='entrenadoresDB')render();
       },(e)=>console.warn('[listener] entrenadores:',e.message));
     }catch(e){console.warn('[loadAll] ent listener:',e.message);}
@@ -182,10 +216,13 @@ async function loadAll(){
       window._entInscListener=onSnapshot(collection(db,'inscripciones_entrenador'),(snap)=>{
         ST.entInsc=snap.docs.map(d=>({id:d.id,...d.data()}))
           .sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+        _programarPublicacion('entrenadores_nomina',()=>publicarNominaEntrenadores(ST.entInsc));
         if(ST.view==='entInsc')render();
       },(e)=>console.warn('[listener] inscripciones_entrenador:',e.message));
-      window._entInscPrivListener=onSnapshot(collection(db,'inscripciones_entrenador_priv'),(snap)=>{
-        ST.entInscPriv={}; snap.docs.forEach(d=>{ ST.entInscPriv[d.id]=d.data(); });
+      window._entInscPrivListener=onSnapshot(collection(db,'inscripciones_entrenador_priv'),async(snap)=>{
+        const P={}; snap.docs.forEach(d=>{ P[d.id]=d.data(); });
+        await _resolverArchivos(P);
+        ST.entInscPriv=P;
         if(ST.view==='entInsc')render();
       },(e)=>console.warn('[listener] inscripciones_entrenador_priv:',e.message));
     }catch(e){console.warn('[loadAll] entInsc listener:',e.message);}
@@ -399,7 +436,8 @@ async function _guardarPadronPrivado(arr){
   const idx=Object.entries(nuevos).filter(([,p])=>YLPrivacidad.norm(p.rut).length>=5);
   for(let i=0;i<idx.length;i+=450){
     const b=writeBatch(db);
-    idx.slice(i,i+450).forEach(([cod,p])=>b.set(doc(db,'rut_indice',YLPrivacidad.norm(p.rut)),{codigo:cod,fechaNac:p.fechaNac||''}));
+    // Solo el código: quien sabe un RUT ajeno no se entera de su fecha de nacimiento.
+    idx.slice(i,i+450).forEach(([cod,p])=>b.set(doc(db,'rut_indice',YLPrivacidad.norm(p.rut)),{codigo:cod}));
     await b.commit();
   }
   return Object.keys(nuevos).length;
@@ -415,7 +453,7 @@ window.protegerDatosPersonales=async function(){
   const btn=document.getElementById('btnProteger'); if(btn){btn.disabled=true;btn.textContent='Guardando…';}
   try{
     const n=await _guardarPadronPrivado(ST.data);
-    await _uploadToStorage(ST.data.map(({_isPending,...a})=>a),null);
+    await _uploadToStorage(ST.data.map(({_isPending,_pendId,...a})=>a),null);
     const enl=await _enlazarPorCodigo();
     await logAction('proteger_datos','privado/padron',null,n+' atletas',{enlazados:enl});
     ST.padronPrivado=n;

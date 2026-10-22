@@ -223,20 +223,15 @@ async function doLookup(){
     if(!fbReady) await initFB();
     const rutClean=rut.replace(/[^0-9kK]/g,'').toUpperCase();
 
-    // Buscar en inscripciones por RUT (busca en todos los eventos)
+    // Las inscripciones públicas no traen el RUT: se buscan por el código de
+    // atleta, que dice rut_indice/{rut} (se lee de a uno, no se lista).
     const {collection,getDocs,query,where}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    const q=query(collection(db,'inscripciones'),where('rut','==',rut));
-    const snap=await getDocs(q);
-
-    // Si no encuentra con el RUT tal cual, intenta variaciones
-    let docs=snap.docs;
-    if(!docs.length){
-      const q2=query(collection(db,'inscripciones'));
-      const all=await getDocs(q2);
-      docs=all.docs.filter(d=>{
-        const r=(d.data().rut||'').replace(/[^0-9kK]/g,'').toUpperCase();
-        return r===rutClean;
-      });
+    const ri=await window.FB.getDoc(window.FB.doc(db,'rut_indice',rutClean)).catch(()=>null);
+    const cod=(ri&&ri.exists()&&(ri.data()||{}).codigo)||'';
+    let docs=[];
+    if(cod){
+      const snap=await getDocs(query(collection(db,'inscripciones'),where('codigo','==',cod)));
+      docs=snap.docs;
     }
 
     if(!docs.length){state.error='No encontramos una inscripción con ese RUT. Verifica que sea el correcto.';render();return;}
@@ -285,7 +280,7 @@ async function doUpload(){
 
   try{
     const ts=Date.now();
-    const rutClean=(i.rut||'').replace(/[^0-9kK]/g,'').toUpperCase();
+    const rutClean=(state.rut||'').replace(/[^0-9kK]/g,'').toUpperCase();
     const updates={};
 
     const compressImage=(file)=>new Promise(resolve=>{
@@ -313,7 +308,8 @@ async function doUpload(){
         try{
           const fileRef=window.FB.ref(storage,path);
           await window.FB.uploadBytes(fileRef,uploadData,{contentType});
-          return await window.FB.getDownloadURL(fileRef);
+          // La ubicación, no un enlace: el enlace solo lo pide un admin.
+          return 'storage:'+path;
         }catch(e){
           console.warn(`Upload intento ${attempt}/3 falló:`,e.message);
           if(attempt<3) await new Promise(r=>setTimeout(r,attempt*2000));

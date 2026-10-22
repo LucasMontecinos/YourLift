@@ -1072,92 +1072,185 @@ function renderEntrenadoresPub(){
   return h;
 }
 
+// La política de privacidad y "tus datos": qué se guarda, para qué, dónde,
+// quién lo ve y cuánto tiempo (Ley 19.628, modificada por la Ley 21.719).
+// Lo que acá se promete es lo que hace el código: si cambia uno, cambia el otro
+// (compartido/privacidad.js, reglas/, admin/proteccion.js y
+// documentos/PROTECCION_DE_DATOS.md).
 function renderTerminos(){
-  const sec=(title,body)=>`
-    <div style="margin-bottom:28px">
+  // Va acá adentro y no como constante del archivo: la página se puede dibujar
+  // (con #privacidad) antes de que el archivo termine de cargar.
+  const POLITICA_VIGENTE='22 de octubre de 2026';
+  const sec=(title,body,id)=>`
+    <div ${id?`id="${id}" `:''}style="margin-bottom:28px">
       <div style="font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--gold);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(212,168,67,.2)">${title}</div>
       <div style="font-size:13px;color:rgba(180,200,230,.8);line-height:1.85">${body}</div>
     </div>`;
+  const b=t=>`<b style="color:#e8eef7">${t}</b>`;
+  const ul=items=>`<ul style="padding-left:18px;margin:0;display:flex;flex-direction:column;gap:6px">${items.map(i=>`<li>${i}</li>`).join('')}</ul>`;
+  const cel='padding:9px 10px;border-bottom:1px solid rgba(29,49,80,.6);vertical-align:top;font-size:12px;line-height:1.55';
+  const cab='padding:8px 10px;text-align:left;font-family:Oswald;font-size:10px;letter-spacing:1.5px;color:var(--muted);border-bottom:1px solid var(--border)';
+  // Cada dato: qué es · para qué · dónde está · quién lo ve · cuánto tiempo.
+  const filas=[
+    ['Nombre, club, categoría, división, modalidad, resultados, récords, año de nacimiento, código de atleta y foto de perfil (si se aprueba)',
+     'Nóminas, resultados, ranking, récords, certificados y la transmisión de cada campeonato',
+     'Sitio público yourlift.cl',
+     'Cualquier persona: es la información deportiva de competencias públicas',
+     'Sin plazo: es el historial deportivo oficial de la federación'],
+    ['RUT y fecha de nacimiento',
+     'Identificarte, no duplicar tu ficha, tu división por edad, el control de menores y de participación por temporada',
+     'Base de datos privada (Google Firebase)',
+     'Administradores de FECHIPO y soporte de YourLift SpA',
+     'Mientras exista tu historial deportivo'],
+    ['Documentos: carnet, pasaporte, certificado ADEL/WADA o carnet SENADIS, foto con fondo blanco, consentimientos firmados y los que pida cada campeonato',
+     'Revisar tu inscripción y cumplir los requisitos de la IPF, FESUPO y antidopaje',
+     'Carpeta privada de archivos (Google Firebase), sin enlaces públicos',
+     'Administradores que revisan las inscripciones',
+     '5 años desde tu última competencia; después se borran'],
+    ['Correo, comuna y PIN de tu inscripción',
+     'Avisarte sobre tu inscripción y dejarte pedir cambios',
+     'Base de datos privada (Google Firebase)',
+     'Administradores de FECHIPO',
+     '5 años desde tu última competencia'],
+    ['Entrenadores y jueces: RUT, correo, teléfono y documentos',
+     'Acreditación, inscripción a campeonatos y la insignia de juez o entrenador en la ficha',
+     'Base de datos privada (Google Firebase); en público solo nombre, club y categoría',
+     'Administradores de FECHIPO',
+     'Mientras dure la acreditación; los documentos, 5 años desde la última participación'],
+    ['Handlers: nombre y correo',
+     'Organizar los turnos del campeonato',
+     'El nombre sale en el cronograma público; el correo queda en privado',
+     'Administradores y el entrenador que los anotó',
+     'El correo, 5 años después del campeonato'],
+    ['Navegación',
+     'Saber cuántas visitas tiene el sitio y qué secciones se usan',
+     'Un contador propio sin datos de quién visita, y Google Analytics (Google LLC)',
+     'Administradores (cifras agregadas)',
+     'El contador, sin plazo (no identifica a nadie); Google Analytics, según su propia configuración'],
+  ];
   return `
-  <div style="max-width:820px;margin:0 auto;padding:8px 0 40px">
+  <div style="max-width:880px;margin:0 auto;padding:8px 0 40px">
     <div style="font-family:Oswald;font-size:24px;font-weight:700;letter-spacing:3px;margin-bottom:4px">POLÍTICA DE <span style="color:var(--gold)">PRIVACIDAD</span></div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:32px">Última actualización: ${new Date().getFullYear()} · Ley N° 19.628 y Ley N° 21.719 sobre Protección de Datos Personales</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:28px">Vigente desde el ${POLITICA_VIGENTE} · Ley N° 19.628 sobre protección de la vida privada, modificada por la Ley N° 21.719</div>
 
-    ${sec('1. RESPONSABLE DEL TRATAMIENTO',`
-      <b style="color:#fff">Federación Chilena de Powerlifting (FECHIPO)</b> es la entidad responsable del tratamiento de los datos personales
-      recopilados a través de la plataforma YourLift.<br><br>
-      Contacto: <a href="mailto:fechipocontacto@gmail.com" style="color:var(--gold)">fechipocontacto@gmail.com</a>
+    ${sec('1. QUIÉN ES RESPONSABLE DE TUS DATOS',`
+      La ${b('Federación Chilena de Powerlifting (FECHIPO)')} es la responsable de los datos personales que se reúnen en YourLift: decide para qué se usan y responde por ellos.<br><br>
+      ${b('YourLift SpA')} opera la plataforma por encargo de FECHIPO: la mantiene, la aloja y da soporte. Solo usa los datos para hacer funcionar la plataforma, nunca para fines propios, y no los vende ni los cede.<br><br>
+      Contacto de FECHIPO: <a href="mailto:fechipocontacto@gmail.com" style="color:var(--gold)">fechipocontacto@gmail.com</a>. Para ejercer tus derechos usa el formulario del punto 9.
     `)}
 
-    ${sec('2. DATOS QUE RECOPILAMOS',`
-      Para el desarrollo de las actividades deportivas y la gestión de competencias, FECHIPO recopila los siguientes datos personales:<br><br>
-      <ul style="padding-left:18px;margin:0;display:flex;flex-direction:column;gap:6px">
-        <li><b style="color:#ccc">Identificación:</b> nombre completo, RUT (número de identificación nacional), fecha de nacimiento, sexo.</li>
-        <li><b style="color:#ccc">Deportivos:</b> club de pertenencia, categoría de peso, modalidad, resultados de competencias (pesos levantados, total, puntos GL), récords y logros.</li>
-        <li><b style="color:#ccc">Documentos de acreditación:</b> fotografía de carnet, carnet de identidad (anverso y reverso), certificado de antidopaje (WADE), formulario de consentimiento IPF, pasaporte (cuando corresponda).</li>
-        <li><b style="color:#ccc">Contacto:</b> correo electrónico (voluntario, solo para notificaciones).</li>
-      </ul>
+    ${sec('2. TUS DATOS: QUÉ, PARA QUÉ, DÓNDE, QUIÉN LOS VE Y CUÁNTO TIEMPO',`
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">
+        <table style="width:100%;border-collapse:collapse;min-width:720px">
+          <tr><th style="${cab}">DATO</th><th style="${cab}">PARA QUÉ</th><th style="${cab}">DÓNDE ESTÁ</th><th style="${cab}">QUIÉN LO VE</th><th style="${cab}">CUÁNTO TIEMPO</th></tr>
+          ${filas.map(f=>`<tr>${f.map((c,i)=>`<td style="${cel}${i===0?';color:#e8eef7':''}">${c}</td>`).join('')}</tr>`).join('')}
+        </table>
+      </div>
+      <div style="margin-top:12px">En lo público cada atleta aparece con su ${b('código de atleta')}, nunca con su RUT. El RUT, la fecha de nacimiento completa, los documentos y los contactos no se publican en ninguna parte del sitio.</div>
     `)}
 
-    ${sec('3. FINALIDAD Y BASE LEGAL',`
-      Los datos son tratados exclusivamente para:<br><br>
-      <ul style="padding-left:18px;margin:0;display:flex;flex-direction:column;gap:6px">
-        <li>Gestionar inscripciones y acreditaciones en competencias oficiales de powerlifting.</li>
-        <li>Publicar resultados deportivos, ranking nacional y récords nacionales.</li>
-        <li>Cumplir obligaciones ante organismos internacionales afiliados (IPF, FESUPO).</li>
-        <li>Emitir certificados de participación y logros deportivos.</li>
-        <li>Llevar el historial deportivo del atleta.</li>
-      </ul><br>
-      La base legal del tratamiento es el <b style="color:#ccc">consentimiento del titular</b> al momento de inscribirse en una competencia, y el <b style="color:#ccc">interés legítimo</b> de la federación para el desarrollo de la actividad deportiva, conforme a los artículos 4° y 5° de la Ley N° 19.628.
+    ${sec('3. CON QUÉ BASE SE USAN',ul([
+      `${b('Tu consentimiento')}, que das al inscribirte (la casilla del formulario). Puedes retirarlo cuando quieras; eso no afecta lo hecho antes.`,
+      `${b('La participación en competencias oficiales')}: para inscribirte, revisar tu elegibilidad y publicar los resultados, que son públicos por naturaleza en el deporte federado.`,
+      `${b('Las obligaciones con la IPF, FESUPO y el control antidopaje')}, que exigen identificar a cada atleta y sus documentos.`,
+      `${b('Datos sensibles')} (salud o discapacidad, como el carnet SENADIS o los documentos de Olimpiadas Especiales): solo cuando el campeonato los pide, con tu consentimiento expreso y solo para revisar tu elegibilidad.`,
+      `${b('Menores de edad')}: el formulario pide la autorización firmada del padre, madre o tutor legal.`,
+    ]))}
+
+    ${sec('4. QUIÉN TIENE ACCESO',ul([
+      `${b('Cualquier persona')}: solo lo deportivo que se publica (punto 2).`,
+      `${b('Administradores de FECHIPO')} (comisión técnica y organizadores autorizados), cada uno con su cuenta personal: ven lo privado para revisar inscripciones y documentos. Cada acción del panel queda registrada.`,
+      `${b('Cuentas de competencia')} (transmisión, mesa técnica, jueces): ven lo que necesita la competencia y nada más; no ven RUT, fechas de nacimiento, documentos ni contactos.`,
+      `${b('YourLift SpA')}, para operar y dar soporte a la plataforma.`,
+      `${b('Proveedores de tecnología')}: Google (Firebase guarda la base de datos y los archivos; Google Analytics mide visitas) y GitHub (aloja los archivos públicos del sitio). Tratan los datos por cuenta nuestra, bajo sus términos de protección de datos.`,
+      `${b('IPF y FESUPO')}, en campeonatos internacionales: nombre, categoría, resultados y los documentos que exija la competencia.`,
+      `Nadie más. Tus datos no se venden ni se usan para publicidad.`,
+    ]))}
+
+    ${sec('5. DÓNDE SE GUARDAN',`
+      En los servicios de ${b('Google Firebase')} (Google LLC) —base de datos Firestore y almacenamiento de archivos— y, lo público del sitio, en ${b('GitHub Pages')} (GitHub, Inc.). Estos proveedores pueden guardar la información en centros de datos fuera de Chile, entre ellos en Estados Unidos, con compromisos contractuales de seguridad y confidencialidad.<br><br>
+      En el navegador de quien visita el sitio quedan copias temporales de lo público (para que cargue rápido) y Google Analytics usa cookies de medición. No se usan señales publicitarias de Google.
     `)}
 
-    ${sec('4. PUBLICIDAD DE LOS DATOS',`
-      Los resultados deportivos (nombre, club, categoría, pesos levantados, total, posición) son de carácter público, en concordancia con la naturaleza de las competencias oficiales y los estándares internacionales del deporte de fuerza.<br><br>
-      Los documentos de acreditación (carnet, WADE, etc.) son de acceso <b style="color:#ccc">estrictamente restringido</b> al personal autorizado de FECHIPO y no son publicados ni compartidos con terceros.
+    ${sec('6. CÓMO SE PROTEGEN',ul([
+      'Lo que se lee sin iniciar sesión no contiene RUT, fechas de nacimiento, documentos, correos ni teléfonos; las reglas de la base de datos lo impiden aunque alguien lo intente.',
+      'Los documentos están en una carpeta privada: no tienen enlaces públicos y solo los abre un administrador.',
+      'Cada administrador entra con su cuenta; las cuentas se pueden desactivar en el momento y las de competencia no acceden a datos personales.',
+      'Todo viaja cifrado (HTTPS) y el panel registra quién hizo cada cambio.',
+    ]))}
+
+    ${sec('7. SI OCURRE UN INCIDENTE DE SEGURIDAD',`
+      Si se pierden, se filtran o se accede sin permiso a datos personales: se contiene el problema, se registra qué pasó, qué datos y a cuántas personas afectó, y qué se hizo. Cuando hay riesgo para las personas se reporta sin demora a la ${b('Agencia de Protección de Datos Personales')}, y se avisa a cada persona afectada cuando la ley lo exige (datos sensibles, de menores o financieros) o cuando el aviso le sirve para protegerse.
     `)}
 
-    ${sec('5. DERECHOS DEL TITULAR',`
-      De conformidad con la Ley N° 19.628 y la Ley N° 21.719, todo atleta tiene derecho a:<br><br>
-      <ul style="padding-left:18px;margin:0;display:flex;flex-direction:column;gap:6px">
-        <li><b style="color:#ccc">Acceso:</b> conocer qué datos personales suyos están almacenados en nuestros sistemas.</li>
-        <li><b style="color:#ccc">Rectificación:</b> corregir datos inexactos o desactualizados.</li>
-        <li><b style="color:#ccc">Cancelación / Eliminación:</b> solicitar la eliminación de sus datos cuando ya no sean necesarios para los fines para los que fueron recopilados, o cuando retire su consentimiento.</li>
-        <li><b style="color:#ccc">Oposición:</b> oponerse al tratamiento de sus datos en circunstancias justificadas.</li>
-        <li><b style="color:#ccc">Portabilidad:</b> recibir sus datos en formato legible cuando corresponda.</li>
-      </ul><br>
-      <b style="color:var(--gold)">Para ejercer cualquiera de estos derechos</b>, envía un correo a
-      <a href="mailto:fechipocontacto@gmail.com" style="color:var(--gold)">fechipocontacto@gmail.com</a>
-      indicando tu nombre completo, RUT y la solicitud específica. FECHIPO responderá en un plazo máximo de 30 días hábiles.
+    ${sec('8. CUÁNTO TIEMPO SE GUARDAN',`
+      Lo deportivo (nombre, club, categoría, resultados, récords) se conserva como historial oficial. Tus documentos, tu correo, tu comuna y tu PIN se borran ${b('5 años después de tu última competencia')}. Tu RUT y tu fecha de nacimiento quedan en privado, asociados a tu historial, mientras este exista.
     `)}
 
-    ${sec('6. PLAZO DE CONSERVACIÓN',`
-      Los datos deportivos (resultados, records, historial) se conservan de forma indefinida en tanto formen parte del historial oficial de competencias de FECHIPO.<br><br>
-      Los documentos de acreditación se conservan por el período mínimo necesario para cumplir con los requisitos de la competencia y las obligaciones ante organismos internacionales, y son eliminados o anonimizados transcurridos 5 años desde la última competencia del atleta, salvo solicitud de eliminación anticipada.
-    `)}
+    ${sec('9. TUS DERECHOS Y CÓMO EJERCERLOS',`
+      Puedes pedir, gratis:
+      ${ul([
+        `${b('Acceso')}: saber qué datos tuyos tenemos y recibir una copia.`,
+        `${b('Rectificación')}: corregir los que estén mal o desactualizados.`,
+        `${b('Supresión')}: que se borren tus datos cuando ya no sean necesarios o retires tu consentimiento. Los resultados deportivos forman parte del registro oficial de competencias públicas; si pides quitarlos, se evalúa tu caso.`,
+        `${b('Oposición')}: que no se usen tus datos para un fin determinado.`,
+        `${b('Portabilidad')}: recibir tus datos en un archivo que se pueda leer en otro sistema.`,
+        `${b('Bloqueo')}: que se suspenda su uso mientras se resuelve una solicitud.`,
+      ])}<br>
+      Usa el formulario de abajo o escribe a <a href="mailto:fechipocontacto@gmail.com" style="color:var(--gold)">fechipocontacto@gmail.com</a>. Te respondemos al correo que indiques ${b('dentro de 30 días corridos')}. Para cuidar tus datos podemos pedirte que confirmes tu identidad. Si no te respondemos o no estás de acuerdo con la respuesta, puedes reclamar ante la ${b('Agencia de Protección de Datos Personales')}.
+      ${_formSolicitudDatos()}
+    `,'derechos')}
 
-    ${sec('7. SEGURIDAD',`
-      FECHIPO implementa medidas técnicas y organizativas para proteger los datos personales contra accesos no autorizados, pérdida, destrucción o divulgación, incluyendo control de acceso por roles, autenticación segura y almacenamiento cifrado en servicios de nube certificados (Google Firebase).
+    ${sec('10. CAMBIOS A ESTA POLÍTICA',`
+      Si cambia cómo se usan tus datos, se actualiza esta página y su fecha de vigencia. Los cambios importantes se avisan en el sitio.
     `)}
-
-    ${sec('8. TRANSFERENCIA INTERNACIONAL',`
-      En el marco de las competencias internacionales, ciertos datos identificativos (nombre, categoría, resultados) pueden ser compartidos con la International Powerlifting Federation (IPF) y la Federación Sudamericana de Powerlifting (FESUPO), organizaciones que cuentan con sus propias políticas de protección de datos.
-    `)}
-
-    ${sec('9. COOKIES Y ANALÍTICA',`
-      YourLift puede utilizar datos de navegación anónimos para mejorar la experiencia del usuario. No se utilizan cookies de rastreo comercial ni se comparten datos de navegación con terceros.
-    `)}
-
-    ${sec('10. MODIFICACIONES',`
-      FECHIPO se reserva el derecho de actualizar esta política para adaptarla a cambios normativos o funcionales de la plataforma. La fecha de última actualización siempre estará visible al inicio de este documento.
-    `)}
-
-    <div style="margin-top:32px;padding:16px 20px;background:rgba(212,168,67,.08);border:1px solid rgba(212,168,67,.2);border-radius:10px;font-size:12px;color:rgba(180,200,230,.7);line-height:1.7">
-      ¿Tienes preguntas sobre el uso de tus datos? Escríbenos a
-      <a href="mailto:fechipocontacto@gmail.com" style="color:var(--gold)">fechipocontacto@gmail.com</a>
-      o usa el formulario de contacto al pie de esta página.
-    </div>
   </div>`;
 }
+
+// El formulario para ejercer los derechos. Llega al panel (Protección de datos)
+// y se guarda en solicitudes_datos, que solo lee un administrador.
+function _formSolicitudDatos(){
+  const st=window._SOL_DATOS||{};
+  const inp='width:100%;background:rgba(10,22,40,.6);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 12px;font-size:13px;font-family:inherit';
+  const lab='display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted);font-family:Oswald;letter-spacing:1px';
+  if(st.enviada)return `<div style="margin-top:16px;padding:14px 16px;border:1px solid rgba(34,197,94,.4);background:rgba(34,197,94,.08);border-radius:10px;color:#e8eef7">
+    Recibimos tu solicitud. Te responderemos a <b>${String(st.correo||'').replace(/</g,'&lt;')}</b> dentro de 30 días corridos.</div>`;
+  return `<div style="margin-top:16px;padding:16px;border:1px solid var(--border);border-radius:12px;background:rgba(10,22,40,.35)">
+    <div style="font-family:Oswald;font-size:13px;letter-spacing:2px;color:#e8eef7;margin-bottom:12px">SOLICITUD SOBRE MIS DATOS</div>
+    ${st.error?`<div style="margin-bottom:10px;color:#f87171;font-size:12px">${st.error}</div>`:''}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+      <label style="${lab}">QUÉ QUIERES PEDIR<select id="sd_tipo" style="${inp}">
+        <option value="acceso">Acceso: saber qué datos tienen</option><option value="rectificacion">Rectificación: corregir un dato</option>
+        <option value="supresion">Supresión: borrar mis datos</option><option value="oposicion">Oposición a un uso</option>
+        <option value="portabilidad">Portabilidad: recibir mis datos</option><option value="bloqueo">Bloqueo temporal</option></select></label>
+      <label style="${lab}">NOMBRE COMPLETO<input id="sd_nombre" style="${inp}" maxlength="110"></label>
+      <label style="${lab}">RUT<input id="sd_rut" style="${inp}" placeholder="12.345.678-9" maxlength="14"></label>
+      <label style="${lab}">CORREO PARA RESPONDERTE<input id="sd_correo" type="email" style="${inp}" maxlength="110"></label>
+      <label style="${lab};grid-column:1/-1">DETALLE (OPCIONAL)<textarea id="sd_detalle" rows="3" style="${inp}" maxlength="1900" placeholder="Por ejemplo: qué dato está mal y cuál es el correcto"></textarea></label>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin:10px 0">Usamos estos datos solo para responder tu solicitud.</div>
+    <button onclick="enviarSolicitudDatos()" ${st.enviando?'disabled':''} style="padding:10px 18px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:Oswald;letter-spacing:1px;cursor:pointer">${st.enviando?'ENVIANDO…':'ENVIAR SOLICITUD'}</button>
+  </div>`;
+}
+
+window.enviarSolicitudDatos=async function(){
+  const v=id=>(document.getElementById(id)?.value||'').trim();
+  const d={tipo:v('sd_tipo'),nombre:v('sd_nombre'),rut:v('sd_rut'),correo:v('sd_correo'),detalle:v('sd_detalle')};
+  const st=window._SOL_DATOS=window._SOL_DATOS||{};
+  const mal=d.nombre.length<3?'Escribe tu nombre completo.'
+    :!/^[0-9.]{7,11}-?[0-9kK]$/.test(d.rut.replace(/\s/g,''))?'Revisa tu RUT.'
+    :!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.correo)?'Revisa tu correo: ahí te respondemos.':'';
+  if(mal){st.error=mal;render();setTimeout(()=>document.getElementById('derechos')?.scrollIntoView({block:'start'}),0);return;}
+  if(!fbReady||!window.FBQ){st.error='No hay conexión. Escríbenos a fechipocontacto@gmail.com.';render();return;}
+  st.enviando=true;st.error='';render();
+  try{
+    const id='sol_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+    await window.FBQ.setDoc(window.FBQ.doc(fbDB,'solicitudes_datos',id),{...d,status:'recibida',ts:window.FBQ.serverTimestamp()});
+    st.enviada=true;st.correo=d.correo;
+  }catch(e){ st.error='No se pudo enviar. Escríbenos a fechipocontacto@gmail.com.'; }
+  st.enviando=false;render();
+  setTimeout(()=>document.getElementById('derechos')?.scrollIntoView({block:'start'}),0);
+};
 
 function glcalc(){
   const g=window.GLC;
@@ -1365,7 +1458,9 @@ async function cargarParaVista(v){
   try{
     const et=_fsCache('entrenadores',2*60*60*1000);
     if(et){window._ENTRENADORES_PUB=et;if(ST.v==='entrenadores')renderFondo();}
-    else{const es=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'entrenadores'));const list=es.docs.map(d=>d.data()).filter(e=>e.nombre).sort((a,b)=>(a.club||'').localeCompare(b.club||'')||(a.nombre||'').localeCompare(b.nombre||''));_fsSetCache('entrenadores',list);window._ENTRENADORES_PUB=list;if(ST.v==='entrenadores')renderFondo();}
+    // La copia pública que arma el panel (publico/entrenadores): nombre, club y
+    // categoría, sin RUT ni correos. La base completa solo la lee un admin.
+    else{const es=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'publico','entrenadores'));const list=((es&&es.exists&&es.exists()&&(es.data()||{}).lista)||[]).filter(e=>e.nombre).sort((a,b)=>(a.club||'').localeCompare(b.club||'')||(a.nombre||'').localeCompare(b.nombre||''));_fsSetCache('entrenadores',list);window._ENTRENADORES_PUB=list;if(ST.v==='entrenadores')renderFondo();}
   }catch(e){}
     }));
   }

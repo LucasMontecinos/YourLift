@@ -49,21 +49,28 @@ async function submitForm() {
       }
     }
 
+    // ── Código de atleta ────────────────────────────────
+    // La inscripción pública identifica al atleta por su código, no por su RUT.
+    // El código sale del padrón (o del índice por RUT) o se genera para el atleta
+    // nuevo; si todavía no está, se intenta una vez más antes de rendirse.
+    if (!f.codigo) { try { autoFillCode(); } catch (e) {} }
+    if (!f.codigo) {
+      state.error = 'Falta tu código de atleta: revisa tu RUT y escribe tu nombre completo para generarlo.';
+      state.submitting = false; render(); return;
+    }
+
     // ── Duplicate check ─────────────────────────────────
     if (firebaseReady) {
-      const rutCleanCheck = f.rut.replace(/[^0-9kK]/gi,'').toUpperCase();
       const nameNorm = f.nombre.trim().toLowerCase().replace(/\s+/g,' ');
-      const existing = state.inscripciones.filter(i => 
+      const existing = (state.inscripciones || []).filter(i => 
         i.evento === f.evento && i.status !== 'rejected'
       );
-      const dupRut = existing.find(i => 
-        i.rut && i.rut.replace(/[^0-9kK]/gi,'').toUpperCase() === rutCleanCheck
-      );
+      const dupCod = existing.find(i => i.codigo && i.codigo === f.codigo);
       const dupName = existing.find(i => 
         i.nombre && i.nombre.trim().toLowerCase().replace(/\s+/g,' ') === nameNorm
       );
-      if (dupRut) {
-        state.error = `Ya existe una inscripción con ese RUT (${f.rut}) para este campeonato. Si necesitas modificarla, usa la opción "Editar mi inscripción".`;
+      if (dupCod) {
+        state.error = `Ya existe una inscripción tuya para este campeonato. Si necesitas modificarla, usa la opción "Editar mi inscripción".`;
         state.submitting = false; render(); return;
       }
       if (dupName) {
@@ -73,8 +80,10 @@ async function submitForm() {
     }
     // ────────────────────────────────────────────────────
     
-    // Datos PÚBLICOS (inscripciones): legibles por cualquiera en la nómina live.
-    const publicEntry = {
+    // La inscripción completa; abajo se separa lo público de lo privado
+    // (compartido/privacidad.js): RUT, fecha de nacimiento, comuna y nombres de
+    // archivo van solo a inscripciones_private.
+    const entrada = {
       evento: f.evento,
       nombre: sanitizeInput(f.nombre),
       // El atleta corrigió el nombre que la federación tenía para su RUT. Viaja
@@ -118,12 +127,14 @@ async function submitForm() {
       declaraMayorFecha: state.declaraMayor ? (f.fechaNac || '') : '',
     };
 
+    // Datos PÚBLICOS (inscripciones): legibles por cualquiera en la nómina live.
     // Datos PRIVADOS (inscripciones_private): solo admin.
-    const privateEntry = {
+    const _sep = YLPrivacidad.separarInscripcion(entrada);
+    const publicEntry = _sep.pub;
+    const privateEntry = Object.assign(_sep.priv, {
       pin: f.pin,
-      rut: sanitizeInput(f.rut),
       correo: sanitizeInput(f.correo || ''),
-    };
+    });
 
     // storageWarning se declara aquí (fuera del bloque if) para que sea accesible
     // en el bloque de renderizado del confirm al final de la función.
@@ -160,11 +171,11 @@ async function submitForm() {
         const ext = MIME_EXT[compressed.type] || (String(file.name||'').match(/\.([a-zA-Z0-9]+)$/)||[])[1] || '';
         const r = window.FB.ref(storage, `athlete_files/${rutClean}/${name}_${ts}${ext?'.'+ext:''}`);
         console.log('[upload]', name, 'starting...', compressed.size, 'bytes', compressed.type);
-        const snap = await window.FB.uploadBytes(r, compressed, {contentType: compressed.type});
-        console.log('[upload]', name, 'uploaded OK, getting URL...');
-        const url = await window.FB.getDownloadURL(snap.ref);
-        console.log('[upload]', name, 'URL:', url.substring(0,80)+'...');
-        return url;
+        await window.FB.uploadBytes(r, compressed, {contentType: compressed.type});
+        console.log('[upload]', name, 'uploaded OK');
+        // Se guarda dónde quedó, no un enlace: el enlace de descarga solo lo
+        // puede pedir un admin (los documentos de identidad no son públicos).
+        return YLPrivacidad.rutaArchivo(r.fullPath || `athlete_files/${rutClean}/${name}_${ts}${ext?'.'+ext:''}`);
       }
       if (state.carnetFile) {
         privateEntry.carnetURL = await uploadOne(state.carnetFile, 'carnet');
@@ -242,8 +253,9 @@ async function submitForm() {
       privateEntry.ts = window.FB.serverTimestamp();
 
       // Transacción atómica: escribe ambos docs o ninguno. ID determinístico
-      // `${evento}_${rutClean}` para pairear public/private y evitar duplicados.
-      const docId = `${f.evento}_${rutClean}`;
+      // `${evento}_${codigo}` para pairear public/private y evitar duplicados.
+      // (Antes era el RUT, que quedaba a la vista al listar la colección.)
+      const docId = YLPrivacidad.idInscripcion(f.evento, f.codigo);
       const inscRef = window.FB.doc(db, 'inscripciones', docId);
       const privRef = window.FB.doc(db, 'inscripciones_private', docId);
       try {
@@ -257,7 +269,7 @@ async function submitForm() {
         });
       } catch(txErr) {
         if (txErr.message === 'DUPLICATE_RUT') {
-          state.error = `Ya existe una inscripción con ese RUT (${f.rut}) para este campeonato. Usa "Editar mi inscripción" si necesitas modificarla.`;
+          state.error = `Ya existe una inscripción con tu código de atleta (${f.codigo}) para este campeonato. Usa "Editar mi inscripción" si necesitas modificarla. Si no te inscribiste tú, avisa al organizador.`;
           state.submitting = false; render(); return;
         }
         throw txErr;
@@ -265,25 +277,23 @@ async function submitForm() {
 
       // Si es atleta NUEVO (no estaba en data.json), registrarlo en Firestore
       // para que el admin pueda subirle la foto aunque no esté en data.json aún.
+      // Lo público va por código (atletas_pending/{codigo}: nombre, club, año);
+      // el RUT y la fecha, aparte y solo para el admin (atletas_pending_priv).
+      // Y el índice rut_indice/{rut} → código, para reconocerlo la próxima vez
+      // que escriba su RUT: se crea una sola vez y no se puede pisar.
       if (f._codigoSource === 'new' && f.codigo) {
-        try {
-          const rutClean2 = f.rut.replace(/[^0-9kK]/g, '').toUpperCase();
-          await window.FB.setDoc(
-            window.FB.doc(db, 'atletas_pending', rutClean2),
-            {
-              nombre: sanitizeInput(f.nombre),
-              rut: sanitizeInput(f.rut),
-              codigo: sanitizeInput(f.codigo),
-              sexo: f.sexo,
-              fechaNac: f.fechaNac,
-              club: sanitizeInput(f.club),
-              zona: f.zona,
-              debut: true,
-              inscripcion_evento: f.evento,
-              ts: window.FB.serverTimestamp(),
-            }
-          );
-        } catch(e2) { console.warn('[atletas_pending]', e2.message); }
+        const cod = sanitizeInput(f.codigo);
+        const escribir = (col, id, datos) => window.FB.setDoc(window.FB.doc(db, col, id), datos)
+          .catch(e2 => console.warn('[' + col + ']', e2.message));
+        await escribir('atletas_pending', cod, {
+          nombre: sanitizeInput(f.nombre), codigo: cod, sexo: f.sexo,
+          anioNac: YLPrivacidad.anio(f.fechaNac), club: sanitizeInput(f.club), zona: f.zona,
+          debut: true, inscripcion_evento: f.evento, ts: window.FB.serverTimestamp(),
+        });
+        await escribir('atletas_pending_priv', cod, {
+          rut: sanitizeInput(f.rut), fechaNac: f.fechaNac, ts: window.FB.serverTimestamp(),
+        });
+        await escribir('rut_indice', YLPrivacidad.norm(f.rut), { codigo: cod, nuevo: true });
       }
     } else {
       // Demo mode: aplana en un solo objeto para localStorage.

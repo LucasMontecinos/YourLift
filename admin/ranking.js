@@ -948,7 +948,7 @@ window.abrirCicloRanking=async function(){
   if(!confirm(`REINICIAR EL RANKING\n\nEl ranking pasará a mostrar solo los resultados desde el ${e.fecha} — "${e.nombre}" en adelante.\n\nNo se borra nada: los resultados anteriores quedan guardados y se siguen viendo en el perfil de cada atleta. Este corte se puede quitar cuando quieras.\n\n¿Confirmar?`)) return;
   try{
     await setDoc(doc(db,'ranking_config','ciclo'),
-      {desde:e.fecha, evento:e.nombre, evento_id:e.id||'', ts:serverTimestamp(), por:ST.user?.email||''});
+      {desde:e.fecha, evento:e.nombre, evento_id:e.id||'', ts:serverTimestamp(), por:ST.user?.uid||''});   // se lee sin sesión: sin correo
     await logAction('ranking_ciclo_abrir', e.id||e.nombre, null, e.fecha);
     ST.rankingCiclo={desde:e.fecha,evento:e.nombre,evento_id:e.id||''};
     showToast('Ranking reiniciado desde '+e.nombre);

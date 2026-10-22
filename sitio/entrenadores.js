@@ -4,17 +4,6 @@
 // que define queda global como antes. Solo define funciones (y las acciones de
 // los botones, window.…); lo que corre al abrir la página está en arranque.js.
 
-   // eventoId -> [entrenadores aprobados]
-function _aplicaEntrenadores(todos){
-  const m={};
-  (todos||[]).forEach(e=>{
-    if(!e||e.status!=='approved')return;
-    (m[e.evento]=m[e.evento]||[]).push(e);
-  });
-  Object.values(m).forEach(l=>l.sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es')));
-  window.ENTRE_NOM=m;
-}
-
 // El entrenador no tiene cómo saber que su formulario existe si no se lo dicen
 // justo donde va a buscarlo, que es la pestaña de inscripción. Solo aparece
 // cuando hay algún campeonato con ese período abierto.
@@ -62,13 +51,16 @@ async function loadFBEntrenadores(force){
   if(!fbReady)return;
   try{
     if(!force){
-      const c=_fsCache('inscripciones_entrenador',5*60*1000);
-      if(c){_aplicaEntrenadores(c);return;}
+      const c=_fsCache('entrenadores_nomina',5*60*1000);
+      if(c){window.ENTRE_NOM=c;return;}
     }
-    const snap=await window.FBQ.getDocs(window.FBQ.collection(fbDB,'inscripciones_entrenador'));
-    const all=[];snap.forEach(d=>all.push({id:d.id,...d.data()}));
-    _fsSetCache('inscripciones_entrenador',all);
-    _aplicaEntrenadores(all);
+    // La nómina pública que arma el panel (publico/entrenadores_nomina): los
+    // aprobados de cada campeonato, sin RUT. Las inscripciones de entrenador
+    // completas solo las lee un admin.
+    const s=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'publico','entrenadores_nomina'));
+    const m=(s&&s.exists&&s.exists()&&(s.data()||{}).porEvento)||{};
+    _fsSetCache('entrenadores_nomina',m);
+    window.ENTRE_NOM=m;
   }catch(e){console.warn('Error loading entrenadores',e)}
 }
 

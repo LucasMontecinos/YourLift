@@ -132,7 +132,7 @@ console.log('\nEl aviso NO frena la inscripción');
   ok(!/no será aceptada por la Comisión/.test(html), 'no queda rastro de la redacción anterior');
   ok(!/disabled|return false|preventDefault|state\.view=/.test(html),
      'y el aviso no toca el flujo: no deshabilita ni corta nada');
-  const enviar = src.indexOf('const publicEntry = {');
+  const enviar = src.indexOf('const entrada = {');   // la inscripción, antes de separar lo público de lo privado
   const bloque = src.slice(enviar, src.indexOf('};', enviar));
   ok(/bloqueoAvisado: \(bloqueoDetectado\(\)\|\|\[\]\)/.test(bloque),
      'queda anotado en la inscripción que el atleta vio el aviso');
@@ -179,17 +179,18 @@ console.log('\nMira las dos fuentes: data.json y lo cerrado hace poco');
   // Sur ni del Norte —143 personas, cerrados esa misma semana—. Con una sola
   // fuente el aviso no le habría saltado a ninguno.
   EVENTS = [SUR_AUSTRAL];
-  state.form = { evento: 'sur_austral', rut: '30.303.030-3' };
+  // Lo recién cerrado se cruza por código de atleta: lo público ya no trae el RUT.
+  state.form = { evento: 'sur_austral', rut: '30.303.030-3', codigo: '3030ANT-2024' };
   ok(bloqueoDetectado().length === 0, 'alguien que no está en data.json no da aviso…');
-  compResDB = [{ rut: '30303030-3', evento: 'Campeonato Regional Norte ' + ANIO, fecha: ANIO + '-08-17' }];
+  compResDB = [{ codigo: '3030ANT-2024', evento: 'Campeonato Regional Norte ' + ANIO, fecha: ANIO + '-08-17' }];
   const ch = bloqueoDetectado();
   ok(ch.length === 1, '…pero sí cuando aparece en los resultados recientes (' + ch.length + ')');
   ok(/Norte/.test(ch[0].evento), 'y es el Regional Norte, cerrado ayer: ' + ch[0].evento);
   compResDB = [];
   ok(/async function cargarCompRes\(\)/.test(src), 'se cargan aparte, con su propia caché');
   ok(/_ifsCache\('ins_compres', 10\*60\*1000\)/.test(src), 'cacheados 10 minutos, para no leer de más');
-  ok(/rut:x\.rut\|\|'',evento:x\.evento\|\|'',fecha:x\.fecha\|\|''/.test(src),
-     'y solo se trae RUT, campeonato y fecha: las marcas no tienen para qué venir a una página pública');
+  ok(/codigo:x\.codigo\|\|'',evento:x\.evento\|\|'',fecha:x\.fecha\|\|''/.test(src),
+     'y solo se trae el código, el campeonato y la fecha: las marcas no tienen para qué venir a una página pública');
   ok(/const escribiendo=document\.activeElement/.test(src),
      'si llegan mientras el atleta escribe, no se le redibuja el campo encima');
 }
@@ -325,8 +326,8 @@ console.log('\nInscribirse no es competir');
     // competition_results solo recibe a quien tuvo total o quedó DQ: el que no se
     // presentó no llega ahí. Por eso no hace falta filtrarlo.
     athleteDB = [];
-    compResDB = [{ rut: '44444444-4', evento: 'Campeonato Regional Norte ' + ANIO, fecha: ANIO + '-08-17' }];
-    state.form = { evento: 'sur_austral', rut: '44444444-4' };
+    compResDB = [{ codigo: '4444CUA-2024', evento: 'Campeonato Regional Norte ' + ANIO, fecha: ANIO + '-08-17' }];
+    state.form = { evento: 'sur_austral', rut: '44444444-4', codigo: '4444CUA-2024' };
     ok(bloqueoDetectado().length === 1, 'entra sin pedirle nada más');
     compResDB = [];
   }
@@ -346,19 +347,21 @@ console.log('\nInscribirse no es competir');
         { evento: CENTRO, fecha: ANIO + '-05-10', resultado: { total: 410 } } ] },
     ];
     EVENTS = [SUR_AUSTRAL, { id: 'regional_centro', name: CENTRO }];
-    insActDB = [{ rut: '33872803-4', evento: 'regional_centro', status: 'approved' }];
+    // Las inscripciones vigentes se buscan por el código de atleta (el que da
+    // rut_indice para el RUT escrito).
+    insActDB = [{ codigo: '3387AFA-2024', evento: 'regional_centro', status: 'approved' }];
 
-    state.form = { evento: 'sur_austral', rut: '33872803-4' };
+    state.form = { evento: 'sur_austral', rut: '33872803-4', codigo: '3387AFA-2024' };
     const a = bloqueoDetectado();
     ok(a.length === 1, 'Andrea recibe el aviso: sigue inscrita');
     ok(a[0] && /Regional Centro/.test(a[0].evento), 'y dice cuál: ' + (a[0] || {}).evento);
 
-    state.form = { evento: 'sur_austral', rut: '36751825-1' };
+    state.form = { evento: 'sur_austral', rut: '36751825-1', codigo: '3675VGA-2024' };
     ok(bloqueoDetectado().length === 0, 'Vicente no: su inscripción ya no está');
 
     // Una inscripción rechazada no sostiene el aviso.
-    insActDB = [{ rut: '36751825-1', evento: 'regional_centro', status: 'rejected' }];
-    state.form = { evento: 'sur_austral', rut: '36751825-1' };
+    insActDB = [{ codigo: '3675VGA-2024', evento: 'regional_centro', status: 'rejected' }];
+    state.form = { evento: 'sur_austral', rut: '36751825-1', codigo: '3675VGA-2024' };
     ok(bloqueoDetectado().length === 0, 'y una inscripción rechazada no cuenta');
 
     // El campeonato viaja como id; hay que traducirlo para poder compararlo.
@@ -366,8 +369,8 @@ console.log('\nInscribirse no es competir');
        'el id de la inscripción se traduce al nombre del campeonato');
     ok(_nombreDeEvento('regional_centro_2026') === 'regional_centro_2026',
        'y si el campeonato ya no está en la lista, se usa el id tal cual');
-    insActDB = [{ rut: '33872803-4', evento: 'regional_centro_2026', status: 'approved' }];
-    state.form = { evento: 'sur_austral', rut: '33872803-4' };
+    insActDB = [{ codigo: '3387AFA-2024', evento: 'regional_centro_2026', status: 'approved' }];
+    state.form = { evento: 'sur_austral', rut: '33872803-4', codigo: '3387AFA-2024' };
     ok(bloqueoDetectado().length === 1,
        'y aun así se detecta: el id normalizado da la misma clave que el nombre');
     insActDB = [];

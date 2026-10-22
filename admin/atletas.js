@@ -69,13 +69,31 @@ window.esc=esc;
 // ═══════════════════════════════════════════
 // EDIT ATHLETES (data.json)
 // ═══════════════════════════════════════════
-// Los athlete_edits se indexan por RUT (que nunca cambia) en vez de código,
-// así editar el código no rompe el matching ni revierte al recargar.
+// athlete_edits se lee sin sesión y su id se ve al listar, así que ni el id ni
+// el documento llevan el RUT: el RUT, la fecha de nacimiento y la comuna van en
+// athlete_edits_priv/{mismo id}, que solo lee un admin. El panel los junta al
+// cargar (ST._edDocPorRut), y así cada persona sigue teniendo UN documento
+// aunque se le corrija el código: se busca primero por RUT, que no cambia.
+// Uno nuevo se llama por el código que tenía el día que se creó.
 function _editDocId(a){
-  const rut=String(a.rut||'').replace(/[^0-9kK]/gi,'').toUpperCase();
-  if(rut) return 'rut_'+rut;
-  // fallback: si no hay rut, usar código (atletas viejos sin rut)
-  return 'cod_'+String(a.codigo||'').replace(/[^a-zA-Z0-9_-]/g,'_');
+  const r=YLPrivacidad.norm(a.rut);
+  if(r&&ST._edDocPorRut&&ST._edDocPorRut[r])return ST._edDocPorRut[r];
+  const c=String(a.codigo||'');
+  if(c&&ST._edDocPorCod&&ST._edDocPorCod[c])return ST._edDocPorCod[c];
+  return 'cod_'+c.replace(/[^a-zA-Z0-9_-]/g,'_');
+}
+function _recordarEditDoc(a,docId){
+  const r=YLPrivacidad.norm(a.rut);
+  if(r)(ST._edDocPorRut=ST._edDocPorRut||{})[r]=docId;
+  if(a.codigo)(ST._edDocPorCod=ST._edDocPorCod||{})[a.codigo]=docId;
+}
+// Lo privado de una edición, aparte. Solo si hay algo que guardar.
+async function _guardarEditPriv(docId,a){
+  const p={};
+  if(a.rut)p.rut=String(a.rut);
+  if(a.fechaNac||a.fecha_nac)p.fechaNac=String(a.fechaNac||a.fecha_nac);
+  if(a.comuna)p.comuna=String(a.comuna);
+  if(Object.keys(p).length)await setDoc(doc(db,'athlete_edits_priv',docId),{...p,ts:Date.now()},{merge:true});
 }
 
 // La hora del último cambio, en un documento aparte de la misma colección.
@@ -91,16 +109,22 @@ async function _marcarEdicion(){
   }catch(e){console.warn('[edits] no se pudo marcar la versión:',e.message);}
 }
 
-// Guarda el overlay completo del atleta en athlete_edits (snapshot de campos editables)
-async function _saveEdit(a){
-  const docId=_editDocId(a);
+// Guarda el overlay completo del atleta en athlete_edits (snapshot de campos
+// editables). Lo público, con el año de nacimiento; lo privado, aparte. Si se le
+// cambió el código, va también el anterior: el sitio cruza por código, y
+// data.json sigue con el viejo hasta que se vuelva a publicar.
+async function _saveEdit(a,docId,codigoAnterior){
+  docId=docId||_editDocId(a);
   await setDoc(doc(db,'athlete_edits',docId),{
-    rut:a.rut||'', codigo:a.codigo||'', nombre:a.nombre||'',
+    codigo:a.codigo||'', nombre:a.nombre||'',
     club:a.club||'', debut:a.debut||'', sexo:a.sexo||'',
-    fechaNac:a.fechaNac||a.fecha_nac||'', zona:a.zona||'', comuna:a.comuna||'',
+    anioNac:a.anioNac||YLPrivacidad.anio(a.fechaNac||a.fecha_nac)||'', zona:a.zona||'',
+    ...(codigoAnterior&&codigoAnterior!==a.codigo?{codigoAnterior}:{}),
     deleted:false,
     ts:Date.now()
   },{merge:true});
+  await _guardarEditPriv(docId,a);
+  _recordarEditDoc(a,docId);
   await _marcarEdicion();
 }
 
@@ -161,7 +185,9 @@ window.editAthlete=async function(cod,field){
       // El código también se puede corregir a mano desde acá, no solo con el
       // botón de arreglar código. La foto tiene que irse con él igual.
       if(field==='codigo')await _mudarFoto(old,nv);
-      await _saveEdit(a);   // guarda snapshot completo indexado por RUT
+      // El mismo documento de siempre (se busca por RUT o por el código viejo).
+      const docId=_editDocId(field==='codigo'?{...a,codigo:old}:a);
+      await _saveEdit(a,docId,field==='codigo'?old:'');
       await logAction('edit_athlete',`${a.codigo}.${field}`,old,nv,{nombre:a.nombre});
       render();
       showToast(`${field} actualizado: ${a.nombre}`,async()=>{
@@ -205,7 +231,9 @@ async function _mudarFoto(oldCod,newCod){
     const vieja=await getDoc(doc(db,'atleta_fotos',oldCod));
     if(!vieja.exists())return;
     const d=vieja.data();
-    await setDoc(doc(db,'atleta_fotos',newCod),{...d,codigo:newCod},{merge:true});
+    // Sin RUT ni correos (atleta_fotos se lee sin sesión): solo lo de la foto.
+    const {rut:_r,approved_by:_ab,rejected_by:_rb,...resto}=d;
+    await setDoc(doc(db,'atleta_fotos',newCod),{...resto,codigo:newCod},{merge:true});
     await deleteDoc(doc(db,'atleta_fotos',oldCod));
     await logAction('mover_foto',oldCod,oldCod,newCod);
   }catch(e){console.warn('[foto] no se pudo mudar:',e.message);}
@@ -213,15 +241,13 @@ async function _mudarFoto(oldCod,newCod){
 
 async function _applyCodigoFix(a,oldCod,newCod,newRut){
   try{
-    // Si el RUT cambia, el docId (basado en RUT) también cambia → borrar el viejo
-    const oldDocId=_editDocId(a);
+    // El documento sigue siendo el mismo aunque cambien el código o el RUT.
+    const docId=_editDocId(a);
     a.codigo=newCod;
     if(newRut)a.rut=newRut;
-    const newDocId=_editDocId(a);
-    if(oldDocId!==newDocId){try{await deleteDoc(doc(db,'athlete_edits',oldDocId))}catch(_){}}
     await _mudarFoto(oldCod,newCod);
-    await _saveEdit(a);   // snapshot completo indexado por RUT
-    await logAction('fix_codigo',oldCod,oldCod,newCod,{nombre:a.nombre,rut:a.rut||''});
+    await _saveEdit(a,docId,oldCod);
+    await logAction('fix_codigo',oldCod,oldCod,newCod,{nombre:a.nombre});
     render();
     showToast('Código corregido: '+newCod);
   }catch(e){a.codigo=oldCod;showToast('Error: '+e.message,null,true);}
@@ -260,7 +286,9 @@ window.deleteAthlete=async function(cod){
     // dos documentos que se contradecían y ninguno mandaba sobre el otro.
     const docId=_editDocId(a);
     await setDoc(doc(db,'athlete_edits',docId),
-      {rut:a.rut||'',codigo:cod,deleted:true,nombre:a.nombre,ts:Date.now()},{merge:true});
+      {codigo:cod,deleted:true,nombre:a.nombre,ts:Date.now()},{merge:true});
+    await _guardarEditPriv(docId,a);
+    _recordarEditDoc(a,docId);
     await _marcarEdicion();
     await logAction('delete_athlete',cod,a.nombre,'deleted',{club:a.club||''});
   }catch(e){console.warn('Delete log failed',e)}
@@ -336,10 +364,11 @@ window.approveEditRequest=async function(reqId){
     const updates={};
     for(const k of allowed){if(req.changes&&req.changes[k]!==undefined)updates[k]=req.changes[k];}
     if(Object.keys(updates).length){
-      await updateDoc(doc(db,'inscripciones',req.inscripcionId),updates);
+      // La fecha de nacimiento y la comuna van a la inscripción privada.
+      await inscGuardar(req.inscripcionId,updates);
     }
     await deleteDoc(doc(db,'edit_requests',reqId));
-    await logAction('approve_edit_request',req.inscripcionId,JSON.stringify(updates).substring(0,200),'applied',{rut:req.rut});
+    await logAction('approve_edit_request',req.inscripcionId,Object.keys(updates).join(', '),'applied');
     // Si el atleta pidió corregir su club, la ficha se corrige con él.
     let sync=null;
     if(updates.club!==undefined||updates.clubOtro!==undefined){
@@ -510,11 +539,13 @@ window.saveCompResult=async function(){
   const slug=s=>String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,40);
   const docId=(codigo||('m_'+slug(nombre)))+'__'+slug(evento)+'__'+slug(modalidad||'cl');
   try{
+    // competition_results se lee sin sesión: va el código, no el RUT; y quién lo
+    // cargó, por su id de cuenta (el correo queda en el registro de acciones).
     await setDoc(doc(db,'competition_results',docId),{
-      codigo,rut,nombre,evento,fecha,sexo,division,categoria,modalidad,
+      codigo,nombre,evento,fecha,sexo,division,categoria,modalidad,
       posicion: posicion!=null ? posicion : deleteField(),
       resultado:{sq,bp,dl,total,bw,pesoCorporal:bw,glp,dots,status:dq?'DQ':'OK',intentos:{sq:att('sq'),bp:att('bp'),dl:att('dl')}},
-      source:'manual', addedBy:(ST.user?.email||'admin'), updatedAt:serverTimestamp()
+      source:'manual', addedBy:(ST.user?.uid||'admin'), updatedAt:serverTimestamp()
     },{merge:true});
     await logAction('add_comp_result',docId,null,evento+' · '+(dq?'DQ ('+liftedTotal+'kg levantados)':total+'kg')+(dq?'':' · GL '+glp),{nombre});
     showToast(dq?('Competencia guardada: '+nombre+' · DQ'):('Competencia guardada: '+nombre+' · '+total+'kg'));

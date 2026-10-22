@@ -4,11 +4,12 @@
 // Su ficha era la de un competidor cualquiera: en ninguna parte decía que además
 // entrena. Ahora lleva una insignia al lado del nombre, como los logros.
 //
-// Lo delicado es el cruce. Se hace por RUT y no por nombre, porque el nombre del
-// entrenador está escrito a mano en su ficha y el del atleta viene de la
-// inscripción: no coinciden en tildes ni en el orden de los apellidos. Y los dos
-// RUT vienen con formatos distintos —con puntos, sin puntos, con guion— así que
-// hay que normalizarlos antes de comparar.
+// Lo delicado es el cruce. Se hace por el código de atleta y no por nombre,
+// porque el nombre del entrenador está escrito a mano en su ficha y el del atleta
+// viene de la inscripción: no coinciden en tildes ni en el orden de los
+// apellidos. El panel anota el código cruzando por RUT (que tiene él), y la ficha
+// lee la copia pública publico/entrenadores, sin RUT ni correos: la base de
+// entrenadores ya no es pública (Ley 21.719).
 //
 // La categoría se guarda como 'Cat. 1' o 'Cat. 2' y se muestra en romanos, que es
 // como se nombran: CAT I y CAT II.
@@ -38,7 +39,7 @@ const MODULOS = {
     export const persistentLocalCache=()=>({}); export const persistentMultipleTabManager=()=>({});
     export const collection=(_d,n)=>({__n:n}); export const doc=(_d,n,i)=>({__n:n,__i:i});
     export const getDocs=async q=>snap(busca(q));
-    export const getDoc=async r=>({exists:()=>false,data:()=>({}),id:r.__i});
+    export const getDoc=async r=>{const d=((globalThis.__FAKE_DOC||{})[r.__n]||{})[r.__i];return {exists:()=>!!d,data:()=>d||{},id:r.__i};};
     export const setDoc=async()=>{}; export const updateDoc=async()=>{}; export const deleteDoc=async()=>{};
     export const addDoc=async()=>({id:'x'}); export const deleteField=()=>null;
     export const query=c=>({__q:c,__n:c&&c.__n}); export const where=()=>({}); export const orderBy=()=>({}); export const limit=()=>({});
@@ -84,7 +85,8 @@ const soloNum = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase();
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));
-  await p.addInitScript(e => { window.__FAKE = { entrenadores: e }; }, entrenadores);
+  // La copia pública que arma el panel: nombre, club, categoría y código.
+  await p.addInitScript(e => { window.__FAKE_DOC = { publico: { entrenadores: { lista: e.map(({ rut, ...x }) => x) } } }; }, entrenadores);
   await p.goto(`http://localhost:${PUERTO}/atleta.html`, { waitUntil: 'domcontentloaded' });
   await p.waitForFunction(() => typeof showProfile === 'function', null, { timeout: 20000 });
   await p.waitForTimeout(4000);
@@ -117,8 +119,8 @@ const soloNum = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase();
   {
     const at = fs.readFileSync(__dirname + '/../atleta.html', 'utf8');
     ok(/_aC\('atl_entren'/.test(at), 'los entrenadores se cachean, no se piden en cada ficha');
-    ok(/porCod\[a\.codigo\]\|\|\(a\.rut\?porRut\[soloNum\(a\.rut\)\]:null\)/.test(at),
-       'el cruce es por código de atleta, o por RUT normalizado; nunca por nombre');
+    ok(/const e=porCod\[a\.codigo\];/.test(at) && /fb\.doc\(db,'publico','entrenadores'\)/.test(at) && !/collection\(db,'entrenadores'\)/.test(at),
+       'el cruce es por código de atleta, desde la copia pública; nunca por nombre ni por RUT');
     ok(/const _catRomana=/.test(at), 'y la categoría se pasa a números romanos');
 
     // Corregir el archivo no alcanza: la ficha vieja quedó guardada CON el RUT

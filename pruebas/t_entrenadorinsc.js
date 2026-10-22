@@ -57,15 +57,16 @@ const FORMS = [
 ];
 
 const ATLETAS = [
-  { rut: '111111111', nombre: 'Ana Soto', club: 'Club Uno', modalidad: 'Olimpiadas Especiales',
+  { codigo: '1111ASO-2020', nombre: 'Ana Soto', club: 'Club Uno', modalidad: 'Olimpiadas Especiales',
     division: 'Open', categoria: '57', status: 'approved' },
-  { rut: '222222222', nombre: 'Bruno Díaz', club: 'Club Dos', modalidad: 'Olimpiadas Especiales',
+  { codigo: '2222BDI-2020', nombre: 'Bruno Díaz', club: 'Club Dos', modalidad: 'Olimpiadas Especiales',
     division: 'Junior', categoria: '74', status: 'pending' },
-  { rut: '333333333', nombre: 'Carla Vera', club: 'Club Uno', modalidad: 'Powerlifting Classic',
+  { codigo: '3333CVE-2020', nombre: 'Carla Vera', club: 'Club Uno', modalidad: 'Powerlifting Classic',
     division: 'Open', categoria: '63', status: 'approved' },
 ];
 
-// Un Firebase de mentira que solo sabe lo justo: buscar un entrenador por RUT y
+// Un Firebase de mentira que solo sabe lo justo: buscar un entrenador por RUT
+// (en entrenadores_indice, por el RUT limpio: la base completa ya no es pública) y
 // dejarse escribir, guardando lo que le mandaron para poder mirarlo después.
 const FB_FALSO = `{
   db:{}, storage:{},
@@ -176,7 +177,7 @@ global.EVENTOS_G = EVENTOS;
     // quien sea que tecleen convertiría esto en un buscador de correos ajenos.
     await montar(p, FORMS);
     const r = await p.evaluate(async f => {
-      window.__BASE = { '11.111.111-1': { nombre: 'Pedro Rojas', club: 'Club Uno',
+      window.__BASE = { '111111111': { nombre: 'Pedro Rojas', club: 'Club Uno',
         categoria: 'Cat. 2', correos: ['secreto@ejemplo.cl'],
         acreditaciones: [{ vence: f, categoria: 'Cat. 2' }] } };
       _estado.step = 1; setCampo('rut', '11.111.111-1');
@@ -210,7 +211,7 @@ global.EVENTOS_G = EVENTOS;
   {
     // En la base pero vencida: mismo trato, aviso distinto.
     const r = await p.evaluate(async () => {
-      window.__BASE = { '11.111.111-1': { nombre: 'Ana Vieja', club: 'X',
+      window.__BASE = { '111111111': { nombre: 'Ana Vieja', club: 'X',
         acreditaciones: [{ vence: '2020-01' }] } };
       _estado.ent = { rut: '', nombre: '', club: '', categoria: '', correo: '', telefono: '', pin: '' };
       _estado.step = 1; setCampo('rut', '11.111.111-1'); await buscarRut();
@@ -232,7 +233,7 @@ global.EVENTOS_G = EVENTOS;
       const nombres = [...document.querySelectorAll('.ath .n')].map(x => x.textContent.trim());
       const btnAntes = [...document.querySelectorAll('button')].find(b => /Continuar/i.test(b.textContent));
       const trancadoSinNinguno = !!btnAntes && btnAntes.disabled;
-      togglAtleta('111111111'); togglAtleta('222222222');
+      togglAtleta('1111ASO-2020'); togglAtleta('2222BDI-2020');
       const btn = [...document.querySelectorAll('button')].find(b => /Continuar/i.test(b.textContent));
       return { nombres, trancadoSinNinguno, elegidos: _estado.atletas.length,
                libre: !!btn && !btn.disabled, texto: document.body.innerText };
@@ -286,7 +287,7 @@ global.EVENTOS_G = EVENTOS;
       const f = { documentos: [{ key: 'ant1', label: 'Certificado de antecedentes' }] };
       _estado.atletas = [];
       const sinOE = Object.keys(docsEntrenador(f));
-      _estado.atletas = ['111111111'];   // Ana Soto, Olimpiadas Especiales
+      _estado.atletas = ['1111ASO-2020'];   // Ana Soto, Olimpiadas Especiales
       const conOE = docsEntrenador(f);
       _estado.step = 3; _estado.archivos = {}; _estado.nombres = {}; render();
       const zonas = document.querySelectorAll('.upload-zone input[type=file]').length;
@@ -325,7 +326,8 @@ global.EVENTOS_G = EVENTOS;
                       categoria: 'Cat. 2', correo: 'marta@ejemplo.cl', telefono: '+56 9 1111 1111', pin: '4321' };
       _estado.acred = { encontrado: true, vigente: true, hasta: '2027-05', categoria: 'Cat. 2' };
       window._atletas(ats);
-      _estado.atletas = ['111111111', '222222222'];
+      _estado.atletas = ['1111ASO-2020', '2222BDI-2020'];
+      _estado.consiente = true;   // la casilla de la política de privacidad
       _estado.archivos = { e_ant1: new File(['x'], 'ant.pdf', { type: 'application/pdf' }) };
       _estado.nombres = { e_ant1: 'ant.pdf' };
       await enviar();
@@ -375,19 +377,28 @@ global.EVENTOS_G = EVENTOS;
     const e2 = []; p2.on('pageerror', x => e2.push(x.message));
     await p2.goto(`http://localhost:${PUERTO}/index.html`, { waitUntil: 'domcontentloaded' });
     await p2.waitForFunction(() => typeof _nomEntrenadores === 'function', null, { timeout: 25000 });
-    const r = await p2.evaluate(() => {
-      // Tres inscripciones: dos aprobadas y una pendiente.
-      _aplicaEntrenadores([
-        { evento: 'oe', status: 'approved', nombre: 'Marta Fuentes', club: 'Club Uno',
-          atletas: [{ nombre: 'Ana Soto' }, { nombre: 'Bruno Díaz' }] },
+    // Las inscripciones de entrenador ya no se leen sin sesión (el id lleva el
+    // RUT): la nómina pública la arma el panel en publico/entrenadores_nomina,
+    // solo con los aprobados y ordenados. Se arma acá con la misma función del
+    // panel y se le pasa al sitio tal cual la leería.
+    const adm = require('./apoyo/fuente').admin();
+    const armar = require('./apoyo/fuente').funcion(adm, 'publicarNominaEntrenadores');
+    let publicado = null;
+    await eval('(async()=>{ const _publicarCopia=async(id,d)=>{publicado=d;}; ' + armar + '; await publicarNominaEntrenadores(['
+      + JSON.stringify([
+        { evento: 'oe', status: 'approved', nombre: 'Marta Fuentes', club: 'Club Uno', rut: '1-9',
+          atletas: [{ nombre: 'Ana Soto', codigo: 'A' }, { nombre: 'Bruno Díaz', codigo: 'B' }] },
         { evento: 'oe', status: 'approved', nombre: 'Ana Reyes', club: 'Club Dos', atletas: [] },
         { evento: 'oe', status: 'pending', nombre: 'Pendiente Pérez', club: 'X', atletas: [] },
         { evento: 'oe', status: 'rejected', nombre: 'Rechazado Ruiz', club: 'X', atletas: [] },
-      ]);
+      ]).slice(1, -1) + ']); })()');
+    ok(publicado && !JSON.stringify(publicado).includes('1-9'), 'la nómina que publica el panel no lleva el RUT del entrenador');
+    const r = await p2.evaluate(m => {
+      window.ENTRE_NOM = m;
       return { conEnt: _nomEntrenadores({ id: 'oe', name: 'Nacional OE' }),
                sinEnt: _nomEntrenadores({ id: 'otro', name: 'Otro' }),
                orden: (window.ENTRE_NOM.oe || []).map(x => x.nombre) };
-    });
+    }, publicado.porEvento);
     ok(/Marta Fuentes/.test(r.conEnt) && /Ana Reyes/.test(r.conEnt), 'salen los entrenadores aprobados');
     ok(!/Pendiente Pérez/.test(r.conEnt), 'el pendiente NO se publica: todavía lo revisa la organización');
     ok(!/Rechazado Ruiz/.test(r.conEnt), 'y el rechazado tampoco');

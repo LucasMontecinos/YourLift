@@ -8,8 +8,17 @@ window.cronoPickEvent=function(ev){
   ST.cronoEv=ev; ST.cronoRows=null;
   if(window._cronoUnsub){try{window._cronoUnsub()}catch(e){}window._cronoUnsub=null;}
   if(ev){
-    window._cronoUnsub=onSnapshot(doc(db,'cronograma',ev),(d)=>{
-      ST.cronoRows=(d.exists()&&Array.isArray(d.data().rows))?d.data().rows:[];
+    // Los correos de los handlers no están en el cronograma público: se pegan
+    // desde cronograma_priv/{ev} (ver cronoSaveDoc).
+    const priv=getDoc(doc(db,'cronograma_priv',ev)).then(d=>(d.exists()&&d.data().correos)||[]).catch(()=>[]);
+    window._cronoUnsub=onSnapshot(doc(db,'cronograma',ev),async(d)=>{
+      const filas=(d.exists()&&Array.isArray(d.data().rows))?d.data().rows:[];
+      const correos=await priv;
+      filas.forEach((r,i)=>{ const c=correos[i]; if(!c)return;
+        if(c.h1c&&!(r.handler1||{}).correo)r.handler1={...(r.handler1||{}),correo:c.h1c};
+        if(c.h2c&&!(r.handler2||{}).correo)r.handler2={...(r.handler2||{}),correo:c.h2c}; });
+      if(ST.cronoEv!==ev)return;
+      ST.cronoRows=filas;
       ST.cronoHideCoaches=(d.exists()&&d.data().hideCoaches)||false;
       if(ST.view==='cronograma')render();
     },(e)=>{console.warn('[crono]',e.message);ST.cronoRows=[];if(ST.view==='cronograma')render();});
@@ -17,9 +26,19 @@ window.cronoPickEvent=function(ev){
   render();
 };
 
+// cronograma/{ev} se lee sin sesión (cronograma.html, el livecast, el sitio):
+// las filas van sin RUT y sin el correo de los handlers. Los correos quedan en
+// cronograma_priv/{ev}, que solo lee un admin, en el mismo orden que las filas.
 async function cronoSaveDoc(){
   if(!ST.cronoEv)return;
-  try{ await setDoc(doc(db,'cronograma',ST.cronoEv),{rows:ST.cronoRows||[],hideCoaches:!!ST.cronoHideCoaches,updatedAt:serverTimestamp()},{merge:true}); }
+  const filas=ST.cronoRows||[];
+  const pub=filas.map(({rut,...r})=>({...r,
+    handler1:{nombre:(r.handler1||{}).nombre||''},handler2:{nombre:(r.handler2||{}).nombre||''}}));
+  const correos=filas.map(r=>({h1c:(r.handler1||{}).correo||'',h2c:(r.handler2||{}).correo||''}));
+  try{
+    await setDoc(doc(db,'cronograma',ST.cronoEv),{rows:pub,hideCoaches:!!ST.cronoHideCoaches,updatedAt:serverTimestamp()},{merge:true});
+    await setDoc(doc(db,'cronograma_priv',ST.cronoEv),{correos,updatedAt:serverTimestamp()});
+  }
   catch(e){ showToast('Error guardando: '+e.message,null,true); }
 }
 
@@ -344,14 +363,26 @@ window.cronoAutoDistribute=async function(){
 
 window._entrenadorPorRut=_entrenadorPorRut;
 
+// Por código de atleta: las inscripciones de entrenador nuevas declaran a sus
+// atletas por código. Las de antes los traían por RUT: se traducen al código
+// con las inscripciones (el panel tiene los dos).
 function _entrenadorPorRut(eventoId){
   const m={};
+  const codDeRut={};
+  (ST.inscripciones||[]).forEach(i=>{ const r=_rutN(i.rut); if(r&&i.codigo)codDeRut[r]=i.codigo; });
   (ST.entInsc||[]).forEach(e=>{
     if(e.evento!==eventoId) return;
     if((e.status||'pending')!=='approved') return;
-    (e.atletas||[]).forEach(a=>{ const r=_rutN(a.rut); if(r) m[r]=e.nombre||''; });
+    (e.atletas||[]).forEach(a=>{ const c=a.codigo||codDeRut[_rutN(a.rut)]; if(c) m[c]=e.nombre||''; });
   });
   return m;
+}
+// El código de una fila del cronograma (las de antes traían el RUT).
+function _codFila(r){
+  if(r.codigo)return r.codigo;
+  const k=_rutN(r.rut); if(!k)return '';
+  const i=(ST.inscripciones||[]).find(x=>_rutN(x.rut)===k);
+  return (i&&i.codigo)||'';
 }
 
 // Rellena la columna en un cronograma que YA está armado, sin rehacerlo: el
@@ -368,7 +399,7 @@ window.cronoTraerEntrenadores=async function(){
   }
   let puestos=0, distintos=0, sinRut=0;
   (ST.cronoRows||[]).forEach(r=>{
-    const k=_rutN(r.rut);
+    const k=_codFila(r);
     if(!k){ if(!r.entrenador)sinRut++; return; }
     const q=mapa[k]; if(!q) return;
     if(!String(r.entrenador||'').trim()){ r.entrenador=q; puestos++; }
@@ -378,7 +409,7 @@ window.cronoTraerEntrenadores=async function(){
   await cronoSaveDoc(); render();
   showToast(`Entrenador puesto en ${puestos} atleta(s)`
     +(distintos?` · ${distintos} ya tenían otro nombre escrito y se dejaron como estaban`:'')
-    +(sinRut?` · ${sinRut} sin RUT en el cronograma, no se pueden cruzar`:''));
+    +(sinRut?` · ${sinRut} sin código de atleta en el cronograma, no se pueden cruzar`:''));
   return {hay:true,puestos,distintos,sinRut};
 };
 
@@ -399,9 +430,9 @@ window.cronoLoadFromNomina=async function(){
   // y se escribe a mano.
   const _entPorRut=_entrenadorPorRut(ST.cronoEv);
   ST.cronoRows=list.map(i=>({
-    nombre:i.nombre||'', rut:i.rut||'', division:i.division||'', categoria:i.categoria||'', sexo:_sexoHM(i.sexo),
+    nombre:i.nombre||'', codigo:i.codigo||'', division:i.division||'', categoria:i.categoria||'', sexo:_sexoHM(i.sexo),
     club:i.club||'', modalidad:i.modalidad||'', tarima:'1', flight:(i.flight||'A'), jornada:'',
-    entrenador:_entPorRut[_rutN(i.rut)]||'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
+    entrenador:_entPorRut[i.codigo]||'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
   })).sort((a,b)=>String(a.flight).localeCompare(String(b.flight))||(a.nombre||'').localeCompare(b.nombre||''));
   await cronoSaveDoc();
   showToast('Cargados '+ST.cronoRows.length+' atletas desde la nómina');
@@ -426,9 +457,9 @@ window.cronoAddMissingFromNomina=async function(){
   if(!confirm('Agregar '+nuevos.length+' atleta(s) nuevo(s) al cronograma?\n\n'+nuevos.map(i=>'• '+i.nombre).join('\n')+'\n\nEntran en flight "A" sin jornada — los mueves a mano después. No toca a los que ya están ubicados.'))return;
   const _entPorRut=_entrenadorPorRut(ST.cronoEv);
   ST.cronoRows=(ST.cronoRows||[]).concat(nuevos.map(i=>({
-    nombre:i.nombre||'', rut:i.rut||'', division:i.division||'', categoria:i.categoria||'', sexo:_sexoHM(i.sexo),
+    nombre:i.nombre||'', codigo:i.codigo||'', division:i.division||'', categoria:i.categoria||'', sexo:_sexoHM(i.sexo),
     club:i.club||'', modalidad:i.modalidad||'', tarima:'1', flight:'A', jornada:'',
-    entrenador:_entPorRut[_rutN(i.rut)]||'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
+    entrenador:_entPorRut[i.codigo]||'', handler1:{nombre:'',correo:''}, handler2:{nombre:'',correo:''}
   })));
   await cronoSaveDoc();
   showToast('Agregados '+nuevos.length+' atleta(s) nuevo(s) al cronograma');

@@ -112,9 +112,8 @@ const TABLA = {
 
   // ── El panel ───────────────────────────────────────────────────
   {
-    // El falso compartido no trae createUserWithEmailAndPassword, que el panel importa.
+    // El falso compartido ya trae createUserWithEmailAndPassword, que el panel importa.
     const MODULOS = Object.assign({}, require('./apoyo/firebase_falso').MODULOS);
-    MODULOS['firebase-auth.js'] += '\n export const createUserWithEmailAndPassword=async()=>({user:{uid:"n"}});';
     const ctx = await b.newContext({ viewport: { width: 1300, height: 900 }, serviceWorkers: 'block' });
     await ctx.route(/^https?:\/\/(?!localhost)/, r => r.abort());
     await ctx.route('**/firebasejs/**', r => {

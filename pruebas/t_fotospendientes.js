@@ -52,8 +52,8 @@ const mods = (cache) => ({
     export const serverTimestamp=()=>0;
     export const writeBatch=()=>({set(){},update(){},delete(){},commit:async()=>{}});`,
   'firebase-storage.js': `
-    export const getStorage=()=>({}); export const ref=()=>({}); export const uploadBytes=async()=>({});
-    export const getDownloadURL=async()=>''; export const deleteObject=async()=>{}; export const listAll=async()=>({items:[],prefixes:[]});`,
+    export const getStorage=()=>({}); export const ref=(_s,p)=>({fullPath:p||''}); export const uploadBytes=async()=>({});
+    export const getDownloadURL=async r=>'https://s/o/'+encodeURIComponent((r&&r.fullPath)||'')+'?token=nuevo'; export const deleteObject=async()=>{}; export const listAll=async()=>({items:[],prefixes:[]});`,
   'firebase-functions.js': `export const getFunctions=()=>({}); export const httpsCallable=()=>async()=>({data:{}});`,
 });
 
@@ -167,6 +167,11 @@ const PADRON = [
       { id: 'evB_111111111', rut: '11111111-1', carnetPhotoURL: foto(9999) },
     ];
     const { ctx, p, errs } = await abrir(b, F2, false, PADRON.slice(0,1));
+    // La foto de la inscripción está en la carpeta privada de documentos: al
+    // confirmarla se baja y se publica una copia con el código (sin el RUT ni la
+    // llave del documento en el enlace). Se anota cuál se bajó.
+    const bajadas = [];
+    await ctx.route('https://s/**', r => { bajadas.push(r.request().url()); r.fulfill({ status: 200, contentType: 'image/webp', body: 'x' }); });
     const r = await p.evaluate(() => {
       ST.view = 'fotos'; render();
       const mostrada = (document.body.innerHTML.match(/carnetPhoto_(\d+)/) || [])[1];
@@ -179,8 +184,11 @@ const PADRON = [
       }));
     });
     ok(r.mostrada === String(T0 + 9999), 'la tarjeta muestra la última que subió');
-    const g = (r.guardada && r.guardada.foto_url || '').match(/carnetPhoto_(\d+)/);
-    ok(g && g[1] === String(T0 + 9999), 'y al confirmar se publica ESA misma, no la otra');
+    // (la tarjeta también la pide, para mostrarla: puede salir más de una vez)
+    ok(bajadas.length >= 1 && bajadas.every(u => u.includes('carnetPhoto_' + (T0 + 9999))), 'y al confirmar se publica ESA misma, no la otra');
+    const pub = (r.guardada && r.guardada.foto_url) || '';
+    ok(/athlete_photos%2FAAA-2025_/.test(pub) && !/athlete_files/.test(pub) && r.guardada.source_ref && !('source_url' in r.guardada) && !('rut' in r.guardada),
+      'publicada como copia por código: sin enlace a la carpeta de documentos ni RUT (' + pub.slice(0, 60) + ')');
     ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs[0] : ''));
     await ctx.close();
   }

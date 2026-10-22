@@ -68,7 +68,10 @@ console.log('\n  Las dos que faltaban están');
     const i = rules.indexOf('match /' + k + '/{');
     return rules.slice(i, rules.indexOf('}', rules.indexOf('write', i)));
   };
-  ok(/allow read: if true/.test(trozo('referees')), 'la corbata del juez se ve en su perfil público');
+  // La base de jueces trae el RUT: la lee solo el panel. La corbata del perfil
+  // público sale de la copia que arma el panel (publico/jueces, por código).
+  ok(/allow read: if veDatosPersonales\(\)/.test(trozo('referees')) && /match \/publico\/\{doc\} \{\s*allow read: if true;/.test(rules),
+    'la corbata del juez se ve en su perfil público (desde publico/jueces, sin RUT)');
   ok(/allow write: if isAdmin\(\)/.test(trozo('referees')), 'y la escribe solo el admin');
   ok(/allow write: if isAdmin\(\)/.test(trozo('nomina_cards')), 'la portada la sube solo el admin');
 }

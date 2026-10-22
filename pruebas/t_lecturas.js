@@ -174,7 +174,8 @@ const suma = (l, f) => l.filter(f).reduce((n, x) => n + x.n, 0);
     const l = await lecturas(p);
     ok(l.filter(x => x.col === 'atleta_fotos').length === 1, 'un solo oyente sobre atleta_fotos (antes, dos)');
     ok(suma(l, x => x.col === 'nomina_suda_fotos') === 0, 'en un campeonato de un país no se bajan las del Sudamericano');
-    const conFotos = await p.evaluate(() => Object.keys(window._ADMIN_FOTOS_BY_RUT || {}).length);
+    // Por código de atleta (el id del documento): las fotos ya no traen el RUT.
+    const conFotos = await p.evaluate(() => Object.keys(window._ADMIN_FOTOS_BY_COD || {}).length);
     ok(conFotos > 400, 'y las fotos llegan igual al panel (' + conFotos + ')');
     ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.join(' | ') : ''));
     await ctx.close();
@@ -188,7 +189,7 @@ const suma = (l, f) => l.filter(f).reduce((n, x) => n + x.n, 0);
     const r = await p.evaluate(() => {
       const n9 = () => ({ sq: [{ w: 100, r: null }, { w: 0, r: null }, { w: 0, r: null }], bp: [{ w: 0, r: null }, { w: 0, r: null }, { w: 0, r: null }], dl: [{ w: 0, r: null }, { w: 0, r: null }, { w: 0, r: null }] });
       DATA.event = { id: 'regional_centro_2026', name: 'Primavera Open' };
-      DATA.athletes = [1, 2, 3].map(i => ({ id: i, lot: 100 + i, name: 'Atleta ' + i, rut: String(10000000 + i) + '-1', born: '1990',
+      DATA.athletes = [1, 2, 3].map(i => ({ id: i, lot: 100 + i, name: 'Atleta ' + i, codigo: '100' + i + 'ATL-2020', born: '1990',
         flight: 'A', sex: 'Hombre', cat: '83', div: 'Open', mod: 'classic', bw: 82, club: 'X', country: 'CHI', bombed: false, att: n9() }));
       DATA.lift = 'sq'; DATA.round = 0; DATA.flight = 'A'; DATA.phase = 'compete';
       globalThis.__LEC = [];
@@ -205,7 +206,8 @@ const suma = (l, f) => l.filter(f).reduce((n, x) => n + x.n, 0);
     await p.waitForTimeout(600);
     l = await lecturas(p);
     ok(l.filter(x => x.col === 'inscripciones').length === 1, 'si a alguno le falta, se busca una sola vez');
-    const guardado = await p.evaluate(() => { try { return !!JSON.parse(localStorage.getItem('yl_nac_rut')).m; } catch (e) { return false; } });
+    // Por código de atleta: lo público ya no trae el RUT ni la fecha (solo el año).
+    const guardado = await p.evaluate(() => { try { return !!JSON.parse(localStorage.getItem('yl_nac_cod')).m; } catch (e) { return false; } });
     ok(guardado, 'y queda guardado en el equipo para la próxima recarga');
     ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.join(' | ') : ''));
     await ctx.close();
@@ -265,8 +267,10 @@ const suma = (l, f) => l.filter(f).reduce((n, x) => n + x.n, 0);
   {
     const { p, ctx, errs } = await abrir(b, `http://localhost:${PUERTO}/inscripcion.html`);
     await p.evaluate(() => {
-      window.__FAKE.inscripciones.push({ id: 'previa', evento: 'regional_sur_austral_2026', status: 'approved', rut: '34446039-6' });
-      window.__FAKE.atleta_fotos.push({ id: 'X1', rut: '34446039-6', foto_url: 'foto.jpg' });
+      // Lo público va por código de atleta; rut_indice dice de quién es el RUT.
+      (window.__FAKE.rut_indice = window.__FAKE.rut_indice || []).push({ id: '344460396', codigo: '3444XYZ-2024' });
+      window.__FAKE.inscripciones.push({ id: 'previa', evento: 'regional_sur_austral_2026', status: 'approved', codigo: '3444XYZ-2024' });
+      window.__FAKE.atleta_fotos.push({ id: '3444XYZ-2024', codigo: '3444XYZ-2024', foto_url: 'foto.jpg' });
     });
     await p.waitForFunction(() => typeof firebaseReady !== 'undefined' && firebaseReady, null, { timeout: 20000 });
     await p.waitForTimeout(1500);
@@ -277,8 +281,10 @@ const suma = (l, f) => l.filter(f).reduce((n, x) => n + x.n, 0);
     await p.waitForTimeout(700);
     l = await lecturas(p);
     const suyas = l.filter(x => x.col === 'inscripciones' || x.col === 'atleta_fotos');
-    ok(suyas.length === 2 && suyas.every(x => (x.filtros || []).some(f => f.op === 'in')),
-       'con el RUT completo pide sus inscripciones y su foto, filtradas por RUT');
+    ok(l.some(x => x.col === 'rut_indice' && x.op === 'getDoc') && suyas.length === 2
+       && suyas.some(x => x.col === 'inscripciones' && (x.filtros || []).some(f => f.campo === 'codigo' && f.val === '3444XYZ-2024'))
+       && suyas.some(x => x.col === 'atleta_fotos' && x.op === 'getDoc'),
+       'con el RUT completo pregunta su código a rut_indice y pide sus inscripciones y su foto por código');
     ok(suma(suyas, () => true) === 2, 'y lee solo lo suyo (' + suma(suyas, () => true) + ')');
     const r = await p.evaluate(() => ({ insc: insActDB.length, foto: atletaTieneFoto('34446039-6') }));
     ok(r.insc === 1 && r.foto, 'y el aviso y la foto quedan con sus datos');

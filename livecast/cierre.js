@@ -132,12 +132,12 @@ async function cerrarCompetencia(evId, evName){
       const esUni=/univ/i.test(String(a.div||''));
       if(esUni&&view==='meet'&&!isOE) modLabel = 'Powerlifting Classic Universitario';
 
-      // Código y RUT: los del atleta, o los de su ficha en la base si no los trae.
-      const ficha = (a.codigo&&a.rut) ? null : _cierreFicha(a);
+      // El código: el del atleta, o el de su ficha en la base si no lo trae. El
+      // RUT no va: los resultados se leen sin sesión (perfil, ranking).
+      const ficha = a.codigo ? null : _cierreFicha(a);
       const codigo = a.codigo || (ficha&&ficha.codigo) || '';
-      const rut = a.rut || (ficha&&ficha.rut) || '';
-      // Doc ID determinístico: {eventoId}_{codigo o rut}_{view}
-      const codeKey = (codigo || rut || a.id || 'unknown').toString().replace(/[^a-zA-Z0-9_-]/g,'_');
+      // Doc ID determinístico: {eventoId}_{codigo o n° del atleta}_{view}
+      const codeKey = (codigo || a.id || 'unknown').toString().replace(/[^a-zA-Z0-9_-]/g,'_');
       const docId = `${evId}_${codeKey}_${view}${esUni?'_uni':''}`;
 
       const payload = {
@@ -145,7 +145,6 @@ async function cerrarCompetencia(evId, evName){
         evento_id: evId,
         fecha: today,
         codigo: codigo,
-        rut: rut,
         nombre: a.name || '',
         club: a.club || '',
         sexo: a.sex || '',

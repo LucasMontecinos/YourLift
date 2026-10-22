@@ -25,13 +25,15 @@ function _applyNominas(all){
         .map((i,idx)=>{
           const inscClub=i.club==='Otro'?i.clubOtro:i.club||'';
           const base={
-            id:i.id,nombre:i.nombre,rut:i.rut||'',sexo:i.sexo||'',codigo:i.codigo||'',
-            dob:i.fechaNac||'',fechaNac:i.fechaNac||'',division:i.division||'',categoria:i.categoria||'',
+            // Sin RUT ni fecha completa: la inscripción pública trae el código
+            // de atleta y el año de nacimiento (compartido/privacidad.js).
+            id:i.id,nombre:i.nombre,sexo:i.sexo||'',codigo:i.codigo||'',
+            born:i.anioNac||(String(i.fechaNac||'').match(/\d{4}/)||[''])[0],division:i.division||'',categoria:i.categoria||'',
             modalidad:i.modalidad||'',club:inscClub,
             universidad:i.universidad||'',status:i.status,
             sortOrder:idx+1,flight:i.flight||''
           };
-          // Overlay: aplicar ediciones del admin (nombre, código, etc.) por RUT.
+          // Overlay: aplicar ediciones del admin (nombre, club, etc.) por código.
           const out=applyEditOverlay(base);
           // El club de la INSCRIPCIÓN manda en la nómina: si el atleta se cambió
           // de club para este evento, no dejar que el overlay del perfil lo pise.

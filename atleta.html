@@ -1,6 +1,6 @@
 ﻿<!DOCTYPE html>
 <html lang="es">
-<head><script async src="https://www.googletagmanager.com/gtag/js?id=G-109D5LTPQ7"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-109D5LTPQ7');</script>
+<head><script async src="https://www.googletagmanager.com/gtag/js?id=G-109D5LTPQ7"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-109D5LTPQ7',{allow_google_signals:false,allow_ad_personalization_signals:false});</script>
 <meta charset="UTF-8">
 <script src="compartido/idioma.js?v=e6ba1ebd"></script>
 <script src="compartido/app.js?v=2f2dab5a"></script>
@@ -102,7 +102,8 @@ html.embedded{scrollbar-width:none;-ms-overflow-style:none}
   <a href="ranking.html" class="rank"><i class=yl-i-trofeo></i> Ranking</a>
 </div>
 <script src="compartido/clubs.js?v=2e5524c1"></script>
-<script src="compartido/ediciones.js?v=477f1b0a"></script>
+<script src="compartido/privacidad.js?v=150cbfb7"></script>
+<script src="compartido/ediciones.js?v=51d01fed"></script>
 
 <div class="wrap">
   <div id="searchSection">
@@ -254,41 +255,42 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
     // coinciden en tildes ni en el orden de los apellidos.
     const cEnt=_aC('atl_entren',30*60*1000);
     const _applyEntren=docs=>{
-      const soloNum=r=>String(r||'').replace(/[^0-9kK]/g,'').toUpperCase();
-      const porRut={};
-      // Por código de atleta (codigoAtleta, que anota el panel) o por RUT: el
-      // padrón público ya no trae el RUT (compartido/privacidad.js).
+      // Por código de atleta (codigoAtleta, que anota el panel): ni el padrón
+      // público ni la copia de entrenadores traen el RUT (compartido/privacidad.js).
       const porCod={};
-      docs.forEach(e=>{ if(e&&e.rut) porRut[soloNum(e.rut)]=e; if(e&&e.codigoAtleta) porCod[e.codigoAtleta]=e; });
+      docs.forEach(e=>{ if(e&&e.codigoAtleta) porCod[e.codigoAtleta]=e; });
       (DB||[]).forEach(a=>{
-        const e=porCod[a.codigo]||(a.rut?porRut[soloNum(a.rut)]:null);
+        const e=porCod[a.codigo];
         if(e) a.entrenadorCat=e.categoria||'';
       });
       if(window._curCodigo)showProfile(window._curCodigo);
     };
     if(cEnt){_conDB(()=>_applyEntren(cEnt));}
-    else{fb.getDocs(fb.collection(db,'entrenadores')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_entren',docs);_conDB(()=>_applyEntren(docs));});}
+    // La base de entrenadores es del panel (trae RUT y correos): el sitio lee la
+    // copia pública, publico/entrenadores, que solo tiene nombre, club,
+    // categoría y código de atleta.
+    else{fb.getDoc(fb.doc(db,'publico','entrenadores')).then(d=>{const docs=(d&&d.exists&&d.exists()&&(d.data()||{}).lista)||[];_aSC('atl_entren',docs);_conDB(()=>_applyEntren(docs));}).catch(()=>{});}
 
     // Jueces: getDocs + caché 30min.
     //
     // Muchos jueces compiten, así que su ficha es la de un atleta cualquiera. Se
     // les marca la categoría igual que a los entrenadores, y con la corbata que
-    // los distingue en la tarima. Se cruza por RUT, por lo mismo de siempre: los
-    // nombres no coinciden entre una base y otra.
+    // los distingue en la tarima. Se cruza por código de atleta (el panel lo
+    // anota cruzando por RUT): los nombres no coinciden entre una base y otra.
     const cRef=_aC('atl_ref',30*60*1000);
     const _applyRef=docs=>{
-      const soloNum=r=>String(r||'').replace(/[^0-9kK]/g,'').toUpperCase();
-      const porRut={};
       const porCod={};
-      docs.forEach(r=>{ if(r&&r.rut) porRut[soloNum(r.rut)]=r; if(r&&r.codigoAtleta) porCod[r.codigoAtleta]=r; });
+      docs.forEach(r=>{ if(r&&r.codigoAtleta) porCod[r.codigoAtleta]=r; });
       (DB||[]).forEach(a=>{
-        const j=porCod[a.codigo]||(a.rut?porRut[soloNum(a.rut)]:null);
+        const j=porCod[a.codigo];
         if(j) a.juez={categoria:j.categoria||'',ambito:j.ambito||'nacional'};
       });
       if(window._curCodigo)showProfile(window._curCodigo);
     };
     if(cRef){_conDB(()=>_applyRef(cRef));}
-    else{fb.getDocs(fb.collection(db,'referees')).then(snap=>{const docs=snap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_ref',docs);_conDB(()=>_applyRef(docs));}).catch(()=>{});}
+    // Igual que los entrenadores: la copia pública de la base de jueces
+    // (publico/jueces), por código de atleta y sin RUT.
+    else{fb.getDoc(fb.doc(db,'publico','jueces')).then(d=>{const docs=(d&&d.exists&&d.exists()&&(d.data()||{}).lista)||[];_aSC('atl_ref',docs);_conDB(()=>_applyRef(docs));}).catch(()=>{});}
 
     // Resultados de competencias cerradas en livecast (en vivo, sin redeploy).
     // Mergea cada doc en el atleta correspondiente como nueva competencia.
@@ -369,22 +371,19 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
     // Merge debutant athletes from Firestore (inscribed but not yet in data.json)
     if(_fbDB && _fbMod){
       try{
-        const rutNorm=s=>String(s||'').replace(/[^0-9kK]/g,'').toLowerCase();
         // atletas_pending: getDocs + caché 30min
         let pendDocs=_aC('atl_pend',30*60*1000);
         if(!pendDocs){const pendSnap=await _fbMod.getDocs(_fbMod.collection(_fbDB,'atletas_pending'));pendDocs=pendSnap.docs.map(d=>({...d.data(),id:d.id}));_aSC('atl_pend',pendDocs);}
         pendDocs.forEach(pd=>{
           if(!pd.nombre||!pd.codigo) return;
-          // Por código o por RUT: el padrón público ya no trae el RUT (compartido/privacidad.js).
-          if(DB.find(a=>a.codigo===pd.codigo||(a.rut&&rutNorm(a.rut)===rutNorm(pd.rut)))) return;
-          let fn=pd.fechaNac||'';
-          const fm=fn.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-          if(fm) fn=`${fm[3]}/${fm[2]}/${fm[1]}`;
-          const insc=INSC.find(i=>rutNorm(i.rut)===rutNorm(pd.rut));
+          // Por código: lo público ya no trae el RUT ni la fecha de nacimiento
+          // (compartido/privacidad.js), solo el año.
+          if(DB.find(a=>a.codigo===pd.codigo)) return;
+          const insc=INSC.find(i=>i.codigo===pd.codigo);
           const ev=insc?NOM_EVENTS.find(e=>e.id===insc.evento):null;
           DB.push({
-            codigo:pd.codigo, rut:pd.rut, nombre:pd.nombre,
-            fechaNac:fn, club:pd.club||'', debut:String(new Date().getFullYear()),
+            codigo:pd.codigo, nombre:pd.nombre,
+            anioNac:pd.anioNac||'', club:pd.club||'', debut:String(new Date().getFullYear()),
             zona:pd.zona||'', _pending:true,
             competencias: insc?[{
               evento:ev?.name||insc.evento||'',
@@ -569,16 +568,9 @@ function fechaOrden(c){
 // ── Lo propio del atleta que se está mirando ───────────────────────────────
 // Antes cada visita a una ficha bajaba las 712 inscripciones y las ~500 fotos de
 // Firestore para mostrar las de UNA persona: era la mitad de las lecturas de la
-// página. Ahora se piden solo las suyas, por código y por RUT. Las inscripciones
-// guardan el RUT como 12345678-9, pero alguna vieja trae puntos o viene sin
-// guion, así que se pregunta por todas las formas de escribirlo.
+// página. Ahora se piden solo las suyas, por código de atleta (lo público ya no
+// trae el RUT).
 const _PROPIO={};
-function _formasRut(r){
-  const n=String(r||'').replace(/[^0-9kK]/g,'').toUpperCase();
-  if(n.length<2)return [];
-  const c=n.slice(0,-1), dv=n.slice(-1), p=c.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
-  return [...new Set([c+'-'+dv, p+'-'+dv, n, c+'-'+dv.toLowerCase(), p+'-'+dv.toLowerCase(), n.toLowerCase()])];
-}
 // La foto de Firestore manda sobre la de data.json, como antes: es la que se
 // cambia desde el panel.
 function _aplicarPropio(a,d){
@@ -591,20 +583,17 @@ async function _cargarPropio(a){
   const g=_aC('atl_p_'+cod,30*60*1000);
   if(g){_PROPIO[cod]=g;_aplicarPropio(a,g);return;}
   _PROPIO[cod]={cargando:true};
-  const fb=_fbMod, db=_fbDB, formas=_formasRut(a.rut);
+  const fb=_fbMod, db=_fbDB;
   const q=(col,campo,op,val)=>fb.getDocs(fb.query(fb.collection(db,col),fb.where(campo,op,val))).catch(()=>null);
   try{
-    const [i1,i2,f1,f2]=await Promise.all([
+    const [i1,f1]=await Promise.all([
       q('inscripciones','codigo','==',cod),
-      formas.length?q('inscripciones','rut','in',formas):null,
       fb.getDoc(fb.doc(db,'atleta_fotos',cod)).catch(()=>null),
-      formas.length?q('atleta_fotos','rut','in',formas):null,
     ]);
     const insc={};
-    [i1,i2].forEach(s=>{ if(s)s.docs.forEach(d=>{insc[d.id]=Object.assign({id:d.id},d.data());}); });
+    if(i1)i1.docs.forEach(d=>{insc[d.id]=Object.assign({id:d.id},d.data());});
     const fotos=[];
     if(f1&&f1.exists())fotos.push(f1.data());
-    if(f2)f2.docs.forEach(d=>fotos.push(d.data()));
     const conFoto=fotos.find(x=>x&&x.foto_url);
     const d={insc:Object.values(insc),foto:conFoto?conFoto.foto_url:null};
     _PROPIO[cod]=d;

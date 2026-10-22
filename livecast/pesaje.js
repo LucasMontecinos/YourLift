@@ -66,9 +66,9 @@ function confirmAddAthlete(){
   R();
 }
 
-function _rutKey(r){ return String(r||'').replace(/[^0-9kK]/gi,'').toUpperCase(); }
+function _codKey(c){ return String(c||'').replace(/[^A-Za-z0-9-]/g,'').toUpperCase(); }
 
-function _adminFotoFor(a){ const r=_rutKey(a&&a.rut); return (r&&window._ADMIN_FOTOS_BY_RUT[r])||null; }
+function _adminFotoFor(a){ const c=_codKey(a&&a.codigo); return (c&&window._ADMIN_FOTOS_BY_COD[c])||null; }
 
 function _nsudaSlugLC(s){
   return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -138,9 +138,11 @@ function _cargarFotosSuda(){
   }catch(e){console.warn('[livecast] nomina_suda_fotos:',e.message);}
 }
 
+// El id del documento se ve al listar atleta_fotos: va por código de atleta,
+// nunca por RUT.
 function _mediaKey(a){
-  const rut=String((a&&a.rut)||'').replace(/[^0-9kK]/gi,'').toUpperCase();
-  if(rut) return 'lc_rut_'+rut;
+  const cod=_codKey(a&&a.codigo);
+  if(cod) return 'lc_cod_'+cod;
   const nm=String((a&&a.name)||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
   return 'lc_'+_ctry(a).toLowerCase()+'_'+nm;
 }
@@ -174,13 +176,14 @@ function _setupLcMediaListener(){
 }
 
 // La foto o GIF propio del livecast (docs lc_*) y la foto aprobada en el panel,
-// por RUT. Sale del mismo oyente de atleta_fotos que las fotos del padrón.
+// por código de atleta (el id del documento). Sale del mismo oyente de
+// atleta_fotos que las fotos del padrón.
 function _fotosAlLivecast(snap){
   snap.docs.forEach(d=>{
     const data=d.data();
     if(String(d.id).indexOf('lc_')===0){ window._LC_MEDIA[d.id]=data; return; }
-    const r=_rutKey(data.rut);
-    if(r&&data.foto_url&&data.status!=='rejected')window._ADMIN_FOTOS_BY_RUT[r]={foto_url:data.foto_url};
+    const c=_codKey(data.codigo||d.id);
+    if(c&&data.foto_url&&data.status!=='rejected')window._ADMIN_FOTOS_BY_COD[c]={foto_url:data.foto_url};
   });
 }
 

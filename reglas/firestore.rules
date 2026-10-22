@@ -38,6 +38,34 @@ service cloud.firestore {
              get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'owner';
     }
 
+    // DATOS PERSONALES (Ley 21.719). Las cuentas de la transmisión, la mesa
+    // técnica y los jueces son admin para lo que necesitan en competencia, pero
+    // no ven RUT, fechas de nacimiento, documentos ni contactos: no lo usan, y
+    // esas cuentas se comparten y se quedan abiertas en equipos del evento.
+    function veDatosPersonales() {
+      return isAdmin() &&
+             !(get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('role', '')
+               in ['streaming', 'transmision', 'mesa', 'juez']);
+    }
+
+    // Lo que nunca va en un documento que se lee sin sesión. La lista es la de
+    // compartido/privacidad.js (YLPrivacidad.INSC_PRIVADOS).
+    function camposPersonales() {
+      return ['rut', 'fechaNac', 'fechanac', 'fechanacimiento', 'dob', 'comuna',
+              'declaraMayorFecha', 'carnetName', 'wadeName', 'correo', 'email',
+              'correos', 'telefono', 'fono', 'celular', 'pin'];
+    }
+    // Al crear: no trae ninguno.
+    function creaSinPersonales() {
+      return !request.resource.data.keys().hasAny(camposPersonales());
+    }
+    // Al modificar: no agrega ni cambia ninguno (sí puede quitarlos: así se
+    // migran los documentos de antes, que los traían).
+    function modificaSinPersonales() {
+      return !request.resource.data.diff(resource.data).addedKeys().hasAny(camposPersonales())
+          && !request.resource.data.diff(resource.data).changedKeys().hasAny(camposPersonales());
+    }
+
     function isCoach() {
       return isSignedIn() &&
              exists(/databases/$(database)/documents/coaches/$(request.auth.uid));
@@ -130,18 +158,26 @@ service cloud.firestore {
     // Lo que tiene que cumplir una inscripción enviada desde el formulario público.
     // Se saca aparte porque ahora se usa en dos lugares: al inscribirse por primera
     // vez y al volver a inscribirse después de un rechazo.
+    //
+    // La inscripción se lee sin sesión (nóminas, livecast, perfil): identifica al
+    // atleta por su CÓDIGO, y el RUT, la fecha de nacimiento, la comuna y lo
+    // demás personal van en inscripciones_private. El id es {evento}_{código}.
     function inscripcionValida() {
       return request.resource.data.status == 'pending'
           && request.resource.data.nombre is string
           && request.resource.data.nombre.size() > 2
-          && request.resource.data.rut is string
+          && request.resource.data.codigo is string
+          && request.resource.data.codigo.size() > 3
           && request.resource.data.evento is string
-          && !request.resource.data.keys().hasAny(['pin','carnetURL','wadeURL','carnetPhotoURL']);
+          && creaSinPersonales()
+          && !request.resource.data.keys().hasAny(['carnetURL','wadeURL','carnetPhotoURL']);
     }
 
     match /inscripciones/{id} {
       allow read: if true;
-      allow create: if isAdmin() || inscripcionValida();
+      // También el admin: nada personal en la inscripción pública. Si algún
+      // camino del panel se olvidara de separarlo, Firestore lo rechaza.
+      allow create: if (isAdmin() && creaSinPersonales()) || inscripcionValida();
 
       // VOLVER A INSCRIBIRSE DESPUÉS DE UN RECHAZO.
       //
@@ -157,20 +193,21 @@ service cloud.firestore {
       // inscripción válida. Una inscripción pendiente o aprobada sigue sin poder
       // tocarse desde afuera: para eso está "Editar mi inscripción", que pasa por
       // el admin con el PIN.
-      allow update: if isAdmin()
+      allow update: if (isAdmin() && modificaSinPersonales())
                     || (resource.data.status == 'rejected' && inscripcionValida());
       allow delete: if isAdmin();
     }
 
     function datosPrivadosValidos() {
-      return request.resource.data.keys().hasOnly(['pin','rut','correo','carnetURL','carnetBackURL','wadeURL','carnetPhotoURL','consentimientoURL','passportURL','ipfConsentURL','notasURL','docs','ts'])
+      return request.resource.data.keys().hasOnly(['pin','rut','correo','fechaNac','comuna','declaraMayorFecha','carnetName','wadeName',
+                                                   'carnetURL','carnetBackURL','wadeURL','carnetPhotoURL','consentimientoURL','passportURL','ipfConsentURL','notasURL','docs','ts'])
           && request.resource.data.pin is string
           && request.resource.data.pin.size() == 4;
     }
 
     match /inscripciones_private/{id} {
-      allow read: if isAdmin();
-      allow create: if datosPrivadosValidos();
+      allow read: if veDatosPersonales();
+      allow create: if isAdmin() || datosPrivadosValidos();
 
       // La otra mitad de volver a inscribirse: los dos documentos se escriben en
       // la misma transacción, así que si uno se permite y el otro no, no se
@@ -218,11 +255,14 @@ service cloud.firestore {
           // uno dejaría el formulario imposible de enviar.
           && (request.resource.data.evento == ''
               || request.resource.data.atletas.size() >= 1)
-          && !request.resource.data.keys().hasAny(['pin','correo','telefono','docs']);
+          && !request.resource.data.keys().hasAny(['pin','correo','telefono','docs','rut']);
     }
     match /inscripciones_entrenador/{id} {
-      // Se lee sin sesión: de acá sale la nómina pública de entrenadores.
-      allow read: if true;
+      // El id lleva el RUT del entrenador ({formulario}_{rut}): se puede leer de
+      // a uno (el formulario mira si ya se inscribió) pero no listar. La nómina
+      // pública sale de publico/entrenadores_nomina, que arma el panel.
+      allow get: if true;
+      allow list: if veDatosPersonales();
       allow create: if isAdmin() || inscEntrenadorValida();
       // Volver a inscribirse después de un rechazo, igual que el atleta.
       allow update: if isAdmin()
@@ -238,8 +278,8 @@ service cloud.firestore {
           && request.resource.data.pin.size() == 4;
     }
     match /inscripciones_entrenador_priv/{id} {
-      allow read: if isAdmin();
-      allow create: if datosEntrenadorValidos();
+      allow read: if veDatosPersonales();
+      allow create: if isAdmin() || datosEntrenadorValidos();
       // Los dos documentos se escriben en la misma transacción: si uno se
       // permitiera y el otro no, no se guardaría ninguno.
       allow update: if isAdmin()
@@ -249,7 +289,7 @@ service cloud.firestore {
     }
 
     match /edit_requests/{id} {
-      allow read, update, delete: if isAdmin();
+      allow read, update, delete: if veDatosPersonales();
       allow create: if request.resource.data.keys().hasAll(['inscripcionId','rut','pin','changes','status','ts'])
                     && request.resource.data.keys().hasOnly(['inscripcionId','rut','pin','changes','status','ts'])
                     && request.resource.data.inscripcionId is string
@@ -261,7 +301,7 @@ service cloud.firestore {
     }
 
     match /coaches/{uid} {
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      allow read: if veDatosPersonales() || (isSignedIn() && request.auth.uid == uid);
       allow write: if isAdmin();
     }
 
@@ -274,21 +314,37 @@ service cloud.firestore {
     //     documento (hay que saber el RUT) pero NO se lista: nadie puede bajar
     //     la lista completa. Ver compartido/privacidad.js.
     match /privado/{doc} {
-      allow read, write: if isAdmin();
+      allow read, write: if veDatosPersonales();
     }
+    // rut_indice/{rut} → {codigo}. Solo el código: quien sabe un RUT ajeno no
+    // se entera de la fecha de nacimiento ni de nada más. El formulario crea el
+    // del atleta NUEVO al inscribirse (una vez: no se puede pisar).
     match /rut_indice/{rut} {
       allow get: if true;
       allow list: if false;
-      allow write: if isAdmin();
+      allow create: if isAdmin()
+                    || (request.resource.data.keys().hasOnly(['codigo', 'nuevo'])
+                        && request.resource.data.codigo is string
+                        && request.resource.data.codigo.size() > 3
+                        && request.resource.data.codigo.size() < 40);
+      allow update, delete: if isAdmin();
     }
 
+    // Las ediciones del padrón se leen sin sesión (todas las páginas las pegan
+    // sobre data.json): sin RUT ni fecha, ni en el id. Lo privado va en
+    // athlete_edits_priv, con el mismo id.
     match /athlete_edits/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if isAdmin() && creaSinPersonales();
+      allow update: if isAdmin() && modificaSinPersonales();
+      allow delete: if isAdmin();
+    }
+    match /athlete_edits_priv/{id} {
+      allow read, write: if veDatosPersonales();
     }
 
     match /audit_log/{id} {
-      allow read: if isAdmin();
+      allow read: if veDatosPersonales();
       allow create: if isAdmin();
       allow update, delete: if false;
     }
@@ -306,7 +362,8 @@ service cloud.firestore {
 
     match /competition_results/{id} {
       allow read: if true;
-      allow create, update: if isAdmin();
+      allow create: if isAdmin() && creaSinPersonales();
+      allow update: if isAdmin() && modificaSinPersonales();
       allow delete: if isAdmin();
     }
 
@@ -334,18 +391,30 @@ service cloud.firestore {
 
     match /atleta_fotos/{codigo} {
       allow read: if true;
-      allow write, delete: if isAdmin();
+      allow create: if isAdmin() && creaSinPersonales();
+      allow update: if isAdmin() && modificaSinPersonales();
+      allow delete: if isAdmin();
     }
 
-    match /atletas_pending/{rut} {
+    // Los debutantes (inscritos que todavía no están en data.json), por código:
+    // nombre, club, año. El RUT y la fecha completa, en atletas_pending_priv.
+    // Los de antes estaban por RUT y con esos datos: la migración los pasa.
+    match /atletas_pending/{cod} {
       allow read: if true;
-      allow create: if isAdmin() || (
-                       request.resource.data.keys().hasAll(['nombre','rut','codigo','sexo','debut'])
+      allow create: if (isAdmin() && creaSinPersonales()) || (
+                       request.resource.data.keys().hasOnly(['nombre','codigo','sexo','anioNac','club','zona','debut','inscripcion_evento','ts'])
                     && request.resource.data.nombre is string
                     && request.resource.data.nombre.size() > 2
-                    && request.resource.data.rut is string
+                    && request.resource.data.codigo == cod
                     );
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() && modificaSinPersonales();
+      allow delete: if isAdmin();
+    }
+    match /atletas_pending_priv/{cod} {
+      allow read, update, delete: if veDatosPersonales();
+      allow create: if isAdmin() || (
+                       request.resource.data.keys().hasOnly(['rut','fechaNac','ts'])
+                    && request.resource.data.rut is string);
     }
 
     match /atleta_achievements/{codigo} {
@@ -367,34 +436,62 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+    // Los correos de los handlers del cronograma (el público ve solo nombres).
+    match /cronograma_priv/{evento} {
+      allow read, write: if veDatosPersonales();
+    }
 
     match /handlers/{id} {
       allow read: if true;
       allow write: if isSignedIn();
+    }
+    // Los correos de los handlers que anota un entrenador: los ve el panel y el
+    // mismo entrenador que los escribió.
+    match /handlers_priv/{id} {
+      allow read: if veDatosPersonales() || (isSignedIn() && resource.data.by == request.auth.uid);
+      allow create: if veDatosPersonales() || (isSignedIn() && request.resource.data.by == request.auth.uid);
+      allow update: if veDatosPersonales() || (isSignedIn() && resource.data.by == request.auth.uid
+                    && request.resource.data.by == request.auth.uid);
+      allow delete: if isAdmin();
     }
 
     match /coach_links/{uid} {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
     }
 
+    // La base de entrenadores es por RUT y trae correos: solo el panel. El sitio
+    // lee la copia pública (publico/entrenadores) y el formulario de entrenador
+    // reconoce a quien escribe SU RUT en entrenadores_indice/{rut} (nombre,
+    // club, categoría y vencimiento de la acreditación; sin correos).
     match /entrenadores/{rut} {
-      allow read: if true;
+      allow read: if veDatosPersonales();
       allow write: if isAdmin();
+    }
+    match /entrenadores_indice/{rut} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Copias públicas que arma el panel (admin/privados.js): entrenadores,
+    // jueces y la nómina de entrenadores, sin RUT ni correos.
+    match /publico/{doc} {
+      allow read: if true;
+      allow write: if isAdmin() && creaSinPersonales();
     }
 
     // Base de jueces del panel, guardada por RUT. Es APARTE de `jueces`, que son
     // las cuentas con las que un juez marca las luces desde el teléfono.
     //
-    // Se lee en público porque la ficha del atleta muestra la corbata con su
-    // categoría — y eso es todo lo que sale afuera: acá no se guardan ni correos
-    // ni teléfonos, por lo mismo que la base de jueces del repositorio tampoco
-    // los trae. Escribe solo el admin.
+    // Solo la lee el panel: la ficha del atleta muestra la corbata con su
+    // categoría desde la copia pública (publico/jueces), por código de atleta y
+    // sin RUT. Escribe solo el admin.
     //
     // Faltaba, y por eso la importación de la planilla de FECHIPO agregaba cero
     // jueces: sin un match propio caía en el `allow read, write: if false` del
     // final y Firestore rechazaba las 39 escrituras, una por una.
     match /referees/{rut} {
-      allow read: if true;
+      allow read: if veDatosPersonales();
       allow write: if isAdmin();
     }
 
@@ -440,7 +537,7 @@ service cloud.firestore {
     }
 
     match /cert_requests/{id} {
-      allow read, update, delete: if isAdmin();
+      allow read, update, delete: if veDatosPersonales();
       allow create: if request.resource.data.status == 'pending'
                     && request.resource.data.nombre is string
                     && request.resource.data.nombre.size() > 1
@@ -484,6 +581,30 @@ service cloud.firestore {
     match /sugerencias/{id} {
       allow read, delete: if isAdmin();
       allow create: if true;
+    }
+
+    // SOLICITUDES SOBRE DATOS PERSONALES (Ley 21.719: acceso, rectificación,
+    // supresión, oposición, portabilidad, bloqueo). Cualquiera puede enviar una
+    // desde yourlift.cl; solo el panel las lee y las responde. Llega con lo justo
+    // para identificar al titular y contestarle.
+    match /solicitudes_datos/{id} {
+      allow read, update, delete: if veDatosPersonales();
+      allow create: if request.resource.data.keys().hasOnly(['tipo','nombre','rut','correo','detalle','status','ts'])
+                    && request.resource.data.tipo in ['acceso','rectificacion','supresion','oposicion','portabilidad','bloqueo']
+                    && request.resource.data.nombre is string && request.resource.data.nombre.size() > 2
+                    && request.resource.data.nombre.size() < 120
+                    && request.resource.data.rut is string && request.resource.data.rut.size() < 15
+                    && request.resource.data.correo is string && request.resource.data.correo.matches('.+@.+[.].+')
+                    && request.resource.data.correo.size() < 120
+                    && request.resource.data.detalle is string && request.resource.data.detalle.size() < 2000
+                    && request.resource.data.status == 'recibida';
+    }
+
+    // Registro de incidentes de seguridad (vulneraciones): qué pasó, qué datos,
+    // a cuántos afectó, qué se hizo y cuándo se avisó a la Agencia y a los
+    // titulares. Solo el panel.
+    match /incidentes/{id} {
+      allow read, write: if veDatosPersonales();
     }
 
     match /{document=**} {

@@ -320,28 +320,30 @@ const LEER = `(() => {
     // Ésta es la razón para que los entrenadores se inscriban por acá en TODOS
     // los campeonatos y no solo en uno: la columna Entrenador del cronograma se
     // escribía a mano, fila por fila, y es exactamente el dato que el entrenador
-    // ya declaró al inscribirse. Se cruza por RUT.
+    // ya declaró al inscribirse. Se cruza por código de atleta: el entrenador
+    // elige a sus atletas de la nómina pública, que ya no trae el RUT. Las
+    // inscripciones de entrenador de antes los traían por RUT: se traducen al
+    // código con las inscripciones de los atletas (el panel tiene los dos).
     const r = await p.evaluate(() => {
       ST.feForm = null; ST.view = 'cronograma'; ST.cronoEv = 'oe';
+      ST.inscripciones = [{ id: 'i1', rut: '11.111.111-1', codigo: '1111ASO-2020' }, { id: 'i2', rut: '22222222-2', codigo: '2222BDI-2020' },
+        { id: 'i3', rut: '33.333.333-3', codigo: '3333CVE-2020' }, { id: 'i4', rut: '44.444.444-4', codigo: '4444DPA-2020' }];
       ST.entInsc = [
         { id: 'a', evento: 'oe', status: 'approved', nombre: 'Marta Fuentes',
-          atletas: [{ rut: '11.111.111-1', nombre: 'Ana Soto' }, { rut: '22222222-2', nombre: 'Bruno Díaz' }] },
+          atletas: [{ codigo: '1111ASO-2020', nombre: 'Ana Soto' }, { rut: '22.222.222-2', nombre: 'Bruno Díaz' }] },
         // Pendiente: todavía la revisa la organización, no puede escribir el cronograma.
         { id: 'b', evento: 'oe', status: 'pending', nombre: 'Pedro Pendiente',
-          atletas: [{ rut: '33.333.333-3', nombre: 'Carla Vera' }] },
+          atletas: [{ codigo: '3333CVE-2020', nombre: 'Carla Vera' }] },
         // De otro campeonato: no se mezcla.
         { id: 'c', evento: 'otro', status: 'approved', nombre: 'Ajeno Ruiz',
-          atletas: [{ rut: '44.444.444-4', nombre: 'Dani Paz' }] },
+          atletas: [{ codigo: '4444DPA-2020', nombre: 'Dani Paz' }] },
       ];
       const m = _entrenadorPorRut('oe');
-      return { m,
-        // El RUT se cruza normalizado: en la inscripción viene con puntos y en el
-        // cronograma puede venir sin ellos.
-        conPuntos: m['111111111'], sinPuntos: m['222222222'],
-        pendiente: m['333333333'], ajeno: m['444444444'] };
+      return { m, porCodigo: m['1111ASO-2020'], porRutViejo: m['2222BDI-2020'],
+        pendiente: m['3333CVE-2020'], ajeno: m['4444DPA-2020'] };
     });
-    ok(r.conPuntos === 'Marta Fuentes' && r.sinPuntos === 'Marta Fuentes',
-       'cruza el RUT venga con puntos o sin ellos');
+    ok(r.porCodigo === 'Marta Fuentes' && r.porRutViejo === 'Marta Fuentes',
+       'cruza por código, y las de antes (con RUT, con o sin puntos) también');
     ok(!r.pendiente, 'una inscripción de entrenador pendiente no escribe el cronograma');
     ok(!r.ajeno, 'y la de otro campeonato tampoco');
   }
@@ -350,9 +352,9 @@ const LEER = `(() => {
     // escrito a mano, y no pierde el trabajo de acomodar tandas.
     const r = await p.evaluate(async () => {
       ST.cronoRows = [
-        { nombre: 'Ana Soto', rut: '11111111-1', flight: 'C', jornada: '2', entrenador: '' },
-        { nombre: 'Bruno Díaz', rut: '22.222.222-2', flight: 'A', jornada: '1', entrenador: 'Otro Nombre' },
-        { nombre: 'Sin Rut', rut: '', flight: 'A', jornada: '1', entrenador: '' },
+        { nombre: 'Ana Soto', codigo: '1111ASO-2020', flight: 'C', jornada: '2', entrenador: '' },
+        { nombre: 'Bruno Díaz', rut: '22.222.222-2', flight: 'A', jornada: '1', entrenador: 'Otro Nombre' },   // fila de antes, con RUT
+        { nombre: 'Sin Rut', flight: 'A', jornada: '1', entrenador: '' },
       ];
       window.cronoSaveDoc = async () => {};
       const cuenta = await cronoTraerEntrenadores();
@@ -360,7 +362,7 @@ const LEER = `(() => {
     });
     ok(r.filas[0][1] === 'Marta Fuentes', 'al que estaba vacío se le pone el entrenador');
     ok(r.filas[1][1] === 'Otro Nombre', 'al que ya tenía un nombre escrito NO se le pisa');
-    ok(r.filas[2][1] === '', 'y el que no tiene RUT queda igual, no se puede cruzar');
+    ok(r.filas[2][1] === '', 'y el que no tiene código queda igual, no se puede cruzar');
     ok(r.filas[0][2] === 'C' && r.filas[0][3] === '2', 'la tanda y la jornada no se tocan');
     ok(r.cuenta.puestos === 1 && r.cuenta.distintos === 1 && r.cuenta.sinRut === 1,
        'y lleva la cuenta de lo que puso, lo que dejó y lo que no pudo cruzar');

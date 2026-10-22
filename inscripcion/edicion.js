@@ -66,7 +66,7 @@ function renderEdit() {
           </select>
         </div>
         <div class="field">
-          <label>Fecha de Nacimiento</label>
+          <label>Fecha de Nacimiento <span style="font-weight:400;color:var(--muted)">(solo si hay que corregirla)</span></label>
           <input class="input" type="date" value="${f.fechaNac}" oninput="upd('fechaNac',this.value)" onblur="render()">
         </div>
       </div>
@@ -108,7 +108,7 @@ function renderEdit() {
         <input class="input" type="text" value="${f.universidad||''}" oninput="upd('universidad',this.value)">
       </div>`:''}
       <div class="field">
-        <label>Ciudad y Región <span class="req">*</span></label>
+        <label>Ciudad y Región <span style="font-weight:400;color:var(--muted)">(solo si cambió)</span></label>
         <input class="input ${f.comuna?'ok':''}" type="text" placeholder="ej: Talca, Región del Maule" value="${f.comuna}" oninput="upd('comuna',this.value)">
       </div>
     </div>
@@ -153,13 +153,18 @@ async function lookupEdit() {
 
   state.error = '';
   try {
-    // Busca por RUT en la colección pública. El PIN ya no vive acá, así
-    // que no validamos aquí — el admin lo verifica al aprobar.
+    // La inscripción pública no trae el RUT: se busca por el código de atleta,
+    // que dice rut_indice/{rut} (se lee de a uno, no se lista). El PIN tampoco
+    // vive acá, así que no se valida aquí — el admin lo verifica al aprobar.
     let candidates = [];
     if (firebaseReady) {
-      const q = window.FB.query(window.FB.collection(db, 'inscripciones'), window.FB.where('rut', '==', rut));
-      const snap = await window.FB.getDocs(q);
-      snap.forEach(d => candidates.push({id: d.id, ...d.data()}));
+      const ri = await window.FB.getDoc(window.FB.doc(db, 'rut_indice', YLPrivacidad.norm(rut))).catch(() => null);
+      const cod = (ri && ri.exists && ri.exists() && (ri.data() || {}).codigo) || '';
+      if (cod) {
+        const q = window.FB.query(window.FB.collection(db, 'inscripciones'), window.FB.where('codigo', '==', cod));
+        const snap = await window.FB.getDocs(q);
+        snap.forEach(d => candidates.push({id: d.id, ...d.data()}));
+      }
     } else {
       candidates = demoGetAll().filter(i => formatRut(i.rut) === rut);
     }
@@ -193,17 +198,19 @@ async function lookupEdit() {
     state.form = {
       evento: found.evento || '',
       nombre: found.nombre || '',
-      rut: found.rut || '',
+      // El RUT es el que escribió; la fecha de nacimiento y la comuna no se
+      // muestran (son privadas): si las escribe, van como cambio.
+      rut: rut,
       codigo: found.codigo || '',
       sexo: found.sexo || '',
-      fechaNac: found.fechaNac || '',
+      fechaNac: '',
       division: found.division || '',
       categoria: found.categoria || '',
       modalidad: found.modalidad || '',
       club: found.club || '',
       clubOtro: found.clubOtro || '',
       zona: found.zona || '',
-      comuna: found.comuna || '',
+      comuna: '',
       pin: pin, // del input, se usará al enviar la solicitud
       universidad: found.universidad || '',
     };

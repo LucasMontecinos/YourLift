@@ -187,9 +187,11 @@ function _inscToAthlete(ins, j, flightMap){
   const catNum=(cronoEntry&&cronoEntry.cat)||_cronoCat(ins.categoria)||(ins.categoria||'');
   const div=(cronoEntry&&cronoEntry.div)||ins.division||'';
   return{
-    id:j,lot:j+1,name,rut:ins.rut||'',sex:ins.sexo||'',
+    // El código identifica al atleta (findInDB); la inscripción pública ya no
+    // trae el RUT ni la fecha completa, solo el año (anioNac).
+    id:j,lot:j+1,name,codigo:ins.codigo||'',rut:ins.rut||'',sex:ins.sexo||'',
     cat:catNum,div,club:ins.club==='Otro'?ins.clubOtro:ins.club||'',
-    uni:ins.universidad||'',mod,plusBench:isCombined,bw:0,flight:fl,jornada:cronoEntry?cronoEntry.jornada:(ins.jornada||''),born:(String(ins.fechaNac||ins.dob||ins.born||'').match(/\d{4}/)||[''])[0],rackSQ:'',rackBP:'',
+    uni:ins.universidad||'',mod,plusBench:isCombined,bw:0,flight:fl,jornada:cronoEntry?cronoEntry.jornada:(ins.jornada||''),born:ins.anioNac||(String(ins.fechaNac||ins.dob||ins.born||'').match(/\d{4}/)||[''])[0],rackSQ:'',rackBP:'',
     bombed:false,weighedIn:false,
     att:{sq:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],
          bp:[{w:0,r:null},{w:0,r:null},{w:0,r:null}],
@@ -216,7 +218,7 @@ function _mergeFirebaseAthletes(fbAthletes){
     for(const t of chico){ if(!grande.has(t))return false; }
     return true;
   };
-  const matches=(local,fa)=>(_r(fa.rut)&&_r(local.rut)&&_r(local.rut)===_r(fa.rut))||_mismoNombre(local.name,fa.name)
+  const matches=(local,fa)=>(fa.codigo&&local.codigo&&fa.codigo===local.codigo)||(_r(fa.rut)&&_r(local.rut)&&_r(local.rut)===_r(fa.rut))||_mismoNombre(local.name,fa.name)
     ||(!!local.nombreOrig&&_mismoNombre(local.nombreOrig,fa.name));   // nombre corregido en vivo
 
   fbAthletes.forEach((fa,j)=>{
@@ -233,6 +235,8 @@ function _mergeFirebaseAthletes(fbAthletes){
         changed=true;
       }
     }else{
+      // El código de atleta, si el local no lo tenía (nóminas armadas antes).
+      if(fa.codigo&&!existing.codigo){existing.codigo=fa.codigo;changed=true;}
       // Update flight if changed in Firestore
       if(fa.flight&&fa.flight!==existing.flight){
         existing.flight=fa.flight;changed=true;

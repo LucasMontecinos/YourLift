@@ -5,7 +5,9 @@
 //   · compartido/privacidad.js decide qué es público: sin RUT ni fecha, con el año;
 //   · el RUT y la fecha viven en Firestore, privado/padron (solo admin);
 //   · el formulario de inscripción reconoce a quien escribe SU RUT preguntando a
-//     rut_indice/{rut}, que se lee de a uno pero no se lista;
+//     rut_indice/{rut}, que se lee de a uno pero no se lista, y solo dice el
+//     código (la fecha de nacimiento la escribe el atleta: quien sabe un RUT
+//     ajeno no tiene por qué enterarse de ella);
 //   · el panel publica y exporta data.json siempre sin esos datos (salvo el
 //     respaldo completo, que se descarga con otro nombre para no confundirlo).
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_privacidad.js
@@ -41,10 +43,11 @@ console.log('\nLas reglas de Firestore');
 {
   const r = fs.readFileSync(path.join(RAIZ, 'reglas', 'firestore.rules'), 'utf8');
   const bloque = k => { const i = r.indexOf('match /' + k); return r.slice(i, r.indexOf('\n    }', i)); };
-  ok(/allow read, write: if isAdmin\(\);/.test(bloque('privado/')), 'privado/: solo un admin lee y escribe');
+  ok(/allow read, write: if veDatosPersonales\(\);/.test(bloque('privado/')), 'privado/: solo un admin lee y escribe (no las cuentas de competencia)');
   const ix = bloque('rut_indice/');
-  ok(/allow get: if true;/.test(ix) && /allow list: if false;/.test(ix) && /allow write: if isAdmin\(\);/.test(ix),
-     'rut_indice/: se lee de a uno, no se lista, y solo lo escribe un admin');
+  ok(/allow get: if true;/.test(ix) && /allow list: if false;/.test(ix) && /allow update, delete: if isAdmin\(\);/.test(ix)
+     && /hasOnly\(\['codigo', 'nuevo'\]\)/.test(ix),
+     'rut_indice/: se lee de a uno, no se lista; solo el admin lo cambia, y el atleta nuevo crea el suyo con solo el código');
 }
 
 console.log('\nEl panel nunca publica el padrón con datos personales');
@@ -95,7 +98,7 @@ for (const f of ['inscripciones.json', 'entrenadores_db.json'])
     const p = await ctx.newPage();
     const errs = []; p.on('pageerror', e => errs.push(e.message));
     await p.addInitScript(([n, cod, fn]) => { window.__FAKE = { eventos: [], inscripciones: [], atleta_fotos: [],
-      rut_indice: [{ id: n, codigo: cod, fechaNac: fn }] }; }, [P.norm(a.rut), a.codigo, a.fechaNac]);
+      rut_indice: [{ id: n, codigo: cod }] }; }, [P.norm(a.rut), a.codigo]);
     await p.goto(`http://localhost:${PUERTO}/inscripcion.html`, { waitUntil: 'domcontentloaded' });
     await p.waitForFunction(() => typeof firebaseReady !== 'undefined' && firebaseReady && athleteDB.length > 100,
       null, { timeout: 20000 });
@@ -109,8 +112,7 @@ for (const f of ['inscripciones.json', 'entrenadores_db.json'])
     }, a.rut);
     ok(r.codigo === a.codigo, 'con el índice lo reconoce: ' + r.codigo);
     ok(r.nombre === a.nombre, 'y completa su nombre: ' + r.nombre);
-    const [d, m, y] = a.fechaNac.split('/');
-    ok(r.fechaNac === `${y}-${m}-${d}`, 'y su fecha de nacimiento, que viene del índice: ' + r.fechaNac);
+    ok(!r.fechaNac, 'pero no su fecha de nacimiento: el índice ya no la trae, la escribe el atleta');
     ok(r.lecturas.length === 1 && r.lecturas[0] === 'getDoc', 'pidiendo solo ese documento, sin listar el índice');
     ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs[0] : ''));
     await ctx.close();

@@ -1,5 +1,9 @@
 # YourLift — Seguridad
 
+> Datos personales (Ley 21.719): qué se guarda, dónde, quién lo ve, cuánto
+> tiempo, cómo se responden las solicitudes y qué hacer ante un incidente está en
+> [`documentos/PROTECCION_DE_DATOS.md`](./documentos/PROTECCION_DE_DATOS.md).
+
 Este archivo documenta los pasos **manuales** que debes hacer en Firebase/Google
 Cloud para completar los fixes críticos de seguridad. El código ya hace su parte.
 

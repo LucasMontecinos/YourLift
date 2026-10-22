@@ -1014,6 +1014,7 @@ window.purgarInscripcionesArchivadas = async function(){
     }
     await logAction('purge_inscripciones_archivadas',`${toDelete.length} docs`,null,evNames);
     ST.inscripciones=ST.inscripciones.filter(i=>!archivedIds.has(i.evento));
+    ST._insPub=(ST._insPub||[]).filter(i=>!archivedIds.has(i.evento));
     showToast(`${toDelete.length} inscripciones purgadas`);
     render();
   }catch(e){showToast('Error: '+e.message,null,true);}
