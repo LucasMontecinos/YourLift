@@ -94,7 +94,6 @@ html.embedded::-webkit-scrollbar{width:0;background:transparent}
 </script>
 <script src="compartido/app.js?v=2f2dab5a"></script>
 <script src="compartido/privacidad.js?v=150cbfb7"></script>
-<script src="compartido/divisiones.js?v=a9a6dcfc"></script>
 </head>
 <body>
 <div class="hdr">
@@ -182,20 +181,9 @@ function fechaLarga(d){
   return x.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 }
 
-// ── La división sale del año de nacimiento ────────────────────
-// En powerlifting la edad se cuenta por año calendario (compartido/divisiones.js),
-// contra el año del campeonato. Además de la suya, cualquiera puede ir a Open.
-function anioCamp(){ return parseInt(String((EV&&EV.date)||'').slice(0,4),10)||new Date().getFullYear(); }
-function divisionPorEdad(){
-  if(!state.f.fechaNac||typeof ylDivisionPorAnio!=='function')return '';
-  const d=ylDivisionPorAnio(state.f.fechaNac,anioCamp());
-  return d==='Sub Junior'?'Sub-Junior':d;
-}
-function divisionesPosibles(){
-  const d=divisionPorEdad();
-  if(!d)return [];
-  return DIVISIONES.filter(x=>x===d||x==='Open');
-}
+// ── División y categoría ──────────────────────────────────────
+// La división la elige el atleta: la organización revisa la nómina.
+function divisionesPosibles(){ return DIVISIONES.slice(); }
 function categoriasPosibles(){
   const l=CATS[state.f.sexo]||[];
   const joven=state.f.division==='Sub-Junior'||state.f.division==='Junior';
@@ -208,8 +196,7 @@ function faltantes(){
   const f=state.f, c=conf(), m=[];
   if(f.nombre.trim().split(/\s+/).filter(Boolean).length<2)m.push('Nombre completo (nombre y apellido)');
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.correo.trim()))m.push('Correo');
-  if(!f.fechaNac)m.push('Fecha de nacimiento');
-  else if(!divisionPorEdad())m.push('Fecha de nacimiento (hay que tener al menos 14 años en '+anioCamp()+')');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f.fechaNac))m.push('Fecha de nacimiento');
   if(f.telefono.replace(/\D/g,'').length<8)m.push('Teléfono');
   if(!f.sexo)m.push('Género');
   if(!f.club||(f.club==='Otro'&&f.clubOtro.trim().length<2))m.push('Club');
@@ -229,11 +216,7 @@ function faltantes(){
 // otras opciones sí.
 window.setCampo=function(k,v,redibujar){
   state.f[k]=v;
-  if(k==='fechaNac'){
-    const pos=divisionesPosibles();
-    if(pos.indexOf(state.f.division)<0)state.f.division=pos[0]||'';
-  }
-  if(k==='fechaNac'||k==='sexo'||k==='division'){
+  if(k==='sexo'||k==='division'){
     if(categoriasPosibles().indexOf(state.f.categoria)<0)state.f.categoria='';
   }
   if(k==='polera'&&v!=='si')state.f.talla='';
@@ -397,7 +380,7 @@ function seccionDatos(){
     <div class="row">
       <div class="field"><label>Fecha de nacimiento <span class="req">*</span></label>
         <input class="input" type="date" value="${esc(f.fechaNac)}" max="${new Date().toISOString().slice(0,10)}"
-          onchange="setCampo('fechaNac',this.value,true)"${marca(!!divisionPorEdad())}></div>
+          onchange="setCampo('fechaNac',this.value,true)"${marca(/^\d{4}-\d{2}-\d{2}$/.test(f.fechaNac))}></div>
       <div class="field"><label>Género <span class="req">*</span></label>
         <select class="input ${f.sexo?'ok':''}" onchange="setCampo('sexo',this.value,true)"${marca(!!f.sexo)}>
           <option value="">— Elegir —</option>
@@ -417,15 +400,14 @@ function seccionDatos(){
 }
 
 function seccionCompetencia(){
-  const f=state.f, c=conf(), divs=divisionesPosibles(), cats=categoriasPosibles(), edad=divisionPorEdad();
+  const f=state.f, c=conf(), divs=divisionesPosibles(), cats=categoriasPosibles();
   return `<div class="card fade"><h2>Tu competencia</h2>
     <div class="row">
       <div class="field"><label>División de edad <span class="req">*</span></label>
-        <select class="input ${f.division?'ok':''}" onchange="setCampo('division',this.value,true)" ${divs.length?'':'disabled'}${marca(!!f.division)}>
-          ${divs.length?'':'<option>Primero tu fecha de nacimiento</option>'}
+        <select class="input ${f.division?'ok':''}" onchange="setCampo('division',this.value,true)"${marca(!!f.division)}>
+          <option value="">— Elegir —</option>
           ${divs.map(d=>`<option ${f.division===d?'selected':''}>${d}</option>`).join('')}
         </select>
-        ${edad?`<div class="hint">Por tu año de nacimiento te corresponde <b>${esc(edad)}</b> en ${anioCamp()}.${edad!=='Open'?' También puedes competir en Open.':''}</div>`:''}
       </div>
       <div class="field"><label>Categoría de peso <span class="req">*</span></label>
         <select class="input ${f.categoria?'ok':''}" onchange="setCampo('categoria',this.value,true)" ${cats.length?'':'disabled'}${marca(!!f.categoria)}>

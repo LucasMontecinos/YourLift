@@ -62,7 +62,7 @@ function renderCampeonatos(){
     }
     setTimeout(()=>{ try{efDocPinta('x')}catch(e){} try{window.renderDocsChecklist()}catch(e){} },0);
     return `
-    <div class="h1">${isNew?'Nuevo Campeonato':'Editar Campeonato'}</div>
+    <div class="h1">${isNew?(editing.abierto===true?'Nuevo Campeonato Abierto':'Nuevo Campeonato'):'Editar Campeonato'}</div>
     <p class="subtitle">${isNew?'Se publicará inmediatamente en inscripciones y nómina':'Cambios se propagan en tiempo real a todos los archivos'}</p>
     <div class="card" style="max-width:680px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
@@ -70,6 +70,7 @@ function renderCampeonatos(){
           <span>Nombre del campeonato</span>
           <input class="inp" id="ef_name" value="${editing.name||''}" placeholder="ej: Campeonato Regional Centro 2027" oninput="efRecordsAviso()">
         </label>
+        ${_abFormHtml(editing,isNew)}
         <label class="field">
           <span>ID (slug único, sin espacios)</span>
           <input class="inp" id="ef_id" value="${editing.id||''}" placeholder="ej: regional_centro_2027" ${!isNew?'disabled style="opacity:.5"':''}>
@@ -149,7 +150,6 @@ function renderCampeonatos(){
             <option value="universidad" ${(editing.extraCols||[]).includes('universidad')?'selected':''}>Universidad</option>
           </select>
         </label>
-        ${_abFormHtml(editing,isNew)}
         <div class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(212,168,67,.05);border:1px solid rgba(212,168,67,.3);border-radius:8px">
           <div style="flex:1">
             <div style="font-weight:600;color:var(--text)">Récords nacionales</div>
@@ -312,6 +312,7 @@ function renderCampeonatos(){
   <p class="subtitle">Gestiona los campeonatos — los cambios se propagan en tiempo real a inscripciones, nómina y cronograma</p>
   <div style="display:flex;justify-content:flex-end;margin-bottom:16px;gap:10px;flex-wrap:wrap">
     ${purgableCount>0?`<button class="btn" onclick="purgarInscripcionesArchivadas()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.4);color:var(--red);font-size:11px" title="Libera espacio en Firestore eliminando inscripciones de campeonatos ya archivados. Los resultados permanecen en el perfil de cada atleta.">Purgar inscripciones archivadas (${purgableCount})</button>`:''}
+    <button class="btn" onclick="newEvento(true)" style="background:rgba(212,168,67,.15);border:1px solid rgba(212,168,67,.6);color:var(--gold)" title="Campeonato que no es de la federación: formulario propio sin RUT ni código, fuera del ranking">+ Campeonato abierto</button>
     <button class="btn btn-g" onclick="newEvento()">+ Nuevo campeonato</button>
   </div>
   <div style="display:grid;gap:12px">
@@ -375,8 +376,10 @@ function renderCampeonatos(){
 }
 
 // ── CRUD helpers ────────────────────────────────────────────
-window.newEvento = function(){
+// abierto=true: "+ Campeonato abierto" (admin/abiertos.js), con esa opción ya marcada.
+window.newEvento = function(abierto){
   ST.eventoForm = {id:'',name:'',date:'',closeDate:'',preNominaCloseAt:'',nominaCloseAt:'',location:'',org:'',days:'',status:'open',extraCols:['modalidad'],recordsEnabled:true,cronogramaPublic:true,requiereFoto:false,livecastVisible:true,posNac2026:false,youtubeUrl:''};
+  if(abierto===true){ ST.eventoForm.abierto = true; ST.eventoForm.recordsNac = 'no'; }
   ST.eventoFormMode = 'create';
   ST.abVer = null;
   render();

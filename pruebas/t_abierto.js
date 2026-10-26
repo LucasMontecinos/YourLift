@@ -133,24 +133,20 @@ console.log('\nLas nóminas públicas del sitio no lo muestran');
     ok(/Los Toros/.test(clubs) && /Club Nuevo Talca/.test(clubs) && /Otro/.test(clubs) && (clubs.match(/Los Toros/g) || []).length === 1,
       'clubes: los de FECHIPO (más los de Firestore, sin repetir) y "Otro"');
 
+    // La división la elige el atleta (la organización lo pidió así): las siete
+    // de la IPF, sin calcularla ni cambiarla sola por la fecha de nacimiento.
     const d = await p.evaluate(() => {
-      const r = {};
-      setCampo('fechaNac', '2008-03-10', true); r.sj = divisionesPosibles(); r.selSJ = _estado.f.division;
-      setCampo('fechaNac', '1995-06-01', true); r.open = divisionesPosibles(); r.selOpen = _estado.f.division;
-      setCampo('fechaNac', '1984-01-20', true); r.m1 = divisionesPosibles();
-      setCampo('fechaNac', '2015-01-01', true); r.nino = divisionesPosibles();
-      return r;
+      setCampo('fechaNac', '2008-03-10', true);
+      const opciones = [...[...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === 'Master IV')).options].map(o => o.value).filter(Boolean);
+      return { todas: divisionesPosibles(), opciones, sola: _estado.f.division };
     });
-    ok(d.sj.join() === 'Sub-Junior,Open' && d.selSJ === 'Sub-Junior', 'la división sale del año de nacimiento (2008 → Sub-Junior en 2026) y se puede ir a Open');
-    ok(d.open.join() === 'Open' && d.selOpen === 'Open', '1995 → Open');
-    ok(d.m1.join() === 'Open,Master I', '1984 → Master I (u Open)');
-    ok(d.nino.length === 0, 'menos de 14 años: no hay división');
+    ok(d.todas.join() === 'Sub-Junior,Junior,Open,Master I,Master II,Master III,Master IV' && d.opciones.join() === d.todas.join(),
+      'la división se elige de las siete de la IPF');
+    ok(d.sola === '', 'y no se pone sola por la fecha de nacimiento');
     const c = await p.evaluate(() => {
       const r = {};
-      setCampo('sexo', 'Masculino', true); setCampo('fechaNac', '1995-06-01', true); r.hOpen = categoriasPosibles();
-      // Al cambiar la fecha se conserva la división elegida si sigue siendo válida
-      // (Open lo es a cualquier edad): Sub-Junior se elige.
-      setCampo('fechaNac', '2008-03-10', true); setCampo('division', 'Sub-Junior', true); r.hSJ = categoriasPosibles();
+      setCampo('sexo', 'Masculino', true); setCampo('division', 'Open', true); r.hOpen = categoriasPosibles();
+      setCampo('division', 'Sub-Junior', true); r.hSJ = categoriasPosibles();
       setCampo('sexo', 'Femenino', true); r.mSJ = categoriasPosibles();
       return r;
     });
@@ -273,7 +269,17 @@ console.log('\nLas nóminas públicas del sitio no lo muestran');
     console.log('\n  Crear un campeonato abierto');
     await p.evaluate(() => { abCerrar(); newEvento(); });
     await p.waitForSelector('#ef_abierto');
-    ok(await p.evaluate(() => getComputedStyle(document.getElementById('ef_abBox')).display === 'none'), 'la opción viene apagada');
+    ok(await p.evaluate(() => getComputedStyle(document.getElementById('ef_abBox')).display === 'none'), 'en "+ Nuevo campeonato" la opción viene apagada');
+    await p.evaluate(() => { ST.eventoForm = null; render(); });
+    ok(await p.evaluate(() => [...document.querySelectorAll('button')].some(x => /\+ Campeonato abierto/i.test(x.textContent) && /newEvento\(true\)/.test(x.getAttribute('onclick') || ''))),
+      'la lista de campeonatos tiene su botón "+ Campeonato abierto"');
+    await p.evaluate(() => newEvento(true));
+    await p.waitForSelector('#ef_abierto');
+    ok(await p.evaluate(() => document.getElementById('ef_abierto').checked && getComputedStyle(document.getElementById('ef_abBox')).display !== 'none'
+      && /Abierto/i.test(document.querySelector('.h1').textContent)), 'que abre el formulario con la opción ya marcada y a la vista');
+    ok(await p.evaluate(() => { const g = document.getElementById('ef_abierto'), n = document.getElementById('ef_date');
+      return !!(g.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING); }), 'arriba en el formulario, antes de las fechas');
+    await p.evaluate(() => { const c = document.getElementById('ef_abierto'); c.checked = false; c.dispatchEvent(new Event('change')); });
     await p.evaluate(() => {
       document.getElementById('ef_id').value = 'copa_panda_2026';
       document.getElementById('ef_name').value = 'Copa Panda Clausura 2026';
