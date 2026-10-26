@@ -67,7 +67,17 @@ function nacTotal() {
   if (el) el.value = f.posNacTotal;
 }
 
-function selectEvent(id) { state.form.evento = id; render(); }
+// Un campeonato abierto (no es de la federación) tiene su propio formulario, que
+// no pide RUT ni código de atleta y no pasa por el padrón: se va para allá.
+function selectEvent(id) {
+  const ev = (EVENTS || []).find(e => e.id === id);
+  if (ev && ev.abierto === true) {
+    const emb = document.documentElement.classList.contains('embedded') ? '&embedded=1' : '';
+    location.href = 'inscripcion_abierta.html?ev=' + encodeURIComponent(id) + emb;
+    return;
+  }
+  state.form.evento = id; render();
+}
 
 function nextStep() {
   state.error = '';

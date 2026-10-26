@@ -301,8 +301,11 @@ async function loadLiveAthletes(ev){
   window._cronoFlightMap=await _loadCronoFlightMap(evId);
   _subscribeCronoFlightMap(evId); // mantiene window._cronoFlightMap al día si el Cronograma se sigue editando
 
+  // Un campeonato abierto tiene sus inscripciones aparte (inscripcion_abierta.html):
+  // no llevan código de atleta ni pasan por el padrón.
+  const meta=(window.LIVE_EVENT_META||{})[evId];
   const q=window._fb.query(
-    window._fb.collection(fbDB,'inscripciones'),
+    window._fb.collection(fbDB,meta&&meta.abierto?'inscripciones_abiertas':'inscripciones'),
     window._fb.where('evento','==',evId),
     window._fb.where('status','in',['approved','pending'])
   );

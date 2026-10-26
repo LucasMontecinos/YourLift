@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#C41E3A">
+<title>YourLift — Inscripción campeonato abierto</title>
+<link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" sizes="96x96" href="icon-96.png">
+<link rel="icon" type="image/png" sizes="256x256" href="favicon.png?v=3">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta property="og:site_name" content="YourLift">
+<meta property="og:image" content="https://yourlift.cl/icon-512.png">
+<link rel="stylesheet" href="compartido/paleta.css?v=64e812b1">
+<link rel="stylesheet" href="compartido/iconos.css?v=10cfc8ba">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="bg-fechipo.css?v=67587424">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+
+body{font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+input,select,button,textarea{font-family:inherit;outline:none}
+.os{font-family:'Oswald',sans-serif}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fade{animation:fadeIn .4s ease}
+.sp{width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+.ctn{max-width:720px;margin:0 auto;padding:16px 20px 60px}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:rgba(17,34,59,.95);position:sticky;top:0;z-index:100;backdrop-filter:blur(10px)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+.card h2{font-family:'Oswald',sans-serif;font-size:17px;letter-spacing:1px;margin-bottom:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 24px;border-radius:8px;border:none;font-weight:600;font-size:14px;cursor:pointer;font-family:'Oswald',sans-serif;letter-spacing:1px;text-transform:uppercase;transition:all .15s}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-green{background:var(--green);color:#fff}.btn-green:hover:not(:disabled){background:#1aa34a}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--muted)}.btn-outline:hover{border-color:var(--accent);color:var(--text)}
+.btn-mini{padding:4px 10px;font-size:11px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer}
+.btn-mini:hover{border-color:var(--gold);color:var(--gold)}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-family:'Oswald',sans-serif}
+.field label .req{color:var(--accent)}
+.input{width:100%;padding:12px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;transition:border-color .2s}
+.input:focus{border-color:var(--accent)}
+.input.ok{border-color:var(--green)}
+select.input{cursor:pointer}
+select.input:disabled{opacity:.5;cursor:not-allowed}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.row{grid-template-columns:1fr}}
+.hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.55}
+.opts{display:flex;gap:8px;flex-wrap:wrap}
+.opt{flex:1;min-width:120px;padding:12px 14px;border-radius:8px;border:1px solid var(--border);cursor:pointer;font-size:14px;display:flex;align-items:center;gap:8px;transition:all .15s}
+.opt:hover{border-color:var(--accent)}
+.opt.sel{border-color:var(--green);background:rgba(34,197,94,.08)}
+.opt input{width:16px;height:16px;flex-shrink:0}
+.field label.opt{display:flex;margin-bottom:0;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);text-transform:none;letter-spacing:0}
+.upload-zone{border:2px dashed var(--border);border-radius:10px;padding:22px;text-align:center;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.upload-zone:hover{border-color:var(--accent);background:rgba(196,30,58,.05)}
+.upload-zone.done{border-color:var(--green);border-style:solid;background:rgba(34,197,94,.05)}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.upload-zone .icon{font-size:26px;margin-bottom:6px}
+.upload-zone .txt{font-size:12px;color:var(--muted)}
+.upload-zone .fname{font-size:13px;color:var(--green);font-weight:600;margin-top:4px;word-break:break-all}
+.upload-zone img{max-height:120px;max-width:100%;border-radius:8px;margin-bottom:6px}
+.alert{padding:14px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;line-height:1.55}
+.alert-info{background:rgba(30,91,168,.15);border:1px solid rgba(30,91,168,.35);color:#8ab4e8}
+.alert-error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red)}
+.alert-warn{background:rgba(212,168,67,.1);border:1px solid rgba(212,168,67,.35);color:var(--gold)}
+.muted{color:var(--muted);font-size:12px;line-height:1.55}
+.ev-dat{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:14px}
+.ev-dat div{border:1px solid var(--border);border-radius:9px;padding:10px 12px}
+.ev-dat b{display:block;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;font-family:'Oswald',sans-serif;font-weight:500;margin-bottom:3px}
+.pago{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:600px){.pago{grid-template-columns:1fr}}
+.banco{border:1px solid rgba(212,168,67,.45);background:rgba(212,168,67,.06);border-radius:10px;padding:14px 16px}
+.banco .l{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(212,168,67,.15);font-size:13px}
+.banco .l:last-of-type{border-bottom:0}
+.banco .l span{color:var(--muted);font-size:11px}
+.banco .l strong{font-weight:600;text-align:right;word-break:break-all;font-variant-numeric:tabular-nums}
+.total{display:flex;justify-content:space-between;align-items:baseline;border-radius:10px;padding:12px 16px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.35);margin-bottom:16px}
+.total .v{font-family:'Oswald',sans-serif;font-size:26px;font-weight:700;color:var(--green);font-variant-numeric:tabular-nums}
+</style>
+<style id="embedHide">
+html.embedded .hdr{display:none !important}
+html.embedded body{background:transparent !important}
+html.embedded{scrollbar-width:none;-ms-overflow-style:none}
+html.embedded::-webkit-scrollbar{width:0;background:transparent}
+</style>
+<script>
+(function(){
+  try{
+    var p=new URLSearchParams(location.search);
+    if(p.get('embedded')==='1'||window.parent!==window)document.documentElement.classList.add('embedded');
+  }catch(e){}
+})();
+</script>
+<script src="compartido/app.js?v=2f2dab5a"></script>
+<script src="compartido/privacidad.js?v=150cbfb7"></script>
+<script src="compartido/divisiones.js?v=a9a6dcfc"></script>
+</head>
+<body>
+<div class="hdr">
+  <div class="os" style="font-weight:700;letter-spacing:2px;font-size:18px"><span style="color:var(--accent)">YOUR</span>LIFT</div>
+  <a href="index.html" style="color:var(--muted);text-decoration:none;font-size:12px">← Volver al sitio</a>
+</div>
+<div class="ctn"><div id="app"><div class="card" style="text-align:center"><div class="sp"></div><div class="muted" style="margin-top:10px">Cargando…</div></div></div></div>
+
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import {getFirestore,collection,getDocs,getDoc,doc,writeBatch,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import {getStorage,ref,uploadBytes} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+const app=initializeApp({apiKey:"AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4",authDomain:"fechipo-db-13148.firebaseapp.com",projectId:"fechipo-db-13148",storageBucket:"fechipo-db-13148.firebasestorage.app"});
+window.FBA={db:getFirestore(app),storage:getStorage(app),collection,getDocs,getDoc,doc,writeBatch,serverTimestamp,ref,uploadBytes};
+window.dispatchEvent(new Event('fba-listo'));
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// INSCRIPCIÓN A UN CAMPEONATO ABIERTO
+//
+// Un campeonato abierto lo organiza alguien de afuera de la federación (la Copa
+// Panda, por ejemplo) y se inscribe cualquiera. Por eso este formulario:
+//
+// · NO pide RUT ni código de atleta. Pide lo justo para inscribir, cobrar y
+//   entregar la polera: nombre, correo, teléfono, fecha de nacimiento, club,
+//   género, división, categoría, modalidad, polera y talla, foto y comprobante.
+//
+// · NO toca la base de atletas, el ranking ni los récords. Lo que llega va a
+//   inscripciones_abiertas (nombre, club, categoría… lo que necesitan la nómina
+//   y el livecast; sin datos personales) e inscripciones_abiertas_priv (correo,
+//   teléfono, fecha, polera, monto y dónde quedaron los archivos), que solo lee
+//   el panel. Al cerrar la competencia, el livecast no publica sus resultados.
+//
+// Lo que cobra y adónde se transfiere lo escribe el admin en el campeonato
+// (Admin → Campeonatos → Campeonato abierto): eventos/{id}.ab.
+// ══════════════════════════════════════════════════════════════
+let FB=null, LISTO=false, EV=null, CLUBS=[];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const nn=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'');
+const pesos=n=>'$'+Math.round(+n||0).toLocaleString('es-CL');
+const EV_ID=(new URLSearchParams(location.search).get('ev')||'').trim();
+
+// Los clubes afiliados, por si Firestore no responde. Los de Firestore se suman.
+const CLUBS_FECHIPO=["All Power CD","Powerlifting Atacama","Athor Powerlifting","Beers and Lifts","Black Bars",
+  "Club Bushido Lifting","Club Deportivo Jaques Oliger","Hannya Strength","Himalaya Powerlifting",
+  "Iron Forces Powerlifting","Kaizen","Los Toros","Potencia Muscular","Primal Strength","REMA",
+  "Shoganai Strength","South Side Club","Wolf Strength"];
+
+// Reglamento IPF. Las categorías más livianas (-53 kg hombres, -43 kg mujeres)
+// son solo para Sub-Junior y Junior.
+const DIVISIONES=['Sub-Junior','Junior','Open','Master I','Master II','Master III','Master IV'];
+const CATS={Masculino:['-53 kg','-59 kg','-66 kg','-74 kg','-83 kg','-93 kg','-105 kg','-120 kg','+120 kg'],
+            Femenino:['-43 kg','-47 kg','-52 kg','-57 kg','-63 kg','-69 kg','-76 kg','-84 kg','+84 kg']};
+const DEFECTO={reglamento:'IPF',precio:0,polera:false,precioPolera:0,tallas:['S','M','L','XL','XXL','XXXL'],
+  mods:['Classic','Equipado'],pago:{},nota:''};
+const MAX_MB=10;
+
+const state={
+  f:{nombre:'',correo:'',fechaNac:'',telefono:'',sexo:'',club:'',clubOtro:'',division:'',categoria:'',modalidad:'',polera:'',talla:''},
+  archivos:{}, nombres:{}, vistas:{},
+  consiente:false, enviando:false, error:'', ok:false, intento:false
+};
+
+function conf(){
+  const a=(EV&&EV.ab)||{};
+  return {...DEFECTO,...a,pago:{...(a.pago||{})},
+    tallas:(Array.isArray(a.tallas)&&a.tallas.length)?a.tallas:DEFECTO.tallas,
+    mods:(Array.isArray(a.mods)&&a.mods.length)?a.mods:DEFECTO.mods};
+}
+
+// ── ¿Se puede inscribir? ──────────────────────────────────────
+function cierre(){ const c=EV&&EV.preNominaCloseAt?new Date(EV.preNominaCloseAt):null; return c&&!isNaN(c)?c:null; }
+function estadoEvento(){
+  if(!EV||EV.abierto!==true||EV.status==='archived'||EV.status==='draft')return 'no';
+  const c=cierre();
+  if(EV.status!=='open'||(c&&new Date()>c))return 'cerrado';
+  return 'abierto';
+}
+function fechaLarga(d){
+  if(!d)return '';
+  const x=d instanceof Date?d:new Date(String(d).length===10?d+'T12:00:00':d);
+  if(isNaN(x))return String(d);
+  return x.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+}
+
+// ── La división sale del año de nacimiento ────────────────────
+// En powerlifting la edad se cuenta por año calendario (compartido/divisiones.js),
+// contra el año del campeonato. Además de la suya, cualquiera puede ir a Open.
+function anioCamp(){ return parseInt(String((EV&&EV.date)||'').slice(0,4),10)||new Date().getFullYear(); }
+function divisionPorEdad(){
+  if(!state.f.fechaNac||typeof ylDivisionPorAnio!=='function')return '';
+  const d=ylDivisionPorAnio(state.f.fechaNac,anioCamp());
+  return d==='Sub Junior'?'Sub-Junior':d;
+}
+function divisionesPosibles(){
+  const d=divisionPorEdad();
+  if(!d)return [];
+  return DIVISIONES.filter(x=>x===d||x==='Open');
+}
+function categoriasPosibles(){
+  const l=CATS[state.f.sexo]||[];
+  const joven=state.f.division==='Sub-Junior'||state.f.division==='Junior';
+  return l.filter(c=>joven||(c!=='-53 kg'&&c!=='-43 kg'));
+}
+function total(){ const c=conf(); return c.polera&&state.f.polera==='si'?c.precioPolera:c.precio; }
+
+// ── Qué falta ─────────────────────────────────────────────────
+function faltantes(){
+  const f=state.f, c=conf(), m=[];
+  if(f.nombre.trim().split(/\s+/).filter(Boolean).length<2)m.push('Nombre completo (nombre y apellido)');
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.correo.trim()))m.push('Correo');
+  if(!f.fechaNac)m.push('Fecha de nacimiento');
+  else if(!divisionPorEdad())m.push('Fecha de nacimiento (hay que tener al menos 14 años en '+anioCamp()+')');
+  if(f.telefono.replace(/\D/g,'').length<8)m.push('Teléfono');
+  if(!f.sexo)m.push('Género');
+  if(!f.club||(f.club==='Otro'&&f.clubOtro.trim().length<2))m.push('Club');
+  if(!f.division)m.push('División');
+  if(!f.categoria)m.push('Categoría');
+  if(!f.modalidad)m.push('Modalidad');
+  if(c.polera&&!f.polera)m.push('¿Quieres polera?');
+  if(c.polera&&f.polera==='si'&&!f.talla)m.push('Talla de polera');
+  if(!state.archivos.fotoAtleta)m.push('Foto del atleta');
+  if(!state.archivos.comprobante)m.push('Comprobante de transferencia');
+  if(!state.consiente)m.push('Autorización de datos');
+  return m;
+}
+
+// ── Cambios en el formulario ──────────────────────────────────
+// Los campos de texto no redibujan (se perdería el cursor); los que cambian
+// otras opciones sí.
+window.setCampo=function(k,v,redibujar){
+  state.f[k]=v;
+  if(k==='fechaNac'){
+    const pos=divisionesPosibles();
+    if(pos.indexOf(state.f.division)<0)state.f.division=pos[0]||'';
+  }
+  if(k==='fechaNac'||k==='sexo'||k==='division'){
+    if(categoriasPosibles().indexOf(state.f.categoria)<0)state.f.categoria='';
+  }
+  if(k==='polera'&&v!=='si')state.f.talla='';
+  if(redibujar)render(); else refrescarBoton();
+};
+window.setConsiente=function(v){ state.consiente=!!v; refrescarBoton(); };
+
+// Fotos de teléfono de 5-8 MB: se achican antes de subir (máx. 1600 px). Un
+// PDF va tal cual.
+function achicar(file){
+  return new Promise(res=>{
+    if(!/^image\//.test(file.type)||file.size<1.5*1024*1024||typeof createImageBitmap!=='function')return res(file);
+    createImageBitmap(file).then(bmp=>{
+      const k=Math.min(1,1600/Math.max(bmp.width,bmp.height));
+      const cv=document.createElement('canvas'); cv.width=Math.round(bmp.width*k); cv.height=Math.round(bmp.height*k);
+      cv.getContext('2d').drawImage(bmp,0,0,cv.width,cv.height);
+      cv.toBlob(b=>res(b?new File([b],String(file.name||'foto').replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg'}):file),'image/jpeg',0.85);
+    }).catch(()=>res(file));
+  });
+}
+window.tomarArchivo=async function(inp,k){
+  const f=inp.files&&inp.files[0]; if(!f)return;
+  if(k==='fotoAtleta'&&!/^image\//.test(f.type)){ state.error='La foto tiene que ser una imagen (JPG o PNG).'; render(); return; }
+  if(!/^image\//.test(f.type)&&f.type!=='application/pdf'){ state.error='El archivo tiene que ser una imagen o un PDF.'; render(); return; }
+  const a=await achicar(f);
+  if(a.size>MAX_MB*1024*1024){ state.error='El archivo pesa más de '+MAX_MB+' MB.'; render(); return; }
+  state.error='';
+  state.archivos[k]=a; state.nombres[k]=f.name||'archivo';
+  try{ if(state.vistas[k])URL.revokeObjectURL(state.vistas[k]); state.vistas[k]=/^image\//.test(a.type)?URL.createObjectURL(a):''; }catch(e){}
+  render();
+};
+
+window.copiar=function(txt,btn){
+  const listo=()=>{ if(btn){ const t=btn.textContent; btn.textContent='Copiado'; setTimeout(()=>{btn.textContent=t;},1400); } };
+  try{ navigator.clipboard.writeText(txt).then(listo,listo); }catch(e){ listo(); }
+};
+
+// ── Enviar ────────────────────────────────────────────────────
+function nuevoId(){
+  const a='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789', r=new Uint8Array(20);
+  crypto.getRandomValues(r); return Array.from(r,x=>a[x%a.length]).join('');
+}
+window.enviar=async function(){
+  state.intento=true;
+  if(faltantes().length){ render(); return; }
+  if(state.enviando)return;
+  if(estadoEvento()!=='abierto'){ state.error='Las inscripciones de este campeonato ya cerraron.'; render(); return; }
+  state.enviando=true; state.error=''; render();
+  const f=state.f, c=conf(), id=nuevoId();
+  try{
+    // Los archivos van a la carpeta privada de documentos, una subcarpeta por
+    // campeonato. Se guarda DÓNDE quedaron, no un enlace: el enlace lo pide el
+    // panel (compartido/privacidad.js). El nombre no lleva el nombre de la persona.
+    const docs={};
+    for(const k of ['fotoAtleta','comprobante']){
+      const a=state.archivos[k];
+      const ext=a.type==='application/pdf'?'pdf':(String(a.name||'').match(/\.([a-zA-Z0-9]{2,4})$/)||[,'jpg'])[1].toLowerCase();
+      const ruta='athlete_files/abierto_'+EV_ID.replace(/[^A-Za-z0-9_-]/g,'_')+'/'+id+'_'+k+'.'+ext;
+      const r=await FB.uploadBytes(FB.ref(FB.storage,ruta),a,{contentType:a.type||'application/octet-stream'});
+      docs[k]=YLPrivacidad.rutaArchivo((r&&r.metadata&&r.metadata.fullPath)||ruta);
+    }
+    const club=f.club==='Otro'?'Otro':f.club;
+    const pub={
+      evento:EV_ID, nombre:f.nombre.trim().replace(/\s+/g,' '), sexo:f.sexo,
+      anioNac:YLPrivacidad.anio(f.fechaNac), division:f.division, categoria:f.categoria,
+      modalidad:f.modalidad, club, clubOtro:f.club==='Otro'?f.clubOtro.trim():'',
+      status:'pending', privacyConsent:true, privacyConsentTs:new Date().toISOString(),
+      timestamp:FB.serverTimestamp()
+    };
+    const priv={
+      evento:EV_ID, correo:f.correo.trim(), telefono:f.telefono.trim(), fechaNac:f.fechaNac,
+      polera:!!(c.polera&&f.polera==='si'), talla:c.polera&&f.polera==='si'?f.talla:'',
+      monto:total(), docs, ts:FB.serverTimestamp()
+    };
+    const b=FB.writeBatch(FB.db);
+    b.set(FB.doc(FB.db,'inscripciones_abiertas',id),pub);
+    b.set(FB.doc(FB.db,'inscripciones_abiertas_priv',id),priv);
+    await b.commit();
+    state.ok=true; state.enviando=false; window.scrollTo(0,0); render();
+  }catch(e){
+    console.error('[enviar]',e);
+    state.error='No se pudo enviar la inscripción: '+(e.code||e.message)+'. Revisa tu conexión y vuelve a intentar.';
+    state.enviando=false; render();
+  }
+};
+
+// ══════════════ Pantalla ══════════════
+function refrescarBoton(){
+  const b=$('btnEnviar'); if(b)b.disabled=state.enviando;
+}
+
+function render(){
+  const app=$('app'); if(!app)return;
+  if(!LISTO){ app.innerHTML='<div class="card" style="text-align:center"><div class="sp"></div><div class="muted" style="margin-top:10px">Cargando el campeonato…</div></div>'; return; }
+  const est=estadoEvento();
+  if(est==='no'){
+    app.innerHTML=`<div class="card"><h2>Formulario no disponible</h2>
+      <div class="alert alert-info">Este link no corresponde a ningún campeonato abierto con inscripciones.
+      Revisa el link que te enviaron o mira los campeonatos en <a href="index.html" style="color:var(--gold)">yourlift.cl</a>.</div></div>`;
+    return;
+  }
+  if(state.ok){ app.innerHTML=vistaListo(); return; }
+  let h=cabecera();
+  if(est==='cerrado'){
+    const c=cierre();
+    app.innerHTML=h+`<div class="card"><div class="alert alert-warn" style="margin:0">Las inscripciones ${c?'cerraron el <b>'+esc(fechaLarga(c))+'</b>':'están cerradas'}.
+      Si tienes dudas, escribe a la organización.</div></div>`;
+    return;
+  }
+  if(state.error)h+=`<div class="alert alert-error">${esc(state.error)}</div>`;
+  h+=seccionDatos()+seccionCompetencia()+seccionPolera()+seccionFoto()+seccionPago()+seccionEnviar();
+  app.innerHTML=h;
+}
+
+function cabecera(){
+  const c=conf(), cr=cierre();
+  const org=Array.isArray(EV.organizers)&&EV.organizers.length?EV.organizers.map(o=>o.name).filter(Boolean).join(' · '):(EV.org||'');
+  return `<div class="card fade" style="border-left:4px solid var(--gold)">
+    <div style="display:flex;gap:14px;align-items:center">
+      ${EV.logoUrl?`<img src="${esc(EV.logoUrl)}" alt="" style="width:62px;height:62px;object-fit:contain;flex-shrink:0">`:''}
+      <div style="min-width:0">
+        <div class="os" style="font-size:11px;letter-spacing:2px;color:var(--gold)">CAMPEONATO ABIERTO · INSCRIPCIÓN</div>
+        <h1 class="os" style="font-size:clamp(21px,4.5vw,28px);letter-spacing:1px;line-height:1.15;margin-top:3px">${esc(EV.name)}</h1>
+        ${org?`<div class="muted" style="margin-top:2px">Organiza: ${esc(org)}</div>`:''}
+      </div>
+    </div>
+    <div class="ev-dat">
+      <div><b>Fecha</b>${esc(EV.days||fechaLarga(EV.date))}</div>
+      <div><b>Ciudad</b>${esc(EV.location||'—')}</div>
+      <div><b>Reglamento</b>${esc(c.reglamento)}</div>
+      <div><b>Inscripciones hasta</b>${cr?esc(cr.toLocaleDateString('es-CL',{day:'numeric',month:'long'})):'—'}</div>
+      <div><b>Valor</b>${pesos(c.precio)}${c.polera?`<span class="muted" style="display:block">${pesos(c.precioPolera)} con polera</span>`:''}</div>
+    </div>
+    ${c.nota?`<div class="muted" style="margin-top:14px;white-space:pre-line">${esc(c.nota)}</div>`:''}
+    <p class="muted" style="margin-top:14px">No necesitas RUT ni código de atleta. Esta inscripción es solo para este campeonato:
+      no entra al ranking ni a los récords de la federación.</p>
+  </div>`;
+}
+
+// Después del primer intento de enviar, lo que falta queda marcado en rojo.
+function marca(ok,grupo){
+  if(!state.intento||ok)return '';
+  return grupo?' style="outline:1px solid var(--red);outline-offset:4px;border-radius:8px"':' style="border-color:var(--red)"';
+}
+
+function seccionDatos(){
+  const f=state.f;
+  const clubs=CLUBS.slice(); if(clubs.indexOf('Otro')<0)clubs.push('Otro');
+  return `<div class="card fade"><h2>Tus datos</h2>
+    <div class="field"><label>Nombre completo <span class="req">*</span></label>
+      <input class="input ${f.nombre.trim().split(/\s+/).filter(Boolean).length>=2?'ok':''}" value="${esc(f.nombre)}" placeholder="Nombre y apellidos" autocomplete="name"
+        oninput="setCampo('nombre',this.value)"${marca(f.nombre.trim().split(/\s+/).filter(Boolean).length>=2)}></div>
+    <div class="row">
+      <div class="field"><label>Correo <span class="req">*</span></label>
+        <input class="input" type="email" value="${esc(f.correo)}" placeholder="tucorreo@gmail.com" autocomplete="email"
+          oninput="setCampo('correo',this.value)"${marca(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.correo.trim()))}></div>
+      <div class="field"><label>Teléfono <span class="req">*</span></label>
+        <input class="input" type="tel" value="${esc(f.telefono)}" placeholder="+56 9 1234 5678" autocomplete="tel"
+          oninput="setCampo('telefono',this.value)"${marca(f.telefono.replace(/\D/g,'').length>=8)}></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Fecha de nacimiento <span class="req">*</span></label>
+        <input class="input" type="date" value="${esc(f.fechaNac)}" max="${new Date().toISOString().slice(0,10)}"
+          onchange="setCampo('fechaNac',this.value,true)"${marca(!!divisionPorEdad())}></div>
+      <div class="field"><label>Género <span class="req">*</span></label>
+        <select class="input ${f.sexo?'ok':''}" onchange="setCampo('sexo',this.value,true)"${marca(!!f.sexo)}>
+          <option value="">— Elegir —</option>
+          ${['Masculino','Femenino'].map(s=>`<option ${f.sexo===s?'selected':''}>${s}</option>`).join('')}
+        </select></div>
+    </div>
+    <div class="field"><label>Club <span class="req">*</span></label>
+      <select class="input ${f.club?'ok':''}" onchange="setCampo('club',this.value,true)"${marca(!!f.club)}>
+        <option value="">— Elegir —</option>
+        ${clubs.map(x=>`<option value="${esc(x)}" ${f.club===x?'selected':''}>${esc(x==='Otro'?'Otro (escribir)':x)}</option>`).join('')}
+      </select>
+      ${f.club==='Otro'?`<input class="input" style="margin-top:8px" value="${esc(f.clubOtro)}" placeholder="Nombre de tu club, gimnasio o “Independiente”"
+        oninput="setCampo('clubOtro',this.value)"${marca(f.clubOtro.trim().length>=2)}>`:''}
+      <div class="hint">Los clubes de la lista son los afiliados a FECHIPO. Si el tuyo no está, elige “Otro”.</div>
+    </div>
+  </div>`;
+}
+
+function seccionCompetencia(){
+  const f=state.f, c=conf(), divs=divisionesPosibles(), cats=categoriasPosibles(), edad=divisionPorEdad();
+  return `<div class="card fade"><h2>Tu competencia</h2>
+    <div class="row">
+      <div class="field"><label>División de edad <span class="req">*</span></label>
+        <select class="input ${f.division?'ok':''}" onchange="setCampo('division',this.value,true)" ${divs.length?'':'disabled'}${marca(!!f.division)}>
+          ${divs.length?'':'<option>Primero tu fecha de nacimiento</option>'}
+          ${divs.map(d=>`<option ${f.division===d?'selected':''}>${d}</option>`).join('')}
+        </select>
+        ${edad?`<div class="hint">Por tu año de nacimiento te corresponde <b>${esc(edad)}</b> en ${anioCamp()}.${edad!=='Open'?' También puedes competir en Open.':''}</div>`:''}
+      </div>
+      <div class="field"><label>Categoría de peso <span class="req">*</span></label>
+        <select class="input ${f.categoria?'ok':''}" onchange="setCampo('categoria',this.value,true)" ${cats.length?'':'disabled'}${marca(!!f.categoria)}>
+          <option value="">${cats.length?'— Elegir —':'Primero tu género'}</option>
+          ${cats.map(x=>`<option ${f.categoria===x?'selected':''}>${x}</option>`).join('')}
+        </select>
+        <div class="hint">Categorías ${esc(c.reglamento)}. ${f.sexo==='Masculino'?'La -53 kg':f.sexo==='Femenino'?'La -43 kg':'La más liviana'} es solo para Sub-Junior y Junior.</div>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:0"><label>Modalidad <span class="req">*</span></label>
+      <div class="opts"${marca(!!f.modalidad,1)}>
+        ${c.mods.map((m,i)=>`<label class="opt ${f.modalidad===m?'sel':''}"><input type="radio" name="mod" ${f.modalidad===m?'checked':''} onchange="setCampo('modalidad',conf().mods[${i}],true)"> ${esc(m)}</label>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+function seccionPolera(){
+  const f=state.f, c=conf();
+  if(!c.polera)return '';
+  const extra=c.precioPolera-c.precio;
+  return `<div class="card fade"><h2>Polera del campeonato</h2>
+    <div class="field"><label>¿Quieres polera? <span class="req">*</span></label>
+      <div class="opts"${marca(!!f.polera,1)}>
+        <label class="opt ${f.polera==='si'?'sel':''}"><input type="radio" name="pol" ${f.polera==='si'?'checked':''} onchange="setCampo('polera','si',true)"> Sí${extra>0?' (+'+pesos(extra)+')':''}</label>
+        <label class="opt ${f.polera==='no'?'sel':''}"><input type="radio" name="pol" ${f.polera==='no'?'checked':''} onchange="setCampo('polera','no',true)"> No</label>
+      </div>
+    </div>
+    ${f.polera==='si'?`<div class="field" style="margin-bottom:0"><label>Talla <span class="req">*</span></label>
+      <div class="opts"${marca(!!f.talla,1)}>
+        ${c.tallas.map((t,i)=>`<label class="opt ${f.talla===t?'sel':''}" style="flex:0 0 auto;min-width:64px;justify-content:center"><input type="radio" name="talla" ${f.talla===t?'checked':''} onchange="setCampo('talla',conf().tallas[${i}],true)"> ${esc(t)}</label>`).join('')}
+      </div></div>`:''}
+  </div>`;
+}
+
+function zona(k,titulo,ayuda,acepta){
+  const nom=state.nombres[k], v=state.vistas[k];
+  return `<div class="upload-zone ${nom?'done':''}"${marca(!!nom)}>
+    <input type="file" accept="${acepta}" onchange="tomarArchivo(this,'${k}')" aria-label="${esc(titulo)}">
+    ${nom?`${v?`<img src="${v}" alt="">`:'<div class="icon"><i class=yl-i-check></i></div>'}<div class="fname">${esc(nom)}</div><div class="txt">Toca para cambiarlo</div>`
+        :`<div class="icon"><i class=yl-i-archivo></i></div><div class="txt">${ayuda}</div>`}
+  </div>`;
+}
+
+function seccionFoto(){
+  return `<div class="card fade"><h2>Foto del atleta <span style="color:var(--accent)">*</span></h2>
+    ${zona('fotoAtleta','Foto del atleta','Toca para subir una foto tuya de frente, con buena luz.<br>JPG o PNG, hasta '+MAX_MB+' MB.','image/*')}
+  </div>`;
+}
+
+function seccionPago(){
+  const c=conf(), p=c.pago||{};
+  const lineas=[['Nombre',p.titular],['RUT',p.rut],['Banco',p.banco],['Tipo de cuenta',p.tipo],['N° de cuenta',p.numero],['Correo',p.correo]].filter(x=>x[1]);
+  const todo=lineas.map(x=>x[0]+': '+x[1]).join('\n');
+  return `<div class="card fade"><h2>Pago</h2>
+    <div class="total"><div><div class="os" style="font-size:12px;letter-spacing:1px;color:var(--muted)">TOTAL A TRANSFERIR</div>
+      <div class="muted">${c.polera&&state.f.polera==='si'?'Inscripción + polera':'Inscripción'}</div></div>
+      <div class="v">${pesos(total())}</div></div>
+    <div class="pago">
+      <div class="banco">
+        <div class="os" style="font-size:12px;letter-spacing:1px;color:var(--gold);margin-bottom:6px">DATOS DE TRANSFERENCIA</div>
+        ${lineas.map(x=>`<div class="l"><span>${esc(x[0])}</span><strong>${esc(x[1])}</strong></div>`).join('')||'<div class="muted">La organización todavía no cargó los datos.</div>'}
+        ${lineas.length?`<button type="button" class="btn-mini" style="margin-top:10px" onclick="copiar(${esc(JSON.stringify(todo))},this)">Copiar datos</button>`:''}
+      </div>
+      <div>
+        <div class="field" style="margin-bottom:0"><label>Comprobante de transferencia <span class="req">*</span></label>
+          ${zona('comprobante','Comprobante de transferencia','Transfiere y sube aquí la captura o el PDF del comprobante.','image/*,application/pdf')}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function seccionEnviar(){
+  const falta=faltantes();
+  const org=Array.isArray(EV.organizers)&&EV.organizers.length?EV.organizers.map(o=>o.name).filter(Boolean).join(' · '):(EV.org||'');
+  return `<div class="card fade">
+    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px;border:1px solid ${state.intento&&!state.consiente?'var(--red)':'var(--border)'};border-radius:10px;margin-bottom:14px">
+      <input type="checkbox" ${state.consiente?'checked':''} onchange="setConsiente(this.checked);if(state.intento)render()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0">
+      <span style="font-size:12px;line-height:1.6">Autorizo a la organización de <b>${esc(EV.name)}</b>${org?' ('+esc(org)+')':''}, responsable de estos datos, y a YourLift SpA, que opera la plataforma por su encargo, a usarlos para gestionar mi inscripción, el pago y la polera.
+        Mi nombre, club, división, categoría y resultados salen en la nómina y en la transmisión del campeonato. Mi correo, teléfono, fecha de nacimiento, foto y comprobante no se publican: los ve solo la organización, y se borran a más tardar 12 meses después del campeonato.
+        Más detalle en la <a href="index.html#privacidad" target="_blank" style="color:var(--gold)">Política de Privacidad</a>.</span>
+    </label>
+    ${state.intento&&falta.length?`<div class="alert alert-error">Falta completar: ${falta.map(esc).join(' · ')}.</div>`:''}
+    <button id="btnEnviar" class="btn btn-green" style="width:100%" onclick="enviar()" ${state.enviando?'disabled':''}>
+      ${state.enviando?'<span class="sp" style="width:16px;height:16px;border-width:2px"></span> Enviando…':'Enviar inscripción · '+pesos(total())}</button>
+    <p class="muted" style="margin-top:10px;text-align:center">La organización revisa el comprobante y te confirma por correo.</p>
+  </div>`;
+}
+
+function vistaListo(){
+  const f=state.f, c=conf();
+  return cabecera()+`<div class="card fade" style="text-align:center;padding:34px 22px">
+    <div style="font-size:42px;margin-bottom:8px;color:var(--green)"><i class=yl-i-check></i></div>
+    <h2 style="font-size:21px;margin-bottom:8px">Inscripción enviada</h2>
+    <p class="muted" style="max-width:440px;margin:0 auto 16px">Quedaste inscrito en <b style="color:var(--text)">${esc(EV.name)}</b>
+      (${esc(f.modalidad)} · ${esc(f.division)} · ${esc(f.categoria)}${c.polera&&f.polera==='si'?' · polera '+esc(f.talla):''}).
+      La organización revisa tu comprobante de ${pesos(total())} y te escribe a <b style="color:var(--text)">${esc(f.correo)}</b>.</p>
+    <a href="index.html" class="btn btn-outline" target="_top">Volver al sitio</a>
+  </div>`;
+}
+
+// ── Arranque ──────────────────────────────────────────────────
+async function arrancar(){
+  FB=window.FBA;
+  try{
+    if(EV_ID){
+      const s=await FB.getDoc(FB.doc(FB.db,'eventos',EV_ID));
+      EV=s&&s.exists()?{id:EV_ID,...s.data()}:null;
+    }
+  }catch(e){ console.warn('[evento]',e); }
+  const vistos=new Set(CLUBS_FECHIPO.map(nn));
+  CLUBS=CLUBS_FECHIPO.slice();
+  try{
+    const sc=await FB.getDocs(FB.collection(FB.db,'clubs'));
+    sc.forEach(d=>{ const n=String((d.data()||{}).name||'').trim(); if(n&&!vistos.has(nn(n))){ vistos.add(nn(n)); CLUBS.push(n); } });
+  }catch(e){ /* sin la lista de Firestore quedan los de siempre */ }
+  CLUBS.sort((a,b)=>a.localeCompare(b,'es'));
+  LISTO=true; render();
+}
+if(window.FBA) arrancar(); else window.addEventListener('fba-listo',arrancar);
+
+// Para las pruebas.
+window._estado=state;
+window.render=render;
+window.faltantes=faltantes;
+window.divisionesPosibles=divisionesPosibles;
+window.categoriasPosibles=categoriasPosibles;
+window.total=total;
+</script>
+</body>
+</html>

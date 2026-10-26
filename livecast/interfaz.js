@@ -149,7 +149,7 @@ async function _contarAtletasEventos(fb,ids){
     if(window._conteoEnCurso[evId])continue;
     window._conteoEnCurso[evId]=true;
     try{
-      const q=fb.query(fb.collection(fbDB,'inscripciones'),fb.where('evento','==',evId),fb.where('status','in',['approved','pending']));
+      const q=fb.query(fb.collection(fbDB,meta.abierto?'inscripciones_abiertas':'inscripciones'),fb.where('evento','==',evId),fb.where('status','in',['approved','pending']));
       let n;
       if(typeof fb.getCountFromServer==='function'){
         const c=await fb.getCountFromServer(q);

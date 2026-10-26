@@ -17,8 +17,10 @@ function _applyNominas(all){
   ((NM&&NM._static)||[]).forEach(e=>{ if(e&&e.parent){ if(e.id)_jornadas.add(e.id); if(e.name)_jornadas.add(e.name); } });
   // Build events from NOM_EVENTS (loaded from Firestore eventos collection)
   // Show ALL non-archived events, even if they have 0 inscriptions
+  // Un campeonato abierto (no es de la federación) no tiene nómina acá: sus
+  // inscripciones van aparte y no se publican (inscripcion_abierta.html).
   const fbEvents=NOM_EVENTS
-    .filter(ev=>ev.status!=='archived'&&ev.status!=='draft'&&!_jornadas.has(ev.id)&&!_jornadas.has(ev.name))
+    .filter(ev=>ev.status!=='archived'&&ev.status!=='draft'&&ev.abierto!==true&&!_jornadas.has(ev.id)&&!_jornadas.has(ev.name))
     .map(ev=>{
       const fbAths=(byEvent[ev.id]||byEvent[ev.name]||[])
         .sort((a,b)=>(a.timestamp?.seconds||0)-(b.timestamp?.seconds||0))
@@ -72,7 +74,7 @@ async function loadFBNominas(force){
 // mitad de la colección y la pestaña las descartaba al llegar.
 function _nominasClaves(){
   if(window._eventosFS!==true)return [];                   // sin la lista de campeonatos: todo
-  const evs=(NOM_EVENTS||[]).filter(ev=>ev&&ev.status!=='archived'&&ev.status!=='draft');
+  const evs=(NOM_EVENTS||[]).filter(ev=>ev&&ev.status!=='archived'&&ev.status!=='draft'&&ev.abierto!==true);
   return [...new Set(evs.flatMap(ev=>[ev.id,ev.name]).filter(Boolean))].sort();
 }
 

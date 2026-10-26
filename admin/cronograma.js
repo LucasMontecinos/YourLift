@@ -417,7 +417,9 @@ window.cronoLoadFromNomina=async function(){
   if(!ST.cronoEv){showToast('Elige un campeonato primero',null,true);return;}
   const evObj=(ST.eventos||[]).find(e=>e.id===ST.cronoEv);
   const evName=evObj?evObj.name:'';
-  const list=(ST.inscripciones||[]).filter(i=>(i.evento===evName||i.evento===ST.cronoEv)&&i.status==='approved');
+  // Un campeonato abierto tiene sus inscripciones aparte (admin/abiertos.js).
+  const list=evObj&&evObj.abierto===true ? await _abAprobadas(ST.cronoEv)
+    : (ST.inscripciones||[]).filter(i=>(i.evento===evName||i.evento===ST.cronoEv)&&i.status==='approved');
   if(!list.length){showToast('No hay inscripciones aprobadas en este campeonato',null,true);return;}
   if(!confirm('Cargar '+list.length+' atletas desde la nómina (inscripciones aprobadas)?\nReemplaza el cronograma actual de este evento.\nLuego ajustas tarima/flight/jornada y handlers.'))return;
   // OJO: NO usar solo la primera letra de i.sexo — las inscripciones guardan
@@ -447,7 +449,9 @@ window.cronoAddMissingFromNomina=async function(){
   if(!ST.cronoEv){showToast('Elige un campeonato primero',null,true);return;}
   const evObj=(ST.eventos||[]).find(e=>e.id===ST.cronoEv);
   const evName=evObj?evObj.name:'';
-  const list=(ST.inscripciones||[]).filter(i=>(i.evento===evName||i.evento===ST.cronoEv)&&i.status==='approved');
+  // Un campeonato abierto tiene sus inscripciones aparte (admin/abiertos.js).
+  const list=evObj&&evObj.abierto===true ? await _abAprobadas(ST.cronoEv)
+    : (ST.inscripciones||[]).filter(i=>(i.evento===evName||i.evento===ST.cronoEv)&&i.status==='approved');
   if(!list.length){showToast('No hay inscripciones aprobadas en este campeonato',null,true);return;}
   const _nn=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
   const _sexoHM=s=>{s=String(s||'').trim().toLowerCase();return /^(hombre|masculino|m(a|á)sc)/.test(s)?'H':/^(mujer|femenino|fem)/.test(s)?'M':'';};

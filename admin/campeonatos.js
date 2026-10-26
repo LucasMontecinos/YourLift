@@ -39,6 +39,8 @@ function renderCampeonatos(){
   // volver a abrir el MISMO campeonato mostraba lo que se había tecleado y
   // cancelado, en vez de lo que está guardado.
   if(!editing) ST._efDocsXPara = null;
+  // Los inscritos de un campeonato abierto: su propia lista (admin/abiertos.js).
+  if(!editing && ST.abVer) return renderAbInscritos();
 
   if(editing){
     const isNew = ST.eventoFormMode === 'create';
@@ -147,6 +149,7 @@ function renderCampeonatos(){
             <option value="universidad" ${(editing.extraCols||[]).includes('universidad')?'selected':''}>Universidad</option>
           </select>
         </label>
+        ${_abFormHtml(editing,isNew)}
         <div class="field" style="grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;background:rgba(212,168,67,.05);border:1px solid rgba(212,168,67,.3);border-radius:8px">
           <div style="flex:1">
             <div style="font-weight:600;color:var(--text)">Récords nacionales</div>
@@ -326,10 +329,12 @@ function renderCampeonatos(){
             <div style="font-size:11px;color:var(--muted);margin-top:3px">${ev.location||'—'} · ${ev.days||ev.date||'—'} · ${ev.org||'—'}</div>
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
               <span style="font-size:11px;font-weight:700;color:${STATUS_COLORS[ev.status]||'var(--muted)'}">${STATUS_LABELS[ev.status]||ev.status}</span>
+              ${ev.abierto===true?'<span style="font-size:10px;font-weight:700;background:rgba(212,168,67,.15);color:var(--gold);padding:2px 8px;border-radius:4px;letter-spacing:.5px">ABIERTO · FUERA DEL RANKING</span>':''}
               ${autoClose?'<span style="font-size:10px;background:rgba(239,68,68,.15);color:var(--red);padding:2px 8px;border-radius:4px">Nómina vencida — cierra automáticamente</span>':''}
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            ${ev.abierto===true?`<button class="btn" onclick="abVer('${ev.id}')" style="padding:6px 14px;font-size:11px;background:rgba(212,168,67,.15);border:1px solid rgba(212,168,67,.5);color:var(--gold)">Ver inscritos</button>`:`
             <div style="text-align:center;min-width:44px">
               <div style="font-family:Oswald;font-size:20px;font-weight:700;color:var(--green)">${approved}</div>
               <div style="font-size:9px;color:var(--muted)">Aprobados</div>
@@ -341,13 +346,13 @@ function renderCampeonatos(){
             <div style="text-align:center;min-width:44px">
               <div style="font-family:Oswald;font-size:20px;font-weight:700">${insc.length}</div>
               <div style="font-size:9px;color:var(--muted)">Total</div>
-            </div>
+            </div>`}
             <button class="btn btn-b" onclick="editEvento('${ev.id}')" style="padding:6px 14px;font-size:11px">Editar</button>
             ${ev.status==='open'?`<button class="btn btn-r" onclick="closeNomina('${ev.id}')" style="padding:6px 14px;font-size:11px">Cerrar nómina</button>`:''}
           </div>
         </div>
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center">
-          <a href="inscripcion.html" target="_blank" style="font-size:10px;color:var(--blue);text-decoration:none;padding:3px 8px;border:1px solid rgba(59,130,246,.3);border-radius:4px">Formulario público</a>
+          <a href="${ev.abierto===true?'inscripcion_abierta.html?ev='+encodeURIComponent(ev.id):'inscripcion.html'}" target="_blank" style="font-size:10px;color:var(--blue);text-decoration:none;padding:3px 8px;border:1px solid rgba(59,130,246,.3);border-radius:4px">Formulario público</a>
           <a href="cronograma.html?evento=${encodeURIComponent(ev.id)}" target="_blank" style="font-size:10px;color:var(--muted);text-decoration:none;padding:3px 8px;border:1px solid var(--border);border-radius:4px">Cronograma</a>
           ${(()=>{
             // Atajo, no configuración: el formulario del entrenador se arma en su
@@ -373,6 +378,7 @@ function renderCampeonatos(){
 window.newEvento = function(){
   ST.eventoForm = {id:'',name:'',date:'',closeDate:'',preNominaCloseAt:'',nominaCloseAt:'',location:'',org:'',days:'',status:'open',extraCols:['modalidad'],recordsEnabled:true,cronogramaPublic:true,requiereFoto:false,livecastVisible:true,posNac2026:false,youtubeUrl:''};
   ST.eventoFormMode = 'create';
+  ST.abVer = null;
   render();
 };
 
@@ -381,6 +387,7 @@ window.editEvento = function(id){
   if(!ev)return;
   ST.eventoForm = {...ev};
   ST.eventoFormMode = 'edit';
+  ST.abVer = null;
   render();
 };
 
@@ -906,6 +913,9 @@ window.saveEvento = async function(){
 
   if(!id || !name){ showToast('ID y nombre son obligatorios', null, true); return; }
   if(isNew && ST.eventos.find(e=>e.id===id)){ showToast('Ya existe un campeonato con ese ID', null, true); return; }
+  // Campeonato abierto: su configuración (admin/abiertos.js).
+  const abForm = _abLeerForm();
+  if(abForm.error){ showToast(abForm.error, null, true); return; }
 
   // Campeonatos que dejan a un atleta fuera de este.
   const bloqueaClaves = Array.from(document.querySelectorAll('.ef-bloq:checked'))
@@ -920,7 +930,10 @@ window.saveEvento = async function(){
     docsExtra,       // documentos propios del campeonato (nombre, PDF y link)
     oeDocs: Object.assign({}, window._efOeDocs||{}),   // papeles de Olimpiadas Especiales que pide (los no marcados usan su valor de siempre)
     modsExtra, modsSolo, divsExtra, divsSolo,   // modalidades y divisiones propias
+    abierto: abForm.abierto, ab: abForm.ab,     // campeonato abierto: formulario propio, fuera del ranking
     updatedAt: serverTimestamp()};
+  // Un abierto no pone récords; queda dicho también en el interruptor viejo.
+  if(abForm.abierto) data.recordsEnabled = false;
   if(isNew) data.createdAt = serverTimestamp();
 
   try{

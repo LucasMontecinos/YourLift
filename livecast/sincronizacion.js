@@ -120,10 +120,14 @@ async function initFB(){
         // de tarima y el detector de récords, que por lo mismo tampoco le
         // llegaban.
         if(!_oculto||e.publicoVisible===true){
-          window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0,logoUrl:e.logoUrl||'',logoFedUrl:e.logoFedUrl||'',logosPantalla:Array.isArray(e.logosPantalla)?e.logosPantalla:[]};
+          window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0,logoUrl:e.logoUrl||'',logoFedUrl:e.logoFedUrl||'',logosPantalla:Array.isArray(e.logosPantalla)?e.logosPantalla:[],
+            // Campeonato abierto: su nómina sale de inscripciones_abiertas y sus
+            // resultados no van al ranking (livecast/nomina.js, cierre.js).
+            abierto:e.abierto===true};
         }
         if((!_oculto||e.publicoVisible===true)&&DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
           DATA.event.recordsEnabled=recordsEnabled;
+          if(e.abierto===true)DATA.event.abierto=true; else delete DATA.event.abierto;
           if(e.recordsNac)DATA.event.recordsNac=e.recordsNac; else delete DATA.event.recordsNac;
           // El logo se BORRA solo si viene del documento exacto de este
           // campeonato. Por nombre pueden calzar dos documentos —el del

@@ -222,6 +222,59 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── CAMPEONATOS ABIERTOS ─────────────────────────────────────
+    // Un campeonato que no es de la federación (eventos/{id}.abierto == true) se
+    // inscribe con su propio formulario, inscripcion_abierta.html: sin sesión,
+    // sin RUT ni código de atleta. Lo que llega no se mezcla con las
+    // inscripciones de la federación —de ahí salen el padrón, el ranking y los
+    // récords— y va a sus propias colecciones.
+    //
+    // Se acepta solo para un campeonato abierto y con inscripciones abiertas:
+    // así nadie usa el formulario para meter nombres en otro campeonato.
+    function campeonatoAbierto(ev) {
+      return ev is string
+          && exists(/databases/$(database)/documents/eventos/$(ev))
+          && get(/databases/$(database)/documents/eventos/$(ev)).data.get('abierto', false) == true
+          && get(/databases/$(database)/documents/eventos/$(ev)).data.get('status', '') == 'open';
+    }
+    // Lo público: lo que necesitan la nómina y el livecast. Lista cerrada: un
+    // campo de más, o un dato personal, bota la inscripción.
+    function inscAbiertaValida() {
+      return request.resource.data.keys().hasOnly(['evento','nombre','sexo','anioNac','division','categoria',
+                                                   'modalidad','club','clubOtro','status','privacyConsent',
+                                                   'privacyConsentTs','timestamp'])
+          && request.resource.data.status == 'pending'
+          && request.resource.data.privacyConsent == true
+          && request.resource.data.nombre is string
+          && request.resource.data.nombre.size() > 2
+          && request.resource.data.nombre.size() <= 120
+          && campeonatoAbierto(request.resource.data.evento);
+    }
+    match /inscripciones_abiertas/{id} {
+      // Las lee el panel y el livecast (cuentas de admin, también las de mesa y
+      // transmisión: aquí no hay nada personal). El público no.
+      allow read: if isAdmin();
+      allow create: if (isAdmin() && creaSinPersonales()) || inscAbiertaValida();
+      allow update: if isAdmin() && modificaSinPersonales();
+      allow delete: if isAdmin();
+    }
+    // Lo privado: correo, teléfono, fecha de nacimiento, polera, monto y dónde
+    // quedaron la foto y el comprobante. Se escribe en el mismo lote que lo
+    // público, y tiene que ser del mismo campeonato.
+    function datosAbiertosValidos(id) {
+      return request.resource.data.keys().hasOnly(['evento','correo','telefono','fechaNac','polera','talla','monto','docs','ts'])
+          && request.resource.data.correo is string
+          && request.resource.data.correo.size() <= 120
+          && request.resource.data.docs is map
+          && request.resource.data.docs.keys().hasOnly(['fotoAtleta','comprobante'])
+          && getAfter(/databases/$(database)/documents/inscripciones_abiertas/$(id)).data.evento == request.resource.data.evento;
+    }
+    match /inscripciones_abiertas_priv/{id} {
+      allow read: if veDatosPersonales();
+      allow create: if isAdmin() || datosAbiertosValidos(id);
+      allow update, delete: if isAdmin();
+    }
+
     // ── FORMULARIOS DE ENTRENADOR ────────────────────────────────
     // Los arma el admin y los lee cualquiera sin sesión: son la definición del
     // formulario que va a llenar el entrenador (qué documentos, hasta cuándo,

@@ -60,6 +60,9 @@ async function cerrarCompetenciaConfirm(){
   // Un evento de prueba nunca publica: sus marcas irían al ranking y a los
   // perfiles de atletas reales como si fueran de verdad.
   if(_isEnsayo()){ alert('Este es un evento de PRUEBA (ensayo).\n\nSus resultados no se publican en el ranking ni en los perfiles.'); return; }
+  // Un campeonato abierto no es de la federación: lo de su tarima no va al
+  // ranking, a los perfiles de atletas ni a los récords.
+  if(_esAbierto(evId)){ alert('Este es un CAMPEONATO ABIERTO.\n\nSus resultados no se publican en el ranking, en los perfiles ni en los récords de la federación. El acta (PDF o Excel) se descarga igual desde Resultados.'); return; }
   const ath = _cierreAtletas();
   const fuera = (DATA.athletes||[]).filter(a=>!a.__is4).length - ath.filter(a=>!a.__is4).length;
   const counts = {meet:0, bench:0, dq:0};
@@ -85,7 +88,14 @@ async function cerrarCompetenciaConfirm(){
   await cerrarCompetencia(evId, evName);
 }
 
+function _esAbierto(evId){
+  if(DATA.event&&DATA.event.abierto===true)return true;
+  const m=(window.LIVE_EVENT_META||{})[evId];
+  return !!(m&&m.abierto===true);
+}
+
 async function cerrarCompetencia(evId, evName){
+  if(_esAbierto(evId))return;
   const fb = window._fb;
   if(!fb || !fbDB){ alert('Firebase no está listo. Vuelve a intentar en 5 segundos.'); return; }
   const today = new Date().toISOString().slice(0,10);

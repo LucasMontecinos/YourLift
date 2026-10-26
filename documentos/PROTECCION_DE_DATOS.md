@@ -1,6 +1,7 @@
 # Protección de datos personales en YourLift
 
-Ley N° 19.628, modificada por la Ley N° 21.719. Vigente desde el 22 de octubre de 2026.
+Ley N° 19.628, modificada por la Ley N° 21.719. Vigente desde el 22 de octubre de 2026
+(campeonatos abiertos: 26 de octubre de 2026).
 
 Este documento es el que se usa puertas adentro. Lo que se le promete al público
 está en la política de privacidad del sitio (yourlift.cl/#privacidad, código en
@@ -50,6 +51,8 @@ cuenta personal (rol owner, superadmin o admin). Las cuentas de competencia
 | Jueces: categoría por código | Firestore `publico/jueces` | Público |
 | Cronograma: filas y nombres de handlers | Firestore `cronograma/{evento}` | Público |
 | Correos de handlers | `cronograma_priv/{evento}`, `handlers_priv/{id}` | Panel (y el entrenador que los anotó) |
+| Campeonato abierto: nombre, club, género, año, división, categoría, modalidad, estado | Firestore `inscripciones_abiertas/{id al azar}` | Panel y livecast (cuentas de admin, también mesa y transmisión) |
+| Campeonato abierto: correo, teléfono, fecha de nacimiento, polera, talla, monto, foto y comprobante | Firestore `inscripciones_abiertas_priv/{mismo id}`, Storage `athlete_files/abierto_{evento}/` | Panel |
 | Solicitudes de titulares | Firestore `solicitudes_datos` | Panel |
 | Incidentes | Firestore `incidentes` | Panel |
 | Registro de acciones del panel | Firestore `audit_log` | Panel |
@@ -72,6 +75,24 @@ campos está en `compartido/privacidad.js` (`INSC_PRIVADOS`) y en las reglas
 
 Cómo: panel → Protección de datos → Conservación → "Borrar lo vencido". Una vez al
 año como mínimo (sugerido: en enero). Queda en el registro de acciones.
+
+Campeonatos abiertos: correo, teléfono, fecha de nacimiento, foto y comprobante se
+borran a más tardar 12 meses después del campeonato (panel → Campeonatos → Ver
+inscritos → "Borrar datos personales"; la pantalla avisa cuando se cumple el plazo).
+
+## 3 bis. Campeonatos abiertos
+
+Un campeonato marcado como abierto (Admin → Campeonatos → "Campeonato abierto") no
+es de FECHIPO: lo organiza un club u otra entidad, que es la **responsable** de esos
+datos; YourLift SpA es su encargado. El formulario es `inscripcion_abierta.html?ev=<id>`:
+
+- No pide RUT ni código de atleta, y no consulta ni escribe el padrón.
+- Lo que llega va a `inscripciones_abiertas` / `_priv`, que no leen el ranking, los
+  récords, la ficha del atleta ni las nóminas públicas del sitio.
+- El livecast carga la nómina desde ahí, pero al cerrar la competencia no publica
+  resultados (`competition_results`) ni actualiza récords.
+- Las reglas solo aceptan inscripciones para un campeonato con `abierto: true` y
+  estado `open`, con listas cerradas de campos.
 
 ## 4. Solicitudes de los titulares (acceso, rectificación, supresión, oposición, portabilidad, bloqueo)
 

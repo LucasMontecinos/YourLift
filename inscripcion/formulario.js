@@ -55,7 +55,7 @@ function renderForm() {
             <div class="os" style="font-size:15px;font-weight:700">${ev.name}</div>
             <div style="font-size:12px;color:var(--muted);margin-top:4px">${ev.org} · ${ev.location} · ${ev.date}</div>
           </div>
-          ${isClosed ? '<span class="tag" style="background:rgba(239,68,68,.15);color:var(--red)">Cerrado</span>' : sel ? '<span style="color:var(--accent);font-size:20px"><i class=yl-i-check></i></span>' : ''}
+          ${isClosed ? '<span class="tag" style="background:rgba(239,68,68,.15);color:var(--red)">Cerrado</span>' : sel ? '<span style="color:var(--accent);font-size:20px"><i class=yl-i-check></i></span>' : ev.abierto === true ? '<span class="tag" style="background:rgba(212,168,67,.15);color:var(--gold)">Abierto · sin RUT</span>' : ''}
         </div>
       </div>`;
     });

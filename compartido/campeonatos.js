@@ -29,6 +29,8 @@
   // recordsEnabled:false es el interruptor viejo, apagado a mano.
   function daRecordEvento(ev) {
     if (!ev) return false;
+    // Un campeonato abierto no es de la federación: nunca pone récords.
+    if (ev.abierto === true) return false;
     if (ev.recordsNac === 'si') return true;
     if (ev.recordsNac === 'no' || ev.recordsEnabled === false) return false;
     return daRecord(ev.name || ev.nombre);
