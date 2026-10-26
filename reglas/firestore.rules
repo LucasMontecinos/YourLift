@@ -251,9 +251,10 @@ service cloud.firestore {
           && campeonatoAbierto(request.resource.data.evento);
     }
     match /inscripciones_abiertas/{id} {
-      // Las lee el panel y el livecast (cuentas de admin, también las de mesa y
-      // transmisión: aquí no hay nada personal). El público no.
-      allow read: if isAdmin();
+      // Se lee sin sesión: de aquí sale la nómina del campeonato en el sitio
+      // (nombre, club, división, categoría, modalidad y estado). No hay nada
+      // personal: lo personal va en inscripciones_abiertas_priv.
+      allow read: if true;
       allow create: if (isAdmin() && creaSinPersonales()) || inscAbiertaValida();
       allow update: if isAdmin() && modificaSinPersonales();
       allow delete: if isAdmin();

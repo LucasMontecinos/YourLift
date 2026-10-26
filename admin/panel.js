@@ -5380,7 +5380,7 @@ async function autoCloseOverdueEventos(){
 //
 //   inscripciones_abiertas/{id}       nombre, club, género, año de nacimiento,
 //                                     división, categoría, modalidad y estado.
-//                                     La leen el panel y el livecast.
+//                                     Pública: la nómina del sitio y el livecast.
 //   inscripciones_abiertas_priv/{id}  correo, teléfono, fecha de nacimiento,
 //                                     polera, talla, monto, foto y comprobante.
 //                                     Solo quien ve datos personales.
@@ -5498,14 +5498,22 @@ async function _abAprobadas(evId){
 }
 
 window.abVer=async function(evId){
-  ST.abVer=evId; ST.abLista=null; ST.eventoForm=null; render();
+  ST.abVer=evId; ST.eventoForm=null;
+  await _abCargar(evId);
+};
+// La lista de inscritos de un campeonato, compartida por "Ver inscritos"
+// (Campeonatos) y Nóminas: las acciones (aprobar, eliminar) la tocan a ella.
+async function _abCargar(evId){
+  ST.abListaEv=evId; ST.abLista=null; render();
   try{
     const r=await _abLeer(evId);
+    if(ST.abListaEv!==evId)return;           // mientras tanto se eligió otro
     ST.abLista=r.lista; ST.abSinPriv=r.sinPriv;
   }catch(e){ ST.abLista=[]; showToast('No se pudieron leer las inscripciones: '+(e.code||e.message),null,true); }
   render();
-};
-window.abCerrar=function(){ ST.abVer=null; ST.abLista=null; render(); };
+}
+// La lista se queda: la usa también Nóminas.
+window.abCerrar=function(){ ST.abVer=null; render(); };
 
 window.abEstado=async function(id,status){
   const i=(ST.abLista||[]).find(x=>x.id===id); if(!i)return;
@@ -5568,19 +5576,21 @@ window.abBorrarPersonales=async function(){
 };
 
 window.abExcel=function(){
-  const ev=(ST.eventos||[]).find(e=>e.id===ST.abVer)||{};
+  const ev=(ST.eventos||[]).find(e=>e.id===ST.abListaEv)||{};
   const est={pending:'Por revisar',approved:'Aprobada',rejected:'Rechazada'};
   const aoa=[['N°','Nombre','Género','Fecha de nacimiento','División','Categoría','Modalidad','Club','Correo','Teléfono','Polera','Talla','Monto','Estado']];
   (ST.abLista||[]).forEach((i,k)=>aoa.push([k+1,i.nombre||'',i.sexo||'',i._p.fechaNac||i.anioNac||'',i.division||'',i.categoria||'',i.modalidad||'',
     _abClub(i),i._p.correo||'',i._p.telefono||'',i._p.polera?'Sí':'No',i._p.talla||'',i._p.monto||'',est[i.status]||i.status||'']));
-  _xlsxDownload(aoa,'Inscritos','inscritos_'+String(ev.id||ST.abVer).replace(/[^a-z0-9_-]/gi,'_')+'.xlsx');
+  _xlsxDownload(aoa,'Inscritos','inscritos_'+String(ev.id||ST.abListaEv).replace(/[^a-z0-9_-]/gi,'_')+'.xlsx');
 };
 
 function renderAbInscritos(){
   const ev=(ST.eventos||[]).find(e=>e.id===ST.abVer)||{id:ST.abVer,name:ST.abVer};
   const c=_abConf(ev);
   const volver=`<button class="btn" style="background:transparent;border:1px solid var(--border);color:var(--muted)" onclick="abCerrar()">← Campeonatos</button>`;
-  if(ST.abLista===null)return `<div class="h1">${_abEsc(ev.name)}</div>${volver}<div class="card" style="margin-top:14px;color:var(--muted)">Cargando inscripciones…</div>`;
+  // Se vuelve acá con la lista de otro campeonato (la dejó Nóminas): se pide la suya.
+  if(ST.abListaEv!==ST.abVer)setTimeout(()=>{ if(ST.abVer&&ST.abListaEv!==ST.abVer)_abCargar(ST.abVer); },0);
+  if(ST.abLista===null||ST.abListaEv!==ST.abVer)return `<div class="h1">${_abEsc(ev.name)}</div>${volver}<div class="card" style="margin-top:14px;color:var(--muted)">Cargando inscripciones…</div>`;
   const l=ST.abLista, vivas=l.filter(i=>i.status!=='rejected');
   const cuenta=s=>l.filter(i=>i.status===s).length;
   const tallas={}; vivas.forEach(i=>{ if(i._p.polera&&i._p.talla)tallas[i._p.talla]=(tallas[i._p.talla]||0)+1; });
@@ -5634,7 +5644,50 @@ function renderAbInscritos(){
       </tr>`).join('')}</tbody>
     </table>`}
   </div>
-  <p style="font-size:11px;color:var(--muted);line-height:1.6;max-width:760px">Aprobar = el pago está revisado. El livecast carga a las aprobadas y a las por revisar, igual que en un campeonato de la federación; las rechazadas no. Nada de esto pasa a la base de atletas, al ranking ni a los récords.</p>`;
+  <p style="font-size:11px;color:var(--muted);line-height:1.6;max-width:760px">Aprobar = el pago está revisado. La nómina del sitio y el livecast muestran a las aprobadas y a las por revisar, igual que en un campeonato de la federación; las rechazadas no. Nada de esto pasa a la base de atletas, al ranking ni a los récords.</p>`;
+}
+
+// ── En Nóminas ───────────────────────────────────────────────
+// El campeonato abierto sale en el mismo selector que los de la federación, con
+// su nómina: lo que llenó cada atleta en el formulario. Lo de pagos, foto y
+// comprobante está en Campeonatos → Ver inscritos.
+function _abNominaOpciones(){
+  return (ST.eventos||[]).filter(e=>e.abierto===true&&e.status!=='archived');
+}
+function renderNomAbierta(ev,selectHtml){
+  if(ST.abListaEv!==ev.id)setTimeout(()=>{ if(ST.abListaEv!==ev.id)_abCargar(ev.id); },0);
+  const cargando=ST.abListaEv!==ev.id||ST.abLista===null;
+  const l=cargando?[]:ST.abLista.filter(i=>i.status!=='rejected');
+  const c=_abConf(ev);
+  const btn=(t,f,col)=>`<button onclick="${f}" style="font-size:10px;padding:3px 8px;border-radius:5px;border:1px solid ${col};background:transparent;color:${col};cursor:pointer;font-family:Oswald">${t}</button>`;
+  return `
+    <div class="h1">Nóminas</div>
+    <p class="subtitle">Campeonato abierto · ${cargando?'cargando…':l.length+' atletas'} · no entra al padrón, al ranking ni a los récords</p>
+    <div class="search-box">
+      ${selectHtml}
+      <button class="btn btn-b" onclick="abExcel()" style="padding:8px 16px;font-size:12px" ${l.length?'':'disabled'}>Exportar Excel</button>
+      <button class="btn" onclick="go('campeonatos');abVer('${_abEsc(ev.id)}')" style="padding:8px 16px;font-size:12px;background:rgba(212,168,67,.12);border:1px solid #D4A843;color:#D4A843">Pagos, fotos y comprobantes</button>
+    </div>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="tbl">
+        <tr><th>#</th><th>Nombre</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Modalidad</th><th>Club</th><th>Correo</th><th>Teléfono</th>${c.polera?'<th>Polera</th>':''}<th>Estado</th><th></th></tr>
+        ${l.map((i,k)=>`<tr>
+          <td style="color:var(--muted);font-family:Oswald">${k+1}</td>
+          <td>${_abEsc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${_abEsc(i._p.fechaNac||i.anioNac||'')}</span></td>
+          <td>${_abEsc(i.sexo||'?')}</td>
+          <td>${_abEsc(i.division||'—')}</td>
+          <td>${_abEsc(i.categoria||'—')}</td>
+          <td>${_abEsc(i.modalidad||'—')}</td>
+          <td>${window.clubLogoImg?window.clubLogoImg(_abClub(i),18,'background:var(--bg);padding:1px;'):''} ${_abEsc(_abClub(i)||'—')}</td>
+          <td style="font-size:11px">${i._p.correo?`<span onclick="copiarCorreo('${_abEsc(i._p.correo)}')" title="Click para copiar" style="cursor:pointer;color:var(--blue);border-bottom:1px dashed rgba(96,165,250,.5)">${_abEsc(i._p.correo)}</span>`:'<span style="color:var(--muted)">—</span>'}</td>
+          <td style="font-size:11px">${_abEsc(i._p.telefono||'—')}</td>
+          ${c.polera?`<td style="font-size:11px">${i._p.polera?_abEsc(i._p.talla||'Sí'):'<span style="color:var(--muted)">No</span>'}</td>`:''}
+          <td><span class="badge ${i.status==='approved'?'b-g':'b-y'}">${i.status==='approved'?'approved':'pending'}</span></td>
+          <td style="white-space:nowrap">${i.status!=='approved'?btn('Aprobar',`abEstado('${i.id}','approved')`,'var(--green)'):''} ${btn('Rechazar',`abEstado('${i.id}','rejected')`,'var(--red)')}</td>
+        </tr>`).join('')}
+      </table>
+      ${cargando?'<div class="empty">Cargando inscripciones…</div>':l.length===0?'<div class="empty">Sin atletas en este campeonato</div>':''}
+    </div>`;
 }
 
 // ═══════════════════════ admin/cronograma.js ═══════════════════════
@@ -6371,11 +6424,21 @@ function renderNomCards(){
 function renderNominas(){
   // Events from Firebase inscriptions only (Firestore is the source of truth)
   const fbEvents=[...new Set(ST.inscripciones.map(i=>i.evento))].filter(Boolean);
-  const allEvents=[...new Set([...fbEvents])];
+  // Los campeonatos abiertos tienen sus inscripciones aparte (admin/abiertos.js):
+  // salen en el mismo selector, con su propia tabla.
+  const abiertos=_abNominaOpciones();
+  const allEvents=[...new Set([...fbEvents,...abiertos.map(e=>e.id)])];
   if(!ST.filterEv&&allEvents.length)ST.filterEv=allEvents[0];
   // La nómina del Sudamericano llega de FESUPO en un archivo, no por inscripciones:
   // tiene su propia tabla (mismo selector de evento).
   if(ST.filterEv===NS_EV) return renderNomSuda(allEvents);
+  const _selEvento=`<select class="inp" onchange="ST.filterEv=this.value;ST.filterClasif='';render()">
+        ${allEvents.map(e=>{ const a=abiertos.find(x=>x.id===e);
+          return `<option value="${e}" ${ST.filterEv===e?'selected':''}>${a?esc(a.name)+' · abierto':e}</option>`; }).join('')}
+        ${ST.sudaPublicada?`<option value="${NS_EV}">Sudamericano 2026 — nómina FESUPO</option>`:''}
+      </select>`;
+  const _evAbierto=abiertos.find(e=>e.id===ST.filterEv);
+  if(_evAbierto) return renderNomAbierta(_evAbierto,_selEvento);
 
   const inFirebase=fbEvents.includes(ST.filterEv);
   const hasEventoDoc=ST.eventos.some(e=>e.id===ST.filterEv||e.name===ST.filterEv);
@@ -6409,10 +6472,7 @@ function renderNominas(){
     <div class="h1">Nóminas</div>
     <p class="subtitle">Edita inscripciones · ${filtered.length} atletas en evento seleccionado</p>
     <div class="search-box">
-      <select class="inp" onchange="ST.filterEv=this.value;ST.filterClasif='';render()">
-        ${allEvents.map(e=>`<option value="${e}" ${ST.filterEv===e?'selected':''}>${e}</option>`).join('')}
-        ${ST.sudaPublicada?`<option value="${NS_EV}">Sudamericano 2026 — nómina FESUPO</option>`:''}
-      </select>
+      ${_selEvento}
       ${_posNacCol?`<select class="inp" style="max-width:190px" onchange="ST.filterClasif=this.value;render()">
         <option value="">Todos</option>
         <option value="clasificado" ${ST.filterClasif==='clasificado'?'selected':''}>Clasificados</option>

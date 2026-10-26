@@ -17,10 +17,8 @@ function _applyNominas(all){
   ((NM&&NM._static)||[]).forEach(e=>{ if(e&&e.parent){ if(e.id)_jornadas.add(e.id); if(e.name)_jornadas.add(e.name); } });
   // Build events from NOM_EVENTS (loaded from Firestore eventos collection)
   // Show ALL non-archived events, even if they have 0 inscriptions
-  // Un campeonato abierto (no es de la federación) no tiene nómina acá: sus
-  // inscripciones van aparte y no se publican (inscripcion_abierta.html).
   const fbEvents=NOM_EVENTS
-    .filter(ev=>ev.status!=='archived'&&ev.status!=='draft'&&ev.abierto!==true&&!_jornadas.has(ev.id)&&!_jornadas.has(ev.name))
+    .filter(ev=>ev.status!=='archived'&&ev.status!=='draft'&&!_jornadas.has(ev.id)&&!_jornadas.has(ev.name))
     .map(ev=>{
       const fbAths=(byEvent[ev.id]||byEvent[ev.name]||[])
         .sort((a,b)=>(a.timestamp?.seconds||0)-(b.timestamp?.seconds||0))
@@ -77,12 +75,26 @@ function _nominasClaves(){
   const evs=(NOM_EVENTS||[]).filter(ev=>ev&&ev.status!=='archived'&&ev.status!=='draft'&&ev.abierto!==true);
   return [...new Set(evs.flatMap(ev=>[ev.id,ev.name]).filter(Boolean))].sort();
 }
+// Los campeonatos abiertos (no son de la federación) tienen sus inscripciones
+// aparte, en inscripciones_abiertas: lo mismo que la nómina necesita (nombre,
+// club, división, categoría, modalidad, estado) y nada personal.
+function _nominasAbiertos(){
+  if(window._eventosFS!==true)return [];
+  return (NOM_EVENTS||[]).filter(ev=>ev&&ev.abierto===true&&ev.status!=='archived'&&ev.status!=='draft')
+    .map(ev=>ev.id).filter(Boolean).sort();
+}
+// Qué se está escuchando: si cambia, se vuelve a armar el oyente.
+function _nominasClave(){ return _nominasClaves().join('|')+'#'+_nominasAbiertos().join('|'); }
 
 function _nominasConsultas(claves){
   const Q=window.FBQ, col=Q.collection(fbDB,'inscripciones');
-  if(!claves.length||!Q.where||!Q.query)return [col];
-  const out=[];
-  for(let i=0;i<claves.length;i+=30)out.push(Q.query(col,Q.where('evento','in',claves.slice(i,i+30))));
+  if(!Q.where||!Q.query)return [col];
+  const out=[], por30=(c,l)=>{ for(let i=0;i<l.length;i+=30)out.push(Q.query(c,Q.where('evento','in',l.slice(i,i+30)))); };
+  if(claves.length)por30(col,claves);
+  // Sin la lista de campeonatos: todo. Con la lista y ninguno de la federación
+  // (solo hay abiertos), nada: bajar la colección entera sería por nada.
+  else if(window._eventosFS!==true)out.push(col);
+  por30(Q.collection(fbDB,'inscripciones_abiertas'),_nominasAbiertos());
   return out;
 }
 
@@ -102,14 +114,20 @@ function _nominasEscuchar(){
   const claves=_nominasClaves();
   const consultas=_nominasConsultas(claves);
   const partes=consultas.map(()=>null);
-  const unsubs=consultas.map((q,i)=>window.FBQ.onSnapshot(q,snap=>{
-    partes[i]=snap.docs.map(d=>({id:d.id,...d.data()}));
+  const juntar=()=>{
     if(partes.some(p=>p===null))return;          // falta que llegue alguna parte
     const all=[].concat(...partes);
     _fsSetCache('inscripciones',all);
     _applyNominas(all);
-  },e=>console.warn('[nominas] oyente',e)));
-  window._nomOyente={unsubs,clave:claves.join('|'),desde:Date.now(),fuera:0};
+  };
+  const unsubs=consultas.map((q,i)=>window.FBQ.onSnapshot(q,snap=>{
+    partes[i]=snap.docs.map(d=>({id:d.id,...d.data()}));
+    juntar();
+  // Una parte que no se puede leer (por ejemplo, reglas sin publicar) cuenta
+  // como vacía: si no, las demás tarjetas se quedaban en "Cargando…".
+  },e=>{console.warn('[nominas] oyente',e); if(partes[i]===null){partes[i]=[];juntar();}}));
+  if(!consultas.length)_applyNominas([]);
+  window._nomOyente={unsubs,clave:_nominasClave(),desde:Date.now(),fuera:0};
 }
 
 function _nominasSoltar(){
@@ -599,6 +617,7 @@ function _nomEvCard(ev,ei){
   const id=_nsudaSlug(ev.name);
   const lc=ev.liveCount||{};
   const badges=(ev.fromFirebase?'<span style="font-size:10px;background:var(--green);color:#fff;padding:2px 8px;border-radius:10px;animation:pulse 2s infinite">EN VIVO</span>':'')
+    +(ev.abierto===true?' <span style="font-size:10px;background:rgba(212,168,67,.15);color:var(--gold);padding:2px 8px;border-radius:10px;border:1px solid rgba(212,168,67,.4)" title="No es de la federación: no suma al ranking ni a los récords">Campeonato abierto</span>':'')
     +(ev.hasJsonFallback?' <span style="font-size:10px;background:rgba(212,168,67,.2);color:var(--gold);padding:2px 8px;border-radius:10px;border:1px solid rgba(212,168,67,.4)">Nómina manual</span>':'');
   return _nomCardShell(id,{
     name:ev.name,fecha:'',org:ev.organizer||ev.org||'',lugar:ev.location||'',

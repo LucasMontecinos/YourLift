@@ -54,7 +54,7 @@ console.log('\nUn abierto no pone récords (compartido/campeonatos.js)');
 console.log('\nLas reglas');
 {
   const pub = bloque('inscripciones_abiertas/'), priv = bloque('inscripciones_abiertas_priv/');
-  ok(/allow read: if isAdmin\(\);/.test(pub) && !/allow read: if true/.test(pub), 'inscripciones_abiertas: las lee el panel y el livecast, no el público');
+  ok(/allow read: if true;/.test(pub), 'inscripciones_abiertas se lee sin sesión: es la nómina del campeonato (no tiene nada personal)');
   ok(/allow create: if \(isAdmin\(\) && creaSinPersonales\(\)\) \|\| inscAbiertaValida\(\);/.test(pub), 'y ni el admin le escribe datos personales');
   ok(/allow read: if veDatosPersonales\(\);/.test(priv), 'inscripciones_abiertas_priv: solo quien ve datos personales');
   const f = REGLAS.slice(REGLAS.indexOf('function campeonatoAbierto'), REGLAS.indexOf('function inscAbiertaValida'));
@@ -94,11 +94,6 @@ console.log('\nEl livecast');
   ok(vm.runInContext("_esAbierto('x')", ctx) === true, 'también lo reconoce por la lista de campeonatos');
 }
 
-console.log('\nLas nóminas públicas del sitio no lo muestran');
-{
-  const s = fs.readFileSync(path.join(RAIZ, 'sitio', 'nominas.js'), 'utf8');
-  ok((s.match(/ev\.abierto!==true/g) || []).length >= 2, 'ni en la pestaña Nóminas ni en lo que escucha');
-}
 
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -220,6 +215,42 @@ console.log('\nLas nóminas públicas del sitio no lo muestran');
     await p.context().close();
   }
 
+  console.log('\nLa pestaña Nóminas del sitio');
+  {
+    const insc = (id, nombre, status) => ({ id, evento: COPA.id, nombre, sexo: 'Femenino', anioNac: '1995', division: 'Open',
+      categoria: '-63 kg', modalidad: 'Classic', club: 'Otro', clubOtro: 'Gimnasio Talca', status });
+    const fake = { eventos: [COPA, FED],
+      inscripciones: [{ id: 'nac_2026_X', evento: FED.id, nombre: 'Atleta Federado', codigo: '1111AFX-2020', status: 'approved', division: 'Open', categoria: '-74 kg', modalidad: 'Powerlifting Classic', club: 'Los Toros', sexo: 'Masculino' }],
+      inscripciones_abiertas: [insc('a1', 'Ana Abierta', 'approved'), insc('a2', 'Berta Pendiente', 'pending'), insc('a3', 'Carla Rechazada', 'rejected')] };
+    const nominas = async f => {
+      const p = await pagina('index.html', f);
+      await p.waitForFunction(() => typeof fbReady !== 'undefined' && fbReady && window._eventosFS === true, null, { timeout: 20000 });
+      await p.evaluate(() => { globalThis.__LEC = []; ST.v = 'nominas'; cargarParaVista('nominas'); });
+      await p.waitForFunction(() => window._nominasCargadas, null, { timeout: 10000 }).catch(() => {});
+      return p;
+    };
+    let p = await nominas(fake);
+    const r = await p.evaluate(id => {
+      const ev = (NM.events || []).find(e => e.id === id) || {};
+      return { nombres: (ev.athletes || []).map(a => a.nombre + '|' + a.club), html: nom(), lec: globalThis.__LEC || [],
+        fed: ((NM.events || []).find(e => e.id === 'nac_2026') || {}).athletes };
+    }, COPA.id);
+    ok(r.nombres.includes('Ana Abierta|Gimnasio Talca') && r.nombres.includes('Berta Pendiente|Gimnasio Talca'),
+      'la Copa sale con sus inscritos aprobados y por revisar (con el club escrito a mano)');
+    ok(!r.nombres.some(n => /Rechazada/.test(n)), 'los rechazados no');
+    ok(/Copa Prueba Clausura 2026/.test(r.html) && /Campeonato abierto/.test(r.html), 'su tarjeta dice "Campeonato abierto"');
+    ok((r.fed || []).length === 1, 'y el campeonato de la federación sigue con lo suyo');
+    const ab = r.lec.filter(x => x.col === 'inscripciones_abiertas');
+    ok(ab.length && ab.every(x => (x.filtros || []).some(f => f.op === 'in' && f.val.includes(COPA.id))), 'pide solo las de los campeonatos abiertos que se muestran');
+    ok(!p.errs.length, 'sin errores' + (p.errs.length ? ': ' + p.errs.join(' | ') : ''));
+    await p.context().close();
+    p = await nominas({ eventos: [COPA], inscripciones_abiertas: [insc('a1', 'Ana Abierta', 'approved')] });
+    const l = await p.evaluate(() => ({ lec: globalThis.__LEC || [], n: ((NM.events || [])[0] || {}).athletes }));
+    ok(!l.lec.some(x => x.col === 'inscripciones'), 'si solo hay abiertos, no baja la colección entera de la federación');
+    ok((l.n || []).length === 1, 'y la nómina del abierto sale igual');
+    await p.context().close();
+  }
+
   console.log('\nDesde el formulario de siempre');
   {
     const ctx = await b.newContext({ viewport: { width: 1000, height: 900 }, serviceWorkers: 'block' });
@@ -265,6 +296,25 @@ console.log('\nLas nóminas públicas del sitio no lo muestran');
     await p.evaluate(() => { window.__ESCRITO = []; return abEstado('a1', 'approved'); });
     const w = await p.evaluate(() => window.__ESCRITO);
     ok(w.some(x => x.col === 'inscripciones_abiertas' && x.id === 'a1' && x.d && x.d.status === 'approved'), 'aprobar cambia el estado');
+
+    console.log('\n  En Nóminas del panel');
+    await p.evaluate(() => { abCerrar(); ST.filterEv = ''; go('nominas'); });
+    await p.waitForTimeout(200);
+    const opc = await p.evaluate(() => [...document.querySelectorAll('#app select option')].map(o => o.value + '=' + o.textContent));
+    ok(opc.some(o => /^copa_prueba_2026=Copa Prueba Clausura 2026 · abierto$/.test(o)), 'el abierto sale en el selector de campeonatos, con su nombre');
+    await p.evaluate(id => { ST.filterEv = id; render(); }, COPA.id);
+    await p.waitForFunction(id => ST.abListaEv === id && Array.isArray(ST.abLista) && /Beto Abierto/.test(document.getElementById('app').innerText), COPA.id, { timeout: 10000 }).catch(() => {});
+    t = await p.evaluate(() => document.getElementById('app').innerText);
+    ok(/Ana Abierta/.test(t) && /Beto Abierto/.test(t) && /Gimnasio Sur/.test(t) && /ana@ejemplo\.cl/.test(t) && /911112222/.test(t),
+      'con su nómina: nombre, club, correo y teléfono');
+    ok(/no entra al padrón, al ranking ni a los récords/.test(t), 'y aclara que no entra al padrón ni al ranking');
+    await p.evaluate(() => { window.__ESCRITO = []; return abEstado('a2', 'rejected'); });
+    t = await p.evaluate(() => document.getElementById('app').innerText);
+    ok(!/Beto Abierto/.test(t) && await p.evaluate(() => window.__ESCRITO.some(x => x.id === 'a2' && x.d.status === 'rejected')), 'rechazar lo saca de la nómina');
+    // Ver inscritos usa la misma lista (la base falsa no guarda lo escrito: no se recarga).
+    await p.evaluate(id => { ST.abVer = id; go('campeonatos'); }, COPA.id);
+    t = await p.evaluate(() => document.getElementById('app').innerText);
+    ok(/Beto Abierto/.test(t) && /Rechazada/.test(t), 'en Ver inscritos sigue estando, como rechazada');
 
     console.log('\n  Crear un campeonato abierto');
     await p.evaluate(() => { abCerrar(); newEvento(); });

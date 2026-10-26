@@ -125,11 +125,21 @@ function renderNomCards(){
 function renderNominas(){
   // Events from Firebase inscriptions only (Firestore is the source of truth)
   const fbEvents=[...new Set(ST.inscripciones.map(i=>i.evento))].filter(Boolean);
-  const allEvents=[...new Set([...fbEvents])];
+  // Los campeonatos abiertos tienen sus inscripciones aparte (admin/abiertos.js):
+  // salen en el mismo selector, con su propia tabla.
+  const abiertos=_abNominaOpciones();
+  const allEvents=[...new Set([...fbEvents,...abiertos.map(e=>e.id)])];
   if(!ST.filterEv&&allEvents.length)ST.filterEv=allEvents[0];
   // La nómina del Sudamericano llega de FESUPO en un archivo, no por inscripciones:
   // tiene su propia tabla (mismo selector de evento).
   if(ST.filterEv===NS_EV) return renderNomSuda(allEvents);
+  const _selEvento=`<select class="inp" onchange="ST.filterEv=this.value;ST.filterClasif='';render()">
+        ${allEvents.map(e=>{ const a=abiertos.find(x=>x.id===e);
+          return `<option value="${e}" ${ST.filterEv===e?'selected':''}>${a?esc(a.name)+' · abierto':e}</option>`; }).join('')}
+        ${ST.sudaPublicada?`<option value="${NS_EV}">Sudamericano 2026 — nómina FESUPO</option>`:''}
+      </select>`;
+  const _evAbierto=abiertos.find(e=>e.id===ST.filterEv);
+  if(_evAbierto) return renderNomAbierta(_evAbierto,_selEvento);
 
   const inFirebase=fbEvents.includes(ST.filterEv);
   const hasEventoDoc=ST.eventos.some(e=>e.id===ST.filterEv||e.name===ST.filterEv);
@@ -163,10 +173,7 @@ function renderNominas(){
     <div class="h1">Nóminas</div>
     <p class="subtitle">Edita inscripciones · ${filtered.length} atletas en evento seleccionado</p>
     <div class="search-box">
-      <select class="inp" onchange="ST.filterEv=this.value;ST.filterClasif='';render()">
-        ${allEvents.map(e=>`<option value="${e}" ${ST.filterEv===e?'selected':''}>${e}</option>`).join('')}
-        ${ST.sudaPublicada?`<option value="${NS_EV}">Sudamericano 2026 — nómina FESUPO</option>`:''}
-      </select>
+      ${_selEvento}
       ${_posNacCol?`<select class="inp" style="max-width:190px" onchange="ST.filterClasif=this.value;render()">
         <option value="">Todos</option>
         <option value="clasificado" ${ST.filterClasif==='clasificado'?'selected':''}>Clasificados</option>

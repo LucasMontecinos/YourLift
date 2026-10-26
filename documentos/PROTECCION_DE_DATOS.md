@@ -51,7 +51,7 @@ cuenta personal (rol owner, superadmin o admin). Las cuentas de competencia
 | Jueces: categoría por código | Firestore `publico/jueces` | Público |
 | Cronograma: filas y nombres de handlers | Firestore `cronograma/{evento}` | Público |
 | Correos de handlers | `cronograma_priv/{evento}`, `handlers_priv/{id}` | Panel (y el entrenador que los anotó) |
-| Campeonato abierto: nombre, club, género, año, división, categoría, modalidad, estado | Firestore `inscripciones_abiertas/{id al azar}` | Panel y livecast (cuentas de admin, también mesa y transmisión) |
+| Campeonato abierto: nombre, club, género, año, división, categoría, modalidad, estado | Firestore `inscripciones_abiertas/{id al azar}` | Público (la nómina del campeonato en el sitio y el livecast) |
 | Campeonato abierto: correo, teléfono, fecha de nacimiento, polera, talla, monto, foto y comprobante | Firestore `inscripciones_abiertas_priv/{mismo id}`, Storage `athlete_files/abierto_{evento}/` | Panel |
 | Solicitudes de titulares | Firestore `solicitudes_datos` | Panel |
 | Incidentes | Firestore `incidentes` | Panel |
@@ -88,7 +88,9 @@ datos; YourLift SpA es su encargado. El formulario es `inscripcion_abierta.html?
 
 - No pide RUT ni código de atleta, y no consulta ni escribe el padrón.
 - Lo que llega va a `inscripciones_abiertas` / `_priv`, que no leen el ranking, los
-  récords, la ficha del atleta ni las nóminas públicas del sitio.
+  récords ni la ficha del atleta. La parte pública (nombre, club, división,
+  categoría, modalidad, estado) sale en la pestaña Nóminas del sitio, marcada
+  como "Campeonato abierto"; lo que dice el formulario al autorizar.
 - El livecast carga la nómina desde ahí, pero al cerrar la competencia no publica
   resultados (`competition_results`) ni actualiza récords.
 - Las reglas solo aceptan inscripciones para un campeonato con `abierto: true` y

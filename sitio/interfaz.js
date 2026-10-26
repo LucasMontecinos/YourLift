@@ -32,7 +32,7 @@ function _applyEventos(docs){
   // Si estaba escuchando otra lista (cambió un campeonato), se rearma.
   window._eventosFS=true;
   if(window._nomEspera){clearTimeout(window._nomEspera);window._nomEspera=null;if(typeof _nominasEscuchar==='function')_nominasEscuchar();}
-  else if(window._nomOyente&&window._nomOyente.clave!==_nominasClaves().join('|')){_nominasSoltar();_nominasEscuchar();}
+  else if(window._nomOyente&&window._nomOyente.clave!==_nominasClave()){_nominasSoltar();_nominasEscuchar();}
   if(ST.v==='trans')renderFondo();
 }
 
