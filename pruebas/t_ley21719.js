@@ -91,7 +91,7 @@ console.log('\nLas reglas');
 console.log('\nEl panel no carga Google Analytics; el sitio, sin señales publicitarias');
 {
   ok(!/googletagmanager/.test(fs.readFileSync(path.join(RAIZ, 'admin.html'), 'utf8')), 'admin.html sin Google Analytics');
-  ok(/allow_google_signals:false/.test(fs.readFileSync(path.join(RAIZ, 'index.html'), 'utf8')), 'index.html sin señales de Google');
+  ok(/allow_google_signals: false/.test(fs.readFileSync(path.join(RAIZ, 'compartido', 'consentimiento.js'), 'utf8')), 'Analytics sin señales de Google (compartido/consentimiento.js)');
 }
 
 const EV = { id: 'ev_ley', name: 'Campeonato Ley', status: 'open', date: '2026-12-05', closeDate: '2026-11-30' };

@@ -1080,7 +1080,7 @@ function renderEntrenadoresPub(){
 function renderTerminos(){
   // Va acá adentro y no como constante del archivo: la página se puede dibujar
   // (con #privacidad) antes de que el archivo termine de cargar.
-  const POLITICA_VIGENTE='26 de octubre de 2026';
+  const POLITICA_VIGENTE='27 de octubre de 2026';
   const sec=(title,body,id)=>`
     <div ${id?`id="${id}" `:''}style="margin-bottom:28px">
       <div style="font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--gold);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(212,168,67,.2)">${title}</div>
@@ -1129,7 +1129,7 @@ function renderTerminos(){
      'Los datos de contacto, la foto y el comprobante, hasta 12 meses después del campeonato'],
     ['Navegación',
      'Saber cuántas visitas tiene el sitio y qué secciones se usan',
-     'Un contador propio sin datos de quién visita, y Google Analytics (Google LLC)',
+     'Un contador propio sin datos de quién visita, y Google Analytics (Google LLC) solo si aceptas las cookies',
      'Administradores (cifras agregadas)',
      'El contador, sin plazo (no identifica a nadie); Google Analytics, según su propia configuración'],
   ];
@@ -1174,7 +1174,9 @@ function renderTerminos(){
 
     ${sec('5. DÓNDE SE GUARDAN',`
       En los servicios de ${b('Google Firebase')} (Google LLC) —base de datos Firestore y almacenamiento de archivos— y, lo público del sitio, en ${b('GitHub Pages')} (GitHub, Inc.). Estos proveedores pueden guardar la información en centros de datos fuera de Chile, entre ellos en Estados Unidos, con compromisos contractuales de seguridad y confidencialidad.<br><br>
-      En el navegador de quien visita el sitio quedan copias temporales de lo público (para que cargue rápido) y Google Analytics usa cookies de medición. No se usan señales publicitarias de Google.
+      En el navegador de quien visita el sitio quedan copias temporales de lo público, para que cargue rápido.<br><br>
+      ${b('Cookies.')} Google Analytics guarda cookies de medición en tu equipo ${b('solo si las aceptas')} en el aviso que sale al entrar. Si no las aceptas, no se carga. No se usan señales publicitarias de Google. Tu elección queda guardada en este equipo y la puedes cambiar cuando quieras:
+      <div style="margin-top:10px"><button type="button" onclick="window.ylCookies&&ylCookies.cambiar()" style="font-family:Oswald;font-size:12px;letter-spacing:1px;padding:8px 14px;border-radius:8px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer">Cambiar preferencias de cookies</button></div>
     `)}
 
     ${sec('6. CÓMO SE PROTEGEN',ul([

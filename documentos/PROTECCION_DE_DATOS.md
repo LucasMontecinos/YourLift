@@ -1,7 +1,7 @@
 # Protección de datos personales en YourLift
 
 Ley N° 19.628, modificada por la Ley N° 21.719. Vigente desde el 22 de octubre de 2026
-(campeonatos abiertos: 26 de octubre de 2026).
+(campeonatos abiertos: 26 de octubre de 2026; aviso de cookies: 27 de octubre de 2026).
 
 Este documento es el que se usa puertas adentro. Lo que se le promete al público
 está en la política de privacidad del sitio (yourlift.cl/#privacidad, código en
@@ -56,7 +56,7 @@ cuenta personal (rol owner, superadmin o admin). Las cuentas de competencia
 | Solicitudes de titulares | Firestore `solicitudes_datos` | Panel |
 | Incidentes | Firestore `incidentes` | Panel |
 | Registro de acciones del panel | Firestore `audit_log` | Panel |
-| Visitas | Firestore `analytics_daily` (cifras agregadas), Google Analytics | Panel |
+| Visitas | Firestore `analytics_daily` (cifras agregadas), Google Analytics (solo con consentimiento de cookies) | Panel |
 
 Las reglas de Firestore rechazan cualquier escritura que ponga RUT, fechas de
 nacimiento, comuna, correos, teléfonos o PIN en una colección pública, también si
@@ -148,7 +148,10 @@ abierta, etc.).
   enlace público, y solo el panel los abre.
 - Cuentas personales por administrador; las de competencia no ven datos
   personales; se desactivan desde Gestión Admin.
-- El panel no carga Google Analytics. El sitio lo carga sin señales publicitarias.
+- El panel no carga Google Analytics. El sitio lo carga solo si la persona acepta
+  las cookies (aviso al entrar, `compartido/consentimiento.js`; se cambia desde la
+  política de privacidad), y sin señales publicitarias. El livecast no muestra el
+  aviso (sale al aire en OBS y pantallas): ahí se carga solo con la aceptación previa.
 - Registro de acciones del panel (`audit_log`).
 - Revisar dos veces al año: quién tiene cuenta de admin, que las reglas publicadas
   sean las del repositorio, y la conservación.
