@@ -146,6 +146,21 @@ async function abrir(b, rol) {
       'y los datos de la SpA y de la cuenta');
   }
 
+  console.log('\nLa guía: cómo facturar y pagar el IVA');
+  {
+    await p.evaluate(() => render());
+    const g = await p.evaluate(() => { const d = document.getElementById('cobro_guia'); return d ? { abierta: d.open, t: d.textContent } : null; });
+    ok(g && g.abierta, 'está en la pantalla, abierta mientras no se haya emitido nada');
+    ok(g && /factura electrónica del SII/.test(g.t) && /No va boleta de honorarios/.test(g.t) && /no es el documento tributario/.test(g.t),
+      'dice qué documento emitir (y que el PDF no lo reemplaza)');
+    ok(g && /\$300\.000/.test(g.t) && /\$57\.000/.test(g.t) && /\$357\.000/.test(g.t), 'con la tarifa guardada: 100 atletas = $300.000 + $57.000 de IVA');
+    ok(g && /\$252\.101/.test(g.t) && /\$47\.899/.test(g.t) && /\$2\.521/.test(g.t), 'y si los $3.000 son con IVA incluido: neto $252.101, IVA $47.899, tarifa neta $2.521');
+    ok(g && /Preparar cobro/.test(g.t) && /Copiar datos para el SII/.test(g.t) && /Marcar pagado/.test(g.t), 'los pasos nombran los botones de esta pantalla');
+    ok(g && /día 20/.test(g.t) && /503/.test(g.t) && /502/.test(g.t) && /sin movimiento/.test(g.t), 'y cómo declarar el IVA en el F29');
+    await p.evaluate(() => { const d = document.getElementById('cobro_guia'); d.open = false; d.dispatchEvent(new Event('toggle')); render(); });
+    ok(await p.evaluate(() => !document.getElementById('cobro_guia').open), 'si se cierra, queda cerrada');
+  }
+
   console.log('\nPreparar y registrar la factura del campeonato');
   {
     await p.evaluate(() => cobroPreparar('regional_sur_austral_2026'));

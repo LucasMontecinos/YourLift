@@ -281,6 +281,55 @@ window.cobroPDF=async function(id){
 };
 
 // ── Pantalla ──
+// La guía paso a paso: qué documento emitir, cómo se emite en el SII y cómo se
+// declara el IVA. Va en la misma pantalla porque se usa una vez al mes y en el
+// intertanto se olvida. Los montos de ejemplo salen de la tarifa guardada.
+function _cobroGuia(cfg,abierta){
+  const t=+cfg.tarifa||3000, n=100, pct=+cfg.iva||19, f=1+pct/100;
+  const netoA=t*n, ivaA=Math.round(netoA*pct/100);
+  const totB=t*n, netoB=Math.round(totB/f), ivaB=totB-netoB, tNeta=Math.round(t/f);
+  const h3=x=>`<div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:var(--gold);margin:18px 0 8px">${x}</div>`;
+  const ol=a=>`<ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:7px">${a.map(x=>`<li>${x}</li>`).join('')}</ol>`;
+  const ul=a=>`<ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:7px">${a.map(x=>`<li>${x}</li>`).join('')}</ul>`;
+  const td='padding:7px 10px;border-bottom:1px solid var(--border)', tdn=td+';text-align:right;font-family:Oswald';
+  const b=x=>`<b style="color:var(--text)">${x}</b>`;
+  return `<details id="cobro_guia" ${abierta?'open':''} ontoggle="ST.cobroGuia=this.open" style="background:var(--card);border:1px solid rgba(212,168,67,.45);border-radius:12px;padding:14px 18px;margin:14px 0 22px">
+    <summary style="cursor:pointer;font-family:Oswald;font-size:15px;letter-spacing:1px">GUÍA: CÓMO FACTURAR Y PAGAR EL IVA</summary>
+    <div style="font-size:13px;color:var(--muted);line-height:1.65;max-width:860px">
+      ${h3('1. QUÉ DOCUMENTO SE EMITE')}
+      ${ul([
+        `A un club, una corporación o FECHIPO (tienen RUT y giro): ${b('factura electrónica del SII')}, con IVA. Es lo normal.`,
+        `A una persona sin RUT de empresa: ${b('boleta electrónica')}, también con IVA.`,
+        `${b('No va boleta de honorarios')}: esa es para personas naturales y ${esc(cfg.emisor&&cfg.emisor.razon||'YourLift SpA')} es una empresa.`,
+        `El ${b('cobro en PDF')} de esta pantalla no es el documento tributario: es el detalle (cuántos atletas, sus nombres y los montos). Se manda ${b('junto con')} la factura del SII.`])}
+      ${h3('2. ¿LA TARIFA ES CON O SIN IVA?')}
+      <p style="margin:0 0 8px">Acá la tarifa se toma como ${b('neto')} y el IVA se suma encima. Con ${_clp(t)} por atleta y ${n} atletas:</p>
+      <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;min-width:460px">
+        <tr><th style="${td};text-align:left">ACUERDO</th><th style="${td};text-align:right">NETO</th><th style="${td};text-align:right">IVA ${_cobroPct(pct)}</th><th style="${td};text-align:right">TE PAGA</th></tr>
+        <tr><td style="${td}">${_clp(t)} + IVA</td><td style="${tdn}">${_clp(netoA)}</td><td style="${tdn}">${_clp(ivaA)}</td><td style="${tdn}">${_clp(netoA+ivaA)}</td></tr>
+        <tr><td style="${td}">${_clp(t)} con IVA incluido</td><td style="${tdn}">${_clp(netoB)}</td><td style="${tdn}">${_clp(ivaB)}</td><td style="${tdn}">${_clp(totB)}</td></tr>
+      </table></div>
+      <p style="margin:8px 0 0">Si acordaron que el atleta paga ${_clp(t)} en total, guarda como tarifa el neto: ${b(_clp(tNeta))}. Conviene dejarlo escrito con el organizador antes del campeonato.</p>
+      ${h3('3. EMITIR LA FACTURA')}
+      ${ol([
+        `Acá, en la fila del campeonato: ${b('Preparar cobro')}. Revisa la cantidad de atletas y los datos del cliente (RUT, razón social, giro, dirección) y aprieta ${b('Copiar datos para el SII')}.`,
+        `En ${b('sii.cl → Servicios online → Factura electrónica → Sistema de facturación gratuito del SII → Emitir documento → Factura electrónica')}. Necesitas el ${b('certificado digital')} (firma electrónica) del representante de la empresa.`,
+        `Pega los datos del cliente. En el detalle, por ejemplo: «Servicio plataforma YourLift: inscripciones y transmisión, Regional Centro 2026». Cantidad: los atletas; precio unitario: el ${b('neto')}. ${b('Firma y envía')}.`,
+        `Vuelve acá, anota el ${b('N° de la factura')} y aprieta ${b('Guardar')}. Baja el ${b('Cobro PDF')} y mándale al cliente la factura del SII y el PDF.`,
+        `Cuando te paguen: ${b('Marcar pagado')}.`])}
+      ${h3('4. PAGAR EL IVA (F29)')}
+      ${ul([
+        `${b('Cuándo')}: el mes siguiente al de la factura, hasta el ${b('día 20')} (una factura de noviembre se declara hasta el 20 de diciembre). Se paga ${b('aunque el cliente todavía no te haya pagado')}.`,
+        `${b('Dónde')}: ${b('sii.cl → Servicios online → Impuestos mensuales → Declarar IVA (F29)')} → el mes. El SII muestra una ${b('propuesta')} con tus facturas (del Registro de Compras y Ventas).`,
+        `${b('Qué revisar')}: que calce con el ${b('Resumen para el F29')} de abajo (eliges el mes): código ${b('503')} = cantidad de facturas y código ${b('502')} = IVA débito. Las boletas van en 110 y 111.`,
+        `${b('Crédito fiscal')}: el IVA de lo que compraste con factura a nombre de la empresa (hosting, equipos…) se ${b('resta')}. La propuesta lo trae.`,
+        `${b('PPM')}: pago provisional sobre las ventas netas (código 563). La tasa te la da el contador; se guarda abajo, en Datos de cobro.`,
+        `Un mes ${b('sin ventas')} igual se presenta el F29, ${b('sin movimiento')}.`])}
+      <p style="margin:16px 0 0;font-size:12px">Revisa el primer F29 con tu contador. Los menús del SII pueden cambiar de nombre.</p>
+    </div>
+  </details>`;
+}
+
 function renderCobros(){
   if(ST._cobrosLoaded!==true){ if(!ST._cobrosLoaded)setTimeout(cobrosCargar,0); return '<div class="h1">Cobros YourLift</div><p class="subtitle">Cargando…</p>'; }
   const cfg=ST.cobrosCfg, f=ST.cobroForm, em=cfg.emisor, bk=cfg.banco;
@@ -392,6 +441,7 @@ function renderCobros(){
       ${tarjeta('POR COBRAR',_clp(porCobrar),'emitidos sin pago','var(--gold)')}
       ${tarjeta('SIN EMITIR',_clp(estimado),sinDoc.length+' campeonatos'+(cfg.tarifa?'':' · falta la tarifa'))}
     </div>
+    ${_cobroGuia(cfg,ST.cobroGuia!==undefined?ST.cobroGuia:!items.some(c=>c.estado!=='pendiente'))}
     ${form}
     <div style="font-family:Oswald;font-size:15px;letter-spacing:1px;margin:6px 0 10px">CAMPEONATOS</div>
     <div class="card" style="padding:0;overflow-x:auto;margin-bottom:22px">
