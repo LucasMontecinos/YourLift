@@ -571,9 +571,171 @@ function buildAnioStats(anio){
     disputados, enCurso,
     sexoCount,
     topClubs: Object.entries(clubCount).sort((a,b)=>b[1]-a[1]).slice(0,10),
-    enCursoNuevas: enCurso.reduce((s,e)=>s+e.nuevas,0)
+    enCursoNuevas: enCurso.reduce((s,e)=>s+e.nuevas,0),
+    ids: [...yaVisto], gente      // quiénes son (para la residencia)
   };
 }
+
+// ── Residencia: dónde viven los que compitieron en el año ──
+// Es lo que cada atleta escribió al inscribirse en "Ciudad / región": texto
+// libre ("Talca, Región del Maule", "Puente Alto", "8va región"). Vive en lo
+// privado de la inscripción (comuna) y acá solo se cuenta: la estadística es
+// por región, nunca por persona. Se reconoce la comuna (las 346) o la región,
+// por nombre o por número.
+const RES_REGIONES=[
+  ['Arica y Parinacota',/arica|parinacota/,'Arica,Camarones,Putre,General Lagos'],
+  ['Tarapacá',/tarapaca/,'Iquique,Alto Hospicio,Pozo Almonte,Camiña,Colchane,Huara,Pica'],
+  ['Antofagasta',/antofagasta/,'Antofagasta,Mejillones,Sierra Gorda,Taltal,Calama,Ollagüe,San Pedro de Atacama,Tocopilla,María Elena'],
+  ['Atacama',/atacama/,'Copiapó,Caldera,Tierra Amarilla,Chañaral,Diego de Almagro,Vallenar,Alto del Carmen,Freirina,Huasco'],
+  ['Coquimbo',/coquimbo/,'La Serena,Coquimbo,Andacollo,La Higuera,Paihuano,Vicuña,Illapel,Canela,Los Vilos,Salamanca,Ovalle,Combarbalá,Monte Patria,Punitaqui,Río Hurtado'],
+  ['Valparaíso',/valparaiso/,'Valparaíso,Casablanca,Concón,Juan Fernández,Puchuncaví,Quintero,Viña del Mar,Isla de Pascua,Los Andes,Calle Larga,Rinconada,San Esteban,La Ligua,Cabildo,Papudo,Petorca,Zapallar,Quillota,La Calera,Hijuelas,La Cruz,Nogales,San Antonio,Algarrobo,Cartagena,El Quisco,El Tabo,Santo Domingo,San Felipe,Catemu,Llaillay,Panquehue,Putaendo,Santa María,Quilpué,Limache,Olmué,Villa Alemana'],
+  ['Metropolitana',/metropolitana|\brm\b|\bstgo\b|santiago/,'Santiago,Cerrillos,Cerro Navia,Conchalí,El Bosque,Estación Central,Huechuraba,Independencia,La Cisterna,La Florida,La Granja,La Pintana,La Reina,Las Condes,Lo Barnechea,Lo Espejo,Lo Prado,Macul,Maipú,Ñuñoa,Pedro Aguirre Cerda,Peñalolén,Providencia,Pudahuel,Quilicura,Quinta Normal,Recoleta,Renca,San Joaquín,San Miguel,San Ramón,Vitacura,Puente Alto,Pirque,San José de Maipo,Colina,Lampa,Tiltil,San Bernardo,Buin,Calera de Tango,Paine,Melipilla,Alhué,Curacaví,María Pinto,San Pedro,Talagante,El Monte,Isla de Maipo,Padre Hurtado,Peñaflor'],
+  ["O'Higgins",/ohiggins|libertador/,'Rancagua,Codegua,Coinco,Coltauco,Doñihue,Graneros,Las Cabras,Machalí,Malloa,Mostazal,Olivar,Peumo,Pichidegua,Quinta de Tilcoco,Rengo,Requínoa,San Vicente,Pichilemu,La Estrella,Litueche,Marchigüe,Navidad,Paredones,San Fernando,Chépica,Chimbarongo,Lolol,Nancagua,Palmilla,Peralillo,Placilla,Pumanque,Santa Cruz'],
+  ['Maule',/maule/,'Talca,Constitución,Curepto,Empedrado,Maule,Pelarco,Pencahue,Río Claro,San Clemente,San Rafael,Cauquenes,Chanco,Pelluhue,Curicó,Hualañé,Licantén,Molina,Rauco,Romeral,Sagrada Familia,Teno,Vichuquén,Linares,Colbún,Longaví,Parral,Retiro,San Javier,Villa Alegre,Yerbas Buenas'],
+  ['Ñuble',/nuble/,'Chillán,Bulnes,Chillán Viejo,El Carmen,Pemuco,Pinto,Quillón,San Ignacio,Yungay,Quirihue,Cobquecura,Coelemu,Ninhue,Portezuelo,Ránquil,Treguaco,San Carlos,Coihueco,Ñiquén,San Fabián,San Nicolás'],
+  ['Biobío',/bio ?bio/,'Concepción,Coronel,Chiguayante,Florida,Hualqui,Lota,Penco,San Pedro de la Paz,Santa Juana,Talcahuano,Tomé,Hualpén,Lebu,Arauco,Cañete,Contulmo,Curanilahue,Los Álamos,Tirúa,Los Ángeles,Antuco,Cabrero,Laja,Mulchén,Nacimiento,Negrete,Quilaco,Quilleco,San Rosendo,Santa Bárbara,Tucapel,Yumbel,Alto Biobío'],
+  ['La Araucanía',/araucania/,'Temuco,Carahue,Cunco,Curarrehue,Freire,Galvarino,Gorbea,Lautaro,Loncoche,Melipeuco,Nueva Imperial,Padre Las Casas,Perquenco,Pitrufquén,Pucón,Saavedra,Teodoro Schmidt,Toltén,Vilcún,Villarrica,Cholchol,Angol,Collipulli,Curacautín,Ercilla,Lonquimay,Los Sauces,Lumaco,Purén,Renaico,Traiguén,Victoria'],
+  ['Los Ríos',/los rios/,'Valdivia,Corral,Lanco,Los Lagos,Máfil,Mariquina,Paillaco,Panguipulli,La Unión,Futrono,Lago Ranco,Río Bueno'],
+  ['Los Lagos',/los lagos/,'Puerto Montt,Calbuco,Cochamó,Fresia,Frutillar,Los Muermos,Llanquihue,Maullín,Puerto Varas,Castro,Ancud,Chonchi,Curaco de Vélez,Dalcahue,Puqueldón,Queilén,Quellón,Quemchi,Quinchao,Osorno,Puerto Octay,Purranque,Puyehue,Río Negro,San Juan de la Costa,San Pablo,Chaitén,Futaleufú,Hualaihué,Palena,Chiloé'],
+  ['Aysén',/aysen|aisen/,"Coyhaique,Lago Verde,Aysén,Puerto Aysén,Cisnes,Guaitecas,Cochrane,Tortel,Chile Chico,Río Ibáñez"],
+  ['Magallanes',/magallanes/,'Punta Arenas,Laguna Blanca,Río Verde,San Gregorio,Cabo de Hornos,Puerto Williams,Antártica,Porvenir,Primavera,Timaukel,Natales,Puerto Natales,Torres del Paine'],
+];
+// El número de cada región: "8va región", "región VIII", "V región".
+const RES_NUM={1:'Tarapacá',2:'Antofagasta',3:'Atacama',4:'Coquimbo',5:'Valparaíso',6:"O'Higgins",7:'Maule',8:'Biobío',
+  9:'La Araucanía',10:'Los Lagos',11:'Aysén',12:'Magallanes',13:'Metropolitana',14:'Los Ríos',15:'Arica y Parinacota',16:'Ñuble'};
+const _resNorm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  .replace(/['’`´]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+let _RES_COMUNAS=null;   // [{n: normalizado, comuna, region}], de la más larga a la más corta
+function _resComunas(){
+  if(_RES_COMUNAS)return _RES_COMUNAS;
+  _RES_COMUNAS=[];
+  RES_REGIONES.forEach(([region,,lista])=>lista.split(',').forEach(c=>_RES_COMUNAS.push({n:_resNorm(c),comuna:c,region})));
+  // Cómo se escriben a veces.
+  [['vina','Viña del Mar','Valparaíso'],['conce','Concepción','Biobío'],['pto montt','Puerto Montt','Los Lagos'],
+   ['pto varas','Puerto Varas','Los Lagos'],['pta arenas','Punta Arenas','Magallanes'],['calera','La Calera','Valparaíso'],
+   ['coihaique','Coyhaique','Aysén'],['pto natales','Natales','Magallanes'],['pac','Pedro Aguirre Cerda','Metropolitana'],
+   ['est central','Estación Central','Metropolitana'],['san bernardo','San Bernardo','Metropolitana']]
+    .forEach(([n,comuna,region])=>_RES_COMUNAS.push({n,comuna,region}));
+  _RES_COMUNAS.sort((a,b)=>b.n.length-a.n.length);
+  return _RES_COMUNAS;
+}
+function _resRomano(x){
+  if(/^\d+$/.test(x))return parseInt(x,10);
+  const v={i:1,v:5,x:10}; let n=0;
+  for(let k=0;k<x.length;k++){ const a=v[x[k]], b=v[x[k+1]]||0; if(!a)return 0; n+=a<b?-a:a; }
+  return n;
+}
+// {region, comuna} de un texto libre; region '' si no se reconoce.
+function _resRegion(texto){
+  const t=_resNorm(texto);
+  if(!t)return null;
+  const porNombre=x=>{ const r=RES_REGIONES.find(([,re])=>re.test(x)); return r?r[0]:''; };
+  const comunaEn=x=>_resComunas().find(c=>new RegExp('(^| )'+c.n+'( |$)').test(x));
+  // 1. Lo que dice explícitamente "región …" manda: "Los Lagos, Región de Los Ríos".
+  const i=t.indexOf('region');
+  if(i>=0){
+    const num=t.match(/\b(\d{1,2}|[ivx]{1,5})\s*(?:a|ra|da|era|ta|va|na|ma)?\s+region\b/)||t.match(/\bregion\s+(?:de\s+)?(\d{1,2}|[ivx]{1,5})\b/);
+    const r=(num&&RES_NUM[_resRomano(num[1])])||porNombre(t.slice(i));
+    if(r){
+      // Y la comuna, si la escribió antes y es de esa región ("Talca, Región del Maule").
+      const c=comunaEn(t.slice(0,i));
+      return {region:r,comuna:c&&c.region===r?c.comuna:''};
+    }
+  }
+  // 2. Solo el nombre de una región que también es comuna ("Los Lagos", "O'Higgins"):
+  //    quien escribe eso habla de la región.
+  if(/^(region )?(de |del )?(los lagos|ohiggins|libertador|biobio|bio bio|nuble|araucania|aysen|metropolitana)$/.test(t))return {region:porNombre(t),comuna:''};
+  // 3. Una comuna (la más larga que calce: "San Pedro de la Paz" antes que "San Pedro").
+  const c=comunaEn(t);
+  if(c)return {region:c.region,comuna:c.comuna};
+  // 4. El nombre de una región en cualquier parte.
+  const r=porNombre(t);
+  if(r)return {region:r,comuna:''};
+  // 5. Fuera de Chile.
+  if(/\b(argentina|peru|bolivia|brasil|venezuela|colombia|ecuador|uruguay|paraguay|mexico|espana|estados unidos|usa|eeuu)\b/.test(t))return {region:'Fuera de Chile',comuna:''};
+  return {region:'',comuna:''};
+}
+
+function buildResidencia(anio){
+  const S=buildAnioStats(anio);
+  // La residencia de cada persona: la de su inscripción más reciente que la traiga.
+  const porRut={}, porNom={};
+  (ST.inscripciones||[]).forEach(i=>{
+    const c=String(i.comuna||'').trim(); if(!c)return;
+    const ev=(ST.eventos||[]).find(e=>e.id===i.evento);
+    const f=String((ev&&(ev.date||ev.fecha))||'');
+    const poner=(m,k)=>{ if(!k)return; const o=m[k]; if(!o||f>o.f)m[k]={c,f}; };
+    poner(porRut,_hRut(i.rut)); poner(porNom,_hNom(i.nombre));
+  });
+  const cuenta={}, comunas={}, noRec={}; let sinDato=0;
+  S.ids.forEach(id=>{
+    const nom=id.indexOf('n:')===0?id.slice(2):_hNom((S.gente[id]||{}).nombre);
+    const d=(id.indexOf('n:')!==0&&porRut[id])||porNom[nom];
+    if(!d){ sinDato++; return; }
+    const r=_resRegion(d.c)||{region:''};
+    if(!r.region){ const k=d.c.trim(); noRec[k]=(noRec[k]||0)+1; return; }
+    cuenta[r.region]=(cuenta[r.region]||0)+1;
+    if(r.comuna){ const k=r.comuna+'|'+r.region; comunas[k]=(comunas[k]||0)+1; }
+  });
+  const orden=RES_REGIONES.map(x=>x[0]).concat(['Fuera de Chile']);
+  const regiones=orden.filter(r=>cuenta[r]).map(r=>[r,cuenta[r]]);
+  const conDato=regiones.reduce((s,x)=>s+x[1],0);
+  const noReconocida=Object.values(noRec).reduce((s,n)=>s+n,0);
+  return {anio:S.anio, total:S.ids.length, conDato, sinDato, noReconocida,
+    regiones,
+    topComunas:Object.entries(comunas).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([k,n])=>{ const [c,r]=k.split('|'); return [c,r,n]; }),
+    noRec:Object.entries(noRec).sort((a,b)=>b[1]-a[1]).slice(0,12)};
+}
+
+function renderResidencia(anio){
+  const R=buildResidencia(anio);
+  const th=(t,al)=>`<th style="padding:7px 8px;text-align:${al||'right'};color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px;font-family:Oswald">${t}</th>`;
+  const max=Math.max(1,...R.regiones.map(x=>x[1]));
+  const pct=n=>R.conDato?Math.round(n/R.conDato*1000)/10:0;
+  if(!R.total)return '';
+  const sinDatos=!R.conDato&&!R.noReconocida;
+  return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div>
+        <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted)">RESIDENCIA POR REGIÓN · ${esc(R.anio)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">De las <b style="color:var(--text)">${R.total}</b> personas que compitieron en ${esc(R.anio)}, <b style="color:var(--text)">${R.conDato}</b> tienen su residencia en la inscripción.
+          ${R.sinDato?` ${R.sinDato} sin dato (no hay inscripción suya con residencia).`:''}${R.noReconocida?` ${R.noReconocida} con un texto que no se reconoce (abajo).`:''}</div>
+      </div>
+      ${R.conDato?'<button class="btn" onclick="exportResidenciaCSV()" style="font-size:11px;padding:6px 12px">Descargar CSV</button>':''}
+    </div>
+    ${sinDatos?'<div style="color:var(--muted);font-size:12px;padding:12px 0 0">No hay residencias para mostrar: esta cuenta no ve los datos privados de las inscripciones, o las inscripciones de este año no la traen.</div>':`
+    <div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:20px;margin-top:14px">
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:2px solid var(--border)">${th('Región','left')}${th('Atletas')}${th('%')}<th style="width:38%"></th></tr></thead>
+        <tbody>${R.regiones.map(([r,n])=>`<tr>
+          <td style="padding:6px 8px;color:var(--text);font-size:13px;white-space:nowrap">${esc(r)}</td>
+          <td style="padding:6px 8px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${n}</td>
+          <td style="padding:6px 8px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums">${String(pct(n)).replace('.',',')}%</td>
+          <td style="padding:6px 8px"><div style="height:8px;border-radius:4px;background:#3b82f6;width:${Math.max(3,Math.round(n/max*100))}%"></div></td>
+        </tr>`).join('')}</tbody></table></div>
+      <div>
+        <div style="font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--muted);margin-bottom:6px">COMUNAS CON MÁS ATLETAS</div>
+        ${R.topComunas.length?R.topComunas.map(([c,r,n])=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid rgba(29,49,80,.4);font-size:12px">
+          <span>${esc(c)} <span style="color:var(--muted);font-size:10px">${esc(r)}</span></span><b style="font-variant-numeric:tabular-nums">${n}</b></div>`).join('')
+          :'<div style="color:var(--muted);font-size:12px">Solo escribieron la región, sin comuna.</div>'}
+        ${R.noRec.length?`<div style="font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--orange);margin:14px 0 6px">NO RECONOCIDOS</div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.6">${R.noRec.map(([t,n])=>esc(t)+(n>1?' ('+n+')':'')).join(' · ')}</div>`:''}
+      </div>
+    </div>`}
+    <p style="color:var(--muted);font-size:10px;margin:12px 0 0;line-height:1.5">Sale de lo que cada atleta escribió en "Ciudad / región" al inscribirse (su inscripción más reciente que lo traiga), no del campeonato en que compitió. Se cuenta a cada persona una vez. Es un dato privado: aquí solo se muestra el total por región.</p>
+  </div>`;
+}
+
+window.exportResidenciaCSV=function(){
+  const R=buildResidencia(new Date().getFullYear());
+  const l=['region,atletas,porcentaje'];
+  R.regiones.forEach(([r,n])=>l.push('"'+r+'",'+n+','+(R.conDato?(n/R.conDato*100).toFixed(1):'0')));
+  l.push('"Sin dato",'+R.sinDato+',');
+  l.push('"No reconocido",'+R.noReconocida+',');
+  const blob=new Blob(['\ufeff'+l.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='residencia_'+R.anio+'.csv'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+};
 
 function render2026Stats(){
   const S = buildAnioStats(new Date().getFullYear());
@@ -659,6 +821,8 @@ function render2026Stats(){
     ${card('INSCRIPCIONES EN CURSO','Nóminas todavía abiertas. No suman hasta que el campeonato se corra.',tablaCurso)}
     ${card('TOP 10 CLUBES','Sobre las '+S.afiliaciones+' personas afiliadas este año.',clubsTable)}
   </div>
+
+  ${renderResidencia(S.anio)}
 
   <p style="color:var(--muted);font-size:11px;margin-top:14px;line-height:1.55">
     <strong>Afiliación</strong> = persona que compitió al menos una vez en el año (1 ene–31 dic). Se paga una sola vez, así que cada persona
