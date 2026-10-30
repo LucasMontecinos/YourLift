@@ -478,7 +478,9 @@ function buildAnioStats(anio){
   const evs = {};      // clave → {nombre, fecha, compiten:Set, inscritos:Set, enCurso}
   const gente = {};    // id → {nombre, sexo, club}
 
-  const meter = (rut,nombre,evento,fecha,compitio,sexo,club,enCurso) => {
+  // El año de nacimiento, venga como venga ("1998", "1998-04-03", "03/04/1998").
+  const anioNac = (...v) => { for(const x of v){ const m=String(x||'').match(/\b(19|20)\d\d\b/); if(m) return m[0]; } return ''; };
+  const meter = (rut,nombre,evento,fecha,compitio,sexo,club,enCurso,nac) => {
     if(!evento || esEnsayo(evento)) return;
     if(anioDe(evento,fecha) !== A) return;
     const k = _evClave(evento); if(!k) return;
@@ -490,7 +492,8 @@ function buildAnioStats(anio){
     if(fecha && (!e.fecha || fecha < e.fecha)) e.fecha = fecha;
     if(enCurso) e.enCurso = true;
     (compitio ? e.compiten : e.inscritos).add(id);
-    const p = gente[id] || (gente[id] = {nombre:'', sexo:'', club:''});
+    const p = gente[id] || (gente[id] = {nombre:'', sexo:'', club:'', anio:''});
+    if(nac && !p.anio) p.anio = nac;
     if(nombre && !p.nombre) p.nombre = nombre;
     if(sexo && !p.sexo) p.sexo = sexo;
     if(club && !p.club) p.club = club;
@@ -499,11 +502,11 @@ function buildAnioStats(anio){
   (ST.allCompResults||[]).forEach(d => {
     // Lo que sale del livecast o lo sube un atleta es, por definición, gente que
     // estuvo en la tarima.
-    meter(d.rut, d.nombre, d.evento, d.fecha, true, d.sexo, d.club, false);
+    meter(d.rut, d.nombre, d.evento, d.fecha, true, d.sexo, d.club, false, anioNac(d.anioNac));
   });
   (ST.data||[]).forEach(o => {
     (o.competencias||[]).forEach(c => {
-      meter(o.rut, o.nombre, c.evento, c.fecha, compitioDe(c.resultado), c.sexo||o.sexo, o.club, false);
+      meter(o.rut, o.nombre, c.evento, c.fecha, compitioDe(c.resultado), c.sexo||o.sexo, o.club, false, anioNac(o.anioNac, o.fechaNac, o.fechanac));
     });
   });
   (ST.inscripciones||[]).forEach(i => {
@@ -511,7 +514,7 @@ function buildAnioStats(anio){
     const ev = (ST.eventos||[]).find(e => e.id===i.evento);
     const nombre = (ev&&ev.name) || i.evento || '';
     const fecha  = (ev&&(ev.date||ev.fecha)) || '';
-    meter(i.rut, i.nombre, nombre, fecha, false, i.sexo, i.club, true);
+    meter(i.rut, i.nombre, nombre, fecha, false, i.sexo, i.club, true, anioNac(i.anioNac, i.fechaNac));
   });
 
   // Un campeonato ya disputado cuenta afiliaciones; uno que todavía no corre va
@@ -525,6 +528,7 @@ function buildAnioStats(anio){
       clave:e.clave, nombre:e.nombre, fecha:e.fecha,
       compiten:e.compiten.size, inscritos:e.inscritos.size,
       participantes:new Set([...e.compiten, ...e.inscritos]).size,
+      ids:new Set([...e.compiten, ...e.inscritos]),   // todos: los que compitieron y los inscritos
       cuentan, disputado,
       fuente: e.compiten.size>0 ? 'resultados' : 'nomina'
     };
@@ -572,7 +576,8 @@ function buildAnioStats(anio){
     sexoCount,
     topClubs: Object.entries(clubCount).sort((a,b)=>b[1]-a[1]).slice(0,10),
     enCursoNuevas: enCurso.reduce((s,e)=>s+e.nuevas,0),
-    ids: [...yaVisto], gente      // quiénes son (para la residencia)
+    ids: [...yaVisto], gente,     // quiénes son (para la residencia)
+    eventos: lista, sexoDe
   };
 }
 
@@ -686,6 +691,90 @@ function buildResidencia(anio){
     topComunas:Object.entries(comunas).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([k,n])=>{ const [c,r]=k.split('|'); return [c,r,n]; }),
     noRec:Object.entries(noRec).sort((a,b)=>b[1]-a[1]).slice(0,12)};
 }
+
+// ── Torneos regionales del año: cuántas personas se inscribieron ──
+// Todos los torneos regionales o zonales que tengan algo registrado en el año:
+// resultados, el histórico o la nómina de inscritos (también los que todavía
+// están abiertos). Cada persona se cuenta una vez aunque haya ido a varios.
+// La división de edad sale del año de nacimiento —la que le corresponde por
+// edad en el año (compartido/divisiones.js)—, no de la que eligió al inscribirse.
+const REG_DIVS=['Sub-Junior','Junior','Open','Master I','Master II','Master III','Master IV','Sin dato'];
+function buildRegionales(anio){
+  const S=buildAnioStats(anio);
+  const regs=S.eventos.filter(e=>/regional|zonal/i.test(e.nombre))
+    .sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+  const todos=new Set(); regs.forEach(e=>e.ids.forEach(id=>todos.add(id)));
+  const sexo=id=>S.sexoDe((S.gente[id]||{}).sexo);
+  const division=id=>{
+    const a=(S.gente[id]||{}).anio;
+    const d=a&&window.ylDivisionPorAnio?window.ylDivisionPorAnio(a,S.anio):'';
+    return d==='Sub Junior'?'Sub-Junior':(d||'Sin dato');
+  };
+  const tabla={}; REG_DIVS.forEach(d=>tabla[d]={F:0,M:0,'N/D':0});
+  const tot={F:0,M:0,'N/D':0};
+  todos.forEach(id=>{ const s=sexo(id), d=division(id); tabla[d][s]++; tot[s]++; });
+  const porTorneo=regs.map(e=>{ const t={F:0,M:0,'N/D':0}; e.ids.forEach(id=>t[sexo(id)]++);
+    return {nombre:e.nombre, fecha:e.fecha, personas:e.ids.size, compitieron:e.compiten, disputado:e.disputado, sexo:t}; });
+  return {anio:S.anio, total:todos.size, sexo:tot, divisiones:REG_DIVS.map(d=>[d,tabla[d]]).filter(([d,t])=>d!=='Sin dato'||t.F+t.M+t['N/D']>0), porTorneo};
+}
+
+function renderRegionales(anio){
+  const R=buildRegionales(anio);
+  if(!R.porTorneo.length)return '';
+  const th=(t,al)=>`<th style="padding:7px 8px;text-align:${al||'right'};color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px;font-family:Oswald">${t}</th>`;
+  const td=(v,extra)=>`<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;${extra||''}">${v}</td>`;
+  const nd=R.sexo['N/D']>0;
+  const pct=n=>R.total?String(Math.round(n/R.total*1000)/10).replace('.',',')+'%':'0%';
+  return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div>
+        <div style="font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted)">TORNEOS REGIONALES · ${esc(R.anio)}</div>
+        <div style="display:flex;align-items:baseline;gap:12px;margin-top:6px;flex-wrap:wrap">
+          <span style="font-family:Oswald;font-size:40px;font-weight:700;color:var(--green);line-height:1">${R.total}</span>
+          <span style="font-size:12px;color:var(--muted)">personas inscritas en ${R.porTorneo.length} torneo${R.porTorneo.length===1?'':'s'} regional${R.porTorneo.length===1?'':'es'} ·
+            <b style="color:#ec4899">${R.sexo.F} mujeres</b> · <b style="color:#f59e0b">${R.sexo.M} hombres</b>${nd?` · ${R.sexo['N/D']} sin sexo registrado`:''}</span>
+        </div>
+      </div>
+      <button class="btn" onclick="exportRegionalesCSV()" style="font-size:11px;padding:6px 12px">Descargar CSV</button>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;margin-top:16px">
+      <div style="overflow-x:auto">
+        <div style="font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--muted);margin-bottom:6px">POR DIVISIÓN DE EDAD Y SEXO</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:2px solid var(--border)">${th('División','left')}${th('Mujeres')}${th('Hombres')}${nd?th('S/sexo'):''}${th('Total')}${th('%')}</tr></thead>
+          <tbody>${R.divisiones.map(([d,t])=>{ const n=t.F+t.M+t['N/D']; return `<tr>
+            <td style="padding:6px 8px;color:${d==='Sin dato'?'var(--muted)':'var(--text)'};font-size:13px">${esc(d)}</td>
+            ${td(t.F)}${td(t.M)}${nd?td(t['N/D']):''}${td('<b>'+n+'</b>')}${td(pct(n),'color:var(--muted)')}</tr>`; }).join('')}</tbody>
+          <tfoot><tr style="border-top:2px solid var(--border)"><td style="padding:7px 8px;font-family:Oswald;font-size:11px;letter-spacing:1px;color:var(--gold)">TOTAL</td>
+            ${td('<b>'+R.sexo.F+'</b>')}${td('<b>'+R.sexo.M+'</b>')}${nd?td('<b>'+R.sexo['N/D']+'</b>'):''}${td('<b>'+R.total+'</b>','color:var(--gold)')}${td('100%','color:var(--muted)')}</tr></tfoot>
+        </table>
+      </div>
+      <div style="overflow-x:auto">
+        <div style="font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--muted);margin-bottom:6px">POR TORNEO</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:2px solid var(--border)">${th('Torneo','left')}${th('Inscritos')}${th('Mujeres')}${th('Hombres')}</tr></thead>
+          <tbody>${R.porTorneo.map(e=>`<tr>
+            <td style="padding:6px 8px;font-size:12px">${esc(e.nombre)}<div style="color:var(--muted);font-size:10px">${esc(e.fecha||'sin fecha')}${e.disputado?(e.compitieron?' · '+e.compitieron+' compitieron':' · sin resultados cargados'):' · inscripción abierta'}</div></td>
+            ${td('<b>'+e.personas+'</b>')}${td(e.sexo.F)}${td(e.sexo.M)}</tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>
+    <p style="color:var(--muted);font-size:10px;margin:12px 0 0;line-height:1.5">Cuenta a cada persona una vez aunque haya ido a varios regionales. Inscritos = los que compitieron más los inscritos en la nómina (sin los rechazados), así que incluye los torneos que todavía están abiertos. La división es la que le corresponde por edad en ${esc(R.anio)} (por año de nacimiento), no la que eligió al inscribirse; "Sin dato" = sin año de nacimiento registrado.</p>
+  </div>`;
+}
+
+window.exportRegionalesCSV=function(){
+  const R=buildRegionales(new Date().getFullYear());
+  const l=['division,mujeres,hombres,sin_sexo,total'];
+  R.divisiones.forEach(([d,t])=>l.push('"'+d+'",'+t.F+','+t.M+','+t['N/D']+','+(t.F+t.M+t['N/D'])));
+  l.push('"TOTAL",'+R.sexo.F+','+R.sexo.M+','+R.sexo['N/D']+','+R.total);
+  l.push('');
+  l.push('torneo,fecha,inscritos,compitieron,mujeres,hombres');
+  R.porTorneo.forEach(e=>l.push('"'+String(e.nombre).replace(/"/g,'""')+'",'+(e.fecha||'')+','+e.personas+','+e.compitieron+','+e.sexo.F+','+e.sexo.M));
+  const blob=new Blob(['﻿'+l.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='regionales_'+R.anio+'.csv'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+};
 
 function renderResidencia(anio){
   const R=buildResidencia(anio);
@@ -821,6 +910,8 @@ function render2026Stats(){
     ${card('INSCRIPCIONES EN CURSO','Nóminas todavía abiertas. No suman hasta que el campeonato se corra.',tablaCurso)}
     ${card('TOP 10 CLUBES','Sobre las '+S.afiliaciones+' personas afiliadas este año.',clubsTable)}
   </div>
+
+  ${renderRegionales(S.anio)}
 
   ${renderResidencia(S.anio)}
 
