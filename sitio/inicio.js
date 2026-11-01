@@ -38,17 +38,81 @@ async function enviarSugerencia(){
 // que el estado vive acá afuera y _lideresHtml() lo pinta de nuevo tal cual.
 var _LID={lista:null,i:0,t0:0,pausa:false,pedido:false};
 var _LID_MS=5000;
+// Qué coeficientes GL usa cada pestaña (el mismo GL_TAB de ranking.html).
+var _LID_GL={cl_m:'pl_m',cl_f:'pl_f',eq_m:'ple_m',eq_f:'ple_f',bench_cl_m:'bo_m',bench_cl_f:'bo_f',bench_eq_m:'boe_m',bench_eq_f:'boe_f'};
 var _LID_TABS={cl_f:'Classic Femenino',cl_m:'Classic Masculino',eq_f:'Equipado Femenino',eq_m:'Equipado Masculino',
   bench_cl_f:'Bench Classic Femenino',bench_cl_m:'Bench Classic Masculino',bench_eq_f:'Bench Equipado Femenino',bench_eq_m:'Bench Equipado Masculino'};
+// La tabla que trae ranking.html es la base, pero no es todo el ranking: la
+// página le suma al abrirse los resultados del año que están en data.json y no
+// pasaron por el livecast —los internacionales—. Sin esa suma la portada ponía
+// a Sergio Mardones con 860 del Nacional y no con 952,5 del Mundial.
+//
+// Acá se hace la misma suma, con las mismas reglas que ranking.html
+// (_normCat, _normDiv, _getTab, rkNoDioPeso y la banca de _applyCompRes). Como
+// la portada solo muestra al primero de cada categoría, alcanza con poner las
+// filas al lado y quedarse con la mejor.
+function _lidCat(cat,bw,hombre){
+  var s=String(cat||'').trim(), m=s.match(/(\d+(?:\.\d+)?)/);
+  if(!m)return '';
+  var c=m[1]+(s.indexOf('+')>=0?'+':'');
+  if(c==='84'&&!hombre&&bw>84)c='84+';
+  if(c==='120'&&hombre&&bw>120)c='120+';
+  return c;
+}
+function _lidDiv(d){
+  var s=String(d||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[-_.]/g,' ').replace(/\s+/g,' ').trim();
+  if(s.indexOf('sub')===0)return 'Sub Junior';
+  if(s.indexOf('junior')===0||s==='jr')return 'Junior';
+  if(s.indexOf('open')===0||!s)return 'Open';
+  return String(d).trim();
+}
+function _lidTab(sexo,mod,div,ev){
+  var s=(sexo==='Hombre'||sexo==='Masculino'||sexo==='M')?'m':'f';
+  mod=String(mod||'');
+  if(/universitario|universidad/i.test(div+' '+ev)||/universitario/i.test(mod))return 'uni_'+s;
+  if(/special olympics|olimpiadas|\bOE\b/i.test(mod))return 'oe_'+s;
+  var eq=/(equipado|equipped)/i.test(mod);
+  if(/only ?bench/i.test(mod))return (eq?'bench_eq_':'bench_cl_')+s;
+  return (eq?'eq_':'cl_')+s;
+}
+function _lidDelAnio(base){
+  var desde=new Date().getFullYear()+'-01-01', out=[];
+  (base||[]).forEach(function(a){
+    (a.competencias||[]).forEach(function(c){
+      var r=c.resultado||{}, f=String(c.fecha||'');
+      if(!f||f<desde||!((r.total||0)>0)||String(r.status||'')==='DQ'||!c.sexo)return;
+      var bw=+(r.bw||r.pesoCorporal||0), hombre=(c.sexo==='Hombre'||c.sexo==='Masculino'||c.sexo==='M');
+      var cat=_lidCat(c.categoria,bw,hombre);
+      if(!cat)return;
+      if(bw&&cat.indexOf('+')<0&&bw>parseFloat(cat))return;      // no dio el peso de su categoría
+      var tab=_lidTab(c.sexo,c.modalidad,c.division||'',c.evento||'');
+      var banca=tab.indexOf('bench')===0, combinado=banca&&((r.sq||0)>0||(r.dl||0)>0);
+      // En banca el total es la banca, y el GL guardado (de powerlifting) no sirve.
+      var tt=banca?((r.bp||0)||(combinado?0:(r.total||0))):(r.total||0);
+      if(!(tt>0))return;
+      out.push({n:a.nombre||'',t:a.club||'',c:cat,d:_lidDiv(c.division),bw:bw,
+        sq:banca?0:(r.sq||0),bp:r.bp||0,dl:banca?0:(r.dl||0),tt:tt,dt:combinado?0:(r.glp||r.gl||0),tab:tab});
+    });
+  });
+  return out;
+}
 function _lideresCargar(){
   if(_LID.pedido)return; _LID.pedido=true;
-  fetch('ranking.html').then(function(r){return r.text();}).then(function(t){
-    var i=t.indexOf('var D='); if(i<0)return;
-    var j=t.indexOf(';\n',i); var D=JSON.parse(t.slice(i+6,j));
+  Promise.all([
+    fetch('ranking.html').then(function(r){return r.text();}),
+    fetch('data.json').then(function(r){return r.ok?r.json():[];}).catch(function(){return [];})
+  ]).then(function(res){
+    var t=res[0], i=t.indexOf('var D='); if(i<0)return;
+    var j=t.indexOf(';\n',i); var D=JSON.parse(t.slice(i+6,j)).concat(_lidDelAnio(res[1]));
+    // El GL con los coeficientes de cada modalidad, igual que glNormalizar() en
+    // ranking.html: el guardado en una banca combinada es el de powerlifting.
+    D.forEach(function(e){ var v=window.YLGL?YLGL.puntos(_LID_GL[e.tab],e.bw,e.tt):null; if(v!==null)e.dt=v; });
     var mejor={};
     D.forEach(function(e){
       if(!_LID_TABS[e.tab]||!(e.tt>0)||e.d!=='Open'||e._baja)return;
       var k=e.tab+'|'+e.c;
+      // A igual total se queda la fila de la tabla (va primero): suele ser la
+      // misma persona escrita de otra forma en data.json.
       if(!mejor[k]||e.tt>mejor[k].tt)mejor[k]=e;
     });
     var orden=Object.keys(_LID_TABS);
