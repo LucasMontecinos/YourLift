@@ -464,24 +464,31 @@ window.cronoDia=function(f){ST.cronoDia=f;render();};
 function crono(){
   const evs=(window.ALL_EVENTS||[]).filter(e=>e.status!=='archived' && e.cronogramaPublic!==false).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const suda=_cronoHaySuda();
-  let opts=evs.map(e=>`<option value="${_escH(e.id)}" ${ST.cronoEv===e.id?'selected':''}>${_escH(e.name||e.id)}</option>`).join('');
+  let opts=evs.map(e=>`<option value="${_escH(e.id)}" ${ST.cronoEv===e.id?'selected':''}>${_escH(_crSinMarca(e.name||e.id))}</option>`).join('');
   if(suda)opts=`<option value="__suda" ${ST.cronoEv==='__suda'?'selected':''}>${_escH(window.NOMSUDA.eventoCorto||'Sudamericano 2026')}</option>`+opts;
   if(ST.cronoEv && ST.cronoEv!=='__suda' && !evs.some(e=>e.id===ST.cronoEv)) ST.cronoEv='';
   if(ST.cronoEv && ST.cronoEv!=='__suda') setTimeout(()=>loadCronoSection(ST.cronoEv),30);
   const cuerpo=ST.cronoEv==='__suda'
     ? cronoSuda()
-    : (ST.cronoEv?'<div style="color:var(--muted);padding:14px">Cargando…</div>':'<div style="color:var(--muted);padding:14px">Selecciona un campeonato.</div>');
-  return `<div class="cd2"><div class="ct"><h2 style="color:var(--gold)"><i class=yl-i-lista></i> Cronograma</h2></div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:14px">${ST.cronoEv==='__suda'
-      ? 'Días, sesiones y rondas · hora de pesaje, hora de competencia y número de lote'
-      : 'Start list por tarima y flight · entrenador y handlers'}</p>
-    <select onchange="cronoSel(this.value)" style="width:100%;max-width:420px;box-sizing:border-box;background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;margin-bottom:8px">
-      <option value="">Selecciona campeonato</option>${opts}
-    </select>
-    ${(evs.length||suda)?'':'<div style="color:var(--muted);padding:6px 0;font-size:13px">No hay cronogramas publicados por el momento.</div>'}
-    <div id="cronoMount">${cuerpo}</div>
-  </div>`;
+    : (ST.cronoEv?'<div class="cr-vacio">Cargando…</div>':'<div class="cr-vacio">Elige un campeonato para ver sus tandas y quién compite en cada una.</div>');
+  const evSel=ST.cronoEv==='__suda'?{name:window.NOMSUDA.eventoCorto||'Sudamericano 2026'}:evs.find(e=>e.id===ST.cronoEv);
+  return `<section class="yl-pag-h"><div class="yl-ey2">${evSel?_escH(_crSinMarca(evSel.name||'')):'Tandas y atletas por campeonato'}</div><h1 class="yl-d">Cronograma</h1>
+    <p class="cr-sub">${ST.cronoEv==='__suda'
+      ? 'Días, sesiones y rondas: hora de pesaje, hora de competencia y número de lote.'
+      : 'Cada tanda con sus atletas, club, división, categoría y entrenador.'}</p></section>
+    <div class="cr-sel"><select onchange="cronoSel(this.value)" aria-label="Campeonato">
+      <option value="">Elige un campeonato</option>${opts}
+    </select></div>
+    ${(evs.length||suda)?'':'<div class="cr-vacio">No hay cronogramas publicados por el momento.</div>'}
+    <div id="cronoMount">${cuerpo}</div>`;
 }
+// Los nombres de campeonato se muestran sin la sigla de la federación.
+function _crSinMarca(n){return String(n||'').replace(/\s*\bFECHIPO\b\s*/gi,' ').replace(/\s+/g,' ').trim();}
+// Categoría como en la vista previa: −74 kg, 84+ kg.
+function _crCat(c){let t=String(c||'').trim().replace(/\s*kg$/i,'');if(!t)return '';
+  if(/^\d+(\.\d+)?$/.test(t))t='−'+t; else t=t.replace(/^-/,'−');return t+' kg';}
+function _crCatKey(c){const t=String(c||'');return (parseFloat(t.replace(/[^0-9.]/g,''))||999)+(t.includes('+')?0.5:0);}
+function _crLogo(club){return (window.clubLogoImg&&club)?window.clubLogoImg(club,30,'flex:none;'):'';}
 
 // ── Cronograma del Sudamericano: día → sesión → ronda → categoría ──
 // Es una VISTA de la nómina, no una copia: los atletas salen de NOMSUDA.atletas y
@@ -500,32 +507,21 @@ function _cronoFechaLarga(f){
 }
 function cronoSuda(){
   const J=window.NOMSUDA||{}, jor=(J.jornadas||[]).slice(), ats=J.atletas||[];
-  if(!jor.length)return '<div style="color:var(--muted);padding:14px">Todavía no hay cronograma publicado.</div>';
+  if(!jor.length)return '<div class="cr-vacio">Todavía no hay cronograma publicado.</div>';
   const fechas=[...new Set(jor.map(j=>j.fecha))].sort();
   if(!ST.cronoDia||!fechas.includes(ST.cronoDia))ST.cronoDia=fechas[0];
   // Los días, como botones: es lo que se pidió — apretar el 20 y ver el 20.
-  const chips=fechas.map((f,i)=>{
-    const on=f===ST.cronoDia;
-    return `<button onclick="cronoDia('${f}')" style="padding:8px 13px;border-radius:9px;cursor:pointer;font-family:Oswald;font-size:13px;letter-spacing:1px;border:1px solid ${on?'var(--gold)':'var(--border)'};background:${on?'rgba(212,168,67,.18)':'rgba(10,22,40,.6)'};color:${on?'var(--gold)':'var(--muted)'}">
-      DÍA ${i+1}<span style="display:block;font-size:10px;letter-spacing:0;opacity:.8">${+f.slice(8,10)} sep</span></button>`;
-  }).join('');
-
+  const chips=fechas.map((f,i)=>`<button class="${f===ST.cronoDia?'on':''}" onclick="cronoDia('${f}')">DÍA ${i+1}<small>${+f.slice(8,10)} sep</small></button>`).join('');
   const delDia=jor.filter(j=>j.fecha===ST.cronoDia)
                   .sort((a,b)=>String(a.inicio).localeCompare(String(b.inicio)));
-  let h=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 16px">${chips}</div>`;
-  h+=`<h3 style="font-family:Oswald;font-size:15px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:0 0 12px">${_escH(_cronoFechaLarga(ST.cronoDia))}</h3>`;
+  let h=`<div class="cr-fil"><div class="cr-seg cr-seg-d">${chips}</div></div>`;
+  h+=`<h3 class="cr-dia yl-d">${_escH(_cronoFechaLarga(ST.cronoDia))}</h3><div class="cr-l">`;
 
   delDia.forEach((j,si)=>{
     const mios=ats.filter(a=>a.jornada===j.id);
     const rondas=[...new Set(mios.map(a=>a.ronda||1))].sort((a,b)=>a-b);
-    const azul=si%2===0, bd=azul?'#3b82f6':'#c41e3a', bg=azul?'rgba(59,130,246,.08)':'rgba(196,30,58,.08)', hd=azul?'rgba(59,130,246,.20)':'rgba(196,30,58,.20)';
-    h+=`<div style="background:${bg};border:1px solid ${bd}55;border-left:5px solid ${bd};border-radius:12px;margin-bottom:16px;overflow:hidden">`;
-    h+=`<div style="background:${hd};padding:11px 14px">
-      <div style="font-family:Oswald;font-weight:700;letter-spacing:1px;font-size:14px">${_escH(j.nombre||j.campeonato||'')}</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:3px">Pesaje ${_escH(j.pesaje||'—')} · Competencia ${_escH(j.inicio||'—')} · ${mios.length} inscripción(es)</div></div>`;
-    if(!mios.length){
-      h+=`<div style="padding:12px 14px;color:var(--muted);font-size:13px">Sin inscripciones.</div></div>`; return;
-    }
+    const cats=[...new Set(mios.map(a=>a.cat))].sort((x,y)=>_nsudaCatKey(x)-_nsudaCatKey(y));
+    let tabla='';
     rondas.forEach(r=>{
       const enR=mios.filter(a=>(a.ronda||1)===r);
       // La TANDA es la letra que corre por todo el campeonato: la primera ronda
@@ -533,9 +529,9 @@ function cronoSuda(){
       // y lo que el operador selecciona en el control en vivo, así que va acá
       // arriba y no en una columna: dentro de una ronda es siempre la misma.
       const tanda=(enR.find(a=>a.tanda)||{}).tanda||'';
-      h+=`<div style="padding:9px 14px 3px;font-family:Oswald;font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase">Ronda ${r}${tanda?' · Tanda '+_escH(tanda):''} · ${enR.length} inscripción(es)</div>`;
-      const cats=[...new Set(enR.map(a=>a.cat))].sort((x,y)=>_nsudaCatKey(x)-_nsudaCatKey(y));
-      cats.forEach(c=>{
+      tabla+=`<div class="cr-ronda">Ronda ${r}${tanda?' · Tanda '+_escH(tanda):''} · ${enR.length} inscripción(es)</div>`;
+      const cR=[...new Set(enR.map(a=>a.cat))].sort((x,y)=>_nsudaCatKey(x)-_nsudaCatKey(y));
+      cR.forEach(c=>{
         // Quien compite en Clásico y además en Only Bench tiene DOS inscripciones,
         // pero sube a la tarima una sola vez y con el mismo número de lote. En el
         // cronograma va en una fila, con las dos modalidades juntas: verlo dos
@@ -547,26 +543,25 @@ function cronoSuda(){
           uno[k]={...a, mods:[a.mod]}; enC.push(uno[k]);
         });
         enC.sort((x,y)=>(+x.lote||999)-(+y.lote||999)||String(x.n).localeCompare(String(y.n)));
-        h+=`<div style="padding:8px 14px 2px;font-family:Oswald;font-size:12px;letter-spacing:1px;color:var(--text)">${_escH(c)} kg</div>`;
         // Ancho fijo: cada categoría es su propia tabla y, sin esto, las columnas
         // se corren de un bloque al siguiente según lo largo que sea un nombre.
-        h+=`<div style="overflow-x:auto"><table style="width:100%;min-width:600px;table-layout:fixed;border-collapse:collapse;font-size:13px">
-          <colgroup><col style="width:56px"><col style="width:30%"><col style="width:16%"><col style="width:18%"><col></colgroup>
-          <tr style="text-align:left;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;text-transform:uppercase">
-            <th style="padding:5px 10px">Lote</th><th style="padding:5px 10px">Atleta</th>
-            <th style="padding:5px 10px">País</th><th style="padding:5px 10px">División</th><th style="padding:5px 10px">Modalidad</th></tr>`;
-        h+=enC.map(a=>`<tr style="border-top:1px solid ${bd}22">
-          <td style="padding:5px 10px;font-family:Oswald;color:var(--gold)">${_escH(a.lote||'—')}</td>
-          <td style="padding:5px 10px;font-weight:600">${_escH(_nsudaNombre(a))}</td>
-          <td style="padding:5px 10px;color:var(--muted)">${_escH(a.pais||'')}</td>
-          <td style="padding:5px 10px;color:var(--muted)">${_escH(a.div||'')}</td>
-          <td style="padding:5px 10px;color:var(--muted)">${_escH((a.mods||[a.mod]).join(' + '))}</td></tr>`).join('');
-        h+='</table></div>';
+        tabla+=`<div class="cr-tab"><table class="cr-fija"><caption>${_escH(c)} kg</caption>
+          <colgroup><col style="width:64px"><col style="width:34%"><col style="width:16%"><col style="width:18%"><col></colgroup>
+          <thead><tr><th>Lote</th><th>Atleta</th><th>País</th><th class="mv">División</th><th class="mv">Modalidad</th></tr></thead><tbody>`
+          +enC.map(a=>`<tr><td class="lt">${_escH(a.lote||'—')}</td><td class="at">${_escH(_nsudaNombre(a))}<span class="sm">${_escH(a.div||'')} · ${_escH((a.mods||[a.mod]).join(' + '))}</span></td>`
+            +`<td class="mu">${_escH(a.pais||'')}</td><td class="mv mu">${_escH(a.div||'')}</td><td class="mv mu">${_escH((a.mods||[a.mod]).join(' + '))}</td></tr>`).join('')
+          +'</tbody></table></div>';
       });
     });
-    h+='</div>';
+    h+=`<div class="cr-r"><div class="cr-t yl-d">${_escH(j.inicio||'—')}<small>Pesaje ${_escH(j.pesaje||'—')}</small></div><div class="cr-x"><i></i></div>
+      <div class="cr-c"><div class="cr-top"><div><h4>${_escH(j.nombre||j.campeonato||'')}</h4>
+        <p>Pesaje ${_escH(j.pesaje||'—')} · Competencia ${_escH(j.inicio||'—')} · ${mios.length} inscripción(es)</p>
+        ${cats.length?`<div class="cr-cats">${cats.map(c=>`<span>${_escH(_crCat(c))}</span>`).join('')}</div>`:''}</div></div>
+        ${mios.length?`<details class="cr-det" open><summary><span class="ver">▾ Ver las ${mios.length} inscripciones</span><span class="ocu">▴ Ocultar inscripciones</span></summary>${tabla}</details>`:'<p class="cr-sin">Sin inscripciones.</p>'}
+      </div></div>`;
   });
-  h+=`<p style="font-size:11px;color:var(--muted);margin-top:4px">Días, horarios, tandas y números de lote según la nominación final de FESUPO. El pesaje abre a la hora indicada y cierra 90 minutos después. El número de lote se sortea por sesión: se repite entre sesiones distintas, nunca dentro de la misma.</p>`;
+  h+='</div>';
+  h+=`<p class="cr-nota">Días, horarios, tandas y números de lote según la nominación final de FESUPO. El pesaje abre a la hora indicada y cierra 90 minutos después. El número de lote se sortea por sesión: se repite entre sesiones distintas, nunca dentro de la misma.</p>`;
   return h;
 }
 async function loadCronoSection(ev){
@@ -588,39 +583,48 @@ const _DIAS_SEMANA=YLDias.SEMANA;
 function _cronoDiaKey(d){ return YLDias.clave(d); }   // compartido/dias.js
 function _cronoCmpDia(a,b){ return YLDias.comparar(a,b); }
 function cronoRender(ev,rows,HMAP,hide){
-  if(!rows.length) return '<div style="color:var(--muted);padding:14px">Sin atletas en este cronograma.</div>';
+  if(!rows.length) return '<div class="cr-vacio">Sin atletas en este cronograma.</div>';
   const _nn=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
   const _slug=s=>_nn(s).replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,50);
   const hNames=r=>{const k=ev+'__'+_slug(r.entrenador||'')+'__'+((r.jornada||'1').toString().trim()||'1');const sub=HMAP[k];if(sub&&Array.isArray(sub.handlers)&&sub.handlers.length)return sub.handlers.map(h=>h.nombre).filter(Boolean);const a=[];if((r.handler1||{}).nombre)a.push(r.handler1.nombre);if((r.handler2||{}).nombre)a.push(r.handler2.nombre);return a;};
   const jr=x=>x==='AM'?0:x==='PM'?1:2;
+  const sexo=r=>{const s=String(r.sexo||'').trim().toLowerCase();return (s==='h'||/hom|masc|varon/.test(s))?'H':(s==='m'||/muj|fem|dama/.test(s))?'M':'';};
   // El día manda: primero todas las tandas del sábado y después las del domingo.
   // Si el cronograma no tiene días cargados, queda igual que antes.
   const groups={}; rows.forEach(r=>{const k=(r.dia||'')+'||'+(r.tarima||'?')+'||'+(r.jornada||'')+'||'+(r.flight||'?');(groups[k]=groups[k]||[]).push(r);});
   const keys=Object.keys(groups).sort((a,b)=>{const x=a.split('||'),y=b.split('||');
     return _cronoCmpDia(x[0],y[0])||String(x[1]).localeCompare(String(y[1]))||(jr(x[2])-jr(y[2]))||String(x[3]).localeCompare(String(y[3]));});
-  let diaPrev=null;
-  return keys.map((k,gi)=>{
+  const tarimas=[...new Set(rows.map(r=>r.tarima||'?'))];
+  const dias=[];keys.forEach(k=>{const d=k.split('||')[0];if(d&&!dias.includes(d))dias.push(d);});
+  // Con más de un día, arriba van los días como botones que llevan a cada uno.
+  let h=dias.length>1?`<div class="cr-fil"><div class="cr-seg">${dias.map((d,i)=>`<a href="#cr-dia-${i}" onclick="event.preventDefault();var e=document.getElementById('cr-dia-${i}');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})">${_escH(d)}</a>`).join('')}</div></div>`:'';
+  let diaPrev=null, abierta=false;
+  keys.forEach(k=>{
     const p=k.split('||'),dia=p[0],tar=p[1],jor=p[2],fl=p[3],aths=groups[k];
-    const jorTxt=(jor==='AM'||jor==='PM')?(' · '+_escH(jor)):'';
     // Encabezado de día, solo si el cronograma los trae cargados.
-    let diaHdr='';
-    if(dia&&dia!==diaPrev)diaHdr=`<h3 style="font-family:Oswald;font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:${diaPrev===null?'4px':'22px'} 0 8px;padding-bottom:6px;border-bottom:1px solid rgba(212,168,67,.35)">${_escH(dia)}</h3>`;
+    if(dia&&dia!==diaPrev){ if(abierta)h+='</div>'; h+=`<h3 class="cr-dia yl-d" id="cr-dia-${dias.indexOf(dia)}">${_escH(dia)}</h3><div class="cr-l">`; abierta=true; }
+    else if(!abierta){ h+='<div class="cr-l">'; abierta=true; }
     diaPrev=dia;
-    const blue=gi%2===0, bg=blue?'rgba(59,130,246,.10)':'rgba(196,30,58,.10)', hd=blue?'rgba(59,130,246,.22)':'rgba(196,30,58,.22)', bd=blue?'#3b82f6':'#c41e3a';
-    const tr=aths.map((r,i)=>{const hs=hNames(r);return `<tr style="border-top:1px solid ${bd}22">
-      <td style="padding:6px 10px;color:var(--muted)">${i+1}</td>
-      <td style="padding:6px 10px;font-weight:600">${_escH(r.nombre||'')}</td>
-      <td style="padding:6px 10px;color:var(--muted)">${_escH(r.division||'')} ${_escH(r.categoria||'')}</td>
-      <td style="padding:6px 10px;color:var(--muted)">${_escH(r.club||'')}</td>
-      <td style="padding:6px 10px">${_escH(r.modalidad||'')}</td>
-      ${hide?'':`<td style="padding:6px 10px">${_escH(r.entrenador||'—')}</td><td style="padding:6px 10px">${hs.length?hs.map(_escH).join('<br>'):'<span style="color:var(--muted)">—</span>'}</td>`}</tr>`;}).join('');
-    return `${diaHdr}<div style="background:${bg};border:1px solid ${bd}55;border-left:5px solid ${bd};border-radius:12px;margin-bottom:14px;overflow:hidden">
-      <div style="background:${hd};padding:10px 14px;font-family:Oswald;font-weight:700;letter-spacing:1px">Flight ${_escH(fl)}${jorTxt} <span style="color:var(--muted);font-weight:400;font-size:12px">· ${aths.length} atleta(s)${dia?' · '+_escH(dia):''}</span></div>
-      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
-        <tr style="text-align:left;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:1px;text-transform:uppercase"><th style="padding:6px 10px">#</th><th style="padding:6px 10px">Atleta</th><th style="padding:6px 10px">Div/Cat</th><th style="padding:6px 10px">Club</th><th style="padding:6px 10px">Modalidad</th>${hide?'':'<th style="padding:6px 10px">Entrenador</th><th style="padding:6px 10px">Handlers</th>'}</tr>
-        ${tr}
-      </table></div></div>`;
-  }).join('');
+    const sx=[...new Set(aths.map(sexo).filter(Boolean))];
+    const quien=sx.length===1?(sx[0]==='M'?' · Mujeres':' · Hombres'):(sx.length>1?' · Mixta':'');
+    const mods=[...new Set(aths.map(r=>r.modalidad).filter(Boolean))];
+    const cats=[...new Set(aths.map(r=>r.categoria).filter(Boolean))].sort((a,b)=>_crCatKey(a)-_crCatKey(b));
+    const meta=[aths.length+' atleta'+(aths.length!==1?'s':''),mods.join(' / '),tarimas.length>1?'Tarima '+tar:'',(jor==='AM'||jor==='PM')?jor:'',dia].filter(Boolean).map(_escH).join(' · ');
+    const tr=aths.map((r,i)=>{const hs=hNames(r);return `<tr><td class="lt">${i+1}</td>
+      <td><div class="at">${_crLogo(r.club)}<div>${_escH(r.nombre||'')}<span class="sm">${_escH(r.club||'')} · ${_escH(r.division||'')} ${_escH(_crCat(r.categoria))}</span></div></div></td>
+      <td class="mv mu">${_escH(r.club||'')}</td>
+      <td class="mv">${_escH(r.division||'')} · ${_escH(_crCat(r.categoria))}</td>
+      <td class="mv mu">${_escH(r.modalidad||'')}</td>
+      ${hide?'':`<td class="mv mu">${_escH(r.entrenador||'—')}</td><td class="mv mu">${hs.length?hs.map(_escH).join('<br>'):'—'}</td>`}</tr>`;}).join('');
+    h+=`<div class="cr-r"><div class="cr-t yl-d">${_escH(fl)}${(jor==='AM'||jor==='PM')?`<small>${_escH(jor)}</small>`:''}</div><div class="cr-x"><i></i></div>
+      <div class="cr-c" data-tanda="${_escH(fl)}" data-dia="${_escH(dia)}"><div class="cr-top"><div><h4>Tanda ${_escH(fl)}${quien}</h4><p>${meta}</p>
+        ${cats.length?`<div class="cr-cats">${cats.map(c=>`<span>${_escH(_crCat(c))}</span>`).join('')}</div>`:''}</div></div>
+        <details class="cr-det" open><summary><span class="ver">▾ Ver los ${aths.length} atletas</span><span class="ocu">▴ Ocultar atletas</span></summary>
+        <div class="cr-tab"><table><thead><tr><th>#</th><th>Atleta</th><th class="mv">Club</th><th class="mv">Div / Cat</th><th class="mv">Modalidad</th>${hide?'':'<th class="mv">Entrenador</th><th class="mv">Handlers</th>'}</tr></thead><tbody>${tr}</tbody></table></div></details>
+      </div></div>`;
+  });
+  if(abierta)h+='</div>';
+  return h;
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -85,14 +85,14 @@ const FILAS = [];
     const m = document.getElementById('cronoMount');
     return {
       dias: [...m.querySelectorAll('h3')].map(e => e.textContent.trim()),
-      tandas: [...m.querySelectorAll('div[style*="font-family:Oswald"]')]
-        .map(e => e.textContent.trim()).filter(t => /^Flight /.test(t)),
+      // Cada tanda es una tarjeta de la línea de tiempo: «Tanda A», y su día en el detalle.
+      tandas: [...m.querySelectorAll('.cr-c')].map(e => e.querySelector('h4').textContent.trim() + ' | ' + e.querySelector('p').textContent),
     };
   }, FILAS);
 
   ok(JSON.stringify(r.dias) === JSON.stringify(['Sábado', 'Domingo']),
      'sale un encabezado por día, en orden: ' + r.dias.join(' → '));
-  const letras = r.tandas.map(t => (t.match(/^Flight (\w+)/) || [])[1]);
+  const letras = r.tandas.map(t => (t.match(/^Tanda (\w+)/) || [])[1]);
   ok(JSON.stringify(letras) === JSON.stringify(['A', 'B', 'C', 'D', 'E', 'F', 'G']),
      'las tandas salen A B C D E (sábado) y después F G (domingo): ' + letras.join(' '));
   ok(r.tandas.every(t => /Sábado|Domingo/.test(t)), 'y cada tanda dice de qué día es');
@@ -107,8 +107,7 @@ const FILAS = [];
     const m = document.getElementById('cronoMount');
     return {
       dias: m.querySelectorAll('h3').length,
-      tandas: [...m.querySelectorAll('div[style*="font-family:Oswald"]')]
-        .map(e => e.textContent.trim()).filter(t => /^Flight /.test(t)).length,
+      tandas: m.querySelectorAll('.cr-c').length,
     };
   }, FILAS);
   ok(sinDia.dias === 0, 'no aparece ningún encabezado de día');
