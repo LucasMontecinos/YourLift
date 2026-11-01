@@ -1762,7 +1762,9 @@ function renderTxScoreboard(cur,lifterChanged){
   // ── Colores: el marcador sigue la paleta elegida en Control TX ──
   // Antes estaban fijos acá y la paleta no le hacía nada. El contorno negro del
   // texto NO entra en la paleta, a propósito: es lo que lo mantiene legible.
-  const YL_NAVY=_txC('headerBg'), YL_GOLD=_txC('accent'), YL_TXT=_txC('nameText');
+  // Las letras del marcador van siempre en blanco (se pidió así); la paleta
+  // cambia los fondos y el acento.
+  const YL_NAVY=_txC('headerBg'), YL_GOLD=_txC('accent');
   const WHITE='#ffffff', WHITE_DIM='rgba(255,255,255,.55)', GREEN='#22c55e', RED='#ef4444';
   // ── SQUAT / BENCH PRESS / DEADLIFT / TOTAL — mejor marca válida de cada uno + estado ──
   const sqB=bestOf(ra,'sq'), bpB=bestOf(ra,'bp'), dlB=bestOf(ra,'dl');
@@ -1770,7 +1772,7 @@ function renderTxScoreboard(cur,lifterChanged){
   const _liftFailed=l=>ra.att[l].every(x=>x.r==='n')&&ra.att[l].some(x=>x.w>0);
   const _liftCell=(l,label,best)=>{
     let val,clr;
-    if(best>0){val=best;clr=GREEN}
+    if(best>0){val=best;clr=WHITE}
     else if(_liftFailed(l)){val='—';clr=RED}
     else{val='—';clr=WHITE_DIM}
     return `<div style="padding:8px 6px;text-align:center;border-right:1px solid rgba(255,255,255,.08)">
@@ -1781,7 +1783,7 @@ function renderTxScoreboard(cur,lifterChanged){
   const totB=sqB+bpB+dlB;
   let totVal,totClr;
   if(dq){totVal='DQ';totClr=RED}
-  else if(sqB>0&&bpB>0&&dlB>0){totVal=totB.toFixed(1);totClr=GREEN}
+  else if(sqB>0&&bpB>0&&dlB>0){totVal=totB.toFixed(1);totClr=WHITE}
   else if(totB>0){totVal=totB.toFixed(1);totClr=WHITE}
   else{totVal='—';totClr=WHITE_DIM}
   const flagHtml=_variosPaises()?_flagImg(_ctry(cur),22):_logoClub(cur,34,'margin-right:0;');
@@ -1809,25 +1811,27 @@ function renderTxScoreboard(cur,lifterChanged){
         </div>
         <div style="${_sbRowAnim(_animDir,1)}background:linear-gradient(90deg,${_txC('nameBg')},${_txC('nameBg2')});padding:7px 22px;display:flex;align-items:center;gap:12px">
           ${flagHtml}
-          <div style="flex:1;font-family:Oswald;color:${YL_TXT};letter-spacing:1px;overflow:hidden">
+          <div style="flex:1;font-family:Oswald;color:#ffffff;letter-spacing:1px;overflow:hidden">
             <div style="font-size:28px;font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nombreAtleta}</div>
           </div>
-          <div style="background:rgba(10,22,40,.9);color:${YL_GOLD};padding:5px 14px;border-radius:4px;font-family:Oswald;font-size:16px;letter-spacing:1px;font-weight:700;white-space:nowrap">${catLabel}</div>
+          <div style="background:rgba(0,0,0,.45);color:#ffffff;padding:5px 14px;border-radius:4px;font-family:Oswald;font-size:16px;letter-spacing:1px;font-weight:700;white-space:nowrap">${catLabel}</div>
         </div>
         <div style="${_sbRowAnim(_animDir,2)}display:grid;grid-template-columns:repeat(${ra.att[DATA.lift].length},1fr) repeat(4,1fr);background:${_txC('gridBg')}">
           ${ra.att[DATA.lift].map((at,j)=>{
-            let clr,td='none',boxSh='';
+            // Letras siempre blancas: el válido y el nulo se marcan con el FONDO
+            // de la casilla (verde o rojo de la paleta), no con el color del número.
+            let clr,td='none',boxSh='',bg='transparent';
             const is4=j===3&&at.extra;
             const x4lbl=((at.grantedRound||0)>=2)?'4º':'EXT';
-            if(at.r==='g'){clr=GREEN}
-            else if(at.r==='n'){clr=RED;td='line-through'}
-            else if(j===ci&&at.w>0){clr=WHITE;boxSh='box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';'}
+            if(at.r==='g'){clr=WHITE;bg=_txC('goodLift')}
+            else if(at.r==='n'){clr=WHITE;bg=_txC('noLift');td='line-through'}
+            else if(j===ci&&at.w>0){clr=WHITE;boxSh='box-shadow:inset 0 0 0 2px #fff;'}
             else{clr=WHITE_DIM}
             // Debajo del peso, las luces que le dieron a ESE intento. Si de ese
             // intento no hay luces guardadas, no va nada: en un campeonato sin
             // luces el scoreboard queda igual que siempre.
             const lucesAt=_lucesDeIntento(at,9);
-            return '<div style="padding:'+(lucesAt?'6px 6px 4px':'8px 6px')+';text-align:center;border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:22px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+boxSh+'"'+(is4?' title="Intento extra / 4º"':'')+'>'+(at.w||'—')+(is4?'<sup style="font-size:10px;color:'+YL_GOLD+'">'+x4lbl+'</sup>':'')+(lucesAt?'<div style="margin-top:3px;text-decoration:none">'+lucesAt+'</div>':'')+'</div>';
+            return '<div style="padding:'+(lucesAt?'6px 6px 4px':'8px 6px')+';text-align:center;border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:22px;font-weight:700;background:'+bg+';color:'+clr+';text-shadow:0 1px 2px rgba(0,0,0,.35);text-decoration:'+td+';'+boxSh+'"'+(is4?' title="Intento extra / 4º"':'')+'>'+(at.w||'—')+(is4?'<sup style="font-size:10px;color:'+YL_GOLD+'">'+x4lbl+'</sup>':'')+(lucesAt?'<div style="margin-top:3px;text-decoration:none">'+lucesAt+'</div>':'')+'</div>';
           }).join('')}
           ${_liftCell('sq','SQUAT',sqB)}
           ${_liftCell('bp','BENCH PRESS',bpB)}

@@ -454,6 +454,24 @@ const _TX_COLOR_PALETTES={
       nameText:'#ffffff',accent:'#D4A843',headerBg:'#0d0d0d',
       gridBg:'#080808',lbHighlight:'#2a2a2a',cardBg:'#101010'}
   },
+  // Las dos del rediseño: todo en negro o en el azul marino de YourLift, con las
+  // letras blancas y sin dorado. El color queda solo para válido, nulo y récord.
+  negroBlanco:{
+    label:'Negro · Blanco',desc:'Negro · Letras blancas',
+    preview:['#000000','#161618','#ffffff','#22c55e','#ef4444'],
+    colors:{goodLift:'#22c55e',noLift:'#ef4444',puesto:'#ffffff',
+      curAttempt:'#1c1c1f',nameBg:'#0b0b0c',nameBg2:'#0b0b0c',
+      nameText:'#ffffff',accent:'#ffffff',headerBg:'#000000',
+      gridBg:'#111113',lbHighlight:'#2a2a2e',cardBg:'#0a0a0b'}
+  },
+  marino:{
+    label:'Azul marino',desc:'Azul YourLift · Letras blancas',
+    preview:['#06142B','#0B2A55','#ffffff','#22c55e','#ef4444'],
+    colors:{goodLift:'#22c55e',noLift:'#ef4444',puesto:'#ffffff',
+      curAttempt:'#0e3266',nameBg:'#0B2A55',nameBg2:'#0B2A55',
+      nameText:'#ffffff',accent:'#ffffff',headerBg:'#06142B',
+      gridBg:'#0a2147',lbHighlight:'#16427F',cardBg:'#0B2A55'}
+  },
   azul:{
     label:'Azul',desc:'Azul competición · Dorado',
     preview:['#071428','#0f3a7a','#D4A843','#22c55e','#ef4444'],

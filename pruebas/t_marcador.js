@@ -3,7 +3,8 @@
 //
 // En el MARCADOR el apellido salía en MAYÚSCULAS y quedaba más marcado que el
 // nombre ("Walter Humberto OLIVARES GUTIÉRREZ"). Se pidió como se escribe: todo del
-// mismo tamaño y con la inicial en mayúscula. El color de la letra es el de siempre.
+// mismo tamaño y con la inicial en mayúscula. Las letras van siempre en blanco:
+// la paleta cambia los fondos, no el color de la letra.
 //
 // En el PERFIL es al revés: el nombre iba en fina y el apellido en negrita y
 // mayúsculas, y se leían como dos cosas distintas. Ahí van los dos iguales.
@@ -77,9 +78,9 @@ const LEER = () => {
   ok(!/[A-ZÁÉÍÓÚÑ]{3}/.test(r.nombre), 'el apellido ya no va en mayúsculas');
   ok(r.cat === '-93kg JR', 'la categoría se lee: ' + r.cat);
 
-  console.log('\n  Y con los colores de siempre');
-  ok(r.nombreColor === 'rgb(10, 22, 40)', 'la letra vuelve al azul oscuro sobre la barra (' + r.nombreColor + ')');
-  ok(r.catColor === 'rgb(212, 168, 67)', 'la categoría en dorado (' + r.catColor + ')');
+  console.log('\n  Las letras van siempre en blanco, sea cual sea la paleta');
+  ok(r.nombreColor === 'rgb(255, 255, 255)', 'el nombre en blanco (' + r.nombreColor + ')');
+  ok(r.catColor === 'rgb(255, 255, 255)', 'la categoría en blanco (' + r.catColor + ')');
   ok(r.nombreSombra === 'none', 'sin reborde negro');
   ok(!/_contorno/.test(src), 'no quedó código del reborde dando vueltas');
 

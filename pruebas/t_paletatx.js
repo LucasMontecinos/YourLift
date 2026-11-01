@@ -69,7 +69,7 @@ const MEDALLERO = `renderTxMedals({mod:'Powerlifting Classic',sex:'Hombre',div:'
     });
     ok(!!r, 'existe el tema');
     ok(r && r.label === 'Sudamericano Chile', 'se llama ' + ((r || {}).label || '—'));
-    ok(r && r.otros === 8, 'y queda junto a los otros siete (' + ((r || {}).otros || 0) + ' en total)');
+    ok(r && r.otros === 10, 'y queda junto a las otras nueve (' + ((r || {}).otros || 0) + ' en total)');
     // Lo que se pidió: el nombre en blanco, bien legible.
     ok(r && r.nameText === '#ffffff', 'el nombre va en blanco');
     ok(r && r.nameBg === '#0F3E9E', 'sobre el azul de la bandera');
