@@ -318,9 +318,9 @@ function _nomGLTable(rows,opts){
   let h='';
   divs.forEach(d=>{
     // Banda de división (estilo goodlift)
-    h+=`<div style="background:linear-gradient(90deg,var(--accent),rgba(196,30,58,.55));border-radius:8px 8px 0 0;padding:8px 14px;margin-top:16px"><span style="font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:1px;color:#fff">División «${d}»</span></div>`;
+    h+=`<div class="nom-div" style="background:linear-gradient(90deg,var(--accent),rgba(196,30,58,.55));border-radius:8px 8px 0 0;padding:8px 14px;margin-top:16px"><span style="font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:1px;color:#fff">División «${d}»</span></div>`;
     h+=`<div class="nomwrap" style="overflow-x:auto;border:1px solid rgba(29,49,80,.5);border-top:none;border-radius:0 0 8px 8px"><table class="nomtbl" style="width:100%;border-collapse:collapse;font-size:12px;min-width:${marks?680:520}px">`;
-    h+=`<tr style="background:rgba(29,49,80,.45)">`;
+    h+=`<tr class="nom-th" style="background:rgba(29,49,80,.45)">`;
     h+=`<th style="padding:6px;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:.5px;width:42px;text-align:center">Pos</th>`;
     h+=`<th style="padding:6px 8px;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:.5px;text-align:left">Atleta</th>`;
     h+=`<th style="padding:6px;color:var(--muted);font-family:Oswald;font-size:10px;letter-spacing:.5px;width:52px;text-align:center">Año</th>`;
@@ -343,7 +343,7 @@ function _nomGLTable(rows,opts){
       const diaHtml=dias.length
         ?`<span title="${g.find(r=>r.diaLbl)?.diaSes||''}" style="font-family:Oswald;font-size:10px;font-weight:600;letter-spacing:.5px;color:var(--gold);background:rgba(212,168,67,.14);border:1px solid rgba(212,168,67,.35);border-radius:9px;padding:2px 9px;white-space:nowrap">${dias.join(' · ')}</span>`
         :'';
-      h+=`<tr><td colspan="${nCols}" style="padding:6px 12px;background:rgba(212,168,67,.10);border-top:1px solid rgba(29,49,80,.45)"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--gold)">${lbl}</span>${diaHtml}</div></td></tr>`;
+      h+=`<tr class="nom-cg"><td colspan="${nCols}" style="padding:6px 12px;background:rgba(212,168,67,.10);border-top:1px solid rgba(29,49,80,.45)"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--gold)">${lbl}</span>${diaHtml}</div></td></tr>`;
       if(marks)g.sort((a,b)=>(b.total||0)-(a.total||0)||(b.bp||0)-(a.bp||0)||a.n.localeCompare(b.n));
       else g.sort((a,b)=>a.n.localeCompare(b.n));
       g.forEach((r,i)=>{
@@ -371,7 +371,7 @@ function _nomFilters(rows,opts){
     items.forEach(o=>{s+=`<option value="${String(o).replace(/"/g,'&quot;')}"${val===String(o)?' selected':''}>${fmt?fmt(o):o}</option>`});
     return s+`</select></label>`;
   };
-  let h=`<div style="display:flex;flex-wrap:wrap;gap:9px;margin:12px 0;align-items:flex-end">`;
+  let h=`<div class="nom-fil" style="display:flex;flex-wrap:wrap;gap:9px;margin:12px 0;align-items:flex-end">`;
   h+=sel('sex','Género',F.sex||'',['F','M'],v=>v==='F'?'Mujeres':'Hombres');
   h+=sel('cat','Categoría',F.cat||'',uniq(r=>r.cat,(a,b)=>_nomCatKey(a)-_nomCatKey(b)),v=>_nomCatLbl(v));
   h+=sel('div','División',F.div||'',uniq(r=>_nomDiv(r.div),(a,b)=>(_NOM_DIVORD[a]??50)-(_NOM_DIVORD[b]??50)));
@@ -398,7 +398,7 @@ function _nomCardShell(id,info,innerFn){
   const fecha=cfg.fecha||info.fecha||'';
   const org=cfg.organizador||info.org||'';
   const lugar=cfg.lugar||info.lugar||'';
-  let h=`<div id="nomcard_${id}" class="cd2" style="margin-bottom:18px;padding:0;overflow:hidden;border:1px solid ${open?'rgba(212,168,67,.55)':'var(--border)'}">`;
+  let h=`<div id="nomcard_${id}" class="cd2 nom-card${open?' abierta':''}" style="margin-bottom:18px;padding:0;overflow:hidden;border:1px solid ${open?'rgba(212,168,67,.55)':'var(--border)'}">`;
   // Cabecera clickeable, a lo ancho, con la foto del evento de fondo
   h+=`<div class="nomcard-head" onclick="nomToggle('${id}')" style="cursor:pointer;position:relative;min-height:96px;display:flex;align-items:center;background:${foto?`linear-gradient(90deg,rgba(7,16,32,.93) 30%,rgba(7,16,32,.55)),url('${foto}') center/cover`:(_lgFondo?`linear-gradient(90deg,rgba(11,42,85,.96) 35%,rgba(11,42,85,.74)),url('${_lgFondo}') right 24px center/auto 150% no-repeat,#0B2A55`:'linear-gradient(120deg,#0B2A55,#123A73)')}">`;
   h+=`<div class="nomcard-info" style="padding:18px 20px;flex:1 1 260px;min-width:0">`;
@@ -501,7 +501,7 @@ function _nomSudaCard(){
     const rows=_nomSudaRows();
     const F=ST.nomF||{};
     // Desglose visible al abrir el evento (pedido de la organización)
-    let h=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:10px">`;
+    let h=`<div class="nom-st" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:10px">`;
     [[st.ins,'Inscripciones'],[st.personas,'Atletas'],[st.h,'Hombres'],[st.m,'Mujeres'],[st.multi,'En 2+ disciplinas'],[st.paises,'Países']].forEach(([v,l])=>{
       h+=`<div style="background:rgba(29,49,80,.28);border:1px solid var(--border);border-radius:10px;padding:9px 6px;text-align:center"><div style="font-family:Oswald;font-size:20px;font-weight:700;color:var(--gold)">${v}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${l}</div></div>`;
     });
@@ -515,7 +515,7 @@ function _nomSudaCard(){
     h+=`<div style="display:flex;flex-wrap:wrap;gap:7px;margin:14px 0 4px">`;
     mods.forEach(m=>{
       const n=rows.filter(r=>r.mod===m).length, on=F.mod===m;
-      h+=`<button onclick="nomFSet('mod','${m.replace(/'/g,"\\'")}')" style="padding:9px 16px;border-radius:18px;border:1px solid ${on?'var(--gold)':'var(--border)'};background:${on?'rgba(212,168,67,.18)':'transparent'};color:${on?'var(--gold)':'var(--muted)'};font-family:Oswald;font-size:12px;font-weight:${on?700:400};letter-spacing:.5px;cursor:pointer">${m} <span style="opacity:.65">(${n})</span></button>`;
+      h+=`<button class="nom-mod${on?' on':''}" onclick="nomFSet('mod','${m.replace(/'/g,"\\'")}')" style="padding:9px 16px;border-radius:18px;border:1px solid ${on?'var(--gold)':'var(--border)'};background:${on?'rgba(212,168,67,.18)':'transparent'};color:${on?'var(--gold)':'var(--muted)'};font-family:Oswald;font-size:12px;font-weight:${on?700:400};letter-spacing:.5px;cursor:pointer">${m} <span style="opacity:.65">(${n})</span></button>`;
     });
     h+=`</div>`;
     if(!F.mod){
@@ -662,7 +662,8 @@ function _nsudaMismoEvento(){
 }
 
 function nom(){
-  let h='';
+  // Encabezado de la página, como la vista previa.
+  let h='<section class="yl-pag-h"><div class="yl-ey2">Inscritos por campeonato</div><h1 class="yl-d">Nóminas</h1></section>';
   const _haySuda=_nsudaVisible();
   if(_haySuda)h+=_nomSudaCard();
   let visibleEvs=(NM.events||[]).filter(ev=>ev.fromFirebase);
