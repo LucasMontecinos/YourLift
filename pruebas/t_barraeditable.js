@@ -161,8 +161,8 @@ const CAJA = `(k)=>{
     });
     p.on('dialog', d => d.accept());
     await p.evaluate(() => barraResetLayout());
-    const r = await p.evaluate(() => ({ intentos: window._piLayout.weight.x, barra: window._piLayout.bPeso.x }));
-    ok(r.barra === 91, '"Atleta en barra" vuelve a fábrica (bPeso x=' + r.barra + ')');
+    const r = await p.evaluate(() => ({ intentos: window._piLayout.weight.x, barra: window._piLayout.bPeso.x, fabrica: PI_DEFAULT_LAYOUT.bPeso.x }));
+    ok(r.barra === r.fabrica, '"Atleta en barra" vuelve a fábrica (bPeso x=' + r.barra + ')');
     ok(r.intentos === 12, 'y la Pantalla de Intentos queda como estaba (weight x=' + r.intentos + ')');
     await p.evaluate(() => piResetLayout());
     const r2 = await p.evaluate(() => [window._piLayout.weight.x, PI_DEFAULT_LAYOUT.weight.x]);

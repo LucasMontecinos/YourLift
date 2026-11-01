@@ -1256,7 +1256,7 @@ const PI_DEFAULT_LAYOUT={
   // Los valores de fábrica reproducen la pantalla tal como estaba antes de que se
   // pudiera mover nada: quien no toque nada no debería notar el cambio.
   bSigla:{x:9,y:11,scale:100},        // SQ 1 / BP 3
-  bPeso:{x:91,y:12,scale:100},        // 92 KG
+  bPeso:{x:80,y:13,scale:100},        // 92 KG (más grande que antes: se corre para que quepa)
   bNombre:{x:50,y:45,scale:100},
   bRecord:{x:50,y:60,scale:100},      // INTENTO DE RÉCORD
   bCambio:{x:80,y:28,scale:100},      // CAMBIO DE INTENTO (3er peso muerto)
@@ -1264,8 +1264,8 @@ const PI_DEFAULT_LAYOUT={
   bPais:{x:10,y:75,scale:100},        // bandera + ARG
   bDatos:{x:50,y:75,scale:100},       // -63 kg · JR · Classic
   bLogo:{x:90,y:75,scale:100},        // logo del campeonato
-  bLogoFed:{x:90,y:88,scale:100},     // logo de la federación
-  bLuces:{x:50,y:90,scale:100}        // las luces de los jueces
+  bLogoFed:{x:90,y:62,scale:100},     // logo de la federación (la franja de abajo lleva los intentos)
+  bLuces:{x:50,y:80,scale:100}        // las luces de los jueces, sobre la franja de intentos
 };
 // Cada logo subido es un bloque suyo: bLogoN0, bLogoN1… en "atleta en barra" y
 // logoN0, logoN1… en la pantalla de intentos. Como son tantos como logos haya,

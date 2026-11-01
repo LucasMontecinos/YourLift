@@ -606,10 +606,37 @@ function renderScreenBarra(a){
   // arrastrar para moverlo, la manija de la esquina para el tamaño. Click en el
   // fondo deselecciona y la pantalla queda limpia para la competencia.
   const B=_piBlock;
+  // Abajo, como la vista previa: los intentos del movimiento en curso (en verde
+  // los válidos, en rojo los nulos, con borde el que va), en banca y peso muerto
+  // lo que ya hizo en los movimientos anteriores, y a la derecha el puesto y el
+  // subtotal (el total en peso muerto). Es fondo: no se mueve ni se elige.
+  const ra=(typeof _realAth==='function')?_realAth(a):a;
+  const _nB=v=>{const x=Math.round((+v||0)*10)/10;return String(x);};
+  const _cel=(txt,bg,borde,dim,top)=>`<div style="min-width:12vh;height:8.6vh;padding:0 1.4vh;box-sizing:border-box;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:${bg};${borde?'box-shadow:inset 0 0 0 3px #fff;':''}color:${dim?'rgba(255,255,255,.5)':'#fff'};line-height:1">${top?`<span style="font-size:1.5vh;letter-spacing:.16em;margin-bottom:.5vh">${top}</span>`:''}<span style="font-size:${top?'3.8vh':'4.8vh'};font-weight:600">${txt}</span></div>`;
+  const _antes=(l==='bp'&&!/bench/i.test(String(a.mod||'')))?[['SQ','sq']]:(l==='dl'?[['SQ','sq'],['BP','bp']]:[]);
+  const _celAntes=_antes.map(([k,m])=>{const v=(typeof bestOf==='function')?bestOf(ra,m):0;return _cel(v>0?_nB(v):'—','#161618',false,!(v>0),k);}).join('');
+  const _celHoy=((ra.att&&ra.att[l])||[]).map((x,j)=>{
+    if(x.r==='g')return _cel(_nB(x.w),'#22C55E');
+    if(x.r==='n')return _cel(_nB(x.w),'#EF4444');
+    if(j===r&&x.w>0)return _cel(_nB(x.w),'#1C1C1F',true);
+    return _cel(x.w?_nB(x.w):'—','#161618',false,true);
+  }).join('');
+  const _rk=(typeof catRankBySub==='function')?catRankBySub(ra):{pos:0};
+  const _sbB=(typeof bestOf==='function')?['sq','bp','dl'].filter(m=>m==='sq'||l!=='sq').filter(m=>m!=='dl'||l==='dl').reduce((t,m)=>t+bestOf(ra,m),0):0;
+  const _movN={sq:'SENTADILLA',bp:'BANCA',dl:'PESO MUERTO'}[l]||'';
+  const franjaAbajo=`<div style="position:absolute;left:0;right:0;bottom:0;height:13vh;background:#0b0b0c;border-top:1px solid #1f1f22;display:flex;align-items:center;gap:1.4vh;padding:0 3.4vw;pointer-events:none;font-family:Oswald,sans-serif;color:#fff">
+      ${_celAntes?_celAntes+'<span style="width:1px;align-self:stretch;margin:2.4vh 1vh;background:#2a2a2e"></span>':''}
+      <span style="font-size:2vh;letter-spacing:.16em;margin-right:1vh">${_movN}</span>${_celHoy}
+      <span style="margin-left:auto;display:flex;gap:4vh;align-items:flex-end;text-align:right">
+        ${_rk&&_rk.pos?`<span><span style="display:block;font-size:1.6vh;letter-spacing:.16em">PUESTO</span><b style="font-size:5vh;font-weight:600;line-height:1">${_rk.pos}°</b></span>`:''}
+        <span><span style="display:block;font-size:1.6vh;letter-spacing:.16em">${l==='dl'?'TOTAL':'SUBTOTAL'}</span><b style="font-size:5vh;font-weight:600;line-height:1">${_sbB>0?_nB(_sbB):'—'}</b></span>
+      </span>
+    </div>`;
   return `<div class="pi-canvas" style="position:absolute;top:0;right:0;bottom:0;left:0;background:${fondo};font-family:Oswald,sans-serif;color:#fff;overflow:hidden">
+    ${franjaAbajo}
     ${B('bSigla',`<div style="font-size:clamp(28px,5.4vw,86px);font-weight:700;letter-spacing:.06em;color:#fff;line-height:1;white-space:nowrap">${_LIFT_SIGLA[l]||''} ${r+1}</div>`)}
 
-    ${B('bPeso',`<div style="line-height:1;white-space:nowrap;font-size:clamp(46px,10vw,150px);font-weight:800;letter-spacing:-.01em">
+    ${B('bPeso',`<div style="line-height:1;white-space:nowrap;font-size:clamp(46px,11vw,200px);font-weight:700;letter-spacing:-.01em">
       ${kg?kg.toFixed(1).replace(/\.0$/,''):'—'}<span style="font-size:.34em;font-weight:600;margin-left:.15em;opacity:.75">KG</span>
     </div>`)}
 
@@ -659,7 +686,7 @@ function _piDefLogoN(key){
   // y saltando de fila cada seis, que es lo que entra a lo ancho.
   const col=i%6, fila=Math.floor(i/6);
   return m[1]==='b'
-    ? {x:88-col*15,y:Math.max(60,90-fila*11),scale:100}   // atleta en barra: abajo, de derecha a izquierda
+    ? {x:88-col*15,y:Math.max(50,76-fila*11),scale:100}   // atleta en barra: sobre la franja de abajo, de derecha a izquierda
     : {x:94-col*9,y:Math.min(40,4.5+fila*9),scale:100};  // intentos: en la franja de arriba, de derecha a izquierda
 }
 
