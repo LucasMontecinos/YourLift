@@ -1225,25 +1225,31 @@ const _LIFT_SIGLA={sq:'SQ',bp:'BP',dl:'DL'};
 // estado la pantalla se ve limpia, sin ningún borde ni manija, lista
 // para mostrar en la competencia. Se guarda por navegador/pantalla.
 // ════════════════════════════════════════════════════════════════
-const PI_LAYOUT_KEY='yl_pant_intentos_layout';
+// v2: las pantallas de tarima se rehicieron como la vista previa. Con la clave
+// nueva todas arrancan con la disposición nueva; las posiciones que se habían
+// guardado eran para la pantalla vieja y la desarmaban.
+const PI_LAYOUT_KEY='yl_pant_intentos_layout_v2';
 const PI_DEFAULT_LAYOUT={
   // El cartel de descanso arranca en el medio, tapando la pantalla: cuando está
   // puesto es lo único que importa. De ahí se corre a donde convenga.
   descanso:{x:50,y:45,scale:100},
-  record:{x:50,y:7,scale:100},       // cartel de intento de récord: arriba de todo
-  liftLabel:{x:50,y:15,scale:100},
-  weight:{x:50,y:22,scale:100},
-  barbell:{x:50,y:50,scale:100},
-  name:{x:50,y:72,scale:100},
-  subtitle:{x:50,y:78,scale:100},
-  position:{x:50,y:84,scale:100},
-  next:{x:50,y:93,scale:100},
+  // Intentos, como la vista previa: a la izquierda (crecen hacia la derecha
+  // desde x-5 %) el cartel de récord, el movimiento, el peso grande, el nombre
+  // y la posición; a la derecha la barra; abajo, en la franja, quién sigue.
+  record:{x:8,y:16,scale:100},
+  liftLabel:{x:8,y:23,scale:100},
+  weight:{x:8,y:43,scale:100},
+  barbell:{x:70,y:50,scale:100},
+  name:{x:8,y:67,scale:100},
+  subtitle:{x:8,y:73,scale:100},
+  position:{x:8,y:79,scale:100},
+  next:{x:50,y:94.5,scale:100},
   // Los dos logos de la Pantalla de Intentos: arrancan arriba, en las esquinas,
   // que es donde no estorban a nada de lo que ya había.
-  logoFed:{x:8,y:9,scale:100},
-  logoCamp:{x:92,y:9,scale:100},
-  cambio:{x:85,y:24,scale:100},       // CAMBIO DE INTENTO (3er peso muerto)
-  jurado:{x:84,y:38,scale:100},       // aviso: el jurado revirtió el último intento juzgado
+  logoFed:{x:86,y:4.5,scale:100},     // los logos, en la franja de arriba
+  logoCamp:{x:94,y:4.5,scale:100},
+  cambio:{x:40,y:16,scale:100},       // CAMBIO DE INTENTO (3er peso muerto)
+  jurado:{x:70,y:16,scale:100},       // aviso: el jurado revirtió el último intento juzgado
   // "Atleta en barra" usa el mismo editor. Las claves llevan b- adelante para no
   // pisarse con las de arriba: las dos disposiciones conviven en el mismo archivo
   // guardado, y cada pantalla dibuja las suyas.

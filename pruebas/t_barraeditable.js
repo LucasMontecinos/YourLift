@@ -127,7 +127,7 @@ const CAJA = `(k)=>{
 
   console.log('\n  Y queda guardado');
   {
-    const guardado = await p.evaluate(() => JSON.parse(localStorage.getItem('yl_pant_intentos_layout') || '{}'));
+    const guardado = await p.evaluate(() => JSON.parse(localStorage.getItem(PI_LAYOUT_KEY) || '{}'));
     ok(guardado.bNombre && guardado.bNombre.scale > 100, 'el tamaño se guardó');
     await p.reload({ waitUntil: 'domcontentloaded' });
     await p.waitForFunction(() => typeof renderTxWidget === 'function', null, { timeout: 20000 });
@@ -165,8 +165,8 @@ const CAJA = `(k)=>{
     ok(r.barra === 91, '"Atleta en barra" vuelve a fábrica (bPeso x=' + r.barra + ')');
     ok(r.intentos === 12, 'y la Pantalla de Intentos queda como estaba (weight x=' + r.intentos + ')');
     await p.evaluate(() => piResetLayout());
-    const r2 = await p.evaluate(() => window._piLayout.weight.x);
-    ok(r2 === 50, 'y al revés también: restablecer Intentos la deja en su lugar (' + r2 + ')');
+    const r2 = await p.evaluate(() => [window._piLayout.weight.x, PI_DEFAULT_LAYOUT.weight.x]);
+    ok(r2[0] === r2[1], 'y al revés también: restablecer Intentos la deja en su lugar (' + r2[0] + ')');
   }
 
   console.log('\nLas luces siguen siendo un espejo');

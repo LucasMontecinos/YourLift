@@ -660,7 +660,7 @@ function _piDefLogoN(key){
   const col=i%6, fila=Math.floor(i/6);
   return m[1]==='b'
     ? {x:88-col*15,y:Math.max(60,90-fila*11),scale:100}   // atleta en barra: abajo, de derecha a izquierda
-    : {x:8+col*15,y:Math.min(40,6+fila*11),scale:100};    // intentos: arriba, de izquierda a derecha
+    : {x:94-col*9,y:Math.min(40,4.5+fila*9),scale:100};  // intentos: en la franja de arriba, de derecha a izquierda
 }
 
 function _piDefBloque(key){
@@ -1029,7 +1029,8 @@ function renderScreenIntentos(cur,nxt){
   });
   // El collar, por fuera del disco más chico.
   s.push(`<rect x="${x}" y="${cy-collarH/2}" width="${collarW}" height="${collarH}" fill="#52525B" rx="4" stroke="#27272A" stroke-width="2"/>`);
-  s.push(`<text x="${x+collarW/2}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="#F4F4F5" stroke="rgba(0,0,0,.7)" stroke-width="2" paint-order="stroke" stroke-linejoin="round" font-family="Oswald" font-weight="700" font-size="16" transform="rotate(-90 ${x+collarW/2} ${cy})">BAR+COL ${barW}</text>`);
+  // Sin letrero encima: el "BAR+COL 25" que llevaba no le servía a nadie y se
+  // pidió sacarlo. El peso de barra y collares va en la línea "Por lado".
   x+=collarW;
   // Y la punta de la manga que asoma después del collar.
   s[_mangaIdx]=`<rect x="${_mangaX}" y="${cy-sleeveThick/2}" width="${x+puntaW-_mangaX}" height="${sleeveThick}" fill="#8A8A93" rx="4"/>`;
@@ -1071,7 +1072,7 @@ function renderScreenIntentos(cur,nxt){
   // Las letras chicas de esta pantalla van en BLANCO, no en el gris claro de
   // antes: la mesa pidió que se lean de lejos (encabezado, categoría, SIGUIENTE).
   // La jerarquía la dan el tamaño y el peso de la letra, no el color.
-  const liftLabelHtml=`<div style="font-family:Oswald;font-size:22px;letter-spacing:4px;color:#fff;white-space:nowrap">${liftName} · ${roundLabel}${_setup?` · ${_setup}`:''}</div>`;
+  const liftLabelHtml=`<div style="font-family:Oswald;font-size:3.4vh;letter-spacing:.14em;color:#fff;white-space:nowrap">${liftName} · ${roundLabel}${_setup?` · ${_setup}`:''}</div>`;
   // ── INTENTO DE RÉCORD SUDAMERICANO ──────────────────────────────
   // Si el peso cargado supera el récord vigente de su división (o del Open), la
   // pantalla de tarima lo canta: es lo que mira el público y la mesa técnica.
@@ -1089,14 +1090,27 @@ function renderScreenIntentos(cur,nxt){
   // Con los dos en juego, cada línea dice de cuál habla.
   if(_srX.mov.length)_srLineas.push((_srX.tot.length?liftName+' · ':'')+_srX.mov.map(_srDet).join('   ·   '));
   if(_srX.tot.length)_srLineas.push('TOTAL '+_srX.total+' KG · '+_srX.tot.map(_srDet).join('   ·   '));
-  const recordHtml=_srX.hay?`<div class="sr-parpadea" style="font-family:Oswald;white-space:nowrap;text-align:center">
-      <div style="display:inline-block;background:#F2C230;color:#1a1200;padding:8px 26px;border-radius:10px;font-size:30px;font-weight:900;letter-spacing:4px;box-shadow:0 0 34px rgba(242,194,48,.55)">${_srIntentoTexto(_srX)}</div>
-      ${_srLineas.map(t=>`<div style="font-size:17px;letter-spacing:2px;color:#F2C230;margin-top:6px">${t}</div>`).join('')}
+  const recordHtml=_srX.hay?`<div class="sr-parpadea" style="font-family:Oswald;white-space:nowrap;text-align:left">
+      <div style="display:inline-block;background:#FFD400;color:#000;padding:.8vh 1.6vh;border-radius:6px;font-size:3vh;font-weight:700;letter-spacing:.1em">${_srIntentoTexto(_srX)}</div>
+      ${_srLineas.map(t=>`<div style="font-size:1.8vh;letter-spacing:.12em;color:#FFD400;margin-top:.6vh">${t}</div>`).join('')}
     </div>`:'';
-  const weightHtml=`<div style="font-family:Oswald;font-size:120px;font-weight:900;color:${textColor};line-height:1;letter-spacing:2px;white-space:nowrap">${weight}<span style="font-size:0.32em;color:#fff;margin-left:10px">KG</span></div>`;
-  const nameHtml=`<div style="font-family:Oswald;font-size:56px;font-weight:700;letter-spacing:1px;color:${textColor};line-height:1.15;white-space:nowrap">${cur.name||''}</div>`;
-  const subtitleHtml=`<div style="font-family:Oswald;font-size:16px;letter-spacing:3px;color:#fff;white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div,_modTarima(cur)].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
-  const positionHtml=posTxt?`<div style="font-family:Oswald;font-size:22px;letter-spacing:1px;color:${accentColor};white-space:nowrap">${posTxt}</div>`:'';
+  // El peso manda: grande, a la izquierda, como en la vista previa.
+  const weightHtml=`<div style="font-family:Oswald;font-size:27vh;font-weight:600;color:${textColor};line-height:.85;white-space:nowrap">${weight||'—'}<span style="font-size:.24em;color:#fff;margin-left:.12em;font-weight:500">KG</span></div>`;
+  const _lgN=(window.clubLogoImg&&cur.club&&!_variosPaises())?window.clubLogoImg(cur.club,Math.round(innerHeight*0.055),'flex:none;')
+    :(_variosPaises()?_flagImg(_ctry(cur),Math.round(innerHeight*0.04)):'');
+  const nameHtml=`<div style="display:flex;align-items:center;gap:1.6vh;font-family:Oswald;font-size:4vh;font-weight:600;letter-spacing:.06em;color:${textColor};line-height:1.1;white-space:nowrap">${_lgN}<span>${cur.name||''}</span>${cur.lot?`<span style="font-weight:400;font-size:.62em;letter-spacing:.12em;color:#fff">· LOTE ${cur.lot}</span>`:''}</div>`;
+  const subtitleHtml=`<div style="font-family:Oswald;font-size:2.2vh;letter-spacing:.14em;color:#fff;white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div,_modTarima(cur)].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
+  // En blanco, como todo en esta pantalla (se pidió así para leerla de lejos).
+  const positionHtml=posTxt?`<div style="font-family:Oswald;font-size:2.6vh;letter-spacing:.04em;color:#fff;white-space:nowrap">${posTxt}</div>`:'';
+  // La barra con el rack arriba a la derecha y, abajo, la carga por lado.
+  const _grupos=[];plates.forEach(k=>{const g=_grupos[_grupos.length-1];if(g&&g.k===k)g.n++;else _grupos.push({k,n:1});});
+  const _n=v=>{const r=Math.round(v*100)/100;return String(r);};
+  const _porLado=_grupos.length?_grupos.map(g=>(g.n>1?g.n+' × ':'')+_n(g.k)).join(' + '):'sin discos';
+  const bbHtml=`<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2vh;font-family:Oswald,sans-serif;color:#fff">
+      ${rackH?`<div style="border:2px solid #3A3A3F;border-radius:10px;padding:.6vh 1.8vh;text-align:center"><div style="font-size:1.7vh;letter-spacing:.16em">RACK</div><div style="font-size:5.4vh;font-weight:600;line-height:1">${rackH}</div></div>`:''}
+      ${bbSvg}
+      <div style="font-size:2.6vh;letter-spacing:.03em;white-space:nowrap">Por lado: <b>${_porLado}</b> · collar ${_n(collarsKg/2)} = <b>${_n(sideKg+collarsKg/2)}</b></div>
+    </div>`;
   // Quién viene después — para que los cargadores/spotters se vayan preparando.
   // Si el actual es el último de su ronda, el de al lado NO es null: se sigue
   // buscando en la ronda siguiente y después en las otras tandas. Antes el cartel
@@ -1113,11 +1127,12 @@ function renderScreenIntentos(cur,nxt){
     // es lo que necesitan los cargadores para ir armando.
     const gris='#fff';
     const ns=_rackSetup(_realAth(s.a),s.lift||DATA.lift);
-    nextHtml=`<div style="font-family:Oswald;font-size:22px;letter-spacing:3px;color:${gris};white-space:nowrap">`
-      +`SIGUIENTE${s.nota?' · '+s.nota:''} · `
-      +`<span style="font-weight:700">${s.a.name||''}</span>`
-      +(s.w?` · <span style="font-weight:700">${s.w} KG</span>`:'')
-      +(ns?` · ${ns}`:'')
+    const lgS=(window.clubLogoImg&&s.a.club&&!_variosPaises())?window.clubLogoImg(s.a.club,Math.round(innerHeight*0.044),'flex:none;'):'';
+    nextHtml=`<div style="display:flex;align-items:center;gap:2.2vh;font-family:Oswald;font-size:3vh;letter-spacing:.06em;color:${gris};white-space:nowrap">`
+      +`<span style="font-size:.62em;letter-spacing:.18em">SIGUIENTE${s.nota?' · '+s.nota:''}</span>`
+      +lgS+`<span style="font-weight:600">${s.a.name||''}</span>`
+      +(s.w?`<span>· ${s.w} KG</span>`:'')
+      +(ns?`<span>· ${ns}</span>`:'')
     +`</div>`;
   }
   // Tiempo compensatorio (4º "se sigue a sí mismo") — se ve arriba a la izquierda
@@ -1133,22 +1148,30 @@ function renderScreenIntentos(cur,nxt){
   const _fondoPant=(piSet.fondoBandera!==false)
     ? _fondoBarra(cur,'bandera',piSet.bgColor||'')
     : (piSet.bgColor||'#000');
+  // La franja de arriba y la de abajo de la vista previa. Son fondo: no se
+  // mueven ni se eligen, los bloques van encima.
+  const _tar=(DATA.event&&(DATA.event.tarima||DATA.event.plataforma))||'';
+  const franjas=`<div style="position:absolute;left:0;right:0;top:0;height:9vh;background:#0b0b0c;border-bottom:1px solid #1f1f22;display:flex;align-items:center;gap:2.6vh;padding:0 3.4vw;font-family:Oswald,sans-serif;color:#fff;pointer-events:none">
+      <b style="font-size:3.4vh;font-weight:600;letter-spacing:.08em">INTENTOS · CARGA DE BARRA</b>
+      <span style="font-size:2vh;letter-spacing:.14em">${['TANDA '+(DATA.flight||''),_tar?'TARIMA '+_tar:''].filter(Boolean).join(' · ')}</span></div>
+    <div style="position:absolute;left:0;right:0;bottom:0;height:11vh;background:#0b0b0c;border-top:1px solid #1f1f22;pointer-events:none"></div>`;
   return `<div class="pi-canvas" style="position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden${_fondoPant?';background:'+_fondoPant:''}" id="pantIntentosBox">
+    ${franjas}
     ${compHtml}
     ${(piSet.showTimer===true||DATA.relojVisible)?`<div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`:''}
-    ${_piBlock('liftLabel',liftLabelHtml)}
-    ${recordHtml?_piBlock('record',recordHtml):''}
+    ${_piBlock('liftLabel',liftLabelHtml,true)}
+    ${recordHtml?_piBlock('record',recordHtml,true):''}
     ${_cambiosIntentoActual(cur)?_piBlock('cambio',_cartelCambioHtml('30px')):''}
     ${(typeof _txJurado!=='undefined'&&_txJurado&&Date.now()<_txJuradoHasta)?_piBlock('jurado',_juradoTarimaHtml(_txJurado)):''}
-    ${_piBlock('weight',weightHtml)}
-    ${_piBlock('barbell',bbSvg)}
-    ${_piBlock('name',nameHtml)}
-    ${_piBlock('subtitle',subtitleHtml)}
-    ${positionHtml?_piBlock('position',positionHtml):''}
+    ${_piBlock('weight',weightHtml,true)}
+    ${_piBlock('barbell',bbHtml)}
+    ${_piBlock('name',nameHtml,true)}
+    ${_piBlock('subtitle',subtitleHtml,true)}
+    ${positionHtml?_piBlock('position',positionHtml,true):''}
     ${nextHtml?_piBlock('next',nextHtml):''}
     ${_logosPantallaSubidos().length
-      ? _logosPantallaSubidos().map((u,i)=>_piLogoBloque('logoN'+i,u,'9vh','13vw')).join('')
-      : _piLogoBloque('logoFed',_logoFed(),'9vh','12vw')+_piLogoBloque('logoCamp',_logoCamp(),'11vh','15vw')}
+      ? _logosPantallaSubidos().map((u,i)=>_piLogoBloque('logoN'+i,u,'6.4vh','13vw')).join('')
+      : _piLogoBloque('logoFed',_logoFed(),'6.4vh','12vw')+_piLogoBloque('logoCamp',_logoCamp(),'6.4vh','15vw')}
     ${_piSettingsPanelHtml()}
   </div>`;
 }
