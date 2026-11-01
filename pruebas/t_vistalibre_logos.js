@@ -87,7 +87,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     await p.close();
   }
 
-  console.log('\n  El FECHIPO de la portada es el logo, no un dibujo');
+  console.log('\n  La cabecera de la portada lleva el logo original de YourLift (sin el de FECHIPO)');
   {
     const p = await b.newPage({ viewport: { width: 1400, height: 900 } });
     p.on('pageerror', e => { console.log('  [pageerror] ' + e.message); fallas++; });
@@ -95,22 +95,22 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     await p.goto(`http://localhost:${PUERTO}/index.html`, { waitUntil: 'domcontentloaded' });
     await p.waitForTimeout(2500);
     const r = await p.evaluate(() => {
-      const img = document.querySelector('.fechipo-logo');
-      const txt = document.querySelector('.fechipo-mini .txt');
+      const img = document.querySelector('.yl-cab-logo');
       return {
         hay: !!img,
         cargo: img ? (img.complete && img.naturalWidth > 0) : false,
         alto: img ? Math.round(img.getBoundingClientRect().height) : 0,
-        dibujoOculto: txt ? getComputedStyle(txt).display === 'none' : null,
-        // Sigue llevando a nóminas, que es lo que hacía antes.
-        clic: !!document.querySelector('.fechipo-mini[onclick]'),
+        filtro: img ? getComputedStyle(img).filter : '',
+        fechipo: !!document.querySelector('.fechipo-logo,.fechipo-mini'),
+        clic: !!document.querySelector('.yl-cab-logo[onclick]'),
       };
     });
-    ok(r.hay, 'está la imagen del logo');
+    ok(r.hay, 'está el logo');
     ok(r.cargo, 'y el archivo carga de verdad');
     ok(r.alto > 20, 'con un tamaño razonable (' + r.alto + 'px)');
-    ok(r.dibujoOculto === true, 'el dibujo hecho a mano queda oculto');
-    ok(r.clic, 'y sigue llevando a las nóminas al hacer clic');
+    ok(r.filtro === 'none', 'con sus colores originales (sin filtro)');
+    ok(!r.fechipo, 'sin el logo de FECHIPO');
+    ok(r.clic, 'y lleva al inicio al hacer clic');
     await p.close();
   }
 

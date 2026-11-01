@@ -38,9 +38,10 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
   ok(sergio && sergio.sq === 420 && sergio.bp === 222.5 && sergio.dl === 310 && Math.abs(sergio.dt - 94.38) < 0.2, 'con sus tres movimientos y el GL de esa marca');
   const bancas = L.filter(e => e.tab.indexOf('bench') === 0);
   ok(bancas.length && bancas.every(e => e.tt === e.bp && e.sq === 0 && e.dl === 0), 'en Bench cuenta la banca, no el total de tres movimientos');
-  await p.evaluate(() => { const i = _LID.lista.findIndex(e => e.tab === 'cl_m' && e.c === '120+'); _lideresIr(i); });
-  const txt = await p.evaluate(() => (document.getElementById('ylLideres') || {}).innerText || '');
-  ok(/Sergio Hernan Mardones Meza/i.test(txt) && /952\.5/.test(txt), 'y así se ve en la portada');
+  // La portada muestra el top 5 GL del año (Classic y Equipado), con los mismos datos.
+  const top = await p.evaluate(() => ({ cl: (_LID.top.cl_m || []).map(e => [e.n, e.dt, e.tt]), txt: (document.getElementById('ylLideres') || {}).innerText || '' }));
+  ok(top.cl.length === 5 && top.cl.every((e, i) => i === 0 || top.cl[i - 1][1] >= e[1]), 'top 5 Classic masculino ordenado por GL: ' + top.cl.map(e => e[0].split(' ')[0] + ' ' + (+e[1]).toFixed(2)).join(', '));
+  ok(/Top 5 GL/i.test(top.txt) && top.cl.length && top.txt.indexOf((+top.cl[0][1]).toFixed(2).replace('.', ',')) >= 0, 'y así se ve en la portada');
   ok(!p.errs.length, 'sin errores' + (p.errs.length ? ': ' + p.errs.join(' | ') : ''));
 
   console.log('\nLo mismo que la página Ranking');

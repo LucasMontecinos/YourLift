@@ -907,132 +907,84 @@ function home(){
     insClosed.push({...e,name:bn});
   });
 
-  // Portada: una foto real de tarima a todo el ancho, con el mismo texto,
-  // los mismos botones y el Instagram de siempre. En el teléfono la foto va
-  // arriba y el texto debajo (ver .yl-hero en index.html).
+  // Portada 2026, como la vista previa aprobada: la foto a todo el ancho con el
+  // texto a la izquierda; abajo las próximas competencias, lo último y el top 5
+  // GL del año. Las fotos y su encuadre siguen saliendo de Admin → Portada.
+  const anio=now.getFullYear();
+  const _e=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const vivo=_vivoHoy();
   let h=`
-  <div class="yl-plates" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
   <header class="yl-hero">
     <picture><source media="(max-width:640px)" srcset="portada/portada_movil.jpg?v=e949b0fa"><img src="portada/portada.jpg?v=ee0a781a" alt="Atleta en sentadilla en el Sudamericano 2026" fetchpriority="high"></picture>
-    <div class="yl-hero-c">
-      <img class="yl-hero-logo" src="yourlift_logo_hd.png" alt="YourLift">
-      <div class="yl-kick">El powerlifting de Chile</div>
-      <h1 class="yl-h1">Cada kilo<br><span>cuenta.</span></h1>
-      <p class="yl-hero-p">La tecnología del powerlifting chileno: inscripciones, nóminas, ranking nacional, récords y transmisión en vivo, todo en un solo lugar.</p>
-      <div class="yl-cta">
-        <button class="yl-btn yl-b-g" onclick="sv('insc')">Inscribirme</button>
-        <button class="yl-btn yl-b-o" onclick="sv('nominas')">Ver nóminas</button>
-        <button class="yl-btn yl-b-y" onclick="sv('rank')">Ranking</button>
+    <div class="yl-hero-c"><div class="yl-hero-in">
+      <div class="yl-ey">Temporada ${anio}</div>
+      <h1 class="yl-h1n yl-d">Powerlifting chileno, intento por intento.</h1>
+      <p class="yl-hero-p">Resultados, ranking y competencias en vivo de todo el país, en un solo lugar.</p>
+      <div class="yl-cta2">
+        <button class="yl-pill bl" onclick="sv('envivo')">Ver en vivo</button>
+        <button class="yl-pill o" onclick="var x=document.getElementById('ylProx');if(x)x.scrollIntoView({behavior:'smooth'})">Calendario ${anio}</button>
       </div>
-      <a href="https://instagram.com/yourlift_oficial" target="_blank" rel="noopener" class="yl-ig" onmouseover="this.style.borderColor='#E1306C';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(255,255,255,.25)';this.style.color='rgba(235,242,250,.9)'">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
-        @yourlift_oficial
-      </a>
-    </div>
+    </div></div>
+    ${vivo?`<div class="yl-vc" onclick="location.href='livecast.html?evento=${encodeURIComponent(vivo.id)}'">
+      <div class="yl-vc-e"><i class="yl-punto"></i>EN VIVO HOY</div>
+      <h3 class="yl-d">${_e(baseName(vivo.name||''))}</h3>
+      <p>${_e([vivo.location,vivo.tarima?('Tarima '+vivo.tarima):''].filter(Boolean).join(' · '))||'Intento por intento, en tiempo real'}</p>
+      <a>Ver competencia →</a></div>`:''}
   </header>
+  ${liveEmbed()}`;
 
-  ${sponsorStrip()}
-  ${liveEmbed()}
-  <div style="margin-bottom:34px">
-    <h2 class="yl-h2" style="margin-bottom:18px">Próximo Campeonato</h2>`;
-  if(!next){
-    h+=`<div style="background:rgba(17,34,59,.4);border:1px solid var(--border);border-radius:12px;padding:30px;text-align:center;color:var(--muted)">No hay campeonatos programados por el momento.</div>`;
+  // Próximas competencias: las que vienen, con su estado.
+  const vistos={};const prox=[];
+  proximos.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).forEach(e=>{
+    const bn=baseName(e.name);if(vistos[bn])return;vistos[bn]=1;prox.push({...e,name:bn});
+  });
+  h+=`<section class="yl-sec" id="ylProx"><div class="yl-sec-h"><h2 class="yl-d">Próximas competencias</h2><a onclick="sv('nominas')">Ver nóminas →</a></div>`;
+  if(!prox.length){
+    h+=`<div class="yl-vacio">No hay campeonatos programados por el momento.</div>`;
   }else{
-    const d=new Date((next.date||'')+'T00:00:00');
-    const dd=isNaN(d)?'--':d.getDate();const mm=isNaN(d)?'':months[d.getMonth()];const yy=isNaN(d)?'':d.getFullYear();
-    const nOrgs=_evOrganizers(next);
-    const nOrgNames=nOrgs.map(o=>o.name).filter(Boolean).join(' · ');
-    const nIgHtml=nOrgs.map(o=>_igPill(o.instagram,false)).join('');
-    const nLogo=next.logoUrl||'';
-    const cd=cdStr(next.date);
-    const cdHtml=cd&&!cd.done&&!cd.unknown
-      ?`<div style="display:flex;gap:16px;margin-top:18px">
-          <div style="text-align:center"><div style="font-family:Oswald;font-size:38px;font-weight:700;color:var(--gold);line-height:1">${cd.d}</div><div style="font-size:10px;color:var(--muted);letter-spacing:1px">DÍAS</div></div>
-          <div style="text-align:center"><div style="font-family:Oswald;font-size:38px;font-weight:700;color:var(--gold);line-height:1">${cd.h}</div><div style="font-size:10px;color:var(--muted);letter-spacing:1px">HRS</div></div>
-          <div style="text-align:center"><div style="font-family:Oswald;font-size:38px;font-weight:700;color:var(--gold);line-height:1">${cd.m}</div><div style="font-size:10px;color:var(--muted);letter-spacing:1px">MIN</div></div>
-        </div>`
-      :(cd&&cd.done?`<div style="margin-top:16px;display:inline-block;background:rgba(196,30,58,.15);border:1px solid var(--accent);color:var(--accent);padding:6px 16px;border-radius:8px;font-family:Oswald;font-size:13px;letter-spacing:2px">EN CURSO / FINALIZADO</div>`:'');
-    h+=`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:24px;background:rgba(17,34,59,.6);backdrop-filter:blur(10px);border:1px solid var(--border);border-left:5px solid var(--accent);border-radius:16px;padding:28px 30px">
-      <div style="flex-shrink:0;text-align:center;background:rgba(196,30,58,.14);border:1px solid rgba(196,30,58,.4);border-radius:14px;padding:16px 22px;min-width:100px">
-        <div style="font-family:Oswald;font-size:48px;font-weight:700;color:var(--accent);line-height:1">${dd}</div>
-        <div style="font-family:Oswald;font-size:15px;letter-spacing:2px;color:var(--gold);margin-top:2px">${mm}</div>
-        <div style="font-size:11px;color:var(--muted)">${yy}</div>
-      </div>
-      <div style="flex:1;min-width:240px">
-        <div style="font-family:Oswald;font-size:clamp(20px,3vw,28px);font-weight:700;letter-spacing:1px;color:var(--text);text-transform:uppercase;line-height:1.1">${next.name||''}</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:8px">${nOrgNames}${next.location?' · '+next.location:''}</div>
-        ${cdHtml}
-        <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;align-items:center">
-          <button onclick="sv('nominas')" style="padding:11px 22px;background:var(--accent);color:#fff;border:none;border-radius:9px;font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer">VER NÓMINA</button>
-          ${nIgHtml}
-        </div>
-      </div>
-      ${nLogo?`<div style="flex-shrink:0;width:clamp(84px,11vw,124px);height:clamp(84px,11vw,124px);background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:14px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:10px"><img src="${nLogo}" alt="Logo ${next.name||''}" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.parentElement.style.display='none'"></div>`:''}
-    </div>`;
-  }
-  h+=`</div>`;
-
-  if(insOpen.length){
-    h+=`<div style="margin-bottom:30px">
-      <h2 class="yl-h2" style="margin-bottom:6px">Inscripciones Abiertas</h2>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:18px">Campeonatos con inscripciones disponibles ahora</p>
-      <div style="display:flex;flex-direction:column;gap:10px">`;
-    insOpen.forEach(ev=>{
+    h+=`<div class="yl-cards">`;
+    prox.slice(0,4).forEach(ev=>{
       const d=new Date((ev.date||'')+'T00:00:00');
-      const dd=isNaN(d)?'--':d.getDate();const mm=isNaN(d)?'':months[d.getMonth()];const yy=isNaN(d)?'':d.getFullYear();
-      let cierreTxt='';
-      if(ev.preNominaCloseAt){const c=new Date(ev.preNominaCloseAt);if(!isNaN(c)){const diff=c-now;const dias=Math.floor(diff/864e5);cierreTxt=dias>0?`cierra en ${dias} día${dias!==1?'s':''}`:'cierra hoy';}}
-      const eOrgs=_evOrganizers(ev);
-      const eOrgNames=eOrgs.map(o=>o.name).filter(Boolean).join(' · ');
-      const eIgHtml=eOrgs.map(o=>_igPill(o.instagram,true)).join('');
-      h+=`<div style="display:flex;align-items:center;gap:16px;background:rgba(17,34,59,.55);backdrop-filter:blur(8px);border:1px solid var(--border);border-left:4px solid var(--green);border-radius:12px;padding:14px 18px;flex-wrap:wrap">
-        <div style="flex-shrink:0;text-align:center;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:8px 14px;min-width:60px">
-          <div style="font-family:Oswald;font-size:24px;font-weight:700;color:var(--green);line-height:1">${dd}</div>
-          <div style="font-family:Oswald;font-size:10px;letter-spacing:1px;color:rgba(34,197,94,.8)">${mm}</div>
-          <div style="font-size:9px;color:var(--muted)">${yy}</div>
-        </div>
-        ${ev.logoUrl?`<div style="flex-shrink:0;width:48px;height:48px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:4px"><img src="${ev.logoUrl}" alt="" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.parentElement.style.display='none'"></div>`:''}
-        <div style="flex:1;min-width:160px">
-          <div style="font-family:Oswald;font-size:15px;font-weight:600;letter-spacing:1px;color:var(--text);text-transform:uppercase;line-height:1.15">${ev.name||''}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:3px">${eOrgNames}${ev.location?' · '+ev.location:''}${cierreTxt?` · <span style="color:var(--gold)">${cierreTxt}</span>`:''}</div>
-        </div>
-        ${eIgHtml}
-        <button onclick="sv('insc')" style="flex-shrink:0;padding:10px 20px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">INSCRIBIRME</button>
-      </div>`;
+      const dd=isNaN(d)?'--':String(d.getDate()).padStart(2,'0');const mm=isNaN(d)?'':months[d.getMonth()];
+      const preNom=ev.preNominaCloseAt&&(()=>{const c=new Date(ev.preNominaCloseAt);return !isNaN(c)&&now>c;})();
+      const abierta=ev.status==='open'&&!preNom;
+      const tag=ev.abierto===true?['#1E5BD7','Campeonato abierto']:abierta?['#1F9D55','Inscripciones abiertas']:(ev.status==='closed'||preNom)?['#F2B705','Nóminas publicadas']:['#AEB3BC','Pronto'];
+      h+=`<article class="yl-evc" onclick="sv('${abierta?'insc':'nominas'}')">
+        <div class="yl-evc-f"><b class="yl-d">${dd}</b><span>${mm}</span></div>
+        <h3>${_e(ev.name||'')}</h3><p>${_e(ev.location||'')}</p>
+        <span class="yl-tag"><i style="background:${tag[0]}"></i>${tag[1]}</span></article>`;
     });
-    h+=`</div></div>`;
+    h+=`</div>`;
   }
-
-  if(insClosed.length){
-    h+=`<div style="margin-bottom:30px">
-      <h2 class="yl-h2" style="margin-bottom:6px">Próximos Campeonatos</h2>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:18px">Con inscripciones cerradas — ya en preparación</p>
-      <div style="display:flex;flex-direction:column;gap:10px">`;
-    insClosed.forEach(ev=>{
-      const d=new Date((ev.date||'')+'T00:00:00');
-      const dd=isNaN(d)?'--':d.getDate();const mm=isNaN(d)?'':months[d.getMonth()];const yy=isNaN(d)?'':d.getFullYear();
-      const eOrgs=_evOrganizers(ev);
-      const eOrgNames=eOrgs.map(o=>o.name).filter(Boolean).join(' · ');
-      const eIgHtml=eOrgs.map(o=>_igPill(o.instagram,true)).join('');
-      h+=`<div style="display:flex;align-items:center;gap:16px;background:rgba(17,34,59,.45);backdrop-filter:blur(8px);border:1px solid var(--border);border-left:4px solid var(--muted);border-radius:12px;padding:14px 18px;flex-wrap:wrap;opacity:.9">
-        <div style="flex-shrink:0;text-align:center;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;padding:8px 14px;min-width:60px">
-          <div style="font-family:Oswald;font-size:24px;font-weight:700;color:var(--text);line-height:1">${dd}</div>
-          <div style="font-family:Oswald;font-size:10px;letter-spacing:1px;color:var(--muted)">${mm}</div>
-          <div style="font-size:9px;color:var(--muted)">${yy}</div>
-        </div>
-        ${ev.logoUrl?`<div style="flex-shrink:0;width:48px;height:48px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:4px"><img src="${ev.logoUrl}" alt="" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.parentElement.style.display='none'"></div>`:''}
-        <div style="flex:1;min-width:160px">
-          <div style="font-family:Oswald;font-size:15px;font-weight:600;letter-spacing:1px;color:var(--text);text-transform:uppercase;line-height:1.15">${ev.name||''}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:3px">${eOrgNames}${ev.location?' · '+ev.location:''} · <span style="color:var(--muted)">Inscripciones cerradas</span></div>
-        </div>
-        ${eIgHtml}
-        <button onclick="sv('nominas')" style="flex-shrink:0;padding:10px 20px;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">VER NÓMINA</button>
-      </div>`;
-    });
-    h+=`</div></div>`;
-  }
-  h+=`<section class="yl-lid" id="ylLideres">${typeof _lideresHtml==='function'?_lideresHtml():''}</section>`;
+  h+=`</section>`;
+  h+=`${sponsorStrip()}`;
+  // Lo último y el top 5 GL se llenan cuando llegan el ranking y data.json.
+  h+=`<section class="yl-sec" id="ylUltimo">${typeof _ultimoHtml==='function'?_ultimoHtml():''}</section>`;
+  h+=`<section class="yl-sec yl-lid" id="ylLideres">${typeof _lideresHtml==='function'?_lideresHtml():''}</section>`;
   return h;
+}
+
+// La competencia que se transmite hoy (si hay): un campeonato público con fecha de hoy.
+function _vivoHoy(){
+  const evs=window.EVENTOS_PUB||[];
+  const d=new Date();const hoy=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  return evs.find(e=>String(e.fecha||e.date||'').slice(0,10)===hoy)||null;
+}
+// Franja EN VIVO de la cabecera y su alto (para que el contenido no quede debajo).
+function _pintarCab(){
+  const t=document.getElementById('ylVivoTira');
+  if(t){
+    const v=_vivoHoy();
+    if(v){
+      t.hidden=false;
+      t.onclick=()=>{location.href='livecast.html?evento='+encodeURIComponent(v.id);};
+      t.innerHTML='<i class="yl-punto"></i><b>EN VIVO</b><span>'+String(v.name||'').replace(/</g,'&lt;')+'</span><em>Ver competencia →</em>';
+    }else t.hidden=true;
+  }
+  document.querySelectorAll('.yl-cab-links a').forEach(a=>a.classList.toggle('on',a.dataset.v===ST.v));
+  document.body.dataset.v=ST.v||'';
+  const c=document.getElementById('ylCab');
+  if(c)document.documentElement.style.setProperty('--cab-h',c.offsetHeight+'px');
 }
 
 function renderEntrenadoresPub(){
@@ -1341,62 +1293,17 @@ function glcalc(){
   </div>`;
 }
   const _igSvg='<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>';
-  h+=`<div class="yl-pie" style="width:100vw;position:relative;left:50%;transform:translateX(-50%);margin-top:60px;border-top:1px solid rgba(212,168,67,.15);background:#040912;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)">
-    <div style="max-width:1100px;margin:0 auto;padding:48px 24px 32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:40px">
-
-      <!-- Col 1: FECHIPO -->
-      <div>
-        <img src="YourLift_logo.png" alt="YourLift" style="height:64px;width:auto;object-fit:contain;margin-bottom:18px;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5))" onerror="this.style.display='none'">
-        <div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;color:#fff;margin-bottom:8px">FEDERACIÓN CHILENA DE POWERLIFTING</div>
-        <div style="font-size:12px;color:rgba(180,200,230,.6);line-height:1.7;margin-bottom:16px">Promoviendo la excelencia en el powerlifting y el desarrollo integral de atletas de fuerza en Chile.</div>
-        <div style="font-size:11px;color:rgba(212,168,67,.8);font-family:Oswald;letter-spacing:1px;margin-bottom:8px">AFILIADOS A</div>
-        <div style="font-size:12px;color:rgba(180,200,230,.6);line-height:1.9">
-          <a href="https://www.powerlifting.sport" target="_blank" rel="noopener" style="color:rgba(180,200,230,.7);text-decoration:none;display:flex;align-items:center;gap:6px;margin-bottom:2px"><i class=yl-i-globo></i> IPF — International Powerlifting Federation</a>
-          <a href="https://fesupo.org" target="_blank" rel="noopener" style="color:rgba(180,200,230,.7);text-decoration:none;display:flex;align-items:center;gap:6px"><i class=yl-i-globo></i> FESUPO — Federación Sudamericana de Powerlifting</a>
-        </div>
-        <div style="margin-top:16px">
-          <a href="https://www.instagram.com/yourlift_oficial" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:8px;text-decoration:none;color:#fff" title="Instagram @yourlift_oficial">${_igSvg}</a>
-        </div>
-      </div>
-
-      <!-- Col 2: Links YourLift -->
-      <div>
-        <div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;color:#fff;margin-bottom:16px">YOURLIFT</div>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <span onclick="sv('nominas');closeMenu()" style="font-size:13px;color:rgba(180,200,230,.7);cursor:pointer;transition:color .2s" onmouseover="this.style.color='#D4A843'" onmouseout="this.style.color='rgba(180,200,230,.7)'">Nóminas</span>
-          <span onclick="sv('rank');closeMenu()" style="font-size:13px;color:rgba(180,200,230,.7);cursor:pointer;transition:color .2s" onmouseover="this.style.color='#D4A843'" onmouseout="this.style.color='rgba(180,200,230,.7)'">Ranking Nacional</span>
-          <span onclick="sv('records');closeMenu()" style="font-size:13px;color:rgba(180,200,230,.7);cursor:pointer;transition:color .2s" onmouseover="this.style.color='#D4A843'" onmouseout="this.style.color='rgba(180,200,230,.7)'">Récords Nacionales</span>
-          <span onclick="sv('atletas');closeMenu()" style="font-size:13px;color:rgba(180,200,230,.7);cursor:pointer;transition:color .2s" onmouseover="this.style.color='#D4A843'" onmouseout="this.style.color='rgba(180,200,230,.7)'">Atletas</span>
-          <span onclick="sv('entrenadores');closeMenu()" style="font-size:13px;color:rgba(180,200,230,.7);cursor:pointer;transition:color .2s" onmouseover="this.style.color='#D4A843'" onmouseout="this.style.color='rgba(180,200,230,.7)'">Entrenadores</span>
-          <span onclick="sv('insc');closeMenu()" style="font-size:13px;color:rgba(180,200,230,.7);cursor:pointer;transition:color .2s" onmouseover="this.style.color='#D4A843'" onmouseout="this.style.color='rgba(180,200,230,.7)'">Inscripciones</span>
-          <span onclick="sv('crono');closeMenu()" style="font-size:13px;color:rgba(180,200,230,.7);cursor:pointer;transition:color .2s" onmouseover="this.style.color='#D4A843'" onmouseout="this.style.color='rgba(180,200,230,.7)'">Cronograma</span>
-        </div>
-      </div>
-
-      <!-- Col 3: Contacto -->
-      <div>
-        <div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;color:#fff;margin-bottom:16px">CONTACTO</div>
-        <div style="display:flex;flex-direction:column;gap:12px">
-          <a href="mailto:fechipocontacto@gmail.com" style="display:flex;align-items:center;gap:10px;font-size:12px;color:rgba(180,200,230,.7);text-decoration:none" onmouseover="this.style.color='#D4A843'" onmouseout="this.style.color='rgba(180,200,230,.7)'">
-            <span style="font-size:16px"><i class=yl-i-correo></i></span> fechipocontacto@gmail.com
-          </a>
-          <a href="https://www.instagram.com/yourlift_oficial" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:10px;font-size:12px;color:rgba(180,200,230,.7);text-decoration:none" onmouseover="this.style.color='#D4A843'" onmouseout="this.style.color='rgba(180,200,230,.7)'">
-            <span style="display:flex;align-items:center;color:rgba(180,200,230,.7)">${_igSvg}</span> @yourlift_oficial
-          </a>
-          <button onclick="document.getElementById('modalSugerencia').style.display='flex'" style="margin-top:8px;padding:10px 18px;background:rgba(212,168,67,.15);border:1px solid rgba(212,168,67,.4);border-radius:8px;color:#D4A843;font-family:Oswald;font-size:13px;letter-spacing:1px;cursor:pointer;text-align:left;width:fit-content"><i class=yl-i-correo></i> Envíanos un mensaje</button>
-        </div>
-      </div>
+  h+=`<footer class="yl-pie2">
+    <div class="yl-pie2-in">
+      <div><img src="YourLift_logo.png" alt="YourLift" onerror="this.style.display='none'">
+        <p>La tecnología del powerlifting chileno: inscripciones, nóminas, ranking, récords y transmisión en vivo.</p>
+        <a class="yl-pie2-ig" href="https://www.instagram.com/yourlift_oficial" target="_blank" rel="noopener">${_igSvg} @yourlift_oficial</a></div>
+      <div><b>Competir</b><a onclick="sv('crono');closeMenu()">Cronograma</a><a onclick="sv('insc');closeMenu()">Inscripción</a><a onclick="sv('nominas');closeMenu()">Nóminas</a><a onclick="sv('entrenadores');closeMenu()">Entrenadores</a></div>
+      <div><b>Seguir</b><a onclick="sv('envivo');closeMenu()">En vivo</a><a onclick="sv('pasadas');closeMenu()">Resultados</a><a onclick="sv('rank');closeMenu()">Ranking</a><a onclick="sv('records');closeMenu()">Récords</a><a onclick="sv('atletas');closeMenu()">Atletas</a></div>
+      <div><b>Sitio</b><a onclick="sv('terminos');closeMenu()">Política de privacidad</a><a onclick="document.getElementById('modalSugerencia').style.display='flex'">Sugerencias</a><a onclick="if(window.ylCookies)ylCookies.cambiar()">Cookies</a></div>
     </div>
-
-    <!-- Bottom bar -->
-    <div style="border-top:1px solid rgba(255,255,255,.06);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;max-width:1100px;margin:0 auto">
-      <div style="font-size:11px;color:rgba(180,200,230,.4);font-family:Oswald;letter-spacing:1px">© ${new Date().getFullYear()} FECHIPO · Federación Chilena de Powerlifting · Todos los derechos reservados</div>
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <span onclick="sv('terminos');closeMenu()" style="font-size:11px;color:rgba(180,200,230,.35);cursor:pointer;text-decoration:underline;text-decoration-color:rgba(180,200,230,.2)" onmouseover="this.style.color='rgba(212,168,67,.7)'" onmouseout="this.style.color='rgba(180,200,230,.35)'">Política de Privacidad</span>
-        <div style="font-size:11px;color:rgba(180,200,230,.4)">Resultados vía <a href="https://www.openpowerlifting.org" target="_blank" rel="noopener" style="color:rgba(212,168,67,.6);text-decoration:none">OpenPowerlifting.org</a></div>
-      </div>
-    </div>
-  </div>
+    <div class="yl-pie2-b">© ${new Date().getFullYear()} YourLift · Resultados internacionales vía <a href="https://www.openpowerlifting.org" target="_blank" rel="noopener">OpenPowerlifting.org</a></div>
+  </footer>
 
   <!-- Modal Sugerencias -->
   <div id="modalSugerencia" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;padding:20px">
@@ -1415,8 +1322,7 @@ function glcalc(){
   app.innerHTML=h;if(ST.v==='home'&&typeof _aplicarPortada==='function')_aplicarPortada();if(!ST.sel&&ST.v==="list"){const i=app.querySelector('.fl input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}
   const cs=document.querySelector('.corner-stack');
   if(cs)cs.style.display='flex';
-  const clogo=document.querySelector('.corner-stack .corner-logo');
-  if(clogo)clogo.style.display='block';
+  try{_pintarCab();}catch(e){}
   // Reaplicar el video de fondo + ocultar el fondo opaco del hero (el render
   // reconstruye el DOM, así que hay que volver a aplicarlo en cada render).
   if(typeof setBgForSection==='function')setBgForSection(ST.v);

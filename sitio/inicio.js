@@ -120,43 +120,72 @@ function _lideresCargar(){
     _LID.lista=Object.keys(mejor).map(function(k){return mejor[k];}).sort(function(a,b){
       return (orden.indexOf(a.tab)-orden.indexOf(b.tab))||(cn(a.c)-cn(b.c));
     });
+    // Top 5 GL del año en Classic y Equipado (todas las divisiones), una fila por persona.
+    var norm=function(n){return String(n||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();};
+    _LID.top={};
+    ['cl_m','cl_f','eq_m','eq_f'].forEach(function(tb){
+      var por={};
+      D.forEach(function(e){ if(e.tab!==tb||e._baja||!(e.tt>0)||!(e.dt>0))return; var k=norm(e.n); if(!por[k]||e.dt>por[k].dt)por[k]=e; });
+      _LID.top[tb]=Object.keys(por).map(function(k){return por[k];}).sort(function(a,b){return b.dt-a.dt;}).slice(0,5);
+    });
+    // Lo último: los tres campeonatos más recientes de data.json, con la mejor marca (GL) de cada uno.
+    var evs={};
+    (res[1]||[]).forEach(function(a){ (a.competencias||[]).forEach(function(c){
+      var r=c.resultado||{}; var g=+r.glp||0; if(!c.evento||!(g>0)||!(r.total>0))return;
+      var ev=evs[c.evento]||(evs[c.evento]={evento:c.evento,fecha:c.fecha||'',mejor:null});
+      if(String(c.fecha||'')>ev.fecha)ev.fecha=String(c.fecha||'');
+      if(!ev.mejor||g>ev.mejor.g)ev.mejor={g:g,n:a.nombre,club:a.club,r:r,cat:c.categoria,div:c.division};
+    }); });
+    _LID.ult=Object.keys(evs).map(function(k){return evs[k];}).sort(function(a,b){return b.fecha.localeCompare(a.fecha);}).slice(0,3);
     _LID.i=0;_LID.t0=Date.now();_lideresPintar();
   }).catch(function(){});
 }
+var _esc=function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');};
+var _kg=function(v){v=+v||0;return (Math.round(v*10)/10).toString().replace('.',',');};
+var _tc=function(n){return String(n||'').toLowerCase().replace(/(^|\s)(\S)/g,function(m,a,b){return a+b.toUpperCase();});};
+var _corto=function(n){var p=_tc(n).split(/\s+/).filter(Boolean);return p.length>=4?p[0]+' '+p[p.length-2]:p.slice(0,2).join(' ');};
+var _catTxt=function(c){c=String(c||'');return (c.indexOf('+')>=0?c:'−'+c)+' kg';};
+// Top 5 GL del año: Classic y Equipado, hombres y mujeres.
 function _lideresHtml(){
-  if(!_LID.lista){_lideresCargar();return '';}
-  if(!_LID.lista.length)return '';
-  var L=_LID.lista,e=L[_LID.i],ib=e.tab.indexOf('bench')===0;
-  var esc=function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');};
-  var cat=(String(e.c).indexOf('+')>=0?'':'-')+e.c;
-  // Los chips son de la modalidad que se está mostrando, para que no sean 60.
-  var chips='';
-  L.forEach(function(x,k){ if(x.tab!==e.tab)return;
-    chips+='<button class="'+(k===_LID.i?'on':'')+'" onclick="_lideresIr('+k+')">'+(String(x.c).indexOf('+')>=0?'':'-')+esc(x.c)+'</button>'; });
-  var mods='';
-  Object.keys(_LID_TABS).forEach(function(tb){
-    var k=L.findIndex(function(x){return x.tab===tb;}); if(k<0)return;
-    mods+='<button class="'+(e.tab===tb?'on':'')+'" onclick="_lideresIr('+k+')">'+_LID_TABS[tb]+'</button>';
+  if(!_LID.top){_lideresCargar();return '';}
+  var anio=new Date().getFullYear();
+  var cols=[['cl_m','Classic masculino'],['cl_f','Classic femenino'],['eq_m','Equipado masculino'],['eq_f','Equipado femenino']];
+  var h='<div class="yl-sec-h"><h2 class="yl-d">Top 5 GL '+anio+'</h2><a onclick="sv(\'rank\')">Ranking completo →</a></div><div class="yl-top">';
+  cols.forEach(function(c){
+    var L=_LID.top[c[0]]||[];
+    h+='<div><h3>'+c[1]+'</h3>';
+    L.forEach(function(e,i){
+      h+='<a class="yl-top-r" href="atleta.html?q='+encodeURIComponent(e.n)+'"><span class="yl-med'+(i<3?' m'+(i+1):'')+'">'+(i+1)+'</span>'
+        +'<span><b>'+_esc(_corto(e.n))+'</b><small>'+_esc(e.t||'')+'<br>'+_catTxt(e.c)+' · '+_esc(e.d||'')+' · '+_kg(e.tt)+' kg</small></span>'
+        +'<strong class="yl-d">'+(+e.dt).toFixed(2).replace('.',',')+'</strong></a>';
+    });
+    if(!L.length)h+='<p class="yl-top-v">Sin marcas este año.</p>';
+    else if(L.length<5)h+='<p class="yl-top-v">'+['','Solo una','Solo dos','Solo tres','Solo cuatro'][L.length]+' con marca este año.</p>';
+    h+='</div>';
   });
-  return '<div class="yl-lid-h"><h2 class="yl-h2">Líderes del ranking</h2><a onclick="sv(\'rank\')">Ver ranking →</a></div>'
-    +'<div class="yl-lid-w" onmouseenter="_LID.pausa=true" onmouseleave="_LID.pausa=false;_LID.t0=Date.now()">'
-    +'<article class="yl-ld"><div class="yl-ld-k">'+_LID_TABS[e.tab]+' · '+cat+' kg · Open</div>'
-    +'<a class="yl-ld-n" href="atleta.html?q='+encodeURIComponent(e.n)+'">'+esc(e.n)+'</a><div class="yl-ld-t">'+esc(e.t)+'</div>'
-    +(ib?'':'<div class="yl-ld-l"><span><em>SQ</em>'+e.sq+'</span><span><em>BP</em>'+e.bp+'</span><span><em>DL</em>'+e.dl+'</span></div>')
-    +'<div class="yl-ld-tt">'+e.tt+'<small>kg</small></div><div class="yl-ld-gl">'+(e.dt?(+e.dt).toFixed(2)+' GL':'')+'</div>'
-    +'<div class="yl-ld-bar"><i id="ylLidBar"></i></div></article>'
-    +'<div class="yl-ld-nav"><div class="yl-ld-mods">'+mods+'</div><div class="yl-ld-chips">'+chips+'</div>'
-    +'<p>El 1.º de cada categoría, uno tras otro. Cambia solo cada 5 segundos, o toca una categoría.</p></div></div>';
+  return h+'</div>';
 }
-function _lideresPintar(){ var el=document.getElementById('ylLideres'); if(el)el.innerHTML=_lideresHtml(); }
-function _lideresIr(k){ if(!_LID.lista)return; _LID.i=(k+_LID.lista.length)%_LID.lista.length; _LID.t0=Date.now(); _lideresPintar(); }
-setInterval(function(){
-  if(!_LID.lista||!_LID.lista.length||!document.getElementById('ylLideres'))return;
-  if(_LID.pausa||document.hidden){return;}
-  var p=(Date.now()-_LID.t0)/_LID_MS;
-  if(p>=1){_lideresIr(_LID.i+1);return;}
-  var b=document.getElementById('ylLidBar'); if(b)b.style.width=(p*100)+'%';
-},100);
+// Lo último: los tres campeonatos más recientes y la mejor marca de cada uno.
+function _ultimoHtml(){
+  if(!_LID.ult||!_LID.ult.length)return '';
+  var M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  var fx=function(f){var m=String(f||'').match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);if(!m)return '';return (m[3]?(+m[3])+' ':'')+M[(+m[2])-1]+' '+m[1];};
+  var h='<div class="yl-sec-h"><h2 class="yl-d">Lo último</h2><a onclick="sv(\'pasadas\')">Todos los resultados →</a></div><div class="yl-res">';
+  _LID.ult.forEach(function(ev){
+    var b=ev.mejor,r=b.r||{};
+    var nom=String(ev.evento).replace(/\s*FECHIPO\s*/gi,' ').replace(/\s+/g,' ').trim();
+    h+='<article class="yl-resc"><span class="e">'+_esc(nom)+(ev.fecha?' · '+fx(ev.fecha):'')+'</span>'
+      +'<h3>'+_esc(_corto(b.n))+', la mejor marca del campeonato</h3>'
+      +'<strong class="yl-d">'+_kg(r.total)+'<small>kg</small></strong>'
+      +'<p>'+(r.sq?_kg(r.sq)+' · '+_kg(r.bp)+' · '+_kg(r.dl)+' · ':'')+b.g.toFixed(2).replace('.',',')+' GL'+(b.cat?' · '+_catTxt(b.cat):'')+'</p></article>';
+  });
+  return h+'</div>';
+}
+function _lideresPintar(){
+  var el=document.getElementById('ylLideres'); if(el)el.innerHTML=_lideresHtml();
+  var u=document.getElementById('ylUltimo'); if(u)u.innerHTML=_ultimoHtml();
+}
+function _lideresIr(k){ if(!_LID.lista)return; _LID.i=(k+_LID.lista.length)%_LID.lista.length; _lideresPintar(); }
 
 // ── Fotos de la portada: las que eligió el owner en el panel ──────────────
 // site_backgrounds/portada: {fotos:[{url,pc:{x,y},movil:{x,y}}], intervalo}.
