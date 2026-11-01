@@ -66,10 +66,11 @@ const MONTAR = `(paises)=>{
     await montar(1);
     const r = await p.evaluate(() => {
       const html = _insignia(DATA.athletes[0], 14);
-      return { bandera: /class="flag-img"/.test(html), algo: html.length > 0, html: html.slice(0, 60) };
+      // El logo va dentro de su recuadro de fondo (oscuro o claro): se busca en todo el html.
+      return { bandera: /class="flag-img"/.test(html), algo: html.length > 0, club: /clubs\//.test(html), html: html.slice(0, 60) };
     });
     ok(!r.bandera, 'ya no sale la bandera, que no informaba nada');
-    ok(/clubs\//.test(r.html), 'sale el logo del club: ' + r.html);
+    ok(r.club, 'sale el logo del club: ' + r.html);
   }
 
   console.log('\n  Sin logo de club, la bandera NO vuelve de relleno');

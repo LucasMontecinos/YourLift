@@ -71,7 +71,12 @@ export function where(){return{};}
   const t = await p.evaluate(() => document.getElementById('profileSection').innerText);
   ok(/CENTRO SUR/i.test(t), 'aparece el Regional Centro Sur en el historial');
   ok(/750 kg/.test(t), 'con su total: 750 kg');
-  ok(/SQ 280/.test(t) && /BP 175/.test(t) && /DL 295/.test(t), 'y los tres levantamientos');
+  // El historial es una tabla: Peso, SQ, BP y DL van en sus columnas.
+  const fila = await p.evaluate(() => {
+    const tr = [...document.querySelectorAll('#profileSection .pf-ct tbody tr')].find(r => /CENTRO SUR/i.test(r.innerText));
+    return tr ? [...tr.querySelectorAll('td.mv')].map(td => td.textContent.trim()) : [];
+  });
+  ok(fila[1] === '280' && fila[2] === '175' && fila[3] === '295', 'y los tres levantamientos en sus columnas: ' + fila.join(' / '));
   const n = await p.evaluate(() => (document.querySelector('#profileSection .sec-title')
     ? [...document.querySelectorAll('#profileSection .sec-title')]
         .map(e => e.textContent).find(x => /Historial/i.test(x)) : ''));
