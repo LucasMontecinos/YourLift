@@ -52,13 +52,39 @@ window.clubLogo = function(name){
   return '';
 };
 
-// HTML helper: <img> con onerror para que no rompa el layout si el archivo falta
+// El fondo de cada logo. Casi todos los logos de club son blancos (Himalaya,
+// Kaizen, Beers and Lifts…) y sobre el sitio blanco no se veían; otros tienen
+// letras oscuras (Hannya) y no se veían sobre la transmisión negra. Por eso cada
+// logo va siempre dentro de su baldosa: oscura por defecto, clara para los de
+// letras oscuras. Se cambia por club en Admin → Clubes (campo fondoLogo).
+window.CLUBS_FONDO = { 'hannya': 'claro' };
+window.CLUB_FONDO_COLOR = { oscuro: '#0E1424', claro: '#FFFFFF' };
+window.clubFondo = function(name){
+  if(!name) return 'oscuro';
+  const n = window.normClub(name);
+  const fs = window._CLUBS_FS || {};
+  for(const key in fs){
+    if(n.indexOf(key) >= 0 && (fs[key].fondoLogo === 'claro' || fs[key].fondoLogo === 'oscuro')) return fs[key].fondoLogo;
+  }
+  const map = window.CLUBS_FONDO;
+  for(const key in map){
+    if(n.indexOf(key) >= 0) return map[key];
+  }
+  return 'oscuro';
+};
+
+// HTML helper: el logo dentro de su baldosa (ver clubFondo). Si el archivo
+// falta, la baldosa se esconde y no rompe el layout.
 window.clubLogoImg = function(name, size, extraStyle){
   const url = window.clubLogo(name);
   if(!url) return '';
   const s = size || 24;
   const xs = extraStyle || '';
-  return '<img src="'+url+'" alt="" loading="lazy" '
-    +'style="width:'+s+'px;height:'+s+'px;object-fit:contain;border-radius:4px;'+xs+'" '
-    +'onerror="this.style.display=\'none\'">';
+  const f = window.clubFondo(name);
+  const bg = window.CLUB_FONDO_COLOR[f] || window.CLUB_FONDO_COLOR.oscuro;
+  return '<span class="club-logo club-logo-'+f+'" style="display:inline-grid;place-items:center;width:'+s+'px;height:'+s+'px;'
+    +'overflow:hidden;flex-shrink:0;vertical-align:middle;box-sizing:border-box;'+xs+';background:'+bg+';border-radius:22%;'
+    +(f==='claro'?'box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);':'')+'">'
+    +'<img src="'+url+'" alt="" loading="lazy" style="width:86%;height:86%;object-fit:contain;display:block" '
+    +'onerror="this.parentNode.style.display=\'none\'"></span>';
 };

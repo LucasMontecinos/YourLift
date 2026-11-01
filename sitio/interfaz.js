@@ -104,7 +104,7 @@ async function initFB(){
         const cl=_fsCache('clubs',24*60*60*1000);
         const docs=cl||(await window.FBQ.getDocs(window.FBQ.collection(fbDB,'clubs'))).docs.map(d=>d.data());
         if(!cl)_fsSetCache('clubs',docs);
-        window._CLUBS_FS={};docs.forEach(v=>{if(v.slug&&v.logoUrl)window._CLUBS_FS[v.slug]=v;});
+        window._CLUBS_FS={};docs.forEach(v=>{if(v.slug&&(v.logoUrl||v.fondoLogo))window._CLUBS_FS[v.slug]=v;});
       }catch(e){}
       })()
     ];

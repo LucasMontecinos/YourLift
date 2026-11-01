@@ -109,6 +109,20 @@ window.clubEliminar=async function(club){
 // renombrar el club es cambiarle el nombre a todos los que lo tienen puesto. Si
 // se cambiara en un solo lado quedarían dos clubes donde hay uno, y el
 // desplegable de inscripción —que sale del mismo padrón— mostraría los dos.
+// Fondo del logo del club (oscuro o claro). Se usa en todas partes: sitio,
+// en vivo, transmisión y tarima (compartido/clubs.js → clubFondo).
+window.clubFondoSet=async function(club,slug,fondo){
+  try{
+    await setDoc(doc(db,'clubs',slug),{name:club,slug,fondoLogo:fondo,updatedAt:serverTimestamp()},{merge:true});
+    const prev=(window._CLUBS_FS||{})[slug]||{};
+    window._CLUBS_FS[slug]=Object.assign({},prev,{name:club,slug,fondoLogo:fondo});
+    const c=(ST.clubs||[]).find(x=>x.slug===slug);
+    if(c)c.fondoLogo=fondo;else (ST.clubs=ST.clubs||[]).push({name:club,slug,fondoLogo:fondo});
+    showToast('Fondo del logo de '+club+': '+fondo);
+    render();
+  }catch(e){showToast('No se pudo guardar el fondo: '+e.message,null,true);}
+};
+
 window.clubRenombrar=async function(club){
   if(!ST.adminInfo||_ROLES_SIN_PANEL.includes(ST.adminInfo?.role)){
     showToast('Tu cuenta no puede editar clubes',null,true); return;
@@ -173,7 +187,7 @@ function renderClubs(){
     const isOpen=expanded===club;
     h+=`<div class="card" style="padding:14px">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-        <div style="width:52px;height:52px;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <div style="width:52px;height:52px;background:${(window.CLUB_FONDO_COLOR||{})[window.clubFondo?window.clubFondo(club):'oscuro']||'#0E1424'};border:1px solid var(--border);border-radius:22%;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0">
           ${logoUrl?`<img src="${esc(logoUrl)}" style="width:100%;height:100%;object-fit:contain" onerror="this.parentElement.innerHTML='<span style=font-size:22px><i class=yl-i-pesa></i></span>'">`:'<span style="font-size:22px"><i class=yl-i-pesa></i></span>'}
         </div>
         <div style="flex:1;min-width:0">
@@ -181,6 +195,9 @@ function renderClubs(){
           <div style="font-size:11px;color:var(--muted)">${athletes.length} atleta${athletes.length!==1?'s':''}</div>
         </div>
       </div>
+      ${(()=>{const f=window.clubFondo?window.clubFondo(club):'oscuro';
+        const b=(v,t)=>`<button class="btn ${f===v?'btn-g':'btn-b'}" style="padding:4px 10px;font-size:11px" onclick="clubFondoSet('${esc(club).replace(/'/g,"\\'")}','${esc(slug)}','${v}')">${t}</button>`;
+        return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:11px;color:var(--muted)">Fondo del logo ${b('oscuro','Oscuro')}${b('claro','Claro')}</div>`;})()}
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <label class="btn btn-b" style="padding:5px 10px;font-size:11px;cursor:pointer" title="Subir o reemplazar logo">
           <input type="file" accept="image/*" style="display:none" onchange="uploadClubLogo('${esc(club)}','${esc(slug)}',this)">

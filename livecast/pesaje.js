@@ -168,7 +168,7 @@ function _setupLcMediaListener(){
     if(!window._lcClubsUnsub){
       window._lcClubsUnsub=window._fb.onSnapshot(window._fb.collection(fbDB,'clubs'),snap=>{
         window._CLUBS_FS={};
-        snap.docs.forEach(d=>{const v=d.data();if(v.slug&&v.logoUrl)window._CLUBS_FS[v.slug]=v;});
+        snap.docs.forEach(d=>{const v=d.data();if(v.slug&&(v.logoUrl||v.fondoLogo))window._CLUBS_FS[v.slug]=v;});
       });
     }
   }catch(e){}

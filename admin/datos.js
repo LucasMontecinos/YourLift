@@ -245,7 +245,7 @@ async function loadAll(){
       window._clubsListener=onSnapshot(collection(db,'clubs'),(snap)=>{
         ST.clubs=snap.docs.map(d=>({id:d.id,...d.data()}));
         window._CLUBS_FS={};
-        ST.clubs.forEach(c=>{if(c.slug&&c.logoUrl)window._CLUBS_FS[c.slug]=c;});
+        ST.clubs.forEach(c=>{if(c.slug&&(c.logoUrl||c.fondoLogo))window._CLUBS_FS[c.slug]=c;});
         if(ST.view==='clubs')render();
       },(e)=>console.warn('[listener] clubs:',e.message));
     }catch(e){console.warn('[loadAll] clubs listener:',e.message);}
