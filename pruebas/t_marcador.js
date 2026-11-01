@@ -56,7 +56,8 @@ async function abrir(b, tx, colores, modo) {
 const LEER = () => {
   const divs = [...document.querySelectorAll('div')];
   const n = divs.find(e => /Olivares/i.test(e.textContent) && e.children.length === 0);
-  const c = divs.find(e => /^-?\d+kg/.test(e.textContent.trim()) && e.children.length === 0);
+  // La franja de arriba: «−93 KG · JUNIOR · CLASSIC».
+  const c = divs.find(e => /^[−-]?\d+ KG ·/.test(e.textContent.trim()) && e.children.length === 0);
   const cs = e => e ? getComputedStyle(e) : null;
   return {
     nombre: n ? n.textContent.trim() : '',
@@ -76,7 +77,7 @@ const LEER = () => {
   ok(r.nombre === 'Walter Humberto Olivares Gutiérrez',
      'inicial en mayúscula y el resto en minúscula: "' + r.nombre + '"');
   ok(!/[A-ZÁÉÍÓÚÑ]{3}/.test(r.nombre), 'el apellido ya no va en mayúsculas');
-  ok(r.cat === '-93kg JR', 'la categoría se lee: ' + r.cat);
+  ok(r.cat === '−93 KG · JUNIOR · CLASSIC', 'la categoría se lee entera, con división y modalidad: ' + r.cat);
 
   console.log('\n  Las letras van siempre en blanco, sea cual sea la paleta');
   ok(r.nombreColor === 'rgb(255, 255, 255)', 'el nombre en blanco (' + r.nombreColor + ')');

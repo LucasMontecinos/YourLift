@@ -424,94 +424,130 @@ function _relojChip(id,px){
     +'background:rgba(0,0,0,.35);color:'+_relojColor()+';font-variant-numeric:tabular-nums">'+_relojTxt()+'</span>';
 }
 
-function _renderTxCerScoreboardBL(cur,opts){
-  opts=opts||{};
-  const scale=opts.scale||1;
-  const noAnimate=!!opts.noAnimate;
-  // Variante compacta del scoreboard, posicionada abajo-izquierda
-  const nombreAtleta=_nombrePropio(cur.name);
-  const divS=txDivShort(cur.div);
-  const catLabel=(cur.cat?txCatLabel(cur.cat)+' ':'')+divS;
-  const cw=cur.att[DATA.lift][DATA.round].w;
-  // Forecast: posición proyectada en sex+cat+div (reemplaza el timer en la barra superior)
-  const _rk=catRankBySub(cur);
-  const _newSubBL=DATA.lift==='sq'?Math.max(bestOf(cur,'sq'),cw)
-                : DATA.lift==='bp'?bestOf(cur,'sq')+Math.max(bestOf(cur,'bp'),cw)
-                : bestOf(cur,'sq')+bestOf(cur,'bp')+Math.max(bestOf(cur,'dl'),cw);
-  const _sameCatBL=DATA.athletes.filter(a=>a.cat===cur.cat&&a.div===cur.div&&a.sex===cur.sex&&a.flight===DATA.flight&&!a.bombed);
-  const _simBL=_sameCatBL.map(a=>a.id===cur.id?{id:a.id,sub:_newSubBL}:{id:a.id,sub:subTotal(a,DATA.lift)}).filter(x=>x.sub>0).sort((a,b)=>b.sub-a.sub);
-  const _simPosBL=_simBL.findIndex(x=>x.id===cur.id)+1;
-  const _forecastPos=_simPosBL||_rk.pos||0;
-  const _willChangeBL=_rk.pos>0&&_simPosBL>0&&_simPosBL!==_rk.pos;
-  let _forecastTxt,_forecastColor;
-  if(_forecastPos<=0){_forecastTxt='—';_forecastColor=_txC('puesto');}
-  else if(_willChangeBL){
-    _forecastTxt='Puesto '+_rk.pos+' → '+_simPosBL;
-    _forecastColor=_simPosBL===1?_txC('goodLift'):_simPosBL<=3?_txC('accent'):_txC('puesto');
-  }else{
-    _forecastTxt='Posición '+_forecastPos;
-    _forecastColor=_forecastPos===1?_txC('goodLift'):_forecastPos<=3?_txC('accent'):_txC('puesto');
-  }
-  const logo=window.clubLogoImg?window.clubLogoImg(cur.club,_variosPaises()?28:34,'background:rgba(10,22,40,.85);padding:2px;flex-shrink:0;'):'';
-  // animOrTx → animación de ciclo automatico (modo widget standalone) o transform de scale
-  // extraStyle → animación in/out cuando se enciende/apaga desde control TX (slide vertical)
-  const animDir=opts.animDir||null; // 'in' | 'out' | null
-  const animOrTx=noAnimate
-    ? (scale!==1?'transform:scale('+scale+');transform-origin:bottom left;':'')
-    : 'animation:txScoreboardCycle '+(TX_CEREMONY.scoreboardMs/1000)+'s ease-in-out forwards;';
-  const champLogo=(DATA.event==null?void 0:DATA.event.logoUrl)||'';
-  const champLogoHtml=champLogo?'<img src="'+champLogo+'" alt="" class="sb-logo-anim" style="height:46px;width:46px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 6px rgba(0,0,0,.7))" onerror="this.style.display=\'none\'">':'';
-  return '<div class="sb-card-explode" style="position:fixed;bottom:24px;left:24px;width:min(640px,55vw);'+animOrTx+'border-radius:8px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.6)">'
-    +'<div style="'+_sbRowAnim(animDir,0)+'display:flex;justify-content:space-between;align-items:center;background:'+_txC('headerBg')+';border-top:2px solid '+_txC('accent')+';padding:6px 14px;gap:12px">'
-      +'<div style="display:flex;align-items:center;gap:12px;font-family:Oswald;font-size:12px;color:rgba(200,215,240,.85);letter-spacing:1px">'+champLogoHtml
-        // La categoría se pidió más grande (dos veces): a 12 px no se leía en la transmisión.
-        +'<span style="font-size:26px;font-weight:700;color:#fff;letter-spacing:1.5px;white-space:nowrap;line-height:1.1">'+catLabel+'</span>'
-        // Si el peso que va a levantar supera el récord de su división (o el Open),
-        // se canta acá al lado de la categoría, en blanco para que resalte.
-        +(function(){
-          // En peso muerto también canta el récord de TOTAL que dejaría el intento.
-          const w=(cur.att[DATA.lift][DATA.round]||{}).w;
-          const x=(typeof _srIntento==='function')?_srIntento(_realAth(cur),DATA.lift,w):{hay:false};
-          return x.hay?'<span class="sr-parpadea" style="background:#F2C230;color:#fff;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:1.5px;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.55);box-shadow:0 0 14px rgba(242,194,48,.6)">'+_srIntentoTexto(x)+'</span>':'';
-        })()
-      +'</div>'
-      +'<div style="display:flex;align-items:center;gap:14px">'
-        // El minuto del intento: solo si lo inició la Planilla (panel de jueces).
-        +(DATA.relojVisible?_relojChip('sbRelojTx',22):'')
-        +'<div style="font-family:Oswald;font-size:18px;font-weight:800;color:'+_forecastColor+';letter-spacing:2px">'+_forecastTxt+'</div>'
-      +'</div>'
+// ── El marcador, tal cual la vista previa ─────────────────────────
+// Lo usan el widget ?tx=scoreboard y el marcador de abajo a la izquierda de la
+// transmisión. Arriba, una franja con la categoría, el cartel de récord y el
+// puesto; abajo, el nombre con el logo del club (o la bandera, si hay varios
+// países), lo que ya levantó en los movimientos anteriores, los intentos del
+// movimiento en curso y el subtotal. Las letras van siempre en blanco: la paleta
+// de Control TX cambia los fondos.
+function _sbNum(v){const n=+v||0;return Number.isInteger(n)?String(n):(Math.round(n*10)/10).toString();}
+function _sbTarjeta(cur,o){
+  o=o||{};
+  const ra=_realAth(cur), ci=curAtt(cur), L=DATA.lift;
+  const W='#ffffff', WD='rgba(255,255,255,.5)', LN='rgba(255,255,255,.14)';
+  // Si la paleta trae el nombre en blanco, su color fuerte va en la franja (la
+  // Bandera queda roja arriba y azul abajo). Si no (la dorada), la franja va en
+  // el azul y el color queda como filete: el blanco sobre dorado no se lee.
+  const conBlanco=String(_txC('nameText')||'').toLowerCase()==='#ffffff';
+  const cHead=conBlanco?_txC('nameBg'):_txC('headerBg');
+  const cHead2=conBlanco?_txC('nameBg2'):_txC('headerBg');
+  const cBody=conBlanco?_txC('headerBg'):_txC('gridBg');
+  const cCell=_txC('curAttempt');
+  // Categoría · división · modalidad
+  const catTxt=[(txCatLabel(cur.cat)||'').replace(/^-/,'−').replace(/kg$/i,' KG'),
+    String(cur.div||'').toUpperCase(), (typeof _lineaLbl==='function'?_lineaLbl(cur):'')].filter(Boolean).join(' · ');
+  // Récord en juego con el peso que va a levantar (y en peso muerto, el de total)
+  const atC=ra.att[L][ci]||{}, cw=atC.w||0;
+  const rx=(!atC.r&&cw>0&&typeof _srIntento==='function')?_srIntento(ra,L,cw):{hay:false};
+  const recTxt=rx.hay?_srIntentoTexto(rx):'';
+  // Puesto: el que tendría si hace este intento, en su sexo + categoría + división
+  const rk=catRankBySub(ra);
+  const simBest=Math.max(bestOf(ra,L),cw);
+  const _pool=_sbPool(ra);
+  let newSub;
+  if(_pool.solo)newSub=(L==='bp')?simBest:bestOf(ra,'bp');       // Only Bench: solo cuenta la banca
+  else if(L==='sq')newSub=simBest;
+  else if(L==='bp')newSub=bestOf(ra,'sq')+simBest;
+  else newSub=bestOf(ra,'sq')+bestOf(ra,'bp')+simBest;
+  const simRanked=_pool.peers.map(a=>a.id===ra.id?{id:a.id,sub:newSub}:{id:a.id,sub:_pool.val(a)})
+    .filter(x=>x.sub>0).sort((a,b)=>b.sub-a.sub);
+  const simPos=simRanked.findIndex(x=>x.id===ra.id)+1;
+  const fPos=simPos||rk.pos||0;
+  const cambia=rk.pos>0&&simPos>0&&simPos!==rk.pos;
+  const puesto=fPos<=0?'':(cambia?'PUESTO '+rk.pos+'° → '+simPos+'°':'PUESTO '+fPos+'°');
+  // Nombre: logo del club o, con varios países, la bandera
+  const varios=_variosPaises();
+  const ident=varios
+    ? '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:none">'+_flagImg(_ctry(cur),46)
+        +'<span style="font-size:16px;letter-spacing:.14em;color:'+W+';font-weight:600">'+_ctry(cur)+'</span></div>'
+    : (window.clubLogoImg&&cur.club?window.clubLogoImg(cur.club,80,'flex:none;'):'');
+  const nombre=_nombrePropio(cur.name);
+  const sub=[varios&&typeof _ctryName==='function'?_ctryName(_ctry(cur)):'', cur.club||'', cur.lot?'Lote '+cur.lot:''].filter(Boolean).join(' · ');
+  // Lo que ya levantó en los movimientos anteriores
+  const sqB=bestOf(ra,'sq'), bpB=bestOf(ra,'bp'), dlB=bestOf(ra,'dl');
+  const prev=_pool.solo?[]:(L==='bp'?[['SQ',sqB]]:L==='dl'?[['SQ',sqB],['BP',bpB]]:[]);
+  const MOV={sq:'SENTADILLA',bp:'BANCA',dl:'PESO MUERTO'}[L]||'';
+  const celda='min-width:112px;min-height:82px;padding:6px 8px;box-sizing:border-box;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;';
+  const intentos=ra.att[L].map((at,j)=>{
+    const is4=j===3&&at.extra;
+    const x4lbl=((at.grantedRound||0)>=2)?'4º':'EXT';
+    let bg=cCell, sh='', tope='', col=WD;
+    if(at.r==='g'){bg=_txC('goodLift');col=W;sh='text-shadow:0 1px 3px rgba(0,0,0,.5);';}
+    else if(at.r==='n'){bg=_txC('noLift');col=W;}
+    else if(j===ci&&at.w>0){col=W;sh='box-shadow:inset 0 0 0 4px '+(recTxt?'#FFD400':'#fff')+';';if(recTxt)tope='RÉCORD';}
+    // Debajo del peso, las luces que le dieron a ESE intento. Si de ese
+    // intento no hay luces guardadas, no va nada: en un campeonato sin
+    // luces el marcador queda igual que siempre.
+    const lucesAt=_lucesDeIntento(at,9);
+    return '<div style="'+celda+'background:'+bg+';color:'+col+';'+sh+'">'
+      +(tope?'<span style="font-size:12px;letter-spacing:.14em;margin-bottom:6px;font-weight:700;color:#FFD400">'+tope+'</span>':'')
+      +'<span style="font-size:38px;font-weight:600">'+(at.w?_sbNum(at.w):'—')+(is4?'<sup style="font-size:12px;margin-left:2px">'+x4lbl+'</sup>':'')+'</span>'
+      +(lucesAt?'<span style="margin-top:5px">'+lucesAt+'</span>':'')
+      +'</div>';
+  }).join('');
+  const dq=isDQ(ra);
+  const tot=_pool.solo?bpB:(sqB+bpB+dlB);
+  const totLbl=(L==='dl'||_pool.solo)?'TOTAL':'SUBTOTAL';
+  const logos=(typeof _tiraLogos==='function')?_tiraLogos(['fed','camp'],'40px','10px'):'';
+  const aD=o.animDir||null;
+  return '<div style="font-family:Oswald,\'Arial Narrow\',sans-serif;color:'+W+';min-width:1040px;max-width:'+(o.maxW||1800)+'px;box-shadow:0 10px 34px rgba(0,0,0,.45)">'
+    // Franja: categoría · récord · reloj · puesto
+    +'<div style="'+_sbRowAnim(aD,0)+'display:flex;align-items:center;gap:18px;background:linear-gradient(90deg,'+cHead+','+cHead2+');'+(conBlanco?'':'border-top:4px solid '+_txC('nameBg')+';')+'padding:10px 22px;font-size:22px;font-weight:500;letter-spacing:.14em;white-space:nowrap">'
+      +(logos?'<span style="display:flex;align-items:center">'+logos+'</span>':'')
+      +'<div style="color:'+W+'">'+catTxt+'</div>'
+      +(recTxt?'<span class="sr-parpadea" style="background:#FFD400;color:#000;font-weight:700;font-size:17px;letter-spacing:.1em;padding:3px 12px;border-radius:3px">'+recTxt+'</span>':'')
+      +'<span style="margin-left:auto;display:flex;align-items:center;gap:16px">'
+        +(DATA.relojVisible&&typeof _relojChip==='function'?_relojChip('sbRelojTx',22):'')
+        +(puesto?'<b style="font-weight:600;color:'+W+'">'+puesto+'</b>':'')
+      +'</span>'
     +'</div>'
-    +'<div style="'+_sbRowAnim(animDir,1)+'background:linear-gradient(90deg,'+_txC('nameBg')+','+_txC('nameBg2')+');padding:5px 14px;display:flex;align-items:center;gap:10px">'
-      // Bandera + código del país DEL ATLETA. Antes acá decía "CHI" escrito a mano,
-      // así que a un ecuatoriano le salía Chile.
-      // En un campeonato de un solo país la bandera no va (serían todas iguales):
-      // en su lugar va el logo del club, que entonces ya no se repite a la derecha.
-      +(_variosPaises()?'<div style="display:flex;align-items:center;gap:6px;background:rgba(10,22,40,.9);padding:3px 9px;border-radius:3px;flex-shrink:0">'
-        +_flagImg(_ctry(cur),14)
-        +'<span style="color:'+_txC('nameBg')+';font-family:Oswald;font-size:10px;letter-spacing:2px;font-weight:700">'+_ctry(cur)+'</span>'
-      +'</div>':logo)
-      +'<div style="flex:1;font-family:Oswald;color:'+_txC('nameText')+';letter-spacing:1px;overflow:hidden">'
-        +'<div style="font-size:24px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nombreAtleta+'</div>'
+    // Cuerpo
+    +'<div style="'+_sbRowAnim(aD,1)+'display:flex;align-items:stretch;background:'+cBody+';border-top:1px solid '+LN+'">'
+      +'<div style="flex:1;display:flex;align-items:center;gap:20px;padding:16px 24px;min-width:0">'+ident
+        +'<div style="min-width:0">'
+          +'<div style="font-size:'+(nombre.length>24?40:50)+'px;font-weight:600;line-height:1;letter-spacing:.02em;white-space:nowrap;color:'+W+'">'+nombre+'</div>'
+          +'<div style="font-family:\'DM Sans\',sans-serif;font-size:20px;color:'+W+';margin-top:7px;white-space:nowrap">'+sub+'</div>'
+        +'</div>'
       +'</div>'
-      +(_variosPaises()?logo:'')
-    +'</div>'
-    +'<div style="'+_sbRowAnim(animDir,2)+'display:grid;grid-template-columns:repeat(3,1fr) 100px;background:'+_txC('gridBg')+'">'
-      +cur.att[DATA.lift].map((at,j)=>{
-        let bg,clr,td='none';
-        if(at.r==='g'){bg=_txC('goodLift');clr=_txC('nameText')}
-        else if(at.r==='n'){bg=_txC('noLift');clr='#fff';td='line-through'}
-        else if(j===DATA.round&&at.w>0){bg=_txC('curAttempt');clr='#fff'}
-        else{bg='rgba(30,48,78,.3)';clr='rgba(140,160,190,.45)'}
-        const isCur=j===DATA.round&&at.r===null&&at.w>0;
-        return '<div style="padding:1px 6px;line-height:1.2;text-align:center;background:'+bg+';border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:28px;font-weight:700;color:'+clr+';text-decoration:'+td+';'+(isCur?'box-shadow:inset 0 -3px 0 '+LIFT_C[DATA.lift]+';':'')+'">'+(at.w||'—')+'</div>';
-      }).join('')
-      // El subtotal va sobre el MISMO fondo que los intentos: usaba el color de
-      // acento de fondo y en las paletas claras salía un cuadro blanco al final
-      // de la fila, como si faltara algo. El acento pasa al número, que es lo
-      // que tiene que resaltar. El DQ sigue en rojo, que ahí sí es un aviso.
-      +'<div style="padding:1px 6px;line-height:1.2;text-align:center;background:'+(isDQ(cur)?_txC('noLift'):_txC('gridBg'))+';color:'+(isDQ(cur)?'#fff':_txC('accent'))+';font-family:Oswald;font-size:28px;font-weight:700;letter-spacing:1px">'+(isDQ(cur)?'DQ':(subTotal(cur,DATA.lift)||0).toFixed(1))+'</div>'
+      +(prev.length?'<div style="display:flex;gap:6px;align-items:center;padding:0 14px;border-left:1px solid '+LN+'">'
+        +prev.map(([k,v])=>'<div style="'+celda+'min-width:104px;background:'+cCell+'"><span style="font-size:13px;letter-spacing:.16em;color:'+W+'">'+k+'</span><span style="font-size:32px;font-weight:600;color:'+W+';line-height:1.1">'+(v>0?_sbNum(v):'—')+'</span></div>').join('')
+      +'</div>':'')
+      +'<div style="'+_sbRowAnim(aD,2)+'display:flex;align-items:center;gap:8px;padding:8px 16px;border-left:1px solid '+LN+'">'
+        +'<span style="font-size:16px;letter-spacing:.16em;color:'+W+';writing-mode:vertical-rl;transform:rotate(180deg)">'+MOV+'</span>'
+        +intentos
+      +'</div>'
+      +'<div style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 24px;border-left:1px solid '+LN+';min-width:160px;'+(dq?'background:'+_txC('noLift')+';':'')+'">'
+        +'<span style="font-size:15px;letter-spacing:.16em;color:'+W+'">'+totLbl+'</span>'
+        +'<span style="font-size:46px;font-weight:600;line-height:1.05;color:'+W+'">'+(dq?'DQ':(tot>0?_sbNum(tot):'—'))+'</span>'
+      +'</div>'
     +'</div>'
   +'</div>';
+}
+// La tarjeta se dibuja para una pantalla de 1920 de ancho y se escala a la ventana.
+function _sbEscala(){ return Math.max(.4,Math.min(1.6,(window.innerWidth||1920)/1920)); }
+
+function _renderTxCerScoreboardBL(cur,opts){
+  opts=opts||{};
+  const scale=(opts.scale||1)*_sbEscala();
+  const noAnimate=!!opts.noAnimate;
+  // animOrTx → animación de ciclo automático (modo widget standalone); la escala
+  // va en la capa de adentro para no pelear con el transform de la animación.
+  const animOrTx=noAnimate?'':'animation:txScoreboardCycle '+(TX_CEREMONY.scoreboardMs/1000)+'s ease-in-out forwards;';
+  return '<div class="sb-card-explode" style="position:fixed;bottom:'+Math.round(56*_sbEscala())+'px;left:'+Math.round(56*_sbEscala())+'px;'+animOrTx+'">'
+    +'<div style="transform:scale('+scale+');transform-origin:bottom left">'
+    +_sbTarjeta(cur,{animDir:opts.animDir||null,maxW:Math.round((window.innerWidth||1920)/scale)-120})
+    +'</div></div>';
 }
 
 function _renderTxCerSlamCorner(type,scale){
@@ -1749,122 +1785,19 @@ function renderTxScoreboard(cur,lifterChanged){
     }
     if(Date.now()-_txSbShownAt>TX_SCOREBOARD_DURATION)return '';
   }
-  const nombreAtleta=_nombrePropio(cur.name);
-  const divS=txDivShort(cur.div);
-  const catLabel=(cur.cat?txCatLabel(cur.cat)+' ':'')+divS;
-  const rk=catRankBySub(ra);
-  const st=subTotal(ra,DATA.lift);
-  const cw=(ra.att[DATA.lift][ci]&&ra.att[DATA.lift][ci].w)||0;
-  const simBest=Math.max(bestOf(ra,DATA.lift),cw);
-  const _pool=_sbPool(ra);
-  let newSub;
-  if(_pool.solo)newSub=(DATA.lift==='bp')?simBest:bestOf(ra,'bp');       // Only Bench: solo cuenta la banca
-  else if(DATA.lift==='sq')newSub=simBest;
-  else if(DATA.lift==='bp')newSub=bestOf(ra,'sq')+simBest;
-  else newSub=bestOf(ra,'sq')+bestOf(ra,'bp')+simBest;
-  // Mismo sexo + cat + div (separar divisiones de edad) y misma competencia
-  const simRanked=_pool.peers.map(a=>{
-    if(a.id===ra.id)return{id:a.id,sub:newSub};
-    return{id:a.id,sub:_pool.val(a)};
-  }).filter(x=>x.sub>0).sort((a,b)=>b.sub-a.sub);
-  const simPos=simRanked.findIndex(x=>x.id===ra.id)+1;
-  const totalAth=simRanked.length;
-  // Forecast mejorado: muestra cambio de posición si corresponde
-  const forecastPos=simPos||rk.pos||0;
-  const willChange=rk.pos>0&&simPos>0&&simPos!==rk.pos;
-  let forecastTxt,forecastColor;
-  if(forecastPos<=0){forecastTxt='—';forecastColor=_txC('puesto');}
-  else if(willChange){
-    forecastTxt='Puesto '+rk.pos+' → '+simPos;
-    forecastColor=simPos===1?_txC('goodLift'):simPos<=3?_txC('accent'):_txC('puesto');
-  }else{
-    forecastTxt='Posición '+forecastPos;
-    forecastColor=forecastPos===1?_txC('goodLift'):forecastPos<=3?_txC('accent'):_txC('puesto');
-  }
   const _animDir=TX_MODE==='scoreboard'?null:(lifterChanged?'in':null);
-  // ── Colores: el marcador sigue la paleta elegida en Control TX ──
-  // Antes estaban fijos acá y la paleta no le hacía nada. El contorno negro del
-  // texto NO entra en la paleta, a propósito: es lo que lo mantiene legible.
-  // Las letras del marcador van siempre en blanco (se pidió así); la paleta
-  // cambia los fondos y el acento.
-  const YL_NAVY=_txC('headerBg'), YL_GOLD=_txC('accent');
-  const WHITE='#ffffff', WHITE_DIM='rgba(255,255,255,.55)', GREEN='#22c55e', RED='#ef4444';
-  // ── SQUAT / BENCH PRESS / DEADLIFT / TOTAL — mejor marca válida de cada uno + estado ──
-  const sqB=bestOf(ra,'sq'), bpB=bestOf(ra,'bp'), dlB=bestOf(ra,'dl');
-  const dq=isDQ(ra);
-  const _liftFailed=l=>ra.att[l].every(x=>x.r==='n')&&ra.att[l].some(x=>x.w>0);
-  const _liftCell=(l,label,best)=>{
-    let val,clr;
-    if(best>0){val=best;clr=WHITE}
-    else if(_liftFailed(l)){val='—';clr=RED}
-    else{val='—';clr=WHITE_DIM}
-    return `<div style="padding:8px 6px;text-align:center;border-right:1px solid rgba(255,255,255,.08)">
-      <div style="font-family:Oswald;font-size:10px;letter-spacing:2px;color:rgba(255,255,255,.4);margin-bottom:2px">${label}</div>
-      <div style="font-family:Oswald;font-size:20px;font-weight:800;color:${clr}">${val}</div>
-    </div>`;
-  };
-  const totB=sqB+bpB+dlB;
-  let totVal,totClr;
-  if(dq){totVal='DQ';totClr=RED}
-  else if(sqB>0&&bpB>0&&dlB>0){totVal=totB.toFixed(1);totClr=WHITE}
-  else if(totB>0){totVal=totB.toFixed(1);totClr=WHITE}
-  else{totVal='—';totClr=WHITE_DIM}
-  const flagHtml=_variosPaises()?_flagImg(_ctry(cur),22):_logoClub(cur,34,'margin-right:0;');
+  const k=_sbEscala();
   return `
     <!-- pointer-events:none — el marcador es un cartel, no una interfaz, y va al
          aire. Si el mouse queda quieto encima (queda: es la ventana que captura
          OBS) el navegador saca su globo gris y sale en la transmisión. Acá se
          puede apagar el puntero sin romper nada porque este marcador no tiene
          editor de bloques, a diferencia de Intentos y Atleta en barra. -->
-    <div class="sb-card-explode" style="pointer-events:none;position:absolute;bottom:0;left:0;right:0;display:flex;align-items:stretch;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
-      <!-- Federación y campeonato. El de YourLift no va acá: esta pantalla está
-           al aire todo el rato y lo que tiene que leerse es de quién es el
-           campeonato. Si no hay ninguno cargado, el bloque no se dibuja y la
-           tarjeta usa todo el ancho en vez de dejar un hueco azul. -->
-      ${(()=>{const t=_tiraLogos(['fed','camp'],'76px','16px');
-        return t?`<div style="flex-shrink:0;padding:0 20px;background:${YL_NAVY};border-top:3px solid ${YL_GOLD};display:flex;align-items:center;justify-content:center">${t}</div>`:'';})()}
-      <div class="sb-wipe-content" style="flex:1;overflow:hidden">
-        <div style="${_sbRowAnim(_animDir,0)}display:flex;justify-content:space-between;align-items:center;background:${YL_NAVY};border-top:3px solid ${YL_GOLD};padding:6px 22px">
-          <div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:rgba(255,255,255,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:38%">${cur.club||''}</div>
-          <div style="font-family:Oswald;font-size:13px;letter-spacing:1px;color:rgba(255,255,255,.6)">${(rk.pos&&totalAth?rk.pos+'/'+totalAth+' en categoría':'')}</div>
-          <!-- Sin title: es un globo del navegador —recuadro gris con texto— y si
-               el mouse queda quieto encima del marcador, sale AL AIRE tapando el
-               nombre del atleta. Pasó en el Sudamericano con Olguín Karen. -->
-          <div style="font-family:Oswald;font-size:${willChange?'15px':'18px'};font-weight:800;color:${forecastColor};letter-spacing:${willChange?'1px':'2px'};white-space:nowrap">${forecastTxt}</div>
-        </div>
-        <div style="${_sbRowAnim(_animDir,1)}background:linear-gradient(90deg,${_txC('nameBg')},${_txC('nameBg2')});padding:7px 22px;display:flex;align-items:center;gap:12px">
-          ${flagHtml}
-          <div style="flex:1;font-family:Oswald;color:#ffffff;letter-spacing:1px;overflow:hidden">
-            <div style="font-size:28px;font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nombreAtleta}</div>
-          </div>
-          <div style="background:rgba(0,0,0,.45);color:#ffffff;padding:5px 14px;border-radius:4px;font-family:Oswald;font-size:16px;letter-spacing:1px;font-weight:700;white-space:nowrap">${catLabel}</div>
-        </div>
-        <div style="${_sbRowAnim(_animDir,2)}display:grid;grid-template-columns:repeat(${ra.att[DATA.lift].length},1fr) repeat(4,1fr);background:${_txC('gridBg')}">
-          ${ra.att[DATA.lift].map((at,j)=>{
-            // Letras siempre blancas: el válido y el nulo se marcan con el FONDO
-            // de la casilla (verde o rojo de la paleta), no con el color del número.
-            let clr,td='none',boxSh='',bg='transparent';
-            const is4=j===3&&at.extra;
-            const x4lbl=((at.grantedRound||0)>=2)?'4º':'EXT';
-            if(at.r==='g'){clr=WHITE;bg=_txC('goodLift')}
-            else if(at.r==='n'){clr=WHITE;bg=_txC('noLift');td='line-through'}
-            else if(j===ci&&at.w>0){clr=WHITE;boxSh='box-shadow:inset 0 0 0 2px #fff;'}
-            else{clr=WHITE_DIM}
-            // Debajo del peso, las luces que le dieron a ESE intento. Si de ese
-            // intento no hay luces guardadas, no va nada: en un campeonato sin
-            // luces el scoreboard queda igual que siempre.
-            const lucesAt=_lucesDeIntento(at,9);
-            return '<div style="padding:'+(lucesAt?'6px 6px 4px':'8px 6px')+';text-align:center;border-right:1px solid rgba(255,255,255,.08);font-family:Oswald;font-size:22px;font-weight:700;background:'+bg+';color:'+clr+';text-shadow:0 1px 2px rgba(0,0,0,.35);text-decoration:'+td+';'+boxSh+'"'+(is4?' title="Intento extra / 4º"':'')+'>'+(at.w||'—')+(is4?'<sup style="font-size:10px;color:'+YL_GOLD+'">'+x4lbl+'</sup>':'')+(lucesAt?'<div style="margin-top:3px;text-decoration:none">'+lucesAt+'</div>':'')+'</div>';
-          }).join('')}
-          ${_liftCell('sq','SQUAT',sqB)}
-          ${_liftCell('bp','BENCH PRESS',bpB)}
-          ${_liftCell('dl','DEADLIFT',dlB)}
-          <div style="padding:8px 6px;text-align:center">
-            <div style="font-family:Oswald;font-size:10px;letter-spacing:2px;color:rgba(255,255,255,.4);margin-bottom:2px">TOTAL</div>
-            <div style="font-family:Oswald;font-size:20px;font-weight:800;color:${totClr}">${totVal}</div>
-          </div>
-        </div>
-      </div>
+    <div class="sb-card-explode" style="pointer-events:none;position:absolute;bottom:${Math.round(64*k)}px;left:${Math.round(64*k)}px;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
+      <!-- Los logos de la federación y del campeonato van en la franja de
+           arriba. El de YourLift no va acá: esta pantalla está al aire todo el
+           rato y lo que tiene que leerse es de quién es el campeonato. -->
+      <div class="sb-wipe-content" style="transform:scale(${k});transform-origin:bottom left">${_sbTarjeta(cur,{animDir:_animDir,maxW:Math.round((window.innerWidth||1920)/k)-128})}</div>
     </div>`;
 }
 

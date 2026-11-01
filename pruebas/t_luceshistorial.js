@@ -92,9 +92,13 @@ console.log('\n  Se anotan en el atleta que estaba en la barra');
   console.log('\n  Y aparecen en el scoreboard debajo del peso');
   {
     ok(/const lucesAt=_lucesDeIntento\(at,9\);/.test(lc), 'el scoreboard las pide por intento');
-    ok(/\(lucesAt\?'<div style="margin-top:3px;text-decoration:none">'\+lucesAt\+'<\/div>':''\)/.test(lc),
+    // La casilla es una columna: arriba el peso, abajo las luces.
+    const casilla = lc.slice(lc.indexOf('const lucesAt='), lc.indexOf('const lucesAt=') + 900);
+    ok(/\(lucesAt\?'<span style="margin-top:5px">'\+lucesAt\+'<\/span>':''\)/.test(casilla)
+       && /flex-direction:column/.test(lc.slice(lc.indexOf('function _sbTarjeta('), lc.indexOf('const lucesAt='))),
        'y las pone debajo del peso');
-    ok(/text-decoration:none/.test(lc.slice(lc.indexOf('const lucesAt='), lc.indexOf('const lucesAt=') + 900)),
+    // El nulo se marca con el fondo rojo, sin tachar: nada que les llegue a las luces.
+    ok(!/line-through/.test(lc.slice(lc.indexOf('function _sbTarjeta('), lc.indexOf('function _sbEscala('))),
        'sin que les llegue la tachadura del intento nulo');
     // Se dibuja de verdad, con un intento que tiene luces.
     const r = await p.evaluate(() => {
