@@ -150,8 +150,11 @@ const EVENTO = {
     const sels = await p.evaluate(e => {
       EVENTS.length = 0; EVENTS.push(e);
       state.form.evento = e.id; state.step = 2; render();
+      // División, categoría y modalidad son botones de opción (.ops .op);
+      // lo demás sigue en desplegables.
       return [...document.querySelectorAll('select')]
-        .map(s => [...s.options].map(o => o.textContent.trim()));
+        .map(s => [...s.options].map(o => o.textContent.trim()))
+        .concat([[...document.querySelectorAll('.ops .op')].map(b => b.textContent.trim())]);
     }, ev);
     const opciones = sels.flat();
     ok(opciones.includes('Juegos Especiales'), 'la modalidad propia sale en el desplegable');

@@ -6,38 +6,35 @@
 
 function renderForm() {
   const f = state.form;
-  const steps = ['Evento','Datos Personales','Competencia','Documentos'];
+  const steps = ['Campeonato','Tus datos','Tu competencia','Documentos'];
   const s = state.step;
   const cats = f.sexo === 'Femenino' ? CATEGORIES_F : CATEGORIES_M;
   const ev = EVENTS.find(e => e.id === f.evento);
   const isUni = (ev?.extraCols||[]).includes('universidad');
   const closed = ev && new Date() > new Date(ev.closeDate + 'T23:59:59');
 
-  let h = `<div class="fade" style="margin-top:20px">`;
-  
-  // Title
-  h += `<div style="text-align:center;margin-bottom:24px">
-    <h1 class="os" style="font-size:clamp(22px,4vw,30px);letter-spacing:2px"><span style="color:var(--accent)">INSCRIPCIÓN</span> A CAMPEONATO</h1>
-    <p style="color:var(--muted);font-size:13px;margin-top:4px">Completa el formulario para inscribirte</p>
-    <div style="width:60px;height:3px;background:linear-gradient(90deg,var(--accent),var(--gold));margin:10px auto;border-radius:2px"></div>
-    <button class="btn btn-o" onclick="state.view='edit_lookup';state.error='';render()" style="margin-top:12px;font-size:11px;padding:8px 16px"><i class=yl-i-editar></i> Editar mi inscripción</button>
-  </div>`;
+  // La página es la de la vista previa: a la izquierda los pasos numerados
+  // (los hechos con su visto bueno, el de ahora abierto y los que faltan en
+  // gris) y a la derecha el resumen de la inscripción.
+  let h = `<div class="fade in"><div class="in-main">`;
+  h += `<section class="in-cab"><div class="in-ey">Inscripción</div><h1 class="yl-d">Inscríbete</h1>
+    <button class="in-edit" onclick="state.view='edit_lookup';state.error='';render()"><i class=yl-i-editar></i> Editar mi inscripción</button></section>`;
+  if (ev && s > 0) h += _inEvCard(ev, closed);
 
   // Firebase status
   if (!firebaseReady) {
     h += `<div class="alert alert-info"><i class=yl-i-info></i> Modo demostración — Los datos se guardan localmente. Configura Firebase para inscripciones reales.</div>`;
   }
 
-  // Step bar
-  h += `<div class="step-bar">${steps.map((st,i) => `<div class="step-dot ${i<s?'done':i===s?'active':''}"></div>`).join('')}</div>`;
-  h += `<p style="font-size:12px;color:var(--muted);margin-bottom:16px">Paso ${s+1} de ${steps.length}: <strong style="color:var(--text)">${steps[s]}</strong></p>`;
+  // Los pasos ya hechos, arriba, con lo que se eligió en cada uno.
+  for (let i = 0; i < s; i++) h += _inPasoHecho(i, f, ev);
 
   if (state.error) h += `<div class="alert alert-error"><i class=yl-i-alerta></i> ${state.error}</div>`;
   h += bloqueoAvisoHtml();
 
   // STEP 0: Event selection
   if (s === 0) {
-    h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Selecciona la Competencia</h3>`;
+    h += `<div class="card"><h2 class="paso-t yl-d"><i>1</i>Elige el campeonato</h2>`;
     const openEvs = openEventsFromFirebase();
     if (!openEvs.length) {
       h += `<div style="text-align:center;padding:40px;color:var(--muted)">
@@ -49,14 +46,14 @@ function renderForm() {
     openEvs.forEach(ev => {
       const sel = f.evento === ev.id;
       const isClosed = ev.status==='closed' || (ev.closeDate && new Date() > new Date(ev.closeDate + 'T23:59:59'));
-      h += `<div onclick="${isClosed?'':`selectEvent('${ev.id}')`}" style="padding:16px;border-radius:10px;border:2px solid ${sel?'var(--accent)':isClosed?'var(--border)':'var(--border)'};background:${sel?'rgba(196,30,58,.08)':'transparent'};margin-bottom:10px;cursor:${isClosed?'not-allowed':'pointer'};transition:all .2s;opacity:${isClosed?'.5':'1'}">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div class="os" style="font-size:15px;font-weight:700">${ev.name}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:4px">${ev.org} · ${ev.location} · ${ev.date}</div>
+      const fx = _inFecha(ev.date);
+      h += `<div class="in-evo${sel?' on':''}${isClosed?' cerrado':''}" onclick="${isClosed?'':`selectEvent('${ev.id}')`}">
+          <div class="ev-f"><b class="yl-d">${fx.d}</b><span>${fx.m}</span></div>
+          <div class="in-evo-t">
+            <div class="in-evo-n">${_inSinMarca(ev.name)}</div>
+            <div class="in-evo-m">${[ev.org,ev.location,ev.date].filter(Boolean).map(_inSinMarca).filter(Boolean).join(' · ')}</div>
           </div>
-          ${isClosed ? '<span class="tag" style="background:rgba(239,68,68,.15);color:var(--red)">Cerrado</span>' : sel ? '<span style="color:var(--accent);font-size:20px"><i class=yl-i-check></i></span>' : ev.abierto === true ? '<span class="tag" style="background:rgba(212,168,67,.15);color:var(--gold)">Abierto · sin RUT</span>' : ''}
-        </div>
+          ${isClosed ? '<span class="tag in-tag-c">Cerrado</span>' : sel ? '<span class="in-ok"><i class=yl-i-check></i></span>' : ev.abierto === true ? '<span class="tag">Abierto · sin RUT</span>' : ''}
       </div>`;
     });
     h += `<div style="text-align:right;margin-top:16px">
@@ -66,7 +63,7 @@ function renderForm() {
 
   // STEP 1: Personal data
   if (s === 1) {
-    h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Datos del Atleta</h3>
+    h += `<div class="card"><h2 class="paso-t yl-d"><i>2</i>Tus datos</h2><p class="paso-p">Con tu RUT traemos tu código de atleta y tu ficha. Si es tu primera competencia, te creamos un código.</p>
     <div class="field">
       <label>Nombre Completo <span class="req">*</span></label>
       ${/* La gente escribe un solo nombre y un solo apellido, y después hay que
@@ -87,7 +84,7 @@ function renderForm() {
         ${f.rut&&!validateRut(f.rut).valid?`<div style="font-size:10px;color:var(--red,#ef4444);margin-top:3px"><i class=yl-i-alerta></i> ${validateRut(f.rut).msg}</div>`:''}
       </div>
       <div class="field">
-        <label>Código de Atleta FECHIPO <span style="font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0">(auto)</span></label>
+        <label>Código de atleta <small>se completa solo</small></label>
         <input class="input ${f.codigo?'ok':''}" type="text" id="codigoInput" value="${f.codigo}" readonly style="background:rgba(212,168,67,.06);cursor:default;${f.codigo?'border-color:var(--gold)':''}">
         <div id="codigoLabel" style="font-size:10px;margin-top:4px;min-height:14px;color:${f._codigoSource==='db'?'var(--green)':'var(--orange, #f59e0b)'}">${f._codigoSource==='db'?'<i class=yl-i-check></i> Atleta encontrado en base de datos':f._codigoSource==='new'?'Nuevo atleta — código generado':''}</div>
       </div>
@@ -95,11 +92,7 @@ function renderForm() {
     <div class="row">
       <div class="field">
         <label>Sexo <span class="req">*</span></label>
-        <select class="input ${f.sexo?'ok':''}" onchange="updR('sexo',this.value)">
-          <option value="">Seleccionar...</option>
-          <option ${f.sexo==='Masculino'?'selected':''}>Masculino</option>
-          <option ${f.sexo==='Femenino'?'selected':''}>Femenino</option>
-        </select>
+        <div class="ops">${['Femenino','Masculino'].map(x=>`<button type="button" class="op${f.sexo===x?' on':''}" onclick="updR('sexo','${x}')">${x}</button>`).join('')}</div>
       </div>
       <div class="field">
         <label>Fecha de Nacimiento <span class="req">*</span></label>
@@ -126,7 +119,7 @@ function renderForm() {
     <div class="field">
       <label>Correo de Contacto <span class="req">*</span></label>
       <input class="input ${f.correo&&/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.correo)?'ok':''}" type="email" inputmode="email" placeholder="tucorreo@ejemplo.com" value="${f.correo||''}" oninput="upd('correo',this.value.trim())">
-      <div style="font-size:10px;color:var(--muted);margin-top:3px">Lo usa FECHIPO para contactarte. No se muestra públicamente.</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:3px">Lo usa la organización para contactarte. No se muestra públicamente.</div>
     </div>
     <div class="field" style="margin-top:8px;padding-top:12px;border-top:1px solid var(--border)">
       <label>PIN de Edición (4 dígitos) <span class="req">*</span> — <span style="color:var(--muted);font-size:10px;text-transform:none;letter-spacing:0">Guarda este PIN para modificar tu inscripción después</span></label>
@@ -175,30 +168,22 @@ function renderForm() {
         +   '<input id="nacTotalField" class="input" readonly style="max-width:220px;background:rgba(212,168,67,.10);border-color:rgba(212,168,67,.4);font-weight:700" value="'+(_sumT>0?_sumT:'')+'">'
         + '</div></div>';
     }
-    h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Datos de Competencia</h3>
-    <div class="row">
+    h += `<div class="card"><h2 class="paso-t yl-d"><i>3</i>Tu competencia</h2>
+    <div class="row in-col">
       <div class="field">
         <label>División de Edad <span class="req">*</span></label>
-        <select class="input ${f.division?'ok':''}" onchange="updR('division',this.value)">
-          <option value="">Seleccionar...</option>
-          ${divisionesDe(_evActual()).map(d => `<option value="${d}" ${f.division===d?'selected':''}>${_divEtiqueta(d)}</option>`).join('')}
-          ${isUni?'<option '+(f.division==='Universitario'?'selected':'')+'>Universitario</option>':''}
-        </select>
+        <div class="ops">${[...new Set(divisionesDe(_evActual()).concat(isUni?['Universitario']:[]))].map(d => `<button type="button" class="op${f.division===d?' on':''}" data-v="${_inAttr(d)}" onclick="updR('division',this.dataset.v)">${_divEtiqueta(d)}</button>`).join('')}</div>
       </div>
       <div class="field">
         <label>Categoría de Peso <span class="req">*</span></label>
-        <select class="input ${f.categoria?'ok':''}" onchange="updR('categoria',this.value)" ${!f.sexo?'disabled':''}>
-          <option value="">Seleccionar...</option>
-          ${cats.map(c => `<option ${f.categoria===c?'selected':''}>${c}</option>`).join('')}
-        </select>
+        ${f.sexo ? `<div class="ops">${cats.map(c => `<button type="button" class="op${f.categoria===c?' on':''}" data-v="${_inAttr(c)}" onclick="updR('categoria',this.dataset.v)">${c}</button>`).join('')}</div>`
+          : '<p class="ayuda">Elige tu sexo en «Tus datos» para ver las categorías.</p>'}
       </div>
     </div>
     <div class="field">
       <label>Modalidad <span class="req">*</span></label>
-      <select class="input ${f.modalidad?'ok':''}" onchange="updR('modalidad',this.value)">
-        <option value="">Seleccionar...</option>
-        ${modalidadesDe(_evActual()).map(m => `<option ${f.modalidad===m?'selected':''}>${m}</option>`).join('')}
-      </select>
+      <div class="ops">${modalidadesDe(_evActual()).map(m => `<button type="button" class="op${f.modalidad===m?' on':''}" data-v="${_inAttr(m)}" onclick="updR('modalidad',this.dataset.v)">${m}</button>`).join('')}</div>
+      <p class="ayuda">Solo aparecen las que abre este campeonato.</p>
     </div>
     ${isUni ? `<div class="field">
       <label>Universidad <span class="req">*</span></label>
@@ -225,7 +210,7 @@ function renderForm() {
     const _CAT = docsDelEvento(_evObj);
     const isIPFWorld = !_hasNewDocs && (/IPF\s*World/i.test(_evName) || _evObj?.tipo==='ipf_world');
 
-    h += `<div class="card"><h3 class="os" style="font-size:16px;letter-spacing:1px;margin-bottom:16px">Documentos${isIPFWorld?' · <i class=yl-i-globo></i> IPF WORLD':''}${_hasNewDocs?' · '+(_evObj.docsLabel||_evName):''}</h3>`;
+    h += `<div class="card"><h2 class="paso-t yl-d"><i>4</i>Documentos${isIPFWorld?' <small>IPF World</small>':''}${_hasNewDocs&&_evObj.docsLabel?' <small>'+_evObj.docsLabel+'</small>':''}</h2>`;
 
     // ─── SISTEMA NUEVO: requiredDocs explícito en el evento ───
     if (_hasNewDocs) {
@@ -253,10 +238,10 @@ function renderForm() {
         if(state.submitting) return 'disabled';
         return '';
       })();
-      h += `<div style="background:var(--bg);border-radius:10px;padding:16px;margin-top:16px;border:1px solid var(--border)">
-        <h4 class="os" style="font-size:13px;letter-spacing:1px;color:var(--gold);margin-bottom:10px">RESUMEN DE INSCRIPCIÓN</h4>
+      h += `<div class="in-res">
+        <h4 class="in-res-t">Lo que vas a enviar</h4>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
-          <div><span style="color:var(--muted)">Evento:</span> <strong>${_evName}</strong></div>
+          <div><span style="color:var(--muted)">Evento:</span> <strong>${_inSinMarca(_evName)}</strong></div>
           <div><span style="color:var(--muted)">Atleta:</span> <strong>${f.nombre}</strong></div>
           <div><span style="color:var(--muted)">RUT:</span> ${f.rut}</div>
           <div><span style="color:var(--muted)">Club:</span> ${f.club==='Otro'?f.clubOtro:f.club}</div>
@@ -265,9 +250,9 @@ function renderForm() {
           ${allDocsCheck}
         </div>
       </div>
-      <label style="display:flex;align-items:flex-start;gap:10px;margin-top:18px;cursor:pointer;padding:12px;background:rgba(212,168,67,.06);border:1px solid rgba(212,168,67,.2);border-radius:8px">
-        <input type="checkbox" id="privacyChkNew" onchange="state.privacyConsent=this.checked;render()" ${state.privacyConsent?'checked':''} style="margin-top:2px;width:16px;height:16px;accent-color:#D4A843;flex-shrink:0">
-        <span style="font-size:12px;color:rgba(180,200,230,.8);line-height:1.6">He leído y acepto la <span onclick="event.preventDefault();(window.parent&&window.parent!==window&&window.parent.sv?window.parent.sv('terminos'):window.open('index.html#privacidad','_blank'))" style="color:#D4A843;cursor:pointer;text-decoration:underline">Política de Privacidad</span>. Autorizo a FECHIPO, responsable de los datos, y a YourLift SpA, que opera la plataforma por su encargo, a tratar mis datos personales —incluidos los de salud o discapacidad y los de mis documentos, si el campeonato los pide— para gestionar mi inscripción y mi participación en competencias de powerlifting, conforme a la Ley N° 19.628 y la Ley N° 21.719. En lo público aparezco con mi nombre, club, categoría, resultados y código de atleta; mi RUT, fecha de nacimiento, contactos y documentos no se publican.</span>
+      <label class="in-cons">
+        <input type="checkbox" id="privacyChkNew" onchange="state.privacyConsent=this.checked;render()" ${state.privacyConsent?'checked':''} style="margin-top:2px;width:18px;height:18px;accent-color:#0B2A55;flex-shrink:0">
+        <span>He leído y acepto la <span onclick="event.preventDefault();(window.parent&&window.parent!==window&&window.parent.sv?window.parent.sv('terminos'):window.open('index.html#privacidad','_blank'))" class="in-link">Política de Privacidad</span>. Autorizo a FECHIPO, responsable de los datos, y a YourLift SpA, que opera la plataforma por su encargo, a tratar mis datos personales —incluidos los de salud o discapacidad y los de mis documentos, si el campeonato los pide— para gestionar mi inscripción y mi participación en competencias de powerlifting, conforme a la Ley N° 19.628 y la Ley N° 21.719. En lo público aparezco con mi nombre, club, categoría, resultados y código de atleta; mi RUT, fecha de nacimiento, contactos y documentos no se publican.</span>
       </label>
       <div style="display:flex;justify-content:space-between;margin-top:14px">
         <button class="btn btn-outline" onclick="prevStep()">← Atrás</button>
@@ -383,10 +368,10 @@ function renderForm() {
     })()}
     
     <!-- Summary -->
-    <div style="background:var(--bg);border-radius:10px;padding:16px;margin-top:16px;border:1px solid var(--border)">
-      <h4 class="os" style="font-size:13px;letter-spacing:1px;color:var(--gold);margin-bottom:10px">RESUMEN DE INSCRIPCIÓN</h4>
+    <div class="in-res">
+      <h4 class="in-res-t">Lo que vas a enviar</h4>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
-        <div><span style="color:var(--muted)">Evento:</span> <strong>${EVENTS.find(e=>e.id===f.evento)?.name||''}</strong></div>
+        <div><span style="color:var(--muted)">Evento:</span> <strong>${_inSinMarca(EVENTS.find(e=>e.id===f.evento)?.name||'')}</strong></div>
         <div><span style="color:var(--muted)">Atleta:</span> <strong>${f.nombre}</strong></div>
         <div><span style="color:var(--muted)">RUT:</span> ${f.rut}</div>
         <div><span style="color:var(--muted)">Club:</span> ${f.club==='Otro'?f.clubOtro:f.club}</div>
@@ -414,9 +399,9 @@ function renderForm() {
       </div>
     </div>
 
-    <label style="display:flex;align-items:flex-start;gap:10px;margin-top:18px;cursor:pointer;padding:12px;background:rgba(212,168,67,.06);border:1px solid rgba(212,168,67,.2);border-radius:8px">
-      <input type="checkbox" id="privacyChkLeg" onchange="state.privacyConsent=this.checked;render()" ${state.privacyConsent?'checked':''} style="margin-top:2px;width:16px;height:16px;accent-color:#D4A843;flex-shrink:0">
-      <span style="font-size:12px;color:rgba(180,200,230,.8);line-height:1.6">He leído y acepto la <span onclick="event.preventDefault();(window.parent&&window.parent.sv?window.parent.sv('terminos'):window.open('./'))" style="color:#D4A843;cursor:pointer;text-decoration:underline">Política de Privacidad</span> de FECHIPO. Autorizo el tratamiento de mis datos personales para la gestión de competencias de powerlifting, conforme a la Ley N° 19.628 y Ley N° 21.719.</span>
+    <label class="in-cons">
+      <input type="checkbox" id="privacyChkLeg" onchange="state.privacyConsent=this.checked;render()" ${state.privacyConsent?'checked':''} style="margin-top:2px;width:18px;height:18px;accent-color:#0B2A55;flex-shrink:0">
+      <span>He leído y acepto la <span onclick="event.preventDefault();(window.parent&&window.parent.sv?window.parent.sv('terminos'):window.open('./'))" class="in-link">Política de Privacidad</span> de FECHIPO. Autorizo el tratamiento de mis datos personales para la gestión de competencias de powerlifting, conforme a la Ley N° 19.628 y Ley N° 21.719.</span>
     </label>
     <div style="display:flex;justify-content:space-between;margin-top:14px">
       <button class="btn btn-outline" onclick="prevStep()">← Atrás</button>
@@ -444,8 +429,73 @@ function renderForm() {
     } // cierre else (legacy docs)
   }
 
-  h += `</div>`;
+  // Los pasos que faltan, en gris.
+  for (let i = s + 1; i < steps.length; i++) h += `<div class="paso prox"><h2 class="paso-t yl-d"><i>${i+1}</i>${steps[i]}</h2></div>`;
+  h += `</div>`;   // in-main
+  h += _inResumen(f, ev, s);
+  h += `</div>`;   // in
   return h;
+}
+
+// ── Piezas de la página de inscripción (vista previa) ─────────────
+function _inSinMarca(t){ return String(t||'').replace(/\s*\bFECHIPO\b\s*/gi,' ').replace(/\s+/g,' ').trim(); }
+function _inAttr(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function _inFecha(d){
+  const M=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(d||''));
+  return m?{d:m[3],m:M[+m[2]-1]}:{d:'—',m:''};
+}
+function _inFechaLarga(d){
+  const M=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(d||''));
+  return m?(+m[3])+' de '+M[+m[2]-1]:'';
+}
+// El campeonato elegido, arriba de los pasos, con "Cambiar".
+function _inEvCard(ev, cerrado){
+  const fx=_inFecha(ev.date);
+  const meta=[ev.location, ev.date?_inFechaLarga(ev.date):'', ev.closeDate?'Cierre '+_inFechaLarga(ev.closeDate):''].filter(Boolean).map(_inSinMarca).join(' · ');
+  const tipo=ev.abierto===true?'Abierto · sin RUT':'Oficial · cuenta para el ranking';
+  return `<div class="in-ev"><div class="ev-f"><b class="yl-d">${fx.d}</b><span>${fx.m}</span></div>
+    <div class="in-ev-t"><h3>${_inSinMarca(ev.name)}</h3><p>${meta}</p><span class="tag"><i></i>${cerrado?'Inscripciones cerradas':tipo}</span></div>
+    <button onclick="state.step=0;state.error='';render();window.scrollTo(0,0)">Cambiar</button></div>`;
+}
+// Un paso ya completo: su título con el visto bueno y lo que se eligió.
+function _inPasoHecho(i, f, ev){
+  const T=['Campeonato','Tus datos','Tu competencia','Documentos'];
+  const club=f.club==='Otro'?(f.clubOtro||'Otro'):f.club;
+  const res=[
+    '',   // el campeonato ya está en la tarjeta de arriba
+    [f.nombre, club].filter(Boolean).join(' · '),
+    [f.categoria, f.division, f.modalidad].filter(Boolean).join(' · '),
+    ''][i]||'';
+  return `<div class="paso hecho"><h2 class="paso-t yl-d"><i class="ok">✓</i>${T[i]}</h2>`
+    +`<button class="paso-ed" onclick="state.step=${i};state.error='';render();window.scrollTo(0,0)">Cambiar</button>`
+    +(res?`<p class="paso-p">${res}</p>`:'')+`</div>`;
+}
+// El resumen de la derecha: lo elegido hasta ahora y, en documentos, cuántos van.
+function _inResumen(f, ev, s){
+  if(!ev) return '';
+  const club=f.club==='Otro'?(f.clubOtro||''):f.club;
+  const lin=(k,v)=>v?`<div class="lin"><span>${k}</span><b>${v}</b></div>`:'';
+  let docs='';
+  if(s>=3 && Array.isArray(ev.requiredDocs) && ev.requiredDocs.length){
+    const pedidos=docsRequeridos(ev, f.fechaNac), cat=docsDelEvento(ev);
+    const lista=pedidos.filter(k=>cat[k]);
+    const hechos=lista.filter(k=>state[cat[k].nameKey]).length;
+    const faltan=lista.filter(k=>!state[cat[k].nameKey]).map(k=>cat[k].label);
+    const pct=lista.length?Math.round(hechos/lista.length*100):100;
+    docs=`<div class="prog"><div><span>Documentos</span><span>${hechos} de ${lista.length}</span></div><i><u style="width:${pct}%"></u></i>`
+      +(faltan.length?`<small>Falta: ${faltan.join(', ')}.</small>`:'<small>Están todos.</small>')+`</div>`;
+  }
+  return `<aside class="rsm"><h2 class="yl-d">Tu inscripción</h2>
+    ${lin('Campeonato',_inSinMarca(ev.name))}
+    ${lin('Atleta',f.nombre)}
+    ${lin('Club',club)}
+    ${lin('Categoría',[f.categoria,f.division].filter(Boolean).join(' · '))}
+    ${lin('Modalidad',f.modalidad)}
+    ${docs}
+    <div class="aviso"><b>Queda pendiente</b> hasta que la organización revise tus documentos. Te avisamos por correo.</div>
+  </aside>`;
 }
 
 function renderConfirm() {

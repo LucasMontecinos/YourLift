@@ -28,6 +28,8 @@ function sanitizeInput(s) {
 // ══════════════════════════════════════════════
 function render() {
   const app = document.getElementById('app');
+  // El formulario usa dos columnas (pasos y resumen); las demás vistas, una.
+  app.classList.toggle('in-ancho', !['admin','confirm','edit_lookup','edit'].includes(state.view));
   if (state.view === 'admin') { app.innerHTML = renderAdmin(); return; }
   if (state.view === 'confirm') { app.innerHTML = renderConfirm(); return; }
   if (state.view === 'edit_lookup') { app.innerHTML = renderEditLookup(); return; }
