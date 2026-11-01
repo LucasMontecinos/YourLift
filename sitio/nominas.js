@@ -392,12 +392,15 @@ function _nomCardShell(id,info,innerFn){
   const cfg=(window.NOMCARDS||{})[id]||{};
   const foto=cfg.fotoUrl||'';
   const open=ST.nomOpen===id;
+  // Sin foto del campeonato, el fondo de la tarjeta es su logo (si se subió),
+  // nunca la foto de un atleta.
+  const _lgFondo=cfg.logoUrl||(window.NOMEVENT_LOGOS||{})[info.eventoId]||info.logo||'';
   const fecha=cfg.fecha||info.fecha||'';
   const org=cfg.organizador||info.org||'';
   const lugar=cfg.lugar||info.lugar||'';
   let h=`<div id="nomcard_${id}" class="cd2" style="margin-bottom:18px;padding:0;overflow:hidden;border:1px solid ${open?'rgba(212,168,67,.55)':'var(--border)'}">`;
   // Cabecera clickeable, a lo ancho, con la foto del evento de fondo
-  h+=`<div class="nomcard-head" onclick="nomToggle('${id}')" style="cursor:pointer;position:relative;min-height:96px;display:flex;align-items:center;background:${foto?`linear-gradient(90deg,rgba(7,16,32,.93) 30%,rgba(7,16,32,.55)),url('${foto}') center/cover`:'linear-gradient(120deg,#0D1F38,#0a1628)'}">`;
+  h+=`<div class="nomcard-head" onclick="nomToggle('${id}')" style="cursor:pointer;position:relative;min-height:96px;display:flex;align-items:center;background:${foto?`linear-gradient(90deg,rgba(7,16,32,.93) 30%,rgba(7,16,32,.55)),url('${foto}') center/cover`:(_lgFondo?`linear-gradient(90deg,rgba(11,42,85,.96) 35%,rgba(11,42,85,.74)),url('${_lgFondo}') right 24px center/auto 150% no-repeat,#0B2A55`:'linear-gradient(120deg,#0B2A55,#123A73)')}">`;
   h+=`<div class="nomcard-info" style="padding:18px 20px;flex:1 1 260px;min-width:0">`;
   h+=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h2 style="font-family:Oswald;font-size:clamp(15px,3.2vw,20px);letter-spacing:1px;text-transform:uppercase;margin:0">${info.name}</h2>${info.badges||''}</div>`;
   // Fecha · organizador · lugar (con link a Google Maps si el evento lo trae) · cierre de nómina
