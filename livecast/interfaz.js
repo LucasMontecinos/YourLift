@@ -170,7 +170,19 @@ function showToastLC(msg){
   t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);
 }
 
+// Tema de la competencia en vivo para el público: "dia" (blanco y azul, el del
+// sitio) o "noche" (negro). Cada persona elige y queda guardado en su navegador.
+// Solo la vista del público: las pantallas de operación siguen como siempre.
+function _temaVivo(){ try{ const t=localStorage.getItem('yl_tema'); if(t==='dia'||t==='noche')return t; }catch(e){} return 'dia'; }
+function _cambiarTemaVivo(){ try{ localStorage.setItem('yl_tema',_temaVivo()==='dia'?'noche':'dia'); }catch(e){} R(); }
+function _aplicarTemaVivo(){
+  const raiz=document.documentElement;
+  if(!TX_MODE&&DATA.phase==='liveView')raiz.setAttribute('data-tema',_temaVivo());
+  else raiz.removeAttribute('data-tema');
+}
+
 function R(){
+  try{ _aplicarTemaVivo(); }catch(e){}
   try{ _sellarCeldas(DATA.athletes); }catch(e){}
   // Los récords logrados hoy se recalculan una vez por dibujado: los consulta cada
   // casilla de la tabla, pero tienen que reflejar lo último (incluido lo que

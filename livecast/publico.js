@@ -113,6 +113,7 @@ function renderLiveView(){
   h += '<p style="color:var(--muted);font-size:12px">'+((DATA.event==null?void 0:DATA.event.name)||'')+'</p></div>';
   h += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
   h += '<div data-yl-idioma style="margin-right:6px"></div>';
+  { const t=_temaVivo(); h += '<button type="button" onclick="_cambiarTemaVivo()" title="Cambiar entre la versión de día (blanca) y la de noche (negra)" style="cursor:pointer;padding:5px 12px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;font-size:12px;font-weight:600;letter-spacing:1px;margin-right:6px">'+(t==='dia'?'☾ NOCHE':'☀ DÍA')+'</button>'; }
   h += '<span style="font-size:11px;color:var(--muted)">'+(libre?'Estás mirando:':'Tanda activa:')+'</span>';
   h += '<span style="background:'+(FL_C[currentFlight]||'#666')+';color:#fff;padding:4px 12px;border-radius:6px;font-family:Oswald;font-weight:700">'+(currentFlight||'—')+'</span>';
   h += '</div></div>';
