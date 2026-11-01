@@ -169,7 +169,7 @@ const CAMP = 'https://ejemplo.cl/sudamericano.png';
     const _i = lc.indexOf('class="sb-card-explode" style="pointer-events');
     const sb = lc.slice(_i, lc.indexOf('sb-wipe-content', _i));
     ok(!/YourLift_logo\.png/.test(sb), 'el scoreboard ya no lo tiene escrito a mano');
-    ok(/_tiraLogos\(\['camp'\],'92px'/.test(lc),
+    ok(/_tiraLogos\(\['camp'\],'44px'/.test(lc),
        'y la tabla actual pide solo el del campeonato');
 
     const adm = require('./apoyo/fuente').admin();

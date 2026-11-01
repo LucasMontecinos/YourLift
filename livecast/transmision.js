@@ -1878,61 +1878,47 @@ function renderTxTablaActual(cur,opts){
   const curRow=ranked.find(a=>a.id===ref.id);
   const curPos=curRow?curRow.curPos:0;
   const fcPos=curRow?curRow.fPos:0;
-  const arrow=curPos===fcPos?'=':(fcPos<curPos?'▲':'▼');
-  const arrowColor=fcPos<curPos?'#22c55e':(fcPos>curPos?'#ef4444':'#D4A843');
   const pendingW=((ref.att==null?void 0:(__o=>__o==null?void 0:(__o=>__o==null?void 0:__o.w)(__o[DATA.round]))(ref.att[DATA.lift])))||0;
-  const liftN=LIFT_N[DATA.lift]||DATA.lift;
+  // Tal cual la vista previa: arriba a la derecha, la franja con la categoría y
+  // una fila por atleta de SU categoría, división y modalidad, con el logo del
+  // club, lo que lleva y lo que tendría si hace lo que declaró. Letras en blanco;
+  // la paleta de Control TX pone los fondos, igual que en el marcador.
+  const k=_sbEscala();
+  const conBlanco=String(_txC('nameText')||'').toLowerCase()==='#ffffff';
+  const cHead=conBlanco?_txC('nameBg'):_txC('headerBg');
+  const cHead2=conBlanco?_txC('nameBg2'):_txC('headerBg');
+  const cBody=conBlanco?_txC('headerBg'):_txC('gridBg');
+  const LN='rgba(255,255,255,.12)';
+  const lab={sq:'SQ',bp:'SQ+BP',dl:'TOTAL'}[DATA.lift]||'TOTAL';
+  const catTxt=[(txCatLabel(ref.cat)||'').replace(/^-/,'−').replace(/kg$/i,' KG'), String(ref.div||'').toUpperCase(), _lineaLbl(ref)].filter(Boolean).join(' · ');
+  const col='display:grid;grid-template-columns:36px 34px minmax(0,1fr) 96px 106px;gap:10px;align-items:center;padding:9px 20px;';
   return `
-    <div style="position:fixed;bottom:30px;right:30px;width:min(520px,38vw);z-index:50;font-family:'Inter',sans-serif">
-      <div class="ta-card-explode" style="background:linear-gradient(180deg,rgba(10,22,40,.96) 0%,rgba(4,12,26,.96) 100%);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:2px solid #D4A843;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.7),0 0 30px rgba(212,168,67,.25)">
-        <!-- Header -->
-        <div data-ta-header style="padding:14px 20px;background:linear-gradient(90deg,#C41E3A 0%,#8B1525 100%);display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:2px solid #D4A843;overflow:hidden">
-          <div style="display:flex;align-items:center;gap:16px;flex:1;min-width:0">
-            ${(()=>{const t=_tiraLogos(['camp'],'92px','12px');
-              return t?`<div class="ta-logo-anim" style="flex-shrink:0">${t}</div>`:'';})()}
-            <div data-ta-title style="min-width:0">
-              <div style="font-family:Oswald;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.75);font-weight:600">TABLA ACTUAL · ${liftN} · R${(DATA.round||0)+1}</div>
-              <div style="font-family:Oswald;font-size:18px;letter-spacing:1.5px;color:#fff;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,.4);margin-top:2px">${divS} • ${ref.cat} ${sexLabel==='Mujer'?'F':'M'} <span style="font-size:.72em;opacity:.8">· ${_lineaLbl(ref)}</span></div>
-            </div>
-          </div>
-          <div style="text-align:right;flex-shrink:0">
-            <div style="font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.65)">PROYECCIÓN</div>
-            <div style="font-family:Oswald;font-size:24px;font-weight:700;color:#fff;letter-spacing:1px;line-height:1">
-              <span style="color:rgba(255,255,255,.7)">${curPos||'—'}</span>
-              <span style="color:${arrowColor};margin:0 6px;font-size:22px">${arrow}</span>
-              <span style="color:#D4A843;text-shadow:0 0 12px rgba(212,168,67,.6)">${fcPos||'—'}</span>
-            </div>
+    <div style="position:fixed;top:${Math.round(56*k)}px;right:${Math.round(56*k)}px;z-index:50">
+      <div class="ta-card-explode" style="transform:scale(${k});transform-origin:top right;width:660px;font-family:Oswald,'Arial Narrow',sans-serif;color:#fff;background:${cBody};border:1px solid ${LN};box-shadow:0 18px 50px rgba(0,0,0,.45)">
+        <div data-ta-header style="display:flex;align-items:center;gap:16px;padding:14px 20px;background:linear-gradient(90deg,${cHead},${cHead2});${conBlanco?'':'border-top:4px solid '+_txC('nameBg')+';'}">
+          ${(()=>{const t=_tiraLogos(['camp'],'44px','10px');
+            return t?`<div class="ta-logo-anim" style="flex-shrink:0;display:flex">${t}</div>`:'';})()}
+          <div data-ta-title style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex:1;min-width:0">
+            <b style="font-size:25px;font-weight:600;letter-spacing:.1em;white-space:nowrap">TABLA ACTUAL</b>
+            <span style="font-size:17px;letter-spacing:.14em;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${catTxt}</span>
           </div>
         </div>
-        <!-- Column header -->
-        <div style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:6px 18px;background:rgba(10,22,40,.7);font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(220,230,245,.5);border-bottom:1px solid rgba(212,168,67,.15)">
-          <div>#</div><div>NOMBRE</div><div style="text-align:right">TOTAL</div><div style="text-align:center">POS</div>
+        <div style="${col}padding-block:8px;font-size:13px;letter-spacing:.16em;color:#fff;border-top:1px solid ${LN}">
+          <span>#</span><span></span><span>ATLETA</span><span style="text-align:right">${lab}</span><span style="text-align:right">PROYECT.</span>
         </div>
-        <!-- Rows -->
-        <div>
-        ${ranked.map((a,idx)=>{
+        ${ranked.map(a=>{
           const isCur=a.id===ref.id;
-          const rowBg=isCur?'background:linear-gradient(90deg,rgba(212,168,67,.32) 0%,rgba(212,168,67,.18) 100%);border-left:4px solid #D4A843':'background:'+(idx%2===0?'rgba(10,22,40,.4)':'transparent');
-          const nameC=isCur?'#fff':'rgba(240,245,255,.85)';
-          const fS=isCur?'15px':'13px';
-          const fW=isCur?'700':'500';
-          const totalShown=isCur?a.fTotal:a.total;
-          const posShown=isCur?a.fPos:a.curPos;
-          const posColor=isCur?'#D4A843':'rgba(220,230,245,.7)';
-          const extra=isCur?'<div style="font-family:Oswald;font-size:9px;color:#D4A843;letter-spacing:2px;margin-top:2px;font-weight:600">EN TARIMA · '+(pendingW||'—')+' kg</div>':'';
-          return `<div style="display:grid;grid-template-columns:30px 1fr 90px 70px;gap:14px;padding:${isCur?'14px 18px':'8px 18px'};${rowBg};border-bottom:1px solid rgba(212,168,67,.08);align-items:center">
-            <div style="font-family:Oswald;font-size:${isCur?'18px':'13px'};font-weight:700;color:${isCur?'#D4A843':'rgba(220,230,245,.5)'};text-shadow:${isCur?'0 0 8px rgba(212,168,67,.5)':'none'}">${posShown}</div>
-            <div style="overflow:hidden">
-              <div style="font-family:Oswald;font-size:${fS};font-weight:${fW};color:${nameC};letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.5);display:flex;align-items:center">${_insignia(a,15)}<span style="overflow:hidden;text-overflow:ellipsis">${a.name}</span></div>
-              ${extra}
-            </div>
-            <div style="font-family:Oswald;font-size:${isCur?'17px':'13px'};font-weight:${fW};text-align:right;color:${isCur?'#D4A843':'rgba(220,230,245,.75)'};text-shadow:${isCur?'0 0 8px rgba(212,168,67,.4)':'none'}">${(totalShown||0).toFixed(1)}</div>
-            <div style="font-family:Oswald;font-size:${isCur?'18px':'13px'};font-weight:700;text-align:center;color:${posColor}">${isCur?(a.curPos+'→'+a.fPos):''}</div>
+          const pos=isCur?a.fPos:a.curPos;
+          const sub=subTotal(a,DATA.lift);   // lo que lleva hasta este movimiento
+          const proy=isCur?a.fTotal:forecastTotal(a);
+          const logo=(window.clubLogoImg&&a.club)?window.clubLogoImg(a.club,34,'flex:none;'):'<span></span>';
+          return `<div style="${col}border-top:1px solid ${LN};font-size:24px;${isCur?'background:rgba(255,255,255,.10);box-shadow:inset 4px 0 #fff;':''}">
+            <span style="font-weight:600">${pos||'—'}</span>${logo}
+            <span style="font-family:'DM Sans',sans-serif;font-weight:700;font-size:21px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_nombrePropio(a.name)}${isCur&&pendingW?'<small style="display:block;font-family:Oswald,sans-serif;font-weight:500;font-size:13px;letter-spacing:.14em;margin-top:2px">EN TARIMA · '+_sbNum(pendingW)+' KG</small>':''}</span>
+            <span style="text-align:right">${sub>0?_sbNum(sub):'—'}</span>
+            <span style="text-align:right;font-weight:600">${proy>0?_sbNum(proy):'—'}</span>
           </div>`;
         }).join('')}
-        </div>
-        <!-- Footer mini-strip -->
-        <div style="padding:6px 18px;background:rgba(10,22,40,.7);font-family:Oswald;font-size:9px;letter-spacing:2px;color:rgba(220,230,245,.5);text-align:center;border-top:1px solid rgba(212,168,67,.15)">YOURLIFT · LIVE</div>
       </div>
     </div>`;
 }
