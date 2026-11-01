@@ -172,41 +172,46 @@ function render(){
         const borderStyle=isOwner?'border:1px solid rgba(196,30,58,.45);background:linear-gradient(135deg,rgba(196,30,58,.08),rgba(212,168,67,.08))':'';
         return `<div class="user" style="${borderStyle}">${nameHtml}<br>${roleHtml}</div>`;
       })()}
-      <div class="side-label">Datos</div>
-      <button class="side-btn ${ST.view==='athletes'?'active':''}" onclick="go('athletes')">Atletas (DB)</button>
-      <button class="side-btn ${ST.view==='nominas'?'active':''}" onclick="go('nominas')">Nóminas</button>
-      <button class="side-btn ${ST.view==='medallero'?'active':''}" onclick="go('medallero')">Medallero</button>
-      ${_statsPuede()?`<button class="side-btn ${ST.view==='stats'?'active':''}" onclick="go('stats')">Estadísticas</button>`:''}
-      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='publisher'?'active':''}" onclick="go('publisher')">Editor publicaciones</button>`:''}
-      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='sponsors'?'active':''}" onclick="go('sponsors')">Auspiciadores</button>`:''}
-      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='portada'?'active':''}" onclick="go('portada')">Portada</button>`:''}
-      <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')">Revisión inscripciones</button>
-      <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')">Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
-      <button class="side-btn ${ST.view==='entrenadoresDB'?'active':''}" onclick="go('entrenadoresDB')">Base Entrenadores</button>
-      <button class="side-btn ${ST.view==='formEnt'?'active':''}" onclick="go('formEnt')">Formularios Entrenadores</button>
-      <button class="side-btn ${ST.view==='entInsc'?'active':''}" onclick="go('entInsc')">Inscripción Entrenadores${(()=>{const n=(ST.entInsc||[]).filter(x=>x.status==='pending').length;return n?` <span style="background:var(--gold);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${n}</span>`:'';})()}</button>
-      <button class="side-btn ${ST.view==='referees'?'active':''}" onclick="go('referees')">Jueces</button>
-      <button class="side-btn ${ST.view==='clubs'?'active':''}" onclick="go('clubs')">Clubes</button>
-      <button class="side-btn ${ST.view==='fotos'?'active':''}" onclick="go('fotos')">Fotos Atletas</button>
-      <button class="side-btn ${ST.view==='records'?'active':''}" onclick="go('records')">Récords</button>
-      <button class="side-btn ${ST.view==='cronograma'?'active':''}" onclick="go('cronograma')">Cronograma</button>
-      <div class="side-label">Sistema</div>
+      <!-- El menú va agrupado por tema: primero lo de las competencias, después
+           las personas, el ranking, el sitio y lo administrativo. -->
+      <div class="side-label">Competencias</div>
+      <button class="side-btn ${ST.view==='campeonatos'?'active':''}" onclick="go('campeonatos')">Campeonatos</button>
       <!-- Abre el selector de campeonatos con la lista de trabajo: lo publicado
            para el público más los ensayos de prueba. Es la única puerta a los
            ensayos — en la lista del público no aparecen. -->
       <a href="livecast.html?operar=1" target="_blank" class="side-btn" style="text-decoration:none" title="Abre el livecast: campeonatos publicados y los de prueba">YourLift <span style="opacity:.55;font-size:11px">(LiftingCast)</span></a>
-      <button class="side-btn ${ST.view==='campeonatos'?'active':''}" onclick="go('campeonatos')">Campeonatos</button>
-      <button class="side-btn ${ST.view==='publico'?'active':''}" onclick="go('publico')">YourLift Público</button>
+      <button class="side-btn ${ST.view==='approvals'?'active':''}" onclick="go('approvals')">Revisión inscripciones</button>
+      <button class="side-btn ${ST.view==='nominas'?'active':''}" onclick="go('nominas')">Nóminas</button>
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='nomcards'?'active':''}" onclick="go('nomcards')">Tarjetas de Nóminas</button>`:''}
+      <button class="side-btn ${ST.view==='cronograma'?'active':''}" onclick="go('cronograma')">Cronograma</button>
+      <button class="side-btn ${ST.view==='medallero'?'active':''}" onclick="go('medallero')">Medallero</button>
       <button class="side-btn ${ST.view==='pasadas'?'active':''}" onclick="go('pasadas')">Competencias pasadas</button>
-      ${_puedeCiclo()?`<button class="side-btn ${ST.view==='rankingCiclo'?'active':''}" onclick="go('rankingCiclo')">Reinicio ranking${ST.rankingCiclo?.desde?` <span style="background:var(--gold);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">activo</span>`:''}</button>`:''}
-      <button class="side-btn ${ST.view==='exports'?'active':''}" onclick="go('exports')">Exports</button>
-      <button class="side-btn ${ST.view==='audit'?'active':''}" onclick="go('audit')">Audit Log</button>
       ${ST.pendingResults?`<button class="side-btn ${ST.view==='mergeResults'?'active':''}" onclick="go('mergeResults')" style="border-color:var(--green);color:var(--green)">Resultados Pendientes <span style="background:var(--green);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.pendingResults}</span></button>`:''}
+      <button class="side-btn ${ST.view==='publico'?'active':''}" onclick="go('publico')">YourLift Público</button>
+      <div class="side-label">Atletas y equipos</div>
+      <button class="side-btn ${ST.view==='athletes'?'active':''}" onclick="go('athletes')">Atletas (DB)</button>
+      <button class="side-btn ${ST.view==='editRequests'?'active':''}" onclick="go('editRequests')">Solicitudes edit${ST.editRequests.length?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${ST.editRequests.length}</span>`:''}</button>
+      <button class="side-btn ${ST.view==='fotos'?'active':''}" onclick="go('fotos')">Fotos Atletas</button>
+      <button class="side-btn ${ST.view==='clubs'?'active':''}" onclick="go('clubs')">Clubes</button>
+      <button class="side-btn ${ST.view==='referees'?'active':''}" onclick="go('referees')">Jueces</button>
+      <button class="side-btn ${ST.view==='entrenadoresDB'?'active':''}" onclick="go('entrenadoresDB')">Base Entrenadores</button>
+      <button class="side-btn ${ST.view==='formEnt'?'active':''}" onclick="go('formEnt')">Formularios Entrenadores</button>
+      <button class="side-btn ${ST.view==='entInsc'?'active':''}" onclick="go('entInsc')">Inscripción Entrenadores${(()=>{const n=(ST.entInsc||[]).filter(x=>x.status==='pending').length;return n?` <span style="background:var(--gold);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${n}</span>`:'';})()}</button>
+      <div class="side-label">Ranking</div>
+      <button class="side-btn ${ST.view==='records'?'active':''}" onclick="go('records')">Récords</button>
+      ${_statsPuede()?`<button class="side-btn ${ST.view==='stats'?'active':''}" onclick="go('stats')">Estadísticas</button>`:''}
+      ${_puedeCiclo()?`<button class="side-btn ${ST.view==='rankingCiclo'?'active':''}" onclick="go('rankingCiclo')">Reinicio ranking${ST.rankingCiclo?.desde?` <span style="background:var(--gold);color:#000;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">activo</span>`:''}</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='certificados'?'active':''}" onclick="go('certificados')">Certificados YourLift</button>`:''}
+      <div class="side-label">Sitio</div>
+      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='portada'?'active':''}" onclick="go('portada')">Portada</button>`:''}
+      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='publisher'?'active':''}" onclick="go('publisher')">Editor publicaciones</button>`:''}
+      ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='sponsors'?'active':''}" onclick="go('sponsors')">Auspiciadores</button>`:''}
+      <div class="side-label">Administración</div>
       ${_esOwnerAdm()?`<button class="side-btn ${ST.view==='cobros'?'active':''}" onclick="go('cobros')">Cobros YourLift</button>`:''}
       ${_pdPuede()?`<button class="side-btn ${ST.view==='proteccion'?'active':''}" onclick="go('proteccion')">Protección de datos${(()=>{const n=(ST.pdSol||[]).filter(s=>s.status==='recibida').length;return n?` <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px">${n}</span>`:'';})()}</button>`:''}
       ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<button class="side-btn ${ST.view==='admins'?'active':''}" onclick="go('admins')">Gestión Admin</button>`:''}
+      <button class="side-btn ${ST.view==='exports'?'active':''}" onclick="go('exports')">Exports</button>
+      <button class="side-btn ${ST.view==='audit'?'active':''}" onclick="go('audit')">Audit Log</button>
       <div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">
         <div data-yl-idioma style="margin:8px 8px 10px"></div>
         <a href="index.html" class="side-btn" style="text-decoration:none"><span class="icon">←</span>Volver al sitio</a>
