@@ -607,7 +607,7 @@ function renderScreenBarra(a){
   // fondo deselecciona y la pantalla queda limpia para la competencia.
   const B=_piBlock;
   return `<div class="pi-canvas" style="position:absolute;top:0;right:0;bottom:0;left:0;background:${fondo};font-family:Oswald,sans-serif;color:#fff;overflow:hidden">
-    ${B('bSigla',`<div style="font-size:clamp(28px,5.4vw,86px);font-weight:700;letter-spacing:.06em;color:#D4A843;line-height:1;white-space:nowrap">${_LIFT_SIGLA[l]||''} ${r+1}</div>`)}
+    ${B('bSigla',`<div style="font-size:clamp(28px,5.4vw,86px);font-weight:700;letter-spacing:.06em;color:#fff;line-height:1;white-space:nowrap">${_LIFT_SIGLA[l]||''} ${r+1}</div>`)}
 
     ${B('bPeso',`<div style="line-height:1;white-space:nowrap;font-size:clamp(46px,10vw,150px);font-weight:800;letter-spacing:-.01em">
       ${kg?kg.toFixed(1).replace(/\.0$/,''):'—'}<span style="font-size:.34em;font-weight:600;margin-left:.15em;opacity:.75">KG</span>
@@ -955,6 +955,8 @@ function _piQuienSigue(nxt){
 }
 
 function renderScreenIntentos(cur,nxt){
+  // Escucha el documento de los jueces: de ahí llega la reversión del jurado.
+  if(typeof _txStartLightsListener==='function')_txStartLightsListener();
   const att=cur.att[DATA.lift][DATA.round];
   const weight=(att==null?void 0:att.w)||0;
   const isMale=cur.sex==='Hombre'||cur.sex==='M'||cur.sex==='Masculino';
@@ -1137,6 +1139,7 @@ function renderScreenIntentos(cur,nxt){
     ${_piBlock('liftLabel',liftLabelHtml)}
     ${recordHtml?_piBlock('record',recordHtml):''}
     ${_cambiosIntentoActual(cur)?_piBlock('cambio',_cartelCambioHtml('30px')):''}
+    ${(typeof _txJurado!=='undefined'&&_txJurado&&Date.now()<_txJuradoHasta)?_piBlock('jurado',_juradoTarimaHtml(_txJurado)):''}
     ${_piBlock('weight',weightHtml)}
     ${_piBlock('barbell',bbSvg)}
     ${_piBlock('name',nameHtml)}

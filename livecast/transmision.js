@@ -1439,7 +1439,7 @@ function renderTxJurado(j){
     +'</div>'
     +'<div>'
       +'<div style="font-size:clamp(22px,2.4vw,40px);font-weight:700;letter-spacing:2px;color:#fff;line-height:1">JURY HAS OVERRULED</div>'
-      +'<div style="font-size:clamp(12px,1.05vw,17px);letter-spacing:4px;color:'+_txC('accent')+';margin-top:6px">DECISIÓN DEL JURADO · '+(j.res==='g'?'GOOD LIFT':'NO LIFT')+'</div>'
+      +'<div style="font-size:clamp(12px,1.05vw,17px);letter-spacing:4px;color:'+_txC('accent')+';margin-top:6px">DECISIÓN DEL JURADO · '+(j.res==='g'?'VÁLIDO':'NULO')+'</div>'
       +(nombre?'<div style="font-size:clamp(13px,1.1vw,18px);color:rgba(220,230,245,.85);margin-top:8px;letter-spacing:1px">'+nombre+' · '+intento+'</div>':'')
     +'</div>'
   +'</div>';
@@ -1560,6 +1560,22 @@ function renderLucesTarima(enBloque){
 // arriba de quién es el intento que se está juzgando. Sirve para el monitor que
 // mira el público cuando no se quiere mostrar nada más.
 // Igual que las chicas: es un espejo, acá no se decide nada.
+// El aviso del jurado en la pantalla de Intentos (cargadores y mesa): sale los
+// mismos JURADO_MS que en la transmisión, y solo cuando revierte el jurado desde
+// el panel de jueces — una corrección de la mesa no lo muestra.
+function _juradoTarimaHtml(j){
+  const ok=j.res==='g';
+  const a=(DATA.athletes||[]).find(x=>x.id===j.id);
+  const nombre=(a&&a.name)||j.name||'';
+  const intento=(_LIFT_SIGLA[j.lift]||LIFT_S[j.lift]||'')+' '+((j.round|0)+1);
+  return '<div style="display:flex;align-items:center;gap:18px;background:#111;border:3px solid #fff;border-left-width:10px;border-radius:12px;padding:14px 22px;font-family:Oswald,sans-serif;color:#fff">'
+    +'<div style="width:54px;height:54px;border-radius:50%;flex:none;background:'+(ok?'#fff':'#ef4444')+';box-shadow:0 0 24px '+(ok?'rgba(255,255,255,.4)':'rgba(239,68,68,.5)')+'"></div>'
+    +'<div><div style="font-size:28px;font-weight:700;letter-spacing:.08em;white-space:nowrap">JURADO REVIRTIÓ '
+    +'<span style="padding:0 10px;border-radius:4px;background:'+(ok?'#22c55e':'#ef4444')+'">'+(ok?'VÁLIDO':'NULO')+'</span></div>'
+    +(nombre?'<div style="font-size:18px;letter-spacing:.06em;margin-top:6px;white-space:nowrap">'+esc(nombre)+' · '+intento+'</div>':'')
+    +'</div></div>';
+}
+
 function renderScreenLuces(a){
   _txStartLightsListener();
   const orden=['izq','central','der'];
@@ -1588,15 +1604,22 @@ function renderScreenLuces(a){
     cab='<div style="text-align:center;margin-bottom:clamp(18px,4vh,52px)">'
       +'<div style="font-size:clamp(20px,3.4vw,52px);font-weight:700;letter-spacing:.04em;color:#fff;line-height:1.1">'
       +esc(a.name||'')+'</div>'
-      +'<div style="margin-top:.5em;font-size:clamp(15px,2.4vw,34px);font-weight:600;letter-spacing:.12em;color:#D4A843">'
+      +'<div style="margin-top:.5em;font-size:clamp(15px,2.4vw,34px);font-weight:600;letter-spacing:.12em;color:#fff">'
       +(_LIFT_SIGLA[l]||'')+' '+(r+1)+(kg?' · '+kg.toFixed(1).replace(/\.0$/,'')+' KG':'')+'</div></div>';
   }
   // Los logos, abajo, como en el resto de las escenas de la pantalla: esta era
   // la única que no los mostraba.
   const tira=_tiraLogosPantalla(['fed','camp'],'clamp(38px,6vh,92px)','clamp(14px,2vw,32px)');
-  return '<div style="position:absolute;top:0;right:0;bottom:0;left:0;background:linear-gradient(160deg,#0d2141,#0A1628 55%,#060d1a);'
+  // Con las tres luces puestas, la decisión escrita: VÁLIDO (dos o tres blancas) o NULO.
+  const vs=orden.map(j=>_txLights[j]).filter(Boolean);
+  let ver='';
+  if(vs.length===3){
+    const ok=vs.filter(v=>v==='white').length>=2;
+    ver='<div style="margin-top:clamp(18px,4vh,52px);padding:.1em .9em;border-radius:12px;font-size:clamp(36px,6vw,104px);font-weight:700;letter-spacing:.12em;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.4);background:'+(ok?'#22c55e':'#ef4444')+'">'+(ok?'VÁLIDO':'NULO')+'</div>';
+  }
+  return '<div style="position:absolute;top:0;right:0;bottom:0;left:0;background:#000;'
     +'display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Oswald,sans-serif">'
-    +cab+luces
+    +cab+luces+ver
     +(tira?'<div style="position:absolute;left:0;right:0;bottom:clamp(14px,3vh,40px);display:flex;justify-content:center">'+tira+'</div>':'')
     +'</div>';
 }

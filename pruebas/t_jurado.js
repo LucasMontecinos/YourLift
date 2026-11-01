@@ -123,7 +123,7 @@ export async function signOut(a){a._u=null;}
       return { antes: /OVERRULED/.test(antes), txt };
     }, jurado);
     ok(!r.antes, 'armado, no muestra nada mientras el jurado no decide');
-    ok(/JURY HAS OVERRULED/.test(r.txt) && /DECISIÓN DEL JURADO/.test(r.txt) && /NO LIFT/.test(r.txt), 'al revertir aparece "JURY HAS OVERRULED · Decisión del jurado"');
+    ok(/JURY HAS OVERRULED/.test(r.txt) && /DECISIÓN DEL JURADO/.test(r.txt) && /NULO/.test(r.txt), 'al revertir aparece "JURY HAS OVERRULED · Decisión del jurado · NULO"');
     await p.screenshot({ path: '/tmp/claude-0/-home-user-YourLift/0692ef33-d41b-5709-98fb-6a0aca869c32/scratchpad/jury_tx.png' });
   }
 
