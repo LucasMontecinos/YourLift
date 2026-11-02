@@ -260,6 +260,16 @@ async function removeAthleteMedia(id){
   }catch(e){alert('Error: '+e.message);}
 }
 
+// Los clubes que se sugieren al escribir en el pesaje: los que ya traen los
+// atletas del campeonato y los que tienen logo cargado en Admin → Clubes.
+function _clubesConocidos(){
+  const vistos=new Map();
+  const add=n=>{ n=String(n||'').replace(/\s+/g,' ').trim(); if(n&&!vistos.has(n.toLowerCase()))vistos.set(n.toLowerCase(),n); };
+  (DATA.athletes||[]).forEach(x=>add(x.club));
+  Object.values(window._CLUBS_FS||{}).forEach(c=>add(c&&c.name));
+  return [...vistos.values()].sort((x,y)=>x.localeCompare(y,'es'));
+}
+
 function openWeighIn(id){
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   const catKg=parseFloat((a.cat||'').replace(/[^0-9.]/g,''))||0;
@@ -302,6 +312,12 @@ function openWeighIn(id){
       <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)">
         PAÍS
         <select id="wi_country" style="padding:9px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:13px">${_countryOptions(_ctry(a))}</select>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)">
+        CLUB
+        <input id="wi_club" type="text" list="wi_club_list" value="${esc(a.club||'')}" placeholder="Sin club" autocomplete="off"
+          style="padding:9px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:Oswald;font-size:13px">
+        <datalist id="wi_club_list">${_clubesConocidos().map(c=>'<option value="'+esc(c)+'">').join('')}</datalist>
       </label>
     </div>
     <div style="font-size:10px;color:var(--gold);letter-spacing:1.5px;margin-bottom:6px;font-family:Oswald;font-weight:700">SENTADILLA</div>
@@ -426,6 +442,15 @@ function confirmWeighIn(id,catKg,limit){
   // Save
   const a=DATA.athletes.find(x=>x.id===id);if(!a)return;
   a.bw=bw;a.rackSQ=rSQ;a.rackBP=rBP;a.sqAbat=sqAbat;a.bpSeg=bpSeg;a.bpPalm=bpPalm;a.country=country;
+  // El club se corrige acá igual que el país. Si se escribe el nombre de un club
+  // que ya está en el campeonato con otras mayúsculas ("kaizen" vs "Kaizen"),
+  // queda la del campeonato: así el acta y el ranking por club los juntan.
+  const clubEl=document.getElementById('wi_club');
+  if(clubEl){
+    const club=clubEl.value.replace(/\s+/g,' ').trim();
+    const igual=club&&_clubesConocidos().find(c=>c.toLowerCase()===club.toLowerCase());
+    a.club=igual||club;
+  }
   _aplicarModalidad(a,mod);
   _markAtt(id,'meta');
   a.weighedIn=true;

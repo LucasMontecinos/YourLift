@@ -109,5 +109,17 @@ const mix = _mergeForWrite(DATA.athletes, otro)[0];
 ok(mix.att.sq[0].w === 120, 'mi apertura de sentadilla se mantiene');
 ok(mix.att.bp[0].w === 65, 'y la banca del otro control no se borra: ' + mix.att.bp[0].w);
 
+console.log('\nEl club se cambia en el pesaje, igual que el país');
+ok(/id="wi_club"[^>]*list="wi_club_list"/.test(src), 'el modal tiene el campo Club con sugerencias');
+ok(/a\.club=igual\|\|club;[\s\S]{0,80}_markAtt\(id,'meta'\)/.test(cuerpo), 'confirmWeighIn guarda el club antes de marcar el meta');
+eval(sacar('_clubesConocidos'));
+DATA.athletes.push({ id: 2, club: 'Kaizen' }, { id: 3, club: 'kaizen ' }, { id: 4, club: 'Himalaya' });
+const sug = _clubesConocidos();
+ok(sug.join('|') === 'Himalaya|Kaizen', 'sugiere cada club una vez, sin repetir por mayúsculas: ' + sug.join(', '));
+window._pendingEdits = new Set();
+a.club = 'Kaizen'; _markAtt(a.id, 'meta');
+const conClub = _mergeForWrite(DATA.athletes.slice(0, 1), [Object.assign({}, remoto[0], { club: 'Club Viejo' })])[0];
+ok(conClub.club === 'Kaizen', 'el club nuevo sube y no lo pisa el del servidor: ' + conClub.club);
+
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');
 process.exit(fallas ? 1 : 0);
