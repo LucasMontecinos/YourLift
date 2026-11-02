@@ -1826,8 +1826,19 @@ function renderTxProfile(cur){
   const gifIsImg=useGif&&String(media.gif_url||'').toLowerCase().split('?')[0].endsWith('.gif');
   const gifBlend=useGif?(media.gif_blend||'screen'):'normal';
   const mediaBg=useGif?'#000':(media.foto_url?'#fff':'linear-gradient(135deg,#1a2e4f,#0e1f3a)');
+  // Fondo negro con franjas de los colores de YourLift (rojo, blanco y azul, los
+  // de la cortina de transición) en la esquina de arriba a la izquierda y en la
+  // de abajo a la derecha.
+  const _franjasPf=(lado)=>{
+    const t=Math.round(Math.min(window.innerWidth||1920,(window.innerHeight||1080)*16/9)*0.30);
+    const pos=lado==='arriba'?'top:0;left:0':'bottom:0;right:0';
+    const ang=lado==='arriba'?'135deg':'315deg';
+    return '<div style="position:absolute;'+pos+';width:'+t+'px;height:'+t+'px;pointer-events:none;'
+      +'background:linear-gradient('+ang+',transparent 0 13%,#C41E3A 13% 22%,#ffffff 22% 24%,#1E4FA8 24% 33%,transparent 33%)"></div>';
+  };
   return `
-    <div style="position:absolute;top:0;right:0;bottom:0;left:0">
+    <div style="position:absolute;top:0;right:0;bottom:0;left:0;background:#000">
+    ${_franjasPf('arriba')}${_franjasPf('abajo')}
     <div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;pointer-events:none;overflow:hidden">
       <img src="YourLift_logo.png" alt="" style="width:52%;opacity:0.07;filter:blur(18px);transform:scale(1.15);user-select:none" onerror="this.style.display='none'">
     </div>
