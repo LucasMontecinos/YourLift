@@ -170,13 +170,11 @@ function showToastLC(msg){
   t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);
 }
 
-// Tema del livecast: "dia" (blanco y azul, el del sitio) o "noche" (negro).
-// Cada persona elige y queda guardado en su navegador. Vale para la vista del
-// público y para todas las pestañas de operación. Las pantallas que van al aire
-// o al proyector (?tx=…) se quedan como están.
-function _temaVivo(){ try{ const t=localStorage.getItem('yl_tema'); if(t==='dia'||t==='noche')return t; }catch(e){} return 'dia'; }
-function _cambiarTemaVivo(){ _ponerTemaVivo(_temaVivo()==='dia'?'noche':'dia'); }
-function _ponerTemaVivo(t){ try{ localStorage.setItem('yl_tema',t==='noche'?'noche':'dia'); }catch(e){} R(); }
+// Tema del livecast: siempre "noche" (negro), en la vista del público y en
+// todas las pestañas de operación (se pidió dejarlo fijo). Las pantallas que van
+// al aire o al proyector (?tx=…) se quedan como están. La versión "dia" sigue
+// definida en tema.css, pero ya no se ofrece.
+function _temaVivo(){ return 'noche'; }
 function _aplicarTemaVivo(){
   const raiz=document.documentElement;
   // Todas las pestañas del livecast. Solo quedan fuera las pantallas que van al
@@ -472,12 +470,6 @@ function renderShell(){
   h+=_fdLat.html;
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap">';
   _fdLat.tandas.forEach(f=>{const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;h+='<button onclick="DATA.flight=\''+f+'\';saveNow();R()" style="flex:1;min-width:36px;padding:6px 0;border-radius:6px;border:2px solid '+(DATA.flight===f?FL_C[f]||'var(--muted)':'var(--border)')+';background:'+(DATA.flight===f?(FL_C[f]||'#666')+'22':'transparent')+';color:'+(DATA.flight===f?FL_C[f]||'#fff':'var(--muted)')+';font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">'+f+'<span style="font-size:9px;opacity:.6;display:block">'+n+'</span></button>'});
-  h+='</div>';
-  // Versión día (blanca y azul, la del sitio) o noche (negra). Reemplaza al
-  // selector de fondo de antes. Preferencia de esta pantalla: no se sincroniza.
-  h+='<div class="side-label" style="margin-top:14px">Versión</div><div style="display:flex;gap:4px">';
-  ['dia','noche'].forEach(t=>{const on=_temaVivo()===t;
-    h+='<button class="lc-tema-b'+(on?' on':'')+'" onclick="_ponerTemaVivo(\''+t+'\')" title="'+(t==='dia'?'Blanca y azul, como el sitio':'Negra, para salas oscuras')+'" style="flex:1;padding:7px 0;border-radius:999px;border:2px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(t==='dia'?'\u2600 D\u00cdA':'\u263e NOCHE')+'</button>';});
   h+='</div>';
   if(isAdmin){
   h+='<div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">';
