@@ -123,6 +123,40 @@ function remoteBreakPanel(){
   return h;
 }
 
+// ── Tamaño de cada cosa en la transmisión ─────────────────────────────────
+// Es el mismo control del Control TX (TAMAÑO 0.50x a 2.00x): se guarda en el
+// mismo documento, así que cambiarlo acá o allá es lo mismo. En el teléfono la
+// barra cuesta, así que además va con − y +.
+const _RM_TAM=[
+  ['profile','Perfil'],['scoreboard','Marcador'],['tablaActual','Tabla actual'],
+  ['leaderboard','Clasificación'],['luces','Luces'],['jurado','Jurado'],
+  ['timer','Timer'],['medals','Medallero'],['breakTimer','Ya volvemos'],['slam','Good / No lift'],
+];
+function _rmEscala(k){ const c=_dirState&&_dirState[k]; return (c&&c.scale)||1; }
+function remoteTamPanel(){
+  if(window._remoteMenu!=='tam')return '';
+  const b='width:44px;height:40px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;font-size:20px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;flex:none';
+  let h='<div id="rmPanel" style="margin-top:10px;padding:14px;border-radius:14px;border:1.5px solid var(--border);background:var(--card)">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+    +'<div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;color:var(--text)">TAMAÑO EN LA TRANSMISIÓN</div>'
+    +'<button onclick="remoteTamReset()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;letter-spacing:1px;cursor:pointer">TODO A 1.00x</button></div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin:6px 0 4px;line-height:1.5">Más grande se ve más cerca; más chico, más lejos. Es el mismo ajuste del Control TX.</div>';
+  _RM_TAM.forEach(([k,lbl])=>{
+    const sc=_rmEscala(k);
+    h+='<div class="rm-tam-f" style="display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--border)">'
+      +'<div class="rm-tam-l" style="flex:0 0 108px;font-family:Oswald;font-size:13px;font-weight:600;letter-spacing:.5px;color:var(--text)">'+lbl+'</div>'
+      +'<button style="'+b+'" onclick="remoteTam(\''+k+'\',-0.05)" aria-label="Achicar '+lbl+'">−</button>'
+      +'<input type="range" min="0.5" max="2.0" step="0.05" value="'+sc+'" aria-label="Tamaño de '+lbl+'"'
+        +' oninput="remoteTamDesliza(\''+k+'\',this.value,this)" onchange="remoteTamDesliza(\''+k+'\',this.value,this,true)"'
+        +' style="flex:1;min-width:60px;cursor:pointer;accent-color:var(--text)">'
+      +'<button style="'+b+'" onclick="remoteTam(\''+k+'\',0.05)" aria-label="Agrandar '+lbl+'">+</button>'
+      +'<span class="rm-tv" style="flex:0 0 52px;text-align:right;font-family:Oswald;font-size:15px;font-weight:700;color:var(--text)">'+sc.toFixed(2)+'x</span>'
+      +'</div>';
+  });
+  h+='</div>';
+  return h;
+}
+
 function renderRemote(){
   _dirEnsureListener();
   if(!_dirState){_dirState={profile:{active:false,until:0},scoreboard:{active:false,until:0},leaderboard:{active:false,until:0,cat:''},tablaActual:{active:false,until:0},timer:{active:false,until:0},slam:{active:false,until:0,type:'g'}};}
@@ -155,6 +189,7 @@ function renderRemote(){
   h+='<div style="display:flex;align-items:center;gap:12px">'
     +'<span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:'+_connCol+';display:inline-block"></span>'
     +'<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">'+_connTxt+'</span></span>'
+    +'<button onclick="remoteMenu(\'tam\')" title="Agrandar o achicar lo que sale en la transmisión" style="padding:6px 12px;border-radius:8px;border:1px solid '+(window._remoteMenu==='tam'?'var(--text)':'var(--border)')+';background:'+(window._remoteMenu==='tam'?'var(--bg2)':'transparent')+';color:var(--text);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">⤢ TAMAÑO</button>'
     +'<button onclick="remoteOrdenar()" title="Cambiar los botones de lugar" style="padding:6px 12px;border-radius:8px;border:1px solid '+(_ord?'var(--gold)':'var(--border)')+';background:'+(_ord?'rgba(212,168,67,.18)':'transparent')+';color:'+(_ord?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(_ord?'<i class=yl-i-check></i> LISTO':'↕ ORDENAR')+'</button>'
     +'</div>';
   h+='</div>';
@@ -217,6 +252,7 @@ function renderRemote(){
   h+='</div>';
   h+=remoteMedalsPanel();
   h+=remoteBreakPanel();
+  h+=remoteTamPanel();
   // Ayuda / enlace del browser source para OBS
   const widgetUrl=location.origin+location.pathname.replace(/[^/]+$/,'')+'livecast.html?tx=director&evento='+encodeURIComponent((DATA.event==null?void 0:DATA.event.id)||(DATA.event==null?void 0:DATA.event.name)||'')+(TARIMA?'&tarima='+TARIMA:'');
   h+='<div style="margin-top:18px;padding:12px 14px;background:rgba(10,22,40,.4);border:1px solid var(--border);border-radius:10px">'
@@ -285,4 +321,32 @@ window.remoteToggleBreak=async function(){
   const bt=_dirState&&_dirState.breakTimer;
   if(bt&&bt.active){ await window.dirBreakHide(); window._remoteMenu=''; R(); return; }
   window.remoteMenu('break');
+};
+
+// −/+ : un paso de 0.05 y se manda al tiro.
+window.remoteTam=async function(k,d){
+  const v=Math.max(0.5,Math.min(2,Math.round((_rmEscala(k)+d)*100)/100));
+  await window.dirSetScale(k,v);
+  R();
+};
+// La barra: el número se actualiza mientras se arrastra y a la transmisión se
+// manda como mucho cada 150 ms (y al soltar), para no saturar la conexión del
+// teléfono con un envío por cada pixel.
+window.remoteTamDesliza=function(k,v,el,fin){
+  const n=Math.max(0.5,Math.min(2,parseFloat(v)||1));
+  const fila=el&&el.parentNode, t=fila&&fila.querySelector('.rm-tv');
+  if(t)t.textContent=n.toFixed(2)+'x';
+  window._rmTamUlt=window._rmTamUlt||{};
+  const ahora=Date.now();
+  if(fin||!window._rmTamUlt[k]||ahora-window._rmTamUlt[k]>150){
+    window._rmTamUlt[k]=ahora;
+    window.dirSetScale(k,n);
+  }
+};
+window.remoteTamReset=async function(){
+  if(!_dirState)_dirState={};
+  _RM_TAM.forEach(([k])=>{ _dirState[k]=Object.assign({},_dirState[k]||{},{scale:1}); });
+  await _dirPush();
+  R();
+  showToastLC('Todo a 1.00x');
 };
