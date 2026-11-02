@@ -24,6 +24,7 @@ const DATA = { lotsGenerated: true, athletes: [] };
 // Z→2600, AA→2700. Se saca también, porque acá la función corre suelta y no
 // tiene alrededor el resto del livecast.
 eval(sacar('_baseTanda'));
+eval(sacar('_lotesYaSorteados'));
 eval(sacar('_reubicarLote'));
 
 // Nómina como la del Regional Centro Sur: lotes por tanda, 100·, 200·, 300·…

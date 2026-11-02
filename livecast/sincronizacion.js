@@ -434,7 +434,7 @@ async function syncToFB(){
           lift:(_nv&&_nv.lift)||DATA.lift,
           round:(_nv&&typeof _nv.round==='number')?_nv.round:DATA.round,
           flight:(_nv&&_nv.flight)||DATA.flight,
-          changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:DATA.lotsGenerated||false,
+          changeTimers:JSON.stringify(DATA.changeTimers),lotsGenerated:_lotesYaSorteados(),
           timer:DATA.timer,timerOn:DATA.timerOn,timerStartedAt:DATA.timerStartedAt||0,relojVisible:!!DATA.relojVisible,
           forcedCurrent:_nv?(_nv.forcedCurrent||null):(DATA.forcedCurrent||null),
           compTimer:DATA.compTimer||null,ts:Date.now(),tsAth:Date.now(),writer:window._WRITER_ID});
@@ -518,7 +518,10 @@ async function syncToFB(){
             // es el congelado: el cursor y el reloj que se mandan son los del
             // momento en que se decidió escribir.
             _athJson=_jsonAth(ath);
-            tx.set(ref,Object.assign({},_pay,{athletes:_athJson}));
+            // "Lotes sorteados" no se desmarca con una escritura normal: si el
+            // servidor ya lo tiene, queda (ver _lotesYaSorteados).
+            const _lg=!!_pay.lotsGenerated||!!(snap.exists()&&snap.data().lotsGenerated);
+            tx.set(ref,Object.assign({},_pay,{athletes:_athJson,lotsGenerated:_lg}));
           });
         }else{
           await window._fb.setDoc(ref,_pay);
@@ -635,7 +638,7 @@ function _flashEscribir(){
       forcedCurrent:nv?(nv.forcedCurrent||null):(DATA.forcedCurrent||null),
       changeTimers:JSON.stringify(DATA.changeTimers||{}),compTimer:DATA.compTimer||null,
       timer:typeof DATA.timer==='number'?DATA.timer:0,timerOn:!!DATA.timerOn,timerStartedAt:DATA.timerStartedAt||0,relojVisible:!!DATA.relojVisible,
-      lotsGenerated:!!DATA.lotsGenerated};
+      lotsGenerated:_lotesYaSorteados()};
     const h=JSON.stringify(p);
     if(h===_flashUltHuella)return;       // igual a lo último mandado: no se repite
     _flashUltHuella=h;
@@ -1027,7 +1030,7 @@ function _avisoLocal(){
       flight:(nv&&nv.flight)||DATA.flight,
       forcedCurrent:nv?(nv.forcedCurrent||null):(DATA.forcedCurrent||null),
       changeTimers:DATA.changeTimers||{},compTimer:DATA.compTimer||null,
-      lotsGenerated:!!DATA.lotsGenerated});
+      lotsGenerated:_lotesYaSorteados()});
   }catch(e){ console.warn('[local] aviso',e); }
 }
 

@@ -65,7 +65,7 @@ ok(/window\._forceFullWrite=true;   \/\/ como el sorteo/.test(src), 'y al aplica
 console.log('\nRe-sincronizar y re-sortear guardan una copia antes');
 ok(/_lotesRespaldar\('re-sincronización'\);\s*const _lotAntes=/.test(src), 're-sincronizar guarda los lotes antes de tocar nada');
 ok(/lote.*al re-sincronizar\. Si no correspondía/.test(src), 'y avisa si cambió alguno');
-ok(/if\(DATA\.lotsGenerated\)_lotesRespaldar\('re-sorteo'\);/.test(src), 're-sortear también guarda la copia');
+ok(/_lotesRespaldar\(ya\?'re-sorteo':'sorteo'\);/.test(src), 'sortear y re-sortear guardan la copia');
 ok(/lotesUsarRespaldo\(\)/.test(src) && /Volver a los de antes/.test(src), 'y Restaurar lotes ofrece volver a ella');
 
 console.log('\nCambiar un lote a mano por uno ocupado intercambia y sube los dos');

@@ -494,16 +494,19 @@ function _nomAplica(){
 }
 
 function generateLots(){
-  const msg=DATA.lotsGenerated
+  const ya=_lotesYaSorteados();
+  const msg=ya
     ? 'Los lotes YA fueron sorteados.\n\n¿Re-sortear y reemplazar todos los números actuales?\n\nLas ediciones manuales se perderán.'
     : '¿Generar números de lote aleatorios?\n\nTanda A → 100, 101, 102…\nTanda B → 200, 201, 202…\netc.';
   if(!confirm(msg))return;
-  if(DATA.lotsGenerated)_lotesRespaldar('re-sorteo');
+  // La copia va SIEMPRE que haya lotes: si algo salió mal, se vuelve con
+  // Restaurar lotes → Volver a los de antes.
+  _lotesRespaldar(ya?'re-sorteo':'sorteo');
   // Shuffle within each flight, assign lot = flightIndex*100 + position (Tanda A: 100-1XX, B: 200-2XX...)
   const flights=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort(_cmpFl);
   flights.forEach((fl,fi)=>{
-    const flightNum=fl.charCodeAt(0)-64; // A=1, B=2, C=3…
-    const base=flightNum*100;
+    // La misma base que usa el resto (_baseTanda): A=100 … Z=2600, AA=2700.
+    const base=_baseTanda(fl)||((fi+1)*100);
     const group=DATA.athletes.filter(a=>a.flight===fl);
     // Fisher-Yates shuffle
     for(let i=group.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[group[i]._rnd,group[j]._rnd]=[group[j]._rnd||Math.random(),group[i]._rnd||Math.random()]}
@@ -638,7 +641,7 @@ function renderManage(){
   _pedirFotos();
   // Filtrar por tarima si está activo (modo 2 tarimas)
   const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="lotesRestaurarAbrir()" title="Volver a poner los lotes de la hoja de pesaje impresa (pegando su texto)">Restaurar lotes</button><button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin: trae cambios, borra eliminados sin datos y toma tanda, división, categoría y modalidad del Cronograma">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-o" onclick="go(\'docs\')" title="Hoja de pesaje, altura de rack, revisión de equipo y papeletas" style="border-color:rgba(212,168,67,.55);color:var(--gold)"><i class=yl-i-archivo></i> Documentos</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(_lotesYaSorteados()?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="lotesRestaurarAbrir()" title="Volver a poner los lotes de la hoja de pesaje impresa (pegando su texto)">Restaurar lotes</button><button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin: trae cambios, borra eliminados sin datos y toma tanda, división, categoría y modalidad del Cronograma">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-o" onclick="go(\'docs\')" title="Hoja de pesaje, altura de rack, revisión de equipo y papeletas" style="border-color:rgba(212,168,67,.55);color:var(--gold)"><i class=yl-i-archivo></i> Documentos</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
     // ── Barra de búsqueda y tandas ────────────────────────────────────────────
   {
     const _mf0=window._MAN_F||{q:'',flight:''};

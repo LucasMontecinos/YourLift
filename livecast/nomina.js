@@ -130,8 +130,22 @@ function _baseTanda(fl){
   return n*100;
 }
 
+// ¿Los lotes ya están sorteados? La marca DATA.lotsGenerated sola no alcanza:
+// cada computador que abría el livecast la mandaba en false al servidor en su
+// primera escritura (todavía no había recibido el estado), y con eso Atletas y
+// Pesaje volvía a ofrecer "Generar Lotes" en rojo, sin el aviso de que ya
+// estaban sorteados ni la copia de respaldo. Apretarlo los sorteaba de nuevo.
+// Se mira también lo que dicen los números: si cada atleta tiene un lote dentro
+// del rango de su tanda (A → 100…, B → 200…), están sorteados.
+function _lotesYaSorteados(){
+  if(DATA.lotsGenerated)return true;
+  const con=(DATA.athletes||[]).filter(a=>a&&a.flight&&_baseTanda(a.flight)>0);
+  if(con.length<2)return false;
+  return con.every(a=>{ const b=_baseTanda(a.flight); return a.lot>=b&&a.lot<b+100; });
+}
+
 function _reubicarLote(a){
-  if(!DATA.lotsGenerated||!a||!a.flight)return false;
+  if(!_lotesYaSorteados()||!a||!a.flight)return false;
   const base=_baseTanda(a.flight);
   if(!(base>0))return false;
   if(a.lot>=base&&a.lot<base+100)return false;      // ya está en el rango de su tanda
@@ -234,17 +248,27 @@ function _mergeFirebaseAthletes(fbAthletes){
   const matches=(local,fa)=>(fa.codigo&&local.codigo&&fa.codigo===local.codigo)||(_r(fa.rut)&&_r(local.rut)&&_r(local.rut)===_r(fa.rut))||_mismoNombre(local.name,fa.name)
     ||(!!local.nombreOrig&&_mismoNombre(local.nombreOrig,fa.name));   // nombre corregido en vivo
 
+  const entraron=[];
   fbAthletes.forEach((fa,j)=>{
     const existing=DATA.athletes.find(a=>matches(a,fa));
     if(!existing){
-      // New athlete — only add if competition not started
-      if(DATA.phase==='manage'||DATA.phase==='setup'){
+      // Un inscrito que todavía no está en el livecast ENTRA, esté la mesa en la
+      // pestaña que esté. Antes entraba solo con la mesa en Atletas y Pesaje, y
+      // además sin marcarlo como alta propia: la escritura al servidor sube solo
+      // los atletas nuevos marcados (ver _mergeForWrite), así que lo descartaba,
+      // y el siguiente documento del servidor lo sacaba también de esta pantalla.
+      // Así quedó afuera uno de los 86 del Regional Sur Austral (agregado a mano
+      // en el admin después de cargada la nómina): 86 en el admin, 85 acá.
+      // Lo agrega el equipo que escribe; uno en Espectador espera a recibirlo.
+      if(DATA.phase==='setup'||(isAdmin&&window.IS_CONTROLLER)){
         const newId=DATA.athletes.length?Math.max(...DATA.athletes.map(a=>a.id))+1:0;
         const nuevo={...fa,id:newId,lot:newId+1};
         DATA.athletes.push(nuevo);
         // Con los lotes ya sorteados, el que entra toma el primer lote libre de SU
         // tanda (A→100…, B→200…) en vez de un correlativo suelto que rompe el orden.
         _reubicarLote(nuevo);
+        _markAtt(newId,'meta');          // alta mía: que la escritura la suba
+        entraron.push(nuevo);
         changed=true;
       }
     }else{
@@ -292,6 +316,11 @@ function _mergeFirebaseAthletes(fbAthletes){
       console.warn('[LC] Atletas con datos pero borrados del admin:',withData.map(a=>a.name));
       showToastLC(''+withData.length+' atleta'+(withData.length>1?'s':'')+' borrado'+(withData.length>1?'s':'')+' del admin pero con datos cargados acá. Revisa Atletas y Pesaje y bórralo'+(withData.length>1?'s':'')+' a mano si corresponde.');
     }
+  }
+  if(entraron.length&&DATA.phase!=='setup'){
+    showToastLC('Entr'+(entraron.length>1?'aron':'ó')+' a la nómina: '
+      +entraron.slice(0,3).map(a=>a.name+(a.flight?' (tanda '+a.flight+(a.lot?', lote '+a.lot:'')+')':'')).join(', ')
+      +(entraron.length>3?' y '+(entraron.length-3)+' más':''));
   }
   if(changed){save();R();}
 }
