@@ -1833,8 +1833,13 @@ function renderTxProfile(cur){
     const t=Math.round(Math.min(window.innerWidth||1920,(window.innerHeight||1080)*16/9)*0.30);
     const pos=lado==='arriba'?'top:0;left:0':'bottom:0;right:0';
     const ang=lado==='arriba'?'135deg':'315deg';
-    return '<div style="position:absolute;'+pos+';width:'+t+'px;height:'+t+'px;pointer-events:none;'
-      +'background:linear-gradient('+ang+',transparent 0 13%,#C41E3A 13% 22%,#ffffff 22% 24%,#1E4FA8 24% 33%,transparent 33%)"></div>';
+    const esq=lado==='arriba'?'top left':'bottom right';
+    // Difuminadas: bordes suaves, un poco transparentes y apagándose a medida
+    // que se alejan de la esquina.
+    const fade='radial-gradient(circle at '+esq+',#000 0%,rgba(0,0,0,.85) 30%,transparent 72%)';
+    return '<div style="position:absolute;'+pos+';width:'+t+'px;height:'+t+'px;pointer-events:none;opacity:.8;'
+      +'filter:blur('+Math.max(4,Math.round(t*0.022))+'px);-webkit-mask-image:'+fade+';mask-image:'+fade+';'
+      +'background:linear-gradient('+ang+',transparent 0 10%,#C41E3A 16% 21%,#ffffff 23.5% 24.5%,#1E4FA8 27% 32%,transparent 38%)"></div>';
   };
   return `
     <div style="position:absolute;top:0;right:0;bottom:0;left:0;background:#000">
