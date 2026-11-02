@@ -291,9 +291,35 @@ function _escucharTimerControl(){
       if(_tcVisto===null){ _tcVisto=d.ts||0; return; }
       if(!d.ts||d.ts<=_tcVisto)return;
       _tcVisto=d.ts;
-      _ordenReloj(d);
+      // Sin Firestore de verdad (práctica) no hay con quién repartirse la orden.
+      if(PRACTICE_MODE||!window._fb||!window._fb.runTransaction){ _ordenReloj(d); return; }
+      _reclamarOrden(d).then(mia=>{ if(mia)_ordenReloj(d); });
     },(e)=>console.warn('[reloj] no se pudo escuchar',e.message));
   }catch(e){console.warn('[reloj] no se pudo escuchar',e);}
+}
+
+// Cada orden de reloj la cumple UN solo equipo, aunque haya varios operando o
+// la mesa tenga Control en Vivo y Control TX en dos pestañas: el primero que la
+// anota como hecha en el mismo documento. Con dos que la cumplieran, cada uno
+// arrancaba el minuto con su propia hora y el reloj de las pantallas saltaba.
+// Las demás órdenes (aviso a los jueces, luces, jurado) escriben siempre lo
+// mismo venga de donde venga, así que no necesitan esto.
+async function _reclamarOrden(d){
+  const ref=window._fb.doc(fbDB,'timer_control',_tcDoc);
+  try{
+    return !!(await window._fb.runTransaction(fbDB,async(tx)=>{
+      const s=await tx.get(ref);
+      const x=s.exists()?(s.data()||{}):{};
+      if(x.ts!==d.ts)return false;        // ya llegó otra orden, más nueva
+      if(x.hecho===d.ts)return false;     // otro equipo ya la cumplió
+      tx.set(ref,{hecho:d.ts,hechoPor:window._WRITER_ID},{merge:true});
+      return true;
+    }));
+  }catch(e){
+    // Sin poder anotarla (sin red, sin permiso): se cumple igual, como antes.
+    console.warn('[reloj] no se pudo anotar la orden',e&&e.code);
+    return true;
+  }
 }
 
 function _ordenReloj(d){
