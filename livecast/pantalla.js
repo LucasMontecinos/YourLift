@@ -747,6 +747,10 @@ function _piLoadSettings(){
       // El cronómetro se sacó de la pantalla de tarima: si venía prendido de antes
       // (era el default viejo) se apaga, salvo que se haya tocado el interruptor.
       if(g.showTimer===true&&!g._timerElegido)delete g.showTimer;
+      // El logo del club de fondo estuvo apagado por defecto un tiempo: las
+      // pantallas que guardaron ajustes en esa época lo traen apagado sin que
+      // nadie lo haya elegido. Se prende una vez; si después lo apagan, queda así.
+      if(!g._fondoClub){g.fondoBandera=true;g._fondoClub=true;}
       return Object.assign({},PI_DEFAULT_SETTINGS,g);
     }
   }catch(e){}
@@ -927,7 +931,7 @@ function _piSettingsPanelHtml(){
     h+=`<div style="background:rgba(10,22,40,.94);border:1px solid rgba(212,225,245,.25);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
       <div style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:rgba(212,225,245,.5)">AJUSTES DE PANTALLA</div>
       <label style="display:flex;align-items:center;gap:8px;font-family:Oswald;font-size:12px;color:#fff;cursor:pointer">
-        <input type="checkbox" ${piSet.fondoBandera!==false?'checked':''} onchange="piSetSetting('fondoBandera',this.checked)"> Bandera de fondo
+        <input type="checkbox" ${piSet.fondoBandera!==false?'checked':''} onchange="piSetSetting('_fondoClub',true);piSetSetting('fondoBandera',this.checked)"> ${_variosPaises()?'Bandera de fondo':'Logo del club de fondo'}
       </label>
       <label style="display:flex;align-items:center;gap:8px;font-family:Oswald;font-size:12px;color:#fff;cursor:pointer">
         <input type="checkbox" ${piSet.showTimer===true?'checked':''} onchange="piSetSetting('_timerElegido',true);piSetSetting('showTimer',this.checked)"> Mostrar cronómetro

@@ -1286,9 +1286,10 @@ const PI_SETTINGS_KEY='yl_pant_intentos_settings';
 // pantalla de intentos. Viene encendida — es lo que identifica de quién es el
 // intento desde el fondo del gimnasio— y se apaga desde el engranaje cuando el
 // proyector o la luz de la sala no la acompañan.
-// Fondo negro liso por defecto: se pidió así para que todo se lea en el proyector.
-// La bandera (o el logo del club) de fondo se puede prender desde el engranaje.
-const PI_DEFAULT_SETTINGS={showTimer:false,fondoBandera:false,bgColor:'',accentColor:'#D4A843',textColor:'#ffffff'};
+// Fondo negro con las letras en blanco, para que todo se lea en el proyector, y
+// encima el logo del club del atleta difuminado (con varios países, la bandera).
+// Se apaga desde el engranaje si en la sala no se lee bien.
+const PI_DEFAULT_SETTINGS={showTimer:false,fondoBandera:true,bgColor:'',accentColor:'#D4A843',textColor:'#ffffff'};
 window._piSettings=_piLoadSettings();
 window._piPanelOpen=false;
 // Handlers globales de click/arrastre/redimensión — se registran una sola vez,

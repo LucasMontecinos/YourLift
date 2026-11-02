@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <script src="compartido/idioma.js?v=e6ba1ebd"></script>
 <script src="compartido/app.js?v=2f2dab5a"></script>
+<script src="compartido/tema.js?v=8d06d9af" data-tema="dia" data-elegible></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>YourLift — Panel de Jueces</title>
 <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
@@ -19,25 +20,47 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 
+/* ── Día (blanco y azul marino) y noche (negro), como la competencia en vivo ──
+   Se cambia con el botón de arriba y se recuerda en este teléfono. Rojo, azul y
+   amarillo siguen siendo los de las tarjetas; nada en dorado. */
+html,html[data-tema="noche"]{
+  --bg:#000000;--card:#0E0E10;--card2:#151517;--border:#2A2A2E;--text:#FFFFFF;--muted:#9A9AA0;
+  --j-head:#0A0A0B;--j-headtx:#FFFFFF;--j-headmut:rgba(255,255,255,.6);--j-headline:rgba(255,255,255,.22);
+  --j-acc:#FFFFFF;--j-acctint:rgba(255,255,255,.1);--j-blanco:#F0F0F0;
+  --j-rojo:#EF4444;--j-azul:#3B82F6;--j-amarillo:#F59E0B;--j-sel:rgba(255,255,255,.18)}
+html[data-tema="dia"]{
+  --bg:#FFFFFF;--card:#FFFFFF;--card2:#F4F6FA;--border:#E2E6ED;--text:#0B1630;--muted:#5A6478;
+  --j-head:#0B2A55;--j-headtx:#FFFFFF;--j-headmut:rgba(255,255,255,.7);--j-headline:rgba(255,255,255,.3);
+  --j-acc:#0B2A55;--j-acctint:rgba(11,42,85,.08);--j-blanco:#0B1630;
+  --j-rojo:#DC2626;--j-azul:#1D4ED8;--j-amarillo:#B45309;--j-sel:rgba(11,42,85,.2)}
+
 body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;align-items:center;justify-content:center;overflow:hidden;user-select:none}
 
+/* ── Franja de arriba: logo original sobre azul (día) o negro (noche) ── */
+.j-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--j-head);color:var(--j-headtx)}
+.j-top img{height:30px;width:auto;display:block}
+.j-top span{font-size:13px;font-weight:600;letter-spacing:.14em;color:var(--j-headmut)}
+.j-tema{margin-left:auto;padding:6px 10px;border-radius:8px;border:1px solid var(--j-headline);background:transparent;color:var(--j-headtx);font-family:Oswald;font-size:12px;font-weight:600;letter-spacing:.1em;cursor:pointer;white-space:nowrap}
+.j-tema::after{content:'☾ NOCHE'}
+html[data-tema="noche"] .j-tema::after{content:'☀ DÍA'}
+.j-tema.chico::after{content:'☾'}
+html[data-tema="noche"] .j-tema.chico::after{content:'☀'}
+/* Selector de idioma: sin dorado, en los colores del tema */
+[data-yl-idioma]{background:var(--card2) !important;border:1px solid var(--border) !important}
+[data-yl-idioma] button[aria-pressed="true"]{background:var(--j-acc) !important;color:var(--bg) !important}
+[data-yl-idioma] button[aria-pressed="false"]{background:transparent !important;color:var(--muted) !important}
+
 /* ── Screens ─────────────────────────────────────── */
-.screen{display:none;width:100%;height:100dvh;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:16px}
+.screen{display:none;position:relative;width:100%;height:100dvh;flex-direction:column;align-items:center;justify-content:center;padding:74px 24px 24px;gap:16px}
 .screen.active{display:flex}
 
 /* ── Pick screen ──────────────────────────────────── */
-.logo{font-size:28px;font-weight:700;letter-spacing:3px;text-align:center;margin-bottom:8px}
-.logo span{color:var(--accent)}
-.subtitle{font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px}
+.j-tit{font-size:24px;font-weight:700;letter-spacing:.06em;text-align:center}
 .pick-btn{width:min(320px,88vw);padding:22px;border-radius:14px;border:2px solid var(--border);background:var(--card);color:var(--text);font-family:Oswald;font-size:22px;font-weight:700;letter-spacing:3px;cursor:pointer;transition:border-color .15s,transform .1s;text-align:center}
 .pick-btn:active{transform:scale(.97)}
-.pick-btn.izq:hover{border-color:#3b82f6}
-.pick-btn.cen:hover{border-color:#f0f0f0}
-.pick-btn.der:hover{border-color:#3b82f6}
-.pick-btn.jury{border-color:rgba(212,168,67,.45)}
-.pick-btn.jury:hover{border-color:var(--gold)}
-.pick-btn.plan{border-color:rgba(34,197,94,.4);font-size:18px}
-.pick-btn.plan:hover{border-color:var(--green)}
+.pick-btn:hover{border-color:var(--j-acc)}
+.pick-btn.prim{background:var(--j-acc);border-color:var(--j-acc);color:var(--bg)}
+.pick-btn.plan{font-size:18px}
 .pick-sep{font-size:11px;color:var(--muted);letter-spacing:2px;margin-top:6px}
 
 /* ── Jurado ───────────────────────────────────────── */
@@ -48,12 +71,12 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 .jury-ult .dec{display:inline-block;margin-top:6px;padding:3px 10px;border-radius:6px;font-size:13px;letter-spacing:2px}
 .jury-btn{display:flex;align-items:center;justify-content:center;gap:12px;padding:16px;border-radius:12px;border:2px solid var(--border);background:var(--card);color:var(--text);font-family:Oswald;font-size:17px;font-weight:700;letter-spacing:2px;cursor:pointer}
 .jury-btn:active{transform:scale(.97)}
-.jury-btn.valido{border-color:#f0f0f0}
+.jury-btn.valido{border-color:var(--j-blanco)}
 .jury-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.jury-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border-radius:12px;border:2px solid #ef4444;background:rgba(239,68,68,.08);color:var(--text);font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer}
+.jury-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border-radius:12px;border:2px solid var(--j-rojo);background:rgba(239,68,68,.08);color:var(--text);font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer}
 .jury-card:active{transform:scale(.96)}
 .jdot{width:34px;height:34px;border-radius:50%;background:#ef4444;box-shadow:0 0 14px rgba(239,68,68,.6)}
-.jdot.w{background:#f0f0f0;box-shadow:0 0 14px rgba(240,240,240,.6)}
+.jdot.w{background:#f0f0f0;box-shadow:0 0 0 2px var(--j-blanco),0 0 14px rgba(240,240,240,.6)}
 .jchip{width:13px;height:13px;border-radius:50%}
 .jury-estado{font-size:12px;color:var(--muted);text-align:center;min-height:16px}
 
@@ -65,29 +88,32 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 .plan-btn{padding:16px 10px;border-radius:12px;border:2px solid var(--border);background:var(--card);color:var(--text);font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer}
 .plan-btn:active{transform:scale(.97)}
 .plan-btn.go{border-color:var(--green);color:var(--green);background:rgba(34,197,94,.1)}
-.plan-btn.stop{border-color:#ef4444;color:#ef4444}
+.plan-btn.stop{border-color:var(--j-rojo);color:var(--j-rojo)}
 .plan-sep{border-top:1px solid var(--border);margin:6px 0 2px}
 .plan-min{display:flex;align-items:center;gap:8px}
 .plan-min input{width:90px;padding:12px;border-radius:10px;border:2px solid var(--border);background:var(--card);color:var(--text);font-family:Oswald;font-size:22px;text-align:center}
 
 /* ── Login ────────────────────────────────────────── */
 .log-in{width:min(320px,88vw);padding:16px;border-radius:12px;border:2px solid var(--border);background:var(--card);color:var(--text);font-family:Oswald;font-size:17px;letter-spacing:1px;outline:none}
-.log-in:focus{border-color:var(--gold)}
+.log-in:focus{border-color:var(--j-acc)}
 .log-in::placeholder{color:var(--muted)}
 
 /* ── Panel screen ─────────────────────────────────── */
 /* overflow-y:auto: con los motivos abajo, en un teléfono chico el contenido
    puede pasarse de alto. Antes se cortaban los botones de voto, que es lo
    último que puede faltarle a un juez. */
-#panel{padding:16px;justify-content:space-between;overflow-y:auto;gap:12px}
-.panel-header{width:100%;display:flex;justify-content:space-between;align-items:center}
-.pos-badge{font-size:13px;font-weight:700;letter-spacing:3px;padding:6px 14px;border-radius:8px;border:2px solid var(--border);color:var(--muted)}
+#panel{padding:0 16px 16px;justify-content:space-between;overflow-y:auto;gap:12px}
+.panel-header{width:calc(100% + 32px);margin:0 -16px;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 16px;background:var(--j-head);color:var(--j-headtx);flex-shrink:0}
+.panel-header img{height:24px;width:auto;display:block}
+.pos-badge{font-size:13px;font-weight:700;letter-spacing:3px;padding:6px 12px;border-radius:8px;background:var(--j-headtx);color:var(--j-head)}
+#tarimaBadge{border:1px solid var(--j-headline)!important;color:var(--j-headtx)!important}
+#liftBadge,#fbLabel{color:var(--j-headmut)!important}
 .fb-dot{width:8px;height:8px;border-radius:50%;background:#ef4444}
 .fb-dot.on{background:var(--green)}
 .athlete-info{text-align:center;flex:0}
 .ath-name{font-size:clamp(20px,5vw,32px);font-weight:700;letter-spacing:1px;line-height:1.1}
 .ath-meta{font-size:13px;color:var(--muted);margin-top:4px}
-.ath-weight{font-size:clamp(44px,12vw,72px);font-weight:700;color:var(--gold);letter-spacing:2px;line-height:1}
+.ath-weight{font-size:clamp(44px,12vw,72px);font-weight:700;color:var(--text);letter-spacing:2px;line-height:1}
 .ath-lift{font-size:14px;color:var(--muted);letter-spacing:2px;margin-top:2px}
 
 /* ── Preview lights ───────────────────────────────── */
@@ -103,14 +129,14 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
    Puestas así el bloque ocupa lo que ocupa UNA sola, y los botones de voto no se
    mueven de su lugar ni se van fuera de la pantalla, que es lo último que puede
    faltarle a un juez. */
-.motivos{width:100%;max-width:360px;border:1px solid var(--border);border-radius:12px;background:rgba(15,30,53,.55);overflow:hidden;flex-shrink:0}
+.motivos{width:100%;max-width:360px;border:1px solid var(--border);border-radius:12px;background:var(--card2);overflow:hidden;flex-shrink:0}
 .motivos-head{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer}
-.motivos-head #motTitulo{font-size:10px;letter-spacing:2px;color:var(--gold);font-weight:700}
+.motivos-head #motTitulo{font-size:10px;letter-spacing:2px;color:var(--text);font-weight:700}
 .motivos-head .chev{font-size:11px;color:var(--muted)}
 /* Los puntitos dicen en cuál de las tres está parado y que hay más al costado. */
 .mot-nav{display:flex;gap:5px;align-items:center;margin-left:auto}
 .mot-nav i{width:6px;height:6px;border-radius:50%;background:var(--border);display:block;transition:background .2s}
-.mot-nav i.on{background:var(--gold)}
+.mot-nav i.on{background:var(--text)}
 .motivos-body{display:flex;flex-direction:row;overflow-x:auto;overflow-y:hidden;
   scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;
   -webkit-overflow-scrolling:touch}
@@ -160,42 +186,42 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 .vote-btn .dot-big{width:36px;height:36px;border-radius:50%}
 .vote-btn .dot-small{width:12px;height:12px;border-radius:50%}
 
-.vote-btn.white-btn{border-color:#f0f0f0;color:#f0f0f0}
-.vote-btn.white-btn .dot-big{background:#f0f0f0}
-.vote-btn.white-btn .dot-small{background:#f0f0f0}
+.vote-btn.white-btn{border-color:var(--j-blanco);color:var(--j-blanco)}
+.vote-btn.white-btn .dot-big{background:#f0f0f0;box-shadow:0 0 0 2px var(--j-blanco)}
+.vote-btn.white-btn .dot-small{background:#f0f0f0;box-shadow:0 0 0 1px var(--j-blanco)}
 .vote-btn.white-btn:active,.vote-btn.white-btn.selected{background:rgba(240,240,240,.12)}
 
-.vote-btn.red-btn{border-color:#ef4444;color:#ef4444}
+.vote-btn.red-btn{border-color:#ef4444;color:var(--j-rojo)}
 .vote-btn.red-btn .dot-big{background:#ef4444}
 .vote-btn.red-btn .dot-small{background:#ef4444}
 .vote-btn.red-btn:active,.vote-btn.red-btn.selected{background:rgba(239,68,68,.12)}
 
-.vote-btn.blue-btn{border-color:#3b82f6;color:#3b82f6}
+.vote-btn.blue-btn{border-color:#3b82f6;color:var(--j-azul)}
 .vote-btn.blue-btn .dot-big{background:#ef4444}  /* big = red = no lift */
 .vote-btn.blue-btn .dot-small{background:#3b82f6}
 .vote-btn.blue-btn:active,.vote-btn.blue-btn.selected{background:rgba(59,130,246,.12)}
 
-.vote-btn.yellow-btn{border-color:#f59e0b;color:#f59e0b}
+.vote-btn.yellow-btn{border-color:#f59e0b;color:var(--j-amarillo)}
 .vote-btn.yellow-btn .dot-big{background:#ef4444}  /* big = red = no lift */
 .vote-btn.yellow-btn .dot-small{background:#f59e0b}
 .vote-btn.yellow-btn:active,.vote-btn.yellow-btn.selected{background:rgba(245,158,11,.12)}
 
-.vote-btn.selected{box-shadow:0 0 0 4px rgba(255,255,255,.15)}
+.vote-btn.selected{box-shadow:0 0 0 4px var(--j-sel)}
 
 /* ── Action bar ───────────────────────────────────── */
 .action-bar{display:flex;gap:10px;width:100%;max-width:360px}
 .btn-timer{flex:2;padding:14px;border-radius:12px;border:2px solid var(--green);background:rgba(34,197,94,.1);color:var(--green);font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .15s}
 .btn-timer:active{transform:scale(.97);background:rgba(34,197,94,.2)}
 .btn-clear{flex:1;padding:14px;border-radius:12px;border:2px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:1px;cursor:pointer;transition:all .15s}
-.btn-clear:active{transform:scale(.97);border-color:var(--accent);color:var(--accent)}
-.btn-clear.has-vote{border-color:#ef4444;color:#ef4444}
+.btn-clear:active{transform:scale(.97);border-color:var(--j-acc);color:var(--j-acc)}
+.btn-clear.has-vote{border-color:#ef4444;color:var(--j-rojo)}
 
 /* ── Campeonato (link sin canal) ──────────────────── */
 .camp-lista{display:flex;flex-direction:column;gap:10px;width:min(340px,90vw);max-height:52dvh;overflow-y:auto}
 .camp-lista .pick-btn{width:100%;font-size:16px;letter-spacing:1px;padding:16px 18px;text-align:left}
 .camp-tarima{display:flex;gap:6px;width:min(340px,90vw)}
 .camp-tarima button{flex:1;padding:9px 6px;border-radius:10px;border:2px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer}
-.camp-tarima button.on{border-color:var(--gold);color:var(--gold);background:rgba(212,168,67,.1)}
+.camp-tarima button.on{border-color:var(--j-acc);color:var(--j-acc);background:var(--j-acctint)}
 .ev-nombre{flex-shrink:0;font-size:11px;color:var(--muted);letter-spacing:1px;text-align:center;max-width:360px;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 </head>
@@ -206,10 +232,8 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
      con una cuenta: quién marcó cada luz tiene que quedar claro. La sesión dura
      lo que dure la jornada y se cierra sola — ver SESION_MAX_MS más abajo. -->
 <div id="login" class="screen active">
-  <div>
-    <div class="logo">YOUR<span>LIFT</span></div>
-    <div class="subtitle">Panel de Jueces</div>
-  </div>
+  <header class="j-top"><img src="YourLift_logo.png" alt="YourLift"><span>PANEL DE JUECES</span><button type="button" class="j-tema" onclick="ylTema.cambiar()" aria-label="Cambiar entre día y noche"></button></header>
+  <div class="j-tit">Entrar</div>
   <p id="logMsg" style="font-size:13px;color:var(--muted);text-align:center;max-width:320px;line-height:1.6">
     Entra con tu cuenta de juez para que tus luces lleguen a la tarima.
   </p>
@@ -218,7 +242,7 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
   <input id="logPass" class="log-in" type="password" autocomplete="current-password"
          placeholder="Clave" onkeydown="if(event.key==='Enter')entrar()">
   <div id="logErr" style="font-size:12px;color:#ef4444;min-height:16px;text-align:center"></div>
-  <button id="logBtn" class="pick-btn cen" onclick="entrar()" style="font-size:18px">ENTRAR</button>
+  <button id="logBtn" class="pick-btn prim" onclick="entrar()" style="font-size:18px">ENTRAR</button>
   <p style="font-size:11px;color:var(--muted);text-align:center;max-width:320px;line-height:1.5;opacity:.8">
     La sesión se cierra al cerrar esta página, y también sola a las 4 horas.
   </p>
@@ -229,22 +253,16 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
      jueces.html escrito a mano. Con dos campeonatos a la misma hora cada juez
      tiene que mandar sus luces al suyo, así que no se adivina: se pregunta. -->
 <div id="camp" class="screen">
-  <div>
-    <div class="logo">YOUR<span>LIFT</span></div>
-    <div class="subtitle">Panel de Jueces</div>
-  </div>
-  <p style="font-size:13px;color:var(--muted);text-align:center;max-width:320px;line-height:1.5">¿En qué campeonato juzgas?</p>
+  <header class="j-top"><img src="YourLift_logo.png" alt="YourLift"><span>PANEL DE JUECES</span><button type="button" class="j-tema" onclick="ylTema.cambiar()" aria-label="Cambiar entre día y noche"></button></header>
+  <div class="j-tit">¿En qué campeonato juzgas?</div>
   <div class="camp-tarima" id="campTarima"></div>
   <div class="camp-lista" id="campLista"><p style="color:var(--muted);font-size:13px;text-align:center">Cargando campeonatos…</p></div>
 </div>
 
 <!-- ══ PICK SCREEN ══════════════════════════════════════════ -->
 <div id="pick" class="screen">
-  <div>
-    <div class="logo">YOUR<span>LIFT</span></div>
-    <div class="subtitle">Panel de Jueces</div>
-  </div>
-  <p style="font-size:13px;color:var(--muted)">Selecciona tu posición</p>
+  <header class="j-top"><img src="YourLift_logo.png" alt="YourLift"><span>PANEL DE JUECES</span><button type="button" class="j-tema" onclick="ylTema.cambiar()" aria-label="Cambiar entre día y noche"></button></header>
+  <div class="j-tit">¿Qué posición tienes?</div>
   <div data-yl-idioma style="margin:10px auto 0"></div>
   <button class="pick-btn izq" onclick="selectPos('izq')"><i class=yl-i-anterior></i> JUEZ IZQ</button>
   <button class="pick-btn cen" onclick="selectPos('central')"><i class=yl-i-punto></i> JUEZ CENTRAL</button>
@@ -259,12 +277,14 @@ body{font-family:'Oswald',sans-serif;background:var(--bg);color:var(--text);heig
 
   <!-- Header -->
   <div class="panel-header">
+    <img src="YourLift_logo.png" alt="YourLift">
     <div class="pos-badge" id="posBadge">—</div>
-    <div id="tarimaBadge" style="display:none;font-size:11px;font-weight:700;letter-spacing:2px;padding:6px 12px;border-radius:8px;border:2px solid var(--gold);color:var(--gold)"></div>
+    <div id="tarimaBadge" style="display:none;font-size:11px;font-weight:700;letter-spacing:2px;padding:6px 10px;border-radius:8px"></div>
     <div style="text-align:center;font-size:11px;color:var(--muted)" id="liftBadge">—</div>
     <div onclick="abrirLogin()" style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted);cursor:pointer">
       <div class="fb-dot" id="fbDot"></div><span id="fbLabel">Conectando</span>
     </div>
+    <button type="button" class="j-tema chico" onclick="ylTema.cambiar()" aria-label="Cambiar entre día y noche"></button>
   </div>
   <div class="ev-nombre" id="evNombre"></div>
 
@@ -946,8 +966,9 @@ function updatePreview(){
   const bigCol=myVote==='white'?'#f0f0f0':'#ef4444';
   const smallCol=VOTE_COLOR[myVote];
   const bigGlow=myVote==='white'?'0 0 28px rgba(240,240,240,.7)':'0 0 28px rgba(239,68,68,.7)';
-  bigEl.style.background=bigCol;bigEl.style.borderColor=bigCol;bigEl.style.boxShadow=bigGlow;
-  smallEl.style.background=smallCol;smallEl.style.borderColor=smallCol;smallEl.style.boxShadow='0 0 10px '+smallCol;
+  // La blanca lleva borde oscuro de día: blanco sobre blanco no se vería.
+  bigEl.style.background=bigCol;bigEl.style.borderColor=myVote==='white'?'var(--j-blanco)':bigCol;bigEl.style.boxShadow=bigGlow;
+  smallEl.style.background=smallCol;smallEl.style.borderColor=myVote==='white'?'var(--j-blanco)':smallCol;smallEl.style.boxShadow='0 0 10px '+smallCol;
   const labels={white:'BUENO',red:'NO LIFT',blue:'NO LIFT',yellow:'NO LIFT'};
   labelEl.textContent=labels[myVote];
   labelEl.style.color=myVote==='white'?'#22c55e':'#ef4444';
@@ -967,7 +988,7 @@ function updateButtons(){
 
 function showPulse(msg,color){
   const t=document.createElement('div');
-  t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0D1F38;border:1px solid '+color+';color:'+color+';padding:10px 20px;border-radius:10px;z-index:9999;font-size:13px;letter-spacing:1px;font-family:Oswald;font-weight:700';
+  t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:'+color+';border:1px solid '+color+';color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.3);padding:10px 20px;border-radius:10px;z-index:9999;font-size:13px;letter-spacing:1px;font-family:Oswald;font-weight:700';
   t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2000);
 }
 </script>
