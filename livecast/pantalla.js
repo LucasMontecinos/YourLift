@@ -118,23 +118,25 @@ function renderScreenControl(){
     h+='<div class="card" style="margin-bottom:16px">';
     h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:4px">UN LINK POR PANTALLA</div>';
     h+='<div style="font-size:11px;color:var(--muted);line-height:1.55;margin-bottom:6px">Cada uno abre SOLO lo que dice y no cambia aunque se toquen los botones de abajo. Son para los televisores que muestran siempre lo mismo: uno con los intentos, otro con las luces, otro con el perfil.</div>';
-    h+=fila('intentos','PANTALLA DE INTENTOS','#22c55e','La tabla de intentos del atleta en barra');
-    h+=fila('luces','LUCES JUECES','#f0f0f0','Las tres luces a pantalla completa');
-    h+=fila('barra','ATLETA EN BARRA','#a855f7','Nombre, peso y discos');
-    h+=fila('profile','PERFIL ATLETA','#3b82f6','Foto y datos del atleta');
-    h+=fila('jornada','TABLA JORNADA','#D4A843','La tabla de toda la jornada');
+    h+=fila('intentos','PANTALLA DE INTENTOS','var(--text)','La tabla de intentos del atleta en barra');
+    h+=fila('luces','LUCES JUECES','var(--text)','Las tres luces a pantalla completa');
+    h+=fila('barra','ATLETA EN BARRA','var(--text)','Nombre, peso y discos');
+    h+=fila('profile','PERFIL ATLETA','var(--text)','Foto y datos del atleta');
+    h+=fila('jornada','TABLA JORNADA','var(--text)','La tabla de toda la jornada');
     h+='</div>';
   }
 
   // Modo
-  const mb=(m,lbl,ic,col)=>'<button onclick="screenSetMode(\''+m+'\')" style="flex:1;min-width:160px;padding:18px;border-radius:12px;border:2px solid '+(mode===m?col:'var(--border)')+';background:'+(mode===m?col+'22':'transparent')+';color:'+(mode===m?col:'var(--text)')+';font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(ic?ic+' ':'')+lbl+(mode===m?' ●':'')+'</button>';
+  // Sin colores por botón: el elegido se marca con borde y fondo, en el color del
+  // texto (negro de día, blanco de noche).
+  const mb=(m,lbl,ic,col)=>'<button onclick="screenSetMode(\''+m+'\')" style="flex:1;min-width:160px;padding:18px;border-radius:12px;border:2px solid '+(mode===m?'var(--text)':'var(--border)')+';background:'+(mode===m?'var(--bg2)':'transparent')+';color:var(--text);font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(ic?ic+' ':'')+lbl+(mode===m?' ●':'')+'</button>';
   h+='<div class="card" style="margin-bottom:16px"><div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:12px">QUÉ MOSTRAR EN LA PANTALLA</div>';
   h+='<div style="display:flex;gap:12px;flex-wrap:wrap">';
   h+=mb('profile','PERFIL ATLETA','','#3b82f6');
   h+=mb('barra','ATLETA EN BARRA','','#a855f7');
   h+=mb('intentos','PANTALLA DE INTENTOS','','#22c55e');
   h+=mb('jornada','TABLA JORNADA','','#D4A843');
-  h+=mb('luces','LUCES JUECES','','#f0f0f0');
+  h+=mb('luces','LUCES JUECES','','#64748B');
   h+=mb('off','APAGAR','','#ef4444');
   h+='</div></div>';
   if(mode==='luces'){

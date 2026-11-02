@@ -65,7 +65,7 @@ function _renderResultsTable(opts){
   h+='<div class="os" style="font-size:15px;font-weight:700;letter-spacing:2px;color:'+opts.color+'">'+opts.icon+' '+opts.title+'</div>';
   h+='<div style="font-size:10px;color:var(--muted);letter-spacing:1px">'+withTotal+' / '+all.length+' clasificados</div>';
   h+='</div>';
-  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
+  h+='<div style="overflow-x:auto"><table class="res-t" style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th class="os" style="padding:8px 4px;text-align:center;color:var(--muted);font-size:9px;width:28px">Pos</th>';
   h+='<th style="padding:8px 4px;text-align:left;color:var(--muted);font-size:9px">Atleta</th>';
   h+='<th style="padding:8px 3px;text-align:center;color:var(--muted);font-size:9px;width:44px">BW</th>';
@@ -259,7 +259,7 @@ function renderResults(){
         +'</div>';
     }
   }
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:24px;letter-spacing:2px">RESULTADOS</h2><p style="color:var(--muted);font-size:12px">'+((DATA.event==null?void 0:DATA.event.name)||'')+' · '+flightAth.length+' atletas · todas las tandas</p></div>'+adminButtons+'</div>'+avisoDia;
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:24px;letter-spacing:2px">RESULTADOS</h2><p style="color:var(--muted);font-size:12px">'+((DATA.event==null?void 0:DATA.event.name)||'')+' · '+flightAth.length+' atletas · todas las tandas</p></div>'+(adminButtons?'<div class="res-acc">'+adminButtons+'</div>':'')+'</div>'+avisoDia;
 
   // ── Barra de filtros ──────────────────────────────────────────────────────
   // Las opciones se arman con lo que hay EN ESTE campeonato, así que no aparecen

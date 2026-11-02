@@ -172,25 +172,24 @@ function showToastLC(msg){
 
 // Tema del livecast: "dia" (blanco y azul, el del sitio) o "noche" (negro).
 // Cada persona elige y queda guardado en su navegador. Vale para la vista del
-// público y para las pantallas de operación (Atletas & Pesaje, Documentos,
-// Control en Vivo, Resultados, la ficha del atleta y la elección de campeonato).
-// La transmisión, el Control TX, el control remoto y las pantallas de tarima se
-// quedan como están: van al aire o se miran en la oscuridad del recinto.
+// público y para todas las pestañas de operación. Las pantallas que van al aire
+// o al proyector (?tx=…) se quedan como están.
 function _temaVivo(){ try{ const t=localStorage.getItem('yl_tema'); if(t==='dia'||t==='noche')return t; }catch(e){} return 'dia'; }
 function _cambiarTemaVivo(){ _ponerTemaVivo(_temaVivo()==='dia'?'noche':'dia'); }
 function _ponerTemaVivo(t){ try{ localStorage.setItem('yl_tema',t==='noche'?'noche':'dia'); }catch(e){} R(); }
 function _aplicarTemaVivo(){
   const raiz=document.documentElement;
-  const _conTema={liveView:1,setup:1,manage:1,docs:1,compete:1,results:1,atletaInfo:1};
-  if(!TX_MODE&&_conTema[DATA.phase]){
+  // Todas las pestañas del livecast. Solo quedan fuera las pantallas que van al
+  // aire o al proyector (?tx=…: widgets de OBS y pantallas de tarima), que tienen
+  // sus propios colores.
+  if(!TX_MODE){
     raiz.setAttribute('data-tema',_temaVivo());
     // El fondo viejo (azul, negro o gris) se ponía directo en la página y le
     // ganaba al tema: el panel seguía azul aunque se eligiera la versión día.
     ['--bg','--card','--border','--side'].forEach(v=>raiz.style.removeProperty(v));
   } else {
     raiz.removeAttribute('data-tema');
-    // Las pantallas que no tienen día/noche (Control TX, transmisión, control
-    // remoto) siguen con su fondo de siempre.
+    // Las pantallas al aire (?tx=…) siguen con su fondo de siempre.
     try{ window.aplicarFondoLC(window.lcFondo); }catch(e){}
   }
 }
