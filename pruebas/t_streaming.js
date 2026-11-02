@@ -104,7 +104,7 @@ async function menuConRol(p, rol) {
   // El panel de admin corre como módulo, así que su ST/render no se ven desde acá:
   // se saca la función del archivo y se dibuja con una cuenta de prueba.
   // La tabla _SHELL_ROL (textos por rol) va pegada: la función la lee.
-  const fnRS = require('./apoyo/fuente').piezas(srcAD, ['const _SHELL_ROL={', 'function renderStreamingShell']);
+  const fnRS = require('./apoyo/fuente').piezas(srcAD, ['const _SHELL_ROL={', 'function _admTop', 'function renderStreamingShell']);
   const pa = await ctx.newPage();
   const errsA = [];
   pa.on('pageerror', e => errsA.push(e.message));

@@ -1911,7 +1911,8 @@ function renderTxTablaActual(cur,opts){
           const pos=isCur?a.fPos:a.curPos;
           const sub=subTotal(a,DATA.lift);   // lo que lleva hasta este movimiento
           const proy=isCur?a.fTotal:forecastTotal(a);
-          const logo=(window.clubLogoImg&&a.club)?window.clubLogoImg(a.club,34,'flex:none;'):'<span></span>';
+          // Bandera si el campeonato tiene varios países; si no, el logo del club.
+          const logo=(typeof _insignia==='function'?_insignia(a,34):'')||'<span></span>';
           return `<div style="${col}border-top:1px solid ${LN};font-size:24px;${isCur?'background:rgba(255,255,255,.10);box-shadow:inset 4px 0 #fff;':''}">
             <span style="font-weight:600">${pos||'—'}</span>${logo}
             <span style="font-family:'DM Sans',sans-serif;font-weight:700;font-size:21px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_nombrePropio(a.name)}${isCur&&pendingW?'<small style="display:block;font-family:Oswald,sans-serif;font-weight:500;font-size:13px;letter-spacing:.14em;margin-top:2px">EN TARIMA · '+_sbNum(pendingW)+' KG</small>':''}</span>

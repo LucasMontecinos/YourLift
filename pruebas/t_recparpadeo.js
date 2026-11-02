@@ -30,7 +30,8 @@ function bloque(marca, largo) {
   ok(_srIntentoTexto({ hay: true, mov: [1], tot: [] }) === 'INTENTO DE RÉCORD SUDAMERICANO',
      'que dice intento de récord sudamericano');
 
-  const marcador = bloque("return x.hay?'<span", 500);
+  // El cartel del marcador va en la franja de arriba de la tarjeta (_sbTarjeta).
+  const marcador = bloque("(recTxt?'<span", 500);
   ok(!!marcador, 'se encuentra el cartel del marcador');
   ok(/class="sr-parpadea"/.test(marcador), 'el del marcador parpadea');
 

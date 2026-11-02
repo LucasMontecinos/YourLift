@@ -87,7 +87,8 @@ const MONTAR = `(paises)=>{
   }
 
   console.log('\nSe usa en las cuatro pantallas');
-  ok(/\$\{_insignia\(a,15\)\}/.test(src), 'Tabla Actual (el ranking de la esquina)');
+  // En la tabla nueva el logo (o la bandera) va más grande, a 34 px.
+  ok(/_insignia\(a,34\)/.test(src), 'Tabla Actual (el ranking de la esquina)');
   ok(/_insignia\(a,fs\(13\)\)/.test(src), 'la tabla de jornada');
   ok(/_insignia\(a,13\)/.test(src), 'las fichas de Atletas del campeonato');
   // En un nacional el logo del club va donde iba la bandera, antes del nombre.

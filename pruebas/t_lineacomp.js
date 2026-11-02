@@ -42,7 +42,7 @@ const MONTAR = `(() => {
 })()`;
 
 const NOMBRES = t => ['Classic Uno','Classic Dos','Equipado Uno','Equipado Dos','Banca Sola','Combinado Eq']
-  .filter(n => t.includes(n));
+  .filter(n => t.toLowerCase().includes(n.toLowerCase()));   // la tabla escribe los nombres con mayúscula inicial
 
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
