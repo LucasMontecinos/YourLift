@@ -35,11 +35,9 @@ const RECIBIR = `(doc)=>{
 }`;
 
 // Cuenta las luces dibujadas y el punto de tarjeta que lleva cada una.
-const LUCES = `(borde)=>{
-  const luces=[...document.querySelectorAll('div')].filter(e=>{
-    const s=e.getAttribute('style')||'';
-    return /border-radius:50%/.test(s) && s.indexOf('border:'+borde+' solid')>=0;
-  });
+// Cada luz lleva data-luz (izq, central, der).
+const LUCES = `()=>{
+  const luces=[...document.querySelectorAll('[data-luz]')];
   return luces.map(l=>{
     const s=l.getAttribute('style')||'';
     const color=/background:#fff/.test(s)?'blanca':(/background:#ef4444/.test(s)?'roja':'apagada');
@@ -131,10 +129,10 @@ const MONTAR = `(()=>{
 
   console.log('\nLos tres nulos son distintos: la tarjeta se ve');
   {
-    const leerLuces = bd => p.evaluate(([f, x]) => eval('(' + f + ')')(x), [LUCES, bd]);
+    const leerLuces = () => p.evaluate((f) => eval('(' + f + ')')(), LUCES);
     await recibir({ mode: 'barra', fondo: 'bandera', luces: true });
     await p.evaluate(() => { _txLights = { izq: 'red', central: 'blue', der: 'yellow' }; renderTxWidget(); });
-    const r = await leerLuces('4px');
+    const r = await leerLuces();
     ok(r.length === 3, 'las tres luces (' + r.length + ')');
     ok(r.every(x => x.color === 'roja'),
        'azul y amarillo TAMBIÉN encienden la luz roja — antes salían apagadas, como si el juez no hubiera votado ('
@@ -143,17 +141,17 @@ const MONTAR = `(()=>{
        'y cada una lleva abajo el punto de su tarjeta (' + r.map(x => x.chip).join(', ') + ')');
   }
   {
-    const leerLuces = bd => p.evaluate(([f, x]) => eval('(' + f + ')')(x), [LUCES, bd]);
+    const leerLuces = () => p.evaluate((f) => eval('(' + f + ')')(), LUCES);
     await p.evaluate(() => { _txLights = { izq: 'white', central: 'white', der: 'red' }; renderTxWidget(); });
-    const r = await leerLuces('4px');
+    const r = await leerLuces();
     ok(r[0].chip === 'sin punto' && r[1].chip === 'sin punto',
        'el intento válido no lleva punto: no hay nada que explicar');
     ok(r[2].chip === 'rojo', 'y el nulo sí lo lleva');
   }
   {
-    const leerLuces = bd => p.evaluate(([f, x]) => eval('(' + f + ')')(x), [LUCES, bd]);
+    const leerLuces = () => p.evaluate((f) => eval('(' + f + ')')(), LUCES);
     await p.evaluate(() => { _txLights = { izq: null, central: null, der: null }; renderTxWidget(); });
-    const r = await leerLuces('4px');
+    const r = await leerLuces();
     ok(r.every(x => x.color === 'apagada' && x.chip === 'sin punto'),
        'sin votos, las tres apagadas y sin puntos');
   }
@@ -163,8 +161,7 @@ const MONTAR = `(()=>{
     await recibir({ mode: 'luces' });
     await p.evaluate(() => { _txLights = { izq: 'white', central: 'red', der: 'white' }; renderTxWidget(); });
     const r = await p.evaluate(() => {
-      const luces = [...document.querySelectorAll('div')]
-        .filter(e => /border:7px solid/.test(e.getAttribute('style') || ''));
+      const luces = [...document.querySelectorAll('[data-luz]')];
       return { n: luces.length, txt: document.getElementById('txWidget').innerText,
         colores: luces.map(e => {
           const s = e.getAttribute('style') || '';
@@ -174,7 +171,7 @@ const MONTAR = `(()=>{
     ok(r.n === 3, 'se ven las tres luces grandes (' + r.n + ')');
     ok(r.colores.join(',') === 'blanca,roja,blanca', 'con lo que marcó cada juez (' + r.colores.join(', ') + ')');
     ok(/SUAREZ|Suarez/i.test(r.txt), 'y arriba dice de quién es el intento');
-    ok(/SQ 1/.test(r.txt), 'con el movimiento y el número de intento: ' + r.txt.replace(/\n/g, ' · ').slice(0, 60));
+    ok(/SENTADILLA · 1ER INTENTO · 250 KG/.test(r.txt), 'con el movimiento, el número de intento y el peso: ' + r.txt.replace(/\n/g, ' · ').slice(0, 60));
   }
 
   console.log('\n  Sigue siendo un espejo: no juzga');
@@ -192,7 +189,7 @@ const MONTAR = `(()=>{
   {
     await recibir({ mode: 'luces' });
     await p.evaluate(() => { _txLights = { izq: 'blue', central: 'yellow', der: 'white' }; renderTxWidget(); });
-    const r = await p.evaluate(([f, x]) => eval('(' + f + ')')(x), [LUCES, '7px']);
+    const r = await p.evaluate((f) => eval('(' + f + ')')(), LUCES);
     ok(r.map(x => x.chip).join(',') === 'azul,amarillo,sin punto',
        'los puntos siguen a los jueces (' + r.map(x => x.chip).join(', ') + ')');
     ok(r[0].color === 'roja' && r[2].color === 'blanca', 'y la luz de arriba es roja en los nulos, blanca en el válido');

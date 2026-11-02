@@ -1195,34 +1195,9 @@ function renderTxDirector(container){
       +'</div>';
     html+=wrap;
   }
-  // Luces de jueces — banda inferior-centro, entra/sale deslizando desde abajo.
-  //
-  // Se deja prendido toda la competencia: mientras no hay decisión no dibuja
-  // nada, y aparece solo cuando los jueces marcan. Al apagarse las luces en el
-  // panel de jueces, desaparece de la misma forma.
-  //
-  // Es un espejo. El válido o el nulo se sigue dando en Control en Vivo o en la
-  // planilla; esto no decide nada.
-  {
-    const showLuces=_txDirActive('luces');
-    const animLuces=_txAnimActive('luces');
-    if(showLuces||(animLuces&&animLuces.dir==='out')){
-      _txStartLightsListener();
-      const lzHtml=renderTxLucesBanda();
-      if(lzHtml){
-        const lzAnim=animLuces
-          ?(animLuces.dir==='in'?'animation:txSlideInBottom .75s cubic-bezier(.2,.85,.3,1.05) forwards;'
-                                :'animation:txSlideOutBottom .55s cubic-bezier(.5,0,.7,.5) forwards;')
-          :'';
-        // La escala, en su propia capa: si va en el mismo elemento que la
-        // animación, el transform de los fotogramas la pisa y no cambia nada.
-        const lzScale=(_txDirState.luces==null?void 0:_txDirState.luces.scale)||1;
-        html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;pointer-events:none;'+lzAnim+'">'
-          +(lzScale!==1?'<div style="position:absolute;top:0;right:0;bottom:0;left:0;transform:scale('+lzScale+');transform-origin:bottom left">'+lzHtml+'</div>':lzHtml)
-          +'</div>';
-      }
-    }
-  }
+  // Lo que ya ocupa la esquina de arriba a la izquierda (el aviso del jurado y
+  // el GOOD LIFT / NO LIFT), en px: las luces van justo debajo para no taparse.
+  let _tlOcupado=0;
   // Decisión del jurado — esquina superior izquierda. Igual que las luces, se
   // deja prendido: no se ve nada hasta que el jurado revierte un intento desde
   // el panel de jueces, y ahí aparece unos segundos.
@@ -1232,6 +1207,7 @@ function renderTxDirector(container){
       const jsc=(_txDirState.jurado==null?void 0:_txDirState.jurado.scale)||1;
       html+='<div style="position:fixed;top:0;left:0;pointer-events:none;'+(jsc!==1?'transform:scale('+jsc+');transform-origin:top left;':'')+'">'
         +renderTxJurado(_txJurado)+'</div>';
+      _tlOcupado+=Math.round(165*_sbEscala()*jsc);
     }
   }
   // Medallero (Top 3) — banda inferior-centro, entra/sale deslizando desde abajo
@@ -1264,7 +1240,37 @@ function renderTxDirector(container){
     }
     if(slamType){
       html+=_renderTxCerSlamCorner(slamType,(_txDirState.slam==null?void 0:_txDirState.slam.scale)||1);
+      _tlOcupado=Math.max(_tlOcupado,Math.round(130*_sbEscala()*((_txDirState.slam==null?void 0:_txDirState.slam.scale)||1)));
       setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},Math.max(50,slamUntil-Date.now()+50));
+    }
+  }
+  // Luces de jueces — arriba a la izquierda, chicas (un tercio del marcador).
+  // Entran y salen deslizando por la izquierda.
+  //
+  // Se deja prendido toda la competencia: mientras no hay decisión no dibuja
+  // nada, y aparece solo cuando los jueces marcan. Al apagarse las luces en el
+  // panel de jueces, desaparece de la misma forma.
+  //
+  // Es un espejo. El válido o el nulo se sigue dando en Control en Vivo o en la
+  // planilla; esto no decide nada.
+  {
+    const showLuces=_txDirActive('luces');
+    const animLuces=_txAnimActive('luces');
+    if(showLuces||(animLuces&&animLuces.dir==='out')){
+      _txStartLightsListener();
+      const lzHtml=renderTxLucesBanda(_tlOcupado);
+      if(lzHtml){
+        const lzAnim=animLuces
+          ?(animLuces.dir==='in'?'animation:txSlideInLeft .6s cubic-bezier(.2,.85,.3,1) forwards;'
+                                :'animation:txSlideOutLeft .5s cubic-bezier(.5,0,.7,.5) forwards;')
+          :'';
+        // La escala, en su propia capa: si va en el mismo elemento que la
+        // animación, el transform de los fotogramas la pisa y no cambia nada.
+        const lzScale=(_txDirState.luces==null?void 0:_txDirState.luces.scale)||1;
+        html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;pointer-events:none;'+lzAnim+'">'
+          +(lzScale!==1?'<div style="position:absolute;top:0;right:0;bottom:0;left:0;transform:scale('+lzScale+');transform-origin:top left">'+lzHtml+'</div>':lzHtml)
+          +'</div>';
+      }
     }
   }
   // Cambio de intento (3er peso muerto, o banca de quien compite solo en banca):
@@ -1501,43 +1507,68 @@ function _luzEstilo(v){
   };
 }
 
-// La banda de luces del control remoto: los tres círculos abajo al centro, con
-// el nombre del atleta y el intento.
+// Las luces de la transmisión (Control TX y control remoto): los tres círculos,
+// con el nombre del atleta y el intento.
 //
 // Devuelve '' mientras no haya ninguna luz marcada. Es a propósito: el
 // componente se deja prendido toda la competencia y aparece solo cuando los
 // jueces deciden, sin que nadie tenga que apretar nada en el momento.
-function renderTxLucesBanda(){
+// Las luces de la transmisión: una caja chica arriba a la izquierda, de un
+// tercio del ancho del marcador (la grande, con las luces a pantalla completa,
+// es la de la tarima). Arriba, una franja con el atleta, el intento y el peso;
+// al medio, las tres luces; abajo, ESPERANDO hasta que estén las tres y después
+// VÁLIDO (verde) o NULO (rojo). Los fondos salen de la paleta de Control TX,
+// igual que el marcador; las letras van en blanco y gris, sin dorado.
+// `ocupado`: los px de arriba que ya usan el aviso del jurado o el GOOD LIFT /
+// NO LIFT; la caja baja eso para no taparlos.
+function renderTxLucesBanda(ocupado){
   const L=_txLights||{};
   if(!L.izq&&!L.central&&!L.der)return '';
   const cur=liftQueue()[0]||null;
   const orden=['izq','central','der'];
+  const conBlanco=String(_txC('nameText')||'').toLowerCase()==='#ffffff';
+  const cHead=_txC('headerBg'), cBody=conBlanco?_txC('nameBg'):_txC('gridBg');
+  const MUT='#BDBDC2', LN='rgba(255,255,255,.14)';
+  const vs=orden.map(j=>L[j]);
+  // El punto de la tarjeta (por qué fue nulo) va debajo de cada luz. La fila
+  // solo aparece cuando hay algún nulo: con tres blancas no hay nada que explicar.
+  const hayTarjeta=vs.some(v=>!!_luzEstilo(v).chip);
   const luz=(j,i)=>{
-    const v=L[j];
-    const e=_luzEstilo(v);
-    const glow=v==='white'?'0 0 34px rgba(255,255,255,.75)':(e.chip?'0 0 34px rgba(239,68,68,.75)':'none');
-    return '<div style="display:flex;flex-direction:column;align-items:center;gap:7px">'
-      +'<div style="width:76px;height:76px;border-radius:50%;background:'+e.bg+';border:5px solid '+e.bd+';box-shadow:'+glow+',inset 0 0 18px rgba(0,0,0,'+(e.on?'.15':'.5')+');'
+    const v=L[j], e=_luzEstilo(v);
+    const bg=v==='white'?'#fff':(e.chip?'#ef4444':'rgba(255,255,255,.07)');
+    const sh=v==='white'?'0 0 22px rgba(255,255,255,.35)':(e.chip?'0 0 22px rgba(239,68,68,.5)':'inset 0 0 0 2px rgba(255,255,255,.14)');
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:6px">'
+      +'<div data-luz="'+j+'" style="width:62px;height:62px;border-radius:50%;background:'+bg+';box-shadow:'+sh+';'
       +(e.on?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards;animation-delay:'+(i*0.08)+'s':'')+'"></div>'
-      +'<div style="width:20px;height:20px;border-radius:50%;background:'+(e.chip||'rgba(255,255,255,.08)')+';border:2px solid rgba(255,255,255,.25)"></div>'
+      +(hayTarjeta?'<div style="width:13px;height:13px;border-radius:50%;'
+        +(e.chip?'background:'+e.chip+';box-shadow:0 0 8px '+e.chip:'background:transparent')+'"></div>':'')
       +'</div>';
   };
-  const cab=cur
-    ?'<div style="text-align:center;margin-bottom:12px;font-family:Oswald;color:#fff">'
-      +'<div style="font-size:22px;font-weight:800;letter-spacing:.04em;line-height:1.1">'+esc(cur.name||'')+'</div>'
-      +'<div style="font-size:14px;font-weight:600;letter-spacing:.12em;color:#D4A843;margin-top:3px">'
-        +(LIFT_S[DATA.lift]||'')+' '+(DATA.round+1)
-        +(((cur.att==null?void 0:(__o=>__o==null?void 0:(__o=>__o==null?void 0:__o.w)(__o[DATA.round]))(cur.att[DATA.lift])))?' · '+cur.att[DATA.lift][DATA.round].w+' KG':'')+'</div></div>'
-    :'';
-  // Abajo a la IZQUIERDA: es la esquina que queda libre — el scoreboard ocupa el
-  // ancho de abajo, la tabla actual va a la derecha y el medallero al centro.
-  // La escala NO se pone acá: va en una capa aparte, porque si comparte elemento
-  // con la animación de entrada, el transform de los fotogramas la pisa.
-  return '<div style="position:fixed;left:34px;bottom:48px;transform-origin:bottom left;'
-    +'background:linear-gradient(180deg,rgba(10,22,40,.93),rgba(6,13,26,.96));border:1px solid rgba(212,168,67,.4);border-top:3px solid #D4A843;'
-    +'border-radius:14px;padding:18px 42px 20px;box-shadow:0 12px 40px rgba(0,0,0,.55)">'
-    +cab
-    +'<div style="display:flex;gap:34px;align-items:flex-start;justify-content:center">'+orden.map(luz).join('')+'</div>'
+  let cab='DECISIÓN DE LOS JUECES';
+  if(cur){
+    const at=cur.att&&cur.att[DATA.lift]?cur.att[DATA.lift][DATA.round]:null;
+    cab='<span style="text-transform:uppercase">'+esc(_nombrePropio(cur.name||''))+'</span>'
+      +' · '+(LIFT_S[DATA.lift]||'')+' '+(DATA.round+1)
+      +(at&&at.w?' · '+_sbNum(at.w)+' KG':'');
+  }
+  const pill='display:inline-block;font-size:21px;font-weight:700;letter-spacing:.12em;padding:2px 14px;border-radius:3px;line-height:1.3;';
+  let ver='<span style="'+pill+'border:2px solid rgba(255,255,255,.22);color:'+MUT+'">ESPERANDO</span>';
+  if(vs.filter(Boolean).length===3){
+    const ok=vs.filter(v=>v==='white').length>=2;
+    ver='<span style="'+pill+'border:2px solid '
+      +(ok?'#22c55e;background:#22c55e;color:#000':'#ef4444;background:#ef4444;color:#fff')+'">'+(ok?'VÁLIDO':'NULO')+'</span>';
+  }
+  // Se dibuja para 1920 de ancho y se escala a la ventana, como el marcador.
+  // La escala del director NO va acá: va en una capa aparte, porque si comparte
+  // elemento con la animación de entrada, el transform de los fotogramas la pisa.
+  const k=_sbEscala();
+  return '<div style="position:fixed;left:'+Math.round(40*k)+'px;top:'+(Math.round(40*k)+(ocupado|0))+'px;width:340px;'
+    +'transform:scale('+k+');transform-origin:top left;'
+    +'background:'+cBody+';border:1px solid '+LN+';text-align:center;padding-bottom:12px;'
+    +'font-family:Oswald,\'Arial Narrow\',sans-serif;color:#fff;box-shadow:0 8px 26px rgba(0,0,0,.45)">'
+    +'<div style="padding:6px 12px;font-size:13px;letter-spacing:.12em;color:'+MUT+';background:'+cHead+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+cab+'</div>'
+    +'<div style="display:flex;gap:22px;justify-content:center;align-items:flex-start;margin:12px 0 10px">'+orden.map(luz).join('')+'</div>'
+    +ver
     +'</div>';
 }
 
@@ -1580,7 +1611,7 @@ function renderLucesTarima(enBloque){
   orden.forEach((j,i)=>{
     const e=_luzEstilo(_txLights[j]);
     h+='<div style="display:flex;flex-direction:column;align-items:center;gap:clamp(4px,.6vw,10px)">';
-    h+='<div style="width:clamp(42px,5.2vw,84px);height:clamp(42px,5.2vw,84px);border-radius:50%;'
+    h+='<div data-luz="'+j+'" style="width:clamp(42px,5.2vw,84px);height:clamp(42px,5.2vw,84px);border-radius:50%;'
       +'background:'+e.bg+';border:4px solid '+e.bd+';box-shadow:'+e.glow+',inset 0 0 14px rgba(0,0,0,'+(e.on?'.15':'.45')+');'
       +(e.on?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards;animation-delay:'+(i*0.07)+'s':'')+'"></div>';
     // Punto chico con el color de la tarjeta: le dice al atleta por qué fue nulo.
@@ -1612,51 +1643,75 @@ function _juradoTarimaHtml(j){
     +'</div></div>';
 }
 
+// Tal cual la vista previa: la franja de arriba como en Intentos ("DECISIÓN DE
+// LOS JUECES", la tanda y la tarima, y los logos a la derecha); abajo, el
+// atleta con el logo de su club, el movimiento, el intento y el peso; las tres
+// luces grandes y, con las tres puestas, VÁLIDO o NULO. Se dibuja para una
+// pantalla de 1920 × 1080 y se escala a la que haya.
 function renderScreenLuces(a){
   _txStartLightsListener();
+  const W=window.innerWidth||1920, H=window.innerHeight||1080;
+  const s=Math.min(W/1920,H/1080);
+  const p=v=>Math.max(1,Math.round(v*s))+'px';
   const orden=['izq','central','der'];
-  let luces='<div style="display:flex;gap:clamp(24px,4vw,90px);align-items:center;justify-content:center">';
+  const vs=orden.map(j=>_txLights[j]);
+  // El punto de la tarjeta (por qué fue nulo) va debajo de cada luz; la fila
+  // solo aparece si hay algún nulo.
+  const hayTarjeta=vs.some(v=>!!_luzEstilo(v).chip);
+  let luces='<div style="display:flex;gap:'+p(90)+';justify-content:center;align-items:flex-start;margin:'+p(70)+' 0 '+p(hayTarjeta?36:60)+'">';
   orden.forEach((j,i)=>{
     const v=_txLights[j];
     const e=_luzEstilo(v);
-    const glow=v==='white'?'0 0 70px rgba(255,255,255,.85),0 0 140px rgba(255,255,255,.4)'
-              :(e.chip?'0 0 70px rgba(239,68,68,.85),0 0 140px rgba(239,68,68,.4)':'none');
-    luces+='<div style="display:flex;flex-direction:column;align-items:center;gap:clamp(10px,1.4vh,26px)">';
-    luces+='<div style="width:clamp(110px,17vw,280px);height:clamp(110px,17vw,280px);border-radius:50%;'
-      +'background:'+e.bg+';border:7px solid '+e.bd+';box-shadow:'+glow+',inset 0 0 34px rgba(0,0,0,'+(e.on?'.15':'.5')+');'
+    const bg=v==='white'?'#fff':(e.chip?'#ef4444':'#1d1d20');
+    const sh=v==='white'?'0 0 0 '+p(3)+' #1f1f22,0 '+p(20)+' '+p(60)+' rgba(0,0,0,.18)'
+            :(e.chip?'0 0 0 '+p(3)+' #ef4444,0 0 '+p(90)+' rgba(239,68,68,.45)':'inset 0 0 0 '+p(3)+' #2f2f33');
+    luces+='<div style="display:flex;flex-direction:column;align-items:center;gap:'+p(22)+'">';
+    luces+='<div data-luz="'+j+'" style="width:'+p(300)+';height:'+p(300)+';border-radius:50%;background:'+bg+';box-shadow:'+sh+';'
       +(e.on?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards;animation-delay:'+(i*0.07)+'s':'')+'"></div>';
-    luces+='<div style="width:clamp(28px,4.2vw,68px);height:clamp(28px,4.2vw,68px);border-radius:50%;'
-      +(e.chip?'background:'+e.chip+';box-shadow:0 0 28px '+e.chip:'background:transparent')+'"></div>';
+    if(hayTarjeta)luces+='<div style="width:'+p(56)+';height:'+p(56)+';border-radius:50%;'
+      +(e.chip?'background:'+e.chip+';box-shadow:0 0 '+p(24)+' '+e.chip:'background:transparent')+'"></div>';
     luces+='</div>';
   });
   luces+='</div>';
 
-  // Encabezado con el atleta: sin esto, tres luces solas no dicen de quién son.
+  // La franja de arriba, la misma de la pantalla de Intentos. A la derecha van
+  // los logos del campeonato (o los subidos para la pantalla); sin ninguno, el
+  // de YourLift.
+  const _tar=(DATA.event&&(DATA.event.tarima||DATA.event.plataforma))||'';
+  const tanda=['TANDA '+(DATA.flight||''),_tar?'TARIMA '+_tar:''].filter(Boolean).join(' · ');
+  const tira=_tiraLogosPantalla(['fed','camp'],p(64),p(18))
+    ||'<img src="YourLift_logo.png" alt="" style="height:'+p(64)+';width:auto" onerror="this.style.display=\'none\'">';
+  const franja='<div style="position:absolute;left:0;right:0;top:0;height:'+p(100)+';box-sizing:border-box;background:#0b0b0c;border-bottom:1px solid #1f1f22;'
+    +'display:flex;align-items:center;gap:'+p(26)+';padding:0 '+p(48)+';color:#fff">'
+    +'<b style="font-size:'+p(36)+';font-weight:600;letter-spacing:.08em;white-space:nowrap">DECISIÓN DE LOS JUECES</b>'
+    +'<span style="font-size:'+p(22)+';letter-spacing:.14em;color:#8a8a90;white-space:nowrap">'+tanda+'</span>'
+    +'<span style="margin-left:auto;display:flex;align-items:center">'+tira+'</span>'
+    +'</div>';
+
+  // El atleta: sin esto, tres luces solas no dicen de quién son.
   let cab='';
   if(a){
     const l=DATA.lift, r=(typeof curAtt==='function')?curAtt(a):DATA.round;
     const at=(a.att&&a.att[l])?a.att[l][r]:null;
     const kg=(at&&at.w)||0;
-    cab='<div style="text-align:center;margin-bottom:clamp(18px,4vh,52px)">'
-      +'<div style="font-size:clamp(20px,3.4vw,52px);font-weight:700;letter-spacing:.04em;color:#fff;line-height:1.1">'
-      +esc(a.name||'')+'</div>'
-      +'<div style="margin-top:.5em;font-size:clamp(15px,2.4vw,34px);font-weight:600;letter-spacing:.12em;color:#fff">'
-      +(_LIFT_SIGLA[l]||'')+' '+(r+1)+(kg?' · '+kg.toFixed(1).replace(/\.0$/,'')+' KG':'')+'</div></div>';
+    const MOV={sq:'SENTADILLA',bp:'BANCA',dl:'PESO MUERTO'}[l]||'';
+    const ORD=['1ER','2DO','3ER','4TO'][r]||((r+1)+'°');
+    const logo=(window.clubLogoImg&&a.club)?window.clubLogoImg(a.club,Math.round(96*s),'padding:'+p(8)+';'):'';
+    cab='<div style="display:flex;align-items:center;justify-content:center;gap:'+p(26)+';font-size:'+p(72)+';font-weight:700;line-height:1.1;color:#fff">'
+      +logo+'<span>'+esc(_nombrePropio(a.name||''))+'</span></div>'
+      +'<div style="margin-top:'+p(16)+';font-size:'+p(38)+';letter-spacing:.16em;color:#9a9aa0">'
+      +[MOV,ORD+' INTENTO',kg?_sbNum(kg)+' KG':''].filter(Boolean).join(' · ')+'</div>';
   }
-  // Los logos, abajo, como en el resto de las escenas de la pantalla: esta era
-  // la única que no los mostraba.
-  const tira=_tiraLogosPantalla(['fed','camp'],'clamp(38px,6vh,92px)','clamp(14px,2vw,32px)');
   // Con las tres luces puestas, la decisión escrita: VÁLIDO (dos o tres blancas) o NULO.
-  const vs=orden.map(j=>_txLights[j]).filter(Boolean);
   let ver='';
-  if(vs.length===3){
+  if(vs.filter(Boolean).length===3){
     const ok=vs.filter(v=>v==='white').length>=2;
-    ver='<div style="margin-top:clamp(18px,4vh,52px);padding:.1em .9em;border-radius:12px;font-size:clamp(36px,6vw,104px);font-weight:700;letter-spacing:.12em;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.4);background:'+(ok?'#22c55e':'#ef4444')+'">'+(ok?'VÁLIDO':'NULO')+'</div>';
+    ver='<span style="display:inline-block;font-size:'+p(84)+';font-weight:700;letter-spacing:.12em;padding:'+p(10)+' '+p(60)+';border-radius:'+p(10)+';'
+      +(ok?'background:#22c55e;color:#000':'background:#ef4444;color:#fff')+'">'+(ok?'VÁLIDO':'NULO')+'</span>';
   }
-  return '<div style="position:absolute;top:0;right:0;bottom:0;left:0;background:#000;'
-    +'display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Oswald,sans-serif">'
-    +cab+luces+ver
-    +(tira?'<div style="position:absolute;left:0;right:0;bottom:clamp(14px,3vh,40px);display:flex;justify-content:center">'+tira+'</div>':'')
+  return '<div style="position:absolute;top:0;right:0;bottom:0;left:0;background:#000;overflow:hidden;font-family:Oswald,sans-serif;color:#fff">'
+    +franja
+    +'<div style="position:absolute;left:0;right:0;top:'+p(100)+';padding-top:'+p(110)+';text-align:center">'+cab+luces+ver+'</div>'
     +'</div>';
 }
 
@@ -2394,7 +2449,7 @@ function renderDirector(){
   h+='</div>';
   h+='<button class="btn '+(lbActive?'btn-r':'btn-g')+'" onclick="dirToggleLb()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(lbActive?'<i class=yl-i-pausa></i> DESACTIVAR':'<i class=yl-i-reproducir></i> ACTIVAR')+'</button>';
   h+='</div>'+scaleSlider('leaderboard')+'</div>';
-  h+=compToggle('luces','','Luces de jueces','Los tres círculos abajo a la izquierda, con el nombre del atleta y el intento. El tamaño se ajusta acá abajo. Se deja prendido toda la competencia: mientras no hay decisión no se ve nada, y aparece solo cuando los jueces marcan. Es un espejo — el válido o el nulo se sigue dando en Control en Vivo o en la planilla.','U','dirToggle(\'luces\')');
+  h+=compToggle('luces','','Luces de jueces','Los tres círculos arriba a la izquierda, en chico, con el nombre del atleta, el intento y VÁLIDO o NULO. El tamaño se ajusta acá abajo. Se deja prendido toda la competencia: mientras no hay decisión no se ve nada, y aparece solo cuando los jueces marcan. Es un espejo — el válido o el nulo se sigue dando en Control en Vivo o en la planilla.','U','dirToggle(\'luces\')');
   h+=compToggle('jurado','','Decisión del jurado (esquina superior izquierda)','"JURY HAS OVERRULED · Decisión del jurado" con la luz blanca o roja y el color de la tarjeta debajo. Se deja prendido: no se ve nada hasta que el jurado revierte un intento desde el panel de jueces (posición JURY), y ahí aparece '+(JURADO_MS/1000)+' segundos.','','dirToggle(\'jurado\')');
   h+=compToggle('tablaActual','','Tabla actual (corner)','Ranking de la categoría del lifter actual, esquina inferior derecha. Entra desde abajo, queda fijo. El levantador en pantalla se resalta y muestra la flecha de proyección (pos actual → pos si lo levanta).','A','dirToggle(\'tablaActual\')');
   // Medallero (Top 3) — selects en cascada: modalidad → sexo → división → categoría.

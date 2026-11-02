@@ -148,10 +148,10 @@ console.log('\n  Se anotan en el atleta que estaba en la barra');
   {
     ok(/const comps=\['profile','scoreboard','leaderboard','timer','breakTimer','tablaActual','medals','luces'\]/.test(lc),
        'entra en la lista de transiciones');
-    const bloque = lc.slice(lc.indexOf("const showLuces=_txDirActive('luces')"),
-                            lc.indexOf('// Medallero (Top 3)'));
-    ok(/txSlideInBottom/.test(bloque) && /txSlideOutBottom/.test(bloque),
-       'sube desde abajo y se va igual, como la tabla actual y el medallero');
+    const iLz = lc.indexOf("const showLuces=_txDirActive('luces')");
+    const bloque = lc.slice(iLz, lc.indexOf('// Cambio de intento', iLz));
+    ok(/txSlideInLeft/.test(bloque) && /txSlideOutLeft/.test(bloque),
+       'entra por la izquierda y se va igual, como el aviso del jurado');
     ok(/_txStartLightsListener\(\)/.test(bloque), 'y se engancha a las luces en vivo');
   }
 
@@ -188,7 +188,7 @@ console.log('\nEl tamaño se puede cambiar de verdad');
     const escalaEnLaMisma = /transform:scale\([^)]*\);transform-origin:[^;]*;'\+\w*Anim/.test(bloque);
     return { anim, escalaEnLaMisma };
   };
-  const ta = lc.slice(lc.indexOf('const taScale='), lc.indexOf('// Medallero (Top 3)'));
+  const ta = lc.slice(lc.indexOf("const showTabla=_txDirActive('tablaActual')"), lc.indexOf('// Medallero (Top 3)'));
   ok(capas(ta).anim, 'la Tabla Actual entra con animación');
   ok(!capas(ta).escalaEnLaMisma, 'y su escala ya NO comparte elemento con ella');
   ok(/transform:scale\('\+taScale\+'\);transform-origin:bottom right/.test(ta),
@@ -202,17 +202,19 @@ console.log('\nEl tamaño se puede cambiar de verdad');
 
   const lzI = lc.indexOf('const lzScale=');
   const lz = lc.slice(lzI, lzI + 700);
-  ok(/transform:scale\('\+lzScale\+'\);transform-origin:bottom left/.test(lz),
+  ok(/transform:scale\('\+lzScale\+'\);transform-origin:top left/.test(lz),
      'y las luces nacen ya con la escala en su capa');
 }
 
-console.log('\n  Las luces van abajo a la izquierda');
+console.log('\n  Las luces van arriba a la izquierda, en chico');
 {
-  ok(/position:fixed;left:34px;bottom:48px;transform-origin:bottom left/.test(lc),
-     'la banda se ancla en la esquina de abajo a la izquierda');
+  ok(/position:fixed;left:'\+Math\.round\(40\*k\)\+'px;top:'\+\(Math\.round\(40\*k\)\+\(ocupado\|0\)\)\+'px;width:340px;/.test(lc),
+     'la caja se ancla arriba a la izquierda, de un tercio del ancho del marcador');
+  ok(/const lzHtml=renderTxLucesBanda\(_tlOcupado\)/.test(lc),
+     'y baja si arriba está el aviso del jurado o el GOOD LIFT / NO LIFT');
   ok(!/left:50%;bottom:48px;transform:translateX\(-50%\)/.test(lc),
      'ya no queda centrada, donde chocaba con el scoreboard');
-  ok(/abajo a la izquierda/.test(lc), 'y el panel dice dónde va');
+  ok(/Los tres círculos arriba a la izquierda, en chico/.test(lc), 'y el panel dice dónde va');
   ok(/El tamaño se ajusta acá abajo/.test(lc), 'y que el tamaño se ajusta ahí mismo');
 }
 
