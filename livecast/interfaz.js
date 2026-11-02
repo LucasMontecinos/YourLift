@@ -170,15 +170,29 @@ function showToastLC(msg){
   t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);
 }
 
-// Tema de la competencia en vivo para el público: "dia" (blanco y azul, el del
-// sitio) o "noche" (negro). Cada persona elige y queda guardado en su navegador.
-// Solo la vista del público: las pantallas de operación siguen como siempre.
+// Tema del livecast: "dia" (blanco y azul, el del sitio) o "noche" (negro).
+// Cada persona elige y queda guardado en su navegador. Vale para la vista del
+// público y para las pantallas de operación (Atletas & Pesaje, Documentos,
+// Control en Vivo, Resultados, la ficha del atleta y la elección de campeonato).
+// La transmisión, el Control TX, el control remoto y las pantallas de tarima se
+// quedan como están: van al aire o se miran en la oscuridad del recinto.
 function _temaVivo(){ try{ const t=localStorage.getItem('yl_tema'); if(t==='dia'||t==='noche')return t; }catch(e){} return 'dia'; }
-function _cambiarTemaVivo(){ try{ localStorage.setItem('yl_tema',_temaVivo()==='dia'?'noche':'dia'); }catch(e){} R(); }
+function _cambiarTemaVivo(){ _ponerTemaVivo(_temaVivo()==='dia'?'noche':'dia'); }
+function _ponerTemaVivo(t){ try{ localStorage.setItem('yl_tema',t==='noche'?'noche':'dia'); }catch(e){} R(); }
 function _aplicarTemaVivo(){
   const raiz=document.documentElement;
-  if(!TX_MODE&&DATA.phase==='liveView')raiz.setAttribute('data-tema',_temaVivo());
-  else raiz.removeAttribute('data-tema');
+  const _conTema={liveView:1,setup:1,manage:1,docs:1,compete:1,results:1,atletaInfo:1};
+  if(!TX_MODE&&_conTema[DATA.phase]){
+    raiz.setAttribute('data-tema',_temaVivo());
+    // El fondo viejo (azul, negro o gris) se ponía directo en la página y le
+    // ganaba al tema: el panel seguía azul aunque se eligiera la versión día.
+    ['--bg','--card','--border','--side'].forEach(v=>raiz.style.removeProperty(v));
+  } else {
+    raiz.removeAttribute('data-tema');
+    // Las pantallas que no tienen día/noche (Control TX, transmisión, control
+    // remoto) siguen con su fondo de siempre.
+    try{ window.aplicarFondoLC(window.lcFondo); }catch(e){}
+  }
 }
 
 function R(){
@@ -460,10 +474,11 @@ function renderShell(){
   h+='<div style="display:flex;gap:4px;flex-wrap:wrap">';
   _fdLat.tandas.forEach(f=>{const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;h+='<button onclick="DATA.flight=\''+f+'\';saveNow();R()" style="flex:1;min-width:36px;padding:6px 0;border-radius:6px;border:2px solid '+(DATA.flight===f?FL_C[f]||'var(--muted)':'var(--border)')+';background:'+(DATA.flight===f?(FL_C[f]||'#666')+'22':'transparent')+';color:'+(DATA.flight===f?FL_C[f]||'#fff':'var(--muted)')+';font-family:Oswald;font-size:12px;font-weight:700;cursor:pointer">'+f+'<span style="font-size:9px;opacity:.6;display:block">'+n+'</span></button>'});
   h+='</div>';
-  // Fondo de la interfaz \u2014 preferencia de esta pantalla, no se sincroniza.
-  h+='<div class="side-label" style="margin-top:14px">Fondo</div><div style="display:flex;gap:4px">';
-  Object.keys(LC_FONDOS).forEach(k=>{const f=LC_FONDOS[k],on=window.lcFondo===k;
-    h+='<button onclick="setFondoLC(\''+k+'\')" title="'+f.n+'" style="flex:1;padding:7px 0;border-radius:6px;border:2px solid '+(on?'var(--gold)':'var(--border)')+';background:'+f.bg+';color:'+(on?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:10px;font-weight:700;letter-spacing:.5px;cursor:pointer">'+f.n.split(' ')[0].toUpperCase()+'</button>';});
+  // Versión día (blanca y azul, la del sitio) o noche (negra). Reemplaza al
+  // selector de fondo de antes. Preferencia de esta pantalla: no se sincroniza.
+  h+='<div class="side-label" style="margin-top:14px">Versión</div><div style="display:flex;gap:4px">';
+  ['dia','noche'].forEach(t=>{const on=_temaVivo()===t;
+    h+='<button class="lc-tema-b'+(on?' on':'')+'" onclick="_ponerTemaVivo(\''+t+'\')" title="'+(t==='dia'?'Blanca y azul, como el sitio':'Negra, para salas oscuras')+'" style="flex:1;padding:7px 0;border-radius:999px;border:2px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(t==='dia'?'\u2600 D\u00cdA':'\u263e NOCHE')+'</button>';});
   h+='</div>';
   if(isAdmin){
   h+='<div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">';
@@ -503,6 +518,7 @@ function renderShell(){
   h+='<div style="font-size:9px;color:'+(fbReady?'var(--green)':'var(--muted)')+';padding:0 8px;margin-bottom:6px">'+(fbReady?'<i class=yl-i-video></i> Datos en vivo':'<i class=yl-i-espera></i> Conectando...')+'</div>';
   h+='<button class="side-btn" onclick="go(\'setup\')"><span class="icon"><i class=yl-i-trofeo></i></span>Selecci\u00f3n de Campeonato</button>';
   h+='<div data-yl-idioma style="margin:8px 8px 10px"></div>';
+
   // El bot\u00f3n de iniciar sesi\u00f3n sali\u00f3 de la barra: esta pantalla la mira el
   // p\u00fablico y no corresponde ofrecerle entrar. Pero la raz\u00f3n por la que estaba
   // sigue en pie: si al operador se le vence la sesi\u00f3n EN MEDIO de la competencia,

@@ -21,7 +21,8 @@ const fs = require('fs');
 
 let fallas = 0;
 const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fallas++; };
-const ROJO = /rgb\(239, 68, 68\)/;
+// El rojo de la versión noche y el de la versión día (más oscuro, para leerse sobre blanco).
+const ROJO = /rgb\(239, 68, 68\)|rgb\(220, 38, 38\)/;
 
 (async () => {
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
