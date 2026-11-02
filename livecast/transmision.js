@@ -1232,7 +1232,10 @@ function renderTxDirector(container){
   // el panel de jueces, y ahí aparece unos segundos.
   if(_txDirActive('jurado')){
     _txStartLightsListener();
-    if(_txJurado&&Date.now()<_txJuradoHasta){
+    // Si la caja de luces está en pantalla con ese mismo intento, ya lo dice ella.
+    const _lzOn=_txDirActive('luces')&&!!(_txLights.izq||_txLights.central||_txLights.der);
+    const _yaEnLuces=_lzOn&&!!_juradoDeLuces(_lucesAtleta(liftQueue()[0]||null));
+    if(_txJurado&&Date.now()<_txJuradoHasta&&!_yaEnLuces){
       const jsc=(_txDirState.jurado==null?void 0:_txDirState.jurado.scale)||1;
       html+='<div style="position:fixed;top:0;left:0;pointer-events:none;'+(jsc!==1?'transform:scale('+jsc+');transform-origin:top left;':'')+'">'
         +renderTxJurado(_txJurado)+'</div>';
@@ -1510,6 +1513,12 @@ function _lzAnotar(cur){
   const r=(typeof curAtt==='function')?curAtt(cur):DATA.round;
   _lzDe={id:cur.id,a:_realAth(cur),lift:DATA.lift,round:r};
 }
+// La decisión del jurado sobre el intento de estas luces, si la hubo.
+function _juradoDeLuces(lz){
+  const j=(typeof _txJurado!=='undefined')?_txJurado:null;
+  if(!j||!lz||!lz.a)return null;
+  return (j.id===lz.a.id&&j.lift===lz.lift&&(j.round|0)===(lz.round|0))?j:null;
+}
 function _lucesAtleta(cur){
   const L=_txLights||{};
   if(!(L.izq||L.central||L.der)){_lzDe=null;return null;}
@@ -1566,10 +1575,21 @@ function renderTxLucesBanda(ocupado){
   }
   const pill='display:inline-block;font-size:21px;font-weight:700;letter-spacing:.12em;padding:2px 14px;border-radius:3px;line-height:1.3;';
   let ver='<span style="'+pill+'border:2px solid rgba(255,255,255,.22);color:'+MUT+'">ESPERANDO</span>';
-  if(vs.filter(Boolean).length===3){
-    const ok=vs.filter(v=>v==='white').length>=2;
+  const tres=vs.filter(Boolean).length===3;
+  const okJueces=vs.filter(v=>v==='white').length>=2;
+  if(tres){
     ver='<span style="'+pill+'border:2px solid '
-      +(ok?'#22c55e;background:#22c55e;color:#000':'#ef4444;background:#ef4444;color:#fff')+'">'+(ok?'VÁLIDO':'NULO')+'</span>';
+      +(okJueces?'#22c55e;background:#22c55e;color:#000':'#ef4444;background:#ef4444;color:#fff')+'">'+(okJueces?'VÁLIDO':'NULO')+'</span>';
+  }
+  // Si el jurado revirtió este intento, lo dice acá mismo: la decisión final
+  // del jurado y lo que habían dado los jueces.
+  const jr=_juradoDeLuces(lz);
+  if(jr){
+    const okJ=jr.res==='g';
+    const chipJ=(!okJ&&jr.card&&jr.card!=='red')?'<i style="display:inline-block;width:14px;height:14px;border-radius:50%;margin-left:8px;vertical-align:middle;background:'+({blue:'#3b82f6',yellow:'#f59e0b'}[jr.card]||'#ef4444')+'"></i>':'';
+    ver='<div style="font-size:14px;font-weight:600;letter-spacing:.16em;color:#fff;margin-bottom:6px">JURADO REVIRTIÓ</div>'
+      +'<span style="'+pill+'border:2px solid '+(okJ?'#22c55e;background:#22c55e;color:#000':'#ef4444;background:#ef4444;color:#fff')+'">'+(okJ?'VÁLIDO':'NULO')+chipJ+'</span>'
+      +(tres?'<div style="font-size:12px;letter-spacing:.12em;color:'+MUT+';margin-top:6px">LOS JUECES DIERON '+(okJueces?'VÁLIDO':'NULO')+'</div>':'');
   }
   // Se dibuja para 1920 de ancho y se escala a la ventana, como el marcador.
   // La escala del director NO va acá: va en una capa aparte, porque si comparte
@@ -1721,10 +1741,18 @@ function renderScreenLuces(a){
   }
   // Con las tres luces puestas, la decisión escrita: VÁLIDO (dos o tres blancas) o NULO.
   let ver='';
-  if(vs.filter(Boolean).length===3){
-    const ok=vs.filter(v=>v==='white').length>=2;
-    ver='<span style="display:inline-block;font-size:'+p(84)+';font-weight:700;letter-spacing:.12em;padding:'+p(10)+' '+p(60)+';border-radius:'+p(10)+';'
-      +(ok?'background:#22c55e;color:#000':'background:#ef4444;color:#fff')+'">'+(ok?'VÁLIDO':'NULO')+'</span>';
+  const pillT=okv=>'display:inline-block;font-size:'+p(84)+';font-weight:700;letter-spacing:.12em;padding:'+p(10)+' '+p(60)+';border-radius:'+p(10)+';'
+    +(okv?'background:#22c55e;color:#000':'background:#ef4444;color:#fff');
+  const tres=vs.filter(Boolean).length===3;
+  const okJueces=vs.filter(v=>v==='white').length>=2;
+  if(tres)ver='<span style="'+pillT(okJueces)+'">'+(okJueces?'VÁLIDO':'NULO')+'</span>';
+  // Si el jurado revirtió este intento: su decisión y lo que dieron los jueces.
+  const jr=_juradoDeLuces(lz);
+  if(jr){
+    const okJ=jr.res==='g';
+    ver='<div style="font-size:'+p(34)+';font-weight:600;letter-spacing:.18em;color:#fff;margin-bottom:'+p(14)+'">JURADO REVIRTIÓ</div>'
+      +'<span style="'+pillT(okJ)+'">'+(okJ?'VÁLIDO':'NULO')+'</span>'
+      +(tres?'<div style="font-size:'+p(30)+';letter-spacing:.14em;color:#9a9aa0;margin-top:'+p(14)+'">LOS JUECES DIERON '+(okJueces?'VÁLIDO':'NULO')+'</div>':'');
   }
   return '<div style="position:absolute;top:0;right:0;bottom:0;left:0;background:#000;overflow:hidden;font-family:Oswald,sans-serif;color:#fff">'
     +franja
@@ -2028,52 +2056,42 @@ function _medalTop3(md){
     .slice(0,3);
 }
 
-// Tal cual la vista previa: el podio abajo al centro. La franja con
-// MEDALLERO y la categoría, y tres tarjetas en orden 2 · 1 · 3, la del primero
-// más alta. Siempre en negro; el oro, la plata y el bronce son el color de la
-// medalla. Mientras está, el marcador se esconde (van en el mismo lugar).
+// El medallero de siempre (se pidió dejarlo como estaba), con fondo negro.
 function renderTxMedals(md){
   md=md||{};
   if(!md.mod||!md.sex||!md.div||!md.cat)return '';
   const tipo=md.tipo||'total';
   const ranked=_medalTop3(md);
   if(!ranked.length)return '';
-  const X=_txNegro(), k=_sbEscala();
-  const MEDALLA={1:'#E2B13C',2:'#C3C8CF',3:'#C98A5A'};
-  const ALTO={1:360,2:310,3:280};
-  const mujer=(md.sex==='Femenino'||md.sex==='Mujer'||md.sex==='F');
-  const cab=[(txCatLabel(md.cat)||md.cat||'').replace(/^-/,'−').replace(/kg$/i,' KG'), String(md.div||'').toUpperCase(),
-    _txModLabel(md.mod).toUpperCase(), mujer?'MUJERES':'HOMBRES', MEDAL_TIPOS[tipo]||'TOTAL'].filter(Boolean).join(' · ');
-  const tarjeta=(r,x)=>{
-    if(!x)return '<div></div>';
-    // Con varios países la bandera va ENTRE el nombre y el total (se pidió así
-    // mirando un medallero real); con uno solo, el logo del club arriba del
-    // nombre, como en la vista previa.
-    const varios=_variosPaises();
-    const logo=(!varios&&window.clubLogoImg&&x.a.club)?window.clubLogoImg(x.a.club,64,'padding:5px;margin-top:14px;'):'';
-    const debajo=varios
-      ?'<div style="display:flex;align-items:center;gap:10px;margin-top:8px">'+_flagImg(_ctry(x.a),32)+'<small style="font-family:\'DM Sans\',sans-serif;font-size:19px;color:'+X.mut+'">'+esc(_ctryName(_ctry(x.a))||_ctry(x.a))+'</small></div>'
-      :'<small style="font-family:\'DM Sans\',sans-serif;font-size:19px;color:'+X.mut+';margin-top:4px">'+esc(x.a.club||'')+'</small>';
-    return `<div style="background:${X.bg};border:1px solid ${X.line};border-top:4px solid #fff;padding:22px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;min-height:${ALTO[r]}px;box-sizing:border-box">
-      <span style="width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:${MEDALLA[r]};color:#000;font-size:34px;font-weight:700">${r}</span>
-      ${logo}
-      <b style="font-family:'DM Sans',sans-serif;font-size:28px;font-weight:700;margin-top:12px;line-height:1.15">${esc(_nombrePropio(x.a.name||''))}</b>
-      ${debajo}
-      <strong style="font-size:54px;font-weight:600;margin-top:auto;padding-top:10px;line-height:1">${_sbNum(x.valor)}</strong>
+  const divS=txDivShort(md.div);
+  const sexLabel=(md.sex==='Femenino'||md.sex==='Mujer'||md.sex==='F')?'F':'M';
+  const RANK_BG={1:'#D4A843',2:'#C0C0C0',3:'#CD7F32'};
+  const row=(r,x)=>{
+    if(!x)return '';
+    const big=r===1;
+    // La bandera va entre el nombre y el total: en un sudamericano es lo que se
+    // busca de un vistazo, y ahí no compite con el número de puesto.
+    const flag=_variosPaises()?_flagImg(_ctry(x.a),big?26:22):_logoClub(x.a,big?34:28,'margin-right:0;');
+    // Siempre en negro (se pidió así). El ORO, la PLATA y el BRONCE son el
+    // color de la medalla y no cambian — un primer lugar plateado no se entiende.
+    return `<div style="display:flex;align-items:center;gap:12px;background:linear-gradient(90deg,#0a0a0b,#000000);border-left:6px solid ${RANK_BG[r]};border-radius:8px;padding:${big?'12px 20px':'9px 18px'};box-shadow:0 8px 20px rgba(0,0,0,.5)">
+      <div style="width:${big?'40px':'32px'};height:${big?'40px':'32px'};flex-shrink:0;border-radius:50%;background:${RANK_BG[r]};display:flex;align-items:center;justify-content:center;font-family:Oswald;font-weight:800;font-size:${big?'20px':'16px'};color:#0A1628">${r}</div>
+      <div style="flex:1;font-family:Oswald;font-weight:700;font-size:${big?'24px':'18px'};color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.5)">${x.a.name||''}</div>
+      ${flag}
+      <div style="font-family:Oswald;font-weight:800;font-size:${big?'24px':'18px'};color:${RANK_BG[r]}">${x.valor.toFixed(1)}</div>
     </div>`;
   };
-  return `<div style="position:absolute;left:50%;bottom:${Math.round(64*k)}px;transform:translateX(-50%) scale(${k});transform-origin:bottom center;pointer-events:none">
-    <div style="width:1320px;font-family:Oswald,'Arial Narrow',sans-serif;color:#fff">
-      <div style="background:${X.head};padding:14px 26px;display:flex;align-items:center;gap:20px;box-shadow:0 10px 30px rgba(0,0,0,.4)">
-        ${_tiraLogos(['camp'],'38px','10px')}
-        <b style="font-size:30px;font-weight:600;letter-spacing:.14em">MEDALLERO</b>
-        <span style="font-size:20px;letter-spacing:.14em;color:#BDBDC2">${cab}</span>
+  return `
+    <div style="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);width:min(760px,60vw);pointer-events:none">
+      <div style="text-align:center;margin-bottom:10px;font-family:Oswald;font-size:14px;letter-spacing:3px;color:#ffffff;text-shadow:0 2px 6px rgba(0,0,0,.6)">MEDALLERO ${MEDAL_TIPOS[tipo]||'TOTAL'} · ${divS} ${txCatLabel(md.cat)||md.cat} ${sexLabel} · ${_txModLabel(md.mod)}</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${row(1,ranked[0])}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>${row(2,ranked[1])}</div>
+          <div>${row(3,ranked[2])}</div>
+        </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);align-items:end;gap:10px;margin-top:10px">
-        ${tarjeta(2,ranked[1])}${tarjeta(1,ranked[0])}${tarjeta(3,ranked[2])}
-      </div>
-    </div>
-  </div>`;
+    </div>`;
 }
 
 function _txModLabel(mod){

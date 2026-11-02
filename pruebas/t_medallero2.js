@@ -123,7 +123,7 @@ const TOP = `(tipo)=>{
       ok(html.indexOf(txt) >= 0, t + ' → "' + txt + '"');
     }
     const html = await p.evaluate(() => renderTxMedals({ mod: 'classic', sex: 'Hombre', div: 'Junior', cat: '83', tipo: 'dl' }));
-    ok(/>190<\/strong>/.test(html), 'y el número que se muestra es el del movimiento, no el total');
+    ok(/190\.0/.test(html), 'y el número que se muestra es el del movimiento, no el total');
   }
 
   console.log('\n  Un medallero viejo, sin tipo, sigue siendo el del total');

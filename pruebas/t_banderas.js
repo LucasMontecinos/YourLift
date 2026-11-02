@@ -62,21 +62,14 @@ const MONTAR = `(paisRaro)=>{
   {
     const { p, errs } = await abrir();
     const pos = await p.evaluate(() => {
-      // El podio: cada atleta es una tarjeta. Se recorre la del primero en orden.
-      const tarjeta = [...document.querySelectorAll('div')].filter(e => /VERGARA/i.test(e.textContent)
-        && e.querySelector('.flag-img') && e.querySelector('strong'))
-        .sort((x, y) => x.textContent.length - y.textContent.length)[0];
-      if (!tarjeta) return null;
-      const orden = [];
-      tarjeta.querySelectorAll('span,b,small,strong,svg').forEach(e => {
-        const t = e.textContent.trim();
-        const q = e.classList.contains('flag-img') ? 'bandera'
-          : e.tagName === 'STRONG' ? 'total'
-          : /VERGARA/i.test(t) ? 'nombre'
-          : /^\d$/.test(t) ? 'puesto' : null;
-        if (q && orden[orden.length - 1] !== q) orden.push(q);
-      });
-      return orden;
+      const bandera = document.querySelector('.flag-img');
+      const fila = bandera && bandera.parentElement;
+      if (!fila) return null;
+      return [...fila.children].map(e =>
+        e.classList.contains('flag-img') ? 'bandera'
+        : /^\d+$/.test(e.textContent.trim()) ? 'puesto'
+        : /VERGARA/.test(e.textContent) ? 'nombre'
+        : /\d+\.\d/.test(e.textContent) ? 'total' : '?');
     });
     ok(!!pos, 'se encuentra la fila del podio');
     const iN = pos ? pos.indexOf('nombre') : -1;
@@ -96,10 +89,9 @@ const MONTAR = `(paisRaro)=>{
                colores: svgs.map(s => (s.innerHTML.match(/#[0-9A-Fa-f]{6}/g) || []).join(',')) };
     });
     ok(r.n === 3, 'tres banderas (' + r.n + ')');
-    // El podio va en orden 2 · 1 · 3 (el primero al medio, más alto).
-    ok(r.paises.join(',') === 'ARG,CHI,BRA', 'cada una con su país: ' + r.paises.join(', '));
-    ok(/0039A6/i.test(r.colores[1]), 'Chile lleva su azul');
-    ok(/74ACDF/i.test(r.colores[0]), 'Argentina su celeste');
+    ok(r.paises.join(',') === 'CHI,ARG,BRA', 'cada una con su país: ' + r.paises.join(', '));
+    ok(/0039A6/i.test(r.colores[0]), 'Chile lleva su azul');
+    ok(/74ACDF/i.test(r.colores[1]), 'Argentina su celeste');
     ok(/009C3B/i.test(r.colores[2]), 'Brasil su verde');
   }
 

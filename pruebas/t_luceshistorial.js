@@ -122,6 +122,13 @@ console.log('\n  Se anotan en el atleta que estaba en la barra');
       out.blancas = renderTxLucesBanda();
       _txLights = { izq: 'red', central: 'blue', der: 'yellow' };
       out.nulo = renderTxLucesBanda();
+      // El jurado revierte ese mismo intento: la caja lo dice.
+      const q = liftQueue()[0];
+      _txJurado = { id: q.id, res: 'g', card: null, lift: DATA.lift, round: curAtt(q), name: q.name, ts: Date.now() };
+      out.jurado = renderTxLucesBanda();
+      _txJurado = { id: 'otro', res: 'g', card: null, lift: DATA.lift, round: 0, name: 'Otro', ts: Date.now() };
+      out.juradoOtro = renderTxLucesBanda();
+      _txJurado = null;
       return out;
     });
     ok(r.apagado === '',
@@ -131,6 +138,9 @@ console.log('\n  Se anotan en el atleta que estaba en la barra');
     ok(/SQ 1 · 150 KG/.test(r.blancas), 'y el movimiento, el intento y el peso');
     ok(/#3b82f6/.test(r.nulo) && /#f59e0b/.test(r.nulo),
        'y los chips de color cuando el nulo fue con tarjeta azul o amarilla');
+    ok(/JURADO REVIRTIÓ/.test(r.jurado) && /VÁLIDO/.test(r.jurado) && /LOS JUECES DIERON NULO/.test(r.jurado),
+       'si el jurado revierte ese intento, la caja dice JURADO REVIRTIÓ, la decisión final y lo que dieron los jueces');
+    ok(!/JURADO REVIRTIÓ/.test(r.juradoOtro), 'y no lo dice si lo que revirtió el jurado es otro intento');
   }
 
   console.log('\n  Está en el control remoto y en el panel');
