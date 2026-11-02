@@ -98,6 +98,19 @@ window.editInsc=async function(insId,field){
 // NAVIGATION
 // ═══════════════════════════════════════════
 window.admNav=function(open){document.body.classList.toggle('nav-open',!!open);};
+// La barra azul de arriba, como la vista previa: el menú (en el celular), el
+// logo original de YourLift, el nombre del panel y quién entró.
+function _admTop(){
+  const nombre=(ST.adminInfo&&(ST.adminInfo.name||ST.adminInfo.nombre))||(ST.user&&ST.user.email)||'';
+  const ini=String(nombre).trim().charAt(0).toUpperCase()||'·';
+  const rol=(ST.adminInfo&&ST.adminInfo.role)||'admin';
+  return `<header class="adm-top">
+    <button class="adm-burger" onclick="admNav(true)" aria-label="Abrir el menú"><i class=yl-i-menu></i> Menú</button>
+    <img src="YourLift_logo.png" alt="YourLift" class="adm-top-logo" onclick="location.href='index.html'" onerror="this.style.display='none'">
+    <b>Panel de administración</b>
+    <span class="adm-u"><span>${nombre}<small>${rol==='owner'?'Owner':rol}</small></span><i>${ini}</i></span>
+  </header>`;
+}
 
 function renderStreamingShell(){
   const cfg=_SHELL_ROL[ST.adminInfo?.role]||_SHELL_ROL.streaming;
@@ -115,7 +128,7 @@ function renderStreamingShell(){
         <button class="side-btn" onclick="doLogout()" style="color:var(--red)">Cerrar sesión</button>
       </div>
     </div>
-    <div class="corner-stack"><img src="YourLift_logo.png" alt="YourLift" class="corner-logo" onclick="location.href='index.html'" title="Volver al sitio" onerror="this.style.display='none'"></div><div class="main"><button class="adm-burger" onclick="admNav(true)"><i class=yl-i-menu></i> Menú</button>
+    ${_admTop()}<div class="main">
       <div class="h1">${cfg.titulo}</div>
       <p class="subtitle">${cfg.bajada}</p>
       <div class="card" style="max-width:560px">
@@ -262,7 +275,7 @@ function render(){
   else if(ST.view==='mergeResults')content=renderMergeResults();
   else if(ST.view==='athleteProfile')content=renderAthleteProfile();
   
-  app.innerHTML=`<div class="shell"><div class="nav-backdrop" onclick="admNav(false)"></div>${sidebar}<div class="corner-stack"><img src="YourLift_logo.png" alt="YourLift" class="corner-logo" onclick="location.href='index.html'" title="Volver al sitio" onerror="this.style.display='none'"></div><div class="main"><button class="adm-burger" onclick="admNav(true)"><i class=yl-i-menu></i> Menú</button>${content}</div></div>`;
+  app.innerHTML=`<div class="shell"><div class="nav-backdrop" onclick="admNav(false)"></div>${sidebar}${_admTop()}<div class="main">${content}</div></div>`;
   if(ST.view==='sponsors'&&!ST._sponsorsLoaded)setTimeout(loadSponsors,0);
   if(ST.view==='portada'&&!ST._portadaLoaded)setTimeout(loadPortada,0);
   if(ST.view==='stats'){
@@ -4292,6 +4305,32 @@ function cpPeso(b){
   return n<1024*1024 ? Math.max(1,Math.round(n/1024))+' KB' : (n/1024/1024).toFixed(1)+' MB';
 }
 
+// ── Lo de arriba de la lista, como la vista previa ─────────────────
+// Cuatro números que dicen qué hay que atender, y en cada campeonato su fecha
+// en un bloque azul a la izquierda.
+const _CAMP_MES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function _campFecha(d){
+  const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(d||''));
+  return m?`<div class="ad-d"><b>${m[3]}</b><span>${_CAMP_MES[+m[2]-1]}</span></div>`:'';
+}
+function _campKpis(evs){
+  const vivos=(evs||[]).filter(e=>e.status!=='archived');
+  const abiertos=vivos.filter(e=>e.status==='open').length;
+  const ids=new Set(vivos.map(e=>e.id));
+  const insc=(ST.inscripciones||[]).filter(i=>ids.has(i.evento));
+  const pend=insc.filter(i=>i.status==='pending').length;
+  const apr=insc.filter(i=>i.status==='approved').length;
+  const hoy=new Date().toISOString().slice(0,10);
+  const prox=vivos.filter(e=>(e.date||'')>=hoy).sort((a,b)=>String(a.date).localeCompare(String(b.date)))[0];
+  const fx=prox?/^(\d{4})-(\d{2})-(\d{2})/.exec(prox.date):null;
+  return `<div class="ad-k">
+    <div><b>${abiertos}</b><span>Con inscripciones abiertas</span></div>
+    <div><b>${pend}</b><span>Inscripciones por revisar</span>${pend?`<a onclick="go('approvals')">Revisar →</a>`:''}</div>
+    <div><b>${apr}</b><span>Inscritos aprobados</span></div>
+    <div><b>${fx?(+fx[3])+' '+_CAMP_MES[+fx[2]-1]:'—'}</b><span>${prox?'Próximo: '+prox.name:'Sin campeonatos por venir'}</span></div>
+  </div>`;
+}
+
 function renderCampeonatos(){
   const evs = ST.eventos;
   const editing = ST.eventoForm;
@@ -4570,6 +4609,7 @@ function renderCampeonatos(){
   return `
   <div class="h1">Campeonatos</div>
   <p class="subtitle">Gestiona los campeonatos — los cambios se propagan en tiempo real a inscripciones, nómina y cronograma</p>
+  ${_campKpis(evs)}
   <div style="display:flex;justify-content:flex-end;margin-bottom:16px;gap:10px;flex-wrap:wrap">
     ${purgableCount>0?`<button class="btn" onclick="purgarInscripcionesArchivadas()" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.4);color:var(--red);font-size:11px" title="Libera espacio en Firestore eliminando inscripciones de campeonatos ya archivados. Los resultados permanecen en el perfil de cada atleta.">Purgar inscripciones archivadas (${purgableCount})</button>`:''}
     <button class="btn" onclick="newEvento(true)" style="background:rgba(212,168,67,.15);border:1px solid rgba(212,168,67,.6);color:var(--gold)" title="Campeonato que no es de la federación: formulario propio sin RUT ni código, fuera del ranking">+ Campeonato abierto</button>
@@ -4585,8 +4625,9 @@ function renderCampeonatos(){
       const autoClose = ev.closeDate && ev.closeDate < today && ev.status==='open';
       return `<div class="card" style="border-left:4px solid ${STATUS_COLORS[ev.status]||'var(--border)'}">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+          ${_campFecha(ev.date)}
           <div style="flex:1;min-width:200px">
-            <div style="font-family:Oswald;font-size:16px;font-weight:700">${ev.name}</div>
+            <div class="ad-ev-n" style="font-family:Oswald;font-size:16px;font-weight:700">${ev.name}</div>
             <div style="font-size:11px;color:var(--muted);margin-top:3px">${ev.location||'—'} · ${ev.days||ev.date||'—'} · ${ev.org||'—'}</div>
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
               <span style="font-size:11px;font-weight:700;color:${STATUS_COLORS[ev.status]||'var(--muted)'}">${STATUS_LABELS[ev.status]||ev.status}</span>

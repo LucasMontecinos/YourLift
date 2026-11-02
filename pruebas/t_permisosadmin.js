@@ -77,7 +77,8 @@ async function abrirComo(b, admin) {
     null, { timeout: 20000 }).catch(() => {});
   await p.waitForTimeout(900);
   const r = await p.evaluate(t => {
-    const menu = document.body.innerText;
+    // El menú ya no va en mayúsculas: se leen los botones del menú, sin importar cómo se escriban.
+    const menu = [...document.querySelectorAll('.side .side-btn')].map(b => b.textContent.toUpperCase()).join(' | ');
     let pest = [];
     try {
       ST.view = 'stats'; render();

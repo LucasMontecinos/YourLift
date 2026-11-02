@@ -60,7 +60,7 @@ async function panel(b, admin, portada) {
   console.log('\nEl owner tiene la pantalla Portada; el resto de los admins no');
   {
     const { p, ctx, errs } = await panel(b, { id: 'u1', email: 'x@y.cl', role: 'owner' }, { intervalo: 4, fotos: [{ url: '', pc: { x: 70, y: 10 }, movil: { x: 40, y: 60 } }, { url: 'portada/portada_movil.jpg', pc: { x: 20, y: 5 }, movil: { x: 60, y: 30 } }] });
-    ok(/PORTADA/.test(await p.evaluate(() => document.body.innerText)), 'el owner ve "Portada" en el menú');
+    ok(/PORTADA/.test(await p.evaluate(() => [...document.querySelectorAll('.side .side-btn')].map(b => b.textContent.toUpperCase()).join(' | '))), 'el owner ve "Portada" en el menú');
     await p.evaluate(() => go('portada')); await p.waitForTimeout(700);
     const v = await p.evaluate(() => ({
       f0: document.getElementById('pt_img_0_pc') && document.getElementById('pt_img_0_pc').style.objectPosition,
@@ -78,7 +78,7 @@ async function panel(b, admin, portada) {
   }
   {
     const { p, ctx } = await panel(b, { id: 'u1', email: 'x@y.cl', role: 'admin' });
-    ok(!/PORTADA/.test(await p.evaluate(() => document.body.innerText)), 'un admin que no es owner no la ve');
+    ok(!/PORTADA/.test(await p.evaluate(() => [...document.querySelectorAll('.side .side-btn')].map(b => b.textContent.toUpperCase()).join(' | '))), 'un admin que no es owner no la ve');
     await ctx.close();
   }
 

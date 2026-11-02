@@ -94,6 +94,19 @@ window.editInsc=async function(insId,field){
 // NAVIGATION
 // ═══════════════════════════════════════════
 window.admNav=function(open){document.body.classList.toggle('nav-open',!!open);};
+// La barra azul de arriba, como la vista previa: el menú (en el celular), el
+// logo original de YourLift, el nombre del panel y quién entró.
+function _admTop(){
+  const nombre=(ST.adminInfo&&(ST.adminInfo.name||ST.adminInfo.nombre))||(ST.user&&ST.user.email)||'';
+  const ini=String(nombre).trim().charAt(0).toUpperCase()||'·';
+  const rol=(ST.adminInfo&&ST.adminInfo.role)||'admin';
+  return `<header class="adm-top">
+    <button class="adm-burger" onclick="admNav(true)" aria-label="Abrir el menú"><i class=yl-i-menu></i> Menú</button>
+    <img src="YourLift_logo.png" alt="YourLift" class="adm-top-logo" onclick="location.href='index.html'" onerror="this.style.display='none'">
+    <b>Panel de administración</b>
+    <span class="adm-u"><span>${nombre}<small>${rol==='owner'?'Owner':rol}</small></span><i>${ini}</i></span>
+  </header>`;
+}
 
 function renderStreamingShell(){
   const cfg=_SHELL_ROL[ST.adminInfo?.role]||_SHELL_ROL.streaming;
@@ -111,7 +124,7 @@ function renderStreamingShell(){
         <button class="side-btn" onclick="doLogout()" style="color:var(--red)">Cerrar sesión</button>
       </div>
     </div>
-    <div class="corner-stack"><img src="YourLift_logo.png" alt="YourLift" class="corner-logo" onclick="location.href='index.html'" title="Volver al sitio" onerror="this.style.display='none'"></div><div class="main"><button class="adm-burger" onclick="admNav(true)"><i class=yl-i-menu></i> Menú</button>
+    ${_admTop()}<div class="main">
       <div class="h1">${cfg.titulo}</div>
       <p class="subtitle">${cfg.bajada}</p>
       <div class="card" style="max-width:560px">
@@ -258,7 +271,7 @@ function render(){
   else if(ST.view==='mergeResults')content=renderMergeResults();
   else if(ST.view==='athleteProfile')content=renderAthleteProfile();
   
-  app.innerHTML=`<div class="shell"><div class="nav-backdrop" onclick="admNav(false)"></div>${sidebar}<div class="corner-stack"><img src="YourLift_logo.png" alt="YourLift" class="corner-logo" onclick="location.href='index.html'" title="Volver al sitio" onerror="this.style.display='none'"></div><div class="main"><button class="adm-burger" onclick="admNav(true)"><i class=yl-i-menu></i> Menú</button>${content}</div></div>`;
+  app.innerHTML=`<div class="shell"><div class="nav-backdrop" onclick="admNav(false)"></div>${sidebar}${_admTop()}<div class="main">${content}</div></div>`;
   if(ST.view==='sponsors'&&!ST._sponsorsLoaded)setTimeout(loadSponsors,0);
   if(ST.view==='portada'&&!ST._portadaLoaded)setTimeout(loadPortada,0);
   if(ST.view==='stats'){
