@@ -1845,7 +1845,9 @@ function renderTxProfile(cur){
     <div style="position:absolute;top:0;right:0;bottom:0;left:0;background:#000">
     ${_franjasPf('arriba')}${_franjasPf('abajo')}
     <div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;pointer-events:none;overflow:hidden">
-      <img src="YourLift_logo.png" alt="" style="width:52%;opacity:0.07;filter:blur(18px);transform:scale(1.15);user-select:none" onerror="this.style.display='none'">
+      <!-- El logo de YourLift de fondo, difuminado: sobre negro se ve más que
+           sobre el azul de antes, así que va algo más visible y menos borroso. -->
+      <img src="YourLift_logo.png" alt="" style="width:52%;opacity:0.2;filter:blur(9px);transform:scale(1.15);user-select:none" onerror="this.style.display='none'">
     </div>
     <div style="position:absolute;top:0;right:0;bottom:0;left:0;padding:clamp(40px,5vw,80px);display:flex;flex-direction:column">
       <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(8px,1.5vh,22px);max-width:1400px;width:100%;margin:auto">
