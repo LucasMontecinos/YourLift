@@ -199,6 +199,19 @@ function _inscToAthlete(ins, j, flightMap){
   };
 }
 
+// ── Respaldo de los lotes ────────────────────────────────────────
+// Antes de re-sincronizar o de re-sortear se guarda una copia de los lotes en
+// este navegador (por campeonato). Si después cambian sin querer, en Atletas y
+// Pesaje → Restaurar lotes se vuelve a ella con un clic.
+function _lotesClave(){ try{ return 'yl_lotes_resp_'+(typeof fbDocId==='function'&&fbDocId()||(DATA.event&&(DATA.event.id||DATA.event.name))||''); }catch(e){ return 'yl_lotes_resp_'; } }
+function _lotesRespaldar(motivo){
+  try{
+    const lots=(DATA.athletes||[]).filter(a=>a.lot).map(a=>({name:a.name,codigo:a.codigo||'',lot:a.lot}));
+    if(lots.length)localStorage.setItem(_lotesClave(),JSON.stringify({ts:Date.now(),motivo,lots}));
+  }catch(e){}
+}
+function _lotesRespaldo(){ try{ return JSON.parse(localStorage.getItem(_lotesClave())||'null'); }catch(e){ return null; } }
+
 function _mergeFirebaseAthletes(fbAthletes){
   // Merge: update existing athletes by name/rut, add new ones, remove deleted
   let changed=false;

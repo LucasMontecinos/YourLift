@@ -473,6 +473,7 @@ function generateLots(){
     ? 'Los lotes YA fueron sorteados.\n\n¿Re-sortear y reemplazar todos los números actuales?\n\nLas ediciones manuales se perderán.'
     : '¿Generar números de lote aleatorios?\n\nTanda A → 100, 101, 102…\nTanda B → 200, 201, 202…\netc.';
   if(!confirm(msg))return;
+  if(DATA.lotsGenerated)_lotesRespaldar('re-sorteo');
   // Shuffle within each flight, assign lot = flightIndex*100 + position (Tanda A: 100-1XX, B: 200-2XX...)
   const flights=[...new Set(DATA.athletes.map(a=>a.flight))].filter(_inTarima).sort(_cmpFl);
   flights.forEach((fl,fi)=>{
@@ -489,6 +490,115 @@ function generateLots(){
   saveNow();R();
 }
 
+// ── Restaurar lotes desde la hoja de pesaje ─────────────────────
+// Si los lotes se re-sortearon o se pisaron después de imprimir la hoja de
+// pesaje, se vuelven a poner los de la hoja: se pega el texto (copiado del PDF,
+// o una lista "lote nombre" por línea) y cada lote va al atleta de ese nombre.
+// Antes de tocar nada se muestra qué cambia, a quién no se encontró y quién del
+// campeonato no está en la lista.
+//
+// Lee cada línea buscando un número de lote seguido del nombre. Sirve tal cual
+// para las líneas de la hoja ("A   100   Paulette Devaud Roa").
+function _lotesParse(txt){
+  const out=[];
+  String(txt||'').split(/\r?\n/).forEach(l=>{
+    const m=l.match(/(?:^|\s)(\d{1,4})\s+([A-Za-zÀ-ÿ'’´.\- ]{4,})/);
+    if(!m)return;
+    const nombre=m[2].replace(/\s{2,}.*$/,'').trim();
+    if(nombre.split(/\s+/).length<2)return;      // un nombre tiene al menos dos palabras
+    out.push({lot:parseInt(m[1],10),nombre});
+  });
+  return out;
+}
+// Arma el plan: a quién le toca qué lote. Busca por nombre exacto y, si no, por
+// las palabras del nombre (en cualquier orden), siempre que dé con uno solo.
+function _lotesPlan(lista,atletas){
+  const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
+  const nombres=a=>[a.name,a.nombreOrig].filter(Boolean).map(norm);
+  const busca=n=>{
+    const t=n.split(' ');
+    let c=atletas.filter(a=>nombres(a).includes(n));
+    if(c.length===1)return c[0];
+    c=atletas.filter(a=>nombres(a).some(x=>{const u=x.split(' ');return t.every(w=>u.includes(w))||u.every(w=>t.includes(w));}));
+    return c.length===1?c[0]:null;
+  };
+  const cambios=[],iguales=[],sinMatch=[],repetidos=[];
+  const usadoAtl=new Map(),usadoLot=new Map();
+  lista.forEach(r=>{
+    const a=busca(norm(r.nombre));
+    if(!a){sinMatch.push(r);return;}
+    if(usadoAtl.has(a.id)||usadoLot.has(r.lot)){repetidos.push(r);return;}
+    usadoAtl.set(a.id,r.lot);usadoLot.set(r.lot,a.id);
+    (a.lot===r.lot?iguales:cambios).push({a,lot:r.lot,antes:a.lot});
+  });
+  const fuera=atletas.filter(a=>!usadoAtl.has(a.id));
+  return {cambios,iguales,sinMatch,repetidos,fuera};
+}
+window.lotesRestaurarAbrir=function(){
+  const viejo=document.getElementById('lotesModal');if(viejo)viejo.remove();
+  const d=document.createElement('div');d.id='lotesModal';
+  d.style.cssText='position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
+  d.innerHTML='<div class="card" style="width:min(720px,100%);max-height:90vh;overflow:auto;padding:20px">'
+    +'<h3 class="os" style="font-size:18px;letter-spacing:1px;margin-bottom:6px">RESTAURAR LOTES</h3>'
+    +'<p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:10px">Abre la hoja de pesaje (PDF), selecciona todo (Ctrl+A), copia (Ctrl+C) y pega acá. También sirve una lista con <b>lote y nombre</b> en cada línea. Primero te muestro qué cambia; nada se guarda hasta que aprietes Aplicar.</p>'
+    +(()=>{const r=_lotesRespaldo();if(!r||!r.lots||!r.lots.length)return '';
+      const hora=new Date(r.ts).toLocaleString('es-CL',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+      return '<div style="margin-bottom:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px">Hay una copia de los lotes de antes de la <b>'+esc(r.motivo||'última re-sincronización')+'</b> ('+hora+', '+r.lots.length+' atletas). '
+        +'<button class="btn btn-o" style="margin-left:6px;padding:5px 12px;font-size:12px" onclick="lotesUsarRespaldo()">Volver a los de antes</button></div>';})()
+    +'<textarea id="lotesTxt" rows="9" style="width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg2,var(--card));color:var(--text);font:13px monospace"></textarea>'
+    +'<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-o" onclick="lotesRestaurarRevisar()">Revisar</button><button class="btn" style="background:transparent;border:1px solid var(--border);color:var(--muted)" onclick="document.getElementById(\'lotesModal\').remove()">Cancelar</button></div>'
+    +'<div id="lotesPrev" style="margin-top:12px"></div></div>';
+  document.body.appendChild(d);
+  setTimeout(()=>{const t=document.getElementById('lotesTxt');if(t)t.focus();},50);
+};
+// Llena la lista con la copia guardada y la revisa, como si se hubiera pegado.
+window.lotesUsarRespaldo=function(){
+  const r=_lotesRespaldo();const t=document.getElementById('lotesTxt');
+  if(!r||!t)return;
+  t.value=r.lots.map(x=>x.lot+'\t'+x.name).join('\n');
+  lotesRestaurarRevisar();
+};
+window.lotesRestaurarRevisar=function(){
+  const lista=_lotesParse((document.getElementById('lotesTxt')||{}).value);
+  const box=document.getElementById('lotesPrev');if(!box)return;
+  if(!lista.length){box.innerHTML='<p style="color:var(--red,#ef4444);font-size:13px">No encontré ningún lote con nombre en el texto.</p>';return;}
+  const p=_lotesPlan(lista,DATA.athletes);
+  window._lotesPlanActual=p;
+  const li=(t)=>'<li style="margin:2px 0">'+t+'</li>';
+  let h='<p style="font-size:13px;margin-bottom:6px"><b>'+lista.length+'</b> líneas leídas · <b>'+p.cambios.length+'</b> lotes cambian · '+p.iguales.length+' ya estaban bien</p>';
+  if(p.cambios.length)h+='<details open style="font-size:12px;margin-bottom:6px"><summary style="cursor:pointer">Cambian ('+p.cambios.length+')</summary><ul style="margin:6px 0 0 18px">'
+    +p.cambios.map(c=>li(esc(c.a.name)+' · '+(c.antes||'—')+' → <b>'+c.lot+'</b>')).join('')+'</ul></details>';
+  if(p.sinMatch.length)h+='<details open style="font-size:12px;margin-bottom:6px;color:var(--red,#ef4444)"><summary style="cursor:pointer">No los encontré en el campeonato ('+p.sinMatch.length+')</summary><ul style="margin:6px 0 0 18px">'
+    +p.sinMatch.map(r=>li(r.lot+' · '+esc(r.nombre))).join('')+'</ul></details>';
+  if(p.repetidos.length)h+='<details open style="font-size:12px;margin-bottom:6px;color:var(--red,#ef4444)"><summary style="cursor:pointer">Repetidos en la lista, no se usan ('+p.repetidos.length+')</summary><ul style="margin:6px 0 0 18px">'
+    +p.repetidos.map(r=>li(r.lot+' · '+esc(r.nombre))).join('')+'</ul></details>';
+  if(p.fuera.length)h+='<details style="font-size:12px;margin-bottom:6px;color:var(--muted)"><summary style="cursor:pointer">Del campeonato pero no están en la lista: conservan su lote ('+p.fuera.length+')</summary><ul style="margin:6px 0 0 18px">'
+    +p.fuera.map(a=>li(esc(a.name)+' · '+(a.lot||'—'))).join('')+'</ul></details>';
+  h+=p.cambios.length?'<button class="btn btn-g" style="margin-top:8px" onclick="lotesRestaurarAplicar()">Aplicar '+p.cambios.length+' cambios</button>'
+    :'<p style="font-size:13px;color:var(--green,#22c55e)">Los lotes ya coinciden con la lista: no hay nada que cambiar.</p>';
+  box.innerHTML=h;
+};
+window.lotesRestaurarAplicar=function(){
+  const p=window._lotesPlanActual;if(!p||!p.cambios.length)return;
+  p.cambios.forEach(c=>{c.a.lot=c.lot;});
+  // Si alguno que no estaba en la lista quedó con un lote repetido, pasa al
+  // primer lote libre de su tanda: los de la hoja mandan.
+  const enLista=new Set([...p.cambios,...p.iguales].map(c=>c.a.id));
+  p.fuera.forEach(a=>{
+    if(!DATA.athletes.some(x=>x!==a&&enLista.has(x.id)&&x.lot===a.lot))return;
+    const base=_baseTanda(a.flight)||1000;
+    const usados=new Set(DATA.athletes.filter(x=>x!==a).map(x=>x.lot));
+    let n=base;while(usados.has(n))n++;
+    a.lot=n;
+  });
+  DATA.lotsGenerated=true;
+  window._forceFullWrite=true;   // como el sorteo: se escriben los lotes de todos
+  window._lotesPlanActual=null;
+  const m=document.getElementById('lotesModal');if(m)m.remove();
+  saveNow();R();
+  showToastLC('Lotes restaurados: '+p.cambios.length+' cambios');
+};
+
 function _manNorm(x){ return String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 
 // Busca por nombre, club, país, categoría o lote. Todas las palabras tienen que
@@ -503,7 +613,7 @@ function renderManage(){
   _pedirFotos();
   // Filtrar por tarima si está activo (modo 2 tarimas)
   const ath=TARIMA?DATA.athletes.filter(a=>_inTarima(a.flight)):DATA.athletes;
-  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin: trae cambios, borra eliminados sin datos y toma tanda, división, categoría y modalidad del Cronograma">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-o" onclick="go(\'docs\')" title="Hoja de pesaje, altura de rack, revisión de equipo y papeletas" style="border-color:rgba(212,168,67,.55);color:var(--gold)"><i class=yl-i-archivo></i> Documentos</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
+  let h='<div class="fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 class="os" style="font-size:22px;letter-spacing:1px">ATLETAS & PESAJE'+(TARIMA?' · TARIMA '+TARIMA:'')+'</h2><p style="color:var(--muted);font-size:12px">'+ath.filter(a=>a.bw>0).length+'/'+ath.length+' pesados'+(function(){const n=ath.filter(_isPlusBench).length;return n?' \u00b7 '+n+' compiten tambi\u00e9n en Only Bench':'';})()+'</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+(DATA.lotsGenerated?'<button class="btn btn-o" onclick="generateLots()" title="Re-sortear todos los lotes al azar (reemplaza los actuales)">Re-sortear lotes</button>':'<button class="btn btn-r" onclick="generateLots()">Generar Lotes</button>')+'<button class="btn btn-o" onclick="lotesRestaurarAbrir()" title="Volver a poner los lotes de la hoja de pesaje impresa (pegando su texto)">Restaurar lotes</button><button class="btn btn-o" onclick="resyncFromAdmin()" title="Re-sincronizar nómina con admin: trae cambios, borra eliminados sin datos y toma tanda, división, categoría y modalidad del Cronograma">Re-sincronizar con admin</button><button class="btn" onclick="openAddAthlete()" title="Agregar un atleta manualmente (ej. atletas internacionales)" style="background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)">Agregar atleta</button><button class="btn btn-o" onclick="sortByLot()">Ordenar por Lote ↑</button><button class="btn btn-o" onclick="sortByFlight()">Ordenar por Tanda ↑</button><button class="btn btn-o" onclick="sortByCat()">Ordenar por Categoría ↑</button><button class="btn btn-o" onclick="go(\'docs\')" title="Hoja de pesaje, altura de rack, revisión de equipo y papeletas" style="border-color:rgba(212,168,67,.55);color:var(--gold)"><i class=yl-i-archivo></i> Documentos</button><button class="btn btn-g" onclick="go(\'compete\')">Iniciar Competencia →</button></div></div>';
     // ── Barra de búsqueda y tandas ────────────────────────────────────────────
   {
     const _mf0=window._MAN_F||{q:'',flight:''};

@@ -1437,7 +1437,11 @@ window.resyncFromAdmin=async function(){
       .sort((a,b)=>((a.timestamp==null?void 0:a.timestamp.seconds)||0)-((b.timestamp==null?void 0:b.timestamp.seconds)||0))
       .map((ins,j)=>_inscToAthlete(ins,j,flightMap));
     if(!fbAthletes.length){alert('No hay inscripciones aprobadas/pendientes en Firestore para este campeonato.');return}
+    _lotesRespaldar('re-sincronización');
+    const _lotAntes=new Map(DATA.athletes.map(x=>[x.id,x.lot]));
     _mergeFirebaseAthletes(fbAthletes);
+    const _lotCambio=DATA.athletes.filter(x=>_lotAntes.has(x.id)&&_lotAntes.get(x.id)!==x.lot).length;
+    if(_lotCambio)showToastLC('Ojo: '+_lotCambio+' lote'+(_lotCambio>1?'s cambiaron':' cambió')+' al re-sincronizar. Si no correspondía: Atletas y Pesaje → Restaurar lotes → Volver a los de antes.');
     // Forzar nuevo render para que los toasts se ordenen
     showToastLC('Re-sincronización completa: '+fbAthletes.length+' atletas en Firestore');
   }catch(e){alert('Error sincronizando: '+(e.message||e));console.error(e)}

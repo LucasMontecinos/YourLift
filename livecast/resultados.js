@@ -90,8 +90,8 @@ function _renderResultsTable(opts){
       const sello=cerrada
         ? '<span style="background:rgba(34,197,94,.18);border:1px solid rgba(34,197,94,.5);color:var(--green);font-size:9px;letter-spacing:1px;padding:1px 7px;border-radius:4px;margin-left:8px">POSICIÓN FINAL</span>'
         : '<span style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.45);color:#f59e0b;font-size:9px;letter-spacing:1px;padding:1px 7px;border-radius:4px;margin-left:8px" title="Todavía quedan intentos por levantar en esta categoría">POSICIÓN VIRTUAL</span>';
-      h+='<tr><td colspan="'+colspanTotal+'" style="padding:7px 8px;background:rgba(196,30,58,.1);border-bottom:2px solid var(--accent);font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--accent)">'+symb+' '+_normCat(a.cat||'?')+' — '+_normDiv(a.div||'Sin Div')
-        +' <span style="opacity:.7;font-size:10px;letter-spacing:1px">· '+_lineaLbl(a)+'</span>'+sello+'</td></tr>';
+      h+='<tr><td colspan="'+colspanTotal+'" style="padding:7px 8px;background:rgba(196,30,58,.1);border-bottom:2px solid var(--accent);font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--text)">'+symb+' '+_normCat(a.cat||'?')+' — '+_normDiv(a.div||'Sin Div')
+        +' <span style="opacity:.85;font-size:10px;letter-spacing:1px">· '+_lineaLbl(a)+'</span>'+sello+'</td></tr>';
       prevCat=catKey;
     }
     const dq = view==='meet' && isDQ(a);
