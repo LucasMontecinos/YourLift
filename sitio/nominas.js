@@ -4,7 +4,7 @@
 // que define queda global como antes. Solo define funciones (y las acciones de
 // los botones, window.…); lo que corre al abrir la página está en arranque.js.
 
-function _applyNominas(all){
+function _applyNominas(all,sinPintar){
   window._lastNominasRaw=all; // guardar raw para re-aplicar overlay cuando lleguen edits
   const visible=all.filter(i=>i.status==='approved'||i.status==='pending');
   const byEvent={};
@@ -47,7 +47,25 @@ function _applyNominas(all){
     });
   NM.events=fbEvents;
   window._nominasCargadas=true;
-  renderFondo();
+  if(!sinPintar)renderFondo();
+}
+
+// Al abrir Nóminas se muestra AL TIRO la última nómina guardada en este equipo
+// (aunque tenga unos días), y el oyente la reemplaza apenas llega la de ahora.
+// Antes se esperaba a la base de datos —un segundo o más en el teléfono— con la
+// pestaña vacía. Con `sinPintar` se arma sin dibujar: lo dibuja quien llama.
+function _nominasDesdeCache(sinPintar){
+  if(window._nominasCargadas)return false;
+  const ins=_fsCache('inscripciones',7*24*60*60*1000);
+  if(!ins)return false;
+  // La lista de campeonatos también puede venir del equipo, si todavía no llegó.
+  if(window._eventosFS!==true){
+    const ev=_fsCache('eventos',7*24*60*60*1000);
+    const evs=(ev||[]).filter(e=>e&&e.status!=='archived');
+    if(evs.length)NOM_EVENTS=evs;
+  }
+  _applyNominas(ins,sinPintar);
+  return true;
 }
 
 async function loadFBNominas(force){
@@ -56,10 +74,7 @@ async function loadFBNominas(force){
     // Caché 5min: esta colección se leía completa y sin caché en CADA carga de
     // página (home, records, etc, no solo la pestaña Nóminas) — era el mayor
     // driver de lecturas Firestore del sitio público.
-    if(!force){
-      const cn=_fsCache('inscripciones',5*60*1000);
-      if(cn)_applyNominas(cn);
-    }
+    if(!force)_nominasDesdeCache();
     // Mientras se mira la pestaña, las nóminas llegan por un oyente: se cobra la
     // primera lectura y después solo lo que cambia. Antes se volvía a bajar todo
     // cada tres minutos mientras la pestaña estuviera abierta.
@@ -681,9 +696,11 @@ function nom(){
   // Las inscripciones se piden al abrir esta pestaña, así que hay un momento en
   // que todavía no llegaron. Decir "no hay campeonatos activos" ahí es mentira y
   // asusta: se avisa que está cargando hasta que se sepa.
-  if(!visibleEvs.length&&!h&&!window._nominasCargadas)
-    return '<div class="emp" style="padding:40px;text-align:center;color:var(--muted)">Cargando campeonatos…</div>';
-  if(!visibleEvs.length&&!h)return '<div class="emp" style="padding:40px;text-align:center;color:var(--muted)">No hay campeonatos activos. El administrador los publicará pronto.</div>';
+  // (El encabezado va siempre: por eso se pregunta por el Sudamericano y no
+  // por si `h` está vacío, que ya nunca lo está.)
+  if(!visibleEvs.length&&!_haySuda&&!window._nominasCargadas)
+    return h+'<div class="emp" style="padding:40px;text-align:center;color:var(--muted)">Cargando nóminas…</div>';
+  if(!visibleEvs.length&&!_haySuda)return h+'<div class="emp" style="padding:40px;text-align:center;color:var(--muted)">No hay campeonatos activos. El administrador los publicará pronto.</div>';
   NM.events=visibleEvs;
   NM.events.forEach((ev,ei)=>{h+=_nomEvCard(ev,ei);});
   return h;

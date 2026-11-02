@@ -159,7 +159,21 @@ fetch('nomina_sudamericano.json').then(r=>r.ok?r.json():null).then(j=>{
   // con el selector sin la opción, porque se dibujó antes que el archivo.
   window.NOMSUDA=j; _nsudaApplyEdits(); if(ST.v==='nominas'||ST.v==='crono')renderFondo();
 }).catch(()=>{});
-Promise.all([fetch("data.json").then(r=>r.json()),fetch("records.json").then(r=>r.json()).catch(()=>({})),fetch("nominas.json").then(r=>r.json()).catch(()=>({events:[]}))]).then(([d,r,n])=>{D=d;R=sinRetiradas(r);NM=n;NM._static=[...(n.events||[])];render();initFB();
+Promise.all([fetch("data.json").then(r=>r.json()),fetch("records.json").then(r=>r.json()).catch(()=>({})),fetch("nominas.json").then(r=>r.json()).catch(()=>({events:[]}))]).then(([d,r,n])=>{D=d;R=sinRetiradas(r);NM=n;NM._static=[...(n.events||[])];if(ST.v==='nominas'){try{_nominasDesdeCache(true);}catch(e){}}render();initFB();
   // Las nóminas ya no se refrescan cada 3 minutos: mientras la pestaña está a
   // la vista las mantiene al día un oyente (ver _nominasEscuchar).
 }).catch(e=>{document.getElementById("app").innerHTML=`<div class="ld"><p style="color:var(--accent);font-weight:600">Error cargando datos</p><p style="color:var(--muted);font-size:13px">${e.message}</p></div>`});
+
+// Nóminas: apenas el dedo toca el link (o el mouse pasa por encima) ya se
+// empieza a pedir a la base de datos, en vez de esperar al click. Son unos
+// cientos de milisegundos que se le ganan a la espera.
+(function(){
+  const pide=e=>{
+    const t=e.target&&e.target.closest&&e.target.closest('a[data-v="nominas"],[onclick*="sv(\'nominas\')"]');
+    if(!t)return;
+    try{ if(!window._nominasCargadas)_nominasDesdeCache(true); }catch(_){}
+    try{ if(fbReady&&!window._nomOyente)_nominasEscuchar(); }catch(_){}
+  };
+  document.addEventListener('pointerdown',pide,{passive:true,capture:true});
+  document.addEventListener('mouseover',pide,{passive:true});
+})();

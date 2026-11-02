@@ -1389,7 +1389,10 @@ async function cargarParaVista(v){
   await Promise.allSettled(tareas.filter(Boolean));
 }
 
-function sv(v){ST.v=v;ST.sel=null;ST.p=0;render();scrollTo(0,0);cargarParaVista(v);if(typeof setBgForSection==='function')setBgForSection(v);if(typeof trackPage==='function')trackPage(v)}
+// Lo que se puede mostrar al tiro, antes de dibujar la pestaña (hoy: la última
+// nómina guardada en este equipo, mientras llega la de la base de datos).
+function _antesDeVista(v){ if(v==='nominas'&&typeof _nominasDesdeCache==='function'){ try{ _nominasDesdeCache(true); }catch(e){} } }
+function sv(v){ST.v=v;ST.sel=null;ST.p=0;_antesDeVista(v);render();scrollTo(0,0);cargarParaVista(v);if(typeof setBgForSection==='function')setBgForSection(v);if(typeof trackPage==='function')trackPage(v)}
 
 // Solo la lista, nunca el campo. Antes esto llamaba a render() y devolvía el
 // foco por programa: el campo moría y volvía a nacer en cada letra, y en el
