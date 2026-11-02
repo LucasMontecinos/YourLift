@@ -130,7 +130,9 @@ const LEER = () => {
      'nombre y apellido, los dos en mayúsculas: "' + (perf && perf.txt) + '"');
   ok(perf && perf.pesosHijos.length === 0,
      'no queda ningún trozo con otro grosor de letra');
-  ok(perf && perf.peso === '700', 'todo en negrita, como el apellido (' + (perf && perf.peso) + ')');
+  // Seminegrita (600), como el nombre de la vista previa: lo que importa es que
+  // nombre y apellido tengan el mismo grosor.
+  ok(perf && +perf.peso >= 600, 'todo en negrita, como el apellido (' + (perf && perf.peso) + ')');
   ok(!/<span style="font-weight:400">\$\{firstName\}<\/span>/.test(src),
      'el nombre ya no se dibuja aparte y en fina');
 

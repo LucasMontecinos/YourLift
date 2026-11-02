@@ -85,6 +85,10 @@ window.clubLogoImg = function(name, size, extraStyle){
   return '<span class="club-logo club-logo-'+f+'" style="display:inline-grid;place-items:center;width:'+s+'px;height:'+s+'px;'
     +'overflow:hidden;flex-shrink:0;vertical-align:middle;box-sizing:border-box;'+xs+';background:'+bg+';border-radius:22%;'
     +(f==='claro'?'box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);':'')+'">'
-    +'<img src="'+url+'" alt="" loading="lazy" style="width:86%;height:86%;object-fit:contain;display:block" '
+    // En la transmisión y las pantallas de tarima (CLUB_LOGO_AL_TIRO) el logo se
+    // carga y se pinta de inmediato: con "lazy", cada vez que la pantalla se
+    // redibujaba el logo desaparecía un instante. En las listas del sitio sigue
+    // en "lazy", que es lo que conviene con muchos logos.
+    +'<img src="'+url+'" alt="" '+(window.CLUB_LOGO_AL_TIRO?'decoding="sync"':'loading="lazy"')+' style="width:86%;height:86%;object-fit:contain;display:block" '
     +'onerror="this.parentNode.style.display=\'none\'"></span>';
 };

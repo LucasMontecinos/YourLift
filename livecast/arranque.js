@@ -23,6 +23,8 @@ const TX_URL=new URLSearchParams(location.search);
 // resuelto —o cuando se agotó la espera, y ahí sí corresponde mostrar la lista.
 window._EV_ESPERANDO=(function(){try{return !!TX_URL.get('evento')}catch(e){return false}})();
 const TX_MODE=TX_URL.get('tx')||null;
+// En la transmisión y la tarima los logos de club se cargan al tiro (ver clubLogoImg).
+if(TX_MODE)window.CLUB_LOGO_AL_TIRO=true;
  // 'profile' | 'scoreboard' | 'leaderboard' | 'lbauto' | 'slam' | 'timer' | 'lights' | 'ceremony' | null
 const TARIMA=TX_URL.get('tarima')||null;
  // '1' o '2' para modo 2 tarimas; null = todas

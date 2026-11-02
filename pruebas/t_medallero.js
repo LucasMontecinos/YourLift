@@ -55,7 +55,7 @@ const SEL = { mod: 'classic', sex: 'Hombre', div: 'Open', cat: '83' };
   console.log('\nEl medallero se ve cuando se activa');
   let t = await pintar(conMedallero());
   ok(/MEDALLERO/.test(t), 'aparece la banda del medallero');
-  ok(/Primero Uno/.test(t) && /Segundo Dos/.test(t) && /Tercero Tres/.test(t),
+  ok(/Primero Uno/i.test(t) && /Segundo Dos/i.test(t) && /Tercero Tres/i.test(t),
      'con el podio completo');
   ok(/550/.test(t), 'y con los totales');
 
@@ -69,7 +69,7 @@ const SEL = { mod: 'classic', sex: 'Hombre', div: 'Open', cat: '83' };
     const CAT = '-83 kg (Hombre)';
     await p.evaluate(c => { DATA.athletes.forEach(a => { if (a.cat === '83') a.cat = c; }); }, CAT);
     const th = await pintar({ medals: Object.assign({ active: true, until: 0 }, SEL, { cat: CAT }) });
-    ok(/-83kg/.test(th), 'la categoría sale normalizada (-83kg)');
+    ok(/[−-]83 ?kg/i.test(th) && !/83 ?kg.{0,4}kg/i.test(th), 'la categoría sale normalizada (−83 KG, una sola vez)');
     ok(!/KG\s*♂|\(Hombre\)/.test(th), 'sin el "KG" pegado ni el sexo repetido');
     ok(/Primero Uno/.test(th), 'y el podio sigue saliendo');
     await p.evaluate(c => { DATA.athletes.forEach(a => { if (a.cat === c) a.cat = '83'; }); }, CAT);

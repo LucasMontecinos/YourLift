@@ -534,6 +534,16 @@ function _sbTarjeta(cur,o){
     +'</div>'
   +'</div>';
 }
+// Los colores de las cajas de la transmisión (perfil, clasificación, medallero,
+// Ya volvemos, luces), de la paleta de Control TX: la franja de arriba, el fondo,
+// las celdas y las líneas. Las letras van en blanco y gris; el color queda para
+// válido, nulo, récord y las medallas.
+function _txX(){
+  const conBlanco=String(_txC('nameText')||'').toLowerCase()==='#ffffff';
+  return {head:_txC('headerBg'), bg:conBlanco?_txC('nameBg'):_txC('gridBg'), cell:_txC('curAttempt'),
+    hl:_txC('lbHighlight'), line:'rgba(255,255,255,.14)', line2:'rgba(255,255,255,.08)',
+    mut:'rgba(255,255,255,.62)', sub:'#D4D4D8'};
+}
 // La tarjeta se dibuja para una pantalla de 1920 de ancho y se escala a la ventana.
 function _sbEscala(){ return Math.max(.4,Math.min(1.6,(window.innerWidth||1920)/1920)); }
 
@@ -954,7 +964,8 @@ function _txDetectTransitions(){
   const fsJustDeactivated=[...fullscreen].some(c=>!!_txDirPrevActive[c]&&!_txDirActive(c));
   const fsVisible=_txDirActive('profile')||_txDirActive('leaderboard')||_txDirActive('breakTimer')||fsCurrentlyExiting||fsJustDeactivated;
   const effectiveActive=(c)=>{
-    if(c==='scoreboard'||c==='timer'||c==='medals')return _txDirActive(c)&&!fsVisible;
+    if(c==='scoreboard')return _txDirActive(c)&&!fsVisible&&!_txDirActive('medals');
+    if(c==='timer'||c==='medals')return _txDirActive(c)&&!fsVisible;
     return _txDirActive(c);
   };
   comps.forEach(c=>{
@@ -1040,9 +1051,10 @@ function renderTxDirector(container){
   // encima del perfil/leaderboard mientras todavía está saliendo.
   const _fsExiting=['profile','leaderboard','breakTimer'].some(c=>{const a=_txDirAnims[c];return a&&a.dir==='out'&&Date.now()-a.startedAt<(a.dur||TX_ANIM_MS.fullscreen);});
   const _fsVisible=showProf||showLb||showBreak||_fsExiting;
-  const showSb=_txDirActive('scoreboard')&&!_fsVisible;
-  const showTm=_txDirActive('timer')&&!_fsVisible;
+  // El medallero va abajo, donde está el marcador: mientras se ve, el marcador se esconde.
   const showMedals=_txDirActive('medals')&&!_fsVisible;
+  const showSb=_txDirActive('scoreboard')&&!_fsVisible&&!_txDirActive('medals');
+  const showTm=_txDirActive('timer')&&!_fsVisible;
   // Detectar transiciones (cambios on↔off) para reproducir animaciones
   _txDetectTransitions();
   // Signature p/ evitar flicker por timer cada 1s
@@ -1097,7 +1109,9 @@ function renderTxDirector(container){
   const animTm=_txAnimActive('timer');
   const animBt=_txAnimActive('breakTimer');
   // Mantener body opaco mientras un fullscreen esté activo O en transición
-  document.body.classList.toggle('tx-opaque', showLb||showProf||showBreak||(animProf&&animProf.dir==='out')||(animLb&&animLb.dir==='out')||(animBt&&animBt.dir==='out'));
+  // El perfil y la clasificación van en cajas sobre la cámara, como en la vista
+  // previa: solo el "Ya volvemos" tapa la pantalla entera.
+  document.body.classList.toggle('tx-opaque', showBreak||(animBt&&animBt.dir==='out'));
   // Video de fondo del break timer (persiste independiente del innerHTML)
   if(showBreak){
     const bvids=bt.videos||[];
@@ -1303,8 +1317,12 @@ function _renderTxBreakTimer(bt,scale){
   const evName=evObj?(evObj.nombre||evObj.name||''):'';
   // ── Parámetros de estilo editables ────────────────────────────────────
   const stl=bt.style||{};
-  const bgColor=stl.bgColor||'#0A1628';
-  const accentColor=stl.accentColor||'#C41E3A';
+  // El azul y el rojo de antes eran los colores por defecto, no una elección:
+  // con ellos va el fondo de la paleta de Control TX y la línea en blanco.
+  const _bgElegido=stl.bgColor&&String(stl.bgColor).toUpperCase()!=='#0A1628';
+  const _acElegido=stl.accentColor&&String(stl.accentColor).toUpperCase()!=='#C41E3A';
+  const bgColor=_bgElegido?stl.bgColor:_txX().head;
+  const accentColor=_acElegido?stl.accentColor:'#ffffff';
   const videoX=stl.videoX!=null?Number(stl.videoX):0;
   const videoY=stl.videoY!=null?Number(stl.videoY):5;
   const videoW=stl.videoW!=null?Number(stl.videoW):40;
@@ -1360,17 +1378,20 @@ function _renderTxBreakTimer(bt,scale){
     +'</div>';
   }
 
+  // Tal cual la vista previa: YA VOLVEMOS grande al centro, la línea, la cuenta
+  // regresiva, lo que sigue y el logo de YourLift abajo.
+  const k=_sbEscala();
+  const sigue=[movement?'Sigue '+movement.charAt(0)+movement.slice(1).toLowerCase():'',
+    (bt.label&&String(bt.label).toUpperCase()!=='YA VOLVEMOS')?bt.label:'', evName].filter(Boolean).join(' · ');
   return '<div style="position:fixed;top:0;right:0;bottom:0;left:0;z-index:3;overflow:hidden;background:'+bgColor+';'+scStyle+'">'
-    +'<div style="position:absolute;top:0;right:0;bottom:0;left:0;bottom:'+barH+';display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;padding:'+titleTop+'vh 4vw 3vh">'
-      +''
-      +'<div style="font-family:Oswald,Impact,sans-serif;font-size:'+titleSize+'vw;font-weight:900;color:#ffffff;line-height:.88;letter-spacing:2px;text-transform:uppercase;text-shadow:0 4px 24px rgba(0,0,0,.9)">YA VOLVEMOS</div>'
-      +'<div style="width:clamp(50px,6vw,110px);height:3px;background:'+accentColor+';margin:clamp(8px,1.2vh,18px) auto;box-shadow:0 0 10px '+accentColor+'99"></div>'
-      +(movement?'<div style="font-family:Oswald,Impact,sans-serif;font-size:'+movSize+'vw;font-weight:700;color:#ffffff;line-height:1;letter-spacing:2px;margin-bottom:clamp(6px,1vh,14px)">'+movement+'</div>':'')
-      +'<div id="dirBreakDisplay" style="font-family:Oswald,Impact,sans-serif;font-size:'+timerSz+'vw;font-weight:900;color:'+timerColor+';line-height:.9;letter-spacing:3px;text-shadow:0 6px 28px rgba(0,0,0,.85)">'+txt+'</div>'
+    +'<div style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-family:Oswald,\'Arial Narrow\',sans-serif;color:#fff">'
+      +'<div style="font-size:'+Math.round(190*k)+'px;font-weight:600;letter-spacing:.04em;line-height:1">YA VOLVEMOS</div>'
+      +'<div style="width:'+Math.round(220*k)+'px;height:'+Math.max(3,Math.round(6*k))+'px;background:'+accentColor+';margin:'+Math.round(34*k)+'px auto"></div>'
+      +'<div id="dirBreakDisplay" style="font-size:'+Math.round(150*k)+'px;font-weight:500;line-height:1;font-variant-numeric:tabular-nums;color:'+timerColor+'">'+txt+'</div>'
       +pausedBadge
-      +(evName?'<div style="font-family:Oswald;font-size:clamp(10px,1.1vw,16px);letter-spacing:5px;color:rgba(255,255,255,.38);margin-top:clamp(8px,1.2vh,16px)">'+String(evName).toUpperCase()+'</div>':'')
+      +(sigue?'<div style="font-family:\'DM Sans\',sans-serif;font-size:'+Math.round(28*k)+'px;color:rgba(255,255,255,.62);margin-top:'+Math.round(30*k)+'px">'+esc(sigue)+'</div>':'')
     +'</div>'
-    +sponsorBar
+    +'<img src="YourLift_logo.png" alt="" style="position:absolute;left:50%;bottom:'+Math.round(60*k)+'px;transform:translateX(-50%);height:'+Math.round(64*k)+'px;width:auto" onerror="this.style.display=\'none\'">'
   +'</div>';
 }
 
@@ -1443,7 +1464,10 @@ function _txStartLightsListener(){
     _txLightsUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'judge_decisions',_txLightsDoc),(snap)=>{
       if(!snap.exists())return;
       const d=snap.data();
+      const _habia=!!(_txLights&&(_txLights.izq||_txLights.central||_txLights.der));
       _txLights={izq:d.izq||null,central:d.central||null,der:d.der||null};
+      if(!(_txLights.izq||_txLights.central||_txLights.der))_lzDe=null;
+      else if(!_habia||!_lzDe){try{_lzAnotar(liftQueue()[0]||null);}catch(e){}}
       _txLightsResetTs=d.reset_ts||0;
       // Decisión del jurado: se muestra JURADO_MS desde que llega. La que ya
       // estaba en el documento al abrir la transmisión es vieja y no sale.
@@ -1507,6 +1531,31 @@ function _luzEstilo(v){
   };
 }
 
+// De quién son las luces: del que estaba en tarima cuando se prendió la
+// primera. Al marcar el intento la fila pasa al siguiente, pero las luces
+// siguen siendo del anterior hasta que los jueces las limpian; antes la caja
+// mostraba el nombre del que venía con la decisión del que ya había levantado.
+// Se anota en el listener de las luces y se suelta cuando se apagan las tres.
+let _lzDe=null;
+// La animación de encendido va solo en la luz que cambió desde el último dibujo.
+// Antes cada redibujo (un logo que carga, el GOOD LIFT, la tabla actual) volvía
+// a encender las tres, y en la transmisión parpadeaban.
+const _lzVisto={tx:{},pant:{}};
+function _lzEnciende(donde,j,v){ const nueva=_lzVisto[donde][j]!==v; _lzVisto[donde][j]=v; return nueva; }
+function _lzAnotar(cur){
+  if(!cur){_lzDe=null;return;}
+  const r=(typeof curAtt==='function')?curAtt(cur):DATA.round;
+  _lzDe={id:cur.id,a:_realAth(cur),lift:DATA.lift,round:r};
+}
+function _lucesAtleta(cur){
+  const L=_txLights||{};
+  if(!(L.izq||L.central||L.der)){_lzDe=null;return null;}
+  if(!_lzDe)_lzAnotar(cur);
+  if(!_lzDe)return null;
+  const a=(DATA.athletes||[]).find(x=>x.id===_lzDe.id&&!x.__is4)||_lzDe.a;
+  return {a,lift:_lzDe.lift,round:_lzDe.round};
+}
+
 // Las luces de la transmisión (Control TX y control remoto): los tres círculos,
 // con el nombre del atleta y el intento.
 //
@@ -1523,8 +1572,8 @@ function _luzEstilo(v){
 // NO LIFT; la caja baja eso para no taparlos.
 function renderTxLucesBanda(ocupado){
   const L=_txLights||{};
-  if(!L.izq&&!L.central&&!L.der)return '';
-  const cur=liftQueue()[0]||null;
+  if(!L.izq&&!L.central&&!L.der){_lzDe=null;_lzVisto.tx={};return '';}
+  const lz=_lucesAtleta(liftQueue()[0]||null);
   const orden=['izq','central','der'];
   const conBlanco=String(_txC('nameText')||'').toLowerCase()==='#ffffff';
   const cHead=_txC('headerBg'), cBody=conBlanco?_txC('nameBg'):_txC('gridBg');
@@ -1537,18 +1586,19 @@ function renderTxLucesBanda(ocupado){
     const v=L[j], e=_luzEstilo(v);
     const bg=v==='white'?'#fff':(e.chip?'#ef4444':'rgba(255,255,255,.07)');
     const sh=v==='white'?'0 0 22px rgba(255,255,255,.35)':(e.chip?'0 0 22px rgba(239,68,68,.5)':'inset 0 0 0 2px rgba(255,255,255,.14)');
+    const anima=_lzEnciende('tx',j,v||null)&&e.on;
     return '<div style="display:flex;flex-direction:column;align-items:center;gap:6px">'
       +'<div data-luz="'+j+'" style="width:62px;height:62px;border-radius:50%;background:'+bg+';box-shadow:'+sh+';'
-      +(e.on?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards;animation-delay:'+(i*0.08)+'s':'')+'"></div>'
+      +(anima?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards':'')+'"></div>'
       +(hayTarjeta?'<div style="width:13px;height:13px;border-radius:50%;'
         +(e.chip?'background:'+e.chip+';box-shadow:0 0 8px '+e.chip:'background:transparent')+'"></div>':'')
       +'</div>';
   };
   let cab='DECISIÓN DE LOS JUECES';
-  if(cur){
-    const at=cur.att&&cur.att[DATA.lift]?cur.att[DATA.lift][DATA.round]:null;
-    cab='<span style="text-transform:uppercase">'+esc(_nombrePropio(cur.name||''))+'</span>'
-      +' · '+(LIFT_S[DATA.lift]||'')+' '+(DATA.round+1)
+  if(lz){
+    const at=lz.a.att&&lz.a.att[lz.lift]?lz.a.att[lz.lift][lz.round]:null;
+    cab='<span style="text-transform:uppercase">'+esc(_nombrePropio(lz.a.name||''))+'</span>'
+      +' · '+(LIFT_S[lz.lift]||'')+' '+(lz.round+1)
       +(at&&at.w?' · '+_sbNum(at.w)+' KG':'');
   }
   const pill='display:inline-block;font-size:21px;font-weight:700;letter-spacing:.12em;padding:2px 14px;border-radius:3px;line-height:1.3;';
@@ -1666,8 +1716,9 @@ function renderScreenLuces(a){
     const sh=v==='white'?'0 0 0 '+p(3)+' #1f1f22,0 '+p(20)+' '+p(60)+' rgba(0,0,0,.18)'
             :(e.chip?'0 0 0 '+p(3)+' #ef4444,0 0 '+p(90)+' rgba(239,68,68,.45)':'inset 0 0 0 '+p(3)+' #2f2f33');
     luces+='<div style="display:flex;flex-direction:column;align-items:center;gap:'+p(22)+'">';
+    const anima=_lzEnciende('pant',j,v||null)&&e.on;
     luces+='<div data-luz="'+j+'" style="width:'+p(300)+';height:'+p(300)+';border-radius:50%;background:'+bg+';box-shadow:'+sh+';'
-      +(e.on?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards;animation-delay:'+(i*0.07)+'s':'')+'"></div>';
+      +(anima?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards':'')+'"></div>';
     if(hayTarjeta)luces+='<div style="width:'+p(56)+';height:'+p(56)+';border-radius:50%;'
       +(e.chip?'background:'+e.chip+';box-shadow:0 0 '+p(24)+' '+e.chip:'background:transparent')+'"></div>';
     luces+='</div>';
@@ -1688,10 +1739,13 @@ function renderScreenLuces(a){
     +'<span style="margin-left:auto;display:flex;align-items:center">'+tira+'</span>'
     +'</div>';
 
-  // El atleta: sin esto, tres luces solas no dicen de quién son.
+  // El atleta: sin esto, tres luces solas no dicen de quién son. Con las luces
+  // prendidas es el que levantó, aunque la fila ya haya pasado al siguiente.
   let cab='';
+  const lz=_lucesAtleta(a);
+  let l=DATA.lift, r=(a&&typeof curAtt==='function')?curAtt(a):DATA.round;
+  if(lz){a=lz.a;l=lz.lift;r=lz.round;}
   if(a){
-    const l=DATA.lift, r=(typeof curAtt==='function')?curAtt(a):DATA.round;
     const at=(a.att&&a.att[l])?a.att[l][r]:null;
     const kg=(at&&at.w)||0;
     const MOV={sq:'SENTADILLA',bp:'BANCA',dl:'PESO MUERTO'}[l]||'';
@@ -1722,7 +1776,14 @@ function _lucesEnTarima(){
   return !!st.luces;
 }
 
-function renderTxProfile(cur){
+// Tal cual la vista previa: una tarjeta abajo a la izquierda, sobre la cámara
+// (el lugar del marcador, que se esconde mientras está el perfil). A la
+// izquierda la foto (o el GIF) y a la derecha el club y el lote, el nombre, la
+// categoría y cinco marcas: sentadilla, banca, peso muerto, total y GL. Las
+// marcas son la mejor entre su historial y lo que lleva hoy.
+// o.centro: centrado (la pantalla de tarima "Perfil"); si no, abajo a la izquierda.
+function renderTxProfile(cur,o){
+  o=o||{};
   _pedirFotos();
   const full=txLookupFull(cur);
   // Media efectiva: foto/gif subida en el livecast (persistente) tiene prioridad
@@ -1730,95 +1791,64 @@ function renderTxProfile(cur){
   const _lm=_lcMediaFor(cur);
   const media=Object.assign({},full||{});
   if(_lm){ if(_lm.foto_url)media.foto_url=_lm.foto_url; if(_lm.gif_url)media.gif_url=_lm.gif_url; ['gif_blend','gif_zoom','gif_offset_x','gif_offset_y','gif_start','gif_end'].forEach(k=>{if(_lm[k]!==undefined)media[k]=_lm[k];}); }
+  const ra=_realAth(cur);
+  const X=_txX(), k=_sbEscala();
   const parts=(cur.name||'').trim().split(/\s+/);
-  // Nombre y apellido con la MISMA tipografía, tamaño y mayúsculas. Antes el
-  // nombre iba en fina y el apellido en negrita, y se leían como dos cosas
-  // distintas en la pantalla de perfil.
-  // Con DOS palabras —"Ojeda Emilse", que es como viene media nómina de FESUPO—
-  // slice(0,-2) daba vacío y el respaldo repetía parts[0]: en pantalla se leía
-  // "OJEDA OJEDA EMILSE". Se parte igual que en el resto de las pantallas: dos
-  // apellidos solo cuando hay más de dos palabras.
-  const firstName=(parts.length>2?parts.slice(0,-2):parts.slice(0,-1)).join(' ').toUpperCase();
-  const lastName=(parts.length>2?parts.slice(-2):parts.slice(-1)).join(' ').toUpperCase();
+  const initials=parts.map(p=>p[0]||'').slice(0,2).join('').toUpperCase();
   const club=cur.club||(full==null?void 0:full.club)||'';
-  const cat=txCatLabel(cur.cat)||(txCatNum(cur.cat)+'kg');
-  const divS=txDivShort(cur.div);
+  const varios=_variosPaises();
+  // Arriba: el logo del club (o la bandera, si hay varios países), club · lote · peso
+  const ident=varios?_flagImg(_ctry(cur),36,true)
+    :((window.clubLogoImg&&club)?window.clubLogoImg(club,54,'padding:4px;'):'');
+  const linea1=[varios?(_ctryName(_ctry(cur))||_ctry(cur)):club, cur.lot?'Lote '+cur.lot:'', cur.bw?_sbNum(cur.bw)+' kg':'']
+    .filter(Boolean).join(' · ').toUpperCase();
+  const rk=(typeof catRankBySub==='function')?catRankBySub(ra):null;
+  const chip=(rk&&rk.pos>0)?'PUESTO '+rk.pos+'°':'';
+  // Categoría · división · modalidad · edad · desde cuándo compite
   const age=txAge((full==null?void 0:full.fechaNac));
   const years=txYearsCompeting(full);
-  const liftKey=DATA.lift;
-  const pb=txPB(full,liftKey);
-  const pbLabel={sq:'MEJOR MARCA SENTADILLA',bp:'MEJOR MARCA PRESS BANCA',dl:'MEJOR MARCA PESO MUERTO'}[liftKey]||'MEJOR MARCA';
-  const clubLogoHtml=(window.clubLogoImg?window.clubLogoImg(club,52,'background:rgba(10,22,40,.6);padding:3px;margin-right:18px;vertical-align:middle;'):'');
-  const chipClub=(window.clubLogoImg&&club)?window.clubLogoImg(club,48,'display:block;background:rgba(10,22,40,.35);padding:2px;'):'';
-  const clubCell=clubLogoHtml?('<span style="display:inline-flex;align-items:center;gap:0;justify-content:flex-end">'+clubLogoHtml+'<span>'+(club||'—')+'</span></span>'):(club||'—');
-  // En un internacional lo que se muestra es el PAÍS (con su bandera), no el club:
-  // en la nómina de FESUPO el "club" es el país escrito a mano, y la fila decía
-  // "CLUB · Ecuador". En un nacional sigue el club con su logo.
-  const rows=[
-    ['CATEGORÍA',cat+' '+divS],
-    _variosPaises()
-      ?['PAÍS','<span style="display:inline-flex;align-items:center;justify-content:flex-end">'+_flagImg(_ctry(cur),34,true)+'<span>'+_ctryName(_ctry(cur))+'</span></span>']
-      :['CLUB',clubCell],
-  ];
-  if(age!==null)rows.push(['EDAD',age+'']);
-  if(years!==null)rows.push(['AÑOS COMPITIENDO',years+'']);
-  if(pb)rows.push([pbLabel,pb.toFixed(1)]);
-  // Al lado del nombre: la bandera y el código del país. En un campeonato de un
-  // solo país serían iguales para todos, así que va el logo del club (sin logo,
-  // nada).
-  const chipNombre=_variosPaises()
-    ?`<div style="background:rgba(0,0,0,.2);padding:clamp(6px,0.7vw,10px) clamp(10px,1.2vw,16px);border-radius:5px;display:flex;align-items:center;gap:clamp(8px,0.9vw,14px)">
-              <div style="width:clamp(44px,5vw,72px);height:clamp(30px,3.3vw,48px);position:relative;overflow:hidden;border-radius:2px;flex-shrink:0;box-shadow:0 1px 8px rgba(0,0,0,.5);background:#0a1628">
-                ${FLAG_SVG[_ctry(cur)]?`<svg viewBox="0 0 30 20" preserveAspectRatio="none" role="img" aria-label="${_ctry(cur)}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%">${FLAG_SVG[_ctry(cur)]}</svg>`:''}
-              </div>
-              <span style="font-family:Oswald;font-weight:700;font-size:clamp(13px,1.4vw,22px);color:${_txC('nameText')};letter-spacing:2px">${_ctry(cur)}</span>
-            </div>`
-    :(chipClub?`<div style="background:rgba(0,0,0,.2);padding:clamp(4px,0.5vw,8px);border-radius:5px;display:flex;align-items:center">${chipClub}</div>`:'');
-  const initials=parts.map(p=>p[0]||'').slice(0,2).join('').toUpperCase();
+  const meta=[(txCatLabel(cur.cat)||'').replace(/^-/,'−').replace(/kg$/i,' kg'), cur.div||'',
+    (typeof _lineaLbl==='function'?_lineaLbl(cur):''), age!==null?age+' años':'',
+    years!==null?'Compite desde '+(new Date().getFullYear()-years+1):''].filter(Boolean).join(' · ');
+  // Las cinco marcas
+  const hoy=l=>bestOf(ra,l);
+  const mejor=l=>Math.max(+(txPB(full,l)||0),hoy(l));
+  const solo=(typeof _sbPool==='function')&&_sbPool(ra).solo;
+  const sq=mejor('sq'), bp=mejor('bp'), dl=mejor('dl');
+  const tot=Math.max(+(txPB(full,'total')||0),(hoy('sq')&&hoy('bp')&&hoy('dl'))?hoy('sq')+hoy('bp')+hoy('dl'):0, solo?bp:0);
+  const gl=(tot>0&&cur.bw&&typeof calcGL==='function')?calcGL(tot,cur.bw,cur.sex,_glMod(cur)):0;
+  const kgs=v=>v>0?_sbNum(v)+'<small style="font-size:20px;color:'+X.mut+';margin-left:3px">kg</small>':'—';
+  const marcas=solo?[['BANCA',kgs(bp)],['GL',gl?gl.toFixed(2):'—']]
+    :[['SENTADILLA',kgs(sq)],['BANCA',kgs(bp)],['P. MUERTO',kgs(dl)],['TOTAL',kgs(tot)],['GL',gl?gl.toFixed(2):'—']];
+  // La foto, el GIF o, sin nada, las iniciales
   const useGif=_txProfileMediaType==='gif'&&!!media.gif_url;
   const gifIsImg=useGif&&String(media.gif_url||'').toLowerCase().split('?')[0].endsWith('.gif');
   const gifBlend=useGif?(media.gif_blend||'screen'):'normal';
-  const mediaBg=useGif?'#000':(media.foto_url?'#fff':'linear-gradient(135deg,#1a2e4f,#0e1f3a)');
-  return `
-    <div style="position:absolute;top:0;right:0;bottom:0;left:0">
-    <div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;pointer-events:none;overflow:hidden">
-      <img src="YourLift_logo.png" alt="" style="width:52%;opacity:0.07;filter:blur(18px);transform:scale(1.15);user-select:none" onerror="this.style.display='none'">
-    </div>
-    <div style="position:absolute;top:0;right:0;bottom:0;left:0;padding:clamp(40px,5vw,80px);display:flex;flex-direction:column">
-      <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(8px,1.5vh,22px);max-width:1400px;width:100%;margin:auto">
-        <div style="display:flex;align-items:center;gap:14px;margin-bottom:clamp(6px,1vh,16px)">
-          <div style="background:${_txC('nameBg')};padding:clamp(10px,1.6vw,18px) clamp(18px,2.2vw,28px);border-radius:6px;display:flex;align-items:center;gap:clamp(10px,1.5vw,18px);box-shadow:0 4px 20px rgba(212,168,67,.35)">
-            ${chipNombre}
-            <div style="font-family:Oswald;font-size:clamp(26px,3.2vw,44px);font-weight:700;letter-spacing:2px;color:${_txC('nameText')}">
-              ${firstName?firstName+' ':''}${lastName}
-            </div>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:clamp(30px,4vw,70px);align-items:center;margin-top:clamp(10px,2vh,30px)">
-          <div style="width:clamp(180px,18vw,280px);aspect-ratio:3/4;background:${mediaBg};border:3px solid ${_txC('accent')};border-radius:4px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(0,0,0,.5);position:relative;overflow:hidden">
-            ${useGif
-              ? (gifIsImg
-                  ? `<img src="${media.gif_url}" alt="${cur.name||''}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center">`
-                  : `<video src="${media.gif_url}" autoplay loop muted playsinline data-gif-trim="1" data-gif-start="${media.gif_start||0}" data-gif-end="${(media.gif_end!=null?media.gif_end:(''))}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center"></video>`)
-              : media.foto_url
-                ? `<img src="${media.foto_url}" alt="${cur.name||''}" style="width:100%;height:100%;object-fit:cover" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px\\'>${initials}</span>'">`
-                : `<span style="font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px">${initials}</span>`
-            }
-          </div>
-          <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(10px,1.8vh,24px)">
-            ${rows.map(r=>`
-              <div style="display:grid;grid-template-columns:auto 1fr;gap:40px;align-items:center;border-bottom:1px solid rgba(212,168,67,.2);padding-bottom:clamp(8px,1.2vh,14px)">
-                <div style="font-family:Oswald;font-size:clamp(22px,2.4vw,36px);font-weight:600;color:rgba(220,230,245,.92);letter-spacing:3px">${r[0]}</div>
-                <div style="font-family:Oswald;font-size:clamp(24px,2.6vw,40px);font-weight:700;color:${_txC('accent')};letter-spacing:1px;text-align:right">${r[1]}</div>
-              </div>`).join('')}
-          </div>
-        </div>
-        <div style="position:absolute;top:clamp(20px,2.5vw,40px);right:clamp(20px,2.5vw,40px);display:flex;align-items:center;gap:12px;padding:8px 14px;background:rgba(10,22,40,.55);border:2px solid rgba(212,168,67,.4);border-radius:8px">
-          ${_tiraLogosPantalla(['fed','camp','yl'],'clamp(34px,3.6vw,56px)','14px')}
+  const ini='<span style="font-size:110px;font-weight:600;color:rgba(255,255,255,.55);letter-spacing:2px">'+initials+'</span>';
+  const foto=useGif
+    ? (gifIsImg
+        ? `<img src="${media.gif_url}" alt="" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center">`
+        : `<video src="${media.gif_url}" autoplay loop muted playsinline data-gif-trim="1" data-gif-start="${media.gif_start||0}" data-gif-end="${(media.gif_end!=null?media.gif_end:(''))}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center"></video>`)
+    : media.foto_url
+      ? `<img src="${media.foto_url}" alt="" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;object-position:center 18%" onerror="this.remove()">`
+      : '';
+  const nombre=_nombrePropio(cur.name||'').toUpperCase();
+  const lugar=o.centro
+    ?`left:50%;top:50%;transform:translate(-50%,-50%) scale(${k});transform-origin:center center`
+    :`left:${Math.round(64*k)}px;bottom:${Math.round(64*k)}px;transform:scale(${k});transform-origin:bottom left`;
+  return `<div style="position:absolute;${lugar};pointer-events:none">
+    <div class="txCascade" style="width:1180px;display:flex;background:${X.bg};border:1px solid ${X.line};font-family:Oswald,'Arial Narrow',sans-serif;color:#fff;box-shadow:0 10px 34px rgba(0,0,0,.45)">
+      <div style="width:300px;height:380px;flex:none;position:relative;overflow:hidden;background:${useGif?'#000':X.cell};display:grid;place-items:center">${ini}${foto}</div>
+      <div style="flex:1;min-width:0;padding:30px 36px 28px;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:14px;font-size:19px;letter-spacing:.2em;color:${X.sub};white-space:nowrap">${ident}<span style="overflow:hidden;text-overflow:ellipsis">${esc(linea1)}</span>${chip?`<span style="margin-left:auto;border:2px solid #fff;color:#fff;font-weight:600;font-size:18px;letter-spacing:.12em;padding:5px 14px">${chip}</span>`:''}</div>
+        <div style="font-weight:600;font-size:${nombre.length>22?58:72}px;line-height:.95;margin-top:12px;letter-spacing:.01em">${esc(nombre)}</div>
+        <div style="font-family:'DM Sans',sans-serif;font-size:22px;color:${X.sub};margin-top:12px">${esc(meta)}</div>
+        <div style="display:grid;grid-template-columns:repeat(${marcas.length},1fr);margin-top:auto;border-top:1px solid ${X.line};padding-top:18px">
+          ${marcas.map(([t,v])=>`<div><span style="font-size:15px;letter-spacing:.18em;color:${X.mut}">${t}</span><b style="display:block;font-size:44px;font-weight:600;line-height:1.1">${v}</b></div>`).join('')}
         </div>
       </div>
     </div>
-    </div>`;
+  </div>`;
 }
 
  // 20s visible
@@ -1856,6 +1886,10 @@ function renderTxScoreboard(cur,lifterChanged){
     </div>`;
 }
 
+// Tal cual la vista previa: una caja al centro, sobre la cámara. Arriba
+// CLASIFICACIÓN, la categoría y en qué movimiento va; la tabla con el puesto,
+// el atleta con el logo de su club, SQ, BP y DL (en gris lo declarado que
+// todavía no levanta), lo actual, lo proyectado y el GL del proyectado.
 function renderTxLeaderboard(cur,lifterChanged,opts){
   opts=opts||{};
   // Determine category to show: current lifter's, or first athlete of current flight if none
@@ -1865,46 +1899,54 @@ function renderTxLeaderboard(cur,lifterChanged,opts){
   // Mismo sexo + cat + div (separar divisiones de edad en el leaderboard)
   const sameCat=DATA.athletes.filter(a=>a.cat===ref.cat&&a.div===ref.div&&a.sex===ref.sex
     &&_lineaComp(a)===_lineaComp(ref)&&(opts.allFlights||a.flight===DATA.flight)&&!a.bombed);
-  const ranked=sameCat.map(a=>({...a,total:totalOf(a),fTotal:forecastTotal(a),fPlace:0}));
-  ranked.sort((a,b)=>b.fTotal-a.fTotal);
-  ranked.forEach((a,i)=>a.fPlace=i+1);
-  const divS=txDivShort(ref.div);
-  const sexLabel=(ref.sex==='Femenino'||ref.sex==='Mujer'||ref.sex==='F')?'Mujer':'Hombre';
-  const curBest={sq:bestOf(ref,'sq'),bp:bestOf(ref,'bp'),dl:bestOf(ref,'dl')};
-  return `
-    <div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;padding:clamp(30px,5vh,80px)">
-      <div class="txCascade" style="width:min(1100px,95%);background:${_txC('cardBg')};backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);border:1px solid rgba(212,168,67,.4);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45)">
-        <div style="padding:clamp(14px,2vh,22px) clamp(20px,2.5vw,32px);background:${_txC('headerBg')};border-bottom:2px solid ${_txC('accent')};display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-family:Oswald;font-size:clamp(11px,1.1vw,14px);color:rgba(220,230,245,.75);letter-spacing:3px">LEADERBOARD</div>
-            <div style="font-family:Oswald;font-size:clamp(20px,2.2vw,30px);font-weight:700;color:#fff;letter-spacing:2px;margin-top:2px;text-shadow:0 2px 6px rgba(0,0,0,.6)">${divS} • ${ref.cat} (${sexLabel}) <span style="font-size:.7em;opacity:.8">· ${_lineaLbl(ref)}</span></div>
-          </div>
-          ${_tiraLogos(['camp'],'clamp(26px,2.6vw,38px)','10px')}
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 120px 120px 80px;padding:10px clamp(20px,2.5vw,32px);background:rgba(10,22,40,.35);border-bottom:1px solid rgba(212,168,67,.25);font-family:Oswald;font-size:clamp(10px,1vw,13px);color:rgba(220,230,245,.7);letter-spacing:2px">
-          <div>NOMBRE</div><div style="text-align:center">TOTAL</div><div style="text-align:center">F.TOT</div><div style="text-align:center">POS</div>
-        </div>
-        ${ranked.map(a=>{
-          const isCur=a.id===ref.id;
-          const logo=window.clubLogoImg?window.clubLogoImg(a.club,28,'background:rgba(10,22,40,.6);padding:2px;flex-shrink:0;'):'';
-          return `<div style="display:grid;grid-template-columns:1fr 120px 120px 80px;padding:clamp(10px,1.6vh,18px) clamp(20px,2.5vw,32px);background:${isCur?_txC('lbHighlight'):'transparent'};border-bottom:1px solid rgba(212,168,67,.12);align-items:center">
-            <div style="display:flex;align-items:center;gap:10px;overflow:hidden">
-              ${logo||'<div style="width:28px;height:28px;flex-shrink:0"></div>'}
-              <span style="font-family:Oswald;font-size:clamp(14px,1.5vw,20px);font-weight:${isCur?'700':'500'};color:${isCur?'#fff':'rgba(240,245,255,.92)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.5)">${a.name}</span>
-            </div>
-            <div style="font-family:Oswald;font-size:clamp(14px,1.5vw,20px);text-align:center;color:rgba(220,230,245,.75);text-shadow:0 1px 3px rgba(0,0,0,.5)">${(a.total||0).toFixed(1)}</div>
-            <div style="font-family:Oswald;font-size:clamp(15px,1.6vw,22px);text-align:center;font-weight:700;color:${isCur?_txC('accent'):'rgba(240,245,255,.95)'};text-shadow:0 1px 3px rgba(0,0,0,.5)">${a.fTotal||'—'}</div>
-            <div style="font-family:Oswald;font-size:clamp(16px,1.7vw,24px);text-align:center;font-weight:700;color:${isCur?_txC('accent'):'rgba(220,230,245,.8)'};text-shadow:0 1px 3px rgba(0,0,0,.5)">${a.fPlace}</div>
-          </div>`;
-        }).join('')}
-        <div style="padding:clamp(10px,1.5vh,16px) clamp(20px,2.5vw,32px);background:rgba(196,30,58,.22);display:flex;gap:clamp(18px,2.5vw,40px);justify-content:center;align-items:center">
-          ${['sq','bp','dl'].map(l=>{
-            const b=curBest[l];
-            return '<div style="display:flex;gap:8px;align-items:center"><span style="font-family:Oswald;font-size:clamp(11px,1.1vw,14px);color:rgba(220,230,245,.7);letter-spacing:2px">'+LIFT_S[l]+'</span><span style="font-family:Oswald;font-size:clamp(16px,1.8vw,24px);font-weight:700;color:'+(b?LIFT_C[l]:'rgba(180,200,220,.4)')+';text-shadow:0 1px 3px rgba(0,0,0,.5)">'+(b?b.toFixed(1):'—')+'</span></div>';
-          }).join('')}
-        </div>
+  const ranked=sameCat.map(a=>({a,act:totalOf(a),proy:forecastTotal(a)}))
+    .sort((x,y)=>(y.proy-x.proy)||((x.a.bw||0)-(y.a.bw||0)));
+  const X=_txX(), k=_sbEscala();
+  const mujer=(ref.sex==='Femenino'||ref.sex==='Mujer'||ref.sex==='F');
+  const cuando={sq:'EN SENTADILLA',bp:'EN BANCA',dl:'EN PESO MUERTO'}[DATA.lift]||'';
+  const catTxt=[(txCatLabel(ref.cat)||'').replace(/^-/,'−').replace(/kg$/i,' KG'), (typeof _lineaLbl==='function'?_lineaLbl(ref):'')]
+    .filter(Boolean).join(' · ').toUpperCase();
+  const divTxt=[String(ref.div||'').toUpperCase(), mujer?'MUJERES':'HOMBRES'].filter(Boolean).join(' · ');
+  // Lo hecho en blanco; si todavía no levanta ese movimiento, lo declarado en gris.
+  const mov=(a,l)=>{
+    const b=bestOf(a,l);
+    if(b>0)return '<td style="'+td+'">'+_sbNum(b)+'</td>';
+    const pend=(a.att[l]||[]).find(x=>x&&!x.r&&(+x.w>0));
+    return '<td style="'+td+'color:#6B6B70">'+(pend?_sbNum(+pend.w):'—')+'</td>';
+  };
+  const muchos=ranked.length>14;
+  const td='padding:'+(muchos?'5px':'8px')+' 14px;font-size:'+(muchos?23:27)+'px;text-align:right;border-top:1px solid '+X.line2+';';
+  const th='font-size:14px;letter-spacing:.18em;color:'+X.mut+';font-weight:500;padding:10px 14px;text-align:right;';
+  const filas=ranked.map(({a,act,proy},i)=>{
+    const yo=a.id===ref.id;
+    const gl=(proy>0&&a.bw&&typeof calcGL==='function')?calcGL(proy,a.bw,a.sex,_glMod(a)):0;
+    const ident=_variosPaises()?_flagImg(_ctry(a),26,true):((window.clubLogoImg&&a.club)?window.clubLogoImg(a.club,40,'padding:3px;'):'');
+    return '<tr style="'+(yo?'background:'+X.hl+';':'')+'">'
+      +'<td style="'+td+'font-weight:600;width:80px;text-align:center">'+(i+1)+'°</td>'
+      +'<td style="'+td+'text-align:left;font-family:\'DM Sans\',sans-serif;font-weight:700;font-size:'+(muchos?21:24)+'px">'
+        +'<div style="display:flex;align-items:center;gap:14px;white-space:nowrap">'+ident+'<span>'+esc(_nombrePropio(a.name||''))
+        +' <small style="font-weight:400;color:'+X.mut+';font-size:'+(muchos?16:18)+'px">'+esc(_variosPaises()?(_ctryName(_ctry(a))||''):(a.club||''))+'</small></span></div></td>'
+      +mov(a,'sq')+mov(a,'bp')+mov(a,'dl')
+      +'<td style="'+td+'">'+(act>0?_sbNum(act):'—')+'</td>'
+      +'<td style="'+td+'font-weight:600">'+(proy>0?_sbNum(proy):'—')+'</td>'
+      +'<td style="'+td+'color:'+X.sub+';font-size:'+(muchos?21:24)+'px">'+(gl?gl.toFixed(2):'—')+'</td>'
+    +'</tr>';
+  }).join('');
+  return `<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(${k});pointer-events:none">
+    <div style="width:1480px;background:${X.bg};border:1px solid ${X.line};font-family:Oswald,'Arial Narrow',sans-serif;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.45)">
+      <div style="display:flex;align-items:center;gap:22px;padding:20px 28px;background:${X.head}">
+        ${_tiraLogos(['camp'],'40px','10px')}
+        <b style="font-size:34px;font-weight:600;letter-spacing:.1em">CLASIFICACIÓN</b>
+        <span style="font-size:22px;letter-spacing:.12em;color:#BDBDC2">${catTxt}</span>
+        <em style="margin-left:auto;font-style:normal;font-size:17px;letter-spacing:.14em;color:${X.mut}">${cuando}</em>
       </div>
-    </div>`;
+      <table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">
+        <thead><tr><th style="${th}text-align:center">POS</th><th style="${th}text-align:left">ATLETA</th><th style="${th}">SQ</th><th style="${th}">BP</th><th style="${th}">DL</th><th style="${th}">ACTUAL</th><th style="${th}">PROYECT.</th><th style="${th}">GL</th></tr></thead>
+        <tbody><tr><td colspan="8" style="font-size:15px;letter-spacing:.24em;color:#fff;background:${X.cell};text-align:left;padding:6px 28px;font-weight:600">${divTxt}</td></tr>${filas}</tbody>
+      </table>
+      <div style="padding:10px 28px 14px;font-family:'DM Sans',sans-serif;font-size:16px;color:${X.mut};border-top:1px solid ${X.line2}">En gris, lo declarado que falta levantar. El proyectado suma lo hecho y lo declarado.</div>
+    </div>
+  </div>`;
 }
 
 // ══════════════════════════════════════════════
@@ -1997,42 +2039,53 @@ function _medalTop3(md){
     .slice(0,3);
 }
 
+// Tal cual la vista previa: el podio abajo al centro. La franja con
+// MEDALLERO y la categoría, y tres tarjetas en orden 2 · 1 · 3, la del primero
+// más alta. El oro, la plata y el bronce son el color de la medalla y no
+// cambian con la paleta; el resto sale de Control TX. Mientras está, el
+// marcador se esconde (van en el mismo lugar).
 function renderTxMedals(md){
   md=md||{};
   if(!md.mod||!md.sex||!md.div||!md.cat)return '';
   const tipo=md.tipo||'total';
   const ranked=_medalTop3(md);
   if(!ranked.length)return '';
-  const divS=txDivShort(md.div);
-  const sexLabel=(md.sex==='Femenino'||md.sex==='Mujer'||md.sex==='F')?'F':'M';
-  const RANK_BG={1:'#D4A843',2:'#C0C0C0',3:'#CD7F32'};
-  const row=(r,x)=>{
-    if(!x)return '';
-    const big=r===1;
-    // La bandera va entre el nombre y el total: en un sudamericano es lo que se
-    // busca de un vistazo, y ahí no compite con el número de puesto.
-    const flag=_variosPaises()?_flagImg(_ctry(x.a),big?26:22):_logoClub(x.a,big?34:28,'margin-right:0;');
-    // El fondo sale de la paleta elegida en Control TX, como el resto de las
-    // pantallas. El ORO, la PLATA y el BRONCE no: son el color de la medalla y
-    // no cambian por tema — un primer lugar plateado no se entiende.
-    return `<div style="display:flex;align-items:center;gap:12px;background:linear-gradient(90deg,${_txC('cardBg')},${_txC('headerBg')});border-left:6px solid ${RANK_BG[r]};border-radius:8px;padding:${big?'12px 20px':'9px 18px'};box-shadow:0 8px 20px rgba(0,0,0,.5)">
-      <div style="width:${big?'40px':'32px'};height:${big?'40px':'32px'};flex-shrink:0;border-radius:50%;background:${RANK_BG[r]};display:flex;align-items:center;justify-content:center;font-family:Oswald;font-weight:800;font-size:${big?'20px':'16px'};color:#0A1628">${r}</div>
-      <div style="flex:1;font-family:Oswald;font-weight:700;font-size:${big?'24px':'18px'};color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.5)">${x.a.name||''}</div>
-      ${flag}
-      <div style="font-family:Oswald;font-weight:800;font-size:${big?'24px':'18px'};color:${RANK_BG[r]}">${x.valor.toFixed(1)}</div>
+  const X=_txX(), k=_sbEscala();
+  const MEDALLA={1:'#E2B13C',2:'#C3C8CF',3:'#C98A5A'};
+  const ALTO={1:360,2:310,3:280};
+  const mujer=(md.sex==='Femenino'||md.sex==='Mujer'||md.sex==='F');
+  const cab=[(txCatLabel(md.cat)||md.cat||'').replace(/^-/,'−').replace(/kg$/i,' KG'), String(md.div||'').toUpperCase(),
+    _txModLabel(md.mod).toUpperCase(), mujer?'MUJERES':'HOMBRES', MEDAL_TIPOS[tipo]||'TOTAL'].filter(Boolean).join(' · ');
+  const tarjeta=(r,x)=>{
+    if(!x)return '<div></div>';
+    // Con varios países la bandera va ENTRE el nombre y el total (se pidió así
+    // mirando un medallero real); con uno solo, el logo del club arriba del
+    // nombre, como en la vista previa.
+    const varios=_variosPaises();
+    const logo=(!varios&&window.clubLogoImg&&x.a.club)?window.clubLogoImg(x.a.club,64,'padding:5px;margin-top:14px;'):'';
+    const debajo=varios
+      ?'<div style="display:flex;align-items:center;gap:10px;margin-top:8px">'+_flagImg(_ctry(x.a),32)+'<small style="font-family:\'DM Sans\',sans-serif;font-size:19px;color:'+X.mut+'">'+esc(_ctryName(_ctry(x.a))||_ctry(x.a))+'</small></div>'
+      :'<small style="font-family:\'DM Sans\',sans-serif;font-size:19px;color:'+X.mut+';margin-top:4px">'+esc(x.a.club||'')+'</small>';
+    return `<div style="background:${X.bg};border:1px solid ${X.line};border-top:4px solid #fff;padding:22px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;min-height:${ALTO[r]}px;box-sizing:border-box">
+      <span style="width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:${MEDALLA[r]};color:#000;font-size:34px;font-weight:700">${r}</span>
+      ${logo}
+      <b style="font-family:'DM Sans',sans-serif;font-size:28px;font-weight:700;margin-top:12px;line-height:1.15">${esc(_nombrePropio(x.a.name||''))}</b>
+      ${debajo}
+      <strong style="font-size:54px;font-weight:600;margin-top:auto;padding-top:10px;line-height:1">${_sbNum(x.valor)}</strong>
     </div>`;
   };
-  return `
-    <div style="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);width:min(760px,60vw);pointer-events:none">
-      <div style="text-align:center;margin-bottom:10px;font-family:Oswald;font-size:14px;letter-spacing:3px;color:${_txC('accent')};text-shadow:0 2px 6px rgba(0,0,0,.6)">MEDALLERO ${MEDAL_TIPOS[tipo]||'TOTAL'} · ${divS} ${txCatLabel(md.cat)||md.cat} ${sexLabel} · ${_txModLabel(md.mod)}</div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        ${row(1,ranked[0])}
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div>${row(2,ranked[1])}</div>
-          <div>${row(3,ranked[2])}</div>
-        </div>
+  return `<div style="position:absolute;left:50%;bottom:${Math.round(64*k)}px;transform:translateX(-50%) scale(${k});transform-origin:bottom center;pointer-events:none">
+    <div style="width:1320px;font-family:Oswald,'Arial Narrow',sans-serif;color:#fff">
+      <div style="background:${X.head};padding:14px 26px;display:flex;align-items:center;gap:20px;box-shadow:0 10px 30px rgba(0,0,0,.4)">
+        ${_tiraLogos(['camp'],'38px','10px')}
+        <b style="font-size:30px;font-weight:600;letter-spacing:.14em">MEDALLERO</b>
+        <span style="font-size:20px;letter-spacing:.14em;color:#BDBDC2">${cab}</span>
       </div>
-    </div>`;
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);align-items:end;gap:10px;margin-top:10px">
+        ${tarjeta(2,ranked[1])}${tarjeta(1,ranked[0])}${tarjeta(3,ranked[2])}
+      </div>
+    </div>
+  </div>`;
 }
 
 function _txModLabel(mod){

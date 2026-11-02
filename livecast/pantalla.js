@@ -353,7 +353,12 @@ function _renderTxAtletaEnBarra(c,st){
   if(st.mode==='profile'){
     const cur=liftQueue()[0]||DATA.athletes.find(a=>a.flight===DATA.flight&&!a.bombed);
     document.body.classList.add('tx-opaque');
-    c.innerHTML=(cur?renderTxProfile(cur):'<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')+_descCapaHtml()+_descGearHtml();
+    // Como las otras pantallas de tarima: fondo negro, los logos arriba a la
+    // derecha y la tarjeta del perfil al centro.
+    const _tiraPf=_tiraLogosPantalla(['fed','camp'],'7vh','1.4vw');
+    c.innerHTML='<div style="position:absolute;top:0;right:0;bottom:0;left:0;background:#000"></div>'
+      +(_tiraPf?'<div style="position:absolute;top:4vh;right:3vw;display:flex;align-items:center">'+_tiraPf+'</div>':'')
+      +(cur?renderTxProfile(cur,{centro:true}):'<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')+_descCapaHtml()+_descGearHtml();
     return;
   }
   if(st.mode==='barra'){

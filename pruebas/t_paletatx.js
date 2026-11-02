@@ -97,9 +97,12 @@ const MEDALLERO = `renderTxMedals({mod:'Powerlifting Classic',sex:'Hombre',div:'
         const h = eval(medallero);
         return {
           vacio: !h,
-          fondo: (h.match(/linear-gradient\(90deg,([^)]*\))/) || [])[1],
-          titulo: (h.match(/letter-spacing:3px;color:([^;"]+)/) || [])[1],
-          medallas: [...new Set(h.match(/#D4A843|#C0C0C0|#CD7F32/gi) || [])].sort(),
+          // El podio (tal cual la vista previa): la franja de arriba y las
+          // tarjetas toman sus fondos de la paleta; las letras van en blanco.
+          fondo: (h.match(/<div style="background:(#[0-9a-fA-F]{6});border:1px solid/) || [])[1],
+          franja: (h.match(/<div style="background:(#[0-9a-fA-F]{6});padding:14px 26px/) || [])[1],
+          letras: (h.match(/width:1320px;[^"]*color:([^;"]+)/) || [])[1],
+          medallas: [...new Set(h.match(/#E2B13C|#C3C8CF|#C98A5A/gi) || [])].sort(),
         };
       };
       const hoy = leer();
@@ -110,13 +113,14 @@ const MEDALLERO = `renderTxMedals({mod:'Powerlifting Classic',sex:'Hombre',div:'
     }, [MONTAR, MEDALLERO]);
 
     ok(!r.hoy.vacio && !r.suda.vacio, 'el medallero se dibuja');
-    // Antes el título era dorado fijo y no le hacía caso a ningún tema.
-    ok(r.hoy.titulo !== r.suda.titulo,
-       'el título cambia con el tema: ' + r.hoy.titulo + ' → ' + r.suda.titulo);
-    ok(r.suda.titulo === '#ffffff', 'y con el tema del Sudamericano queda blanco');
-    ok(r.hoy.fondo !== r.suda.fondo, 'el fondo de las filas también cambia');
+    // Antes el título era dorado fijo y no le hacía caso a ningún tema. Ahora
+    // la franja del título toma el color del tema y las letras van en blanco.
+    ok(r.hoy.franja !== r.suda.franja,
+       'la franja del título cambia con el tema: ' + r.hoy.franja + ' → ' + r.suda.franja);
+    ok(r.suda.letras === '#fff', 'y las letras quedan en blanco');
+    ok(r.hoy.fondo !== r.suda.fondo, 'el fondo de las tarjetas también cambia');
     // Lo que NO puede cambiar nunca.
-    ok(r.hoy.medallas.join(',') === '#C0C0C0,#CD7F32,#D4A843'.split(',').sort().join(','),
+    ok(r.hoy.medallas.join(',') === '#C3C8CF,#C98A5A,#E2B13C'.split(',').sort().join(','),
        'están el oro, la plata y el bronce');
     ok(r.suda.medallas.join(',') === r.hoy.medallas.join(','),
        'y el tema NO se los cambia: un primer lugar plateado no se entiende');
@@ -132,8 +136,7 @@ const MEDALLERO = `renderTxMedals({mod:'Powerlifting Classic',sex:'Hombre',div:'
     // El medallero ya no puede tener el fondo escrito a mano.
     const i = lc.indexOf('function renderTxMedals');
     const f = lc.slice(i, i + 2500);
-    ok(/_txC\('cardBg'\)/.test(f), 'el medallero pide su fondo a la paleta');
-    ok(/_txC\('accent'\)/.test(f), 'y su título también');
+    ok(/_txX\(\)/.test(f), 'el medallero pide sus fondos a la paleta');
     ok(!/rgba\(10,22,40,\.94\)/.test(f), 'sin el fondo fijo que tenía antes');
     // Y que se pueda tocar a mano desde Control TX.
     ok(/LEADERBOARD Y MEDALLERO/.test(lc), 'el editor de Control TX lo nombra');
