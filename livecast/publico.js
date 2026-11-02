@@ -90,7 +90,13 @@ function _seguirTarima(){
 // El número va adentro de la función y no en una constante suelta: esta se
 // declara muy abajo en el archivo, y una pantalla que se dibuja durante la carga
 // la leería antes de que exista.
-function _anchoDaParaLinea(){ return (window.innerWidth||1400) >= 1280; }
+// En la vista del público la fila lleva más aire (casillas redondeadas, lote
+// grande), así que el atleta va todo en un renglón recién desde 1500 px; más
+// angosto, los datos van debajo del nombre, como en la vista previa.
+function _anchoDaParaLinea(){
+  const min=(typeof DATA!=='undefined'&&DATA&&DATA.phase==='liveView')?1500:1280;
+  return (window.innerWidth||1400) >= min;
+}
 
 function renderLiveView(){
   const _enLinea = _anchoDaParaLinea();
@@ -105,18 +111,19 @@ function renderLiveView(){
   // La transmisión ya no se dibuja acá: la monta _ytSync() en #ytLive, arriba
   // de todo y fuera de esta pantalla, para que no se reinicie en cada intento.
 
-  let h = '<div class="fade">';
+  let h = '<div class="fade lv-vista">';
 
-  // ── Header ──────────────────────────────────────────────────
-  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">';
-  h += '<div><h2 class="os" style="font-size:22px;letter-spacing:2px">COMPETENCIA EN VIVO</h2>';
-  h += '<p style="color:var(--muted);font-size:12px">'+((DATA.event==null?void 0:DATA.event.name)||'')+'</p></div>';
-  h += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
-  h += '<div data-yl-idioma style="margin-right:6px"></div>';
-  { const t=_temaVivo(); h += '<button type="button" onclick="_cambiarTemaVivo()" title="Cambiar entre la versión de día (blanca) y la de noche (negra)" style="cursor:pointer;padding:5px 12px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;font-size:12px;font-weight:600;letter-spacing:1px;margin-right:6px">'+(t==='dia'?'☾ NOCHE':'☀ DÍA')+'</button>'; }
-  h += '<span style="font-size:11px;color:var(--muted)">'+(libre?'Estás mirando:':'Tanda activa:')+'</span>';
-  h += '<span style="background:'+(FL_C[currentFlight]||'#666')+';color:#fff;padding:4px 12px;border-radius:6px;font-family:Oswald;font-weight:700">'+(currentFlight||'—')+'</span>';
-  h += '</div></div>';
+  // ── Header: la barra azul de arriba, como la vista previa ────────────
+  // Va pegada al borde de arriba (el menú queda encima, a la izquierda) con el
+  // título, el campeonato, el idioma, día/noche y la tanda que está compitiendo.
+  h += '<header class="lv-cab">';
+  h += '<div class="lv-cab-t"><h2>COMPETENCIA EN VIVO</h2>';
+  h += '<p>'+((DATA.event==null?void 0:DATA.event.name)||'')+'</p></div>';
+  h += '<div class="lv-cab-d">';
+  h += '<div data-yl-idioma></div>';
+  { const t=_temaVivo(); h += '<button type="button" class="lv-tema" onclick="_cambiarTemaVivo()" title="Cambiar entre la versión de día (blanca) y la de noche (negra)">'+(t==='dia'?'☾ NOCHE':'☀ DÍA')+'</button>'; }
+  h += '<span class="lv-tanda"><span>'+(libre?'Estás mirando:':'Tanda activa:')+'</span><b>'+(currentFlight||'—')+'</b></span>';
+  h += '</div></header>';
 
   // ── Elegir qué tanda mirar ───────────────────────────────────
   // AUTOMÁTICO sigue a la tarima, como siempre. Si el espectador elige una tanda,
@@ -138,8 +145,8 @@ function renderLiveView(){
     const diaSel=window._DIA_SEL?window._DIA_SEL['publico']:null;
     const hayTandas=tandas.length>1;
     if(_fd.html||hayTandas){
-      h += '<div class="card" style="margin-bottom:10px;padding:0;overflow:hidden">';
-      h += '<button onclick="window._NAV_PANEL_OPEN=!window._NAV_PANEL_OPEN;try{localStorage.setItem(\'yl_navPanel\',window._NAV_PANEL_OPEN?\'1\':\'0\')}catch(e){};R()" '
+      h += '<div class="card lv-nav" style="margin-bottom:10px;padding:0;overflow:hidden">';
+      h += '<button class="lv-nav-t" onclick="window._NAV_PANEL_OPEN=!window._NAV_PANEL_OPEN;try{localStorage.setItem(\'yl_navPanel\',window._NAV_PANEL_OPEN?\'1\':\'0\')}catch(e){};R()" '
         +'style="width:100%;display:flex;align-items:center;gap:9px;padding:7px 12px;border:none;background:rgba(29,49,80,.35);'
         +'color:var(--muted);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;text-align:left">'
         +'<span>VER DÍA Y TANDA</span>'
@@ -152,18 +159,18 @@ function renderLiveView(){
         if(hayTandas){
           h += '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:7px">';
           h += '<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-right:2px">VER TANDA</span>';
-          h += '<button onclick="liveVerTanda(null)" style="padding:5px 12px;border-radius:6px;border:2px solid '
+          h += '<button class="lv-chip'+(libre?'':' on')+'" onclick="liveVerTanda(null)" style="padding:5px 12px;border-radius:6px;border:2px solid '
             +(libre?'var(--border)':'var(--green)')+';background:'+(libre?'transparent':'rgba(34,197,94,.12)')
             +';color:'+(libre?'var(--muted)':'var(--green)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer" '
             +'title="Sigue sola a la tanda que está en tarima">AUTOMÁTICO</button>';
           tandasVer.forEach(f=>{
             const on=libre&&f===currentFlight, enTarima=f===_tandaEnTarima;
             const n=DATA.athletes.filter(a=>a.flight===f&&!a.bombed).length;
-            h += '<button onclick="liveVerTanda(\''+f+'\')" style="padding:5px 12px;border-radius:6px;border:2px solid '
+            h += '<button class="lv-chip'+(on?' on':'')+'" onclick="liveVerTanda(\''+f+'\')" style="padding:5px 12px;border-radius:6px;border:2px solid '
               +(on?(FL_C[f]||'var(--gold)'):'var(--border)')+';background:'+(on?(FL_C[f]||'#666')+'22':'transparent')
               +';color:'+(on?(FL_C[f]||'#fff'):'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'
               +f+'<span style="font-size:9px;opacity:.65;margin-left:4px">'+n+'</span>'
-              +(enTarima?'<span style="font-size:8px;color:var(--green);margin-left:5px">EN TARIMA</span>':'')+'</button>';
+              +(enTarima?'<span class="lv-entar" style="font-size:8px;color:var(--green);margin-left:5px">EN TARIMA</span>':'')+'</button>';
           });
           h += '</div>';
         }
@@ -252,7 +259,7 @@ function renderLiveView(){
 
   // Fila de grupos (SQ / BP / DL)
   h += '<thead>';
-  h += '<tr style="border-bottom:1px solid rgba(29,49,80,.4)">';
+  h += '<tr class="lv-gr" style="border-bottom:1px solid rgba(29,49,80,.4)">';
   h += '<th colspan="2" style="padding:6px 8px;border-right:1px solid var(--border)"></th>';
   ['sq','bp','dl'].forEach(l=>{
     const isCur = l===DATA.lift;
@@ -260,11 +267,13 @@ function renderLiveView(){
     h += '<th colspan="'+(maxAtts[l]+(l==='dl'?0:1))+'" style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:12px;letter-spacing:2px;color:'+c+';border-right:1px solid var(--border);background:'+(isCur?c+'18':'transparent')+'">'+LIFT_N[l]+(isCur?' <i class=yl-i-reproducir></i>':'')+'</th>';
   });
   h += '<th colspan="3" style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);border-right:1px solid var(--border)">TOTALES</th>';
-  h += '<th style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:10px;color:var(--gold)">GLP</th>';
+  // Cubre las dos últimas columnas (GL y posición): si no, la esquina de arriba
+  // a la derecha quedaba sin encabezado, en blanco.
+  h += '<th colspan="2" style="padding:6px 4px;text-align:center;font-family:Oswald;font-size:10px;color:var(--gold)">GL · PUESTO</th>';
   h += '</tr>';
 
   // Fila de columnas
-  h += '<tr style="background:rgba(29,49,80,.35);border-bottom:2px solid var(--border)">';
+  h += '<tr class="lv-cols" style="background:rgba(29,49,80,.35);border-bottom:2px solid var(--border)">';
   h += '<th style="padding:5px 3px;text-align:center;color:#fff;font-size:14px;font-weight:700;width:48px;line-height:1.1;border-right:1px solid var(--border);">N°<br>LOTE</th>';
   h += '<th style="padding:5px 8px;text-align:left;color:#fff;font-size:14px;font-weight:700;border-right:1px solid var(--border)">ATLETA</th>';
   ['sq','bp','dl'].forEach(l=>{
@@ -310,10 +319,10 @@ function renderLiveView(){
     else if(a.bombed)         rowStyle += 'opacity:.4;';
 
     const rowId = isOnPlatform ? 'id="liveCurrentLifter"' : '';
-    h += '<tr '+rowId+' style="'+rowStyle+'">';
+    h += '<tr '+rowId+' class="'+(isOnPlatform?'lv-tarima':inQueue&&queuePos<=2?'lv-pronto':a.bombed?'lv-fuera':'')+'" style="'+rowStyle+'">';
 
     // # / posición cola + lote
-    h += '<td style="padding:6px 3px;text-align:center;border-right:1px solid var(--border);">';
+    h += '<td class="lv-lote" style="padding:6px 3px;text-align:center;border-right:1px solid var(--border);">';
     // El lote, en blanco y 50% más grande: en gris a 8-9 px no se leía desde las
     // teles ni en el teléfono.
     if(isOnPlatform){
@@ -339,19 +348,22 @@ function renderLiveView(){
     // debajo de eso el que mira tendría que arrastrar la tabla a lo ancho para
     // llegar al peso muerto. Ahí se queda apilado, que es lo que conviene cuando
     // lo que sobra es alto y lo que falta es ancho.
-    h += '<td class="lv-atl" style="padding:'+(_enLinea?'3px':'5px')+' 8px;border-right:1px solid var(--border)">';
-    if(_enLinea) h += '<div style="display:flex;align-items:center;gap:6px;white-space:nowrap">';
-    if(isOnPlatform) h += '<span style="background:'+liftColor+';color:#fff;padding:1px 6px;border-radius:3px;font-size:8px;font-family:Oswald;letter-spacing:1px;'+(_enLinea?'flex-shrink:0':'display:inline-block;margin-bottom:2px')+'"><i class=yl-i-reproducir></i> EN TARIMA</span>'+(_enLinea?'':'<br>');
+    // En la vista previa son dos renglones: arriba el nombre con su club y su
+    // peso; abajo el puesto virtual y las etiquetas. Con pantalla ancha va todo
+    // en uno solo, para que la tanda entera entre en los televisores.
+    h += '<td class="lv-atl" style="padding:'+(_enLinea?'3px':'6px')+' 8px;border-right:1px solid var(--border)">';
+    h += '<div class="lv-l1" style="display:flex;align-items:center;gap:6px;'+(_enLinea?'white-space:nowrap':'flex-wrap:wrap;row-gap:2px')+'">';
+    if(isOnPlatform) h += '<span class="lv-ent" style="background:'+liftColor+';color:#fff;padding:1px 6px;border-radius:3px;font-size:8px;font-family:Oswald;letter-spacing:1px;flex-shrink:0"><i class=yl-i-reproducir></i> EN TARIMA</span>';
     // La bandera del país, al lado del nombre, como en las tablas de Resultados
     // y en el medallero. Solo si el campeonato tiene más de un país: en un
     // nacional serían cuatrocientas banderas chilenas iguales, que no informan
     // nada y le quitan lugar al nombre. Es la misma condición que usa Resultados.
     // En un nacional va el logo del club, que es lo que distingue a cada uno.
     if(_variosPaises()) h += _flagImg(_ctry(a),isOnPlatform?15:12,true);
-    else h += _logoClub(a,_enLinea?(isOnPlatform?30:26):(isOnPlatform?34:30));
-    // Nombre y peso corporal en la letra del lote (Oswald, blanco), como en la
-    // tabla de la pantalla de tarima.
-    h += '<span style="font-family:Oswald,sans-serif;font-weight:'+(isOnPlatform?600:500)+';letter-spacing:.3px;font-size:'+(isOnPlatform?15:13)+'px;color:#fff">'+a.name+'</span>';
+    else h += _logoClub(a,isOnPlatform?30:26);
+    // Nombre y peso corporal en la letra del lote (Oswald), como en la tabla de
+    // la pantalla de tarima.
+    h += '<span class="lv-nm" style="font-family:Oswald,sans-serif;font-weight:'+(isOnPlatform?600:500)+';letter-spacing:.3px;font-size:'+(isOnPlatform?15:13)+'px;color:#fff">'+a.name+'</span>';
     // Club/país + peso corporal. El club se omite cuando repite lo que ya dice la
     // bandera: en un sudamericano, "Brasil" al lado de la bandera brasileña gasta
     // ancho sin agregar nada. En un nacional el club sí dice algo y se muestra.
@@ -359,16 +371,22 @@ function renderLiveView(){
       const _cl=String(a.club||'').trim();
       const _pn=String(_ctryName(_ctry(a))||'').trim();
       const _clV=(_cl&&_variosPaises()&&_cl.toLowerCase()===_pn.toLowerCase())?'':(_cl?_cl+' · ':'');
-      h += _enLinea
-        ? '<span style="font-family:Oswald,sans-serif;font-size:12px;font-weight:500;color:rgba(220,230,245,.9);flex-shrink:0">'+_clV+(a.bw?(+a.bw).toFixed(1)+' kg':'—')+'</span>'
-        : '<div style="font-family:Oswald,sans-serif;font-size:12px;font-weight:500;color:rgba(220,230,245,.9);margin-top:1px">'+_clV+(a.bw?(+a.bw).toFixed(1)+' kg':'—')+'</div>';
+      h += '<span class="lv-bw" style="font-family:Oswald,sans-serif;font-size:12px;font-weight:500;color:rgba(220,230,245,.9);flex-shrink:0">'+_clV+(a.bw?(+a.bw).toFixed(1)+' kg':'—')+'</span>';
     }
     // El puesto virtual, pegado al nombre. Va acá y no en una columna porque la
     // columna quedaría a la derecha del todo, fuera de la pantalla del teléfono.
     // El clon del 4º intento no tiene puesto propio: se busca el del atleta real.
-    h += _virtualHtml(VIRT[_realAth(a).id],_enLinea);
-    h += _nomChips(a,_enLinea?.92:1,_enLinea);
-    h += (_enLinea?'</div>':'')+'</td>';
+    if(_enLinea){
+      h += _virtualHtml(VIRT[_realAth(a).id],true);
+      h += _nomChips(a,.92,true);
+      h += '</div>';
+    } else {
+      h += '</div><div class="lv-l2" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:5px">';
+      h += _virtualHtml(VIRT[_realAth(a).id],true);
+      h += _nomChips(a,.92,true);
+      h += '</div>';
+    }
+    h += '</td>';
 
     // Atleta REAL detrás de la entrada (el clon del 4º redirige su att) + índice
     // del intento actual (3 si está en su intento extra, si no la ronda activa).
@@ -421,17 +439,17 @@ function renderLiveView(){
       const dq=isDQ(ra);
       const proy=dq?0:(_proyLift(ra,'sq')||0)+(_proyLift(ra,'bp')||0)+(_proyLift(ra,'dl')||0);
       const fin=(bSQ&&bBP&&bDL)?actual:0;
-      const celda=(v,col,grande,borde)=>'<td style="text-align:center;padding:3px;'+(borde?'border-right:1px solid var(--border)':'')+'">'
+      const celda=(v,col,grande,borde,k)=>'<td class="lv-tot lv-tot-'+k+'" style="text-align:center;padding:3px;'+(borde?'border-right:1px solid var(--border)':'')+'">'
         +'<span style="font-family:Oswald;font-size:'+(v?(grande?14:13):10)+'px;font-weight:700;color:'+(v?col:'rgba(100,120,150,.5)')+'">'+(v?(Math.round(v*10)/10):'—')+'</span></td>';
-      h += celda(actual,'#e5e7eb',false,false);
-      h += celda(proy,'#f59e0b',false,false);
-      h += celda(fin,'var(--gold)',true,true);
+      h += celda(actual,'#e5e7eb',false,false,'act');
+      h += celda(proy,'#f59e0b',false,false,'pro');
+      h += celda(fin,'var(--gold)',true,true,'fin');
     }
 
     // GLP
     const tot = totalOf(ra);
     const glp = tot ? calcGL(tot,ra.bw,ra.sex,_glMod(ra)) : null;
-    h += '<td style="text-align:center;padding:3px 5px">';
+    h += '<td class="lv-glp" style="text-align:center;padding:3px 5px">';
     h += '<span style="font-family:Oswald;font-size:'+(glp?12:9)+'px;font-weight:700;color:'+(glp?'var(--gold)':'rgba(100,120,150,.5)')+';">'+(glp||'—')+'</span>';
     h += '</td>';
     h += _posCellHtml(a,{fs:11});

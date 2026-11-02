@@ -327,8 +327,8 @@ function _srPanel(){
     if(r.hoy)return '<td title="'+esc('NUEVO — '+(r.quien||'')+', en esta competencia')+'" style="padding:4px 6px;text-align:center;font-family:Oswald;font-weight:800;color:#0f1a10;background:#F2C230;white-space:nowrap">'+r.kg+' <span style="font-size:8px;letter-spacing:.5px">NUEVO</span></td>';
     return '<td title="'+esc((r.quien||'')+(r.pais?' · '+r.pais:''))+'" style="padding:4px 6px;text-align:center;font-family:Oswald;font-weight:700;color:#F2C230;white-space:nowrap">'+r.kg+'</td>';
   };
-  let h='<div class="card" style="margin-bottom:10px;padding:0;overflow:hidden;border:1px solid rgba(242,194,48,.45)">';
-  h+='<button onclick="window._SR_PANEL_OPEN=!window._SR_PANEL_OPEN;R()" style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 13px;border:none;background:rgba(242,194,48,.10);color:#F2C230;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;text-align:left">'
+  let h='<div class="card lv-recp" style="margin-bottom:10px;padding:0;overflow:hidden;border:1px solid rgba(242,194,48,.45)">';
+  h+='<button class="lv-recp-t" onclick="window._SR_PANEL_OPEN=!window._SR_PANEL_OPEN;R()" style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 13px;border:none;background:rgba(242,194,48,.10);color:#F2C230;font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;text-align:left">'
     +'<span><i class=yl-i-trofeo></i> RÉCORDS SUDAMERICANOS</span>'
     +(nuevos?'<span style="background:#F2C230;color:#0f1a10;font-size:10px;font-weight:800;letter-spacing:.5px;padding:2px 7px;border-radius:4px;white-space:nowrap">'
         +nuevos+(nuevos>1?' NUEVOS':' NUEVO')+'</span>':'')

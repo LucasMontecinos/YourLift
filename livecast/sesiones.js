@@ -167,7 +167,7 @@ function _filaDias(zona, tandas, diaEnTarima){
   h+='<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px;margin-right:2px">VER DÍA</span>';
   dias.forEach(d=>{
     const on=d===sel, hoy=d===diaEnTarima;
-    h+='<button onclick="verDia(\''+zona+'\','+d+')" class="os" style="padding:5px 14px;border-radius:999px;border:2px solid '
+    h+='<button onclick="verDia(\''+zona+'\','+d+')" class="os lv-chip lv-dia'+(on?' on':'')+'" style="padding:5px 14px;border-radius:999px;border:2px solid '
       +(on?'var(--gold)':'var(--border)')+';background:'+(on?'rgba(212,168,67,.14)':'transparent')
       +';color:'+(on?'var(--gold)':'var(--muted)')+';font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'
       +'DÍA '+d+'<span style="font-size:9px;opacity:.65;margin-left:5px">'+_fechaDeTanda(porDia[d][0])+'</span>'
