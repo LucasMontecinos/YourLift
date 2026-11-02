@@ -793,6 +793,10 @@ window.isDQ=isDQ;
 const ctIntervals={};
 // Master tick: updates ALL change timers every second, no matter which tab
 setInterval(()=>{
+  // El aviso a los jueces y los oyentes de luces y reloj también por acá, una
+  // vez por segundo: R() no corre mientras se está tecleando en una casilla, y
+  // el panel de jueces no puede quedarse esperando a que se suelte el campo.
+  try{ if(typeof _deberesDelPuesto==='function')_deberesDelPuesto(); }catch(e){}
   let changed=false;
   let anyActive=false;
   // Solo se fuerza un re-render completo si el auto-relleno cambió un peso (aparecen

@@ -136,10 +136,11 @@ const DONDE = () => {
     // Se mira el bloque, no la línea exacta: ahí adentro se fue sumando más de
     // una cosa (también se anotan las luces de cada intento) y una comprobación
     // pegada al texto se rompía sola.
-    const bloque = lc.slice(lc.indexOf("if(isAdmin&&DATA.phase==='compete')"),
-                            lc.indexOf("if(isAdmin&&DATA.phase==='compete')") + 320);
-    ok(/isAdmin&&DATA\.phase==='compete'/.test(bloque) && /_avisarAtletaAJueces\(\)/.test(bloque),
-       'y sale desde el puesto que opera, en la pantalla de competencia');
+    const bloque = lc.slice(lc.indexOf('function _deberesDelPuesto'),
+                            lc.indexOf('function _deberesDelPuesto') + 320);
+    ok(/_esPuestoQueOpera\(\)/.test(bloque) && /_avisarAtletaAJueces\(\)/.test(bloque)
+       && /try\{_deberesDelPuesto\(\);\}catch/.test(lc),
+       'y sale desde el puesto que opera (en cualquier pestaña, ver t_puestoopera)');
     const f = lc.slice(lc.indexOf('async function _avisarAtletaAJueces'),
                        lc.indexOf('async function resetJudgeLights'));
     ok(/\{merge:true\}/.test(f),

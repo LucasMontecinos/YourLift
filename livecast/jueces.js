@@ -5,6 +5,42 @@
 // partir el archivo. Solo define funciones: lo que corre al abrir la página
 // está en arranque.js, que se carga al final.
 
+// ── Lo que hace el puesto que opera, esté en la pestaña que esté ──────────
+// Avisarle al panel de jueces quién está en la barra, anotar las luces en cada
+// intento, aplicar la decisión del jurado y obedecer las órdenes de reloj del
+// juez central y de la Planilla. Antes se hacía solo con la pestaña Control en
+// Vivo abierta: si el computador de la mesa se iba a Control TX, a la Pantalla
+// de Tarima o al Pesaje, el panel de jueces se quedaba con el atleta anterior,
+// las luces no quedaban anotadas y el botón del reloj no hacía nada.
+function _esPuestoQueOpera(){
+  if(TX_MODE||!isAdmin||!DATA.event)return false;
+  if(DATA.phase==='setup'||DATA.phase==='liveView')return false;
+  // En Control en Vivo, como siempre. En las demás pestañas, si este equipo
+  // escribe (Controlador): uno puesto en Espectador solo mira.
+  return DATA.phase==='compete'||!!window.IS_CONTROLLER;
+}
+function _deberesDelPuesto(){
+  if(!_esPuestoQueOpera())return;
+  try{_avisarAtletaAJueces();}catch(e){}
+  try{_escucharLucesHistorial();}catch(e){}
+  try{_escucharTimerControl();}catch(e){}
+}
+
+// Con VISTA LIBRE este equipo mira otra tanda u otro movimiento, pero lo que se
+// le dice a los jueces —y a quién se le anotan las luces— es lo de la TARIMA,
+// no lo que está mirando. Se calcula con el último cursor que publicó ella.
+function _conCursorDeTarima(fn){
+  const n=window.NAV_LIBRE&&window._NAV_REMOTA;
+  if(!n)return fn();
+  const g={flight:DATA.flight,lift:DATA.lift,round:DATA.round,fc:DATA.forcedCurrent};
+  if(n.flight)DATA.flight=n.flight;
+  if(n.lift)DATA.lift=n.lift;
+  if(typeof n.round==='number')DATA.round=n.round;
+  DATA.forcedCurrent=(n.forcedCurrent!==undefined)?n.forcedCurrent:null;
+  try{ return fn(); }
+  finally{ DATA.flight=g.flight;DATA.lift=g.lift;DATA.round=g.round;DATA.forcedCurrent=g.fc; }
+}
+
 // Judge mode functions
 async function toggleJudgeMode(){
   judgeMode=!judgeMode;
@@ -56,8 +92,10 @@ function startJudgeListener(){
     if(_juezPrimera){ _juezPrimera=false; if(cuantas===3)_juezAplicada=ronda+'|'+votos.join(','); R(); return; }
     if(cuantas===0){ _juezDestino=null; R(); return; }
     if(!_juezDestino||_juezDestino.ronda!==ronda){
-      const cur=liftQueue()[0];
-      _juezDestino=cur?{ronda,id:cur.id,lift:DATA.lift,round:DATA.round,r4:!!cur.__is4}:null;
+      _juezDestino=_conCursorDeTarima(()=>{
+        const cur=liftQueue()[0];
+        return cur?{ronda,id:cur.id,lift:DATA.lift,round:DATA.round,r4:!!cur.__is4}:null;
+      });
     }
     if(cuantas===3&&_juezDestino){
       const firma=ronda+'|'+votos.join(',');
@@ -100,9 +138,11 @@ function _escucharLucesHistorial(){
       const cuantas=[L.izq,L.central,L.der].filter(Boolean).length;
       if(cuantas===0){_lucesHistDestino=null;return;}      // se apagaron: listo para el próximo
       if(!_lucesHistDestino){
-        const cur=liftQueue()[0];
-        if(!cur)return;
-        _lucesHistDestino={id:cur.id,lift:DATA.lift,round:DATA.round};
+        _lucesHistDestino=_conCursorDeTarima(()=>{
+          const cur=liftQueue()[0];
+          return cur?{id:cur.id,lift:DATA.lift,round:DATA.round}:null;
+        });
+        if(!_lucesHistDestino)return;
       }
       if(cuantas<3)return;                                  // todavía falta algún juez
       const dst=_lucesHistDestino;
@@ -155,10 +195,14 @@ function _ultimoJuzgado(){
 async function _avisarAtletaAJueces(){
   if(!fbReady||!fbDB||!window._fb)return;
   try{
-    const cur=liftQueue()[0];
-    const lift=LIFT_S[DATA.lift]||'';
-    const ult=_ultimoJuzgado();
-    const firma=juezDocId()+'|'+(cur?cur.name:'')+'|'+lift+'|'+DATA.round
+    // Todo con el cursor de la tarima (ver _conCursorDeTarima).
+    const x=_conCursorDeTarima(()=>{
+      const cur=liftQueue()[0];
+      return {cur,lift:LIFT_S[DATA.lift]||'',round:DATA.round,
+        w:cur?((cur.att[DATA.lift]||[])[cur.__is4?3:DATA.round]||{}).w||0:0,ult:_ultimoJuzgado()};
+    });
+    const cur=x.cur, lift=x.lift, ult=x.ult;
+    const firma=juezDocId()+'|'+(cur?cur.name:'')+'|'+lift+'|'+x.round+'|'+x.w
       +'|'+(ult?ult.id+'-'+ult.lift+'-'+ult.round+'-'+ult.r:'');
     if(firma===_juezUltAtleta)return;
     _juezUltAtleta=firma;
@@ -167,13 +211,18 @@ async function _avisarAtletaAJueces(){
       // hora, el juez ve que abrió el link correcto.
       evento:(DATA.event&&DATA.event.name)||'',
       athlete_name:cur?cur.name:'',
-      athlete_weight:cur?(cur.att[DATA.lift][DATA.round]||{}).w||0:0,
+      athlete_weight:x.w,
       athlete_lift:lift,
-      athlete_round:DATA.round
+      athlete_round:x.round
     };
     if(ult)campos.ultimo=ult;
     await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions',juezDocId()),campos,{merge:true});
-  }catch(e){console.warn('[jueces] no se pudo avisar el atleta en barra',e);}
+  }catch(e){
+    // Se vuelve a intentar en el próximo segundo (ver el reloj maestro): con la
+    // firma ya anotada, un corte de wifi dejaba al panel con el atleta anterior.
+    _juezUltAtleta=null;
+    console.warn('[jueces] no se pudo avisar el atleta en barra',e);
+  }
 }
 
 async function resetJudgeLights(){
@@ -181,16 +230,19 @@ async function resetJudgeLights(){
   if(!fbReady)return;
   try{
     // Send current athlete info + reset
-    const queue=liftQueue();
-    const cur=queue[0];
+    const x=_conCursorDeTarima(()=>{
+      const cur=liftQueue()[0];
+      return {cur,lift:LIFT_S[DATA.lift]||'',round:DATA.round,
+        w:cur?((cur.att[DATA.lift]||[])[cur.__is4?3:DATA.round]||{}).w||0:0};
+    });
     await window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions',juezDocId()),{
       izq:null,central:null,der:null,
       reset_ts:Date.now(),
       evento:(DATA.event&&DATA.event.name)||'',
-      athlete_name:cur?cur.name:'',
-      athlete_weight:cur?cur.att[DATA.lift][DATA.round].w:0,
-      athlete_lift:LIFT_S[DATA.lift]||'',
-      athlete_round:DATA.round
+      athlete_name:x.cur?x.cur.name:'',
+      athlete_weight:x.w,
+      athlete_lift:x.lift,
+      athlete_round:x.round
     });
   }catch(e){console.warn('Reset judge lights error',e)}
 }

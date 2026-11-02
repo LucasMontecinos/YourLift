@@ -68,5 +68,12 @@ ok(/lote.*al re-sincronizar\. Si no correspondía/.test(src), 'y avisa si cambi�
 ok(/if\(DATA\.lotsGenerated\)_lotesRespaldar\('re-sorteo'\);/.test(src), 're-sortear también guarda la copia');
 ok(/lotesUsarRespaldo\(\)/.test(src) && /Volver a los de antes/.test(src), 'y Restaurar lotes ofrece volver a ella');
 
+console.log('\nCambiar un lote a mano por uno ocupado intercambia y sube los dos');
+{
+  const i = src.indexOf('window.setLot=function');
+  const cuerpo = src.slice(i, src.indexOf('\n};', i));
+  ok(/other\.lot=a\.lot;[\s\S]*_markAtt\(other\.id,'meta'\)/.test(cuerpo), 'el otro atleta también queda marcado para subir');
+}
+
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTODO OK\n');
 process.exit(fallas ? 1 : 0);

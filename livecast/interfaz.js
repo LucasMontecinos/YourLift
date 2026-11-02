@@ -204,16 +204,11 @@ function R(){
   // de OBS/pantalla, si falla se conserva lo anterior. Para el admin, se muestra un
   // panel de recuperación (los datos quedan intactos: reintentar / deshacer / recargar).
   if(TX_MODE){ try{renderTxWidget();}catch(e){console.error('[TX] render error',e);} return; }
-  // Quién está en la barra, para el panel de los jueces. Va acá porque es el
-  // único punto por el que pasan todos los cambios; adentro se corta solo si no
-  // cambió nada, así que no escribe de más. Solo desde el puesto que opera.
-  if(isAdmin&&DATA.phase==='compete'){
-    try{_avisarAtletaAJueces();}catch(e){}
-    // Y se anotan las luces en cada intento, para poder mostrarlas después.
-    try{_escucharLucesHistorial();}catch(e){}
-    // Y las órdenes de reloj del panel de jueces (juez central y Planilla).
-    try{_escucharTimerControl();}catch(e){}
-  }
+  // Quién está en la barra para el panel de los jueces, las luces de cada
+  // intento, el jurado y las órdenes de reloj. Va acá porque es el único punto
+  // por el que pasan todos los cambios; adentro se corta solo si no cambió nada.
+  // Corre en el puesto que opera ESTÉ EN LA PESTAÑA QUE ESTÉ (ver jueces.js).
+  try{_deberesDelPuesto();}catch(e){}
   // Con el modo jueces encendido y otro campeonato elegido, el canal cambió.
   if(judgeMode&&judgeUnsub&&_judgeDoc!==juezDocId()){try{startJudgeListener();}catch(e){}}
   try{

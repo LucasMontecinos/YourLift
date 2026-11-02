@@ -1459,9 +1459,12 @@ window.setLot=function(id,val){
   if(n===a.lot){R();return}
   const other=DATA.athletes.find(x=>x.lot===n&&x.id!==id);
   if(other){
-    // Swap: el otro recibe el lote anterior
+    // Swap: el otro recibe el lote anterior. Se marcan LOS DOS: si se marcaba
+    // solo este, la escritura le devolvía al otro el lote del servidor y
+    // quedaban dos atletas con el mismo número.
     other.lot=a.lot;
     a.lot=n;
+    _markAtt(other.id,'meta');
   } else {
     a.lot=n;
   }
