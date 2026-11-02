@@ -217,12 +217,11 @@ const MONTAR = `(paisRaro)=>{
       DATA.athletes = [a, Object.assign({}, a, { id: 98, country: 'ARG' })]; window._VARIOS_PAISES = undefined;
       const intl = renderTxProfile(a);
       const txt = h => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent; };
-      // Arriba del nombre va "CLUB · LOTE · PESO" (o "PAÍS · LOTE · PESO").
-      return { nacClub: /BUSHIDO/i.test(txt(nac)) && !/CHILE/i.test(txt(nac)), nacLogo: /clubs\/Bushido/.test(nac),
-               nacBandera: /<svg[^>]*aria-label="CHI"/.test(nac), intlPais: /CHILE/i.test(txt(intl)) && !/BUSHIDO/i.test(txt(intl)),
+      return { nacClub: /CLUB/.test(txt(nac)) && !/PAÍS/.test(txt(nac)), nacLogo: /clubs\/Bushido/.test(nac),
+               nacBandera: /<svg[^>]*aria-label="CHI"/.test(nac), intlPais: /PAÍS/.test(txt(intl)),
                intlBandera: /<svg[^>]*aria-label="CHI"/.test(intl) };
     });
-    ok(r.nacClub, 'nacional: arriba va el club y no el país');
+    ok(r.nacClub, 'nacional: la fila dice CLUB y no PAÍS');
     ok(r.nacLogo && !r.nacBandera, 'y al lado del nombre va el logo del club, no la bandera');
     ok(r.intlPais && r.intlBandera, 'internacional: país y bandera, como siempre');
   }

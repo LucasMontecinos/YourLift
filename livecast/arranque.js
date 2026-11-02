@@ -374,19 +374,21 @@ const FL_C=(function(){
   return c;
 })();
 // ── TX Widget Color System ───────────────────────────────────────────
+// Sin paleta elegida, la transmisión va en Negro · Blanco (se pidió como la de
+// por defecto). Las demás siguen en Control TX.
 const _TX_COLOR_DEFAULTS={
   goodLift:    '#22c55e', // good attempt cell & GOOD LIFT slam
   noLift:      '#ef4444', // no lift attempt cell & NO LIFT slam
   puesto:      '#ffffff', // rank/position text (pos 4+)
-  curAttempt:  '#2d4169', // current upcoming attempt cell bg
-  nameBg:      '#D4A843', // name bar gradient start (scoreboard + profile)
-  nameBg2:     '#c19735', // name bar gradient end
-  nameText:    '#0A1628', // dark text on name bar
-  accent:      '#D4A843', // borders, total cell, LB highlights
-  headerBg:    '#1c324a', // scoreboard/LB header background
-  gridBg:      '#0b1826', // attempt grid row background
-  lbHighlight: '#6b1525', // current lifter row in leaderboard
-  cardBg:      '#0d1e38', // leaderboard card background
+  curAttempt:  '#1c1c1f', // current upcoming attempt cell bg
+  nameBg:      '#0b0b0c', // name bar (scoreboard + profile)
+  nameBg2:     '#0b0b0c', // name bar gradient end
+  nameText:    '#ffffff', // name text
+  accent:      '#ffffff', // borders, total cell, LB highlights
+  headerBg:    '#000000', // scoreboard/LB header background
+  gridBg:      '#111113', // attempt grid row background
+  lbHighlight: '#2a2a2e', // current lifter row in leaderboard
+  cardBg:      '#0a0a0b', // leaderboard card background
 };
 const _TX_COLOR_PALETTES={
   yourlift:{

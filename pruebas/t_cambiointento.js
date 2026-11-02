@@ -67,7 +67,10 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     const caja = document.createElement('div'); document.body.appendChild(caja);
     _txDirLastSig = null; renderTxDirector(caja);
     const cartel = [...caja.children].find(d => /CAMBIO DE INTENTO/.test(d.textContent));
-    out.tx = !!cartel && /bottom:24px/.test(cartel.getAttribute('style')) && /right:24px/.test(cartel.getAttribute('style'));
+    // Justo arriba del marcador, a su izquierda (como la vista previa): la tabla
+    // actual ahora va arriba a la derecha y las luces arriba a la izquierda.
+    out.tx = !!cartel && /left:\d+px;bottom:\d+px/.test(cartel.getAttribute('style'))
+      && +(cartel.getAttribute('style').match(/bottom:(\d+)px/) || [])[1] > 100;
     out.txSinNombre = !!cartel && cartel.textContent.indexOf(pl.name) < 0;
     // Pasados 3 segundos del cambio, el cartel se va solo (el intento sigue sin juzgar).
     const ts0 = pl.att.dl[2].cambioTs;
@@ -96,7 +99,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
   console.log('\nEl cartel');
   ok(r.cur && r.cuenta === true, 'el atleta en tarima tiene el intento cambiado');
   ok(r.barra, 'pantalla de tarima: CAMBIO DE INTENTO');
-  ok(r.tx, 'transmisión: CAMBIO DE INTENTO abajo a la derecha');
+  ok(r.tx, 'transmisión: CAMBIO DE INTENTO justo arriba del marcador');
   ok(!r.txSb, 'no va dentro del marcador');
   ok(r.txSinNombre, 'el cartel no lleva el nombre del atleta');
   ok(!r.juzgado[0] && !r.juzgado[1] && !r.juzgado[2], 'con la decisión, el cartel y el botón se van');

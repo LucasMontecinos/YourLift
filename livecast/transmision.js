@@ -538,6 +538,12 @@ function _sbTarjeta(cur,o){
 // Ya volvemos, luces), de la paleta de Control TX: la franja de arriba, el fondo,
 // las celdas y las líneas. Las letras van en blanco y gris; el color queda para
 // válido, nulo, récord y las medallas.
+// La clasificación, el medallero y el "Ya volvemos" van siempre en negro, con
+// cualquier paleta (se pidió así).
+function _txNegro(){
+  return {head:'#000000', bg:'rgba(10,10,11,.95)', cell:'#1c1c1f', hl:'#2a2a2e',
+    line:'rgba(255,255,255,.14)', line2:'rgba(255,255,255,.08)', mut:'rgba(255,255,255,.62)', sub:'#D4D4D8'};
+}
 function _txX(){
   const conBlanco=String(_txC('nameText')||'').toLowerCase()==='#ffffff';
   return {head:_txC('headerBg'), bg:conBlanco?_txC('nameBg'):_txC('gridBg'), cell:_txC('curAttempt'),
@@ -767,18 +773,40 @@ function _btVideoSetup(videos){
     _btVideoBgEl.muted=true;_btVideoBgEl.playsInline=true;
     document.body.appendChild(_btVideoBgEl);
   }
-  if(!_btVideoFgEl){
-    _btVideoFgEl=document.createElement('video');
-    _btVideoFgEl.style.cssText='position:fixed;left:0;top:5%;width:40%;height:80%;object-fit:cover;z-index:3;pointer-events:none;-webkit-mask-image:linear-gradient(to right,#000 56%,transparent 93%),linear-gradient(to bottom,transparent 0%,#000 18%,#000 82%,transparent 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(to right,#000 56%,transparent 93%),linear-gradient(to bottom,transparent 0%,#000 18%,#000 82%,transparent 100%);mask-composite:intersect';
-    _btVideoFgEl.muted=true;_btVideoFgEl.playsInline=true;
-    document.body.appendChild(_btVideoFgEl);
-  }
   if(_btVideoSrcsKey!==key){
     _btVideoSrcsKey=key;_btVideoIdx=0;
     if(_btVideoInterval){clearInterval(_btVideoInterval);_btVideoInterval=null;}
     _btPlayVideos(videos,0);
   }
 }
+
+// ── Video predeterminado del "Ya volvemos" ───────────────────────
+// Se elige una vez en Control TX (★ en la lista de videos) y queda guardado en
+// livecast_director/_ya_volvemos, para todos los campeonatos. Cuando el
+// descanso arranca sin videos elegidos —desde el control remoto, la planilla o
+// Control TX— va ese de fondo.
+let _txYvDefecto=[], _txYvUnsub=null, _txYvPoll=null;
+function _txEscucharYvDefecto(){
+  if(_txYvUnsub)return;
+  if(!fbReady||!window._fb||!window._fb.onSnapshot){
+    if(!_txYvPoll)_txYvPoll=setInterval(()=>{ if(fbReady&&window._fb){clearInterval(_txYvPoll);_txYvPoll=null;_txEscucharYvDefecto();} },500);
+    return;
+  }
+  try{
+    _txYvUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director','_ya_volvemos'),snap=>{
+      const v=snap.exists()?(snap.data().videos||[]):[];
+      const antes=JSON.stringify(_txYvDefecto);
+      _txYvDefecto=Array.isArray(v)?v.filter(Boolean):[];
+      if(JSON.stringify(_txYvDefecto)!==antes){
+        _txDirLastSig=null;
+        if(TX_MODE){ if(typeof renderTxWidget==='function')renderTxWidget(); }
+        else if(typeof R==='function')R();
+      }
+    },()=>{});
+  }catch(e){}
+}
+// Los videos del descanso: los elegidos al iniciarlo o, si no hay, el predeterminado.
+function _btVideosDe(bt){ return (bt&&bt.videos&&bt.videos.length)?bt.videos:_txYvDefecto; }
 
 function _btPlayVideos(videos,idx){
   const src=videos[idx%videos.length];
@@ -1038,6 +1066,7 @@ function renderTxDirector(container){
   if(!c)return;
   _txStartDirectorListener();
   _widgetStartDirectObsListener();
+  _txEscucharYvDefecto();
   if(!_txDirState){c.innerHTML='';return}
   const cur=liftQueue()[0];
   const showProf=_txDirActive('profile');
@@ -1066,7 +1095,7 @@ function renderTxDirector(container){
     +'|'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.cat)||'')+'|'+((_txDirState.slam==null?void 0:_txDirState.slam.type)||'')
     +'|md-'+(md.mod||'')+'-'+(md.sex||'')+'-'+(md.div||'')+'-'+(md.cat||'')+'-'+(md.tipo||'')+'-'+(md.until||0)
     +'|'+((_txDirState.profile==null?void 0:_txDirState.profile.until)||0)+'|'+((_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.until)||0)+'|'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.until)||0)+'|'+((_txDirState.slam==null?void 0:_txDirState.slam.until)||0)
-    +'|bt-'+(bt.startedAt||0)+'-'+(bt.durationSec||0)+'-'+(bt.pausedAt||0)+'-'+(bt.label||'')+'-'+(bt.videos||[]).length+'-'+(bt.movement||'')+'-'+JSON.stringify(bt.style||{})
+    +'|bt-'+(bt.startedAt||0)+'-'+(bt.durationSec||0)+'-'+(bt.pausedAt||0)+'-'+(bt.label||'')+'-'+_btVideosDe(bt).length+'-'+(bt.movement||'')+'-'+JSON.stringify(bt.style||{})
     +'|sc-'+((_txDirState.profile==null?void 0:_txDirState.profile.scale)||1)+'-'+((_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.scale)||1)+'-'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.scale)||1)+'-'+((_txDirState.timer==null?void 0:_txDirState.timer.scale)||1)+'-'+((_txDirState.slam==null?void 0:_txDirState.slam.scale)||1)+'-'+((_txDirState.breakTimer==null?void 0:_txDirState.breakTimer.scale)||1)+'-'+((_txDirState.tablaActual==null?void 0:_txDirState.tablaActual.scale)||1)+'-'+((_txDirState.medals==null?void 0:_txDirState.medals.scale)||1)+'-'+((_txDirState.luces==null?void 0:_txDirState.luces.scale)||1)
     +'|col-'+JSON.stringify(_txDirState.colors||{})
     +'|rv-'+(DATA.relojVisible?1:0)
@@ -1109,31 +1138,17 @@ function renderTxDirector(container){
   const animTm=_txAnimActive('timer');
   const animBt=_txAnimActive('breakTimer');
   // Mantener body opaco mientras un fullscreen esté activo O en transición
-  // El perfil y la clasificación van en cajas sobre la cámara, como en la vista
-  // previa: solo el "Ya volvemos" tapa la pantalla entera.
-  document.body.classList.toggle('tx-opaque', showBreak||(animBt&&animBt.dir==='out'));
+  // El perfil (con su fondo azul) y el "Ya volvemos" tapan la pantalla entera;
+  // la clasificación va en una caja sobre la cámara.
+  document.body.classList.toggle('tx-opaque', showProf||showBreak||(animProf&&animProf.dir==='out')||(animBt&&animBt.dir==='out'));
   // Video de fondo del break timer (persiste independiente del innerHTML)
   if(showBreak){
-    const bvids=bt.videos||[];
+    const bvids=_btVideosDe(bt);
     if(bvids.length){
       _btVideoSetup(bvids);
-      // Sincronizar posición/tamaño/blur desde style params
-      const _bts=bt.style||{};
-      if(_btVideoFgEl){
-        _btVideoFgEl.style.left=(_bts.videoX!=null?_bts.videoX:0)+'%';
-        _btVideoFgEl.style.top=(_bts.videoY!=null?_bts.videoY:5)+'%';
-        _btVideoFgEl.style.width=(_bts.videoW!=null?_bts.videoW:40)+'%';
-        _btVideoFgEl.style.height=(_bts.videoH!=null?_bts.videoH:80)+'%';
-        _btVideoFgEl.style.transform='none';
-        _btVideoFgEl.style.borderRadius='0';
-        _btVideoFgEl.style.clipPath='none';
-        _btVideoFgEl.style.objectFit='cover';
-        _btVideoFgEl.style.zIndex='3';
-      }
-      if(_btVideoBgEl){
-        const blur=_bts.blurAmount!=null?Number(_bts.blurAmount):24;
-        _btVideoBgEl.style.filter='blur('+blur+'px) brightness(.28)';
-      }
+      // El video va de fondo a pantalla completa, nítido; el texto encima con
+      // un velo negro (ver _renderTxBreakTimer).
+      if(_btVideoBgEl){ _btVideoBgEl.style.filter='none'; _btVideoBgEl.style.transform='none'; _btVideoBgEl.style.background='#000'; }
     } else _btVideoTeardown();
   } else if(!(animBt&&animBt.dir==='out')){
     // Solo limpiar cuando la animación de salida ya terminó también
@@ -1288,12 +1303,12 @@ function renderTxDirector(container){
     }
   }
   // Cambio de intento (3er peso muerto, o banca de quien compite solo en banca):
-  // cartel amarillo abajo a la derecha, sin el nombre — el nombre ya está en el
-  // marcador. Si la Tabla Actual ocupa esa esquina, sube arriba a la derecha.
-  // Se apaga solo cuando el intento se juzga.
+  // el cartel amarillo justo arriba del marcador, como en la vista previa; sin
+  // el nombre, que ya está en el marcador. Parpadea unos segundos y se va.
   if(cur&&!_fsVisible&&_cambiosIntentoActual(cur)){
-    html+='<div style="position:fixed;'+(_txDirActive('tablaActual')?'top:24px':'bottom:24px')+';right:24px;pointer-events:none;animation:txSlideInBottom .45s ease-out">'
-      +_cartelCambioHtml('26px')+'</div>';
+    const kc=_sbEscala();
+    html+='<div style="position:fixed;left:'+Math.round(64*kc)+'px;bottom:'+Math.round(270*kc)+'px;pointer-events:none;animation:txSlideInBottom .45s ease-out">'
+      +_cartelCambioHtml(Math.round(28*kc)+'px')+'</div>';
   }
   c.innerHTML=html;
   _txDirScheduleHide();
@@ -1312,84 +1327,32 @@ function _renderTxBreakTimer(bt,scale){
   const movement=(bt.movement||'').toUpperCase();
   const pausedBadge=bt.pausedAt?'<div style="margin-top:10px;display:inline-block;padding:5px 16px;background:rgba(245,158,11,.18);border:2px solid #f59e0b;border-radius:6px;font-family:Oswald;font-size:15px;letter-spacing:5px;color:#f59e0b"><i class=yl-i-pausa></i> PAUSADO</div>':'';
   const sc=scale||1;
-  const hasVideo=(bt.videos||[]).length>0;
   const evObj=DATA&&DATA.event;
   const evName=evObj?(evObj.nombre||evObj.name||''):'';
-  // ── Parámetros de estilo editables ────────────────────────────────────
+  // Fondo negro. Con video (el elegido o el predeterminado) el video va de
+  // fondo a pantalla completa y encima un velo negro para que se lea el texto.
+  // Un color o una línea elegidos a mano en Control TX se respetan; el azul y
+  // el rojo de antes eran los de por defecto, no una elección.
   const stl=bt.style||{};
-  // El azul y el rojo de antes eran los colores por defecto, no una elección:
-  // con ellos va el fondo de la paleta de Control TX y la línea en blanco.
   const _bgElegido=stl.bgColor&&String(stl.bgColor).toUpperCase()!=='#0A1628';
   const _acElegido=stl.accentColor&&String(stl.accentColor).toUpperCase()!=='#C41E3A';
-  const bgColor=_bgElegido?stl.bgColor:_txX().head;
+  const conVideo=_btVideosDe(bt).length>0;
+  const fondo=conVideo?'rgba(0,0,0,.5)':(_bgElegido?stl.bgColor:'#000000');
   const accentColor=_acElegido?stl.accentColor:'#ffffff';
-  const videoX=stl.videoX!=null?Number(stl.videoX):0;
-  const videoY=stl.videoY!=null?Number(stl.videoY):5;
-  const videoW=stl.videoW!=null?Number(stl.videoW):40;
-  const videoH=stl.videoH!=null?Number(stl.videoH):80;
-  const textX=stl.textX!=null?Number(stl.textX):44;
-  const textY=stl.textY!=null?Number(stl.textY):10;
-  const titleSize=stl.titleSize!=null?Number(stl.titleSize):8;
-  const movSize=stl.movSize!=null?Number(stl.movSize):5;
-  const timerSz=stl.timerSize!=null?Number(stl.timerSize):12;
-  const showLogos=false;
-  const barH=showLogos?'clamp(52px,7vh,84px)':'0px';
-  const titleTop=stl.titleTop!=null?Number(stl.titleTop):10;
-  const overlayOp=stl.overlayOpacity!=null?Number(stl.overlayOpacity):0.65;
-  // hex → rgba para el overlay semi-transparente sobre el video de fondo
-  const _h2r=(hex,a)=>{const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return'rgba('+r+','+g+','+b+','+a+')';};
-  const overlayRgba=_h2r(bgColor,overlayOp);
-  // NEO logo — N con diagonal correcta (top-left → bottom-right) + barra derecha
-  const neoSvg='<svg viewBox="0 0 290 90" xmlns="http://www.w3.org/2000/svg" style="height:clamp(36px,5.5vh,66px);width:auto;display:block;fill:white">'
-    +'<polygon fill-rule="evenodd" points="0,0 20,0 70,90 90,90 90,0 70,0 20,90 0,90"/>'
-    +'<rect x="103" y="0" width="87" height="24"/>'
-    +'<rect x="103" y="33" width="87" height="24"/>'
-    +'<rect x="103" y="66" width="87" height="24"/>'
-    +'<path fill-rule="evenodd" d="M203,0 L290,0 L290,90 L203,90 Z M226,22 L267,22 L267,68 L226,68 Z"/>'
-  +'</svg>';
-  const sponsorBar=showLogos
-    ?'<div style="position:absolute;bottom:0;left:0;right:0;height:'+barH+';background:rgba(0,0,0,.85);border-top:2px solid '+accentColor+';display:flex;align-items:center;justify-content:center;gap:clamp(18px,3.5vw,55px);padding:0 4vw;z-index:6">'
-      +'<img src="YourLift_logo.png" style="height:clamp(22px,3.2vh,40px);width:auto;object-fit:contain;filter:brightness(1.1)" onerror="this.style.display=\'none\'">'
-      +(stl.eventLogoUrl?'<div style="width:1px;height:36%;background:rgba(255,255,255,.2)"></div><img src="'+stl.eventLogoUrl+'" style="height:clamp(22px,3.2vh,40px);width:auto;max-width:clamp(80px,12vw,180px);object-fit:contain;filter:brightness(0) invert(1)" onerror="this.style.display=\'none\'">':'')
-      +'<div style="width:1px;height:36%;background:rgba(255,255,255,.2)"></div>'
-      +neoSvg+'</div>'
-    :'';
   const scStyle=sc!==1?'transform:scale('+sc+');transform-origin:center center;':'';
-
-  if(hasVideo){
-    // fades que cubren los bordes del video (z:3, encima del _btVideoFgEl en z:2)
-    const vl=videoX,vt=videoY,vw=videoW,vh=videoH;
-    const colorOv='<div style="position:absolute;top:0;right:0;bottom:0;left:0;background:'+overlayRgba+';pointer-events:none"></div>';
-    const fadeR='<div style="position:absolute;left:'+vl+'%;top:'+vt+'%;width:'+vw+'%;height:'+vh+'%;pointer-events:none;background:linear-gradient(to right,transparent 52%,'+overlayRgba+' 94%)"></div>';
-    const fadeT='<div style="position:absolute;left:'+vl+'%;top:'+vt+'%;width:'+vw+'%;height:22%;pointer-events:none;background:linear-gradient(to bottom,'+overlayRgba+' 0%,transparent 100%)"></div>';
-    const fadeB='<div style="position:absolute;left:'+vl+'%;top:'+(vt+vh-22)+'%;width:'+vw+'%;height:22%;pointer-events:none;background:linear-gradient(to top,'+overlayRgba+' 0%,transparent 100%)"></div>';
-    return '<div style="position:fixed;top:0;right:0;bottom:0;left:0;z-index:3;overflow:hidden;background:transparent;'+scStyle+'">'
-      +colorOv+fadeR+fadeT+fadeB
-      // Bloque de texto — posicionado absolutamente
-      +'<div style="position:absolute;left:'+textX+'%;top:'+textY+'%;z-index:5;display:flex;flex-direction:column;align-items:flex-start;max-width:'+(100-textX-2)+'%">'
-        +'<div style="font-family:Oswald,Impact,sans-serif;font-size:'+titleSize+'vw;font-weight:900;color:#ffffff;line-height:.88;letter-spacing:2px;text-transform:uppercase;text-shadow:0 4px 24px rgba(0,0,0,.9);white-space:nowrap">YA VOLVEMOS</div>'
-        +'<div style="width:clamp(50px,6vw,110px);height:3px;background:'+accentColor+';margin:clamp(8px,1.2vh,18px) 0;box-shadow:0 0 10px '+accentColor+'99"></div>'
-        +(movement?'<div style="font-family:Oswald,Impact,sans-serif;font-size:'+movSize+'vw;font-weight:700;color:#ffffff;line-height:1;letter-spacing:2px;margin-bottom:clamp(6px,1vh,16px);white-space:nowrap">'+movement+'</div>':'')
-        +'<div id="dirBreakDisplay" style="font-family:Oswald,Impact,sans-serif;font-size:'+timerSz+'vw;font-weight:900;color:'+timerColor+';line-height:.9;letter-spacing:2px;text-shadow:0 4px 22px rgba(0,0,0,.85)">'+txt+'</div>'
-        +pausedBadge
-        +(evName?'<div style="font-family:Oswald;font-size:clamp(9px,1vw,15px);letter-spacing:5px;color:rgba(255,255,255,.38);text-transform:uppercase;margin-top:clamp(6px,1vh,14px)">'+String(evName).toUpperCase()+'</div>':'')
-      +'</div>'
-      +sponsorBar
-    +'</div>';
-  }
-
-  // Tal cual la vista previa: YA VOLVEMOS grande al centro, la línea, la cuenta
-  // regresiva, lo que sigue y el logo de YourLift abajo.
+  // YA VOLVEMOS grande al centro, la línea, la cuenta regresiva, lo que sigue
+  // y el logo de YourLift abajo.
   const k=_sbEscala();
   const sigue=[movement?'Sigue '+movement.charAt(0)+movement.slice(1).toLowerCase():'',
     (bt.label&&String(bt.label).toUpperCase()!=='YA VOLVEMOS')?bt.label:'', evName].filter(Boolean).join(' · ');
-  return '<div style="position:fixed;top:0;right:0;bottom:0;left:0;z-index:3;overflow:hidden;background:'+bgColor+';'+scStyle+'">'
-    +'<div style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-family:Oswald,\'Arial Narrow\',sans-serif;color:#fff">'
+  const sombra=conVideo?'text-shadow:0 4px 24px rgba(0,0,0,.6);':'';
+  return '<div style="position:fixed;top:0;right:0;bottom:0;left:0;z-index:3;overflow:hidden;background:'+fondo+';'+scStyle+'">'
+    +'<div style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-family:Oswald,\'Arial Narrow\',sans-serif;color:#fff;'+sombra+'">'
       +'<div style="font-size:'+Math.round(190*k)+'px;font-weight:600;letter-spacing:.04em;line-height:1">YA VOLVEMOS</div>'
       +'<div style="width:'+Math.round(220*k)+'px;height:'+Math.max(3,Math.round(6*k))+'px;background:'+accentColor+';margin:'+Math.round(34*k)+'px auto"></div>'
       +'<div id="dirBreakDisplay" style="font-size:'+Math.round(150*k)+'px;font-weight:500;line-height:1;font-variant-numeric:tabular-nums;color:'+timerColor+'">'+txt+'</div>'
       +pausedBadge
-      +(sigue?'<div style="font-family:\'DM Sans\',sans-serif;font-size:'+Math.round(28*k)+'px;color:rgba(255,255,255,.62);margin-top:'+Math.round(30*k)+'px">'+esc(sigue)+'</div>':'')
+      +(sigue?'<div style="font-family:\'DM Sans\',sans-serif;font-size:'+Math.round(28*k)+'px;color:rgba(255,255,255,.7);margin-top:'+Math.round(30*k)+'px">'+esc(sigue)+'</div>':'')
     +'</div>'
     +'<img src="YourLift_logo.png" alt="" style="position:absolute;left:50%;bottom:'+Math.round(60*k)+'px;transform:translateX(-50%);height:'+Math.round(64*k)+'px;width:auto" onerror="this.style.display=\'none\'">'
   +'</div>';
@@ -1776,14 +1739,9 @@ function _lucesEnTarima(){
   return !!st.luces;
 }
 
-// Tal cual la vista previa: una tarjeta abajo a la izquierda, sobre la cámara
-// (el lugar del marcador, que se esconde mientras está el perfil). A la
-// izquierda la foto (o el GIF) y a la derecha el club y el lote, el nombre, la
-// categoría y cinco marcas: sentadilla, banca, peso muerto, total y GL. Las
-// marcas son la mejor entre su historial y lo que lleva hoy.
-// o.centro: centrado (la pantalla de tarima "Perfil"); si no, abajo a la izquierda.
-function renderTxProfile(cur,o){
-  o=o||{};
+// El perfil de siempre, a pantalla completa con el fondo azul: se pidió dejarlo
+// como estaba (es el único que mantiene el azul).
+function renderTxProfile(cur){
   _pedirFotos();
   const full=txLookupFull(cur);
   // Media efectiva: foto/gif subida en el livecast (persistente) tiene prioridad
@@ -1791,64 +1749,95 @@ function renderTxProfile(cur,o){
   const _lm=_lcMediaFor(cur);
   const media=Object.assign({},full||{});
   if(_lm){ if(_lm.foto_url)media.foto_url=_lm.foto_url; if(_lm.gif_url)media.gif_url=_lm.gif_url; ['gif_blend','gif_zoom','gif_offset_x','gif_offset_y','gif_start','gif_end'].forEach(k=>{if(_lm[k]!==undefined)media[k]=_lm[k];}); }
-  const ra=_realAth(cur);
-  const X=_txX(), k=_sbEscala();
   const parts=(cur.name||'').trim().split(/\s+/);
-  const initials=parts.map(p=>p[0]||'').slice(0,2).join('').toUpperCase();
+  // Nombre y apellido con la MISMA tipografía, tamaño y mayúsculas. Antes el
+  // nombre iba en fina y el apellido en negrita, y se leían como dos cosas
+  // distintas en la pantalla de perfil.
+  // Con DOS palabras —"Ojeda Emilse", que es como viene media nómina de FESUPO—
+  // slice(0,-2) daba vacío y el respaldo repetía parts[0]: en pantalla se leía
+  // "OJEDA OJEDA EMILSE". Se parte igual que en el resto de las pantallas: dos
+  // apellidos solo cuando hay más de dos palabras.
+  const firstName=(parts.length>2?parts.slice(0,-2):parts.slice(0,-1)).join(' ').toUpperCase();
+  const lastName=(parts.length>2?parts.slice(-2):parts.slice(-1)).join(' ').toUpperCase();
   const club=cur.club||(full==null?void 0:full.club)||'';
-  const varios=_variosPaises();
-  // Arriba: el logo del club (o la bandera, si hay varios países), club · lote · peso
-  const ident=varios?_flagImg(_ctry(cur),36,true)
-    :((window.clubLogoImg&&club)?window.clubLogoImg(club,54,'padding:4px;'):'');
-  const linea1=[varios?(_ctryName(_ctry(cur))||_ctry(cur)):club, cur.lot?'Lote '+cur.lot:'', cur.bw?_sbNum(cur.bw)+' kg':'']
-    .filter(Boolean).join(' · ').toUpperCase();
-  const rk=(typeof catRankBySub==='function')?catRankBySub(ra):null;
-  const chip=(rk&&rk.pos>0)?'PUESTO '+rk.pos+'°':'';
-  // Categoría · división · modalidad · edad · desde cuándo compite
+  const cat=txCatLabel(cur.cat)||(txCatNum(cur.cat)+'kg');
+  const divS=txDivShort(cur.div);
   const age=txAge((full==null?void 0:full.fechaNac));
   const years=txYearsCompeting(full);
-  const meta=[(txCatLabel(cur.cat)||'').replace(/^-/,'−').replace(/kg$/i,' kg'), cur.div||'',
-    (typeof _lineaLbl==='function'?_lineaLbl(cur):''), age!==null?age+' años':'',
-    years!==null?'Compite desde '+(new Date().getFullYear()-years+1):''].filter(Boolean).join(' · ');
-  // Las cinco marcas
-  const hoy=l=>bestOf(ra,l);
-  const mejor=l=>Math.max(+(txPB(full,l)||0),hoy(l));
-  const solo=(typeof _sbPool==='function')&&_sbPool(ra).solo;
-  const sq=mejor('sq'), bp=mejor('bp'), dl=mejor('dl');
-  const tot=Math.max(+(txPB(full,'total')||0),(hoy('sq')&&hoy('bp')&&hoy('dl'))?hoy('sq')+hoy('bp')+hoy('dl'):0, solo?bp:0);
-  const gl=(tot>0&&cur.bw&&typeof calcGL==='function')?calcGL(tot,cur.bw,cur.sex,_glMod(cur)):0;
-  const kgs=v=>v>0?_sbNum(v)+'<small style="font-size:20px;color:'+X.mut+';margin-left:3px">kg</small>':'—';
-  const marcas=solo?[['BANCA',kgs(bp)],['GL',gl?gl.toFixed(2):'—']]
-    :[['SENTADILLA',kgs(sq)],['BANCA',kgs(bp)],['P. MUERTO',kgs(dl)],['TOTAL',kgs(tot)],['GL',gl?gl.toFixed(2):'—']];
-  // La foto, el GIF o, sin nada, las iniciales
+  const liftKey=DATA.lift;
+  const pb=txPB(full,liftKey);
+  const pbLabel={sq:'MEJOR MARCA SENTADILLA',bp:'MEJOR MARCA PRESS BANCA',dl:'MEJOR MARCA PESO MUERTO'}[liftKey]||'MEJOR MARCA';
+  const clubLogoHtml=(window.clubLogoImg?window.clubLogoImg(club,52,'background:rgba(10,22,40,.6);padding:3px;margin-right:18px;vertical-align:middle;'):'');
+  const chipClub=(window.clubLogoImg&&club)?window.clubLogoImg(club,48,'display:block;background:rgba(10,22,40,.35);padding:2px;'):'';
+  const clubCell=clubLogoHtml?('<span style="display:inline-flex;align-items:center;gap:0;justify-content:flex-end">'+clubLogoHtml+'<span>'+(club||'—')+'</span></span>'):(club||'—');
+  // En un internacional lo que se muestra es el PAÍS (con su bandera), no el club:
+  // en la nómina de FESUPO el "club" es el país escrito a mano, y la fila decía
+  // "CLUB · Ecuador". En un nacional sigue el club con su logo.
+  const rows=[
+    ['CATEGORÍA',cat+' '+divS],
+    _variosPaises()
+      ?['PAÍS','<span style="display:inline-flex;align-items:center;justify-content:flex-end">'+_flagImg(_ctry(cur),34,true)+'<span>'+_ctryName(_ctry(cur))+'</span></span>']
+      :['CLUB',clubCell],
+  ];
+  if(age!==null)rows.push(['EDAD',age+'']);
+  if(years!==null)rows.push(['AÑOS COMPITIENDO',years+'']);
+  if(pb)rows.push([pbLabel,pb.toFixed(1)]);
+  // Al lado del nombre: la bandera y el código del país. En un campeonato de un
+  // solo país serían iguales para todos, así que va el logo del club (sin logo,
+  // nada).
+  const chipNombre=_variosPaises()
+    ?`<div style="background:rgba(0,0,0,.2);padding:clamp(6px,0.7vw,10px) clamp(10px,1.2vw,16px);border-radius:5px;display:flex;align-items:center;gap:clamp(8px,0.9vw,14px)">
+              <div style="width:clamp(44px,5vw,72px);height:clamp(30px,3.3vw,48px);position:relative;overflow:hidden;border-radius:2px;flex-shrink:0;box-shadow:0 1px 8px rgba(0,0,0,.5);background:#0a1628">
+                ${FLAG_SVG[_ctry(cur)]?`<svg viewBox="0 0 30 20" preserveAspectRatio="none" role="img" aria-label="${_ctry(cur)}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%">${FLAG_SVG[_ctry(cur)]}</svg>`:''}
+              </div>
+              <span style="font-family:Oswald;font-weight:700;font-size:clamp(13px,1.4vw,22px);color:${_txC('nameText')};letter-spacing:2px">${_ctry(cur)}</span>
+            </div>`
+    :(chipClub?`<div style="background:rgba(0,0,0,.2);padding:clamp(4px,0.5vw,8px);border-radius:5px;display:flex;align-items:center">${chipClub}</div>`:'');
+  const initials=parts.map(p=>p[0]||'').slice(0,2).join('').toUpperCase();
   const useGif=_txProfileMediaType==='gif'&&!!media.gif_url;
   const gifIsImg=useGif&&String(media.gif_url||'').toLowerCase().split('?')[0].endsWith('.gif');
   const gifBlend=useGif?(media.gif_blend||'screen'):'normal';
-  const ini='<span style="font-size:110px;font-weight:600;color:rgba(255,255,255,.55);letter-spacing:2px">'+initials+'</span>';
-  const foto=useGif
-    ? (gifIsImg
-        ? `<img src="${media.gif_url}" alt="" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center">`
-        : `<video src="${media.gif_url}" autoplay loop muted playsinline data-gif-trim="1" data-gif-start="${media.gif_start||0}" data-gif-end="${(media.gif_end!=null?media.gif_end:(''))}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center"></video>`)
-    : media.foto_url
-      ? `<img src="${media.foto_url}" alt="" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;object-position:center 18%" onerror="this.remove()">`
-      : '';
-  const nombre=_nombrePropio(cur.name||'').toUpperCase();
-  const lugar=o.centro
-    ?`left:50%;top:50%;transform:translate(-50%,-50%) scale(${k});transform-origin:center center`
-    :`left:${Math.round(64*k)}px;bottom:${Math.round(64*k)}px;transform:scale(${k});transform-origin:bottom left`;
-  return `<div style="position:absolute;${lugar};pointer-events:none">
-    <div class="txCascade" style="width:1180px;display:flex;background:${X.bg};border:1px solid ${X.line};font-family:Oswald,'Arial Narrow',sans-serif;color:#fff;box-shadow:0 10px 34px rgba(0,0,0,.45)">
-      <div style="width:300px;height:380px;flex:none;position:relative;overflow:hidden;background:${useGif?'#000':X.cell};display:grid;place-items:center">${ini}${foto}</div>
-      <div style="flex:1;min-width:0;padding:30px 36px 28px;display:flex;flex-direction:column">
-        <div style="display:flex;align-items:center;gap:14px;font-size:19px;letter-spacing:.2em;color:${X.sub};white-space:nowrap">${ident}<span style="overflow:hidden;text-overflow:ellipsis">${esc(linea1)}</span>${chip?`<span style="margin-left:auto;border:2px solid #fff;color:#fff;font-weight:600;font-size:18px;letter-spacing:.12em;padding:5px 14px">${chip}</span>`:''}</div>
-        <div style="font-weight:600;font-size:${nombre.length>22?58:72}px;line-height:.95;margin-top:12px;letter-spacing:.01em">${esc(nombre)}</div>
-        <div style="font-family:'DM Sans',sans-serif;font-size:22px;color:${X.sub};margin-top:12px">${esc(meta)}</div>
-        <div style="display:grid;grid-template-columns:repeat(${marcas.length},1fr);margin-top:auto;border-top:1px solid ${X.line};padding-top:18px">
-          ${marcas.map(([t,v])=>`<div><span style="font-size:15px;letter-spacing:.18em;color:${X.mut}">${t}</span><b style="display:block;font-size:44px;font-weight:600;line-height:1.1">${v}</b></div>`).join('')}
+  const mediaBg=useGif?'#000':(media.foto_url?'#fff':'linear-gradient(135deg,#1a2e4f,#0e1f3a)');
+  return `
+    <div style="position:absolute;top:0;right:0;bottom:0;left:0">
+    <div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;pointer-events:none;overflow:hidden">
+      <img src="YourLift_logo.png" alt="" style="width:52%;opacity:0.07;filter:blur(18px);transform:scale(1.15);user-select:none" onerror="this.style.display='none'">
+    </div>
+    <div style="position:absolute;top:0;right:0;bottom:0;left:0;padding:clamp(40px,5vw,80px);display:flex;flex-direction:column">
+      <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(8px,1.5vh,22px);max-width:1400px;width:100%;margin:auto">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:clamp(6px,1vh,16px)">
+          <div style="background:${_txC('nameBg')};padding:clamp(10px,1.6vw,18px) clamp(18px,2.2vw,28px);border-radius:6px;display:flex;align-items:center;gap:clamp(10px,1.5vw,18px);box-shadow:0 4px 20px rgba(212,168,67,.35)">
+            ${chipNombre}
+            <div style="font-family:Oswald;font-size:clamp(26px,3.2vw,44px);font-weight:700;letter-spacing:2px;color:${_txC('nameText')}">
+              ${firstName?firstName+' ':''}${lastName}
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:clamp(30px,4vw,70px);align-items:center;margin-top:clamp(10px,2vh,30px)">
+          <div style="width:clamp(180px,18vw,280px);aspect-ratio:3/4;background:${mediaBg};border:3px solid ${_txC('accent')};border-radius:4px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(0,0,0,.5);position:relative;overflow:hidden">
+            ${useGif
+              ? (gifIsImg
+                  ? `<img src="${media.gif_url}" alt="${cur.name||''}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center">`
+                  : `<video src="${media.gif_url}" autoplay loop muted playsinline data-gif-trim="1" data-gif-start="${media.gif_start||0}" data-gif-end="${(media.gif_end!=null?media.gif_end:(''))}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center"></video>`)
+              : media.foto_url
+                ? `<img src="${media.foto_url}" alt="${cur.name||''}" style="width:100%;height:100%;object-fit:cover" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px\\'>${initials}</span>'">`
+                : `<span style="font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px">${initials}</span>`
+            }
+          </div>
+          <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(10px,1.8vh,24px)">
+            ${rows.map(r=>`
+              <div style="display:grid;grid-template-columns:auto 1fr;gap:40px;align-items:center;border-bottom:1px solid rgba(212,168,67,.2);padding-bottom:clamp(8px,1.2vh,14px)">
+                <div style="font-family:Oswald;font-size:clamp(22px,2.4vw,36px);font-weight:600;color:rgba(220,230,245,.92);letter-spacing:3px">${r[0]}</div>
+                <div style="font-family:Oswald;font-size:clamp(24px,2.6vw,40px);font-weight:700;color:${_txC('accent')};letter-spacing:1px;text-align:right">${r[1]}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+        <div style="position:absolute;top:clamp(20px,2.5vw,40px);right:clamp(20px,2.5vw,40px);display:flex;align-items:center;gap:12px;padding:8px 14px;background:rgba(10,22,40,.55);border:2px solid rgba(212,168,67,.4);border-radius:8px">
+          ${_tiraLogosPantalla(['fed','camp','yl'],'clamp(34px,3.6vw,56px)','14px')}
         </div>
       </div>
     </div>
-  </div>`;
+    </div>`;
 }
 
  // 20s visible
@@ -1886,7 +1875,7 @@ function renderTxScoreboard(cur,lifterChanged){
     </div>`;
 }
 
-// Tal cual la vista previa: una caja al centro, sobre la cámara. Arriba
+// Tal cual la vista previa: una caja negra al centro, sobre la cámara. Arriba
 // CLASIFICACIÓN, la categoría y en qué movimiento va; la tabla con el puesto,
 // el atleta con el logo de su club, SQ, BP y DL (en gris lo declarado que
 // todavía no levanta), lo actual, lo proyectado y el GL del proyectado.
@@ -1901,7 +1890,7 @@ function renderTxLeaderboard(cur,lifterChanged,opts){
     &&_lineaComp(a)===_lineaComp(ref)&&(opts.allFlights||a.flight===DATA.flight)&&!a.bombed);
   const ranked=sameCat.map(a=>({a,act:totalOf(a),proy:forecastTotal(a)}))
     .sort((x,y)=>(y.proy-x.proy)||((x.a.bw||0)-(y.a.bw||0)));
-  const X=_txX(), k=_sbEscala();
+  const X=_txNegro(), k=_sbEscala();
   const mujer=(ref.sex==='Femenino'||ref.sex==='Mujer'||ref.sex==='F');
   const cuando={sq:'EN SENTADILLA',bp:'EN BANCA',dl:'EN PESO MUERTO'}[DATA.lift]||'';
   const catTxt=[(txCatLabel(ref.cat)||'').replace(/^-/,'−').replace(/kg$/i,' KG'), (typeof _lineaLbl==='function'?_lineaLbl(ref):'')]
@@ -2041,16 +2030,15 @@ function _medalTop3(md){
 
 // Tal cual la vista previa: el podio abajo al centro. La franja con
 // MEDALLERO y la categoría, y tres tarjetas en orden 2 · 1 · 3, la del primero
-// más alta. El oro, la plata y el bronce son el color de la medalla y no
-// cambian con la paleta; el resto sale de Control TX. Mientras está, el
-// marcador se esconde (van en el mismo lugar).
+// más alta. Siempre en negro; el oro, la plata y el bronce son el color de la
+// medalla. Mientras está, el marcador se esconde (van en el mismo lugar).
 function renderTxMedals(md){
   md=md||{};
   if(!md.mod||!md.sex||!md.div||!md.cat)return '';
   const tipo=md.tipo||'total';
   const ranked=_medalTop3(md);
   if(!ranked.length)return '';
-  const X=_txX(), k=_sbEscala();
+  const X=_txNegro(), k=_sbEscala();
   const MEDALLA={1:'#E2B13C',2:'#C3C8CF',3:'#C98A5A'};
   const ALTO={1:360,2:310,3:280};
   const mujer=(md.sex==='Femenino'||md.sex==='Mujer'||md.sex==='F');
@@ -2625,85 +2613,27 @@ function renderDirector(){
     h+='<div style="padding:10px 12px;font-size:11px;color:var(--muted)">No hay videos en storage. Sube uno con <i class=yl-i-subir></i> SUBIR.</div>';
   } else {
     h+='<div style="padding:8px 12px;display:flex;flex-direction:column;gap:6px">';
+    _txEscucharYvDefecto();
     const activeUrls=new Set(bt.videos||[]);
+    const pred=_txYvDefecto[0]||'';
     _dirBtVideoList.forEach((v,i)=>{
-      const checked=activeUrls.has(v.url)||(!bt.active&&i===0&&_dirBtVideoList.length>0);
+      // Marcado al iniciar: los que ya están en pantalla o, si no, el predeterminado.
+      const checked=activeUrls.has(v.url)||(!bt.active&&(pred?v.url===pred:i===0));
+      const esPred=!!pred&&v.url===pred;
       const fname=v.name.replace(/\.[^.]+$/,''); // sin extensión
       h+='<div style="display:flex;align-items:center;gap:8px">';
       h+='<input type="checkbox" id="dirBtVid_'+i+'" '+(checked?'checked':'')+' style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">';
-      h+='<label for="dirBtVid_'+i+'" style="font-size:11px;color:var(--text);cursor:pointer;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+v.name+'">'+fname+'</label>';
+      h+='<label for="dirBtVid_'+i+'" style="font-size:11px;color:var(--text);cursor:pointer;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+v.name+'">'+fname+(esPred?' <b style="font-size:9px;letter-spacing:1px">· PREDETERMINADO</b>':'')+'</label>';
+      h+='<button onclick="window.dirBtDefecto(\''+v.url.replace(/'/g,"\\'")+'\')" title="'+(esPred?'Quitar como predeterminado':'Dejar como predeterminado: sale siempre en Ya volvemos')+'" style="padding:2px 7px;border-radius:4px;border:1px solid var(--border);background:'+(esPred?'var(--text)':'transparent')+';color:'+(esPred?'var(--bg)':'var(--muted)')+';font-size:11px;cursor:pointer;flex-shrink:0">'+(esPred?'★':'☆')+'</button>';
       h+='<button onclick="window.dirBtDeleteVideo(\''+v.name.replace(/'/g,"\\'")+'\')" title="Eliminar" style="padding:2px 7px;border-radius:4px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;font-size:10px;cursor:pointer;flex-shrink:0">Eliminar</button>';
       h+='</div>';
     });
     h+='</div>';
   }
   h+='</div>';
-  // ── Editor visual de layout ──────────────────────────────────────────────
-  const stl=bt.style||{};
-  const _vx=stl.videoX!=null?stl.videoX:0,_vy=stl.videoY!=null?stl.videoY:5;
-  const _vw=stl.videoW!=null?stl.videoW:40,_vh=stl.videoH!=null?stl.videoH:80;
-  const _tx=stl.textX!=null?stl.textX:44,_ty=stl.textY!=null?stl.textY:10;
-  const _bg=stl.bgColor||'#0A1628',_ac=stl.accentColor||'#C41E3A';
-  const _ts=stl.titleSize!=null?stl.titleSize:8,_ms=stl.movSize!=null?stl.movSize:5,_tmr=stl.timerSize!=null?stl.timerSize:12;
-  const _blur=stl.blurAmount!=null?stl.blurAmount:24,_ov=stl.overlayOpacity!=null?stl.overlayOpacity:0.65;
-  h+='<details style="margin-top:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden" open>';
-  h+='<summary style="padding:9px 14px;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text);background:var(--card);list-style:none;display:flex;align-items:center;justify-content:space-between">EDITOR DE LAYOUT <span style="font-size:9px;color:var(--muted);font-weight:400">arrastra los bloques para mover</span></summary>';
-  h+='<div style="background:#07111e">';
-  // ── Canvas 16:9 ─────────────────────────────────────────────────────────
-  h+='<div id="dirBtCanvas" style="position:relative;width:100%;aspect-ratio:16/9;background:'+_bg+';overflow:hidden;cursor:default;user-select:none;touch-action:none"'
-    +' onmousemove="window.dirBtMove(event)" onmouseup="window.dirBtUp(event)" onmouseleave="window.dirBtUp(event)">';
-  // Bloque VIDEO (arrastrable + redimensionable)
-  h+='<div id="dirBtVid" style="position:absolute;left:'+_vx+'%;top:'+_vy+'%;width:'+_vw+'%;height:'+_vh+'%;background:rgba(30,90,180,.25);border:2px solid rgba(80,150,255,.6);box-sizing:border-box;cursor:grab"'
-    +' onmousedown="window.dirBtDown(event,\'vid\')">'
-    +'<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:10px;color:rgba(255,255,255,.5);pointer-events:none;text-align:center"><br>VIDEO<br><span style="font-size:8px;opacity:.6">arrastra</span></div>'
-    // Handle resize esquina inferior-derecha
-    +'<div style="position:absolute;right:-1px;bottom:-1px;width:14px;height:14px;background:rgba(80,150,255,.8);cursor:se-resize;border-radius:2px 0 0 0" onmousedown="window.dirBtDown(event,\'vid-resize\');event.stopPropagation()"></div>'
-    // Handle resize borde derecho (ancho)
-    +'<div style="position:absolute;right:-1px;top:50%;transform:translateY(-50%);width:10px;height:28px;background:rgba(80,150,255,.6);cursor:ew-resize;border-radius:3px 0 0 3px" onmousedown="window.dirBtDown(event,\'vid-w\');event.stopPropagation()"></div>'
-    // Handle resize borde inferior (altura)
-    +'<div style="position:absolute;bottom:-1px;left:50%;transform:translateX(-50%);width:28px;height:10px;background:rgba(80,150,255,.6);cursor:ns-resize;border-radius:3px 3px 0 0" onmousedown="window.dirBtDown(event,\'vid-h\');event.stopPropagation()"></div>'
-  +'</div>';
-  // Bloque TEXTO (arrastrable)
-  const movPreview=((bt.movement||'').toUpperCase()||'DEADLIFT');
-  h+='<div id="dirBtTxt" style="position:absolute;left:'+_tx+'%;top:'+_ty+'%;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.35);padding:4% 3%;cursor:grab;min-width:8%;max-width:'+(100-_tx-1)+'%"'
-    +' onmousedown="window.dirBtDown(event,\'txt\')">'
-    +'<div style="font-family:Oswald;font-size:clamp(6px,2.2vw,16px);font-weight:900;color:#fff;white-space:nowrap;pointer-events:none;line-height:1">YA VOLVEMOS</div>'
-    +'<div style="width:60%;height:2px;background:'+_ac+';margin:4px 0;pointer-events:none"></div>'
-    +'<div style="font-family:Oswald;font-size:clamp(4px,1.4vw,10px);font-weight:700;color:#fff;pointer-events:none;line-height:1">'+movPreview+'</div>'
-    +'<div style="font-family:Oswald;font-size:clamp(8px,3vw,20px);font-weight:900;color:#fff;pointer-events:none;line-height:1;margin-top:2px">10:00</div>'
-    +'<div style="font-size:7px;color:rgba(255,255,255,.4);pointer-events:none;margin-top:3px">arrastra</div>'
-  +'</div>';
-  h+='</div>'; // fin canvas
-  // ── Controles de estilo debajo del canvas ───────────────────────────────
-  h+='<div style="padding:10px 12px;display:grid;gap:8px;border-top:1px solid var(--border)">';
-  // Row colores
-  h+='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">';
-  h+='<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)">Fondo <input type="color" id="dirBtBgColor" value="'+_bg+'" onchange="window.dirBtPreviewBg(this.value)" style="width:36px;height:24px;border:1px solid var(--border);border-radius:3px;background:none;cursor:pointer;padding:1px"></div>';
-  h+='<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)">Acento <input type="color" id="dirBtAccent" value="'+_ac+'" style="width:36px;height:24px;border:1px solid var(--border);border-radius:3px;background:none;cursor:pointer;padding:1px"></div>';
-  h+='<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer"><input type="checkbox" id="dirBtShowLogos" '+(stl.showLogos!==false?'checked':'')+' style="accent-color:var(--accent)"> Logos</label>';
-  h+='</div>';
-  // Logo del evento
-  const _evLogo=stl.eventLogoUrl||'';
-  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid rgba(29,49,80,.3);margin-top:4px">';
-  h+='<span style="font-size:10px;color:var(--muted);white-space:nowrap">Logo evento</span>';
-  if(_evLogo){
-    h+='<img src="'+_evLogo+'" id="dirBtEvLogo" data-url="'+_evLogo+'" style="height:28px;width:auto;max-width:80px;object-fit:contain;background:rgba(255,255,255,.05);border-radius:4px;border:1px solid var(--border);padding:2px" onerror="this.style.opacity=.3">';
-    h+='<button onclick="window.dirBtClearEventLogo()" style="padding:3px 8px;border-radius:4px;border:1px solid rgba(239,68,68,.4);background:transparent;color:#ef4444;font-size:10px;cursor:pointer"><i class=yl-i-cerrar></i> Quitar</button>';
-  } else {
-    h+='<span id="dirBtEvLogo" data-url="" style="font-size:10px;color:var(--muted);font-style:italic">Sin logo</span>';
-  }
-  h+='<button id="dirBtEvLogoBtn" onclick="window.dirBtUploadEventLogo()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:10px;font-family:Oswald;letter-spacing:1px;cursor:pointer"><i class=yl-i-subir></i> SUBIR</button>';
-  h+='</div>';
-  // Tamaños de fuente
-  const sl2=(id,lbl,min,max,val)=>'<div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:var(--muted);white-space:nowrap;min-width:90px">'+lbl+'</span><input type="range" id="'+id+'" min="'+min+'" max="'+max+'" value="'+val+'" style="flex:1;accent-color:var(--accent)" oninput="document.getElementById(\''+id+'V\').textContent=this.value"><span id="'+id+'V" style="font-size:10px;color:var(--muted);min-width:18px">'+val+'</span></div>';
-  h+=sl2('dirBtTS','YA VOLVEMOS (vw)',3,14,_ts);
-  h+=sl2('dirBtMS','Movimiento (vw)',2,10,_ms);
-  h+=sl2('dirBtTmr','Timer (vw)',5,22,_tmr);
-  h+=sl2('dirBtBlur','Desenfoque fondo',0,48,_blur);
-  h+='<div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:var(--muted);white-space:nowrap;min-width:90px">Opacidad overlay</span><input type="range" id="dirBtOv" min="0" max="1" step="0.05" value="'+_ov+'" style="flex:1;accent-color:var(--accent)" oninput="document.getElementById(\'dirBtOvV\').textContent=parseFloat(this.value).toFixed(2)"><span id="dirBtOvV" style="font-size:10px;color:var(--muted);min-width:28px">'+_ov.toFixed(2)+'</span></div>';
-  // Botón guardar
-  h+='<button onclick="window.dirBtApplyStyle()" style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-family:Oswald;font-size:13px;letter-spacing:2px;cursor:pointer;width:100%;margin-top:2px">GUARDAR Y APLICAR</button>';
-  h+='</div></div></details>';
+  // El diseño de "Ya volvemos" es fijo (fondo negro o el video, la cuenta al
+  // centro): ya no hay editor de posiciones.
+  h+='<div style="margin-top:8px;font-size:11px;color:var(--muted);line-height:1.5">Con ☆ dejas un video como <b>predeterminado</b>: sale de fondo cada vez que se inicia "Ya volvemos" sin elegir otro, también desde el control remoto y la planilla, y queda guardado para todos los campeonatos.</div>';
   // Botones
   h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">';
   if(!bt.active){
@@ -3515,6 +3445,19 @@ window._dirKeyHandler=function(e){
 };
 
 // ── Break timer (descanso configurable) ─────────────────────
+// Deja (o quita) un video como predeterminado del "Ya volvemos", para todos los campeonatos.
+window.dirBtDefecto=async function(url){
+  if(!fbReady||!window._fb){showToastLC('Conectando a Firebase… vuelve a intentar en unos segundos');return;}
+  if(!isAdmin){showToastLC('Solo un admin logueado puede cambiarlo');return;}
+  const nuevos=(_txYvDefecto[0]===url)?[]:[url];
+  try{
+    await window._fb.setDoc(window._fb.doc(fbDB,'livecast_director','_ya_volvemos'),{videos:nuevos,ts:Date.now()});
+    _txYvDefecto=nuevos;
+    showToastLC(nuevos.length?'Listo: ese video sale siempre en Ya volvemos':'Sin video predeterminado');
+  }catch(e){showToastLC('No se pudo guardar: '+(e.message||e));}
+  R();
+};
+
 window.dirBreakStart=async function(){
   const m=parseInt((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakMin'))||'0',10)||0;
   const s=parseInt((__o=>__o==null?void 0:__o.value)(document.getElementById('dirBreakSec'))||'0',10)||0;
