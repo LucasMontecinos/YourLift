@@ -976,7 +976,10 @@ function _startBarrido(dir){
   _txBarridoEl.innerHTML=
     '<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#c41e3a;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) forwards"></div>'
     +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#ffffff;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .08s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
-    +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#0a1f44;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .16s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
+    // La última cinta, la que tapa la pantalla, es del negro del fondo del
+    // perfil (y de la clasificación y el Ya volvemos): antes era azul marino y
+    // la entrada se veía de otro color que lo que aparecía detrás.
+    +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#000000;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .16s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
     +'<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;animation:txLogoBeat '+dur+'s ease-out forwards;opacity:0">'
       +_barridoLogoImg()
     +'</div>';

@@ -133,8 +133,8 @@ console.log('\nSe elige en el mismo panel donde se sube el logo');
   {
     const r = await correr({ src: 'https://ejemplo.cl/logo-campeonato.png', cual: 'campeonato' });
     ok(r.cintas === 3, 'las tres cintas siguen ahí (' + r.cintas + ')');
-    ok(r.colores.join(',') === '#c41e3a,#ffffff,#0a1f44',
-       'rojo, blanco y azul, en ese orden');
+    ok(r.colores.join(',') === '#c41e3a,#ffffff,#000000',
+       'rojo, blanco y negro —el del fondo del perfil—, en ese orden: ' + r.colores.join(','));
     // Y se limpia solo: si quedara pegado, taparía la transmisión.
     const antes = await p.evaluate(() => document.body.contains(_txBarridoEl) ? 1 : 0);
     ok(antes === 1, 'queda uno solo mientras corre');
