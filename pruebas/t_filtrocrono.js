@@ -102,6 +102,36 @@ const CRONO = [
   const src = require('./apoyo/fuente').admin();
   ok(/iCod=headers\.findIndex\(h=>\/\^c\[oó\]digo\/\.test\(h\)\)/.test(src) && /codigo:iCod>=0/.test(src), 'la columna Código se lee al importar');
 
+  console.log('\nDesde el link admin.html?cronoOficial=regional_centro_2026');
+  {
+    const p2 = await ctx.newPage();
+    p2.on('pageerror', e => errs.push('link: ' + e.message));
+    const dlg = [];
+    p2.on('dialog', async d => { dlg.push(d.message()); await d.accept(); });
+    await p2.addInitScript(([ev, insc]) => {
+      window.__AUTH = { uid: 'u1', email: 'x@y.cl' };
+      window.__FAKE = { admins: [{ id: 'u1', email: 'x@y.cl', role: 'owner' }], eventos: [ev], inscripciones: insc };
+      window.__ESCRITO = [];
+    }, [EV, INSC]);
+    await p2.goto(`http://localhost:${PUERTO}/admin.html?cronoOficial=${EV.id}`, { waitUntil: 'domcontentloaded' });
+    await p2.waitForFunction(() => (window.__ESCRITO || []).some(w => w.col === 'eventos'), null, { timeout: 30000 }).catch(() => {});
+    const r = await p2.evaluate(() => ({
+      crono: (window.__ESCRITO.filter(w => w.col === 'cronograma').slice(-1)[0] || {}).d,
+      priv: (window.__ESCRITO.filter(w => w.col === 'cronograma_priv').slice(-1)[0] || {}).d,
+      ev: window.__ESCRITO.filter(w => w.col === 'eventos').map(w => w.d),
+      url: location.search, vista: ST.view,
+    }));
+    ok(dlg.length === 2 && /CRONOGRAMA OFICIAL/.test(dlg[0]) && /144 atletas/.test(dlg[0]) && /FILTRAR LA NÓMINA/.test(dlg[1]),
+      'pide confirmar el cronograma oficial (144) y después el filtrado: ' + dlg.map(x => x.split('\n')[0]).join(' / '));
+    const filas = (r.crono && r.crono.rows) || [];
+    ok(filas.length === 144 && filas.every(f => f.codigo), 'guarda las 144 filas del cronograma oficial, todas con su código');
+    ok(filas.filter(f => f.flight === 'L').length === 13 && filas[0].dia === 'Sábado' && filas[0].jornada === 'AM', 'con tanda, día y jornada');
+    ok(!JSON.stringify(r.crono || {}).includes('@') && !JSON.stringify(r.priv || {}).includes('@'), 'sin ningún correo');
+    ok(r.ev.some(d => d.cronogramaPublic === true), 'y al aceptar el filtrado queda publicado');
+    ok(r.url === '' && r.vista === 'cronograma', 'queda en la pestaña Cronograma, y recargar no lo vuelve a ofrecer');
+    await p2.close();
+  }
+
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.slice(0, 2).join(' | ') : ''));
   await b.close();
   console.log(fallas ? `\n${fallas} FALLA(S)` : '\nTodo OK');

@@ -6321,6 +6321,40 @@ window.cronoDeshacerFiltro=async function(){
   render();
 };
 
+// ── El cronograma oficial, desde un link ────────────────────────────────
+// admin.html?cronoOficial=<id del campeonato> carga cronogramas/<id>.json (el
+// cronograma que entregó la organización, sin correos), lo deja como el
+// Cronograma de ese campeonato y abre el filtrado de la nómina. Cada paso pide
+// confirmación. Sirve para dejarlo listo desde afuera: quien lo abre con su
+// sesión de admin solo acepta.
+async function _cronoOficialDesdeLink(){
+  const id=new URLSearchParams(location.search).get('cronoOficial');
+  if(!id||window._cronoOficialEnCurso)return;
+  window._cronoOficialEnCurso=true;
+  const espera=ms=>new Promise(r=>setTimeout(r,ms));
+  const evDe=()=>(ST.eventos||[]).find(e=>e.id===id);
+  const hayInsc=()=>{ const ev=evDe(); return !!ev&&(ST.inscripciones||[]).some(i=>i.evento===id||i.evento===ev.name); };
+  for(let k=0;k<160&&!hayInsc();k++) await espera(250);
+  const ev=evDe();
+  if(!ev){ showToast('No encontré el campeonato '+id,null,true); return; }
+  let data=null;
+  try{ data=await (await fetch('cronogramas/'+encodeURIComponent(id)+'.json',{cache:'no-store'})).json(); }catch(e){}
+  if(!data||!Array.isArray(data.filas)||!data.filas.length){ showToast('No pude leer el cronograma oficial de '+ev.name,null,true); return; }
+  ST.view='cronograma'; cronoPickEvent(id);
+  for(let k=0;k<40&&ST.cronoRows===null;k++) await espera(250);
+  const antes=(ST.cronoRows||[]).length;
+  if(!confirm('CRONOGRAMA OFICIAL\n'+ev.name+'\n\n'+(data.fuente||'')+'\n'+data.filas.length+' atletas'
+    +(antes?'\n\nReemplaza al cronograma de '+antes+' que hay ahora.':'')
+    +'\n\nDespués te muestro cómo queda la nómina antes de tocarla.'))return;
+  ST.cronoRows=data.filas.map(r=>({...r,tarima:r.tarima||'1',
+    handler1:{nombre:(r.handler1||{}).nombre||'',correo:''},handler2:{nombre:(r.handler2||{}).nombre||'',correo:''}}));
+  await cronoSaveDoc(); render();
+  await cronoFiltrarNomina();
+  // Que recargar la página no lo vuelva a ofrecer.
+  try{ history.replaceState(null,'',location.pathname); }catch(_){}
+}
+window._cronoOficialDesdeLink=_cronoOficialDesdeLink;
+
 function _xlsxDownload(aoa, sheetName, filename){
   if(typeof XLSX==='undefined'){ showToast('Excel no cargó (revisa internet)',null,true); return; }
   const ws=XLSX.utils.aoa_to_sheet(aoa);
@@ -16328,7 +16362,12 @@ onAuthStateChanged(auth,async(u)=>{window._authFired=true;
     // datos privados, resultados, fotos— eran miles de lecturas de Firestore en
     // cada entrada, para nada.
     if(ST.adminInfo?.role==='streaming'||ST.adminInfo?.role==='mesa'){ render(); }
-    else loadAll(); // intentional: no await — render() called inside
+    else{
+      loadAll(); // intentional: no await — render() called inside
+      // admin.html?cronoOficial=<campeonato>: carga el cronograma oficial y abre
+      // el filtrado de la nómina (admin/cronograma.js).
+      if(new URLSearchParams(location.search).get('cronoOficial')) _cronoOficialDesdeLink();
+    }
   }catch(e){
     console.error('Auth error',e);
     ST.user=null;

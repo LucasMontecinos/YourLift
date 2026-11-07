@@ -123,7 +123,12 @@ onAuthStateChanged(auth,async(u)=>{window._authFired=true;
     // datos privados, resultados, fotos— eran miles de lecturas de Firestore en
     // cada entrada, para nada.
     if(ST.adminInfo?.role==='streaming'||ST.adminInfo?.role==='mesa'){ render(); }
-    else loadAll(); // intentional: no await — render() called inside
+    else{
+      loadAll(); // intentional: no await — render() called inside
+      // admin.html?cronoOficial=<campeonato>: carga el cronograma oficial y abre
+      // el filtrado de la nómina (admin/cronograma.js).
+      if(new URLSearchParams(location.search).get('cronoOficial')) _cronoOficialDesdeLink();
+    }
   }catch(e){
     console.error('Auth error',e);
     ST.user=null;
