@@ -469,6 +469,119 @@ window.cronoAddMissingFromNomina=async function(){
   showToast('Agregados '+nuevos.length+' atleta(s) nuevo(s) al cronograma');
 };
 
+// ── Filtrar la nómina con el cronograma oficial ──────────────────────────
+// Cuando la organización entrega el cronograma oficial, la nómina tiene que
+// quedar con exactamente esos atletas. Antes eso era a mano, uno por uno (en el
+// Regional Centro 2026: 19 por aprobar y 35 por bajar):
+//   · está en el cronograma y seguía pendiente (o rechazado) → aprobado
+//   · aprobado o pendiente que NO está en el cronograma → rechazado
+//   · categoría, división, modalidad y club: los del cronograma, que es el oficial
+// Cada inscripción tocada guarda cómo estaba (filtroCrono) para poder deshacerlo.
+// Se cruza por código de atleta y, si la fila no lo trae, por nombre (exacto, o
+// el mismo con un nombre de más o de menos, siempre que dé con uno solo).
+function _cronoPlanFiltro(filas, insc){
+  const nn=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
+  const sub=(a,b)=>{ const A=new Set(nn(a).split(' ').filter(Boolean)), B=new Set(nn(b).split(' ').filter(Boolean));
+    const [ch,gr]=A.size<=B.size?[A,B]:[B,A]; if(ch.size<2)return false; for(const t of ch) if(!gr.has(t)) return false; return true; };
+  const clubDe=i=>(i.club==='Otro'?(i.clubOtro||''):(i.club||''));
+  const cat=s=>String(s||'').replace(/[^0-9+]/g,'');
+  const usados=new Set(), aprobar=[], corregir=[], sinInsc=[];
+  (filas||[]).forEach(r=>{
+    let ins=null;
+    if(r.codigo){ ins=insc.find(i=>i.codigo&&String(i.codigo)===String(r.codigo)&&!usados.has(i.id))||null; }
+    if(!ins){ const ex=insc.filter(i=>!usados.has(i.id)&&nn(i.nombre)===nn(r.nombre)); if(ex.length===1)ins=ex[0]; }
+    if(!ins){ const pa=insc.filter(i=>!usados.has(i.id)&&sub(i.nombre,r.nombre)); if(pa.length===1)ins=pa[0]; }
+    if(!ins){ sinInsc.push(r); return; }
+    usados.add(ins.id);
+    if(ins.status!=='approved') aprobar.push({ins,fila:r});
+    const cambios=[];
+    if(r.categoria&&cat(r.categoria)!==cat(ins.categoria)) cambios.push({campo:'categoria',antes:ins.categoria||'',ahora:r.categoria});
+    if(r.division&&nn(r.division)!==nn(ins.division)) cambios.push({campo:'division',antes:ins.division||'',ahora:r.division});
+    if(r.modalidad&&nn(r.modalidad)!==nn(ins.modalidad)) cambios.push({campo:'modalidad',antes:ins.modalidad||'',ahora:r.modalidad});
+    if(r.club&&nn(r.club)!==nn(clubDe(ins))) cambios.push({campo:'club',antes:clubDe(ins),ahora:r.club});
+    if(cambios.length) corregir.push({ins,cambios});
+  });
+  const bajar=insc.filter(i=>!usados.has(i.id)&&(i.status==='approved'||i.status==='pending'));
+  return {aprobar,bajar,corregir,sinInsc};
+}
+window._cronoPlanFiltro=_cronoPlanFiltro;
+
+function _cronoInscDelEvento(){
+  const evObj=(ST.eventos||[]).find(e=>e.id===ST.cronoEv);
+  const evName=evObj?evObj.name:'';
+  return {evObj, evName, insc:(ST.inscripciones||[]).filter(i=>i.evento===evName||i.evento===ST.cronoEv)};
+}
+
+window.cronoFiltrarNomina=async function(){
+  if(!ST.cronoEv){showToast('Elige un campeonato primero',null,true);return;}
+  const {evObj,evName,insc}=_cronoInscDelEvento();
+  if(evObj&&evObj.abierto===true){showToast('Esto es para campeonatos con inscripción oficial',null,true);return;}
+  const filas=ST.cronoRows||[];
+  if(!filas.length){showToast('El cronograma está vacío: impórtalo primero',null,true);return;}
+  const p=_cronoPlanFiltro(filas,insc);
+  const publicar=!!(evObj&&evObj.cronogramaPublic===false);
+  if(!p.aprobar.length&&!p.bajar.length&&!p.corregir.length&&!publicar){
+    showToast('La nómina ya coincide con el cronograma'+(p.sinInsc.length?' · '+p.sinInsc.length+' del cronograma sin inscripción':''));return;
+  }
+  const lista=(t,a,f)=>a.length?'\n'+t+' ('+a.length+'):\n'+a.slice(0,14).map(f).join('\n')+(a.length>14?'\n   … y '+(a.length-14)+' más':'')+'\n':'';
+  const msg='FILTRAR LA NÓMINA CON EL CRONOGRAMA\n'+(evName||ST.cronoEv)+' — '+filas.length+' atletas en el cronograma\n'
+    +lista('SE APRUEBAN',p.aprobar,x=>'   • '+x.ins.nombre+(x.ins.status==='rejected'?' (estaba rechazado)':''))
+    +lista('SE BAJAN: no están en el cronograma',p.bajar,i=>'   • '+i.nombre+' ('+(i.status==='approved'?'aprobado':'pendiente')+')')
+    +lista('SE CORRIGEN con el dato del cronograma',p.corregir,x=>'   • '+x.ins.nombre+': '+x.cambios.map(c=>c.campo+' '+(c.antes||'—')+' → '+c.ahora).join(', '))
+    +lista('EN EL CRONOGRAMA SIN INSCRIPCIÓN — no se tocan, revísalos',p.sinInsc,r=>'   • '+r.nombre)
+    +(publicar?'\nAdemás se PUBLICA el cronograma: queda visible en cronograma.html.\n':'')
+    +'\nLos que se bajan quedan rechazados. Todo se puede deshacer con "Deshacer filtrado".';
+  if(!confirm(msg))return;
+  const ts=Date.now();
+  // Cómo estaba cada una antes del primer filtrado: si se corre dos veces, se
+  // conserva lo de la primera, que es lo que hay que devolver al deshacer.
+  const previo=(ins,campos)=>{
+    const f=ins.filtroCrono||{};
+    const camposAntes={...(f.camposAntes||{})};
+    (campos||[]).forEach(c=>{ if(!(c.campo in camposAntes)) camposAntes[c.campo]=c.campo==='club'?(ins.club||''):(ins[c.campo]||''); });
+    return {statusAntes:f.statusAntes||ins.status||'pending',camposAntes,ts};
+  };
+  const cambiosPor={};
+  const add=(ins,obj,campos)=>{ const c=cambiosPor[ins.id]||(cambiosPor[ins.id]={ins,upd:{},campos:[]}); Object.assign(c.upd,obj); c.campos.push(...(campos||[])); };
+  p.aprobar.forEach(x=>add(x.ins,{status:'approved'}));
+  p.bajar.forEach(i=>add(i,{status:'rejected'}));
+  p.corregir.forEach(x=>add(x.ins,Object.fromEntries(x.cambios.map(c=>[c.campo,c.ahora])),x.cambios));
+  const ids=Object.keys(cambiosPor);
+  try{
+    for(let k=0;k<ids.length;k+=400){
+      const b=writeBatch(db);
+      ids.slice(k,k+400).forEach(id=>{ const c=cambiosPor[id]; b.update(doc(db,'inscripciones',id),{...c.upd,filtroCrono:previo(c.ins,c.campos)}); });
+      await b.commit();
+    }
+    if(publicar) await updateDoc(doc(db,'eventos',evObj.id),{cronogramaPublic:true});
+  }catch(e){ showToast('Error aplicando el filtrado: '+e.message,null,true); return; }
+  // Aprobar es aceptar también el club con que se inscribió (igual que setStatus).
+  for(const x of p.aprobar){ try{ await _clubAlPadron({...x.ins,club:(cambiosPor[x.ins.id].upd.club||x.ins.club)}); }catch(_){} }
+  await logAction('filtro_cronograma',ST.cronoEv,null,
+    `aprobados ${p.aprobar.length} · bajados ${p.bajar.length} · corregidos ${p.corregir.length}`+(publicar?' · cronograma publicado':''),{evento:ST.cronoEv});
+  showToast(`Nómina filtrada: ${p.aprobar.length} aprobados · ${p.bajar.length} bajados · ${p.corregir.length} corregidos`+(publicar?' · cronograma publicado':''));
+  render();
+};
+
+window.cronoDeshacerFiltro=async function(){
+  if(!ST.cronoEv)return;
+  const {insc}=_cronoInscDelEvento();
+  const marcadas=insc.filter(i=>i.filtroCrono);
+  if(!marcadas.length){showToast('No hay nada filtrado en este campeonato');return;}
+  if(!confirm('Deshacer el filtrado de '+marcadas.length+' inscripciones?\nCada una vuelve al estado y a los datos que tenía antes.\n(El cronograma sigue publicado: eso se cambia en Campeonatos.)'))return;
+  try{
+    for(let k=0;k<marcadas.length;k+=400){
+      const b=writeBatch(db);
+      marcadas.slice(k,k+400).forEach(i=>{ const f=i.filtroCrono||{};
+        b.update(doc(db,'inscripciones',i.id),{status:f.statusAntes||'pending',...(f.camposAntes||{}),filtroCrono:deleteField()}); });
+      await b.commit();
+    }
+  }catch(e){ showToast('Error deshaciendo: '+e.message,null,true); return; }
+  await logAction('filtro_cronograma_deshecho',ST.cronoEv,null,String(marcadas.length),{evento:ST.cronoEv});
+  showToast('Filtrado deshecho: '+marcadas.length+' inscripciones como estaban');
+  render();
+};
+
 function _xlsxDownload(aoa, sheetName, filename){
   if(typeof XLSX==='undefined'){ showToast('Excel no cargó (revisa internet)',null,true); return; }
   const ws=XLSX.utils.aoa_to_sheet(aoa);
@@ -504,6 +617,9 @@ window.cronoImportXlsx=function(){
       if(!aoa.length){showToast('Archivo vacío',null,true);return;}
       const headers=aoa[0].map(h=>String(h||'').trim().toLowerCase());
       const idx=name=>headers.findIndex(h=>h.includes(name));
+      // El código de atleta, si viene: con él la fila se cruza con su inscripción
+      // aunque el nombre esté escrito distinto (ver cronoFiltrarNomina).
+      const iCod=headers.findIndex(h=>/^c[oó]digo/.test(h));
       const iNombre=idx('nombre'), iDiv=idx('divisi'), iCat=idx('categor'), iSexo=idx('sexo'),
         iClub=idx('club'), iMod=idx('modalidad'), iFlight=idx('flight'), iJor=idx('jornada'),
         iEnt=idx('entrenador'),
@@ -516,7 +632,8 @@ window.cronoImportXlsx=function(){
         iH2c=headers.findIndex(h=>h.includes('correo')&&h.includes('2'));
       if(iNombre<0){showToast('No encontré la columna "Nombre" en el Excel',null,true);return;}
       const rows=aoa.slice(1).filter(r=>r[iNombre]).map(r=>({
-        nombre:String(r[iNombre]||'').trim(), division:iDiv>=0?String(r[iDiv]??'').trim():'',
+        nombre:String(r[iNombre]||'').trim(), codigo:iCod>=0?String(r[iCod]??'').trim():'',
+        division:iDiv>=0?String(r[iDiv]??'').trim():'',
         categoria:iCat>=0?String(r[iCat]??'').trim():'', sexo:iSexo>=0?String(r[iSexo]??'').trim():'',
         club:iClub>=0?String(r[iClub]??'').trim():'', modalidad:iMod>=0?String(r[iMod]??'').trim():'',
         tarima:'1', flight:iFlight>=0?String(r[iFlight]??'').trim()||'A':'A',
@@ -553,7 +670,7 @@ function renderCronoEditor(){
       <select onchange="cronoPickEvent(this.value)" style="background:rgba(10,22,40,.7);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;min-width:240px">
         <option value="">— Elegir campeonato —</option>${evOpts}
       </select>
-      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g" title="Reemplaza TODO el cronograma actual">Cargar desde nómina</button><button onclick="cronoAddMissingFromNomina()" class="btn btn-g" title="Suma solo los aprobados que todavía no están — no toca a los ya ubicados">+ Nuevos de nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoTraerEntrenadores()" class="btn" title="Llena la columna Entrenador con lo que los propios entrenadores declararon al inscribirse. No pisa lo que ya está escrito.">Traer entrenadores</button><button onclick="cronoImportXlsx()" class="btn" title="Sube un Excel con las columnas Nombre/División/Categoría/Sexo/Club/Modalidad/Flight/Jornada/Entrenador/Handlers">Importar Excel</button><button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button><label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;margin-left:4px"><input type="checkbox" ${ST.cronoHideCoaches?'checked':''} onchange="cronoToggleCoaches(this.checked)"> Ocultar entrenador/handlers en el público</label>`:''}
+      ${ST.cronoEv?`<button onclick="cronoLoadFromNomina()" class="btn btn-g" title="Reemplaza TODO el cronograma actual">Cargar desde nómina</button><button onclick="cronoAddMissingFromNomina()" class="btn btn-g" title="Suma solo los aprobados que todavía no están — no toca a los ya ubicados">+ Nuevos de nómina</button><button onclick="cronoAutoDistribute()" class="btn">Auto-distribuir flights</button><button onclick="cronoTraerEntrenadores()" class="btn" title="Llena la columna Entrenador con lo que los propios entrenadores declararon al inscribirse. No pisa lo que ya está escrito.">Traer entrenadores</button><button onclick="cronoImportXlsx()" class="btn" title="Sube un Excel con las columnas Nombre/Código/División/Categoría/Sexo/Club/Modalidad/Día/Flight/Jornada/Entrenador/Handlers">Importar Excel</button><button onclick="cronoFiltrarNomina()" class="btn btn-g" title="Deja la nómina con exactamente los atletas de este cronograma: aprueba a los que están, baja a los que no, corrige categoría/división/modalidad/club y publica el cronograma. Muestra todo antes de aplicar.">Filtrar nómina con el cronograma</button>${(ST.inscripciones||[]).some(i=>i.filtroCrono&&(i.evento===ST.cronoEv||i.evento===((ST.eventos||[]).find(e=>e.id===ST.cronoEv)||{}).name))?'<button onclick="cronoDeshacerFiltro()" class="btn" style="border-color:var(--orange,#f59e0b);color:var(--orange,#f59e0b)">Deshacer filtrado</button>':''}<button onclick="cronoAddRow()" class="btn">+ Atleta</button><button onclick="cronoExportXlsx()" class="btn">Exportar Excel</button><button onclick="cronoClear()" class="btn" style="border-color:var(--red);color:var(--red)">Vaciar</button><label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;margin-left:4px"><input type="checkbox" ${ST.cronoHideCoaches?'checked':''} onchange="cronoToggleCoaches(this.checked)"> Ocultar entrenador/handlers en el público</label>`:''}
     </div>`;
   if(!ST.cronoEv) return h+`<div class="card" style="color:var(--muted)">Elige un campeonato para ver y editar su cronograma.</div>`;
   if(ST.cronoRows===null) return h+`<div class="card" style="color:var(--muted)">Cargando…</div>`;
