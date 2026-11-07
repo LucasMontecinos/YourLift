@@ -319,6 +319,103 @@ function _syncWriteAlert(e){
 
 function _syncWriteOk(){ const el=document.getElementById('syncErrBanner'); if(el)el.remove(); window._syncFallo=0; window._syncFalloMsg=''; }
 
+// ── ¿El público ve la misma nómina que esta mesa? ───────────────────────────
+//
+// La mesa no aplica el eco de sus propias escrituras (parpadearía), y escribe
+// mezclando sus cambios ENCIMA de lo que ya hay en el servidor. Si el servidor
+// quedó con otra nómina —atletas de más, ids corridos, lotes cambiados—, la mesa
+// no se entera nunca: ella sigue viendo lo suyo y el público otra cosa. Pasó en
+// el Regional Sur Austral: 86 en la mesa, 115 en el público, con lotes movidos.
+//
+// Acá se compara lo que volvió del servidor con lo de esta mesa. Si no calza (y
+// sigue sin calzar unos segundos después, para no saltar por una escritura en
+// camino), aparece un cartel con un botón para publicar lo de esta mesa tal cual.
+function _difRoster(local, remoto){
+  const pend=window._pendingEdits||new Set();
+  const L={}, Rm={};
+  (local||[]).forEach(a=>{ if(a&&a.id!=null)L[a.id]=a; });
+  (remoto||[]).forEach(a=>{ if(a&&a.id!=null)Rm[a.id]=a; });
+  const mio=id=>pend.has(id+'|meta');
+  let sobran=0, faltan=0, otros=0, lotes=0;
+  for(const id in Rm){
+    const la=L[id];
+    if(!la){ sobran++; continue; }
+    if(mio(id))continue;                       // lo estoy cambiando yo: todavía viaja
+    if(!_mismaPersona(la,Rm[id],null)) otros++;
+    else if(String(la.lot||'')!==String(Rm[id].lot||'')||String(la.flight||'')!==String(Rm[id].flight||'')) lotes++;
+  }
+  for(const id in L){ if(!Rm[id]&&!mio(id)) faltan++; }
+  return {mesa:(local||[]).length, servidor:(remoto||[]).length, sobran, faltan, otros, lotes,
+    total:sobran+faltan+otros+lotes};
+}
+
+function _vigilarRoster(d){
+  if(TX_MODE||!isAdmin||!window.IS_CONTROLLER||!DATA.event)return;
+  if(DATA.phase==='liveView')return;
+  const re=d.event||{}, le=DATA.event||{};
+  if((re.id||re.name)&&String(re.id||'')!==String(le.id||'')&&String(re.name||'')!==String(le.name||''))return;
+  let remoto; try{ remoto=JSON.parse(d.athletes||'[]'); }catch(e){ return; }
+  const dif=_difRoster(DATA.athletes, remoto);
+  window._rosterDif=dif;
+  if(!dif.total){ window._rosterDifDesde=0; _avisoRosterQuitar(); return; }
+  window._ultRosterDoc=d;
+  if(!window._rosterDifDesde){
+    window._rosterDifDesde=Date.now();
+    // Se vuelve a mirar sola, con el último documento que haya llegado: la mesa
+    // puede quedarse un rato sin escribir y el cartel igual tiene que salir.
+    clearTimeout(window._rosterDifT);
+    window._rosterDifT=setTimeout(()=>{ try{ if(window._ultRosterDoc)_vigilarRoster(window._ultRosterDoc); }catch(_){} },6500);
+    return;
+  }
+  if(Date.now()-window._rosterDifDesde<6000)return;   // tiene que durar
+  _avisoRoster(dif);
+}
+
+function _avisoRosterQuitar(){ const el=document.getElementById('rosterDifBanner'); if(el)el.remove(); }
+
+function _avisoRoster(dif){
+  let el=document.getElementById('rosterDifBanner');
+  if(!el){
+    el=document.createElement('div'); el.id='rosterDifBanner';
+    el.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:100001;background:#C41E3A;color:#fff;padding:10px 14px;font-family:Oswald,sans-serif;font-size:14px;letter-spacing:.4px;text-align:center;box-shadow:0 -2px 14px rgba(0,0,0,.5)';
+    document.body.appendChild(el);
+  }
+  const det=[];
+  if(dif.sobran)det.push(dif.sobran+' que esta mesa no tiene');
+  if(dif.faltan)det.push(dif.faltan+' que el público no tiene');
+  if(dif.otros)det.push(dif.otros+' cambiados de persona');
+  if(dif.lotes)det.push(dif.lotes+' con otro lote o tanda');
+  el.innerHTML='EL PÚBLICO NO VE LO MISMO QUE ESTA MESA — público: <b>'+dif.servidor+'</b> atletas, esta mesa: <b>'+dif.mesa+'</b>'
+    +(det.length?' ('+det.join(', ')+')':'')
+    +' <button onclick="publicarEstaMesa()" style="margin-left:10px;padding:5px 16px;border-radius:6px;border:none;background:#fff;color:#C41E3A;font-family:Oswald;font-size:13px;font-weight:700;cursor:pointer">PUBLICAR LO DE ESTA MESA</button>';
+}
+
+// El servidor (y con él el público, las pantallas y OBS) queda EXACTAMENTE con lo
+// de esta mesa: atletas, lotes, tandas, pesos e intentos. Es una escritura
+// autoritativa, como el reinicio o el re-sorteo, pero sin borrar nada de acá.
+function publicarEstaMesa(){
+  if(!isAdmin||!DATA.event){alert('Solo una mesa con sesión de administrador puede publicar.');return;}
+  if(!fbReady){alert('Sin conexión con el servidor. No se publicó nada: revisa internet y vuelve a intentar.');return;}
+  const dif=window._rosterDif||{};
+  const n=(DATA.athletes||[]).length;
+  if(!confirm('PUBLICAR LO DE ESTA MESA\n\n'
+    +'El público, las pantallas de tarima y OBS van a quedar EXACTAMENTE con lo que ves en esta mesa: '
+    +n+' atletas, con sus lotes, tandas, pesos e intentos.'
+    +(dif.servidor!=null?'\n\nHoy el público ve '+dif.servidor+' atletas.':'')
+    +'\n\nHazlo solo desde la mesa que tiene la nómina correcta.'))return;
+  if(!window.IS_CONTROLLER){ try{ setSyncMode(true); }catch(e){ window.IS_CONTROLLER=true; } }
+  window._forceFullWrite=true;
+  window._pendingEdits=new Set();
+  window._rosterDifDesde=0;
+  _avisoRosterQuitar();
+  saveNow();
+  R();
+  _confirmarPublicado(
+    ()=>showToastLC('Publicado: el público ve los '+n+' atletas de esta mesa'),
+    ()=>alert('No se pudo publicar todavía (sin conexión con el servidor). Revisa el indicador SYNC y vuelve a apretar el botón.'));
+}
+window.publicarEstaMesa=publicarEstaMesa;
+
 // ── El semáforo: se ve que está en verde ─────────────────────────────────────
 //
 // Los dos avisos de arriba son carteles que aparecen cuando algo se rompe, y
@@ -796,6 +893,8 @@ function startFBSync(){
       // Firestore la aceptó. Esto dice que ya salió publicada.
       window._pubPendiente=false;
       window._pubUltimo=Date.now();
+      // Lo que quedó en el servidor, ¿es lo mismo que tengo acá?
+      try{ _vigilarRoster(d); }catch(_){}
       return;
     }
     // Si hay un campo enfocado, el operador está escribiendo un peso: NO se
@@ -941,6 +1040,7 @@ function startFBSync(){
       try{
         if(!_viejoLocal&&_mismoEv) _flashReaplicar(d.writer||'',window._fullUlt.t);
       }catch(_){}
+      try{ if(_mismoEv)_vigilarRoster(d); }catch(_){}
       const newSig = _firma();
       const structuralChange = prevSig !== newSig;
       // Solo re-renderizar si hubo cambio estructural (no solo timer) — evita flicker en vista pública
