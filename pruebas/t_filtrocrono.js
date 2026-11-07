@@ -132,6 +132,35 @@ const CRONO = [
     await p2.close();
   }
 
+  console.log('\nEntrando al admin sin el link: el aviso arriba');
+  {
+    const p3 = await ctx.newPage();
+    p3.on('pageerror', e => errs.push('aviso: ' + e.message));
+    const dlg = [];
+    p3.on('dialog', async d => { dlg.push(d.message()); await d.accept(); });
+    await p3.addInitScript(([ev, insc]) => {
+      window.__AUTH = { uid: 'u1', email: 'x@y.cl' };
+      window.__FAKE = { admins: [{ id: 'u1', email: 'x@y.cl', role: 'owner' }], eventos: [ev], inscripciones: insc };
+      window.__ESCRITO = [];
+    }, [EV, INSC]);
+    await p3.goto(`http://localhost:${PUERTO}/admin.html`, { waitUntil: 'domcontentloaded' });
+    const boton = p3.locator('button', { hasText: 'Cargar cronograma oficial y filtrar la nómina' });
+    let visible = false;
+    try { await boton.first().waitFor({ timeout: 20000 }); visible = true; } catch (e) {}
+    ok(visible, 'arriba aparece "Cronograma oficial listo para aplicar" con su botón');
+    const texto = visible ? await p3.locator('.main').first().innerText() : '';
+    ok(/CRONOGRAMA OFICIAL LISTO PARA APLICAR/i.test(texto) && /144 atletas/.test(texto), 'dice de qué campeonato y cuántos atletas');
+    if (visible) await boton.first().click();
+    await p3.waitForFunction(() => (window.__ESCRITO || []).some(w => w.col === 'eventos'), null, { timeout: 30000 }).catch(() => {});
+    const r = await p3.evaluate(() => ({ n: ((window.__ESCRITO.filter(w => w.col === 'cronograma').slice(-1)[0] || {}).d || {}).rows?.length || 0,
+      pub: window.__ESCRITO.some(w => w.col === 'eventos' && w.d.cronogramaPublic === true) }));
+    ok(dlg.length === 2 && r.n === 144 && r.pub, 'el botón hace lo mismo que el link: carga los 144, filtra y publica');
+    // Lo que devuelve el servidor tras el filtrado: con la marca, el aviso se va.
+    await p3.evaluate(() => { window.__ESCRITO.filter(w => w.col === 'inscripciones').forEach(w => { const i = ST.inscripciones.find(x => x.id === w.id); if (i) Object.assign(i, w.d); }); render(); });
+    ok(await boton.count() === 0, 'ya aplicado, el aviso desaparece');
+    await p3.close();
+  }
+
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.slice(0, 2).join(' | ') : ''));
   await b.close();
   console.log(fallas ? `\n${fallas} FALLA(S)` : '\nTodo OK');

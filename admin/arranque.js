@@ -128,6 +128,8 @@ onAuthStateChanged(auth,async(u)=>{window._authFired=true;
       // admin.html?cronoOficial=<campeonato>: carga el cronograma oficial y abre
       // el filtrado de la nómina (admin/cronograma.js).
       if(new URLSearchParams(location.search).get('cronoOficial')) _cronoOficialDesdeLink();
+      // Y los cronogramas oficiales pendientes: se avisan arriba hasta aplicarlos.
+      _cronoPendCargar();
     }
   }catch(e){
     console.error('Auth error',e);

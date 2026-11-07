@@ -275,7 +275,7 @@ function render(){
   else if(ST.view==='mergeResults')content=renderMergeResults();
   else if(ST.view==='athleteProfile')content=renderAthleteProfile();
   
-  app.innerHTML=`<div class="shell"><div class="nav-backdrop" onclick="admNav(false)"></div>${sidebar}${_admTop()}<div class="main">${content}</div></div>`;
+  app.innerHTML=`<div class="shell"><div class="nav-backdrop" onclick="admNav(false)"></div>${sidebar}${_admTop()}<div class="main">${_cronoPendAviso()}${content}</div></div>`;
   if(ST.view==='sponsors'&&!ST._sponsorsLoaded)setTimeout(loadSponsors,0);
   if(ST.view==='portada'&&!ST._portadaLoaded)setTimeout(loadPortada,0);
   if(ST.view==='stats'){
@@ -6326,39 +6326,72 @@ window.cronoDeshacerFiltro=async function(){
   render();
 };
 
-// ── El cronograma oficial, desde un link ────────────────────────────────
-// admin.html?cronoOficial=<id del campeonato> carga cronogramas/<id>.json (el
-// cronograma que entregó la organización, sin correos), lo deja como el
-// Cronograma de ese campeonato y abre el filtrado de la nómina. Cada paso pide
-// confirmación. Sirve para dejarlo listo desde afuera: quien lo abre con su
-// sesión de admin solo acepta.
-async function _cronoOficialDesdeLink(){
-  const id=new URLSearchParams(location.search).get('cronoOficial');
+// ── El cronograma oficial que entregó la organización ───────────────────
+// Queda en el sitio como cronogramas/<id del campeonato>.json (sin correos) y se
+// anota en cronogramas/pendientes.json. Mientras no se aplica, el panel lo avisa
+// arriba en cualquier pestaña (_cronoPendAviso), con el botón que lo carga como
+// el Cronograma del campeonato y abre el filtrado de la nómina. Cada paso pide
+// confirmación. También se llega con admin.html?cronoOficial=<id>.
+window.cronoOficialAplicar=async function(id){
   if(!id||window._cronoOficialEnCurso)return;
   window._cronoOficialEnCurso=true;
-  const espera=ms=>new Promise(r=>setTimeout(r,ms));
-  const evDe=()=>(ST.eventos||[]).find(e=>e.id===id);
-  const hayInsc=()=>{ const ev=evDe(); return !!ev&&(ST.inscripciones||[]).some(i=>i.evento===id||i.evento===ev.name); };
-  for(let k=0;k<160&&!hayInsc();k++) await espera(250);
-  const ev=evDe();
-  if(!ev){ showToast('No encontré el campeonato '+id,null,true); return; }
-  let data=null;
-  try{ data=await (await fetch('cronogramas/'+encodeURIComponent(id)+'.json',{cache:'no-store'})).json(); }catch(e){}
-  if(!data||!Array.isArray(data.filas)||!data.filas.length){ showToast('No pude leer el cronograma oficial de '+ev.name,null,true); return; }
-  ST.view='cronograma'; cronoPickEvent(id);
-  for(let k=0;k<40&&ST.cronoRows===null;k++) await espera(250);
-  const antes=(ST.cronoRows||[]).length;
-  if(!confirm('CRONOGRAMA OFICIAL\n'+ev.name+'\n\n'+(data.fuente||'')+'\n'+data.filas.length+' atletas'
-    +(antes?'\n\nReemplaza al cronograma de '+antes+' que hay ahora.':'')
-    +'\n\nDespués te muestro cómo queda la nómina antes de tocarla.'))return;
-  ST.cronoRows=data.filas.map(r=>({...r,tarima:r.tarima||'1',
-    handler1:{nombre:(r.handler1||{}).nombre||'',correo:''},handler2:{nombre:(r.handler2||{}).nombre||'',correo:''}}));
-  await cronoSaveDoc(); render();
-  await cronoFiltrarNomina();
-  // Que recargar la página no lo vuelva a ofrecer.
-  try{ history.replaceState(null,'',location.pathname); }catch(_){}
+  try{
+    const espera=ms=>new Promise(r=>setTimeout(r,ms));
+    const evDe=()=>(ST.eventos||[]).find(e=>e.id===id);
+    const hayInsc=()=>{ const ev=evDe(); return !!ev&&(ST.inscripciones||[]).some(i=>i.evento===id||i.evento===ev.name); };
+    if(!hayInsc()) showToast('Cargando las inscripciones…');
+    for(let k=0;k<160&&!hayInsc();k++) await espera(250);
+    const ev=evDe();
+    if(!ev){ showToast('No encontré el campeonato '+id,null,true); return; }
+    let data=null;
+    try{ data=await (await fetch('cronogramas/'+encodeURIComponent(id)+'.json',{cache:'no-store'})).json(); }catch(e){}
+    if(!data||!Array.isArray(data.filas)||!data.filas.length){ showToast('No pude leer el cronograma oficial de '+ev.name,null,true); return; }
+    ST.view='cronograma'; cronoPickEvent(id);
+    for(let k=0;k<40&&ST.cronoRows===null;k++) await espera(250);
+    const antes=(ST.cronoRows||[]).length;
+    if(!confirm('CRONOGRAMA OFICIAL\n'+ev.name+'\n\n'+(data.fuente||'')+'\n'+data.filas.length+' atletas'
+      +(antes?'\n\nReemplaza al cronograma de '+antes+' que hay ahora.':'')
+      +'\n\nDespués te muestro cómo queda la nómina antes de tocarla.'))return;
+    ST.cronoRows=data.filas.map(r=>({...r,tarima:r.tarima||'1',
+      handler1:{nombre:(r.handler1||{}).nombre||'',correo:''},handler2:{nombre:(r.handler2||{}).nombre||'',correo:''}}));
+    await cronoSaveDoc(); render();
+    await cronoFiltrarNomina();
+  }finally{
+    window._cronoOficialEnCurso=false;
+    // Que recargar la página no lo vuelva a ofrecer por el link.
+    try{ if(location.search.includes('cronoOficial'))history.replaceState(null,'',location.pathname); }catch(_){}
+    render();
+  }
+};
+
+async function _cronoOficialDesdeLink(){
+  const id=new URLSearchParams(location.search).get('cronoOficial');
+  if(id) await cronoOficialAplicar(id);
 }
 window._cronoOficialDesdeLink=_cronoOficialDesdeLink;
+
+async function _cronoPendCargar(){
+  if(ST._cronoPend!==undefined)return;
+  ST._cronoPend=[];
+  try{ const j=await (await fetch('cronogramas/pendientes.json',{cache:'no-store'})).json(); ST._cronoPend=Array.isArray(j)?j:[]; }catch(e){}
+  render();
+}
+window._cronoPendCargar=_cronoPendCargar;
+
+// Ya se aplicó si alguna inscripción del campeonato tiene la marca del filtrado
+// (y si se deshizo, el aviso vuelve).
+function _cronoPendAviso(){
+  if(window._cronoOficialEnCurso)return '';
+  return (ST._cronoPend||[]).map(p=>{
+    const ev=(ST.eventos||[]).find(e=>e.id===p.evento); if(!ev)return '';
+    if((ST.inscripciones||[]).some(i=>(i.evento===ev.id||i.evento===ev.name)&&i.filtroCrono))return '';
+    return '<div style="margin:0 0 16px;padding:14px 16px;border:2px solid var(--gold,#D4A843);border-radius:12px;background:rgba(212,168,67,.10);display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:space-between">'
+      +'<div style="min-width:220px;flex:1"><div style="font-family:Oswald;font-weight:700;letter-spacing:1px;font-size:14px">CRONOGRAMA OFICIAL LISTO PARA APLICAR</div>'
+      +'<div style="font-size:12px;color:var(--muted);margin-top:3px">'+escapeHtml(ev.name)+(p.filas?' · '+p.filas+' atletas':'')
+      +' — se carga como el Cronograma y la nómina queda con esos atletas (te muestra los cambios antes).</div></div>'
+      +'<button class="btn btn-g" style="padding:10px 18px;font-weight:700" onclick="cronoOficialAplicar(\''+escapeJsAttr(p.evento)+'\')">Cargar cronograma oficial y filtrar la nómina</button></div>';
+  }).join('');
+}
 
 function _xlsxDownload(aoa, sheetName, filename){
   if(typeof XLSX==='undefined'){ showToast('Excel no cargó (revisa internet)',null,true); return; }
@@ -16372,6 +16405,8 @@ onAuthStateChanged(auth,async(u)=>{window._authFired=true;
       // admin.html?cronoOficial=<campeonato>: carga el cronograma oficial y abre
       // el filtrado de la nómina (admin/cronograma.js).
       if(new URLSearchParams(location.search).get('cronoOficial')) _cronoOficialDesdeLink();
+      // Y los cronogramas oficiales pendientes: se avisan arriba hasta aplicarlos.
+      _cronoPendCargar();
     }
   }catch(e){
     console.error('Auth error',e);

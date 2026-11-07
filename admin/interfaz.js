@@ -271,7 +271,7 @@ function render(){
   else if(ST.view==='mergeResults')content=renderMergeResults();
   else if(ST.view==='athleteProfile')content=renderAthleteProfile();
   
-  app.innerHTML=`<div class="shell"><div class="nav-backdrop" onclick="admNav(false)"></div>${sidebar}${_admTop()}<div class="main">${content}</div></div>`;
+  app.innerHTML=`<div class="shell"><div class="nav-backdrop" onclick="admNav(false)"></div>${sidebar}${_admTop()}<div class="main">${_cronoPendAviso()}${content}</div></div>`;
   if(ST.view==='sponsors'&&!ST._sponsorsLoaded)setTimeout(loadSponsors,0);
   if(ST.view==='portada'&&!ST._portadaLoaded)setTimeout(loadPortada,0);
   if(ST.view==='stats'){
