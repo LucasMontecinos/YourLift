@@ -6266,7 +6266,7 @@ window.cronoFiltrarNomina=async function(){
   const msg='FILTRAR LA NÓMINA CON EL CRONOGRAMA\n'+(evName||ST.cronoEv)+' — '+filas.length+' atletas en el cronograma\n'
     +lista('SE APRUEBAN',p.aprobar,x=>'   • '+x.ins.nombre+(x.ins.status==='rejected'?' (estaba rechazado)':''))
     +lista('SE BAJAN: no están en el cronograma',p.bajar,i=>'   • '+i.nombre+' ('+(i.status==='approved'?'aprobado':'pendiente')+')')
-    +lista('SE CORRIGEN con el dato del cronograma',p.corregir,x=>'   • '+x.ins.nombre+': '+x.cambios.map(c=>c.campo+' '+(c.antes||'—')+' → '+c.ahora).join(', '))
+    +lista('SE CORRIGEN con el dato del cronograma (el club, también en la ficha del atleta)',p.corregir,x=>'   • '+x.ins.nombre+': '+x.cambios.map(c=>c.campo+' '+(c.antes||'—')+' → '+c.ahora).join(', '))
     +lista('EN EL CRONOGRAMA SIN INSCRIPCIÓN — no se tocan, revísalos',p.sinInsc,r=>'   • '+r.nombre)
     +(publicar?'\nAdemás se PUBLICA el cronograma: queda visible en cronograma.html.\n':'')
     +'\nLos que se bajan quedan rechazados. Todo se puede deshacer con "Deshacer filtrado".';
@@ -6294,8 +6294,13 @@ window.cronoFiltrarNomina=async function(){
     }
     if(publicar) await updateDoc(doc(db,'eventos',evObj.id),{cronogramaPublic:true});
   }catch(e){ showToast('Error aplicando el filtrado: '+e.message,null,true); return; }
-  // Aprobar es aceptar también el club con que se inscribió (igual que setStatus).
-  for(const x of p.aprobar){ try{ await _clubAlPadron({...x.ins,club:(cambiosPor[x.ins.id].upd.club||x.ins.club)}); }catch(_){} }
+  // El club manda el del cronograma, también en la ficha del atleta: al aprobar
+  // (igual que setStatus) y cuando el cronograma le corrige el club.
+  for(const id of ids){
+    const c=cambiosPor[id];
+    if(c.upd.status!=='approved'&&!c.upd.club)continue;
+    try{ await _clubAlPadron({...c.ins,club:(c.upd.club||c.ins.club)}); }catch(_){}
+  }
   await logAction('filtro_cronograma',ST.cronoEv,null,
     `aprobados ${p.aprobar.length} · bajados ${p.bajar.length} · corregidos ${p.corregir.length}`+(publicar?' · cronograma publicado':''),{evento:ST.cronoEv});
   showToast(`Nómina filtrada: ${p.aprobar.length} aprobados · ${p.bajar.length} bajados · ${p.corregir.length} corregidos`+(publicar?' · cronograma publicado':''));
