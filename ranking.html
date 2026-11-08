@@ -413,6 +413,19 @@ function applyEdit(o){
   if(ed.club!==undefined&&ed.club!=='')o.t=ed.club;  // 't' para club
   return o;
 }
+// ¿Cuándo se publicaron resultados por última vez? Lo escribe el livecast al
+// cerrar una competencia (y el panel al corregir uno) en publico/resultados_version.
+// Es una lectura chica por HTTP, sin SDK. Devuelve la hora, 0 si no hay marca, o
+// null si no se pudo saber (sin red, o tardó más de 2,5 s): en ese caso se sigue
+// con la copia, como antes.
+function _ylVersionResultados(){
+  var url='https://firestore.googleapis.com/v1/projects/fechipo-db-13148/databases/(default)/documents/publico/resultados_version?key=AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4';
+  var tarde=new Promise(function(res){setTimeout(function(){res(null);},2500);});
+  var pide=fetch(url,{cache:'no-store'}).then(function(r){return r.status===404?{}:(r.ok?r.json():null);})
+    .then(function(j){if(!j)return null;var f=j.fields&&j.fields.ts;return f?+(f.integerValue||f.doubleValue||0):0;})
+    .catch(function(){return null;});
+  return Promise.race([pide,tarde]);
+}
 (async function loadFirestoreRanking(){
   try{
     var fbApp = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
@@ -526,8 +539,13 @@ function applyEdit(o){
     // window._rkResultados: 'ok' cuando ya están puestos los resultados de
     // competition_results. El panel lo espera para exportar el ranking a Excel:
     // los de data.json llegan antes y no alcanzan.
-    var _crOk=false;
-    try{var _cc=localStorage.getItem('_rkCR2');if(_cc){var _co=JSON.parse(_cc);if(Date.now()-_co.ts<1800000){_applyCompRes(_co.d);_crOk=true;window._rkResultados='ok';}}}catch(e){}
+    // La copia se descarta si se publicaron resultados DESPUÉS de guardarla
+    // (publico/resultados_version, ver _ylVersionResultados). La llave cambió a
+    // _rkCR3 para que las copias viejas —una quedó con el Regional Sur Austral a
+    // medio publicar— no se usen ni una vez más.
+    var _crOk=false, _crTs=0;
+    try{localStorage.removeItem('_rkCR2');}catch(e){}
+    try{var _cc=localStorage.getItem('_rkCR3');if(_cc){var _co=JSON.parse(_cc);if(Date.now()-_co.ts<1800000){_applyCompRes(_co.d);_crOk=true;_crTs=_co.ts;window._rkResultados='ok';}}}catch(e){}
     // El ciclo del ranking. Es un solo documento y se lee siempre fresco: si el
     // Nacional acaba de cerrarse, el corte tiene que verse enseguida.
     fb.getDoc(fb.doc(db,'ranking_config','ciclo')).then(function(s){
@@ -554,7 +572,9 @@ function applyEdit(o){
       });
       if(docs.length)_applyCompRes(docs);
     }).catch(function(e){console.warn('data.json',e);});
-    if(!_crOk){fb.getDocs(fb.collection(db,'competition_results')).then(function(s){var a=s.docs.map(function(d){var x=d.data();x.id=d.id;return x;});try{localStorage.setItem('_rkCR2',JSON.stringify({ts:Date.now(),d:a}));}catch(e){}_applyCompRes(a);window._rkResultados='ok';}).catch(function(e){window._rkResultados='error';console.warn('compres',e);});}
+    function _bajarCR(){fb.getDocs(fb.collection(db,'competition_results')).then(function(s){var a=s.docs.map(function(d){var x=d.data();x.id=d.id;return x;});try{localStorage.setItem('_rkCR3',JSON.stringify({ts:Date.now(),d:a}));}catch(e){}_applyCompRes(a);window._rkResultados='ok';}).catch(function(e){if(!_crOk)window._rkResultados='error';console.warn('compres',e);});}
+    if(!_crOk)_bajarCR();
+    else _ylVersionResultados().then(function(v){ if(v&&v>_crTs)_bajarCR(); });
   }catch(e){console.warn('Firestore ranking load failed',e)}
 })();
 

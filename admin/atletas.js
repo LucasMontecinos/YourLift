@@ -547,15 +547,20 @@ window.saveCompResult=async function(){
       resultado:{sq,bp,dl,total,bw,pesoCorporal:bw,glp,dots,status:dq?'DQ':'OK',intentos:{sq:att('sq'),bp:att('bp'),dl:att('dl')}},
       source:'manual', addedBy:(ST.user?.uid||'admin'), updatedAt:serverTimestamp()
     },{merge:true});
+    await _resVersion();
     await logAction('add_comp_result',docId,null,evento+' · '+(dq?'DQ ('+liftedTotal+'kg levantados)':total+'kg')+(dq?'':' · GL '+glp),{nombre});
     showToast(dq?('Competencia guardada: '+nombre+' · DQ'):('Competencia guardada: '+nombre+' · '+total+'kg'));
     closeCompModal();
   }catch(e){showToast('Error: '+e.message,null,true);}
 };
 
+// Marca de versión de competition_results (ver livecast/cierre.js): el ranking y
+// el perfil descartan la copia guardada en el navegador si es anterior a esto.
+async function _resVersion(){ try{ await setDoc(doc(db,'publico','resultados_version'),{ts:Date.now()},{merge:true}); }catch(e){ console.warn('[resultados] versión',e); } }
+
 window.deleteCompResult=async function(id){
   if(!confirm('¿Eliminar esta competencia del atleta?\n(Quita solo lo agregado en vivo, no afecta data.json)'))return;
-  try{ await deleteDoc(doc(db,'competition_results',id)); await logAction('delete_comp_result',id,null,'deleted'); showToast('Competencia eliminada'); }
+  try{ await deleteDoc(doc(db,'competition_results',id)); await _resVersion(); await logAction('delete_comp_result',id,null,'deleted'); showToast('Competencia eliminada'); }
   catch(e){showToast('Error: '+e.message,null,true);}
 };
 
@@ -573,6 +578,7 @@ window.setCompCampo=async function(id,campo,val){
   const v=String(val||'').trim();
   try{
     await updateDoc(doc(db,'competition_results',id), {[campo]:v, updatedAt:serverTimestamp()});
+    await _resVersion();
     await logAction('set_comp_'+campo,id,null,campo+'='+v);
     showToast((campo==='categoria'?'Categoría':'División')+' corregida: '+(v||'(vacía)'));
   }catch(e){showToast('Error: '+e.message,null,true);}
@@ -583,6 +589,7 @@ window.setCompPos=async function(id,val){
   const p=parseInt(val,10);
   try{
     await updateDoc(doc(db,'competition_results',id), {posicion: (p>0? p : deleteField()), updatedAt:serverTimestamp()});
+    await _resVersion();
     await logAction('set_comp_pos',id,null,'pos='+(p>0?p:'(auto)'));
     showToast(p>0?('Posición fijada: '+p+'°'):'Posición vuelta a automática');
   }catch(e){showToast('Error: '+e.message,null,true);}

@@ -309,6 +309,18 @@ function _dbLista(){ window._DB_LISTA=true; while(_pendientesDB.length){ try{ _p
 // ── Cache helpers ─────────────────────────────────────────
 function _aC(k,ttl){try{const v=localStorage.getItem('_yfc_'+k);if(!v)return null;const o=JSON.parse(v);if(Date.now()-o.ts<ttl)return o.d;}catch(e){}return null;}
 function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.now(),d}));}catch(e){}}
+// Cuándo se guardó la copia (0 si no hay).
+function _aCts(k){try{const v=localStorage.getItem('_yfc_'+k);return v?(JSON.parse(v).ts||0):0;}catch(e){return 0;}}
+// ¿Cuándo se publicaron resultados por última vez? Ver ranking.html: es la misma
+// marca (publico/resultados_version), una lectura chica por HTTP. null = no se supo.
+function _ylVersionResultados(){
+  const url='https://firestore.googleapis.com/v1/projects/fechipo-db-13148/databases/(default)/documents/publico/resultados_version?key=AIzaSyA21IHMus2bklPLJm7ExRrVJJL9bzLhyp4';
+  const tarde=new Promise(res=>setTimeout(()=>res(null),2500));
+  const pide=fetch(url,{cache:'no-store'}).then(r=>r.status===404?{}:(r.ok?r.json():null))
+    .then(j=>{if(!j)return null;const f=j.fields&&j.fields.ts;return f?+(f.integerValue||f.doubleValue||0):0;})
+    .catch(()=>null);
+  return Promise.race([pide,tarde]);
+}
 
 // ── Firebase ─────────────────────────────────────────────
 (async()=>{
@@ -427,7 +439,10 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
       PEERS=_peersBuild(DB);
       if(window._curCodigo)showProfile(window._curCodigo);
     };
-    const cr=_aC('atl_res',10*60*1000);
+    // Llave nueva (atl_res2): las copias viejas no se usan más. Y si hubo un cierre
+    // después de guardar la copia, se vuelve a leer (ver _ylVersionResultados).
+    try{localStorage.removeItem('_yfc_atl_res');}catch(e){}
+    const cr=_aC('atl_res2',10*60*1000);
     // Resultados de un evento de prueba (ensayo): no son de verdad y no se muestran.
     const _real=docs=>(docs||[]).filter(x=>!(x&&(/ensayo/i.test(String(x.evento_id||''))||/ensayo/i.test(String(x.id||''))||/^\s*ensayo\b/i.test(String(x.evento||'')))));
     // Récords: la tabla vigente es records/data de Firestore —la que actualiza el
@@ -436,8 +451,13 @@ function _aSC(k,d){try{localStorage.setItem('_yfc_'+k,JSON.stringify({ts:Date.no
     // aparecían en la ficha aunque ya estuvieran guardados.
     fb.getDoc(fb.doc(db,'records','data')).then(s=>{const r=s.exists()?s.data():null;
       if(r&&(r.classic||r.equipped)){window.RECORDS=r;if(window._curCodigo)showProfile(window._curCodigo);}}).catch(()=>{});
-    if(cr){_conDB(()=>_applyResults(_real(cr)));}
-    else{fb.getDocs(fb.collection(db,'competition_results')).then(snap=>{const docs=_real(snap.docs.map(d=>({...d.data(),id:d.id})));_aSC('atl_res',docs);_conDB(()=>_applyResults(docs));});}
+    const _bajarRes=()=>fb.getDocs(fb.collection(db,'competition_results')).then(snap=>{const docs=_real(snap.docs.map(d=>({...d.data(),id:d.id})));_aSC('atl_res2',docs);_conDB(()=>_applyResults(docs));});
+    if(cr){
+      const tsCopia=_aCts('atl_res2');
+      _conDB(()=>_applyResults(_real(cr)));
+      _ylVersionResultados().then(v=>{ if(v&&v>tsCopia)_bajarRes(); });
+    }
+    else{_bajarRes();}
 
     // Overrides de posición para competencias históricas (data.json): getDocs + caché 1h
     const _applyPos=docs=>{window._HIST_POS={};docs.forEach(v=>{if(v.codigo&&v.evento)window._HIST_POS[v.codigo+'__'+v.evento]=v;});if(window._curCodigo)showProfile(window._curCodigo);};

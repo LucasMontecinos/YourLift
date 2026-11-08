@@ -77,7 +77,7 @@ const R_BENCH = { ...BASE, id: 'r2', view: 'bench', modalidad: 'Only Bench Class
     const ctx = await b.newContext({ viewport: { width: 900, height: 1400 }, serviceWorkers: 'block' });
     abiertos.push(ctx);
     await ctx.addInitScript(rs => {
-      localStorage.setItem('_yfc_atl_res', JSON.stringify({ ts: Date.now(), d: rs }));
+      localStorage.setItem('_yfc_atl_res2', JSON.stringify({ ts: Date.now(), d: rs }));
     }, resultados);
     const p = await ctx.newPage();
     await p.route('**/firebasejs/**', route =>

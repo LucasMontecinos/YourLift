@@ -189,6 +189,15 @@ async function cerrarCompetencia(evId, evName){
     }
   }
 
+  // Marca de versión: el ranking y el perfil guardan en el navegador lo que leen
+  // de competition_results (30 y 10 minutos). Quien abrió la página MIENTRAS se
+  // publicaba se quedaba con la mitad de los resultados hasta que la copia
+  // vencía — así faltó Vicente González Vivanco, de los últimos en subir, en el
+  // Regional Sur Austral. Con esta marca, la copia anterior al cierre se descarta.
+  if(written>0){
+    try{ await fb.setDoc(fb.doc(fbDB,'publico','resultados_version'),{ts:Date.now(),evento:evId}); }
+    catch(e){ console.warn('[cerrar] versión de resultados',e); }
+  }
   if(errors===0){
     showToastLC(`Competencia cerrada: ${written} resultados publicados`);
     alert(`Competencia "${evName}" cerrada.\n\n${written} resultados publicados.\n\nYa son visibles en yourlift.cl/atleta y en el ranking.`);

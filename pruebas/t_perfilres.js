@@ -51,7 +51,7 @@ export function where(){return{};}
     // sin ella compartido/privacidad.js las borra todas una vez.)
     await ctx.addInitScript(r => {
       localStorage.setItem('_yfc_v', '2');
-      localStorage.setItem('_yfc_atl_res', JSON.stringify({ ts: Date.now(), d: [r] }));
+      localStorage.setItem('_yfc_atl_res2', JSON.stringify({ ts: Date.now(), d: [r] }));
     }, RESULTADO);
     const p = await ctx.newPage();
     await p.route('**/firebasejs/**', route =>
@@ -94,7 +94,7 @@ export function where(){return{};}
   console.log('\nLa cola espera a data.json y se suelta una sola vez');
   ok(/window\._DB_LISTA=false;/.test(src), 'arranca marcada como no lista');
   // (_real() saca los resultados de los ensayos antes de pintarlos)
-  ok(/if\(cr\)\{_conDB\(\(\)=>_applyResults\((?:_real\(cr\)|cr)\)\);\}/.test(src), 'los resultados se encolan');
+  ok(/if\(cr\)\{[\s\S]{0,80}_conDB\(\(\)=>_applyResults\((?:_real\(cr\)|cr)\)\);/.test(src), 'los resultados se encolan');
   ok(/_conDB\(\(\)=>_applyFotos/.test(src), 'las fotos también');
   ok(/_conDB\(\(\)=>_applyAch/.test(src), 'los logros también');
   ok(/_conDB\(\(\)=>_applyPos/.test(src), 'y las posiciones');
