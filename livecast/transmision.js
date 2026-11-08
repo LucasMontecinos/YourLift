@@ -1691,10 +1691,11 @@ function renderScreenLuces(a){
   const p=v=>Math.max(1,Math.round(v*s))+'px';
   const orden=['izq','central','der'];
   const vs=orden.map(j=>_txLights[j]);
-  // El punto de la tarjeta (por qué fue nulo) va debajo de cada luz; la fila
-  // solo aparece si hay algún nulo.
-  const hayTarjeta=vs.some(v=>!!_luzEstilo(v).chip);
-  let luces='<div style="display:flex;gap:'+p(90)+';justify-content:center;align-items:flex-start;margin:'+p(70)+' 0 '+p(hayTarjeta?36:60)+'">';
+  // El punto de la tarjeta (por qué fue nulo) va debajo de cada luz.
+  // Es un bloque que se mueve y se agranda (ver más abajo): sin márgenes, y con
+  // la fila de los puntos siempre puesta —vacía si no hay nulo— para que las
+  // luces no salten de lugar cuando aparece una tarjeta.
+  let luces='<div style="display:flex;gap:'+p(90)+';justify-content:center;align-items:flex-start">';
   orden.forEach((j,i)=>{
     const v=_txLights[j];
     const e=_luzEstilo(v);
@@ -1705,7 +1706,7 @@ function renderScreenLuces(a){
     const anima=_lzEnciende('pant',j,v||null)&&e.on;
     luces+='<div data-luz="'+j+'" style="width:'+p(300)+';height:'+p(300)+';border-radius:50%;background:'+bg+';box-shadow:'+sh+';'
       +(anima?'animation:txLightOn .35s cubic-bezier(.2,.9,.2,1) backwards':'')+'"></div>';
-    if(hayTarjeta)luces+='<div style="width:'+p(56)+';height:'+p(56)+';border-radius:50%;'
+    luces+='<div style="width:'+p(56)+';height:'+p(56)+';border-radius:50%;'
       +(e.chip?'background:'+e.chip+';box-shadow:0 0 '+p(24)+' '+e.chip:'background:transparent')+'"></div>';
     luces+='</div>';
   });
@@ -1757,9 +1758,19 @@ function renderScreenLuces(a){
       +'<span style="'+pillT(okJ)+'">'+(okJ?'VÁLIDO':'NULO')+'</span>'
       +(tres?'<div style="font-size:'+p(30)+';letter-spacing:.14em;color:#9a9aa0;margin-top:'+p(14)+'">LOS JUECES DIERON '+(okJueces?'VÁLIDO':'NULO')+'</div>':'');
   }
-  return '<div style="position:absolute;top:0;right:0;bottom:0;left:0;background:#000;overflow:hidden;font-family:Oswald,sans-serif;color:#fff">'
+  // El atleta, las luces y la decisión son bloques del mismo editor de las otras
+  // pantallas de tarima: click para elegir, arrastrar para mover, la manija de
+  // la esquina para el tamaño. Se guarda en esta pantalla (cada televisor el suyo).
+  const B=(typeof _piBlock==='function')?_piBlock:((k,h)=>h);
+  const centrado=h=>'<div style="text-align:center;white-space:nowrap">'+h+'</div>';
+  return '<div class="pi-canvas" style="position:absolute;top:0;right:0;bottom:0;left:0;background:#000;overflow:hidden;font-family:Oswald,sans-serif;color:#fff">'
     +franja
-    +'<div style="position:absolute;left:0;right:0;top:'+p(100)+';padding-top:'+p(110)+';text-align:center">'+cab+luces+ver+'</div>'
+    +(cab?B('lCab',centrado(cab)):'')
+    +B('lLuces',luces)
+    +(ver?B('lVer',centrado(ver)):'')
+    +'<button onclick="lucesResetLayout()" style="position:absolute;right:10px;bottom:8px;z-index:9;width:26px;height:26px;border-radius:50%;'
+    +'border:1px solid rgba(212,225,245,.15);background:rgba(10,22,40,.15);color:rgba(255,255,255,.2);'
+    +'font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center">⟲</button>'
     +'</div>';
 }
 

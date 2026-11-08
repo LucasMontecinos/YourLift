@@ -370,7 +370,7 @@ function _renderTxAtletaEnBarra(c,st){
     const nxt=_piQ[1]||null;
     document.body.classList.add('tx-opaque');
     c.innerHTML=(cur?renderScreenIntentos(cur,nxt):'<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;color:rgba(220,230,245,.5);font-family:Oswald;font-size:22px">Sin atleta en tarima</div>')
-      +(_lucesEnTarima()?renderLucesTarima():'')+_descCapaHtml();
+      +_descCapaHtml();
     return;
   }
 }
@@ -651,7 +651,7 @@ function renderScreenBarra(a){
       font-size:clamp(14px,2.2vw,32px);font-weight:700;letter-spacing:.22em;color:#D4A843;
       animation:barraParpadeo 1.05s ease-in-out infinite" class="barra-rec">${etiqRec}</span>`):''}
 
-    ${DATA.relojVisible?`<div id="pantBarraTimer" style="position:fixed;top:2.6vh;left:50%;transform:translateX(-50%);font-size:clamp(34px,6.2vw,96px);font-weight:800;letter-spacing:.04em;line-height:1;color:${_relojColor()};font-variant-numeric:tabular-nums;text-shadow:0 3px 14px rgba(0,0,0,.6)">${_relojTxt()}</div>`:''}
+    ${DATA.relojVisible?B('bReloj',`<div id="pantBarraTimer" style="font-size:clamp(34px,6.2vw,96px);font-weight:800;letter-spacing:.04em;line-height:1;white-space:nowrap;color:${_relojColor()};font-variant-numeric:tabular-nums;text-shadow:0 3px 14px rgba(0,0,0,.6)">${_relojTxt()}</div>`):''}
 
     ${_cambiosIntentoActual(a)?B('bCambio',_cartelCambioHtml('clamp(16px,2.4vw,38px)')):''}
 
@@ -1191,7 +1191,7 @@ function renderScreenIntentos(cur,nxt){
   return `<div class="pi-canvas" style="position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden${_fondoPant?';background:'+_fondoPant:''}" id="pantIntentosBox">
     ${franjas}
     ${compHtml}
-    ${(piSet.showTimer===true||DATA.relojVisible)?`<div id="pantIntentosTimer" style="position:fixed;top:36px;right:48px;font-family:Oswald,sans-serif;font-size:64px;font-weight:900;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`:''}
+    ${(piSet.showTimer===true||DATA.relojVisible)?_piBlock('reloj',`<div id="pantIntentosTimer" style="font-family:Oswald,sans-serif;font-size:64px;font-weight:900;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`):''}
     ${_piBlock('liftLabel',liftLabelHtml,true)}
     ${recordHtml?_piBlock('record',recordHtml,true):''}
     ${_cambiosIntentoActual(cur)?_piBlock('cambio',_cartelCambioHtml('30px')):''}
@@ -1202,6 +1202,7 @@ function renderScreenIntentos(cur,nxt){
     ${_piBlock('subtitle',subtitleHtml,true)}
     ${positionHtml?_piBlock('position',positionHtml,true):''}
     ${nextHtml?_piBlock('next',nextHtml):''}
+    ${_lucesEnTarima()?_piBlock('luces',renderLucesTarima(true)):''}
     ${_logosPantallaSubidos().length
       ? _logosPantallaSubidos().map((u,i)=>_piLogoBloque('logoN'+i,u,'6.4vh','13vw')).join('')
       : _piLogoBloque('logoFed',_logoFed(),'6.4vh','12vw')+_piLogoBloque('logoCamp',_logoCamp(),'6.4vh','15vw')}
@@ -1359,7 +1360,13 @@ window.piResetLayout=function(){
   if(!confirm('¿Restablecer las posiciones y tamaños de la Pantalla de Intentos a los valores por defecto?'))return;
   // Las de "Atleta en barra" son las que empiezan con b y mayúscula (bSigla,
   // bPeso…). 'barbell' es de esta pantalla, por eso se pide la mayúscula.
-  _piResetClaves(k=>!/^b[A-Z]/.test(k));
+  // Las de la pantalla de Luces empiezan con l y mayúscula (lCab, lLuces…).
+  _piResetClaves(k=>!/^[bl][A-Z]/.test(k));
+};
+
+window.lucesResetLayout=function(){
+  if(!confirm('¿Volver a dejar la pantalla de Luces como venía de fábrica?\nSe pierden las posiciones y tamaños que acomodaste en esta pantalla.'))return;
+  _piResetClaves(k=>/^l[A-Z]/.test(k));
 };
 
 window.barraResetLayout=function(){

@@ -1273,7 +1273,20 @@ const PI_DEFAULT_LAYOUT={
   bDatos:{x:50,y:75,scale:100},       // -63 kg · JR · Classic
   bLogo:{x:90,y:75,scale:100},        // logo del campeonato
   bLogoFed:{x:90,y:62,scale:100},     // logo de la federación (la franja de abajo lleva los intentos)
-  bLuces:{x:50,y:80,scale:100}        // las luces de los jueces, sobre la franja de intentos
+  bLuces:{x:50,y:80,scale:100},       // las luces de los jueces, sobre la franja de intentos
+  // Las luces en la Pantalla de Intentos: arrancan donde estaban fijas (abajo al
+  // centro, sobre la franja), y de ahí se arrastran o se agrandan como el resto.
+  luces:{x:50,y:89,scale:100},
+  // El reloj del intento: arriba a la derecha en Intentos y arriba al centro en
+  // "Atleta en barra", donde estaba fijo. También se mueve y se agranda.
+  reloj:{x:93,y:8,scale:100},
+  bReloj:{x:50,y:9,scale:100},
+  // La pantalla de LUCES (las tres grandes). Llevan l adelante, como las de
+  // "Atleta en barra" llevan b: el atleta arriba, las luces y el VÁLIDO/NULO.
+  // De fábrica quedan donde estaban antes de que se pudieran mover.
+  lCab:{x:50,y:27,scale:100},
+  lLuces:{x:50,y:59,scale:100},
+  lVer:{x:50,y:88,scale:100}
 };
 // Cada logo subido es un bloque suyo: bLogoN0, bLogoN1… en "atleta en barra" y
 // logoN0, logoN1… en la pantalla de intentos. Como son tantos como logos haya,
