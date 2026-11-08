@@ -4,13 +4,21 @@
 // que se arma juntando estas fuentes (node herramientas/armar_panel.js).
 // Solo define funciones; lo que corre al abrir el panel está en arranque.js.
 
-// Un campeonato es "pasado" si está archivado o si su fecha ya quedó atrás.
+// Un campeonato entra a "Competencias pasadas" si está archivado o si su fecha
+// es de hoy o de antes. El de HOY también: el acta se baja del livecast apenas
+// termina la última tanda y se quiere subir ese mismo día. Antes había que
+// esperar al día siguiente, y el Regional Sur Austral no aparecía para subirla.
+// (Subirla no la publica: eso es "Visible en yourlift.cl", aparte.)
+// La fecha de hoy es la de acá (Chile), no la de Greenwich: con toISOString, de
+// noche ya era "mañana" y de mañana todavía "ayer".
 function cpEsPasado(e){
   if(!e)return false;
   if(e.status==='archived')return true;
   const f=String(e.date||e.fecha||'').slice(0,10);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return false;
-  return f < new Date().toISOString().slice(0,10);
+  const d=new Date(), dd=n=>String(n).padStart(2,'0');
+  const hoy=d.getFullYear()+'-'+dd(d.getMonth()+1)+'-'+dd(d.getDate());
+  return f <= hoy;
 }
 
 function cpPasados(){

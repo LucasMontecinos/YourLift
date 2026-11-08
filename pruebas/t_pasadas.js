@@ -82,9 +82,10 @@ const FICHAS = [
     const i = src.indexOf('function cpEsPasado(');
     const fin = src.indexOf('function cpPasados(', i);
     eval(src.slice(i, fin));
-    const hoy = new Date().toISOString().slice(0, 10);
-    const ayer = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
-    const manana = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+    const dia = t => { const d = new Date(t), dd = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + dd(d.getMonth() + 1) + '-' + dd(d.getDate()); };
+    const hoy = dia(Date.now());
+    const ayer = dia(Date.now() - 864e5);
+    const manana = dia(Date.now() + 864e5);
     return {
       archivado: cpEsPasado({ status: 'archived', date: manana }),
       ayer: cpEsPasado({ status: 'open', date: ayer }),
@@ -95,7 +96,7 @@ const FICHAS = [
   }, adm);
   ok(cp.archivado === true, 'un campeonato archivado cuenta como pasado');
   ok(cp.ayer === true, 'uno con fecha de ayer también');
-  ok(cp.hoy === false, 'el de hoy todavía no (puede estar corriendo)');
+  ok(cp.hoy === true, 'el de hoy también: el acta se sube el mismo día que termina');
   ok(cp.manana === false, 'ni el de mañana');
   ok(cp.sinFecha === false, 'sin fecha ni estado, no se asume nada');
 
