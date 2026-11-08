@@ -772,12 +772,18 @@ function _piLogoBloque(key,url,maxAlto,maxAncho){
 // `izq`: el bloque crece hacia la derecha desde su borde izquierdo en vez de
 // hacia los dos lados. Lo usa el nombre del club en "Atleta en barra": centrado
 // en el 10 % de la pantalla, un nombre largo se salía por la izquierda.
+// `izq`='der': al revés, crece hacia la izquierda desde su borde derecho (la
+// barra de Intentos: la punta de la manga queda fija y los discos que se suman
+// crecen hacia adentro).
 function _piBlock(key,innerHtml,izq){
   const pos=_piPos(key);
   const selected=window._piSelected===key;
+  const der=izq==='der'; if(der)izq=false;
+  // El elegido va encima de los demás: si quedaba debajo de otro bloque, su
+  // manija para el tamaño no se podía agarrar.
   const left=izq?Math.max(0,pos.x-5):pos.x;
-  let h='<div class="pi-block" data-pi-key="'+key+'" style="position:absolute;left:'+left+'%;top:'+pos.y+'%;transform:translate('+(izq?'0':'-50%')+',-50%);padding:10px;border-radius:8px;'+(selected?'outline:2px dashed #D4A843;background:rgba(212,168,67,.08);':'')+'cursor:'+(selected?'move':'pointer')+'">';
-  h+='<div class="pi-inner" style="transform:scale('+((pos.scale||100)/100)+');transform-origin:'+(izq?'left':'center')+' center">'+innerHtml+'</div>';
+  let h='<div class="pi-block" data-pi-key="'+key+'"'+(izq?' data-anc="izq"':'')+' style="position:absolute;left:'+left+'%;top:'+pos.y+'%;transform:translate('+(izq?'0':(der?'-100%':'-50%'))+',-50%);padding:10px;border-radius:8px;'+(selected?'outline:2px dashed #D4A843;background:rgba(212,168,67,.08);z-index:30;':'')+'cursor:'+(selected?'move':'pointer')+'">';
+  h+='<div class="pi-inner" style="transform:scale('+((pos.scale||100)/100)+');transform-origin:'+(izq?'left':(der?'right':'center'))+' center">'+innerHtml+'</div>';
   if(selected){
     h+='<div class="pi-resize" data-pi-key="'+key+'" title="Arrastra para agrandar o achicar" style="position:absolute;right:-15px;bottom:-15px;width:26px;height:26px;background:#D4A843;border:3px solid #0A1628;border-radius:50%;cursor:nwse-resize;box-shadow:0 2px 8px rgba(0,0,0,.5)"></div>';
   }
@@ -1069,7 +1075,7 @@ function renderScreenIntentos(cur,nxt){
   s[_mangaIdx]=`<rect x="${_mangaX}" y="${cy-sleeveThick/2}" width="${x+puntaW-_mangaX}" height="${sleeveThick}" fill="#8A8A93" rx="4"/>`;
   x+=puntaW;
   const VW=x+20;
-  const bbSvg=`<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" style="height:${Math.round(VH*0.85)}px;width:auto;max-width:none;display:block">${s.join('')}</svg>`;
+  const bbSvg=`<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" style="height:34.6vh;width:auto;max-width:none;display:block">${s.join('')}</svg>`;
   // Pronóstico de posición (idéntico criterio al del widget de OBS)
   const peers=DATA.athletes.filter(a=>a.sex===cur.sex&&a.cat===cur.cat&&a.div===cur.div&&a.mod===cur.mod);
   const curGL=calcGL(totalOf(cur),cur.bw,cur.sex,_glMod(cur));
@@ -1135,15 +1141,11 @@ function renderScreenIntentos(cur,nxt){
   const subtitleHtml=`<div style="font-family:Oswald;font-size:2.2vh;letter-spacing:.14em;color:#fff;white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div,_modTarima(cur)].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
   // En blanco, como todo en esta pantalla (se pidió así para leerla de lejos).
   const positionHtml=posTxt?`<div style="font-family:Oswald;font-size:2.6vh;letter-spacing:.04em;color:#fff;white-space:nowrap">${posTxt}</div>`:'';
-  // La barra con el rack arriba a la derecha y, abajo, la carga por lado.
-  const _grupos=[];plates.forEach(k=>{const g=_grupos[_grupos.length-1];if(g&&g.k===k)g.n++;else _grupos.push({k,n:1});});
-  const _n=v=>{const r=Math.round(v*100)/100;return String(r);};
-  const _porLado=_grupos.length?_grupos.map(g=>(g.n>1?g.n+' × ':'')+_n(g.k)).join(' + '):'sin discos';
-  const bbHtml=`<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2vh;font-family:Oswald,sans-serif;color:#fff">
-      ${rackH?`<div style="border:2px solid #3A3A3F;border-radius:10px;padding:.6vh 1.8vh;text-align:center"><div style="font-size:1.7vh;letter-spacing:.16em">RACK</div><div style="font-size:5.4vh;font-weight:600;line-height:1">${rackH}</div></div>`:''}
-      ${bbSvg}
-      <div style="font-size:2.6vh;letter-spacing:.03em;white-space:nowrap">Por lado: <b>${_porLado}</b> · collar ${_n(collarsKg/2)} = <b>${_n(sideKg+collarsKg/2)}</b></div>
-    </div>`;
+  // Dos bloques, el rack y la barra, para que cada uno se acomode por separado.
+  // La línea "Por lado: 4 × 25 + 10 … collar 2.5 = 115" se sacó: la mesa pidió
+  // dejar solo el dibujo de la barra.
+  const rackHtml=rackH?`<div style="border:2px solid #3A3A3F;border-radius:10px;padding:.6vh 1.8vh;text-align:center;font-family:Oswald,sans-serif;color:#fff"><div style="font-size:1.7vh;letter-spacing:.16em">RACK</div><div style="font-size:5.4vh;font-weight:600;line-height:1">${rackH}</div></div>`:'';
+  const bbHtml=bbSvg;
   // Quién viene después — para que los cargadores/spotters se vayan preparando.
   // Si el actual es el último de su ronda, el de al lado NO es null: se sigue
   // buscando en la ronda siguiente y después en las otras tandas. Antes el cartel
@@ -1171,7 +1173,7 @@ function renderScreenIntentos(cur,nxt){
   // Tiempo compensatorio (4º "se sigue a sí mismo") — se ve arriba a la izquierda
   // en la pantalla de tarima. Solo informativo.
   const _ci=(typeof _compInfo==='function')?_compInfo():null;
-  const compHtml=_ci?`<div style="position:fixed;top:36px;left:48px;font-family:Oswald,sans-serif;color:#60a5fa;text-shadow:0 4px 20px rgba(0,0,0,.7)">
+  const compHtml=_ci?`<div style="font-family:Oswald,sans-serif;color:#60a5fa;text-shadow:0 4px 20px rgba(0,0,0,.7);white-space:nowrap">
       <div style="font-size:16px;letter-spacing:3px;opacity:.8">TIEMPO COMPENSATORIO</div>
       <div id="compTimerPant" style="font-size:56px;font-weight:900;color:${_ci.neg?'#ef4444':'#60a5fa'};line-height:1">${_ci.mmss}</div>
     </div>`:'';
@@ -1184,20 +1186,25 @@ function renderScreenIntentos(cur,nxt){
   // La franja de arriba y la de abajo de la vista previa. Son fondo: no se
   // mueven ni se eligen, los bloques van encima.
   const _tar=(DATA.event&&(DATA.event.tarima||DATA.event.plataforma))||'';
-  const franjas=`<div style="position:absolute;left:0;right:0;top:0;height:9vh;background:#0b0b0c;border-bottom:1px solid #1f1f22;display:flex;align-items:center;gap:2.6vh;padding:0 3.4vw;font-family:Oswald,sans-serif;color:#fff;pointer-events:none">
-      <b style="font-size:3.4vh;font-weight:600;letter-spacing:.08em">INTENTOS · CARGA DE BARRA</b>
-      <span style="font-size:2vh;letter-spacing:.14em">${['TANDA '+(DATA.flight||''),_tar?'TARIMA '+_tar:''].filter(Boolean).join(' · ')}</span></div>
+  // El título y la tanda son bloques como el resto (se mueven y se agrandan);
+  // las dos franjas oscuras quedan de fondo.
+  const tituloHtml=`<b style="font-family:Oswald,sans-serif;color:#fff;font-size:3.4vh;font-weight:600;letter-spacing:.08em;white-space:nowrap">INTENTOS · CARGA DE BARRA</b>`;
+  const tandaHtml=`<span style="font-family:Oswald,sans-serif;color:#fff;font-size:2vh;letter-spacing:.14em;white-space:nowrap">${['TANDA '+(DATA.flight||''),_tar?'TARIMA '+_tar:''].filter(Boolean).join(' · ')}</span>`;
+  const franjas=`<div style="position:absolute;left:0;right:0;top:0;height:9vh;background:#0b0b0c;border-bottom:1px solid #1f1f22;pointer-events:none"></div>
     <div style="position:absolute;left:0;right:0;bottom:0;height:11vh;background:#0b0b0c;border-top:1px solid #1f1f22;pointer-events:none"></div>`;
   return `<div class="pi-canvas" style="position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden${_fondoPant?';background:'+_fondoPant:''}" id="pantIntentosBox">
     ${franjas}
-    ${compHtml}
+    ${_piBlock('titulo',tituloHtml,true)}
+    ${_piBlock('tanda',tandaHtml,true)}
+    ${compHtml?_piBlock('comp',compHtml,true):''}
     ${(piSet.showTimer===true||DATA.relojVisible)?_piBlock('reloj',`<div id="pantIntentosTimer" style="font-family:Oswald,sans-serif;font-size:64px;font-weight:900;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums;color:${tColor};letter-spacing:2px;text-shadow:0 4px 20px rgba(0,0,0,.7)">${tTxt}</div>`):''}
     ${_piBlock('liftLabel',liftLabelHtml,true)}
     ${recordHtml?_piBlock('record',recordHtml,true):''}
     ${_cambiosIntentoActual(cur)?_piBlock('cambio',_cartelCambioHtml('30px')):''}
     ${(typeof _txJurado!=='undefined'&&_txJurado&&Date.now()<_txJuradoHasta)?_piBlock('jurado',_juradoTarimaHtml(_txJurado)):''}
     ${_piBlock('weight',weightHtml,true)}
-    ${_piBlock('barbell',bbHtml)}
+    ${rackHtml?_piBlock('rack',rackHtml,'der'):''}
+    ${_piBlock('discos',bbHtml,'der')}
     ${_piBlock('name',nameHtml,true)}
     ${_piBlock('subtitle',subtitleHtml,true)}
     ${positionHtml?_piBlock('position',positionHtml,true):''}
@@ -1359,7 +1366,7 @@ window.screenAllFlights=function(){
 window.piResetLayout=function(){
   if(!confirm('¿Restablecer las posiciones y tamaños de la Pantalla de Intentos a los valores por defecto?'))return;
   // Las de "Atleta en barra" son las que empiezan con b y mayúscula (bSigla,
-  // bPeso…). 'barbell' es de esta pantalla, por eso se pide la mayúscula.
+  // bPeso…). 'discos' es de esta pantalla, por eso se pide la mayúscula.
   // Las de la pantalla de Luces empiezan con l y mayúscula (lCab, lLuces…).
   _piResetClaves(k=>!/^[bl][A-Z]/.test(k));
 };

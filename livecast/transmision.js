@@ -1175,7 +1175,11 @@ function renderTxDirector(container){
     const fade=animProf?(animProf.dir==='in'?'animation:txContentFadeIn 1.2s ease forwards;':'animation:txContentFadeOut 1.2s ease forwards;'):'';
     if(cur){
       const pfScale=(_txDirState.profile==null?void 0:_txDirState.profile.scale)||1;
-      html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;'+(pfScale!==1?'transform:scale('+pfScale+');transform-origin:center center;':'')+fade+'">'+renderTxProfile(cur)+'</div>';
+      // El perfil es una escena a pantalla completa: el tamaño se aplica solo a
+      // lo de adentro (nombre, foto, datos). Antes se achicaba el bloque entero,
+      // fondo incluido, y con el Perfil bajo 1.00x quedaba un recuadro negro al
+      // medio de la transmisión, con la cámara asomando por los costados.
+      html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;'+fade+'">'+renderTxProfile(cur,pfScale)+'</div>';
     } else if(showProf){
       html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;font-family:Oswald,sans-serif;'+fade+'">'
         +'<div style="font-size:clamp(28px,3vw,42px);color:#D4A843;letter-spacing:4px;margin-bottom:16px">SIN LEVANTADOR ACTUAL</div>'
@@ -1783,7 +1787,8 @@ function _lucesEnTarima(){
 
 // El perfil de siempre, a pantalla completa con el fondo azul: se pidió dejarlo
 // como estaba (es el único que mantiene el azul).
-function renderTxProfile(cur){
+function renderTxProfile(cur,escala){
+  const _esc=(+escala>0&&+escala!==1)?+escala:1;
   _pedirFotos();
   const full=txLookupFull(cur);
   // Media efectiva: foto/gif subida en el livecast (persistente) tiene prioridad
@@ -1864,7 +1869,7 @@ function renderTxProfile(cur){
       <img src="YourLift_logo.png" alt="" style="width:52%;opacity:0.2;filter:blur(9px);transform:scale(1.15);user-select:none" onerror="this.style.display='none'">
     </div>
     <div style="position:absolute;top:0;right:0;bottom:0;left:0;padding:clamp(40px,5vw,80px);display:flex;flex-direction:column">
-      <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(8px,1.5vh,22px);max-width:1400px;width:100%;margin:auto">
+      <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(8px,1.5vh,22px);max-width:1400px;width:100%;margin:auto${_esc!==1?';transform:scale('+_esc+');transform-origin:center center':''}">
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:clamp(6px,1vh,16px)">
           <div style="background:${_txC('nameBg')};padding:clamp(10px,1.6vw,18px) clamp(18px,2.2vw,28px);border-radius:6px;display:flex;align-items:center;gap:clamp(10px,1.5vw,18px);box-shadow:0 4px 20px rgba(212,168,67,.35)">
             ${chipNombre}
@@ -1892,9 +1897,10 @@ function renderTxProfile(cur){
               </div>`).join('')}
           </div>
         </div>
-        <div style="position:absolute;top:clamp(20px,2.5vw,40px);right:clamp(20px,2.5vw,40px);display:flex;align-items:center;gap:12px;padding:8px 14px;background:rgba(10,22,40,.55);border:2px solid rgba(212,168,67,.4);border-radius:8px">
-          ${_tiraLogosPantalla(['fed','camp','yl'],'clamp(34px,3.6vw,56px)','14px')}
-        </div>
+      </div>
+      <!-- Los logos, fuera de lo que se agranda: quedan en su esquina. -->
+      <div style="position:absolute;top:clamp(20px,2.5vw,40px);right:clamp(20px,2.5vw,40px);display:flex;align-items:center;gap:12px;padding:8px 14px;background:rgba(10,22,40,.55);border:2px solid rgba(212,168,67,.4);border-radius:8px">
+        ${_tiraLogosPantalla(['fed','camp','yl'],'clamp(34px,3.6vw,56px)','14px')}
       </div>
     </div>
     </div>`;

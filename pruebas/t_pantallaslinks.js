@@ -75,10 +75,9 @@ console.log('\nEl panel da un link por pantalla');
     const t = c.innerText || '';
     return {
       vacio: !c.innerHTML.trim(),
-      // El modo luces es el único que dibuja tres círculos grandes y no usa
-      // el lienzo movible de la pantalla de barra.
-      luces: c.querySelectorAll('[style*="border-radius:50%"]').length >= 3
-             && !c.querySelector('.pi-canvas'),
+      // El modo luces dibuja las tres luces grandes en su propio bloque (lLuces):
+      // también se mueven, pero con claves suyas, distintas de las de barra.
+      luces: c.querySelectorAll('[data-pi-key="lLuces"] [data-luz]').length >= 3,
       canvas: !!c.querySelector('.pi-canvas'),
       texto: t.slice(0, 120),
       html: c.innerHTML.length,

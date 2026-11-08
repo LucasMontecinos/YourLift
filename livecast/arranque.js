@@ -1247,7 +1247,16 @@ const PI_DEFAULT_LAYOUT={
   record:{x:8,y:16,scale:100},
   liftLabel:{x:8,y:23,scale:100},
   weight:{x:8,y:43,scale:100},
-  barbell:{x:70,y:50,scale:100},
+  // La barra y el rack van anclados por la DERECHA (x es su borde
+  // derecho): con más discos la barra crece hacia adentro, no hacia el borde.
+  // Clave nueva ('discos', antes 'barbell', que iba centrada): una posición
+  // guardada con el centro, leída como borde derecho, la corría de lugar.
+  discos:{x:84,y:50,scale:100},
+  rack:{x:84,y:26,scale:100},
+  // La franja de arriba: el título y la tanda (desde el borde izquierdo).
+  titulo:{x:7.9,y:4.5,scale:100},
+  tanda:{x:35.4,y:4.5,scale:100},
+  comp:{x:7,y:6.8,scale:100},          // TIEMPO COMPENSATORIO
   name:{x:8,y:67,scale:100},
   subtitle:{x:8,y:73,scale:100},
   position:{x:8,y:79,scale:100},
@@ -1366,7 +1375,9 @@ if(!window._piHandlersInit){
       pos.x=Math.max(2,Math.min(98,d.startPosX+(e.clientX-d.startX)/d.rectW*100));
       pos.y=Math.max(2,Math.min(98,d.startPosY+(e.clientY-d.startY)/d.rectH*100));
       const el=document.querySelector('.pi-block[data-pi-key="'+d.key+'"]');
-      if(el){el.style.left=pos.x+'%';el.style.top=pos.y+'%';}
+      // Los anclados por la izquierda se dibujan desde x-5 (ver _piBlock): si acá
+      // se pusiera x, el bloque saltaba al soltarlo y volver a dibujarse.
+      if(el){el.style.left=(el.getAttribute('data-anc')==='izq'?Math.max(0,pos.x-5):pos.x)+'%';el.style.top=pos.y+'%';}
     } else if(window._piResize){
       const r=window._piResize;
       const pos=_piPos(r.key);
@@ -1407,7 +1418,9 @@ if(!window._piHandlersInit){
       pos.x=Math.max(2,Math.min(98,d.startPosX+(t.clientX-d.startX)/d.rectW*100));
       pos.y=Math.max(2,Math.min(98,d.startPosY+(t.clientY-d.startY)/d.rectH*100));
       const el=document.querySelector('.pi-block[data-pi-key="'+d.key+'"]');
-      if(el){el.style.left=pos.x+'%';el.style.top=pos.y+'%';}
+      // Los anclados por la izquierda se dibujan desde x-5 (ver _piBlock): si acá
+      // se pusiera x, el bloque saltaba al soltarlo y volver a dibujarse.
+      if(el){el.style.left=(el.getAttribute('data-anc')==='izq'?Math.max(0,pos.x-5):pos.x)+'%';el.style.top=pos.y+'%';}
     } else if(window._piResize){
       const r=window._piResize;
       const pos=_piPos(r.key);

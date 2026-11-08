@@ -73,7 +73,8 @@ const ESCENAS = ['profile', 'barra', 'intentos', 'luces', 'jornada'];
        '"Restablecer posiciones" también los alcanza');
     // El reset de cada pantalla filtra por el prefijo b+Mayúscula: bLogoN0 es de
     // "atleta en barra" y logoN0 de "intentos", así que cada una vuelve a lo suyo.
-    ok(/_piResetClaves\(k=>!\/\^b\[A-Z\]\/\.test\(k\)\)/.test(lc)
+    // (Intentos deja afuera también las de la pantalla de Luces: l+Mayúscula.)
+    ok(/_piResetClaves\(k=>!\/\^\[bl\]\[A-Z\]\/\.test\(k\)\)/.test(lc)
        && /_piResetClaves\(k=>\/\^b\[A-Z\]\/\.test\(k\)\)/.test(lc),
        'y una pantalla no mueve los de la otra');
   }

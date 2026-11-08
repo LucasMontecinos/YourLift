@@ -1,4 +1,5 @@
-// Las luces de los jueces y el reloj se pueden mover y agrandar en la pantalla de tarima.
+// En la pantalla de tarima todo se mueve y se agranda: las luces de los jueces,
+// el reloj y, en Intentos, cada cosa (título, tanda, rack, barra…).
 //
 // En "Atleta en barra" ya eran un bloque del editor. En Intentos estaban fijas
 // abajo al centro, y en la pantalla de Luces las tres grandes iban siempre al
@@ -99,6 +100,37 @@ const MONTAR = `(modo)=>{
   }
   await probarReloj('intentos', 'reloj', 'Reloj en Intentos');
   await probarReloj('barra', 'bReloj', 'Reloj en Atleta en barra');
+
+  // Todo lo de la pantalla de Intentos es un bloque: también el título y la
+  // tanda de la franja de arriba, el rack y la barra.
+  console.log('\nTodo en Intentos se mueve');
+  await montar('intentos');
+  await p.evaluate(() => { const a = DATA.athletes[0]; a.rackSQ = '12'; DATA.relojVisible = true; window._piSelected = null; renderTxWidget(); });
+  const claves = await p.evaluate(() => [...document.querySelectorAll('.pi-block')].map(e => e.getAttribute('data-pi-key')));
+  for (const k of ['titulo', 'tanda', 'liftLabel', 'weight', 'rack', 'discos', 'name', 'subtitle', 'luces', 'reloj'])
+    ok(claves.includes(k), k + ' es un bloque');
+  ok(!/Por lado/.test(await p.evaluate(() => document.body.innerText)), 'sin la línea "Por lado … collar": solo el dibujo de la barra');
+  const fijos = await p.evaluate(() => [...document.querySelectorAll('#pantIntentosBox *')].filter(e => {
+    if (e.closest('.pi-block') || e.closest('button') || e.closest('[style*="z-index:50"]')) return false;
+    return [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
+  }).map(e => e.textContent.trim().slice(0, 30)));
+  ok(fijos.length === 0, 'no queda ningún texto fijo fuera de los bloques' + (fijos.length ? ': ' + fijos.join(' | ') : ''));
+  for (const k of ['titulo', 'discos', 'rack']) {
+    const sel = '.pi-block[data-pi-key="' + k + '"]';
+    const antes = await p.evaluate(x => Object.assign({}, _piPos(x)), k);
+    const a = await caja(sel);
+    await p.mouse.click(a.x, a.y); await p.waitForTimeout(120);
+    const b0 = await caja(sel);
+    await p.mouse.move(b0.x, b0.y); await p.mouse.down();
+    await p.mouse.move(b0.x + 120, b0.y + 90, { steps: 6 }); await p.mouse.up();
+    const m = await caja('.pi-resize[data-pi-key="' + k + '"]');
+    await p.mouse.move(m.x, m.y); await p.mouse.down();
+    await p.mouse.move(m.x, m.y + 60, { steps: 4 }); await p.mouse.up();
+    await p.evaluate(() => { window._piSelected = null; renderTxWidget(); });
+    const des = await p.evaluate(x => Object.assign({}, _piPos(x)), k);
+    ok(des.x > antes.x + 5 && des.y > antes.y + 8 && des.scale > 115,
+      k + ': se mueve y se agranda (x ' + antes.x + '→' + des.x.toFixed(1) + ', y ' + antes.y + '→' + des.y.toFixed(1) + ', escala ' + Math.round(des.scale) + '%)');
+  }
 
   console.log('\nRestablecer');
   await p.evaluate(() => lucesResetLayout());
