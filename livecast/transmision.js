@@ -756,6 +756,9 @@ function _txStartDirectorListener(){
 }
 
 function _txDirActive(comp){
+  // El perfil automático (ver _autoPerfilVigilar) lo prende un rato acá mismo,
+  // sin escribir nada: así no se pisa con lo que manden el Control TX o el remoto.
+  if(comp==='profile'&&Date.now()<(window._autoPerfilHasta||0)&&_autoPerfilConf())return true;
   const c=_txDirState&&_txDirState[comp];
   if(!c||!c.active)return false;
   if(c.until>0&&Date.now()>=c.until)return false;
@@ -1064,6 +1067,44 @@ function _txDirScheduleHide(){
   if(next!==Infinity){setTimeout(()=>{if(typeof renderTxWidget==='function')renderTxWidget()},next-now+50);}
 }
 
+// ── PERFIL AUTOMÁTICO ─────────────────────────────────────────────────────
+// Se prende desde el Control Remoto (PERFIL AUTO). Cuando llega un válido o un
+// nulo, la transmisión espera 2 segundos, muestra el perfil del atleta que
+// sigue en tarima durante 3 segundos y lo saca, sola, en cada intento.
+//
+// Lo hace la propia transmisión (el Browser Source de OBS) mirando los
+// resultados que ya le llegan: no depende de que el teléfono siga abierto ni
+// de que alguien escriba nada en el servidor.
+function _autoPerfilConf(){ const c=_txDirState&&_txDirState.autoPerfil; return (c&&c.on)?c:null; }
+let _apPrev=null;
+function _autoPerfilVigilar(){
+  if(TX_MODE!=='director')return;
+  const m={};
+  (DATA.athletes||[]).forEach(a=>{
+    if(!a||!a.att)return;
+    ['sq','bp','dl'].forEach(l=>((a.att[l])||[]).forEach((x,r)=>{ if(x&&(x.r==='g'||x.r==='n'))m[a.id+'|'+l+'|'+r]=1; }));
+  });
+  const ev=(DATA.event&&(DATA.event.id||DATA.event.name))||'';
+  const prev=_apPrev; _apPrev={m,ev};
+  // La primera vez (o con otro campeonato) solo se toma nota de lo que ya había.
+  if(!prev||prev.ev!==ev)return;
+  const nuevos=Object.keys(m).filter(k=>!prev.m[k]).length;
+  // Muchos de golpe no es una decisión: es la nómina que llegó entera.
+  if(!nuevos||nuevos>3)return;
+  const c=_autoPerfilConf(); if(!c)return;
+  const espera=(c.espera!=null&&+c.espera>=0?+c.espera:2)*1000;
+  const dura=(+c.dura>0?+c.dura:3)*1000;
+  clearTimeout(window._apT1); clearTimeout(window._apT2);
+  window._apT1=setTimeout(()=>{
+    // Sin nadie en tarima (se cerró la tanda) no hay perfil que mostrar.
+    if(!_autoPerfilConf()||!liftQueue()[0])return;
+    window._autoPerfilHasta=Date.now()+dura;
+    _txDirLastSig=null;
+    if(typeof renderTxWidget==='function')renderTxWidget();
+    window._apT2=setTimeout(()=>{ _txDirLastSig=null; if(typeof renderTxWidget==='function')renderTxWidget(); },dura+60);
+  },espera);
+}
+
 function renderTxDirector(container){
   const c=container||document.getElementById('txWidget');
   if(!c)return;
@@ -1071,6 +1112,7 @@ function renderTxDirector(container){
   _widgetStartDirectObsListener();
   _txEscucharYvDefecto();
   if(!_txDirState){c.innerHTML='';return}
+  try{ _autoPerfilVigilar(); }catch(e){}
   const cur=liftQueue()[0];
   const showProf=_txDirActive('profile');
   const showLb=_txDirActive('leaderboard');

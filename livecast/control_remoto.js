@@ -132,6 +132,7 @@ const _RM_TAM=[
   ['leaderboard','Clasificación'],['luces','Luces'],['jurado','Jurado'],
   ['timer','Timer'],['medals','Medallero'],['breakTimer','Ya volvemos'],['slam','Good / No lift'],
 ];
+function _rmAutoPerfil(){ const c=_dirState&&_dirState.autoPerfil; return !!(c&&c.on); }
 function _rmEscala(k){ const c=_dirState&&_dirState[k]; return (c&&c.scale)||1; }
 function remoteTamPanel(){
   if(window._remoteMenu!=='tam')return '';
@@ -189,6 +190,9 @@ function renderRemote(){
   h+='<div style="display:flex;align-items:center;gap:12px">'
     +'<span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:'+_connCol+';display:inline-block"></span>'
     +'<span style="font-size:10px;color:var(--muted);font-family:Oswald;letter-spacing:1px">'+_connTxt+'</span></span>'
+    // PERFIL AUTO: con cada válido o nulo, la transmisión muestra sola el perfil
+    // del que sigue (a los 2 s, durante 3 s). Ver _autoPerfilVigilar.
+    +'<button onclick="remoteAutoPerfil()" title="Mostrar el perfil solo, después de cada válido o nulo" style="padding:6px 12px;border-radius:8px;border:1px solid '+(_rmAutoPerfil()?'#22c55e':'var(--border)')+';background:'+(_rmAutoPerfil()?'rgba(34,197,94,.18)':'transparent')+';color:'+(_rmAutoPerfil()?'#4ade80':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">PERFIL AUTO: '+(_rmAutoPerfil()?'SÍ':'NO')+'</button>'
     +'<button onclick="remoteMenu(\'tam\')" title="Agrandar o achicar lo que sale en la transmisión" style="padding:6px 12px;border-radius:8px;border:1px solid '+(window._remoteMenu==='tam'?'var(--text)':'var(--border)')+';background:'+(window._remoteMenu==='tam'?'var(--bg2)':'transparent')+';color:var(--text);font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">⤢ TAMAÑO</button>'
     +'<button onclick="remoteOrdenar()" title="Cambiar los botones de lugar" style="padding:6px 12px;border-radius:8px;border:1px solid '+(_ord?'var(--gold)':'var(--border)')+';background:'+(_ord?'rgba(212,168,67,.18)':'transparent')+';color:'+(_ord?'var(--gold)':'var(--muted)')+';font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">'+(_ord?'<i class=yl-i-check></i> LISTO':'↕ ORDENAR')+'</button>'
     +'</div>';
@@ -218,7 +222,7 @@ function renderRemote(){
       +(g?'<i class=yl-i-check></i> GOOD LIFT':'<i class=yl-i-cruz></i> NO LIFT')+'</button>';
   };
   const BOTONES={
-    profile:    oc=>bigBtn('PERFIL', on('profile')?'EN PANTALLA':'atleta actual', on('profile'), oc||"dirToggle('profile')"),
+    profile:    oc=>bigBtn('PERFIL', on('profile')?'EN PANTALLA':(_rmAutoPerfil()?'AUTO · tras válido o nulo':'atleta actual'), on('profile'), oc||"dirToggle('profile')"),
     scoreboard: oc=>bigBtn('MARCADOR', on('scoreboard')?'EN PANTALLA':'lower-third', on('scoreboard'), oc||"dirToggle('scoreboard')"),
     tablaActual:oc=>bigBtn('TABLA ACTUAL', on('tablaActual')?'EN PANTALLA':'ranking corner', on('tablaActual'), oc||"dirToggle('tablaActual')"),
     // Las luces se dejan prendidas toda la competencia: mientras no hay decisión
@@ -278,6 +282,15 @@ window.remoteMenu=function(cual){
     const p=document.getElementById('rmPanel');
     if(p)p.scrollIntoView({behavior:'smooth',block:'nearest'});
   },60);
+};
+
+window.remoteAutoPerfil=async function(){
+  if(!_dirState)_dirState={};
+  const on=!_rmAutoPerfil();
+  _dirState.autoPerfil={on,espera:2,dura:3};
+  R();
+  await _dirPush();
+  showToastLC(on?'Perfil automático: a los 2 s de cada válido o nulo, 3 s en pantalla':'Perfil automático apagado');
 };
 
 window.remoteOrdenar=function(){ window._rmOrdenar=!window._rmOrdenar; window._rmSel=null; window._remoteMenu=''; R(); };
