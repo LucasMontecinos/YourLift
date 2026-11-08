@@ -237,7 +237,10 @@ function changeResult(id,l,r,res){
                 :a.name+' — '+LIFT_S[l]+(r+1)+': cambiado a NULO'));
 }
 
-function updA(id,k,v){const a=DATA.athletes.find(x=>x.id===id);if(!a)return;if(k==='bw')a.bw=parseFloat(v)||0;else a[k]=v;_markAtt(id,'meta');save()}
+function updA(id,k,v){const a=DATA.athletes.find(x=>x.id===id);if(!a)return;if(k==='bw')a.bw=parseFloat(v)||0;else a[k]=v;_markAtt(id,'meta');save();
+  // La tanda nueva también al Cronograma (si no, el Cronograma se la devuelve).
+  if(k==='flight'){ try{ _cronoAnotarTanda(a); }catch(e){} }
+}
 
 // ¿Salió de verdad la escritura al servidor?
 //

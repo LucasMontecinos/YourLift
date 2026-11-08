@@ -95,6 +95,48 @@ async function _loadCronoFlightMap(evId){
   }catch(e){console.warn('[crono] flightMap',e.message);return null;}
 }
 
+// El cambio de tanda hecho en el livecast vuelve al Cronograma.
+//
+// El livecast toma las tandas del Cronograma (cronograma/{evento}) y las vuelve
+// a aplicar cada vez que ese documento cambia. Pero al revés no iba nada: si la
+// mesa pasaba a un atleta de tanda (en Atletas y Pesaje), el Cronograma —el del
+// admin y el que ve el público— seguía con la vieja, y la siguiente edición del
+// Cronograma (o volver a abrir el campeonato) le devolvía al atleta la tanda
+// vieja también en el livecast. Pasó con un cambio a la tanda E en el Regional
+// Sur Austral. Ahora la mesa anota la tanda nueva en su fila del Cronograma.
+function _cronoEvId(){
+  const ev=DATA.event||{};
+  return Object.keys(LIVE_EVENTS||{}).find(k=>LIVE_EVENTS[k]===ev.name)||ev.id||null;
+}
+async function _cronoAnotarTanda(a){
+  if(!a||!a.flight||PRACTICE_MODE||!isAdmin||!window.IS_CONTROLLER)return;
+  if(!fbReady||!window._fb||!window._fb.runTransaction)return;
+  const evId=_cronoEvId(); if(!evId)return;
+  const ref=window._fb.doc(fbDB,'cronograma',evId);
+  try{
+    const cambio=await window._fb.runTransaction(fbDB,async tx=>{
+      const snap=await tx.get(ref);
+      if(!snap.exists())return null;
+      const rows=Array.isArray(snap.data().rows)?snap.data().rows.slice():[];
+      // La fila del atleta: por código si las dos lo tienen; si no, por nombre
+      // (el actual o el original), con la misma comparación que usa el livecast.
+      const idx={}; rows.forEach((r,i)=>{ if(r&&r.nombre)idx[_nnCrono(r.nombre)]=i; });
+      let i=a.codigo?rows.findIndex(r=>r&&r.codigo&&String(r.codigo)===String(a.codigo)):-1;
+      if(i<0){ const m=_cronoLookup(idx,a.name); i=(m!=null)?m:-1; }
+      if(i<0&&a.nombreOrig){ const m=_cronoLookup(idx,a.nombreOrig); i=(m!=null)?m:-1; }
+      if(i<0||rows[i].flight===a.flight)return null;
+      const antes=rows[i].flight||'';
+      rows[i]=Object.assign({},rows[i],{flight:a.flight});
+      tx.update(ref,{rows});
+      return {antes,ahora:a.flight};
+    });
+    if(cambio)showToastLC('Cronograma actualizado: '+a.name+' pasa a la tanda '+cambio.ahora);
+  }catch(e){
+    console.warn('[crono] anotar tanda',e.message);
+    showToastLC('El cambio de tanda quedó en el livecast, pero no se pudo anotar en el Cronograma: cámbialo también ahí.');
+  }
+}
+
 function _subscribeCronoFlightMap(evId){
   if(!fbReady||!window._fb||!evId)return;
   if(_cronoFlightUnsub){_cronoFlightUnsub();_cronoFlightUnsub=null;}
