@@ -1335,8 +1335,13 @@ function _mergeForWrite(localArr, remoteArr){
   const byId={}; (localArr||[]).forEach(a=>{ if(a&&a.id!=null) byId[a.id]=a; });
   const out=(remoteArr||[]).map(ra=>{
     const la=byId[ra.id];
-    // Mismo id pero otra persona → roster de otro campeonato: manda el remoto.
-    if(!la || !_mismaPersona(la,ra,pend))return ra;
+    // Mismo id pero otra persona → manda el remoto. Sin excepciones: antes una
+    // edición pendiente de esta pantalla (pend id|meta) bastaba para darla por la
+    // misma persona, y si los ids de esta pantalla y los del servidor no
+    // calzaban, el nombre, la tanda y el lote de uno se le copiaban a otro. Así
+    // se revolvió el Regional Sur Austral (atletas repetidos, lotes movidos). Un
+    // nombre corregido sigue siendo la misma persona por nombreOrig.
+    if(!la || !_mismaPersona(la,ra,null))return ra;
     const m=JSON.parse(JSON.stringify(ra));
     if(pend.has(ra.id+'|meta'))META.forEach(f=>{ if(la[f]!==undefined)m[f]=la[f]; });
     ['sq','bp','dl'].forEach(l=>{

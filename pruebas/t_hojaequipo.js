@@ -65,7 +65,9 @@ const { chromium } = require('playwright');
   ok(esperadas.every(e => dibujadas.includes(e)), 'las siete modalidades aparecen en la hoja');
 
   // La modalidad tiene que ir después del nombre, nunca antes.
-  const largo = out.cap.textos.findIndex(t => t.t.startsWith('Sebastian Alejandro'));
+  // (El ancho falso de getTextWidth es mayor que el de Helvetica real, así que acá
+  // el nombre sale más recortado que en el PDF; basta con que empiece igual.)
+  const largo = out.cap.textos.findIndex(t => t.t.startsWith('Sebastian Ale'));
   ok(largo >= 0, 'el nombre largo se dibuja');
   if (largo >= 0) {
     const sig = out.cap.textos[largo + 1];

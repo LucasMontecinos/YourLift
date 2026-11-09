@@ -130,6 +130,23 @@ const cuenta = () => {
   ok(ui && /todo el campeonato/i.test(ui.ops[0]), 'la opción de siempre viene primero y elegida');
   ok(ui && /\(\d+\)/.test(ui.ops[1]), 'cada opción dice cuántos atletas trae');
 
+  // La lista que se despliega se tiene que leer: con fondo transparente salía
+  // blanca con letras blancas. Va con el fondo y las letras del tema, como Filtrar.
+  for (const dia of ['', 'Sábado']) {
+    const col = await p.evaluate(d => {
+      window._ACTA_DIA = d; R();
+      const sel = [...document.querySelectorAll('select')].find(s => /Acta:/.test(s.textContent));
+      const cs = getComputedStyle(sel);
+      const op = [...sel.options].map(o => getComputedStyle(o));
+      const opaco = c => !/rgba\(.*,\s*0\)$|transparent/.test(c);
+      return { fondo: cs.backgroundColor, opaco: opaco(cs.backgroundColor),
+               ops: op.map(o => [o.backgroundColor, o.color]) };
+    }, dia);
+    ok(col.opaco && col.ops.every(([f, c]) => f !== c && !/rgba\(.*,\s*0\)$/.test(f)),
+      'la lista desplegada tiene fondo propio y letras de otro color' + (dia ? ' (con un día elegido)' : '') + ': ' + col.fondo + ' / ' + (col.ops[0] || []).join(' · '));
+  }
+  await p.evaluate(() => { window._ACTA_DIA = ''; R(); });
+
   console.log('\n  Al elegir un día avisa qué categorías quedan partidas');
   const aviso = await p.evaluate(() => {
     setActaDia('Sábado');

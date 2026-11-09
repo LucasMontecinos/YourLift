@@ -516,6 +516,107 @@ function generateLots(){
   DATA.lotsGenerated=true;
   window._forceFullWrite=true;   // el re-sorteo reemplaza los lots de todos
   saveNow();R();
+  // Quedan guardados como los oficiales (candado de lotes).
+  _lotesFijar(ya?'re-sorteo':'sorteo').then(()=>showToastLC('Lotes guardados: quedan fijos aunque se recargue o se caiga la conexión'));
+}
+
+// ── CANDADO DE LOTES ────────────────────────────────────────────
+// Los lotes sorteados quedan guardados en el servidor (publico/lotes__{evento})
+// y la mesa los defiende: si a un atleta le cambia el lote sin que nadie lo haya
+// cambiado a mano —una recarga que rearmó la nómina desde las inscripciones, una
+// mezcla con otro equipo—, vuelve solo a su número. Pasó en el Regional Sur
+// Austral: los lotes se perdieron y hubo que restaurarlos desde la hoja impresa.
+//
+// Cambian el candado (y solo ellos): sortear / re-sortear, cambiar un lote a
+// mano y Restaurar lotes. Un atleta que cambia de tanda no se pelea (su lote
+// nuevo lo da la tanda); uno que entra después se suma al candado con el lote
+// que le tocó en su tanda.
+//
+// Si el servidor todavía no tiene candado, se toma el respaldo que haya en el
+// repositorio (cronogramas/lotes_{evento}.json) y se sube.
+window._lotesFijos=null;
+let _lfEv=null,_lfUnsub=null,_lfSemilla=false,_lfGuardarT=null,_lfUlt=0,_lfDif=null;
+function _lfDocId(){ return 'lotes__'+String(_cronoEvId()||'').replace(/[^A-Za-z0-9_-]/g,'_'); }
+function _lfDeAtletas(){
+  return (DATA.athletes||[]).filter(a=>a&&!a.__is4&&a.lot)
+    .map(a=>({codigo:a.codigo||'',nombre:a.name||'',lote:+a.lot,tanda:a.flight||''}));
+}
+function _lfPuede(){ return !TX_MODE&&isAdmin&&!!window.IS_CONTROLLER&&!PRACTICE_MODE&&!!DATA.event; }
+async function _lfEscribir(doc){
+  if(!fbReady||!window._fb||!fbDB)return false;
+  try{ await window._fb.setDoc(window._fb.doc(fbDB,'publico',_lfDocId()),doc); return true; }
+  catch(e){ console.warn('[lotes] no se pudo guardar el candado',e); return false; }
+}
+// Guarda los lotes de ahora como los oficiales.
+async function _lotesFijar(motivo){
+  if(!_lfPuede()||!_cronoEvId())return;
+  const doc={evento:_cronoEvId(),nombre:(DATA.event&&DATA.event.name)||'',ts:Date.now(),motivo:motivo||'',lotes:_lfDeAtletas()};
+  window._lotesFijos=doc;
+  if(!(await _lfEscribir(doc)))showToastLC('Los lotes quedaron en esta pantalla pero no se pudieron guardar en el servidor: revisa la conexión');
+}
+function _lfGuardarPronto(){
+  clearTimeout(_lfGuardarT);
+  _lfGuardarT=setTimeout(()=>{ const d=window._lotesFijos; if(d&&_lfPuede()){ d.ts=Date.now(); _lfEscribir(d); } },2500);
+}
+function _lotesEscuchar(){
+  const ev=_cronoEvId(); if(!ev||!fbReady||!window._fb||!fbDB)return;
+  if(_lfEv===ev&&_lfUnsub)return;
+  if(_lfUnsub){try{_lfUnsub()}catch(e){} _lfUnsub=null;}
+  _lfEv=ev; window._lotesFijos=null; _lfSemilla=false;
+  try{
+    _lfUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'publico',_lfDocId()),snap=>{
+      if(snap.exists()){ window._lotesFijos=snap.data(); return; }
+      // Sin candado en el servidor: el respaldo del repositorio, si hay.
+      if(_lfSemilla)return; _lfSemilla=true;
+      fetch('cronogramas/lotes_'+ev+'.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{
+        if(!j||!Array.isArray(j.lotes)||!j.lotes.length||_lfEv!==ev)return;
+        const doc={evento:ev,nombre:j.nombre||'',ts:Date.parse(j.guardado||'')||Date.now(),motivo:'respaldo guardado',lotes:j.lotes};
+        window._lotesFijos=doc;
+        if(_lfPuede())_lfEscribir(doc);
+      }).catch(()=>{});
+    },e=>console.warn('[lotes] candado',e));
+  }catch(e){ console.warn('[lotes] candado',e); }
+}
+// Corre cada pocos segundos en la mesa (ver el reloj maestro).
+function _lotesVigilar(){
+  if(!_lfPuede())return;
+  _lotesEscuchar();
+  if(Date.now()-_lfUlt<2000)return; _lfUlt=Date.now();
+  const L=window._lotesFijos; if(!L||!Array.isArray(L.lotes)||!L.lotes.length)return;
+  const porCod={}, porNom={};
+  L.lotes.forEach(x=>{ if(x.codigo)porCod[x.codigo]=x; const n=_nnCrono(x.nombre||''); if(n&&!porNom[n])porNom[n]=x; });
+  const lotesFijos=new Set(L.lotes.map(x=>+x.lote));
+  const vuelven=[]; let aprende=false;
+  (DATA.athletes||[]).forEach(a=>{
+    if(!a||a.__is4)return;
+    const e=(a.codigo&&porCod[a.codigo])||porNom[_nnCrono(a.name||'')]||(a.nombreOrig&&porNom[_nnCrono(a.nombreOrig)]);
+    if(!e){
+      // Entró después del sorteo, con un lote de su tanda que nadie más tiene:
+      // se suma al candado.
+      const b=_baseTanda(a.flight);
+      if(b>0&&a.lot>=b&&a.lot<b+100&&!lotesFijos.has(+a.lot)){
+        L.lotes.push({codigo:a.codigo||'',nombre:a.name||'',lote:+a.lot,tanda:a.flight||''}); lotesFijos.add(+a.lot); aprende=true;
+      }
+      return;
+    }
+    if(String(a.flight||'')!==String(e.tanda||''))return;   // cambió de tanda: no se pelea
+    if(+a.lot!==+e.lote)vuelven.push([a,a.lot,+e.lote]);
+  });
+  if(aprende)_lfGuardarPronto();
+  // La diferencia tiene que durar: un lote cambiado a mano en OTRO equipo llega
+  // por la nómina y por el candado en dos documentos distintos, y por un momento
+  // pueden no coincidir. Solo se repone lo que sigue distinto 6 segundos después.
+  if(!vuelven.length){ _lfDif=null; return; }
+  const firma=vuelven.map(v=>v[0].id+':'+v[1]+'>'+v[2]).join(',');
+  if(!_lfDif||_lfDif.firma!==firma){ _lfDif={firma,t:Date.now()}; return; }
+  if(Date.now()-_lfDif.t<6000)return;
+  _lfDif=null;
+  vuelven.forEach(([a,,l])=>{ a.lot=l; _markAtt(a.id,'meta'); });
+  DATA.lotsGenerated=true;
+  save(); R();
+  console.warn('[lotes] vuelven a su número:',vuelven.map(v=>v[0].name+' '+v[1]+'→'+v[2]).join(', '));
+  showToastLC('Lotes protegidos: '+vuelven.length+' volvi'+(vuelven.length>1?'eron':'ó')+' a su número guardado'
+    +' ('+vuelven.slice(0,2).map(v=>v[0].name.split(' ')[0]+' '+(v[1]||'—')+'→'+v[2]).join(', ')+(vuelven.length>2?'…':'')+')');
 }
 
 // ── Restaurar lotes desde la hoja de pesaje ─────────────────────
@@ -574,6 +675,10 @@ window.lotesRestaurarAbrir=function(){
       const hora=new Date(r.ts).toLocaleString('es-CL',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
       return '<div style="margin-bottom:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px">Hay una copia de los lotes de antes de la <b>'+esc(r.motivo||'última re-sincronización')+'</b> ('+hora+', '+r.lots.length+' atletas). '
         +'<button class="btn btn-o" style="margin-left:6px;padding:5px 12px;font-size:12px" onclick="lotesUsarRespaldo()">Volver a los de antes</button></div>';})()
+    +(()=>{const L=window._lotesFijos;if(!L||!Array.isArray(L.lotes)||!L.lotes.length)return '';
+      const hora=new Date(L.ts||0).toLocaleString('es-CL',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+      return '<div style="margin-bottom:10px;padding:10px 12px;border:1px solid var(--green,#22c55e);border-radius:8px;font-size:13px">Lotes guardados en el servidor ('+hora+', '+L.lotes.length+' atletas). '
+        +'<button class="btn btn-g" style="margin-left:6px;padding:5px 12px;font-size:12px" onclick="lotesUsarGuardados()">Volver a los guardados</button></div>';})()
     +'<textarea id="lotesTxt" rows="9" style="width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg2,var(--card));color:var(--text);font:13px monospace"></textarea>'
     +'<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-o" onclick="lotesRestaurarRevisar()">Revisar</button><button class="btn" style="background:transparent;border:1px solid var(--border);color:var(--muted)" onclick="document.getElementById(\'lotesModal\').remove()">Cancelar</button></div>'
     +'<div id="lotesPrev" style="margin-top:12px"></div></div>';
@@ -585,6 +690,12 @@ window.lotesUsarRespaldo=function(){
   const r=_lotesRespaldo();const t=document.getElementById('lotesTxt');
   if(!r||!t)return;
   t.value=r.lots.map(x=>x.lot+'\t'+x.name).join('\n');
+  lotesRestaurarRevisar();
+};
+window.lotesUsarGuardados=function(){
+  const L=window._lotesFijos;const t=document.getElementById('lotesTxt');
+  if(!L||!t)return;
+  t.value=L.lotes.slice().sort((x,y)=>x.lote-y.lote).map(x=>x.lote+'\t'+x.nombre).join('\n');
   lotesRestaurarRevisar();
 };
 window.lotesRestaurarRevisar=function(){
@@ -625,6 +736,7 @@ window.lotesRestaurarAplicar=function(){
   window._lotesPlanActual=null;
   const m=document.getElementById('lotesModal');if(m)m.remove();
   saveNow();R();
+  _lotesFijar('restaurados');
   showToastLC('Lotes restaurados: '+p.cambios.length+' cambios');
 };
 

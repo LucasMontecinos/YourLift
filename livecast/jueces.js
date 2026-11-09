@@ -304,7 +304,7 @@ window.revertirJurado=function(id,l,r){
       ?'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">¿Con qué tarjeta? (el motivo del nulo)</div>'
         +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+b('ROJA',sale('n','red'),'#ef4444')+b('AZUL',sale('n','blue'),'#3b82f6')+b('AMARILLA',sale('n','yellow'),'#f59e0b','#111')+'</div>'
       :'<div style="display:flex;gap:8px">'+b('REVERTIR A VÁLIDO',sale('g',null),'#22c55e','#04210f')+'</div>')
-    +'<div style="font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5">Sale en la transmisión si JURADO está activado (Control Remoto o Control TX) y en la pantalla de Intentos.</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5">Sale en la transmisión si JURADO está activado (Control Remoto o Control TX) y en la Pantalla cargadores.</div>'
     +'<button onclick="document.getElementById(\'juradoModal\').remove()" style="margin-top:12px;width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;letter-spacing:1px;cursor:pointer">CANCELAR</button>'
     +'</div>';
   document.body.appendChild(m);

@@ -3,7 +3,7 @@
 // Entra a yourlift.cl/admin y ahí adentro tiene una sola puerta, YourLift
 // (LiftingCast) — nada de la base de atletas, nóminas ni inscripciones. Ya en el
 // livecast elige el campeonato como cualquiera, y una vez adentro solo ve lo de la
-// transmisión: Control TX, Control Remoto, Transmisión, Widgets OBS y Pantalla de
+// transmisión: Control TX, Control Remoto y Pantalla de
 // Tarima. No entra a Atletas & Pesaje ni a Control en Vivo, así que no puede
 // tocar la competencia por accidente.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_streaming.js
@@ -46,8 +46,8 @@ async function menuConRol(p, rol) {
   const tiene = t => st.menu.some(x => x.includes(t));
   ok(tiene('Control TX'), 'está Control TX');
   ok(tiene('Control Remoto'), 'está Control Remoto');
-  ok(tiene('Transmisión'), 'está Transmisión');
-  ok(tiene('Widgets OBS'), 'están los Widgets OBS');
+  // Transmisión y Widgets OBS salieron del menú: todo queda en Control TX.
+  ok(!tiene('Widgets OBS') && !st.menu.some(x => x === 'Transmisión'), 'ya no están Transmisión ni Widgets OBS');
   ok(tiene('Pantalla Tarima'), 'está la Pantalla de Tarima');
   ok(tiene('Selección de Campeonato'), 'y puede volver a elegir campeonato');
   ok(!tiene('Atletas & Pesaje'), 'NO está Atletas & Pesaje');

@@ -95,7 +95,7 @@ async function operar(b, ev, tarima) {
   });
   await r.p.waitForTimeout(2500);
   r.info = await r.p.evaluate(() => ({ juez: juezDocId(), canal: fbDocId(), atletas: DATA.athletes.map(a => a.name),
-    link: (() => { DATA.phase = 'obsTx'; R(); const l = [...document.querySelectorAll('input[readonly]')].map(i => i.value)
+    link: (() => { DATA.phase = 'director'; R(); const l = [...document.querySelectorAll('input[readonly]')].map(i => i.value)
       .find(v => /jueces\.html/.test(v)); DATA.phase = 'compete'; R(); return l; })() }));
   r.res = resumen(await lecturas(r.p));
   return r;

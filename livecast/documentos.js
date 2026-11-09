@@ -78,23 +78,22 @@ async function generateHojaRack(dia,idBoton){
     const PW=210,PH=297;
     const C=CP;
 
-    // Sort by flight then lot
-    const athletes=_athDeDia(dia).sort((a,b)=>{
-      if(a.flight!==b.flight)return _cmpFl(a.flight,b.flight);
-      return a.lot-b.lot;
-    });
+    // Por número de lote, de menor a mayor (el lote lleva la tanda: A→100…,
+    // B→200…), así que las tandas salen seguidas y en orden.
+    const athletes=_athDeDia(dia).sort((a,b)=>((+a.lot||1e9)-(+b.lot||1e9))||_cmpFl(a.flight,b.flight));
     if(_avisaSinAtletas(athletes.length,dia))return;
 
-    // 5 cols — usable 194mm portrait
-    // Tanda|Nombre|Rack SQ|Rack BP|Firma
+    // 6 cols — usable 194mm portrait
+    // Tanda|Lote|Nombre|Rack SQ|Rack BP|Firma
     const cols=[
-      {h:'Tanda',   w:18,  align:'center', writable:false},
-      {h:'Nombre',  w:90,  align:'left',   writable:false},
-      {h:'Rack SQ', w:28,  align:'center', writable:true},
-      {h:'Rack BP', w:28,  align:'center', writable:true},
-      {h:'Firma',   w:30,  align:'center', writable:true},
+      {h:'Tanda',   w:16,  align:'center', writable:false},
+      {h:'Lote',    w:16,  align:'center', writable:false},
+      {h:'Nombre',  w:82,  align:'left',   writable:false},
+      {h:'Rack SQ', w:26,  align:'center', writable:true},
+      {h:'Rack BP', w:26,  align:'center', writable:true},
+      {h:'Firma',   w:28,  align:'center', writable:true},
     ];
-    // 18+90+28+28+30 = 194 ✓
+    // 16+16+82+26+26+28 = 194 ✓
     const totalW=cols.reduce((s,c)=>s+c.w,0);
     const startX=(PW-totalW)/2;
 
@@ -154,6 +153,7 @@ async function generateHojaRack(dia,idBoton){
 
       const vals=[
         {t:a.flight||'', bold:true},
+        {t:String(a.lot||'—'), bold:true},
         {t:strip(a.name||''), bold:false, align:'left'},
         {t:(function(){const ab={izq:'I',der:'D',ambos:'I+D'}[String(a.sqAbat||'')]||'';return (a.rackSQ?String(a.rackSQ):'')+(ab?' ab:'+ab:'');})(), bold:!!a.rackSQ},
         {t:(function(){const p=parseInt(a.bpPalm,10)||0;return (a.rackBP?String(a.rackBP):'')+(a.bpSeg?' s:'+a.bpSeg:'')+(p>0?' p:'+p:'');})(), bold:!!a.rackBP},
@@ -171,7 +171,7 @@ async function generateHojaRack(dia,idBoton){
           const al=(cell.align||col.align)==='center'?'center':'left';
           const px=al==='center'?cx+col.w/2:cx+3;
           let txt=cell.t;
-          if(ci===1){const maxW=col.w-6;while(txt.length>1&&doc.getTextWidth(txt)>maxW)txt=txt.slice(0,-1);if(txt!==cell.t)txt+='.';}
+          if(ci===2){const maxW=col.w-6;while(txt.length>1&&doc.getTextWidth(txt)>maxW)txt=txt.slice(0,-1);if(txt!==cell.t)txt+='.';}
           doc.text(txt,px,ty,{align:al});
         }
         if(col.writable&&!cell.t){
@@ -245,13 +245,9 @@ async function generateHojaEquipo(dia,idBoton){
     const PW=297,PH=210;
     const C=CP;
 
-    // Sort: by flight then by category weight then by name
-    const athletes=_athDeDia(dia).sort((a,b)=>{
-      if(a.flight!==b.flight)return _cmpFl(a.flight,b.flight);
-      const na=parseFloat((a.cat||'').replace(/[^0-9.]/g,''))||999;
-      const nb=parseFloat((b.cat||'').replace(/[^0-9.]/g,''))||999;
-      return na!==nb?na-nb:a.name.localeCompare(b.name);
-    });
+    // Por número de lote, de menor a mayor, como la hoja de pesaje: el lote lleva
+    // la tanda, así que las tandas salen seguidas y en orden.
+    const athletes=_athDeDia(dia).sort((a,b)=>((+a.lot||1e9)-(+b.lot||1e9))||_cmpFl(a.flight,b.flight)||String(a.name||'').localeCompare(String(b.name||'')));
     if(_avisaSinAtletas(athletes.length,dia))return;
 
     // Cols: Tanda|Categoría|Nombre|Singlet|Polera|Cinturón|Rodilleras|Muñequeras|Calzado SQ|Calzado BP|Calzado DL|Calcetas SQ/BP|Calcetas DL
@@ -264,8 +260,9 @@ async function generateHojaEquipo(dia,idBoton){
     // quedan de sobra para una marca a mano.
     const cols=[
       {h:'Tanda',      w:14,  align:'center', check:false},
-      {h:'Cat.',       w:17,  align:'center', check:false},
-      {h:'Nombre (modalidad inscrita)', w:72, align:'left', check:false},
+      {h:'Lote',       w:12,  align:'center', check:false},
+      {h:'Cat.',       w:15,  align:'center', check:false},
+      {h:'Nombre (modalidad inscrita)', w:62, align:'left', check:false},
       {h:'Singlet',    w:17,  align:'center', check:true},
       {h:'Polera',     w:17,  align:'center', check:true},
       {h:'Cinturon',   w:17,  align:'center', check:true},
@@ -277,7 +274,7 @@ async function generateHojaEquipo(dia,idBoton){
       {h:'Calcetas SQ/BP', w:18, align:'center', check:true},
       {h:'Calcetas DL',    w:19, align:'center', check:true},
     ];
-    // total = 14+17+72+17+17+17+18+18+18+18+18+18+19 = 281 ✓
+    // total = 14+12+15+62+17+17+17+18+18+18+18+18+18+19 = 281 ✓
     const totalW=cols.reduce((s,c)=>s+c.w,0);
     const startX=(PW-totalW)/2;
     const BOX=11; // checkbox size mm — large enough to write/mark
@@ -332,6 +329,7 @@ async function generateHojaEquipo(dia,idBoton){
 
       const vals=[
         {t:a.flight||'', bold:true},
+        {t:String(a.lot||'—'), bold:true},
         {t:strip(a.cat||''), bold:false},
         {t:strip(a.name||''),bold:false,align:'left'},
         null,null,null,null,null,null,null,null,null,null,
@@ -351,7 +349,7 @@ async function generateHojaEquipo(dia,idBoton){
             const al=(cell.align||col.align)==='center'?'center':'left';
             const px=al==='center'?cx+col.w/2:cx+2;
             let txt=cell.t;
-            if(ci===2){
+            if(ci===3){
               // Nombre + modalidad entre paréntesis. Si no entra todo, se recorta
               // el NOMBRE y nunca la modalidad, que es el dato que se viene a mirar.
               const lbl=' ('+_modHojaEquipo(a)+')';

@@ -240,10 +240,14 @@ function renderResults(){
   if(_diasActa.length>1){
     const _dSel=window._ACTA_DIA||'';
     const _nDia=d=>DATA.athletes.filter(a=>!a.__is4&&_diaDeAtleta(a)===d).length;
+    // La lista que se despliega toma el fondo del <select>: con fondo transparente
+    // salía blanca con letras blancas y no se leía qué día era cuál. Va con el
+    // fondo y las letras del tema, igual que los selectores de Filtrar.
+    const _opSt=' style="background:var(--bg);color:var(--text)"';
     adminButtons='<select onchange="setActaDia(this.value)" title="Con qué atletas se generan las actas de abajo" '
-      +'style="padding:7px 10px;border-radius:8px;border:1px solid '+(_dSel?'var(--gold)':'var(--border)')+';background:'+(_dSel?'rgba(212,168,67,.12)':'transparent')+';color:'+(_dSel?'var(--gold)':'var(--text)')+';font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:.5px;cursor:pointer">'
-      +'<option value=""'+(_dSel?'':' selected')+'>Acta: todo el campeonato ('+DATA.athletes.filter(a=>!a.__is4).length+')</option>'
-      +_diasActa.map(d=>'<option value="'+esc(d)+'"'+(_dSel===d?' selected':'')+'>Acta: solo '+esc(d)+' ('+_nDia(d)+')</option>').join('')
+      +'style="padding:7px 10px;border-radius:8px;border:1px solid '+(_dSel?'var(--gold)':'var(--border)')+';background-color:var(--bg);background-image:'+(_dSel?'linear-gradient(rgba(212,168,67,.12),rgba(212,168,67,.12))':'none')+';color:'+(_dSel?'var(--gold)':'var(--text)')+';font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:.5px;cursor:pointer">'
+      +'<option value=""'+_opSt+(_dSel?'':' selected')+'>Acta: todo el campeonato ('+DATA.athletes.filter(a=>!a.__is4).length+')</option>'
+      +_diasActa.map(d=>'<option value="'+esc(d)+'"'+_opSt+(_dSel===d?' selected':'')+'>Acta: solo '+esc(d)+' ('+_nDia(d)+')</option>').join('')
       +'</select>'+adminButtons;
     if(_dSel){
       // Si una categoría se reparte entre los dos días, el podio del acta de hoy

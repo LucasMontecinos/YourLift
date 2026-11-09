@@ -117,8 +117,8 @@ function renderScreenControl(){
     };
     h+='<div class="card" style="margin-bottom:16px">';
     h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:4px">UN LINK POR PANTALLA</div>';
-    h+='<div style="font-size:11px;color:var(--muted);line-height:1.55;margin-bottom:6px">Cada uno abre SOLO lo que dice y no cambia aunque se toquen los botones de abajo. Son para los televisores que muestran siempre lo mismo: uno con los intentos, otro con las luces, otro con el perfil.</div>';
-    h+=fila('intentos','PANTALLA DE INTENTOS','var(--text)','La tabla de intentos del atleta en barra');
+    h+='<div style="font-size:11px;color:var(--muted);line-height:1.55;margin-bottom:6px">Cada uno abre SOLO lo que dice y no cambia aunque se toquen los botones de abajo. Son para los televisores que muestran siempre lo mismo: uno para los cargadores, otro con las luces, otro con el perfil.</div>';
+    h+=fila('intentos','PANTALLA CARGADORES','var(--text)','Para los cargadores (spotters): peso, discos e intentos del atleta en barra');
     h+=fila('luces','LUCES JUECES','var(--text)','Las tres luces a pantalla completa');
     h+=fila('barra','ATLETA EN BARRA','var(--text)','Nombre, peso y discos');
     h+=fila('profile','PERFIL ATLETA','var(--text)','Foto y datos del atleta');
@@ -134,7 +134,7 @@ function renderScreenControl(){
   h+='<div style="display:flex;gap:12px;flex-wrap:wrap">';
   h+=mb('profile','PERFIL ATLETA','','#3b82f6');
   h+=mb('barra','ATLETA EN BARRA','','#a855f7');
-  h+=mb('intentos','PANTALLA DE INTENTOS','','#22c55e');
+  h+=mb('intentos','PANTALLA CARGADORES','','#22c55e');
   h+=mb('jornada','TABLA JORNADA','','#D4A843');
   h+=mb('luces','LUCES JUECES','','#64748B');
   h+=mb('off','APAGAR','','#ef4444');
@@ -1362,7 +1362,7 @@ window.screenAllFlights=function(){
 };
 
 window.piResetLayout=function(){
-  if(!confirm('¿Restablecer las posiciones y tamaños de la Pantalla de Intentos a los valores por defecto?'))return;
+  if(!confirm('¿Restablecer las posiciones y tamaños de la Pantalla cargadores a los valores por defecto?'))return;
   // Las de "Atleta en barra" son las que empiezan con b y mayúscula (bSigla,
   // bPeso…). 'discos' es de esta pantalla, por eso se pide la mayúscula.
   // Las de la pantalla de Luces empiezan con l y mayúscula (lCab, lLuces…).
@@ -1481,6 +1481,9 @@ window.setLot=function(id,val){
     a.lot=n;
   }
   _markAtt(id,'meta');
+  // Cambio a mano: el candado de lotes pasa a tener este número (antes de
+  // guardar, para que llegue a los otros equipos junto con el lote nuevo).
+  if(typeof _lotesFijar==='function'&&window._lotesFijos)_lotesFijar('lote cambiado a mano');
   save();R();
 };
 

@@ -243,7 +243,9 @@ function R(){
         +'<div style="color:var(--muted);font-size:13px">Un segundo…</div></div></div>';
       return;
     }
-    if(DATA.phase==='transmision'){el.innerHTML=renderTransmision();setTimeout(initTxWidgets,0);return}
+    // Las pestañas Transmisión y Widgets OBS ya no están en el menú; quien las
+    // tenía guardadas como última página cae en Control TX.
+    if(DATA.phase==='transmision'||DATA.phase==='obsTx')DATA.phase=isAdmin?'director':'liveView';
     if(DATA.phase==='setup'){
       // El selector se vuelve a dibujar varias veces mientras cargan los datos
       // (nóminas, campeonatos de Firestore, el conteo de atletas de cada uno).
@@ -438,8 +440,8 @@ function renderShell(){
   // "Scoreboard" se sacó del menú: era una pantalla vieja de proyección que quedó
   // reemplazada por Pantalla de Tarima. Las descargas del acta NO estaban ahí, están
   // en Resultados, así que no se pierde nada.
-  if(window._canAccess('transmision'))h+='<button class="side-btn '+(p==='transmision'?'active':'')+'" onclick="go(\'transmision\')"><span class="icon"><i class=yl-i-video></i></span>Transmisi\u00f3n</button>';
-  if(window._canAccess('obsTx'))h+='<button class="side-btn '+(p==='obsTx'?'active':'')+'" onclick="go(\'obsTx\')"><span class="icon"><i class=yl-i-capas></i></span>Widgets OBS</button>';
+  // "Transmisión" y "Widgets OBS" salieron del menú: todo se maneja desde
+  // Control TX (que ahora trae también la tarima y los links de los teléfonos).
   if(window._canAccess('director'))h+='<button class="side-btn '+(p==='director'?'active':'')+'" onclick="go(\'director\')"><span class="icon"><i class=yl-i-ajustes></i></span>Control TX</button>';
   if(window._canAccess('remote'))h+='<button class="side-btn '+(p==='remote'?'active':'')+'" onclick="go(\'remote\')"><span class="icon"><i class=yl-i-telefono></i></span>Control Remoto</button>';
   if(window._canAccess('screen'))h+='<button class="side-btn '+(p==='screen'?'active':'')+'" onclick="go(\'screen\')"><span class="icon"><i class=yl-i-pantalla></i></span>Pantalla Tarima</button>';

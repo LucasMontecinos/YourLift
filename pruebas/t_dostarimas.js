@@ -121,9 +121,9 @@ async function abrir(b, tarima) {
 
   console.log('\nEl panel entrega los links de los teléfonos con la tarima puesta');
   {
-    const r = await t1.p.evaluate(() => {  // Widgets OBS: ahí viven los links
+    const r = await t1.p.evaluate(() => {  // Control TX: ahí viven los links
       isAdmin = true; DATA.event = { id: 'x', name: 'Regional Noviembre' };
-      DATA.phase = 'obsTx'; R();
+      DATA.phase = 'director'; R();
       return document.body.innerText + '||' + [...document.querySelectorAll('input[readonly]')].map(i => i.value).join(' ');
     });
     ok(/LINKS PARA LOS TEL/.test(r), 'hay una sección para los teléfonos');

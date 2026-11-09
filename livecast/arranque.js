@@ -206,8 +206,8 @@ window.ADMIN_ROLE=null;
 // jueces no entran a Control TX. El resto de roles (owner/superadmin/admin) tiene acceso total.
 //
 // "streaming" es la cuenta de quien transmite: elige el campeonato como cualquiera,
-// pero de ahí en adelante solo ve lo de la transmisión (Control TX, Control Remoto,
-// Transmisión, Widgets OBS y Pantalla de Tarima). No entra a Atletas & Pesaje ni a
+// pero de ahí en adelante solo ve lo de la transmisión (Control TX, Control Remoto
+// y Pantalla de Tarima). No entra a Atletas & Pesaje ni a
 // Control en Vivo, así que no puede tocar la competencia por accidente.
 const _PAGS_STREAMING=['setup','transmision','obsTx','director','remote','screen','results','atletaInfo','liveView'];
 // ══════════════════════════════════════════════
@@ -801,6 +801,7 @@ setInterval(()=>{
   // vez por segundo: R() no corre mientras se está tecleando en una casilla, y
   // el panel de jueces no puede quedarse esperando a que se suelte el campo.
   try{ if(typeof _deberesDelPuesto==='function')_deberesDelPuesto(); }catch(e){}
+  try{ if(typeof _lotesVigilar==='function')_lotesVigilar(); }catch(e){}   // candado de lotes
   let changed=false;
   let anyActive=false;
   // Solo se fuerza un re-render completo si el auto-relleno cambió un peso (aparecen
