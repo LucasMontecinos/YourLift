@@ -107,15 +107,17 @@ const MONTAR = `(modo)=>{
   await montar('intentos');
   await p.evaluate(() => { const a = DATA.athletes[0]; a.rackSQ = '12'; DATA.relojVisible = true; window._piSelected = null; renderTxWidget(); });
   const claves = await p.evaluate(() => [...document.querySelectorAll('.pi-block')].map(e => e.getAttribute('data-pi-key')));
-  for (const k of ['titulo', 'tanda', 'liftLabel', 'weight', 'rack', 'discos', 'name', 'subtitle', 'luces', 'reloj'])
+  for (const k of ['titulo', 'tanda', 'liftLabel', 'weight', 'discos', 'name', 'subtitle', 'luces', 'reloj'])
     ok(claves.includes(k), k + ' es un bloque');
   ok(!/Por lado/.test(await p.evaluate(() => document.body.innerText)), 'sin la línea "Por lado … collar": solo el dibujo de la barra');
+  ok(!claves.includes('rack') && await p.evaluate(() => (document.querySelector('[data-pi-key="liftLabel"]') || {}).textContent.indexOf('RACK 12') >= 0),
+    'sin el cuadro RACK junto a la barra: la altura queda en el rótulo del movimiento');
   const fijos = await p.evaluate(() => [...document.querySelectorAll('#pantIntentosBox *')].filter(e => {
     if (e.closest('.pi-block') || e.closest('button') || e.closest('[style*="z-index:50"]')) return false;
     return [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
   }).map(e => e.textContent.trim().slice(0, 30)));
   ok(fijos.length === 0, 'no queda ningún texto fijo fuera de los bloques' + (fijos.length ? ': ' + fijos.join(' | ') : ''));
-  for (const k of ['titulo', 'discos', 'rack']) {
+  for (const k of ['titulo', 'discos', 'weight']) {
     const sel = '.pi-block[data-pi-key="' + k + '"]';
     const antes = await p.evaluate(x => Object.assign({}, _piPos(x)), k);
     const a = await caja(sel);

@@ -1099,7 +1099,6 @@ function renderScreenIntentos(cur,nxt){
   // Enunciado del intento extra en la proyección: "4º INTENTO" si se concedió en
   // la 3ª ronda, "INTENTO EXTRA" en la 1ª/2ª. Se suma al intento normal en curso.
   if(cur.__is4){roundLabel+=((((cur.att[DATA.lift][3]||{}).grantedRound)||0)>=2)?' · 4º INTENTO':' · INTENTO EXTRA';}
-  const rackH=DATA.lift==='sq'?cur.rackSQ:DATA.lift==='bp'?cur.rackBP:'';
   const _setup=_rackSetup(_realAth(cur),DATA.lift);
   const sexLbl=isMale?'HOMBRES':'MUJERES';
   const t=Math.max(0,DATA.timer||0);
@@ -1141,10 +1140,10 @@ function renderScreenIntentos(cur,nxt){
   const subtitleHtml=`<div style="font-family:Oswald;font-size:2.2vh;letter-spacing:.14em;color:#fff;white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div,_modTarima(cur)].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
   // En blanco, como todo en esta pantalla (se pidió así para leerla de lejos).
   const positionHtml=posTxt?`<div style="font-family:Oswald;font-size:2.6vh;letter-spacing:.04em;color:#fff;white-space:nowrap">${posTxt}</div>`:'';
-  // Dos bloques, el rack y la barra, para que cada uno se acomode por separado.
-  // La línea "Por lado: 4 × 25 + 10 … collar 2.5 = 115" se sacó: la mesa pidió
-  // dejar solo el dibujo de la barra.
-  const rackHtml=rackH?`<div style="border:2px solid #3A3A3F;border-radius:10px;padding:.6vh 1.8vh;text-align:center;font-family:Oswald,sans-serif;color:#fff"><div style="font-size:1.7vh;letter-spacing:.16em">RACK</div><div style="font-size:5.4vh;font-weight:600;line-height:1">${rackH}</div></div>`:'';
+  // Solo el dibujo de la barra. Se sacaron, a pedido de la mesa, la línea
+  // "Por lado: 4 × 25 + 10 … collar 2.5 = 115" y el cuadro RACK que iba junto a
+  // la barra: la altura de rack ya se lee en el rótulo del movimiento
+  // (SENTADILLA · 1er INTENTO · RACK 12).
   const bbHtml=bbSvg;
   // Quién viene después — para que los cargadores/spotters se vayan preparando.
   // Si el actual es el último de su ronda, el de al lado NO es null: se sigue
@@ -1203,7 +1202,6 @@ function renderScreenIntentos(cur,nxt){
     ${_cambiosIntentoActual(cur)?_piBlock('cambio',_cartelCambioHtml('30px')):''}
     ${(typeof _txJurado!=='undefined'&&_txJurado&&Date.now()<_txJuradoHasta)?_piBlock('jurado',_juradoTarimaHtml(_txJurado)):''}
     ${_piBlock('weight',weightHtml,true)}
-    ${rackHtml?_piBlock('rack',rackHtml,'der'):''}
     ${_piBlock('discos',bbHtml,'der')}
     ${_piBlock('name',nameHtml,true)}
     ${_piBlock('subtitle',subtitleHtml,true)}

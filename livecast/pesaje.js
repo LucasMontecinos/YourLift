@@ -532,7 +532,8 @@ function _lotesParse(txt){
   String(txt||'').split(/\r?\n/).forEach(l=>{
     const m=l.match(/(?:^|\s)(\d{1,4})\s+([A-Za-zÀ-ÿ'’´.\- ]{4,})/);
     if(!m)return;
-    const nombre=m[2].replace(/\s{2,}.*$/,'').trim();
+    // La hoja trae la categoría al lado del nombre (-83kg): el guion queda colgando.
+    const nombre=m[2].replace(/\s{2,}.*$/,'').replace(/[\s\-.]+$/,'').trim();
     if(nombre.split(/\s+/).length<2)return;      // un nombre tiene al menos dos palabras
     out.push({lot:parseInt(m[1],10),nombre});
   });

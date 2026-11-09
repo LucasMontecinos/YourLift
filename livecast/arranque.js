@@ -1251,12 +1251,11 @@ const PI_DEFAULT_LAYOUT={
   record:{x:8,y:16,scale:100},
   liftLabel:{x:8,y:23,scale:100},
   weight:{x:8,y:43,scale:100},
-  // La barra y el rack van anclados por la DERECHA (x es su borde
+  // La barra va anclada por la DERECHA (x es su borde
   // derecho): con más discos la barra crece hacia adentro, no hacia el borde.
   // Clave nueva ('discos', antes 'barbell', que iba centrada): una posición
   // guardada con el centro, leída como borde derecho, la corría de lugar.
   discos:{x:84,y:50,scale:100},
-  rack:{x:84,y:26,scale:100},
   // La franja de arriba: el título y la tanda (desde el borde izquierdo).
   titulo:{x:7.9,y:4.5,scale:100},
   tanda:{x:35.4,y:4.5,scale:100},

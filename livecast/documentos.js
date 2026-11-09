@@ -254,7 +254,9 @@ async function generateHojaEquipo(dia,idBoton){
     });
     if(_avisaSinAtletas(athletes.length,dia))return;
 
-    // Cols: Tanda|Categoría|Nombre|Singlet|Polera|Cinturón|Rodilleras|Muñequeras|Calzado SQ|Calzado BP|Calzado DL|Calcetas
+    // Cols: Tanda|Categoría|Nombre|Singlet|Polera|Cinturón|Rodilleras|Muñequeras|Calzado SQ|Calzado BP|Calzado DL|Calcetas SQ/BP|Calcetas DL
+    // Las calcetas van en dos columnas: para peso muerto se revisan aparte (tienen
+    // que cubrir la canilla), así lo pidió la mesa.
     // Total usable: 297 - 2*8 = 281mm
     // La columna Nombre se ensancha para que quepa la modalidad entre paréntesis:
     // en revisión de equipo importa saber de una si es classic o equipado, y quién
@@ -263,18 +265,19 @@ async function generateHojaEquipo(dia,idBoton){
     const cols=[
       {h:'Tanda',      w:14,  align:'center', check:false},
       {h:'Cat.',       w:17,  align:'center', check:false},
-      {h:'Nombre (modalidad inscrita)', w:78, align:'left', check:false},
-      {h:'Singlet',    w:18,  align:'center', check:true},
-      {h:'Polera',     w:18,  align:'center', check:true},
-      {h:'Cinturon',   w:18,  align:'center', check:true},
-      {h:'Rodilleras', w:20,  align:'center', check:true},
-      {h:'Munequeras', w:20,  align:'center', check:true},
-      {h:'Calz. SQ',   w:20,  align:'center', check:true},
-      {h:'Calz. BP',   w:20,  align:'center', check:true},
-      {h:'Calz. DL',   w:20,  align:'center', check:true},
-      {h:'Calcetas',   w:18,  align:'center', check:true},
+      {h:'Nombre (modalidad inscrita)', w:72, align:'left', check:false},
+      {h:'Singlet',    w:17,  align:'center', check:true},
+      {h:'Polera',     w:17,  align:'center', check:true},
+      {h:'Cinturon',   w:17,  align:'center', check:true},
+      {h:'Rodilleras', w:18,  align:'center', check:true},
+      {h:'Munequeras', w:18,  align:'center', check:true},
+      {h:'Calz. SQ',   w:18,  align:'center', check:true},
+      {h:'Calz. BP',   w:18,  align:'center', check:true},
+      {h:'Calz. DL',   w:18,  align:'center', check:true},
+      {h:'Calcetas SQ/BP', w:18, align:'center', check:true},
+      {h:'Calcetas DL',    w:19, align:'center', check:true},
     ];
-    // total = 14+17+78+18+18+18+20+20+20+20+20+18 = 281 ✓
+    // total = 14+17+72+17+17+17+18+18+18+18+18+18+19 = 281 ✓
     const totalW=cols.reduce((s,c)=>s+c.w,0);
     const startX=(PW-totalW)/2;
     const BOX=11; // checkbox size mm — large enough to write/mark
@@ -296,12 +299,17 @@ async function generateHojaEquipo(dia,idBoton){
 
     const drawColHeaders=(y)=>{
       doc.setFillColor(...C.colH);doc.rect(startX,y,totalW,7,'F');
-      doc.setTextColor(...C.colTx);doc.setFont('helvetica','bold');doc.setFontSize(6.5);
+      doc.setTextColor(...C.colTx);doc.setFont('helvetica','bold');
       let cx=startX;
       cols.forEach(col=>{
+        // "Calcetas SQ/BP" no entra en 6,5 pt: ese encabezado se achica lo justo.
+        doc.setFontSize(6.5);
+        const an=doc.getTextWidth(col.h);
+        if(an>col.w-2)doc.setFontSize(Math.max(4.5,6.5*(col.w-2)/an));
         doc.text(col.h,cx+(col.align==='center'?col.w/2:2),y+4.5,{align:col.align==='center'?'center':'left'});
         cx+=col.w;
       });
+      doc.setFontSize(6.5);
       doc.setDrawColor(...C.line);doc.setLineWidth(0.4);doc.line(startX,y+7,startX+totalW,y+7);
     };
 
@@ -326,7 +334,7 @@ async function generateHojaEquipo(dia,idBoton){
         {t:a.flight||'', bold:true},
         {t:strip(a.cat||''), bold:false},
         {t:strip(a.name||''),bold:false,align:'left'},
-        null,null,null,null,null,null,null,null,null,
+        null,null,null,null,null,null,null,null,null,null,
       ];
 
       let cx=startX;
@@ -697,6 +705,19 @@ async function generatePapeletas(conNombre,dia,idBoton){
 // ═══════════════════════════════════════════════════════════
 // HOJA DE PESAJE PDF
 // ═══════════════════════════════════════════════════════════
+// Categoría y división en corto, para la hoja de pesaje: -83kg / +120kg, y
+// SUB-JR, JR, OPEN, M1…M4, UNIV, OE.
+function _catHoja(c){
+  try{ const l=(typeof txCatLabel==='function')?txCatLabel(c):''; if(l)return l; }catch(e){}
+  return String(c||'');
+}
+function _divHoja(d){
+  const s=String(d||'').trim(); if(!s)return '';
+  if(/univ/i.test(s))return 'UNIV';
+  if(/olimp|special|^oe$/i.test(s))return 'OE';
+  const c=(typeof txDivShort==='function')?txDivShort(s):s;
+  return c.replace(/^SJR$/,'SUB-JR').replace(/^OPN$/,'OPEN').toUpperCase();
+}
 async function generateHojaPesaje(dia,idBoton){
   const btn=document.getElementById(idBoton||'btnHojaPesaje');
   const rotulo=btn?btn.textContent:'';
@@ -716,21 +737,25 @@ async function generateHojaPesaje(dia,idBoton){
     const PW=210,PH=297;
     const C=CP;
 
-    // Cols: Tarima|Tanda|Lot#|Nombre|BW|Opener SQ|Opener BP|Opener DL|Ropa Int.|Firma
+    // Cols: Tarima|Tanda|Lot#|Nombre|Cat.|Div.|BW|Opener SQ|Opener BP|Opener DL|Ropa Int.|Firma
     // Total usable width: 210 - 2*8 = 194mm
+    // La categoría y la división de edad van al lado del nombre: en el pesaje se
+    // mira si el peso calza con su categoría, y la mesa lo pidió (no venían).
     const cols=[
-      {h:'Tarima',    w:16, align:'center', writable:true},
-      {h:'Tanda',     w:14, align:'center', writable:false},
-      {h:'Lot #',     w:14, align:'center', writable:false},
-      {h:'Nombre',    w:52, align:'left',   writable:false},
+      {h:'Tarima',    w:12, align:'center', writable:true},
+      {h:'Tanda',     w:11, align:'center', writable:false},
+      {h:'Lot #',     w:11, align:'center', writable:false},
+      {h:'Nombre',    w:46, align:'left',   writable:false},
+      {h:'Cat.',      w:12, align:'center', writable:false},
+      {h:'Div.',      w:13, align:'center', writable:false},
       {h:'BW',        w:14, align:'center', writable:true},
-      {h:'Opener SQ', w:18, align:'center', writable:true},
-      {h:'Opener BP', w:18, align:'center', writable:true},
-      {h:'Opener DL', w:18, align:'center', writable:true},
-      {h:'Ropa Int.', w:16, align:'center', writable:true},
+      {h:'Opener SQ', w:16, align:'center', writable:true},
+      {h:'Opener BP', w:16, align:'center', writable:true},
+      {h:'Opener DL', w:16, align:'center', writable:true},
+      {h:'Ropa Int.', w:13, align:'center', writable:true},
       {h:'Firma',     w:14, align:'center', writable:true},
     ];
-    // total = 16+14+14+52+14+18+18+18+16+14 = 194 ✓
+    // total = 12+11+11+46+12+13+14+16+16+16+13+14 = 194 ✓
     const totalW=cols.reduce((s,c)=>s+c.w,0);
     const startX=(PW-totalW)/2;
 
@@ -792,6 +817,8 @@ async function generateHojaPesaje(dia,idBoton){
           {t:a.flight||'', bold:true},
           {t:String(a.lot||'—'), bold:true},
           {t:strip(a.name||''), bold:false, align:'left'},
+          {t:strip(_catHoja(a.cat)), bold:false},
+          {t:strip(_divHoja(a.div)), bold:false},
           {t:a.bw>0?String(a.bw):'', bold:a.bw>0},
           {t:(a.att==null?void 0:(a.att.sq==null?void 0:(a.att.sq[0]==null?void 0:a.att.sq[0].w)))>0?String(a.att.sq[0].w):'', bold:false},
           {t:(a.att==null?void 0:(a.att.bp==null?void 0:(a.att.bp[0]==null?void 0:a.att.bp[0].w)))>0?String(a.att.bp[0].w):'', bold:false},
