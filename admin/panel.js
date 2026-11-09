@@ -326,7 +326,11 @@ window.doLogin=async function(){
   const btn=document.querySelector('[onclick*="doLogin"]');
   if(btn){btn.textContent='Ingresando...';btn.disabled=true;}
   try{
-    await signInWithEmailAndPassword(auth,em,pw);
+    const cred=await signInWithEmailAndPassword(auth,em,pw);
+    // Si la cuenta ya estaba con la sesión abierta, Firebase no vuelve a avisar
+    // y la pantalla se quedaba en el formulario. Se entra a mano.
+    const u=(cred&&cred.user)||auth.currentUser;
+    if(u&&!ST.user&&typeof window._alCambiarSesion==='function')window._alCambiarSesion(u);
   }catch(e){
     console.error('[doLogin]',e.code,e.message);
     let msg='Error: '+e.message;
@@ -391,11 +395,27 @@ async function loadAll(){
   // ¿La nómina del Sudamericano sigue publicada? Mientras lo esté, el panel la
   // ofrece en Nóminas, Tarjetas y Medallero; cuando se despublica, desaparece.
   fetch('nomina_sudamericano.json').then(r=>r.json()).then(j=>{ST.sudaPublicada=j.publicada!==false;if(ST.sudaPublicada&&typeof render==='function')render();}).catch(()=>{});
+  // Todo lo que se lee al entrar se PIDE junto, acá, y se USA más abajo en el
+  // mismo orden de siempre (las fichas pendientes antes que las ediciones, las
+  // ediciones antes que las fotos…), así que el resultado es el mismo. Antes se
+  // pedía una cosa, se esperaba, y recién ahí la siguiente: ocho viajes a la
+  // base uno detrás de otro, y el panel se quedaba en "Cargando datos…" lo
+  // bastante como para que el vigilante de la carga lo diera por caído.
+  // Las ediciones no van acá: tienen su propia copia y solo bajan si cambiaron.
+  const _pide=(f,nom)=>{ const p=f(); p.catch(e=>console.warn('[loadAll] '+nom+':',e&&e.message)); return p; };
+  const _pre={
+    padron:   _pide(()=>getDoc(doc(db,'privado','padron')),'privado/padron'),
+    pend:     _pide(()=>getDocs(collection(db,'atletas_pending')),'atletas_pending'),
+    pendPriv: _pide(()=>getDocs(collection(db,'atletas_pending_priv')),'atletas_pending_priv'),
+    edPriv:   _pide(()=>getDocs(collection(db,'athlete_edits_priv')),'athlete_edits_priv'),
+    fotos:    _pide(()=>getDocs(collection(db,'atleta_fotos')),'atleta_fotos'),
+    logros:   _pide(()=>getDocs(collection(db,'atleta_achievements')),'atleta_achievements'),
+  };
   // Load data.json — non-blocking, dashboard degrades gracefully if missing
   try{
     const dRes=await fetch('data.json').then(r=>r.json()).catch(()=>[]);
     ST.data=Array.isArray(dRes)?dRes:[];
-    await _mezclarPadronPrivado();   // RUT y fecha completa, que data.json ya no publica
+    await _mezclarPadronPrivado(_pre.padron);   // RUT y fecha completa, que data.json ya no publica
     PEERS=_peersBuild(ST.data);
     window._HIST_ANIO=null;   // el cruce de participación ya puede usar data.json
     cargarCupoCfg();          // qué campeonatos cuentan (si se eligieron a mano)
@@ -409,8 +429,7 @@ async function loadAll(){
   // (admin/privados.js, pendienteGuardar). _pendId: el documento, para marcarlo
   // como incorporado (los de antes de la migración tienen el RUT de id).
   try{
-    const [pendSnap,privSnap]=await Promise.all([getDocs(collection(db,'atletas_pending')),
-      getDocs(collection(db,'atletas_pending_priv')).catch(e=>{console.warn('[loadAll] atletas_pending_priv:',e.message);return null;})]);
+    const [pendSnap,privSnap]=await Promise.all([_pre.pend,_pre.pendPriv.catch(()=>null)]);
     const PP={}; if(privSnap)privSnap.forEach(d=>{PP[d.id]=d.data()||{};});
     const rutNorm=(s)=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
     pendSnap.forEach(d=>{
@@ -438,7 +457,7 @@ async function loadAll(){
     // es de quién (admin/atletas.js, _editDocId).
     ST._edDocPorRut={}; ST._edDocPorCod={};
     try{
-      const ps=await getDocs(collection(db,'athlete_edits_priv'));
+      const ps=await _pre.edPriv;
       const P={}; ps.forEach(d=>{P[d.id]=d.data()||{};});
       docs.forEach(ed=>{ const p=P[ed.id]; if(!p)return;
         ['rut','fechaNac','comuna'].forEach(k=>{ if(p[k]&&!ed[k])ed[k]=p[k]; }); });
@@ -469,7 +488,7 @@ async function loadAll(){
   ST.fotosByRut = {};
   ST.fotosDesdeCache = false;
   try{
-    const fotosSnap=await getDocs(collection(db,'atleta_fotos'));
+    const fotosSnap=await _pre.fotos;
     // Firestore guarda una copia en el navegador y, si no logra hablar con el
     // servidor, la devuelve SIN avisar: ni error ni nada. La pantalla queda
     // mostrando lo de la última vez, así que una foto ya confirmada vuelve a
@@ -507,7 +526,7 @@ async function loadAll(){
   // Load atleta_achievements (logros/medallas). Un doc por atleta (ID = codigo).
   ST.achievementsByCodigo = {};
   try{
-    const achSnap=await getDocs(collection(db,'atleta_achievements'));
+    const achSnap=await _pre.logros;
     achSnap.forEach(d=>{
       const data=d.data();
       const codigo=data.codigo||d.id;
@@ -785,9 +804,9 @@ function renderImportar(){
 // inscripciones, validar edades, los certificados—, así que al cargar los pide a
 // privado/padron, que solo lee un admin, y los pega en cada atleta por código.
 // Mientras data.json todavía los traiga, esto no cambia nada.
-async function _mezclarPadronPrivado(){
+async function _mezclarPadronPrivado(pedido){
   try{
-    const s=await getDoc(doc(db,'privado','padron'));
+    const s=await (pedido||getDoc(doc(db,'privado','padron')));
     if(!s.exists())return;
     const P=(s.data()||{}).atletas||{};
     const completa=f=>/\d{1,2}[\/-]\d{1,2}[\/-]\d{4}|\d{4}-\d{2}-\d{2}/.test(String(f||''));
@@ -16332,8 +16351,14 @@ window.ST=ST;
 // AUTH
 // ═══════════════════════════════════════════
 
-// Safety net — always show something after 5s
+// Red de seguridad: si a los 5 s Firebase todavía no dijo si hay sesión, se
+// muestra el ingreso. SOLO en ese caso. Antes miraba si la pantalla decía
+// "Cargando", y eso también lo dice mientras bajan los datos de alguien que YA
+// entró: lo devolvía al formulario con la sesión abierta, apretar INGRESAR no
+// hacía nada (Firebase no avisa de nuevo por la misma cuenta) y había que
+// recargar la página. Es lo que le pasaba al owner casi cada vez.
 setTimeout(()=>{
+  if(window._authFired)return;
   const app=document.getElementById('app');
   if(app&&(app.innerHTML.includes('Cargando')||app.innerHTML.trim()===''))
     {ST.user=null;render();}
@@ -16362,8 +16387,15 @@ function _vigilarCuentaPropia(uid){
     },()=>{});
   }catch(e){}
 }
-onAuthStateChanged(auth,async(u)=>{window._authFired=true;
-  if(!u){ST.user=null;ST.adminInfo=null;render();return}
+// Lo que pasa al entrar o salir. Se llama desde Firebase y también desde
+// doLogin (admin/sesion.js): si la cuenta ya tenía la sesión abierta, Firebase
+// no vuelve a avisar y el botón INGRESAR se quedaba sin hacer nada.
+let _sesionUid=null;
+async function _alCambiarSesion(u){window._authFired=true;
+  if(!u){_sesionUid=null;ST.user=null;ST.adminInfo=null;render();return}
+  // La misma cuenta ya entrando o adentro: no se carga todo dos veces.
+  if(_sesionUid===u.uid){ if(ST.user)render(); return; }
+  _sesionUid=u.uid;
   try{
     // La lectura va en su propio try: las reglas solo dejan leer admins/{uid} a un
     // admin, así que para una cuenta de juez esto NO devuelve "no existe", tira
@@ -16378,7 +16410,7 @@ onAuthStateChanged(auth,async(u)=>{window._authFired=true;
       let esJuez=false;
       try{ esJuez=(await getDoc(doc(db,'jueces',u.uid))).exists(); }catch(e){}
       await signOut(auth);
-      ST.user=null;ST.adminInfo=null;
+      _sesionUid=null;ST.user=null;ST.adminInfo=null;
       alert(esJuez
         ? 'Esta es una cuenta de juez: sirve solamente para marcar las luces en yourlift.cl/jueces.\n\nNo entra al panel de administración ni al control en vivo.'
         : 'Acceso denegado.\nUID: '+u.uid+'\n\nAgrega este UID a Firestore → admins/'+u.uid+' con campo role:"superadmin"');
@@ -16387,7 +16419,7 @@ onAuthStateChanged(auth,async(u)=>{window._authFired=true;
     // Desactivada por el owner (Gestión Admin): la ficha sigue, pero no entra.
     if(adminDoc.data()?.disabled){
       await signOut(auth);
-      ST.user=null;ST.adminInfo=null;
+      _sesionUid=null;ST.user=null;ST.adminInfo=null;
       alert('Tu cuenta está desactivada.\n\nPídele al administrador de YourLift que la vuelva a activar.');
       render();return;
     }
@@ -16425,10 +16457,13 @@ onAuthStateChanged(auth,async(u)=>{window._authFired=true;
     }
   }catch(e){
     console.error('Auth error',e);
+    _sesionUid=null;
     ST.user=null;
     render();
   }
-});
+}
+window._alCambiarSesion=_alCambiarSesion;
+onAuthStateChanged(auth,_alCambiarSesion);
 // ═══════════════════════════════════════════
 // TOAST WITH UNDO
 // ═══════════════════════════════════════════

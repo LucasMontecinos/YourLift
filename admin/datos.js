@@ -11,11 +11,27 @@ async function loadAll(){
   // ¿La nómina del Sudamericano sigue publicada? Mientras lo esté, el panel la
   // ofrece en Nóminas, Tarjetas y Medallero; cuando se despublica, desaparece.
   fetch('nomina_sudamericano.json').then(r=>r.json()).then(j=>{ST.sudaPublicada=j.publicada!==false;if(ST.sudaPublicada&&typeof render==='function')render();}).catch(()=>{});
+  // Todo lo que se lee al entrar se PIDE junto, acá, y se USA más abajo en el
+  // mismo orden de siempre (las fichas pendientes antes que las ediciones, las
+  // ediciones antes que las fotos…), así que el resultado es el mismo. Antes se
+  // pedía una cosa, se esperaba, y recién ahí la siguiente: ocho viajes a la
+  // base uno detrás de otro, y el panel se quedaba en "Cargando datos…" lo
+  // bastante como para que el vigilante de la carga lo diera por caído.
+  // Las ediciones no van acá: tienen su propia copia y solo bajan si cambiaron.
+  const _pide=(f,nom)=>{ const p=f(); p.catch(e=>console.warn('[loadAll] '+nom+':',e&&e.message)); return p; };
+  const _pre={
+    padron:   _pide(()=>getDoc(doc(db,'privado','padron')),'privado/padron'),
+    pend:     _pide(()=>getDocs(collection(db,'atletas_pending')),'atletas_pending'),
+    pendPriv: _pide(()=>getDocs(collection(db,'atletas_pending_priv')),'atletas_pending_priv'),
+    edPriv:   _pide(()=>getDocs(collection(db,'athlete_edits_priv')),'athlete_edits_priv'),
+    fotos:    _pide(()=>getDocs(collection(db,'atleta_fotos')),'atleta_fotos'),
+    logros:   _pide(()=>getDocs(collection(db,'atleta_achievements')),'atleta_achievements'),
+  };
   // Load data.json — non-blocking, dashboard degrades gracefully if missing
   try{
     const dRes=await fetch('data.json').then(r=>r.json()).catch(()=>[]);
     ST.data=Array.isArray(dRes)?dRes:[];
-    await _mezclarPadronPrivado();   // RUT y fecha completa, que data.json ya no publica
+    await _mezclarPadronPrivado(_pre.padron);   // RUT y fecha completa, que data.json ya no publica
     PEERS=_peersBuild(ST.data);
     window._HIST_ANIO=null;   // el cruce de participación ya puede usar data.json
     cargarCupoCfg();          // qué campeonatos cuentan (si se eligieron a mano)
@@ -29,8 +45,7 @@ async function loadAll(){
   // (admin/privados.js, pendienteGuardar). _pendId: el documento, para marcarlo
   // como incorporado (los de antes de la migración tienen el RUT de id).
   try{
-    const [pendSnap,privSnap]=await Promise.all([getDocs(collection(db,'atletas_pending')),
-      getDocs(collection(db,'atletas_pending_priv')).catch(e=>{console.warn('[loadAll] atletas_pending_priv:',e.message);return null;})]);
+    const [pendSnap,privSnap]=await Promise.all([_pre.pend,_pre.pendPriv.catch(()=>null)]);
     const PP={}; if(privSnap)privSnap.forEach(d=>{PP[d.id]=d.data()||{};});
     const rutNorm=(s)=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
     pendSnap.forEach(d=>{
@@ -58,7 +73,7 @@ async function loadAll(){
     // es de quién (admin/atletas.js, _editDocId).
     ST._edDocPorRut={}; ST._edDocPorCod={};
     try{
-      const ps=await getDocs(collection(db,'athlete_edits_priv'));
+      const ps=await _pre.edPriv;
       const P={}; ps.forEach(d=>{P[d.id]=d.data()||{};});
       docs.forEach(ed=>{ const p=P[ed.id]; if(!p)return;
         ['rut','fechaNac','comuna'].forEach(k=>{ if(p[k]&&!ed[k])ed[k]=p[k]; }); });
@@ -89,7 +104,7 @@ async function loadAll(){
   ST.fotosByRut = {};
   ST.fotosDesdeCache = false;
   try{
-    const fotosSnap=await getDocs(collection(db,'atleta_fotos'));
+    const fotosSnap=await _pre.fotos;
     // Firestore guarda una copia en el navegador y, si no logra hablar con el
     // servidor, la devuelve SIN avisar: ni error ni nada. La pantalla queda
     // mostrando lo de la última vez, así que una foto ya confirmada vuelve a
@@ -127,7 +142,7 @@ async function loadAll(){
   // Load atleta_achievements (logros/medallas). Un doc por atleta (ID = codigo).
   ST.achievementsByCodigo = {};
   try{
-    const achSnap=await getDocs(collection(db,'atleta_achievements'));
+    const achSnap=await _pre.logros;
     achSnap.forEach(d=>{
       const data=d.data();
       const codigo=data.codigo||d.id;
@@ -405,9 +420,9 @@ function renderImportar(){
 // inscripciones, validar edades, los certificados—, así que al cargar los pide a
 // privado/padron, que solo lee un admin, y los pega en cada atleta por código.
 // Mientras data.json todavía los traiga, esto no cambia nada.
-async function _mezclarPadronPrivado(){
+async function _mezclarPadronPrivado(pedido){
   try{
-    const s=await getDoc(doc(db,'privado','padron'));
+    const s=await (pedido||getDoc(doc(db,'privado','padron')));
     if(!s.exists())return;
     const P=(s.data()||{}).atletas||{};
     const completa=f=>/\d{1,2}[\/-]\d{1,2}[\/-]\d{4}|\d{4}-\d{2}-\d{2}/.test(String(f||''));

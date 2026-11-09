@@ -16,7 +16,11 @@ window.doLogin=async function(){
   const btn=document.querySelector('[onclick*="doLogin"]');
   if(btn){btn.textContent='Ingresando...';btn.disabled=true;}
   try{
-    await signInWithEmailAndPassword(auth,em,pw);
+    const cred=await signInWithEmailAndPassword(auth,em,pw);
+    // Si la cuenta ya estaba con la sesión abierta, Firebase no vuelve a avisar
+    // y la pantalla se quedaba en el formulario. Se entra a mano.
+    const u=(cred&&cred.user)||auth.currentUser;
+    if(u&&!ST.user&&typeof window._alCambiarSesion==='function')window._alCambiarSesion(u);
   }catch(e){
     console.error('[doLogin]',e.code,e.message);
     let msg='Error: '+e.message;

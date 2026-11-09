@@ -40,8 +40,14 @@ window.ST=ST;
 // AUTH
 // ═══════════════════════════════════════════
 
-// Safety net — always show something after 5s
+// Red de seguridad: si a los 5 s Firebase todavía no dijo si hay sesión, se
+// muestra el ingreso. SOLO en ese caso. Antes miraba si la pantalla decía
+// "Cargando", y eso también lo dice mientras bajan los datos de alguien que YA
+// entró: lo devolvía al formulario con la sesión abierta, apretar INGRESAR no
+// hacía nada (Firebase no avisa de nuevo por la misma cuenta) y había que
+// recargar la página. Es lo que le pasaba al owner casi cada vez.
 setTimeout(()=>{
+  if(window._authFired)return;
   const app=document.getElementById('app');
   if(app&&(app.innerHTML.includes('Cargando')||app.innerHTML.trim()===''))
     {ST.user=null;render();}
@@ -70,8 +76,15 @@ function _vigilarCuentaPropia(uid){
     },()=>{});
   }catch(e){}
 }
-onAuthStateChanged(auth,async(u)=>{window._authFired=true;
-  if(!u){ST.user=null;ST.adminInfo=null;render();return}
+// Lo que pasa al entrar o salir. Se llama desde Firebase y también desde
+// doLogin (admin/sesion.js): si la cuenta ya tenía la sesión abierta, Firebase
+// no vuelve a avisar y el botón INGRESAR se quedaba sin hacer nada.
+let _sesionUid=null;
+async function _alCambiarSesion(u){window._authFired=true;
+  if(!u){_sesionUid=null;ST.user=null;ST.adminInfo=null;render();return}
+  // La misma cuenta ya entrando o adentro: no se carga todo dos veces.
+  if(_sesionUid===u.uid){ if(ST.user)render(); return; }
+  _sesionUid=u.uid;
   try{
     // La lectura va en su propio try: las reglas solo dejan leer admins/{uid} a un
     // admin, así que para una cuenta de juez esto NO devuelve "no existe", tira
@@ -86,7 +99,7 @@ onAuthStateChanged(auth,async(u)=>{window._authFired=true;
       let esJuez=false;
       try{ esJuez=(await getDoc(doc(db,'jueces',u.uid))).exists(); }catch(e){}
       await signOut(auth);
-      ST.user=null;ST.adminInfo=null;
+      _sesionUid=null;ST.user=null;ST.adminInfo=null;
       alert(esJuez
         ? 'Esta es una cuenta de juez: sirve solamente para marcar las luces en yourlift.cl/jueces.\n\nNo entra al panel de administración ni al control en vivo.'
         : 'Acceso denegado.\nUID: '+u.uid+'\n\nAgrega este UID a Firestore → admins/'+u.uid+' con campo role:"superadmin"');
@@ -95,7 +108,7 @@ onAuthStateChanged(auth,async(u)=>{window._authFired=true;
     // Desactivada por el owner (Gestión Admin): la ficha sigue, pero no entra.
     if(adminDoc.data()?.disabled){
       await signOut(auth);
-      ST.user=null;ST.adminInfo=null;
+      _sesionUid=null;ST.user=null;ST.adminInfo=null;
       alert('Tu cuenta está desactivada.\n\nPídele al administrador de YourLift que la vuelva a activar.');
       render();return;
     }
@@ -133,10 +146,13 @@ onAuthStateChanged(auth,async(u)=>{window._authFired=true;
     }
   }catch(e){
     console.error('Auth error',e);
+    _sesionUid=null;
     ST.user=null;
     render();
   }
-});
+}
+window._alCambiarSesion=_alCambiarSesion;
+onAuthStateChanged(auth,_alCambiarSesion);
 // ═══════════════════════════════════════════
 // TOAST WITH UNDO
 // ═══════════════════════════════════════════

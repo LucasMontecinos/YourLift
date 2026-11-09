@@ -159,8 +159,13 @@ body.nav-open .adm-burger{opacity:0;pointer-events:none}
     if(btn) btn.style.display = 'block';
   }, 5000);
 
+  // A los 12 s, el aviso de error SOLO si el panel nunca arrancó (no llegó la
+  // respuesta de Firebase). Si ya arrancó y está bajando los datos de alguien
+  // que entró, se le deja terminar: antes lo tapaba con "Error al cargar" y
+  // obligaba a recargar.
   setTimeout(function(){
     var app = document.getElementById('app');
+    if(window._authFired) return;
     if(app && app.innerHTML.indexOf('Cargando') !== -1){
       app.innerHTML = '<div style="text-align:center;padding:60px;color:#C41E3A;font-family:Oswald">'
         + '<div style="font-size:32px;margin-bottom:12px"></div>'
@@ -172,6 +177,6 @@ body.nav-open .adm-burger{opacity:0;pointer-events:none}
   }, 12000);
 })();
 </script>
-<script type="module" src="admin/panel.js?v=7138c4b5"></script>
+<script type="module" src="admin/panel.js?v=1dee1b57"></script>
 </body>
 </html>
