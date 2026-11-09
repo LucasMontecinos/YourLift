@@ -103,13 +103,22 @@ const MEDALLERO = `renderTxMedals({mod:'Powerlifting Classic',sex:'Hombre',div:'
         };
       };
       const hoy = leer();
-      _txColorsLS = JSON.parse(JSON.stringify(_TX_COLOR_PALETTES.suda.colors));
+      // El tema del campeonato (la paleta guardada en su documento del director).
+      const antes = _txDirState;
+      _txDirState = Object.assign({}, _txDirState || {}, { colors: JSON.parse(JSON.stringify(_TX_COLOR_PALETTES.suda.colors)) });
       const suda = leer();
+      _txDirState = antes;
+      // Lo que quedó guardado en ESTE computador de otro campeonato no cuenta:
+      // sin paleta propia, el campeonato sale con la de fábrica (negro).
+      _txColorsLS = JSON.parse(JSON.stringify(_TX_COLOR_PALETTES.bandera.colors));
+      const ajeno = { head: _txC('headerBg'), name: _txC('nameBg') };
       _txColorsLS = {};
-      return { hoy, suda };
+      return { hoy, suda, ajeno };
     }, [MONTAR, MEDALLERO]);
 
     ok(!r.hoy.vacio && !r.suda.vacio, 'el medallero se dibuja');
+    ok(r.ajeno.head === '#000000' && r.ajeno.name === '#0b0b0c',
+       'un campeonato sin paleta propia sale en negro, aunque este computador haya usado otra: ' + JSON.stringify(r.ajeno));
     // Se pidió así: el medallero en negro y el título en blanco, sin dorado.
     ok(r.hoy.titulo === '#ffffff' && r.suda.titulo === '#ffffff', 'el título va en blanco con cualquier tema');
     ok(r.hoy.fondo === r.suda.fondo && /#0a0a0b,#000000/.test(r.hoy.fondo || ''), 'y el fondo de las filas es negro: ' + r.hoy.fondo);

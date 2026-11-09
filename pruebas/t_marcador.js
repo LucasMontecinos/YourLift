@@ -41,12 +41,14 @@ const MONTAR = modo => `(()=>{
 
 async function abrir(b, tx, colores, modo) {
   const ctx = await b.newContext({ viewport: { width: 1600, height: 640 } });
-  if (colores) await ctx.addInitScript(c => localStorage.setItem('fechipo_tx_colors', JSON.stringify(c)), colores);
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));
   await p.goto('http://localhost:8972/livecast.html?tx=' + tx + '&evento=suda2026_fesupo_full', { waitUntil: 'domcontentloaded' });
   await p.waitForFunction(() => typeof DATA !== 'undefined', null, { timeout: 20000 });
+  // La paleta es la del campeonato: la que guarda el Control TX en su documento
+  // del director (lo que quedó en el navegador de otro campeonato no cuenta).
+  if (colores) await p.evaluate(c => { _txDirState = Object.assign({}, (typeof _txDirState !== 'undefined' && _txDirState) || TX_DIR_DEFAULT, { colors: c }); }, colores);
   await p.evaluate(MONTAR(modo));
   await p.waitForTimeout(600);
   return { p, errs };

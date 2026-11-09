@@ -5,8 +5,13 @@
 // partir el archivo. Solo define funciones: lo que corre al abrir la página
 // está en arranque.js, que se carga al final.
 
+// Los colores salen de la paleta guardada en ESE campeonato (livecast_director)
+// o, si no eligió ninguna, de la de fábrica: el negro con letras blancas, que es
+// la de todos los campeonatos. Antes, sin paleta guardada, se tomaba la última
+// que se había usado en ese computador (localStorage), y un campeonato nuevo
+// salía con los colores de otro.
 function _txC(key){
-  const c=(_dirState&&_dirState.colors)||(_txDirState&&_txDirState.colors)||_txColorsLS;
+  const c=(_dirState&&_dirState.colors)||(_txDirState&&_txDirState.colors)||null;
   return (c&&c[key])||_TX_COLOR_DEFAULTS[key];
 }
 
@@ -2801,7 +2806,9 @@ function renderDirector(){
   // medallero NO están acá a propósito. Son el color de la medalla, no del tema:
   // un primer lugar plateado no se entiende en ninguna paleta.
   // ── Paletas rápidas ──────────────────────────────────────────
-  const activePal=(_dirState&&_dirState.palette)||null;
+  // Sin paleta elegida, la que se ve es la de fábrica (Negro · Blanco).
+  const _sinColores=!(_dirState&&_dirState.colors&&Object.keys(_dirState.colors).length);
+  const activePal=(_dirState&&_dirState.palette)||(_sinColores?'negroBlanco':null);
   h+='<div style="margin-top:14px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px">';
   h+='<div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:12px">PALETA DE COLORES</div>';
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">';
@@ -2816,7 +2823,7 @@ function renderDirector(){
     h+='<div style="display:flex;gap:3px">';
     pal.preview.forEach(c=>{h+='<div style="width:14px;height:14px;border-radius:3px;background:'+c+';box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>';});
     h+='</div>';
-    h+='<div style="font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:.5px;color:'+(active?'#D4A843':'var(--text)')+'">'+pal.label+'</div>';
+    h+='<div style="font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:.5px;color:'+(active?'#D4A843':'var(--text)')+'">'+pal.label+(key==='negroBlanco'?' <span style="font-size:9px;color:var(--muted);font-weight:400">(por defecto)</span>':'')+'</div>';
     h+='<div style="font-size:9px;color:var(--muted);line-height:1.3">'+pal.desc+'</div>';
     h+='</button>';
   });
