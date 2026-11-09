@@ -105,6 +105,8 @@ if(TX_MODE){
     /* ─── IPF-style flag wipe (3 cintas diagonales) ─── */
     @keyframes txStripeFwd{0%{transform:translateX(-160%) skewX(-18deg)}45%{transform:translateX(0) skewX(-18deg)}55%{transform:translateX(0) skewX(-18deg)}100%{transform:translateX(160%) skewX(-18deg)}}
     @keyframes txStripeBack{0%{transform:translateX(160%) skewX(-18deg)}45%{transform:translateX(0) skewX(-18deg)}55%{transform:translateX(0) skewX(-18deg)}100%{transform:translateX(-160%) skewX(-18deg)}}
+    @keyframes txLbIn{from{transform:translate3d(105%,0,0)}to{transform:translate3d(0,0,0)}}
+    @keyframes txLbOut{from{transform:translate3d(0,0,0)}to{transform:translate3d(105%,0,0)}}
     @keyframes txContentFadeIn{0%,55%{opacity:0;transform:scale(.96)}65%{opacity:1;transform:scale(1)}100%{opacity:1;transform:scale(1)}}
     @keyframes txContentFadeOut{0%,45%{opacity:1;transform:scale(1)}55%{opacity:0;transform:scale(.96)}100%{opacity:0;transform:scale(.96)}}
     @keyframes txLogoBeat{0%,55%{opacity:0;transform:scale(.5)}45%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.7)}}
@@ -1109,7 +1111,9 @@ let _txDirLastSig=null;
 // Animaciones de transición — detecta on→off / off→on por componente.
 // Cuando hay un cambio, se guarda timestamp y dirección para reproducir
 // la animación CSS correcta. Después de la duración, se limpia.
-const TX_ANIM_MS={fullscreen:1200,corner:850};
+// lb: la Clasificación entra y sale deslizándose por el costado, sin la cascada
+// (es una caja sobre la cámara, no una escena a pantalla completa).
+const TX_ANIM_MS={fullscreen:1200,corner:850,lb:650};
 let _txDirAnims={};
 let _txDirPrevActive={};
 // Overlay del barrido — vive en document.body, independiente del innerHTML del widget.

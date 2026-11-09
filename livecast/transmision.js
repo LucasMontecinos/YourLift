@@ -560,9 +560,11 @@ function _renderTxCerScoreboardBL(cur,opts){
   // animOrTx → animación de ciclo automático (modo widget standalone); la escala
   // va en la capa de adentro para no pelear con el transform de la animación.
   const animOrTx=noAnimate?'':'animation:txScoreboardCycle '+(TX_CEREMONY.scoreboardMs/1000)+'s ease-in-out forwards;';
-  return '<div class="sb-card-explode" style="position:fixed;bottom:'+Math.round(56*_sbEscala())+'px;left:'+Math.round(56*_sbEscala())+'px;'+animOrTx+'">'
+  // Esquinado abajo a la izquierda, a 24 px de los bordes en 1920×1080, como en
+  // el Sudamericano (el rediseño lo había dejado a 56 px y se veía corrido).
+  return '<div class="sb-card-explode" style="position:fixed;bottom:'+Math.round(24*_sbEscala())+'px;left:'+Math.round(24*_sbEscala())+'px;'+animOrTx+'">'
     +'<div style="transform:scale('+scale+');transform-origin:bottom left">'
-    +_sbTarjeta(cur,{animDir:opts.animDir||null,maxW:Math.round((window.innerWidth||1920)/scale)-120})
+    +_sbTarjeta(cur,{animDir:opts.animDir||null,maxW:Math.round((window.innerWidth||1920)/scale)-48})
     +'</div></div>';
 }
 
@@ -1006,13 +1008,17 @@ function _txDetectTransitions(){
     const prev=!!_txDirPrevActive[c];
     const now=effectiveActive(c);
     if(prev!==now){
-      const dur=fullscreen.has(c)?TX_ANIM_MS.fullscreen:TX_ANIM_MS.corner;
+      // La Clasificación cuenta como pantalla completa para esconder el marcador
+      // y el timer, pero no lleva la cascada: es una caja sobre la cámara y entra
+      // deslizándose por el costado (txLbIn/txLbOut). La cascada además pesa en el
+      // navegador de OBS y la transición se veía trabada.
+      const dur=c==='leaderboard'?TX_ANIM_MS.lb:(fullscreen.has(c)?TX_ANIM_MS.fullscreen:TX_ANIM_MS.corner);
       if(fullscreen.has(c)){
         // Guard: si ya hay una animación en curso para este componente, no la retriggereamos.
         // Evita que renders rápidos en sucesión (sync, Firestore, etc.) lancen el barrido 2 veces.
         if(!_txDirAnims[c]){
         _txDirAnims[c]={dir:now?'in':'out',startedAt:Date.now(),dur};
-        _startBarrido(now?'in':'out');
+        if(c!=='leaderboard')_startBarrido(now?'in':'out');
         setTimeout(()=>{
           if(_txDirAnims[c]&&Date.now()-_txDirAnims[c].startedAt>=dur-50){
             delete _txDirAnims[c];
@@ -1200,21 +1206,30 @@ function renderTxDirector(container){
     _btVideoTeardown();
   }
   let html='';
+  // La animación sigue desde donde iba aunque la pantalla se vuelva a dibujar a
+  // mitad de camino (llega un dato, corre un reloj): con un retraso negativo igual
+  // a lo que ya pasó. Antes cada redibujo la empezaba de nuevo y se veía a saltos.
+  const _anim=(a,inK,outK,seg,curva)=>a?('animation:'+(a.dir==='in'?inK:outK)+' '+seg+'s '+(curva||'ease')+' -'+Math.max(0,Date.now()-a.startedAt)+'ms both;'):'';
   // (el barrido/curtain vive en document.body como overlay independiente — ver _startBarrido)
   // Break timer (fullscreen, prioridad alta)
   if(showBreak||(animBt&&animBt.dir==='out')){
-    const fade=animBt?(animBt.dir==='in'?'animation:txContentFadeIn 1.2s ease forwards;':'animation:txContentFadeOut 1.2s ease forwards;'):'';
+    const fade=_anim(animBt,'txContentFadeIn','txContentFadeOut',1.2);
     html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;'+fade+'">'+_renderTxBreakTimer(bt,(_txDirState.breakTimer==null?void 0:_txDirState.breakTimer.scale)||1)+'</div>';
   } else if(showLb||(animLb&&animLb.dir==='out')){
     const cat=_txDirState.leaderboard.cat;
     const ref=cat?DATA.athletes.find(a=>a.cat===cat&&!a.bombed):cur;
     const lbScale=(_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.scale)||1;
     if(ref){
-      const fade=animLb?(animLb.dir==='in'?'animation:txContentFadeIn 1.2s ease forwards;':'animation:txContentFadeOut 1.2s ease forwards;'):'';
-      html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;'+(lbScale!==1?'transform:scale('+lbScale+');transform-origin:center center;':'')+fade+'">'+renderTxLeaderboard(ref,false,{allFlights:true})+'</div>';
+      // Entra desde la derecha y sale por la derecha. El deslizamiento va en un
+      // envoltorio y el tamaño en otro: los dos usan transform y en el mismo
+      // elemento la animación pisaba el tamaño.
+      const desliza=_anim(animLb,'txLbIn','txLbOut',TX_ANIM_MS.lb/1000,animLb&&animLb.dir==='in'?'cubic-bezier(.16,1,.3,1)':'cubic-bezier(.7,0,.84,0)');
+      html+='<div style="position:fixed;top:0;right:0;bottom:0;left:0;will-change:transform;'+desliza+'">'
+        +'<div style="position:absolute;top:0;right:0;bottom:0;left:0;'+(lbScale!==1?'transform:scale('+lbScale+');transform-origin:center center;':'')+'">'
+        +renderTxLeaderboard(ref,false,{allFlights:true})+'</div></div>';
     }
   } else if(showProf||(animProf&&animProf.dir==='out')){
-    const fade=animProf?(animProf.dir==='in'?'animation:txContentFadeIn 1.2s ease forwards;':'animation:txContentFadeOut 1.2s ease forwards;'):'';
+    const fade=_anim(animProf,'txContentFadeIn','txContentFadeOut',1.2);
     if(cur){
       const pfScale=(_txDirState.profile==null?void 0:_txDirState.profile.scale)||1;
       // El perfil es una escena a pantalla completa: el tamaño se aplica solo a
@@ -1975,11 +1990,13 @@ function renderTxScoreboard(cur,lifterChanged){
          OBS) el navegador saca su globo gris y sale en la transmisión. Acá se
          puede apagar el puntero sin romper nada porque este marcador no tiene
          editor de bloques, a diferencia de Intentos y Atleta en barra. -->
-    <div class="sb-card-explode" style="pointer-events:none;position:absolute;bottom:${Math.round(64*k)}px;left:${Math.round(64*k)}px;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
+    <!-- Esquinado abajo a la izquierda, a 24 px de los bordes en 1920×1080, como
+         estaba en el Sudamericano. Con el rediseño quedó a 64 px y se veía corrido. -->
+    <div class="sb-card-explode" style="pointer-events:none;position:absolute;bottom:${Math.round(24*k)}px;left:${Math.round(24*k)}px;${TX_MODE==='scoreboard'?'animation:txScoreboardCycle '+(TX_SCOREBOARD_DURATION/1000)+'s ease-in-out forwards':''}">
       <!-- Los logos de la federación y del campeonato van en la franja de
            arriba. El de YourLift no va acá: esta pantalla está al aire todo el
            rato y lo que tiene que leerse es de quién es el campeonato. -->
-      <div class="sb-wipe-content" style="transform:scale(${k});transform-origin:bottom left">${_sbTarjeta(cur,{animDir:_animDir,maxW:Math.round((window.innerWidth||1920)/k)-128})}</div>
+      <div class="sb-wipe-content" style="transform:scale(${k});transform-origin:bottom left">${_sbTarjeta(cur,{animDir:_animDir,maxW:Math.round((window.innerWidth||1920)/k)-48})}</div>
     </div>`;
 }
 
