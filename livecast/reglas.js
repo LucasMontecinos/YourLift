@@ -326,11 +326,26 @@ function isDQ(a){
   return a.att.sq.every(x=>x.r==='n')||a.att.bp.every(x=>x.r==='n')||a.att.dl.every(x=>x.r==='n');
 }
 
-function sortByCat(){DATA.athletes.sort((a,b)=>{const na=parseFloat(a.cat.replace(/[^0-9.]/g,''))||999;const nb=parseFloat(b.cat.replace(/[^0-9.]/g,''))||999;return na-nb});save();R()}
+// Atletas & Pesaje se ve SIEMPRE por número de lote, de menor a mayor, cada vez
+// que se entra (go('manage') lo vuelve a poner). Los botones "Ordenar por…" solo
+// cambian cómo se mira la tabla mientras se está ahí: ya no reordenan la nómina
+// ni la guardan, así que no reescriben a todos los atletas en el servidor.
+window._manOrden='lote';
+function _manOrdenar(lista){
+  const lot=a=>(+a.lot>0?+a.lot:1e9);
+  const cat=a=>parseFloat(String(a.cat||'').replace(/[^0-9.]/g,''))||999;
+  const nom=(a,b)=>String(a.name||'').localeCompare(String(b.name||''));
+  const porLote=(a,b)=>(lot(a)-lot(b))||_cmpFl(a.flight,b.flight)||nom(a,b);
+  const cmp=window._manOrden==='tanda'?(a,b)=>_cmpFl(a.flight,b.flight)||(cat(a)-cat(b))||porLote(a,b)
+          :window._manOrden==='cat'?(a,b)=>(cat(a)-cat(b))||porLote(a,b)
+          :porLote;
+  return lista.slice().sort(cmp);
+}
+function sortByCat(){window._manOrden='cat';R()}
 
-function sortByFlight(){DATA.athletes.sort((a,b)=>{if(a.flight!==b.flight)return _cmpFl(a.flight,b.flight);const na=parseFloat(a.cat.replace(/[^0-9.]/g,''))||999;const nb=parseFloat(b.cat.replace(/[^0-9.]/g,''))||999;return na-nb});save();R()}
+function sortByFlight(){window._manOrden='tanda';R()}
 
-function sortByLot(){DATA.athletes.sort((a,b)=>a.lot-b.lot);save();R()}
+function sortByLot(){window._manOrden='lote';R()}
 
 // Mejor marca PROYECTADA de un movimiento: lo mejor que ya validó o, si todavía
 // no valida nada, lo que tiene declarado y sin juzgar. Al empezar la competencia

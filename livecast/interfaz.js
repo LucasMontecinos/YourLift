@@ -16,7 +16,7 @@ async function doLogout(){
   R();
 }
 
-function go(p){DATA.phase=p;save();toggleNav(false);R()}
+function go(p){if(p==='manage')window._manOrden='lote';DATA.phase=p;save();toggleNav(false);R()}
 
 function toggleNav(force){
   const open=(typeof force==='boolean')?force:!document.body.classList.contains('nav-open');
