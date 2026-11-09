@@ -569,6 +569,7 @@ function _renderTxCerScoreboardBL(cur,opts){
   // el Sudamericano (el rediseño lo había dejado a 56 px y se veía corrido).
   return '<div class="sb-card-explode" style="position:fixed;bottom:'+Math.round(24*_sbEscala())+'px;left:'+Math.round(24*_sbEscala())+'px;'+animOrTx+'">'
     +'<div style="transform:scale('+scale+');transform-origin:bottom left">'
+    +(opts.encima||'')
     +_sbTarjeta(cur,{animDir:opts.animDir||null,maxW:Math.round((window.innerWidth||1920)/scale)-48})
     +'</div></div>';
 }
@@ -1116,6 +1117,53 @@ function _autoPerfilVigilar(){
   },espera);
 }
 
+// ── CAMBIO DE INTENTO en la transmisión ───────────────────────────────────
+// Se arma desde el Control Remoto o el Control TX (botón CAMBIO DE INTENTO).
+// Armado, cuando la mesa cambia un intento (el 3er peso muerto, o la banca de
+// quien compite solo en banca) sale en la transmisión el cartel amarillo con el
+// nombre del atleta, el movimiento y el peso nuevo, TX_CAMBIO_MS y se va. Vale
+// para cualquier atleta, no solo el que está en tarima: el cambio se hace casi
+// siempre antes de que le toque.
+const TX_CAMBIO_MS=6000;
+function _txCambioReciente(){
+  const ahora=(typeof _ahora==='function')?_ahora():Date.now();
+  let mejor=null;
+  (DATA.athletes||[]).forEach(a=>{
+    if(!a||a.__is4||!a.att)return;
+    ['sq','bp','dl'].forEach(l=>((a.att[l])||[]).forEach((x,j)=>{
+      if(!x||x.r!=null||!(x.cambios>0)||!x.cambioTs)return;
+      const edad=ahora-x.cambioTs;
+      if(edad<0||edad>=TX_CAMBIO_MS)return;
+      if(!mejor||x.cambioTs>mejor.ts)mejor={a,l,j,w:x.w,ts:x.cambioTs,resta:TX_CAMBIO_MS-edad,key:a.id+'|'+l+'|'+j+'|'+x.cambioTs};
+    }));
+  });
+  return mejor;
+}
+function _txCartelCambio(cb,k){
+  const MOV={sq:'SENTADILLA',bp:'PRESS DE BANCA',dl:'PESO MUERTO'}[cb.l]||'';
+  const ORD=['1ER','2DO','3ER','4TO'][cb.j]||((cb.j+1)+'°');
+  const nombre=(typeof _nombrePropio==='function')?_nombrePropio(cb.a.name||''):(cb.a.name||'');
+  return '<div style="display:flex;flex-direction:column;align-items:flex-start;gap:'+Math.round(6*k)+'px">'
+    +_cartelCambioHtml(Math.round(28*k)+'px')
+    +'<div style="background:rgba(10,10,11,.92);color:#fff;font-family:Oswald,sans-serif;padding:'+Math.round(8*k)+'px '+Math.round(16*k)+'px;border-left:'+Math.round(5*k)+'px solid #F2C230;white-space:nowrap">'
+      +'<div style="font-size:'+Math.round(30*k)+'px;font-weight:600;line-height:1.1">'+esc(nombre)+'</div>'
+      +'<div style="font-size:'+Math.round(20*k)+'px;letter-spacing:.12em;margin-top:'+Math.round(3*k)+'px">'+MOV+' · '+ORD+' INTENTO · <b style="color:#F2C230;font-size:1.25em">'+_sbNum(cb.w)+' KG</b></div>'
+    +'</div></div>';
+}
+
+// El cartel sale de atrás del borde de arriba del marcador, deslizándose hacia
+// arriba, y al final vuelve a bajar y se esconde ahí mismo. Un recorte
+// (overflow:hidden) apoyado en el borde del marcador hace de "ranura". Las
+// demoras salen de la hora del cambio, así un redibujo no lo hace saltar.
+function _txCartelCambioSube(cb,k,posCss){
+  const ahora=(typeof _ahora==='function')?_ahora():Date.now();
+  const ya=Math.max(0,ahora-cb.ts);
+  const baja=Math.max(0,TX_CAMBIO_MS-450-ya);
+  return '<div style="'+posCss+'overflow:hidden;padding:'+Math.round(24*k)+'px '+Math.round(24*k)+'px 0 0;pointer-events:none">'
+    +'<div style="will-change:transform;animation:txCambioSube .55s cubic-bezier(.16,1,.3,1) -'+ya+'ms both,txCambioBaja .45s cubic-bezier(.7,0,.84,0) '+baja+'ms forwards">'
+    +_txCartelCambio(cb,k)+'</div></div>';
+}
+
 function renderTxDirector(container){
   const c=container||document.getElementById('txWidget');
   if(!c)return;
@@ -1155,7 +1203,7 @@ function renderTxDirector(container){
     +'|sc-'+((_txDirState.profile==null?void 0:_txDirState.profile.scale)||1)+'-'+((_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.scale)||1)+'-'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.scale)||1)+'-'+((_txDirState.timer==null?void 0:_txDirState.timer.scale)||1)+'-'+((_txDirState.slam==null?void 0:_txDirState.slam.scale)||1)+'-'+((_txDirState.breakTimer==null?void 0:_txDirState.breakTimer.scale)||1)+'-'+((_txDirState.tablaActual==null?void 0:_txDirState.tablaActual.scale)||1)+'-'+((_txDirState.medals==null?void 0:_txDirState.medals.scale)||1)+'-'+((_txDirState.luces==null?void 0:_txDirState.luces.scale)||1)
     +'|col-'+JSON.stringify(_txDirState.colors||{})
     +'|rv-'+(DATA.relojVisible?1:0)
-    +'|cbi-'+(_cartelCambioRestante(cur)>0?1:0)
+    +'|cbi-'+(_txDirActive('cambioIntento')?((_txCambioReciente()||{}).key||'')+'-'+((_txDirState.cambioIntento==null?void 0:_txDirState.cambioIntento.scale)||1):'off')
     +'|jur-'+(_txDirActive('jurado')?1:0)+'-'+((_txJurado&&Date.now()<_txJuradoHasta)?_txJuradoTs:0)+'-'+((_txDirState.jurado==null?void 0:_txDirState.jurado.scale)||1);
   if(sig===_txDirLastSig){
     // Updates in-place sin re-render para evitar flicker
@@ -1249,10 +1297,18 @@ function renderTxDirector(container){
       +'</div>';
     }
   }
+  // Cambio de intento armado: el cartel sale sobre el marcador (ver más abajo).
+  const _cb=(!_fsVisible&&_txDirActive('cambioIntento'))?_txCambioReciente():null;
+  const _cbEsc=(_txDirState.cambioIntento&&_txDirState.cambioIntento.scale)||1;
+  let _cbPuesto=false;
   // Scoreboard (corner) — anim "explode from logo" si HAY logo, cascade original si no.
   if((showSb||(animSb&&animSb.dir==='out'))&&cur){
     const hasLogoSb = !!((DATA.event==null?void 0:DATA.event.logoUrl));
-    const sbHtml=_renderTxCerScoreboardBL(cur,{noAnimate:true,scale:(_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.scale)||1,animDir:(animSb==null?void 0:animSb.dir)||null});
+    // Con el marcador en pantalla, el cartel va DENTRO de su caja, apoyado en su
+    // borde de arriba: así sale justo de ahí, sea cual sea el alto del marcador.
+    const encima=(_cb&&!(animSb&&animSb.dir==='out'))?_txCartelCambioSube(_cb,_cbEsc,'position:absolute;left:0;bottom:100%;'):'';
+    if(encima)_cbPuesto=true;
+    const sbHtml=_renderTxCerScoreboardBL(cur,{noAnimate:true,scale:(_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.scale)||1,animDir:(animSb==null?void 0:animSb.dir)||null,encima});
     const isSbEnter = animSb && animSb.dir==='in';
     // Sin logo: usar el HTML directo (la cascada _sbRowAnim ya viene del render con animDir)
     // Con logo: envolvemos para gatear logo zoom + explode, sin replay en updates
@@ -1377,10 +1433,17 @@ function renderTxDirector(container){
   // Cambio de intento (3er peso muerto, o banca de quien compite solo en banca):
   // el cartel amarillo justo arriba del marcador, como en la vista previa; sin
   // el nombre, que ya está en el marcador. Parpadea unos segundos y se va.
-  if(cur&&!_fsVisible&&_cambiosIntentoActual(cur)){
-    const kc=_sbEscala();
-    html+='<div style="position:fixed;left:'+Math.round(64*kc)+'px;bottom:'+Math.round(270*kc)+'px;pointer-events:none;animation:txSlideInBottom .45s ease-out">'
-      +_cartelCambioHtml(Math.round(28*kc)+'px')+'</div>';
+  // Ahora sale solo con CAMBIO DE INTENTO armado (Control Remoto / Control TX), y
+  // para cualquier atleta, con su nombre y el peso nuevo (ver _txCambioReciente).
+  if(_cb){
+    // Sin marcador en pantalla, sale igual desde donde estaría su borde de arriba.
+    if(!_cbPuesto){
+      const kc=_sbEscala()*_cbEsc;
+      html+=_txCartelCambioSube(_cb,kc,'position:fixed;left:'+Math.round(24*_sbEscala())+'px;bottom:'+Math.round(206*_sbEscala())+'px;');
+    }
+    // Que se vaya solo al vencer, aunque no cambie nada más.
+    clearTimeout(window._txCambioTO);
+    window._txCambioTO=setTimeout(()=>{ _txDirLastSig=null; if(typeof renderTxWidget==='function')renderTxWidget(); },_cb.resta+80);
   }
   c.innerHTML=html;
   _txDirScheduleHide();
@@ -2612,6 +2675,7 @@ function renderDirector(){
   h+='</div>'+scaleSlider('leaderboard')+'</div>';
   h+=compToggle('luces','','Luces de jueces','Los tres círculos arriba a la izquierda, en chico, con el nombre del atleta, el intento y VÁLIDO o NULO. El tamaño se ajusta acá abajo. Se deja prendido toda la competencia: mientras no hay decisión no se ve nada, y aparece solo cuando los jueces marcan. Es un espejo — el válido o el nulo se sigue dando en Control en Vivo o en la planilla.','U','dirToggle(\'luces\')');
   h+=compToggle('jurado','','Decisión del jurado (esquina superior izquierda)','"JURY HAS OVERRULED · Decisión del jurado" con la luz blanca o roja y el color de la tarjeta debajo. Se deja prendido: no se ve nada hasta que el jurado revierte un intento desde el panel de jueces (posición JURY), y ahí aparece '+(JURADO_MS/1000)+' segundos.','','dirToggle(\'jurado\')');
+  h+=compToggle('cambioIntento','','Cambio de intento','Cartel amarillo "CAMBIO DE INTENTO" con el nombre del atleta, el movimiento y el peso nuevo, arriba del marcador. Se deja prendido: no se ve nada hasta que la mesa cambia un intento (3er peso muerto, o la banca de quien compite solo en banca), y ahí aparece '+(TX_CAMBIO_MS/1000)+' segundos.','','dirToggle(\'cambioIntento\')');
   h+=compToggle('tablaActual','','Tabla actual (corner)','Ranking de la categoría del lifter actual, esquina inferior derecha. Entra desde abajo, queda fijo. El levantador en pantalla se resalta y muestra la flecha de proyección (pos actual → pos si lo levanta).','A','dirToggle(\'tablaActual\')');
   // Medallero (Top 3) — selects en cascada: modalidad → sexo → división → categoría.
   // Todo se calcula desde DATA.athletes (ya cargado local): cero lecturas nuevas a Firestore.
@@ -3429,7 +3493,7 @@ window.dirHide=async function(comp){
 };
 
 window.dirHideAll=async function(){
-  ['profile','scoreboard','leaderboard','timer','slam','tablaActual','medals','luces','jurado'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
+  ['profile','scoreboard','leaderboard','timer','slam','tablaActual','medals','luces','jurado','cambioIntento'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
   await _dirPush();R();
 };
 

@@ -117,6 +117,8 @@ if(TX_MODE){
     @keyframes txSlideOutRight{0%{transform:translateX(0);opacity:1}100%{transform:translateX(110%);opacity:0}}
     /* Scoreboard: entra desde abajo (sube hacia su posición) */
     /* Scoreboard slide-in/out: usamos px fijos (no %) porque el wrapper tiene altura 0 (position:fixed inside) */
+    @keyframes txCambioSube{from{transform:translate3d(0,105%,0)}to{transform:translate3d(0,0,0)}}
+    @keyframes txCambioBaja{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,105%,0)}}
     @keyframes txSlideInBottom{0%{transform:translateY(260px);opacity:0}55%{transform:translateY(-6px);opacity:1}80%{transform:translateY(2px);opacity:1}100%{transform:translateY(0);opacity:1}}
     @keyframes txSlideOutBottom{0%{transform:translateY(0);opacity:1}100%{transform:translateY(260px);opacity:0}}
     @keyframes txBuildRow{0%{transform:translateX(-30px) scaleY(0);opacity:0;transform-origin:left center}60%{transform:translateX(0) scaleY(1);opacity:1}100%{transform:translateX(0) scaleY(1);opacity:1}}
@@ -1099,7 +1101,7 @@ let _widgetObsNativeListening=false;
 // Lee comandos desde Firestore livecast_director/current.
 // Cada componente tiene {active, until?} independiente; el panel del
 // admin pushea cambios y este widget renderiza lo que esté activo.
-const TX_DIR_DEFAULT={jurado:{active:false,until:0,scale:1},profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',tipo:'total',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[],movement:'',style:{bgColor:'#0A1628',accentColor:'#C41E3A',videoX:0,videoY:5,videoW:40,videoH:80,textX:44,textY:10,titleSize:8,movSize:5,timerSize:12,showLogos:true,blurAmount:24,overlayOpacity:0.65}}};
+const TX_DIR_DEFAULT={jurado:{active:false,until:0,scale:1},cambioIntento:{active:false,until:0,scale:1},profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',tipo:'total',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[],movement:'',style:{bgColor:'#0A1628',accentColor:'#C41E3A',videoX:0,videoY:5,videoW:40,videoH:80,textX:44,textY:10,titleSize:8,movSize:5,timerSize:12,showLogos:true,blurAmount:24,overlayOpacity:0.65}}};
 let _txDirState=null;
 // Firma del timer de descanso, para no redibujar las pantallas de tarima por
 // cambios del director que no las tocan.

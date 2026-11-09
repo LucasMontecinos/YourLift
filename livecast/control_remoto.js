@@ -129,7 +129,7 @@ function remoteBreakPanel(){
 // barra cuesta, así que además va con − y +.
 const _RM_TAM=[
   ['profile','Perfil'],['scoreboard','Marcador'],['tablaActual','Tabla actual'],
-  ['leaderboard','Clasificación'],['luces','Luces'],['jurado','Jurado'],
+  ['leaderboard','Clasificación'],['luces','Luces'],['jurado','Jurado'],['cambioIntento','Cambio de intento'],
   ['timer','Timer'],['medals','Medallero'],['breakTimer','Ya volvemos'],['slam','Good / No lift'],
 ];
 function _rmAutoPerfil(){ const c=_dirState&&_dirState.autoPerfil; return !!(c&&c.on); }
@@ -229,6 +229,9 @@ function renderRemote(){
     // no se ve nada, y aparecen solas cuando los jueces marcan.
     luces:      oc=>bigBtn('LUCES', on('luces')?'ARMADO · aparece al decidir':'luces de jueces', on('luces'), oc||"dirToggle('luces')"),
     jurado:     oc=>bigBtn('JURADO', on('jurado')?'ARMADO · aparece al revertir':'decisión del jurado', on('jurado'), oc||"dirToggle('jurado')"),
+    // Se deja armado: sale solo cuando la mesa cambia un intento (3er peso muerto
+    // o la banca de Only Bench), con el nombre y el peso nuevo.
+    cambio:     oc=>bigBtn('CAMBIO DE INTENTO', on('cambioIntento')?'ARMADO · aparece al cambiar':'3er DL · banca Only Bench', on('cambioIntento'), oc||"dirToggle('cambioIntento')"),
     leaderboard:oc=>bigBtn('CLASIFICACIÓN', on('leaderboard')?'EN PANTALLA':'ranking cat.', on('leaderboard'), oc||"dirToggleLb()"),
     timer:      oc=>bigBtn('TIMER', on('timer')?'EN PANTALLA':'cronómetro', on('timer'), oc||"dirToggle('timer')"),
     // MEDALLERO abre el menú en vez de disparar: sin categoría elegida no hay
@@ -239,12 +242,13 @@ function renderRemote(){
     descanso:   oc=>bigBtn(_descanso?'QUITAR DESCANSO':'YA VOLVEMOS', _descanso?'en pantalla':(window._remoteMenu==='break'?'elige los minutos ▾':'cartel de descanso'), _descanso, oc||"remoteToggleBreak()"),
     good:       oc=>oc?bigBtn('GOOD LIFT','',false,oc):_slam('g'),
     nolift:     oc=>oc?bigBtn('NO LIFT','',false,oc):_slam('n'),
-    esconder:   oc=>oc?bigBtn('⨯ ESCONDER TODO','',false,oc,2)
-      :'<button onclick="dirHideAll()" style="grid-column:span 2;min-height:0;height:100%;border-radius:14px;border:2px solid var(--red);background:rgba(239,68,68,.1);color:#f87171;font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">⨯ ESCONDER TODO</button>',
+    esconder:   oc=>oc?bigBtn('⨯ ESCONDER TODO','',false,oc,_rmCols===4?4:2)
+      :'<button onclick="dirHideAll()" style="grid-column:span '+(_rmCols===4?4:2)+';min-height:0;height:100%;border-radius:14px;border:2px solid var(--red);background:rgba(239,68,68,.1);color:#f87171;font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">⨯ ESCONDER TODO</button>',
   };
   const orden=_rmOrden(Object.keys(BOTONES));
-  // Once botones, ESCONDER TODO ocupa dos lugares: doce casillas justas.
-  const filas=Math.ceil(12/_rmCols);
+  // Doce botones, y ESCONDER TODO ocupa una fila entera abajo con cuatro
+  // columnas (dos casillas en el teléfono): la grilla queda justa, sin huecos.
+  const filas=Math.ceil((12+(_rmCols===4?4:2))/_rmCols);
   h+='<div id="rmGrid" data-filas="'+filas+'" style="display:grid;grid-template-columns:repeat('+_rmCols+',1fr);grid-template-rows:repeat('+filas+',1fr);grid-auto-flow:dense;gap:8px;height:'+_rmAltoGrilla(filas)+'px">';
   orden.forEach(id=>{
     if(!_ord){ h+=BOTONES[id](); return; }
@@ -298,7 +302,7 @@ window.remoteOrdenar=function(){ window._rmOrdenar=!window._rmOrdenar; window._r
 window.remoteOrdenTap=function(id){
   if(!window._rmSel){ window._rmSel=id; R(); return; }
   if(window._rmSel!==id){
-    const ids=['profile','scoreboard','tablaActual','luces','jurado','leaderboard','timer','medals','descanso','good','nolift','esconder'];
+    const ids=['profile','scoreboard','tablaActual','luces','jurado','cambio','leaderboard','timer','medals','descanso','good','nolift','esconder'];
     const o=_rmOrden(ids), i=o.indexOf(window._rmSel), j=o.indexOf(id);
     if(i>=0&&j>=0){ o[i]=id; o[j]=window._rmSel; try{ localStorage.setItem('yl_remoteOrden',JSON.stringify(o)); }catch(e){} }
   }

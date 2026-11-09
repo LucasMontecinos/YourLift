@@ -65,13 +65,22 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     out.txSb = /CAMBIO DE INTENTO/.test(renderTxScoreboard(cur, false) + _renderTxCerScoreboardBL(cur, { noAnimate: true }));
     if (!_txDirState) _txDirState = JSON.parse(JSON.stringify(TX_DIR_DEFAULT));
     const caja = document.createElement('div'); document.body.appendChild(caja);
+    // Sin armar CAMBIO DE INTENTO (Control Remoto / Control TX) no sale nada.
+    _txDirState.cambioIntento = { active: false, until: 0, scale: 1 };
+    _txDirLastSig = null; renderTxDirector(caja);
+    out.txApagado = ![...caja.children].some(d => /CAMBIO DE INTENTO/.test(d.textContent));
+    _txDirState.cambioIntento = { active: true, until: 0, scale: 1 };
     _txDirLastSig = null; renderTxDirector(caja);
     const cartel = [...caja.children].find(d => /CAMBIO DE INTENTO/.test(d.textContent));
     // Justo arriba del marcador, a su izquierda (como la vista previa): la tabla
     // actual ahora va arriba a la derecha y las luces arriba a la izquierda.
     out.tx = !!cartel && /left:\d+px;bottom:\d+px/.test(cartel.getAttribute('style'))
       && +(cartel.getAttribute('style').match(/bottom:(\d+)px/) || [])[1] > 100;
-    out.txSinNombre = !!cartel && cartel.textContent.indexOf(pl.name) < 0;
+    // Lleva el nombre y el peso nuevo: el cambio puede ser de cualquier atleta,
+    // no solo del que está en tarima (se hace casi siempre antes de que le toque).
+    out.txConNombre = !!cartel && /PESO MUERTO · 3ER INTENTO/.test(cartel.textContent)
+      && cartel.textContent.toLowerCase().indexOf(pl.name.split(' ')[0].toLowerCase()) >= 0
+      && cartel.textContent.indexOf(String(pl.att.dl[2].w).replace(/\.0$/, '')) >= 0;
     // Pasados 3 segundos del cambio, el cartel se va solo (el intento sigue sin juzgar).
     const ts0 = pl.att.dl[2].cambioTs;
     out.parpadea = /cambioParpadeo/.test(renderScreenBarra(cur));
@@ -99,9 +108,10 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
   console.log('\nEl cartel');
   ok(r.cur && r.cuenta === true, 'el atleta en tarima tiene el intento cambiado');
   ok(r.barra, 'pantalla de tarima: CAMBIO DE INTENTO');
-  ok(r.tx, 'transmisión: CAMBIO DE INTENTO justo arriba del marcador');
+  ok(r.txApagado, 'transmisión: sin armar CAMBIO DE INTENTO no sale nada');
+  ok(r.tx, 'armado: CAMBIO DE INTENTO justo arriba del marcador');
   ok(!r.txSb, 'no va dentro del marcador');
-  ok(r.txSinNombre, 'el cartel no lleva el nombre del atleta');
+  ok(r.txConNombre, 'con el nombre del atleta, el movimiento y el peso nuevo');
   ok(!r.juzgado[0] && !r.juzgado[1] && !r.juzgado[2], 'con la decisión, el cartel y el botón se van');
   ok(errs.length === 0, 'sin errores de página' + (errs.length ? ': ' + errs.join(' | ') : ''));
 
