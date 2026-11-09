@@ -4,7 +4,7 @@
 // válido" y "revertir a nulo" con la tarjeta (roja, azul o amarilla). Lo que
 // manda queda en el campo `jurado` del documento de los jueces; la mesa lo
 // aplica al intento una sola vez, y la transmisión lo muestra en la esquina
-// superior izquierda: "JURY HAS OVERRULED · Decisión del jurado".
+// superior izquierda: "DECISIÓN DEL JURADO" y debajo NULO o VÁLIDO.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_jurado.js
 const { chromium } = require('playwright');
 const PUERTO = process.env.PUERTO || '8972';
@@ -120,10 +120,10 @@ export async function signOut(a){a._u=null;}
       snap({ izq: null, central: null, der: null, jurado: j });
       await new Promise(r => setTimeout(r, 700));
       const txt = document.body.innerText;
-      return { antes: /OVERRULED/.test(antes), txt };
+      return { antes: /DECISIÓN DEL JURADO/.test(antes), txt };
     }, jurado);
     ok(!r.antes, 'armado, no muestra nada mientras el jurado no decide');
-    ok(/JURY HAS OVERRULED/.test(r.txt) && /DECISIÓN DEL JURADO/.test(r.txt) && /NULO/.test(r.txt), 'al revertir aparece "JURY HAS OVERRULED · Decisión del jurado · NULO"');
+    ok(!/OVERRULED/.test(r.txt) && /DECISIÓN DEL JURADO/.test(r.txt) && /NULO/.test(r.txt), 'al revertir aparece "DECISIÓN DEL JURADO · NULO" (sin el texto en inglés)');
     await p.screenshot({ path: '/tmp/claude-0/-home-user-YourLift/0692ef33-d41b-5709-98fb-6a0aca869c32/scratchpad/jury_tx.png' });
   }
 

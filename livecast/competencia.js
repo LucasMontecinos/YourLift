@@ -564,6 +564,21 @@ function _attCellCompete(a,l,j,isCurrentCell){
       +'background:'+(nc?'rgba(242,194,48,.22)':'transparent')+';color:#F2C230;font-family:Oswald;font-size:'+Math.round(9*sc)+'px;font-weight:700;letter-spacing:.5px;cursor:pointer;'
       +(lleno?'opacity:.5;':'')+'line-height:1.2">⟳ CAMBIO '+nc+'/'+CAMBIOS_MAX+'</button>';
   }
+  // REVERTIR (decisión del jurado): arriba del ÚLTIMO intento juzgado de la
+  // tanda, que es el único que el jurado puede revertir. Hace lo mismo que el
+  // jurado desde el panel de jueces (posición JURY): cambia la decisión, la deja
+  // anotada como del jurado y sale en la transmisión (con JURADO armado) y en la
+  // pantalla de Intentos.
+  if(isAdmin&&(at.r==='g'||at.r==='n')){
+    const u=(typeof _ultimoJuzgado==='function')?_ultimoJuzgado():null;
+    if(u&&u.id===a.id&&u.lift===l&&u.round===j){
+      cell+='<button class="att-revertir" onclick="event.stopPropagation();revertirJurado('+a.id+',\''+l+'\','+j+')"'
+        +' title="Decisión del jurado: revertir a '+(at.r==='g'?'NULO':'VÁLIDO')+'"'
+        +' style="width:100%;margin-bottom:2px;padding:'+Math.round(2*sc)+'px 0;border-radius:4px;border:1px solid #a78bfa;'
+        +'background:'+(at.jurado?'rgba(167,139,250,.22)':'transparent')+';color:#c4b5fd;font-family:Oswald;font-size:'+Math.round(9*sc)+'px;font-weight:700;letter-spacing:.5px;cursor:pointer;line-height:1.2">'
+        +'⚖ REVERTIR'+(at.jurado?' ✓':'')+'</button>';
+    }
+  }
   if(ctRem!==null){
     cell+='<div id="ctcell_'+ctKey+'" class="att att-p" onclick="editAtt('+a.id+',\''+l+'\','+j+')" style="font-size:'+Math.round(14*sc)+'px;font-weight:700;padding:'+Math.round(8*sc)+'px 4px;background:rgba(245,158,11,.15);border:2px solid var(--orange);color:var(--orange);text-align:center" title="Tiene '+ctRem+'s para declarar el peso">'+ctRem+'s</div>';
   } else if(ctExpired && !at.w){

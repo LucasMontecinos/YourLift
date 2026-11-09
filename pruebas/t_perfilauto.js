@@ -69,8 +69,10 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
 
   console.log('\nEl botón del Control Remoto');
   const fuente = require('fs').readFileSync(__dirname + '/../livecast/control_remoto.js', 'utf8');
-  ok(/window\.remoteAutoPerfil=/.test(fuente) && /autoPerfil=\{on,espera:2,dura:3\}/.test(fuente) && /PERFIL AUTO: /.test(fuente),
+  const ftx = require('fs').readFileSync(__dirname + '/../livecast/transmision.js', 'utf8');
+  ok(/window\.remoteAutoPerfil=/.test(fuente) && /PERFIL AUTO: /.test(fuente) && /autoPerfil=\{on,espera:2,dura:3\}/.test(ftx),
     'PERFIL AUTO guarda {on, espera 2, dura 3} en el documento del director');
+  ok(/onclick="dirAutoPerfil\(\)"/.test(ftx), 'y está también en el Control TX');
 
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();

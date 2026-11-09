@@ -267,6 +267,57 @@ function _aplicarJurado(j){
   showToastLC('Decisión del jurado: '+a.name+' — '+(LIFT_S[j.lift]||j.lift)+(j.round+1)+' → '+(j.res==='g'?'VÁLIDO':'NULO'));
 }
 
+// ── REVERTIR desde la mesa (Control en Vivo, Stream Deck) ────────────────
+// Lo mismo que hace el jurado desde el panel de jueces: se escribe la decisión
+// del jurado en judge_decisions —de ahí la toman la transmisión, las pantallas de
+// tarima y las otras mesas— y se aplica acá al tiro. A válido se pasa directo; a
+// nulo se elige la tarjeta (el motivo), que sale como punto bajo la luz.
+function _juradoDesdeMesa(id,l,r,res,card){
+  const a=DATA.athletes.find(x=>x.id===id);
+  const at=a&&a.att&&a.att[l]&&a.att[l][r];
+  if(!at||(res!=='g'&&res!=='n'))return;
+  const j={ts:Date.now(),res,card:res==='n'?(card||'red'):null,id:a.id,lift:l,round:r,name:a.name||'',desde:'mesa'};
+  // Que el eco de esta misma escritura no la vuelva a aplicar.
+  _juradoVisto=Math.max(_juradoVisto||0,j.ts);
+  _aplicarJurado(j);
+  if(PRACTICE_MODE||!fbReady||!window._fb||!fbDB)return;
+  window._fb.setDoc(window._fb.doc(fbDB,'judge_decisions',juezDocId()),{jurado:j},{merge:true})
+    .catch(e=>{ console.warn('[jurado] no se pudo publicar',e); showToastLC('La decisión quedó acá pero no salió a la transmisión: revisa la conexión'); });
+}
+
+window.revertirJurado=function(id,l,r){
+  const a=DATA.athletes.find(x=>x.id===id);
+  const at=a&&a.att&&a.att[l]&&a.att[l][r];
+  if(!at||(at.r!=='g'&&at.r!=='n'))return;
+  const viejo=document.getElementById('juradoModal'); if(viejo)viejo.remove();
+  const aNulo=at.r==='g';
+  const b=(txt,fn,bg,col)=>'<button onclick="'+fn+'" style="flex:1;min-width:110px;padding:12px 10px;border-radius:10px;border:none;background:'+bg+';color:'+(col||'#fff')+';font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:1px;cursor:pointer">'+txt+'</button>';
+  const sale=(res,card)=>"document.getElementById('juradoModal').remove();_juradoDesdeMesa("+id+",'"+l+"',"+r+",'"+res+"',"+(card?"'"+card+"'":'null')+")";
+  const m=document.createElement('div'); m.id='juradoModal';
+  m.style.cssText='position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
+  m.onclick=e=>{ if(e.target===m)m.remove(); };
+  m.innerHTML='<div style="background:var(--card);border:1px solid #a78bfa;border-radius:14px;padding:20px;max-width:440px;width:100%">'
+    +'<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:#c4b5fd">⚖ DECISIÓN DEL JURADO</div>'
+    +'<div style="font-family:Oswald;font-size:20px;font-weight:700;margin:6px 0 2px">'+esc(a.name)+'</div>'
+    +'<div style="font-size:13px;color:var(--muted);margin-bottom:14px">'+(LIFT_S[l]||l)+' '+(r+1)+' · '+(at.w||0)+' kg · hoy '+(at.r==='g'?'VÁLIDO':'NULO')+' → <b style="color:var(--text)">'+(aNulo?'NULO':'VÁLIDO')+'</b></div>'
+    +(aNulo
+      ?'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">¿Con qué tarjeta? (el motivo del nulo)</div>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+b('ROJA',sale('n','red'),'#ef4444')+b('AZUL',sale('n','blue'),'#3b82f6')+b('AMARILLA',sale('n','yellow'),'#f59e0b','#111')+'</div>'
+      :'<div style="display:flex;gap:8px">'+b('REVERTIR A VÁLIDO',sale('g',null),'#22c55e','#04210f')+'</div>')
+    +'<div style="font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5">Sale en la transmisión si JURADO está activado (Control Remoto o Control TX) y en la pantalla de Intentos.</div>'
+    +'<button onclick="document.getElementById(\'juradoModal\').remove()" style="margin-top:12px;width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;letter-spacing:1px;cursor:pointer">CANCELAR</button>'
+    +'</div>';
+  document.body.appendChild(m);
+};
+
+// Stream Deck: revertir el último intento juzgado de la tanda, sin preguntar
+// (el botón ya es la decisión). A nulo con la tarjeta que traiga, o roja.
+window.revertirUltimo=function(card){
+  const u=(typeof _ultimoJuzgado==='function')?_ultimoJuzgado():null;
+  if(!u){ showToastLC('No hay un intento juzgado para revertir en esta tanda'); return; }
+  _juradoDesdeMesa(u.id,u.lift,u.round,u.r==='g'?'n':'g',card||'red');
+};
+
 // ── Órdenes de reloj desde el panel de jueces ────────────────
 // El juez central (INICIAR TIMER) y la Planilla mandan órdenes al documento
 // timer_control del canal. Antes se escuchaban solo con el modo jueces

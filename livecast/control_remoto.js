@@ -288,14 +288,8 @@ window.remoteMenu=function(cual){
   },60);
 };
 
-window.remoteAutoPerfil=async function(){
-  if(!_dirState)_dirState={};
-  const on=!_rmAutoPerfil();
-  _dirState.autoPerfil={on,espera:2,dura:3};
-  R();
-  await _dirPush();
-  showToastLC(on?'Perfil automático: a los 2 s de cada válido o nulo, 3 s en pantalla':'Perfil automático apagado');
-};
+// El mismo del Control TX (dirAutoPerfil, en transmision.js).
+window.remoteAutoPerfil=function(){ return window.dirAutoPerfil(); };
 
 window.remoteOrdenar=function(){ window._rmOrdenar=!window._rmOrdenar; window._rmSel=null; window._remoteMenu=''; R(); };
 

@@ -641,6 +641,10 @@ function _widgetHandleDirectObsEvent(d){
     return;
   }
   const mark=()=>{ _txDirLastSig=null; if(typeof renderTxWidget==='function')renderTxWidget(); };
+  if(action==='autoPerfil'){
+    const on=!(_txDirState.autoPerfil&&_txDirState.autoPerfil.on);
+    _txDirState.autoPerfil={on,espera:2,dura:3}; mark(); return;
+  }
   if(action==='toggle'&&d.component){
     const c=_txDirState[d.component]||{};
     const isOn=c.active&&(!c.until||c.until>Date.now());
@@ -1583,7 +1587,8 @@ function _txStartLightsListener(){
 // Cuánto queda en pantalla la decisión del jurado.
 const JURADO_MS=12000;
 
-// "JURY HAS OVERRULED · Decisión del jurado", con la luz como la de los jueces:
+// "DECISIÓN DEL JURADO" y debajo NULO o VÁLIDO (sin el "JURY HAS OVERRULED" en
+// inglés, se pidió así), con la luz como la de los jueces:
 // blanca si quedó válido, roja con el punto de la tarjeta debajo si quedó nulo.
 // Con los colores del scoreboard (fondo de su encabezado y color de acento), así
 // combina con lo que se elija en Control TX.
@@ -1602,8 +1607,8 @@ function renderTxJurado(j){
               :'<div style="height:clamp(16px,1.4vw,24px)"></div>')
     +'</div>'
     +'<div>'
-      +'<div style="font-size:clamp(22px,2.4vw,40px);font-weight:700;letter-spacing:2px;color:#fff;line-height:1">JURY HAS OVERRULED</div>'
-      +'<div style="font-size:clamp(12px,1.05vw,17px);letter-spacing:4px;color:'+_txC('accent')+';margin-top:6px">DECISIÓN DEL JURADO · '+(j.res==='g'?'VÁLIDO':'NULO')+'</div>'
+      +'<div style="font-size:clamp(20px,2.1vw,36px);font-weight:700;letter-spacing:3px;color:#fff;line-height:1">DECISIÓN DEL JURADO</div>'
+      +'<div style="font-size:clamp(26px,2.8vw,48px);font-weight:800;letter-spacing:4px;line-height:1.1;margin-top:6px;color:'+(j.res==='g'?'#22c55e':'#ef4444')+'">'+(j.res==='g'?'VÁLIDO':'NULO')+'</div>'
       +(nombre?'<div style="font-size:clamp(13px,1.1vw,18px);color:rgba(220,230,245,.85);margin-top:8px;letter-spacing:1px">'+nombre+' · '+intento+'</div>':'')
     +'</div>'
   +'</div>';
@@ -2418,12 +2423,17 @@ function handleObsCustomEvent(data){
   if(action==='toggle'){
     if(data.component==='leaderboard')return window.dirToggleLb();
     if(data.component==='breakTimer')return window.dirToggleBreak();
+    if(data.component==='medals'&&typeof window.dirToggleMedals==='function')return window.dirToggleMedals();
     if(data.component)return window.dirToggle(data.component);
   }
   if(action==='slam'&&data.type)return window.dirShowSlam(data.type);
+  if(action==='autoPerfil')return window.dirAutoPerfil();
+  if(action==='revertir'&&typeof window.revertirUltimo==='function')return window.revertirUltimo(data.card||'red');
   if(action==='hideAll')return window.dirHideAll();
   if(action==='breakStart')return window.dirBreakStart();
   if(action==='breakStop')return window.dirBreakHide();
+  if(action==='breakPause')return window.dirBreakPause();
+  if(action==='breakResume')return window.dirBreakResume();
   if(action==='breakAdd'&&typeof data.seconds==='number')return window.dirBreakAdd(data.seconds);
   if(action==='showLb'&&data.cat)return window.dirShowLb(data.cat,0);
 }
@@ -2578,10 +2588,24 @@ function renderDirector(){
   h+='<div>{"action":"slam","type":"n"}        ← NO LIFT manual (legacy)</div>';
   h+='<div>{"action":"showLb","cat":"-83 kg (Hombre)"}  ← cat específica</div>';
   h+='<div>{"action":"hideAll"}</div>';
+  h+='<div>{"action":"toggle","component":"luces"}         ← arma LUCES de jueces</div>';
+  h+='<div>{"action":"toggle","component":"jurado"}        ← arma JURADO (sale al revertir)</div>';
+  h+='<div>{"action":"toggle","component":"cambioIntento"} ← arma CAMBIO DE INTENTO</div>';
+  h+='<div>{"action":"toggle","component":"tablaActual"}   ← tabla actual (esquina)</div>';
+  h+='<div>{"action":"toggle","component":"medals"}        ← medallero (el podio elegido en Control TX)</div>';
+  h+='<div>{"action":"autoPerfil"}           ← PERFIL AUTO sí / no</div>';
+  h+='<div>{"action":"revertir","card":"red"}    ← JURADO revierte el último intento juzgado (a nulo con tarjeta red/blue/yellow; si era nulo, a válido)</div>';
   h+='<div>{"action":"breakStart"}             ← arranca con valores actuales</div>';
   h+='<div>{"action":"breakStop"}</div>';
+  h+='<div>{"action":"breakPause"}             ← pausa el Ya volvemos</div>';
+  h+='<div>{"action":"breakResume"}            ← lo sigue</div>';
   h+='<div>{"action":"breakAdd","seconds":60} ← +1 min</div>';
   h+='</div>';
+  h+='<br><b style="color:var(--text)">Sin OBS WebSocket: teclas</b> (el Stream Deck manda la tecla con la acción <code>Hotkey</code>, con esta ventana del livecast al frente):';
+  h+='<div style="margin-top:6px;background:rgba(10,22,40,.6);padding:10px;border-radius:6px;font-family:monospace;font-size:10px;color:rgba(200,215,240,.85);line-height:1.8">'
+    +'P perfil · S marcador · L clasificación · T timer · A tabla actual · U luces · J jurado · C cambio de intento · F perfil auto · M medallero · B ya volvemos · G good lift · N no lift · 0 / Esc esconder todo'
+    +'</div>';
+  h+='<div style="margin-top:6px">REVERTIR no tiene tecla a propósito (una tecla apretada sin querer cambiaría un intento): va por el botón ⚖ REVERTIR en Control en Vivo o por el evento <code>{"action":"revertir"}</code>.</div>';
   h+='<br><b style="color:var(--orange,#f59e0b)">Nota:</b> esto reemplaza los hotkeys. Una vez conectado a OBS WS, no hace falta tener el panel en foco — los eventos llegan por WebSocket.';
   h+='</div></details>';
   h+='</div>';
@@ -2642,6 +2666,15 @@ function renderDirector(){
   // Componentes — TOGGLES (1 botón / 1 tecla por componente, listo para Stream Deck)
   h+='<div style="display:grid;gap:12px">';
   h+=compToggle('profile','','Perfil del atleta','Pantalla completa con nombre, categoría, club, edad, PB del atleta actual.','P','dirToggle(\'profile\')');
+  // PERFIL AUTO, el mismo del Control Remoto (ver _autoPerfilVigilar).
+  { const apOn=!!(_dirState.autoPerfil&&_dirState.autoPerfil.on);
+    h+='<div class="card" style="padding:14px 18px;border-left:4px solid '+(apOn?'var(--green)':'var(--border)')+';background:'+(apOn?'rgba(34,197,94,.04)':'transparent')+'">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap"><div style="flex:1;min-width:200px">'
+      +'<div style="display:flex;align-items:center;gap:10px"><div style="font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:1px">Perfil automático</div>'+kbd('F')+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">Después de cada válido o nulo, a los 2 segundos sale el perfil del atleta que sigue durante 3 segundos, y se va solo. Lo hace la transmisión: funciona aunque se cierre este panel.</div>'
+      +(apOn?'<div style="font-size:10px;color:var(--green);margin-top:4px;font-family:Oswald;letter-spacing:1px">ACTIVADO</div>':'')
+      +'</div><button class="btn '+(apOn?'btn-r':'btn-g')+'" onclick="dirAutoPerfil()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(apOn?'DESACTIVAR':'ACTIVAR')+'</button></div></div>';
+  }
   // Selector Foto / GIF
   const _isGif=_txProfileMediaType==='gif';
   h+='<div style="margin-top:-8px;margin-bottom:4px;padding:8px 18px;display:flex;align-items:center;gap:10px;background:rgba(10,22,40,.4);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;flex-wrap:wrap">';
@@ -2658,6 +2691,8 @@ function renderDirector(){
   }
   h+='</div>';
   h+=compToggle('scoreboard','','Marcador (lower-third)','Barra inferior izquierda con nombre, categoría e intentos cargados.','S','dirToggle(\'scoreboard\')');
+  // TIMER, el mismo botón del Control Remoto: el reloj del intento en la esquina.
+  h+=compToggle('timer','','Timer (cronómetro)','El reloj del intento en la esquina superior derecha de la transmisión.','T','dirToggle(\'timer\')');
   // Leaderboard: selector de cat + toggle
   const curCat=(_dirState.leaderboard==null?void 0:_dirState.leaderboard.cat)||'';
   const lbActive=(_dirState.leaderboard==null?void 0:_dirState.leaderboard.active)&&(!(_dirState.leaderboard==null?void 0:_dirState.leaderboard.until)||_dirState.leaderboard.until>Date.now());
@@ -2674,8 +2709,8 @@ function renderDirector(){
   h+='<button class="btn '+(lbActive?'btn-r':'btn-g')+'" onclick="dirToggleLb()" style="padding:14px 28px;font-size:14px;font-family:Oswald;font-weight:700;letter-spacing:2px;min-width:160px">'+(lbActive?'<i class=yl-i-pausa></i> DESACTIVAR':'<i class=yl-i-reproducir></i> ACTIVAR')+'</button>';
   h+='</div>'+scaleSlider('leaderboard')+'</div>';
   h+=compToggle('luces','','Luces de jueces','Los tres círculos arriba a la izquierda, en chico, con el nombre del atleta, el intento y VÁLIDO o NULO. El tamaño se ajusta acá abajo. Se deja prendido toda la competencia: mientras no hay decisión no se ve nada, y aparece solo cuando los jueces marcan. Es un espejo — el válido o el nulo se sigue dando en Control en Vivo o en la planilla.','U','dirToggle(\'luces\')');
-  h+=compToggle('jurado','','Decisión del jurado (esquina superior izquierda)','"JURY HAS OVERRULED · Decisión del jurado" con la luz blanca o roja y el color de la tarjeta debajo. Se deja prendido: no se ve nada hasta que el jurado revierte un intento desde el panel de jueces (posición JURY), y ahí aparece '+(JURADO_MS/1000)+' segundos.','','dirToggle(\'jurado\')');
-  h+=compToggle('cambioIntento','','Cambio de intento','Cartel amarillo "CAMBIO DE INTENTO" con el nombre del atleta, el movimiento y el peso nuevo, arriba del marcador. Se deja prendido: no se ve nada hasta que la mesa cambia un intento (3er peso muerto, o la banca de quien compite solo en banca), y ahí aparece '+(TX_CAMBIO_MS/1000)+' segundos.','','dirToggle(\'cambioIntento\')');
+  h+=compToggle('jurado','','Decisión del jurado (esquina superior izquierda)','"DECISIÓN DEL JURADO" y debajo NULO o VÁLIDO, con la luz blanca o roja y el color de la tarjeta debajo. Se deja prendido: no se ve nada hasta que el jurado revierte un intento —desde el panel de jueces (posición JURY) o con ⚖ REVERTIR en Control en Vivo— y ahí aparece '+(JURADO_MS/1000)+' segundos. El ✓ y la ✗ de corrección no lo disparan.','J','dirToggle(\'jurado\')');
+  h+=compToggle('cambioIntento','','Cambio de intento','Cartel amarillo "CAMBIO DE INTENTO" con el nombre del atleta, el movimiento y el peso nuevo, arriba del marcador. Se deja prendido: no se ve nada hasta que la mesa cambia un intento (3er peso muerto, o la banca de quien compite solo en banca), y ahí aparece '+(TX_CAMBIO_MS/1000)+' segundos.','C','dirToggle(\'cambioIntento\')');
   h+=compToggle('tablaActual','','Tabla actual (corner)','Ranking de la categoría del lifter actual, esquina inferior derecha. Entra desde abajo, queda fijo. El levantador en pantalla se resalta y muestra la flecha de proyección (pos actual → pos si lo levanta).','A','dirToggle(\'tablaActual\')');
   // Medallero (Top 3) — selects en cascada: modalidad → sexo → división → categoría.
   // Todo se calcula desde DATA.athletes (ya cargado local): cero lecturas nuevas a Firestore.
@@ -3492,6 +3527,16 @@ window.dirHide=async function(comp){
   await _dirPush();R();
 };
 
+// PERFIL AUTO (el mismo botón del Control Remoto).
+window.dirAutoPerfil=async function(){
+  if(!_dirState)_dirState={};
+  const on=!(_dirState.autoPerfil&&_dirState.autoPerfil.on);
+  _dirState.autoPerfil={on,espera:2,dura:3};
+  if(typeof R==='function')R();
+  await _dirPush();
+  showToastLC(on?'Perfil automático: a los 2 s de cada válido o nulo, 3 s en pantalla':'Perfil automático apagado');
+};
+
 window.dirHideAll=async function(){
   ['profile','scoreboard','leaderboard','timer','slam','tablaActual','medals','luces','jurado','cambioIntento'].forEach(k=>{_dirState[k]=Object.assign({},_dirState[k]||{},{active:false,until:0})});
   await _dirPush();R();
@@ -3623,6 +3668,9 @@ window._dirKeyHandler=function(e){
   if(k==='l'){e.preventDefault();window.dirToggleLb();return}
   if(k==='a'){e.preventDefault();window.dirToggle('tablaActual');return}
   if(k==='u'){e.preventDefault();window.dirToggle('luces');return}
+  if(k==='j'){e.preventDefault();window.dirToggle('jurado');return}
+  if(k==='c'){e.preventDefault();window.dirToggle('cambioIntento');return}
+  if(k==='f'){e.preventDefault();window.dirAutoPerfil();return}
   if(k==='m'){e.preventDefault();window.dirToggleMedals();return}
   if(k==='g'){e.preventDefault();window.dirShowSlam('g');return}
   if(k==='n'){e.preventDefault();window.dirShowSlam('n');return}
