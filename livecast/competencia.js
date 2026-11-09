@@ -576,7 +576,7 @@ function _attCellCompete(a,l,j,isCurrentCell){
         +' title="Decisión del jurado: revertir a '+(at.r==='g'?'NULO':'VÁLIDO')+'"'
         +' style="width:100%;margin-bottom:2px;padding:'+Math.round(2*sc)+'px 0;border-radius:4px;border:1px solid #a78bfa;'
         +'background:'+(at.jurado?'rgba(167,139,250,.22)':'transparent')+';color:#c4b5fd;font-family:Oswald;font-size:'+Math.round(9*sc)+'px;font-weight:700;letter-spacing:.5px;cursor:pointer;line-height:1.2">'
-        +'⚖ REVERTIR'+(at.jurado?' ✓':'')+'</button>';
+        +'REVERTIR'+(at.jurado?' ✓':'')+'</button>';
     }
   }
   if(ctRem!==null){

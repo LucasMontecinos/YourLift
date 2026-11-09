@@ -297,7 +297,7 @@ window.revertirJurado=function(id,l,r){
   m.style.cssText='position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
   m.onclick=e=>{ if(e.target===m)m.remove(); };
   m.innerHTML='<div style="background:var(--card);border:1px solid #a78bfa;border-radius:14px;padding:20px;max-width:440px;width:100%">'
-    +'<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:#c4b5fd">⚖ DECISIÓN DEL JURADO</div>'
+    +'<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:#c4b5fd">DECISIÓN DEL JURADO</div>'
     +'<div style="font-family:Oswald;font-size:20px;font-weight:700;margin:6px 0 2px">'+esc(a.name)+'</div>'
     +'<div style="font-size:13px;color:var(--muted);margin-bottom:14px">'+(LIFT_S[l]||l)+' '+(r+1)+' · '+(at.w||0)+' kg · hoy '+(at.r==='g'?'VÁLIDO':'NULO')+' → <b style="color:var(--text)">'+(aNulo?'NULO':'VÁLIDO')+'</b></div>'
     +(aNulo

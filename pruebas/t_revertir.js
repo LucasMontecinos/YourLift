@@ -1,7 +1,7 @@
 // REVERTIR desde Control en Vivo: la decisión del jurado sale en la transmisión.
 //
 // El jurado podía revertir solo desde el panel de jueces (posición JURY). Ahora
-// la mesa tiene ⚖ REVERTIR arriba del último intento juzgado: cambia la decisión,
+// la mesa tiene REVERTIR arriba del último intento juzgado: cambia la decisión,
 // la deja anotada como del jurado y la transmisión (con JURADO armado) muestra
 // "DECISIÓN DEL JURADO · NULO/VÁLIDO". El ✓ y la ✗ de abajo siguen siendo corrección de la mesa
 // (un error del juez) y no salen en la transmisión.
@@ -52,7 +52,7 @@ const atletas = () => [1, 2, 3].map(i => ({ id: i, lot: 100 + i, name: 'Atleta N
   await mesa.evaluate(() => { overrideResult(1, 'sq', 0, 'g'); });
   await red.calma(2000);
   const btn = await mesa.evaluate(() => { const b = [...document.querySelectorAll('.att-revertir')]; return b.length + '|' + (b[0] ? b[0].getAttribute('onclick') : ''); });
-  ok(/^1\|.*revertirJurado\(1,'sq',0\)/.test(btn), 'aparece ⚖ REVERTIR, una sola vez, arriba de ese intento (' + btn + ')');
+  ok(/^1\|.*revertirJurado\(1,'sq',0\)/.test(btn), 'aparece REVERTIR, una sola vez, arriba de ese intento (' + btn + ')');
 
   console.log('\nCorrección de la mesa (la ✗ de abajo): no es del jurado');
   await mesa.evaluate(() => { changeResult(1, 'sq', 0, 'n'); });
@@ -62,7 +62,7 @@ const atletas = () => [1, 2, 3].map(i => ({ id: i, lot: 100 + i, name: 'Atleta N
   await mesa.evaluate(() => { changeResult(1, 'sq', 0, 'g'); });
   await red.calma(2500);
 
-  console.log('\n⚖ REVERTIR → NULO con tarjeta azul');
+  console.log('\nREVERTIR → NULO con tarjeta azul');
   await mesa.evaluate(() => { document.querySelector('.att-revertir').click(); });
   await mesa.waitForSelector('#juradoModal');
   const modal = await mesa.evaluate(() => document.getElementById('juradoModal').innerText.replace(/\s+/g, ' '));
