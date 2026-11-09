@@ -141,10 +141,18 @@ const TOP = `(tipo)=>{
     await p.evaluate(() => remoteMenu('medals'));
     txt = await p.evaluate(() => document.body.innerText);
     ok(/QUÉ MEDALLERO MOSTRAR/.test(txt), 'al apretarlo se abre');
-    for (const t of ['TOTAL', 'SENTADILLA', 'PRESS DE BANCA', 'PESO MUERTO'])
-      ok(txt.indexOf(t) >= 0, 'con la opción ' + t);
-    const selects = await p.evaluate(() => document.querySelectorAll('select').length);
-    ok(selects >= 4, 'y los cuatro selectores de categoría (' + selects + ')');
+    // 1 · Qué se premia: un solo botón con TOTAL; al tocarlo se despliegan los otros.
+    ok(/TOTAL ▾/.test(txt) && !/SENTADILLA/.test(txt), 'arranca en TOTAL, con los otros premios plegados');
+    await p.evaluate(() => remoteMdTipoAbrir());
+    txt = await p.evaluate(() => document.body.innerText);
+    for (const t of ['SENTADILLA', 'PRESS DE BANCA', 'PESO MUERTO'])
+      ok(txt.indexOf(t) >= 0, 'al tocarlo aparece ' + t + ' hacia abajo');
+    await p.evaluate(() => remoteMdTipoAbrir());
+    // 2 · Tanda y 3 · las categorías de esa tanda, como botones (sin listas desplegables).
+    ok(/TANDA A/.test(txt), 'después, la tanda');
+    const cats = await p.evaluate(() => [...document.querySelectorAll('#rmPanel button')].filter(b => /remoteMdCombo/.test(b.getAttribute('onclick') || '')).map(b => b.innerText.replace(/\s+/g, ' ')));
+    ok(cats.length >= 1 && cats.some(c => /−83 KG/.test(c) && /JUNIOR · HOMBRES · CLASSIC/.test(c)), 'y las categorías de esa tanda como botones: ' + cats.join(' | '));
+    ok(await p.evaluate(() => document.querySelectorAll('#rmPanel select').length) === 0, 'ya no hay listas desplegables');
   }
 
   console.log('\n  No deja mostrar un podio vacío');
@@ -155,7 +163,8 @@ const TOP = `(tipo)=>{
     });
     ok(antes === true, 'sin elegir categoría, el botón está deshabilitado');
     await p.evaluate(() => {
-      dirMdSet('mod', 'classic'); dirMdSet('sex', 'Hombre'); dirMdSet('div', 'Junior'); dirMdSet('cat', '83');
+      const b = [...document.querySelectorAll('#rmPanel button')].find(x => /remoteMdCombo/.test(x.getAttribute('onclick') || '') && /−83 KG/.test(x.innerText));
+      b.click();
     });
     const despues = await p.evaluate(() => {
       const b = [...document.querySelectorAll('button')].find(x => /MOSTRAR EN PANTALLA/.test(x.textContent));
@@ -163,12 +172,12 @@ const TOP = `(tipo)=>{
     });
     ok(despues === false, 'con la categoría elegida se habilita');
     const txt = await p.evaluate(() => document.body.innerText);
-    ok(/Listo: 3 en el podio/.test(txt), 'y avisa cuántos van a salir');
+    ok(/Listo: TOTAL · 3 en el podio/.test(txt), 'y avisa qué premio y cuántos van a salir');
   }
 
   console.log('\n  Cambiar el premio no borra la categoría elegida');
   {
-    await p.evaluate(() => dirMdSet('tipo', 'dl'));
+    await p.evaluate(() => { remoteMdTipoAbrir(); remoteMdTipo('dl'); });
     const sel = await p.evaluate(() => JSON.parse(JSON.stringify(window._mdSel)));
     ok(sel.cat === '83' && sel.div === 'Junior' && sel.tipo === 'dl',
        'sigue en -83 Junior, ahora peso muerto — en la ceremonia se pasan los cuatro seguidos');

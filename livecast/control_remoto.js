@@ -49,59 +49,112 @@ function _remoteSelStyle(){
   return 'width:100%;padding:12px;border-radius:10px;border:2px solid var(--border);background:#0a1628;color:var(--text);font-family:Oswald;font-size:15px;margin-top:8px';
 }
 
+// El medallero, pensado para el teléfono en la ceremonia, en tres pasos:
+//   1. Qué se premia: un solo botón con TOTAL (el de siempre); al apretarlo se
+//      despliegan hacia abajo SENTADILLA, PRESS DE BANCA y PESO MUERTO.
+//   2. La tanda: botones con las tandas del campeonato.
+//   3. Las categorías que compitieron en esa tanda, como botones (categoría,
+//      división, sexo y modalidad juntos). Se toca una y queda lista.
+// Antes eran cuatro listas desplegables (modalidad, sexo, división, categoría)
+// que había que ir abriendo una por una con el campeonato andando.
+function _rmMdCombos(fl){
+  const MOD={classic:'CLASSIC',equipped:'EQUIPADO',oe_classic:'OLIMPIADAS ESP.',universitario:'UNIVERSITARIO',onlybench:'ONLY BENCH',classic_bench:'CLASSIC + BENCH',equipped_bench:'EQUIPADO + BENCH'};
+  const mujer=s=>/^(mujer|femenino|f)$/i.test(String(s||''));
+  const g={};
+  (DATA.athletes||[]).forEach(a=>{
+    if(!a||a.__is4||(fl&&a.flight!==fl))return;
+    if(!a.mod||!a.sex||!a.div||!a.cat)return;
+    const k=a.mod+'|'+a.sex+'|'+a.div+'|'+a.cat;
+    (g[k]=g[k]||{mod:a.mod,sex:a.sex,div:a.div,cat:a.cat,n:0}).n++;
+  });
+  return Object.values(g).map(c=>Object.assign(c,{
+    lbl:((typeof txCatLabel==='function'&&txCatLabel(c.cat))||(c.cat+' kg')).replace(/kg$/i,' KG').replace(/^-/,'−'),
+    sub:[String(c.div||'').toUpperCase(),mujer(c.sex)?'MUJERES':'HOMBRES',MOD[c.mod]||String(c.mod).toUpperCase()].join(' · ')
+  })).sort((x,y)=>(mujer(y.sex)-mujer(x.sex))||String(x.mod).localeCompare(String(y.mod))
+    ||((parseFloat(x.cat)||999)-(parseFloat(y.cat)||999))||(String(x.cat).indexOf('+')>=0)-(String(y.cat).indexOf('+')>=0)
+    ||String(x.div).localeCompare(String(y.div)));
+}
+
 function remoteMedalsPanel(){
   if(window._remoteMenu!=='medals')return '';
-  const sel=window._mdSel||{mod:'',sex:'',div:'',cat:'',tipo:'total'};
-  const MOD_LABEL={classic:'Classic',equipped:'Equipado',oe_classic:'Olimpiadas Especiales',universitario:'Universitario',onlybench:'Only Bench',classic_bench:'Classic + Bench',equipped_bench:'Equipado + Bench'};
-  const vivos=DATA.athletes.filter(a=>!a.__is4);
-  const byMod=vivos.filter(a=>!sel.mod||a.mod===sel.mod);
-  const byModSex=byMod.filter(a=>!sel.sex||a.sex===sel.sex);
-  const byModSexDiv=byModSex.filter(a=>!sel.div||a.div===sel.div);
-  const uniq=(arr,f)=>[...new Set(arr.map(f))].filter(Boolean);
+  const sel=window._mdSel||(window._mdSel={mod:'',sex:'',div:'',cat:'',tipo:'total'});
+  const tipo=sel.tipo||'total';
   const listo=sel.mod&&sel.sex&&sel.div&&sel.cat;
   const cuantos=listo?_medalTop3(sel).length:0;
+  const c=_dirState&&_dirState.medals, enPantalla=!!(c&&c.active&&(!c.until||c.until>Date.now()));
+  const btn=(txt,sub,act,fn,extra)=>'<button onclick="'+fn+'" style="min-height:52px;border-radius:10px;border:2px solid '
+    +(act?'var(--gold)':'var(--border)')+';background:'+(act?'rgba(212,168,67,.18)':'rgba(10,22,40,.55)')
+    +';color:'+(act?'var(--gold)':'var(--text)')+';font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:1px;cursor:pointer;-webkit-tap-highlight-color:transparent;padding:6px 8px;'+(extra||'')+'">'
+    +txt+(sub?'<span style="display:block;font-size:10px;font-weight:600;letter-spacing:.5px;color:'+(act?'var(--gold)':'var(--muted)')+';margin-top:2px">'+sub+'</span>':'')+'</button>';
+  const paso=(n,t)=>'<div style="font-family:Oswald;font-size:11px;letter-spacing:2px;color:var(--muted);margin:14px 0 6px">'+n+' · '+t+'</div>';
 
   let h='<div id="rmPanel" style="margin-top:10px;padding:14px;border-radius:14px;border:2px solid var(--gold);background:rgba(212,168,67,.06)">';
   h+='<div style="font-family:Oswald;font-size:12px;letter-spacing:2px;color:var(--gold)">QUÉ MEDALLERO MOSTRAR</div>';
 
-  // Qué se premia — botones grandes, que es lo que más se cambia en la ceremonia.
-  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">';
-  Object.keys(MEDAL_TIPOS).forEach(t=>{
-    const act=(sel.tipo||'total')===t;
-    h+='<button onclick="dirMdSet(\'tipo\',\''+t+'\')" style="min-height:52px;border-radius:10px;border:2px solid '
-      +(act?'var(--gold)':'var(--border)')+';background:'+(act?'rgba(212,168,67,.18)':'rgba(10,22,40,.55)')
-      +';color:'+(act?'var(--gold)':'var(--text)')+';font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;cursor:pointer;-webkit-tap-highlight-color:transparent">'
-      +MEDAL_TIPOS[t]+'</button>';
-  });
+  // 1 · Qué se premia
+  h+=paso('1','QUÉ SE PREMIA');
+  const abierto=!!window._rmMdTipoAbierto;
+  h+=btn(MEDAL_TIPOS[tipo]+' '+(abierto?'▴':'▾'),abierto?'elige abajo':'toca para cambiar',true,'remoteMdTipoAbrir()','width:100%');
+  if(abierto){
+    h+='<div style="display:grid;grid-template-columns:1fr;gap:6px;margin-top:6px">';
+    Object.keys(MEDAL_TIPOS).filter(t=>t!==tipo).forEach(t=>{ h+=btn(MEDAL_TIPOS[t],'',false,"remoteMdTipo('"+t+"')"); });
+    h+='</div>';
+  }
+
+  // 2 · Tanda
+  const fls=[...new Set((DATA.athletes||[]).filter(a=>a&&!a.__is4&&a.flight).map(a=>a.flight))].sort(typeof _cmpFl==='function'?_cmpFl:undefined);
+  if(window._rmMdTanda===undefined||fls.indexOf(window._rmMdTanda)<0)window._rmMdTanda=fls.indexOf(DATA.flight)>=0?DATA.flight:(fls[0]||'');
+  const fl=window._rmMdTanda;
+  h+=paso('2','TANDA');
+  h+='<div style="display:grid;grid-template-columns:repeat('+Math.min(4,Math.max(1,fls.length))+',1fr);gap:6px">';
+  fls.forEach(f=>{ h+=btn('TANDA '+esc(f),'',f===fl,"remoteMdTanda('"+String(f).replace(/'/g,"\\'")+"')"); });
   h+='</div>';
 
-  const opt=(v,txt,cur)=>'<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(txt)+'</option>';
-  h+='<select style="'+_remoteSelStyle()+'" onchange="dirMdSet(\'mod\',this.value)"><option value="">Modalidad —</option>';
-  uniq(vivos,a=>a.mod).forEach(m=>{h+=opt(m,MOD_LABEL[m]||m,sel.mod)});
-  h+='</select>';
-  h+='<select style="'+_remoteSelStyle()+'" '+(sel.mod?'':'disabled')+' onchange="dirMdSet(\'sex\',this.value)"><option value="">Sexo —</option>';
-  uniq(byMod,a=>a.sex).sort().forEach(s=>{h+=opt(s,(s==='Mujer'||s==='Femenino'||s==='F')?'Mujer':'Hombre',sel.sex)});
-  h+='</select>';
-  h+='<select style="'+_remoteSelStyle()+'" '+(sel.sex?'':'disabled')+' onchange="dirMdSet(\'div\',this.value)"><option value="">División —</option>';
-  uniq(byModSex,a=>a.div).sort().forEach(d=>{h+=opt(d,d,sel.div)});
-  h+='</select>';
-  h+='<select style="'+_remoteSelStyle()+'" '+(sel.div?'':'disabled')+' onchange="dirMdSet(\'cat\',this.value)"><option value="">Categoría —</option>';
-  uniq(byModSexDiv,a=>a.cat).sort((a,b)=>(parseFloat(a)||999)-(parseFloat(b)||999)).forEach(c=>{h+=opt(c,c+' kg',sel.cat)});
-  h+='</select>';
+  // 3 · Categorías de esa tanda
+  const combos=_rmMdCombos(fl);
+  window._rmMdCombosLista=combos;
+  h+=paso('3','CATEGORÍAS DE LA TANDA '+esc(fl||''));
+  if(!combos.length){
+    h+='<div style="font-size:12px;color:var(--muted)">Esa tanda no tiene atletas con categoría cargada.</div>';
+  }else{
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">';
+    combos.forEach((k,ix)=>{
+      const act=sel.mod===k.mod&&sel.sex===k.sex&&sel.div===k.div&&sel.cat===k.cat;
+      h+=btn(esc(k.lbl),esc(k.sub),act,'remoteMdCombo('+ix+')');
+    });
+    h+='</div>';
+  }
 
-  h+='<div style="font-size:11px;color:'+(listo&&!cuantos?'var(--orange)':'var(--muted)')+';margin-top:10px;line-height:1.5">'
-    +(!listo?'Elige los cuatro para poder mostrarlo.'
-      :(cuantos?('Listo: '+cuantos+' en el podio.')
-               :'Con esa combinación todavía no hay nadie con marca válida.'))
+  h+='<div style="font-size:11px;color:'+(listo&&!cuantos?'var(--orange)':'var(--muted)')+';margin-top:12px;line-height:1.5">'
+    +(!listo?'Toca una categoría para dejarla lista.'
+      :(cuantos?('Listo: '+MEDAL_TIPOS[tipo]+' · '+cuantos+' en el podio'+(enPantalla?' · EN PANTALLA':'')+'.')
+               :'Con esa categoría todavía no hay nadie con marca válida.'))
     +'</div>';
-  h+='<button onclick="dirToggleMedals()" '+(listo&&cuantos?'':'disabled')
+  const puede=listo&&cuantos;
+  h+='<button onclick="dirToggleMedals()" '+(puede||enPantalla?'':'disabled')
     +' style="width:100%;margin-top:10px;min-height:58px;border-radius:12px;border:2px solid '
-    +(listo&&cuantos?'var(--green)':'var(--border)')+';background:'+(listo&&cuantos?'rgba(34,197,94,.16)':'transparent')
-    +';color:'+(listo&&cuantos?'#4ade80':'var(--muted)')+';font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:2px;cursor:'
-    +(listo&&cuantos?'pointer':'not-allowed')+';-webkit-tap-highlight-color:transparent"><i class=yl-i-reproducir></i> MOSTRAR EN PANTALLA</button>';
+    +(enPantalla?'var(--red)':(puede?'var(--green)':'var(--border)'))+';background:'+(enPantalla?'rgba(239,68,68,.12)':(puede?'rgba(34,197,94,.16)':'transparent'))
+    +';color:'+(enPantalla?'#f87171':(puede?'#4ade80':'var(--muted)'))+';font-family:Oswald;font-size:15px;font-weight:700;letter-spacing:2px;cursor:'
+    +(puede||enPantalla?'pointer':'not-allowed')+';-webkit-tap-highlight-color:transparent">'
+    +(enPantalla?'⨯ QUITAR DE PANTALLA':'<i class=yl-i-reproducir></i> MOSTRAR EN PANTALLA')+'</button>';
   h+='</div>';
   return h;
 }
+
+// Si el medallero ya está en pantalla, lo que se elige se ve al tiro.
+function _rmMdRefrescar(){
+  const c=_dirState&&_dirState.medals, on=!!(c&&c.active&&(!c.until||c.until>Date.now()));
+  const s=window._mdSel||{};
+  if(on&&s.mod&&s.sex&&s.div&&s.cat&&_medalTop3(s).length)window.dirShow('medals',0,{mod:s.mod,sex:s.sex,div:s.div,cat:s.cat,tipo:s.tipo||'total'});
+}
+window.remoteMdTipoAbrir=function(){ window._rmMdTipoAbierto=!window._rmMdTipoAbierto; R(); };
+window.remoteMdTipo=function(t){ window._rmMdTipoAbierto=false; window.dirMdSet('tipo',t); _rmMdRefrescar(); };
+window.remoteMdTanda=function(f){ window._rmMdTanda=f; R(); };
+window.remoteMdCombo=function(ix){
+  const k=(window._rmMdCombosLista||[])[ix]; if(!k)return;
+  window._mdSel=Object.assign(window._mdSel||{tipo:'total'},{mod:k.mod,sex:k.sex,div:k.div,cat:k.cat});
+  R(); _rmMdRefrescar();
+};
 
 function remoteBreakPanel(){
   if(window._remoteMenu!=='break')return '';
