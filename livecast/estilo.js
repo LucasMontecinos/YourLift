@@ -259,15 +259,16 @@ function _pvPerfil(d){
 }
 
 // ── Pantalla Tarima ────────────────────────────────────────────────────────
-// La decoración va detrás de los bloques (que se siguen moviendo y agrandando
-// como siempre): la rama colgando bajo la franja de arriba, o ramas en las
-// esquinas, y el logo.
+// En las pantallas de los cargadores, del atleta en barra y de las luces NO va
+// ninguna rama sobre la pantalla: los bloques se mueven y se agrandan donde se
+// quiera, y una rama colgando bajo la franja tapaba "SENTADILLA · 1er INTENTO ·
+// RACK…" (se pidió así: ahí no puede ir nada). Queda el logo y el resto del
+// estilo (fondo, franjas, recuadros).
 function _pvPantDeco(tipo,alto){
   if(!_estiloPrim())return '';
-  if(tipo==='franja')return '<div class="pvDeco pvPant-rama">'+_pvRamaAncho({modo:'cuelga',alto:96,semilla:13,paso:340,inicio:260})+'</div>'
-    +'<img class="pvLogo pvPant-logo" src="'+_pvLogoUrl()+'" alt="">';
-  if(tipo==='marco')return '<div class="pvPant-marco">'+_pvMarco()+'</div>'+'<img class="pvLogo pvPant-logo der" src="'+_pvLogoUrl()+'" alt="">';
-  if(tipo==='luces')return '<div class="pvPant-marco bajo">'+_pvMarco()+'</div>'+'<img class="pvLogo pvPant-logo" src="'+_pvLogoUrl()+'" alt="">';
+  if(tipo==='franja')return '<img class="pvLogo pvPant-logo" src="'+_pvLogoUrl()+'" alt="">';
+  if(tipo==='marco')return '<img class="pvLogo pvPant-logo der" src="'+_pvLogoUrl()+'" alt="">';
+  if(tipo==='luces')return '<img class="pvLogo pvPant-logo" src="'+_pvLogoUrl()+'" alt="">';
   // En la tabla jornada la rama va apoyada en el borde de abajo de la franja,
   // en el hueco entre el nombre del campeonato y el logo: así no le quita ni un
   // pixel a la tabla, que se calcula para caber entera en la pantalla.

@@ -108,14 +108,22 @@ const MONTAR = (estilo) => {
         logo: !!c.querySelector('img.pvPant-logo,img.pvJo-logo'), jo: !!c.querySelector('.pvJo .pvJo-rama svg'), at: c.querySelectorAll('.pvAt.g span').length,
         bloques: c.querySelectorAll('.pi-block').length }; }, m);
     const it = await modo('intentos');
-    ok(it.pant && it.rama && it.logo, 'Pantalla cargadores: tablas, la rama bajo la franja y el logo');
+    // Sin ramas encima de la pantalla: los bloques se ponen donde se quiera y una
+    // rama colgando bajo la franja tapaba "SENTADILLA · 1er INTENTO · RACK…".
+    ok(it.pant && !it.rama && !it.marco && it.logo, 'Pantalla cargadores: tablas y el logo, sin ramas que tapen el texto');
     ok(it.bloques > 5, 'y sus bloques siguen ahí para moverlos (' + it.bloques + ')');
     const ba = await modo('barra');
-    ok(ba.pant && ba.marco && ba.logo, 'Atleta en barra: ramas en las esquinas y el logo');
+    ok(ba.pant && !ba.marco && !ba.rama && ba.logo, 'Atleta en barra: el logo, sin ramas encima');
     const lu = await modo('luces');
-    ok(lu.pant && lu.marco, 'Luces: con su marco de ramas');
+    ok(lu.pant && !lu.marco && lu.logo, 'Luces: el logo, sin ramas encima');
     const jo = await modo('jornada');
     ok(jo.jo && jo.logo && jo.at > 0, 'Tabla jornada: rama en la franja, logo e intentos en placas (' + jo.at + ' válidos)');
+    // En Lirio, los datos (movimiento, rack, categoría, club) van en recuadro
+    // sólido: se leen sobre el papel y sobre la franja vino.
+    await montar(p, 'lirio');
+    const lr = await p.evaluate(() => { window._SCREEN_STATE = { mode: 'intentos', flights: null, fondo: 'yourlift', luces: false }; window._piSelected = null; renderTxWidget();
+      return ['liftLabel', 'subtitle'].map(k => { const el = document.querySelector('.pi-block[data-pi-key="' + k + '"]>.pi-inner>*'); return el ? getComputedStyle(el).backgroundColor : 'no'; }); });
+    ok(lr.every(c => c === 'rgb(31, 110, 94)'), 'Lirio: los datos de los cargadores en recuadro verde sólido (' + lr.join(' · ') + ')');
     await ctx.close();
   }
 
