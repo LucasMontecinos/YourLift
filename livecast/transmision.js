@@ -1003,15 +1003,21 @@ function _startBarrido(dir){
   const fwd=dir!=='out';
   const ks=fwd?'txStripeFwd':'txStripeBack';
   const dur=(TX_ANIM_MS.fullscreen/1000).toFixed(2);
+  // Con el estilo del campeonato (livecast/estilo.js) las cintas van en sus
+  // colores —rosado, verde y las tablas turquesas del perfil—, con el borde
+  // negro de sticker, y al medio el logo del estilo.
+  const _pv=typeof _estiloPrim==='function'&&_estiloPrim();
+  const _c=_pv?['#F28AAE','#69BE6C','var(--pv-tablas-grandes)']:['#c41e3a','#ffffff','#000000'];
+  const _bd=_pv?'border-right:12px solid #15110E;':'';
   _txBarridoEl.innerHTML=
-    '<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#c41e3a;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) forwards"></div>'
-    +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#ffffff;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .08s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
+    '<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:'+_c[0]+';'+_bd+'animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) forwards"></div>'
+    +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:'+_c[1]+';'+_bd+'animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .08s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
     // La última cinta, la que tapa la pantalla, es del negro del fondo del
     // perfil (y de la clasificación y el Ya volvemos): antes era azul marino y
     // la entrada se veía de otro color que lo que aparecía detrás.
-    +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:#000000;animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .16s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
+    +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:'+_c[2]+';'+_bd+'animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .16s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
     +'<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;animation:txLogoBeat '+dur+'s ease-out forwards;opacity:0">'
-      +_barridoLogoImg()
+      +(_pv?'<img class="pvLogo" src="'+_pvLogoUrl()+'" alt="" style="max-width:min(60vw,640px);max-height:min(62vh,620px);object-fit:contain">':_barridoLogoImg())
     +'</div>';
   document.body.appendChild(_txBarridoEl);
   setTimeout(()=>{if(_txBarridoEl&&_txBarridoEl.parentNode){_txBarridoEl.parentNode.removeChild(_txBarridoEl);_txBarridoEl=null;}},TX_ANIM_MS.fullscreen+200);
@@ -1190,6 +1196,9 @@ function renderTxDirector(container){
   _widgetStartDirectObsListener();
   _txEscucharYvDefecto();
   if(!_txDirState){c.innerHTML='';return}
+  // Las fotos se piden apenas abre la transmisión, no recién al mostrar el
+  // primer perfil: así ese primer perfil ya sale con la foto.
+  if(typeof _pedirFotos==='function')_pedirFotos();
   try{ _autoPerfilVigilar(); }catch(e){}
   const cur=liftQueue()[0];
   const showProf=_txDirActive('profile');

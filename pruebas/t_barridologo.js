@@ -32,7 +32,8 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
 console.log('\nEl logo sale del campeonato, no está escrito a mano');
 {
   ok(/function _barridoLogoImg\(\)\{/.test(lc), 'hay una función que lo decide');
-  ok(/\+_barridoLogoImg\(\)/.test(lc), 'y el barrido la usa');
+  // Con el estilo Primavera la cascada lleva el logo del estilo; si no, el de siempre.
+  ok(/_pv\?'<img class="pvLogo"[^\n]*:_barridoLogoImg\(\)/.test(lc), 'y el barrido la usa (salvo con el estilo Primavera, que lleva su logo)');
   const f = require('./apoyo/fuente').funcion(lc, '_barridoLogoImg');
   ok(/ev\.barridoLogo==='yourlift'/.test(f),
      'y solo deja el del campeonato si alguien eligió a propósito el de YourLift');

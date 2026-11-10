@@ -71,6 +71,10 @@ function _fotosArrancar(){
       window._fotosUltSnap=snap;
       _fotosAlPadron(snap);
       _fotosAlLivecast(snap);
+      // La transmisión no se redibuja si "nada cambió", y la llegada de las
+      // fotos no cuenta como cambio: el perfil que ya estaba en pantalla se
+      // quedaba con las iniciales aunque el atleta tuviera foto. Se le avisa.
+      try{ _txDirLastSig=null; }catch(e){}
       if(typeof renderTxWidget==='function')renderTxWidget();
       if(typeof R==='function')R();
     });
