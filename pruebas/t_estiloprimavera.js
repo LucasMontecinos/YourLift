@@ -218,6 +218,23 @@ const MONTAR = (estilo) => {
     await t.ctx.close();
   }
 
+  console.log('\nLas pestañas de operación también llevan el estilo');
+  {
+    const { p, ctx } = await abrir('?evento=suda2026_fesupo_full');
+    const fondo = async (est, fase) => { await montar(p, est); return p.evaluate(f => { isAdmin = true; window.ADMIN_ROLE = 'owner'; DATA.phase = f; R();
+      const card = document.querySelector('#R .card'); return { body: getComputedStyle(document.body).backgroundColor, tema: document.documentElement.getAttribute('data-tema'),
+        card: card ? getComputedStyle(card).backgroundColor : '', tit: (document.querySelector('#R h2.os') ? getComputedStyle(document.querySelector('#R h2.os')).fontFamily : '') }; }, fase); };
+    const sin = await fondo('', 'manage');
+    ok(sin.body === 'rgb(0, 0, 0)', 'sin estilo, Atletas & Pesaje sigue negro');
+    const pv = await fondo('primavera', 'manage');
+    ok(pv.body === 'rgb(12, 37, 45)' && /Lilita/.test(pv.tit), 'Primavera: turquesa oscuro y el título con la letra del estilo');
+    const li = await fondo('lirio', 'director');
+    ok(li.body === 'rgb(42, 7, 16)' && /Anton/.test(li.tit), 'Lirio: Control TX en vino oscuro, título en Anton');
+    const cr = await fondo('liriocrema', 'results');
+    ok(cr.tema === 'dia' && cr.body === 'rgb(241, 231, 211)', 'Lirio crema: Resultados claro (papel crema)');
+    await ctx.close();
+  }
+
   console.log('\nSolo el owner elige el estilo');
   for (const [rol, ve] of [['owner', true], ['admin', false]]) {
     const ctx = await b.newContext({ viewport: { width: 1100, height: 1000 }, serviceWorkers: 'block' });
