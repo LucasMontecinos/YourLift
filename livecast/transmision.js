@@ -1007,8 +1007,11 @@ function _startBarrido(dir){
   // colores —rosado, verde y las tablas turquesas del perfil—, con el borde
   // negro de sticker, y al medio el logo del estilo.
   const _pv=typeof _estiloPrim==='function'&&_estiloPrim();
-  const _c=_pv?['#F28AAE','#69BE6C','var(--pv-tablas-grandes)']:['#c41e3a','#ffffff','#000000'];
-  const _bd=_pv?'border-right:12px solid #15110E;':'';
+  // Los colores salen de la hoja del estilo (--pv-cortina…): Primavera rosado
+  // y verde con borde de sticker; Lirio vino y verde, sin borde. La última es
+  // el fondo del perfil, que es lo que queda detrás.
+  const _c=_pv?['var(--pv-cortina1,#F28AAE)','var(--pv-cortina2,#69BE6C)','var(--pv-tablas-grandes)']:['#c41e3a','#ffffff','#000000'];
+  const _bd=_pv?'border-right:var(--pv-cortina-borde,12px solid #15110E);':'';
   _txBarridoEl.innerHTML=
     '<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:'+_c[0]+';'+_bd+'animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) forwards"></div>'
     +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:'+_c[1]+';'+_bd+'animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .08s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'

@@ -4464,22 +4464,24 @@ function renderCampeonatos(){
         </label>
         <!-- Estilo del campeonato (livecast/estilo.js). Se elige una vez y cambia
              todo lo de ESTE campeonato junto: la página del público, la
-             transmisión, la Pantalla Tarima y el Control Remoto. -->
-        <div class="field" style="grid-column:span 2">
+             transmisión, la Pantalla Tarima y el Control Remoto. Lo ve y lo
+             cambia solo el owner; para los demás se guarda el que ya tenía. -->
+        ${(ST.adminInfo?.role==='owner'||ST.adminInfo?.bootstrap)?`<div class="field" style="grid-column:span 2">
           <span>Estilo del campeonato</span>
           <span style="font-size:11px;color:var(--muted);margin:2px 0 8px">Cambia todo lo de este campeonato a la vez: Competencia en Vivo del público, transmisión (OBS), Pantalla cargadores, Atleta en barra, Luces, Tabla jornada, Control Remoto y Control TX. Los demás campeonatos siguen como están.</span>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
             ${[['','Normal','Lo de siempre: negro en la transmisión y la tarima; día o noche en la página del público.'],
-               ['primavera','Primavera','Madera turquesa, contorno negro, rama con flores y el logo del “Primavera Open”.']].map(([v,t,d])=>{
+               ['primavera','Primavera','Madera turquesa, contorno negro, rama con flores y el logo del “Primavera Open”.'],
+               ['lirio','Lirio','Como la credencial y la cinta: papel crema, vino y verde, lirios rojos y letra condensada.']].map(([v,t,d])=>{
               const sel=(editing.estilo||'')===v;
               return `<label style="display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:12px;cursor:pointer;border:2px solid ${sel?'var(--accent)':'var(--border)'}">
                 <input type="radio" name="ef_estilo" value="${v}" ${sel?'checked':''} onchange="document.querySelectorAll('input[name=ef_estilo]').forEach(r=>r.closest('label').style.borderColor=r.checked?'var(--accent)':'var(--border)')" style="margin-top:4px">
-                <span style="width:64px;height:48px;flex-shrink:0;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;${v?'background:linear-gradient(180deg,#3399B2,#24809A);border:2px solid #15110E':'background:#000;border:2px solid #333'}">${v?'<img src="estilos/primavera/logo.webp" alt="" style="height:44px">':'<b style="color:#fff;font-size:11px;letter-spacing:1px">NEGRO</b>'}</span>
+                <span style="width:64px;height:48px;flex-shrink:0;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;${v==='primavera'?'background:linear-gradient(180deg,#3399B2,#24809A);border:2px solid #15110E':v==='lirio'?'background:#F6EEDF;border:2px solid #8C1D2F;box-shadow:inset 0 -8px 0 #8C1D2F':'background:#000;border:2px solid #333'}">${v?'<img src="estilos/primavera/logo.webp" alt="" style="height:'+(v==='lirio'?36:44)+'px">':'<b style="color:#fff;font-size:11px;letter-spacing:1px">NEGRO</b>'}</span>
                 <span><b style="display:block;font-size:14px">${t}</b><span style="font-size:12px;color:var(--muted);line-height:1.4">${d}</span></span>
               </label>`;}).join('')}
           </div>
-          ${editing.id?`<a href="livecast.html?evento=${encodeURIComponent(editing.id)}&estilo=primavera" target="_blank" style="margin-top:8px;font-size:12px;color:var(--blue);text-decoration:none">Ver cómo queda el estilo Primavera en este campeonato ↗</a>`:''}
-        </div>
+          ${editing.id?`<span style="margin-top:8px;font-size:12px;display:flex;gap:16px;flex-wrap:wrap">${[['primavera','Primavera'],['lirio','Lirio']].map(([v,t])=>`<a href="livecast.html?evento=${encodeURIComponent(editing.id)}&estilo=${v}" target="_blank" style="color:var(--blue);text-decoration:none">Ver cómo queda ${t} en este campeonato ↗</a>`).join('')}</span>`:''}
+        </div>`:`<input type="hidden" id="ef_estilo_guardado" value="${String(editing.estilo||'').replace(/"/g,'')}">`}
         <label class="field" style="grid-column:span 2">
           <span>Organizadores <span style="font-weight:400;color:var(--muted)">(puedes agregar más de uno · cada uno con su Instagram opcional)</span></span>
           <div id="ef_organizers" style="display:flex;flex-direction:column;gap:6px;margin-top:4px">${(()=>{
@@ -5245,8 +5247,11 @@ window.saveEvento = async function(){
   const logoFedUrl = (document.getElementById('ef_logoFedUrl')?.value||'').trim();
   const instagram = organizers[0]?.instagram || '';   // compat: IG del primer organizador
   const streamLogoUrl = (document.getElementById('ef_streamLogoUrl')?.value||'').trim();
-  // Estilo del campeonato: '' (Normal) o 'primavera' (livecast/estilo.js).
-  const estilo = (document.querySelector('input[name="ef_estilo"]:checked')||{}).value||'';
+  // Estilo del campeonato: '' (Normal), 'primavera' o 'lirio' (livecast/estilo.js).
+  // Lo elige solo el owner: para los demás no hay selector y se guarda el que
+  // el campeonato ya tenía (si no, guardar cualquier otro cambio lo borraba).
+  const _estSel = document.querySelector('input[name="ef_estilo"]:checked');
+  const estilo = _estSel ? (_estSel.value||'') : ((document.getElementById('ef_estilo_guardado')||{}).value||'');
   const streamInstagram = (document.getElementById('ef_streamIg')?.value||'').trim().replace(/^@/,'');
   // NUEVO: leer los checkboxes de documentos requeridos
   // Solo las casillas de documentos (data-doc-key): las de Olimpiadas

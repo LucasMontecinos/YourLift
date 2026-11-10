@@ -18,9 +18,22 @@
 // esas piezas; la rama, las flores y el logo se agregan desde acá. Sin estilo
 // no se agrega nada y esa hoja no toca nada: el Normal queda idéntico.
 //
-// Para mirar cómo queda sin cambiar el campeonato: ?estilo=primavera en el link
-// (y ?estilo=normal para verlo sin estilo). Es solo para esa pestaña.
-const ESTILOS={primavera:{nombre:'Primavera',logo:'estilos/primavera/logo.webp'}};
+// Hay un segundo, "lirio", sacado de la credencial y la cinta del mismo
+// campeonato: vino, crema y verde azulado, lirios rojos, letra condensada
+// gruesa y líneas finas en vez de contornos. Es una VARIANTE de Primavera: usa
+// las mismas piezas (las mismas clases pv…, la misma escena del perfil, las
+// mismas ramas), con otros colores, otras flores y otro acabado. El <html> lleva
+// data-estilo="primavera" (la familia, para que valga toda la hoja de
+// Primavera) y además data-estilo-var="lirio"; livecast/estilo_lirio.css cambia
+// lo que hace falta. El logo es el del campeonato, el mismo en los dos.
+//
+// Para mirar cómo queda sin cambiar el campeonato: ?estilo=primavera o
+// ?estilo=lirio en el link (y ?estilo=normal para verlo sin estilo). Es solo
+// para esa pestaña.
+const ESTILOS={
+  primavera:{nombre:'Primavera',logo:'estilos/primavera/logo.webp'},
+  lirio:{nombre:'Lirio',familia:'primavera'},
+};
 const _ESTILO_URL=(()=>{try{return new URLSearchParams(location.search).get('estilo')||'';}catch(e){return '';}})();
 function _estiloId(){
   if(_ESTILO_URL==='normal')return '';
@@ -28,8 +41,12 @@ function _estiloId(){
   const e=(typeof DATA!=='undefined'&&DATA&&DATA.event&&DATA.event.estilo)||'';
   return ESTILOS[e]?e:'';
 }
-function _estiloPrim(){ return _estiloId()==='primavera'; }
-function _pvLogoUrl(){ return ESTILOS.primavera.logo; }
+// ¿El campeonato tiene escena propia? (Primavera o una de sus variantes)
+function _estiloPrim(){ const id=_estiloId(); return id==='primavera'||!!(ESTILOS[id]&&ESTILOS[id].familia==='primavera'); }
+// La variante: 'lirio', o '' para Primavera tal cual.
+function _estiloVar(){ const id=_estiloId(); return (ESTILOS[id]&&ESTILOS[id].familia)?id:''; }
+function _pvLirio(){ return _estiloVar()==='lirio'; }
+function _pvLogoUrl(){ return ESTILOS.primavera.logo; }   // el logo del campeonato, en los dos
 let _estiloPuesto=null;
 // Se llama en cada dibujo (R y renderTxWidget): solo hace algo si cambió.
 function _estiloAplicar(){
@@ -37,25 +54,44 @@ function _estiloAplicar(){
   if(id===_estiloPuesto)return;
   _estiloPuesto=id;
   const r=document.documentElement;
-  if(id)r.setAttribute('data-estilo',id); else r.removeAttribute('data-estilo');
-  if(id==='primavera'&&!document.getElementById('estiloFuentes')){
-    const l=document.createElement('link'); l.id='estiloFuentes'; l.rel='stylesheet';
-    l.href='https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;700;800;900&display=swap';
+  const fam=(ESTILOS[id]&&ESTILOS[id].familia)||id;
+  if(fam)r.setAttribute('data-estilo',fam); else r.removeAttribute('data-estilo');
+  if(fam&&fam!==id)r.setAttribute('data-estilo-var',id); else r.removeAttribute('data-estilo-var');
+  // Los colores de los dibujos (ramas, flores, medallas) son los de la variante.
+  Object.assign(_PV,id==='lirio'?_PV_LIRIO:_PV_PRIM);
+  const FUENTES={
+    primavera:'https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;700;800;900&display=swap',
+    lirio:'https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700;800&display=swap',
+  };
+  if(FUENTES[id]&&!document.getElementById('estiloFuentes-'+id)){
+    const l=document.createElement('link'); l.id='estiloFuentes-'+id; l.rel='stylesheet';
+    l.href=FUENTES[id];
     document.head.appendChild(l);
   }
 }
 
 // ── Dibujos del estilo Primavera (SVG) ─────────────────────────────────────
 // Todo con contorno negro y una cara más clara, como el logo.
-const _PV={ink:'#15110E',wood:'#8B5530',woodL:'#C0864C',leaf:'#3E9A4A',leafL:'#69BE6C',leafD:'#246B30',
+const _PV_PRIM={ink:'#15110E',wood:'#8B5530',woodL:'#C0864C',leaf:'#3E9A4A',leafL:'#69BE6C',leafD:'#246B30',
   pink:'#F28AAE',pinkL:'#F9BDD2',pinkD:'#DC6890',pollen:'#F6C744',cream:'#FFF4E6'};
+// Lirio: tallos y hojas verde azulado, lirios vino, sin contorno negro.
+const _PV_LIRIO={ink:'#5A0F1E',wood:'#1F6E5E',woodL:'#2F8A75',leaf:'#1F6E5E',leafL:'#2F8A75',leafD:'#174E43',
+  pink:'#8C1D2F',pinkL:'#AE3346',pinkD:'#5E0F1D',pollen:'#E2B866',cream:'#F6EEDF'};
+const _PV=Object.assign({},_PV_PRIM);
 function _pvRand(seed){ let a=seed>>>0||1; return ()=>{ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 function _pvTallo(d,w){
+  if(_pvLirio())return '<path d="'+d+'" fill="none" stroke="'+_PV.wood+'" stroke-width="'+Math.max(3,w*.42).toFixed(1)+'" stroke-linecap="round" stroke-linejoin="round"/>';
   return '<path d="'+d+'" fill="none" stroke="'+_PV.ink+'" stroke-width="'+(w+8)+'" stroke-linecap="round" stroke-linejoin="round"/>'
     +'<path d="'+d+'" fill="none" stroke="'+_PV.wood+'" stroke-width="'+w+'" stroke-linecap="round" stroke-linejoin="round"/>'
     +'<path d="'+d+'" fill="none" stroke="'+_PV.woodL+'" stroke-width="'+Math.max(1.6,w*.24)+'" stroke-linecap="round" stroke-dasharray="22 30" transform="translate(0,'+(-w*.2)+')" opacity=".85"/>';
 }
 function _pvHoja(x,y,r,s){
+  if(_pvLirio()){
+    // Hoja de lirio: larga y angosta, plana, con la nervadura más clara.
+    const L='M0,0 C-9,-16 -10,-50 0,-78 C10,-50 9,-16 0,0Z';
+    return '<g transform="translate('+x+','+y+') rotate('+r+') scale('+s+')"><path d="'+L+'" fill="'+_PV.leaf+'"/>'
+      +'<path d="M0,-4 C1,-30 1,-52 0,-70" fill="none" stroke="'+_PV.leafL+'" stroke-width="'+(2.6/s).toFixed(2)+'" stroke-linecap="round"/></g>';
+  }
   const P='M0,0 C-20,-14 -21,-44 0,-62 C21,-44 20,-14 0,0Z';
   return '<g transform="translate('+x+','+y+') rotate('+r+') scale('+s+')"><path d="'+P+'" fill="'+_PV.leaf+'"/><path d="M0,0 C20,-14 21,-44 0,-62Z" fill="'+_PV.leafL+'"/>'
     +'<path d="M0,-3 L0,-55" stroke="'+_PV.leafD+'" stroke-width="3" stroke-linecap="round"/><path d="M0,-18 L-9,-26 M0,-32 L-8,-40 M0,-24 L8,-32" stroke="'+_PV.leafD+'" stroke-width="2" stroke-linecap="round"/>'
@@ -63,12 +99,35 @@ function _pvHoja(x,y,r,s){
 }
 const _PV_PETALO='M0,-5 C-14,-8 -26,-24 -18,-37 C-12,-44 -4,-43 0,-37 C4,-43 12,-44 18,-37 C26,-24 14,-8 0,-5Z';
 const _PV_PETALO_L='M0,-5 C-14,-8 -26,-24 -18,-37 C-12,-44 -4,-43 0,-37Z';
+// Lirio visto de frente: seis pétalos en punta, la nervadura más oscura y los
+// estambres. Con un borde crema fino, para que se lea sobre el vino de la cinta.
+const _LR_PETALO='M0,-4 C-10,-12 -12,-32 0,-50 C12,-32 10,-12 0,-4Z';
+function _lrLirio(x,y,r,s){
+  let o='',f='';
+  for(let i=0;i<6;i++){ const e=(i%2)?.86:1;
+    o+='<path transform="rotate('+(i*60)+') scale('+e+')" d="'+_LR_PETALO+'" fill="'+_PV.cream+'" stroke="'+_PV.cream+'" stroke-width="'+(7/s).toFixed(2)+'" stroke-linejoin="round"/>';
+    f+='<g transform="rotate('+(i*60)+') scale('+e+')"><path d="'+_LR_PETALO+'" fill="'+((i%2)?_PV.pinkL:_PV.pink)+'"/>'
+      +'<path d="M0,-8 C1,-22 1,-32 0,-42" fill="none" stroke="'+_PV.pinkD+'" stroke-width="2.4" stroke-linecap="round"/></g>';
+  }
+  let est='';
+  for(let i=0;i<6;i++){ const a=(i*60+30)*Math.PI/180, L=24+(i%2)*5, ex=(Math.sin(a)*L).toFixed(1), ey=(-Math.cos(a)*L).toFixed(1);
+    est+='<path d="M0,0 L'+ex+','+ey+'" stroke="'+_PV.pinkD+'" stroke-width="1.8"/><ellipse cx="'+ex+'" cy="'+ey+'" rx="2.6" ry="4.4" transform="rotate('+(i*60+30)+' '+ex+' '+ey+')" fill="'+_PV.pollen+'" stroke="'+_PV.pinkD+'" stroke-width="1.2"/>'; }
+  return '<g transform="translate('+x+','+y+') rotate('+r+') scale('+s+')">'+o+f+est+'<circle r="5" fill="'+_PV.leaf+'"/></g>';
+}
 function _pvFlor(x,y,r,s){
+  if(_pvLirio())return _lrLirio(x,y,r,s);
   let g='<g transform="translate('+x+','+y+') rotate('+r+') scale('+s+')">';
   for(let i=0;i<5;i++)g+='<g transform="rotate('+(i*72)+')"><path d="'+_PV_PETALO+'" fill="'+_PV.pink+'"/><path d="'+_PV_PETALO_L+'" fill="'+_PV.pinkL+'"/><path d="'+_PV_PETALO+'" fill="none" stroke="'+_PV.ink+'" stroke-width="'+(3.6/s)+'" stroke-linejoin="round"/></g>';
   return g+'<circle r="15" fill="'+_PV.pinkD+'"/><circle r="9.5" fill="'+_PV.pollen+'" stroke="'+_PV.ink+'" stroke-width="'+(3.4/s)+'"/><circle cx="-2.5" cy="-2.5" r="3" fill="#FFE68E"/></g>';
 }
 function _pvBoton(x,y,r,s){
+  if(_pvLirio()){
+    // Botón de lirio: cerrado, alargado, con dos hojitas en la base.
+    const B='M0,0 C-8,-10 -9,-34 0,-52 C9,-34 8,-10 0,0Z';
+    return '<g transform="translate('+x+','+y+') rotate('+r+') scale('+s+')">'+_pvHoja(-2,2,-34,.36)+_pvHoja(2,2,34,.36)
+      +'<path d="'+B+'" fill="'+_PV.cream+'" stroke="'+_PV.cream+'" stroke-width="'+(6/s).toFixed(2)+'" stroke-linejoin="round"/>'
+      +'<path d="'+B+'" fill="'+_PV.pink+'"/><path d="M0,0 C8,-10 9,-34 0,-52Z" fill="'+_PV.pinkL+'"/></g>';
+  }
   const P='M0,0 C-11,-6 -14,-23 0,-36 C14,-23 11,-6 0,0Z';
   return '<g transform="translate('+x+','+y+') rotate('+r+') scale('+s+')">'+_pvHoja(-3,2,-38,.42)+_pvHoja(3,2,38,.42)
     +'<path d="'+P+'" fill="'+_PV.pink+'"/><path d="M0,0 C11,-6 14,-23 0,-36Z" fill="'+_PV.pinkL+'"/><path d="M0,-4 C-5,-14 -4,-25 0,-33" fill="none" stroke="'+_PV.ink+'" stroke-width="2.4"/>'
@@ -81,6 +140,12 @@ function _pvFlorIcono(px){ return '<svg class="pvIcono" width="'+px+'" height="'
 const _PV_MED={1:['#F2C230','#F9DE7C'],2:['#BFC8CF','#E6ECEF'],3:['#C47A3A','#E3A06A']};
 function _pvMedalla(n,px){
   const c=_PV_MED[n]; if(!c)return String(n);
+  if(_pvLirio()){
+    // Medalla redonda, del metal, con un anillo vino fino.
+    return '<svg class="pvMedalla" width="'+px+'" height="'+px+'" viewBox="-50 -50 100 100" aria-label="'+n+'°">'
+      +'<circle r="44" fill="'+c[0]+'" stroke="'+_PV.ink+'" stroke-width="3"/><circle r="35" fill="none" stroke="'+c[1]+'" stroke-width="3"/>'
+      +'<text y="13" text-anchor="middle" font-family="Anton,Oswald,sans-serif" font-size="38" fill="'+_PV.ink+'">'+n+'</text></svg>';
+  }
   let g='<svg class="pvMedalla" width="'+px+'" height="'+px+'" viewBox="-50 -50 100 100" aria-label="'+n+'°">';
   for(let i=0;i<5;i++)g+='<g transform="rotate('+(i*72)+')"><path d="'+_PV_PETALO+'" fill="'+c[0]+'"/><path d="'+_PV_PETALO_L+'" fill="'+c[1]+'"/><path d="'+_PV_PETALO+'" fill="none" stroke="'+_PV.ink+'" stroke-width="3.6" stroke-linejoin="round"/></g>';
   return g+'<circle r="19" fill="'+_PV.cream+'" stroke="'+_PV.ink+'" stroke-width="3.6"/><text y="9" text-anchor="middle" font-family="Lilita One,Oswald,sans-serif" font-size="27" fill="'+_PV.ink+'">'+n+'</text></svg>';
@@ -181,7 +246,7 @@ function _pvPerfil(d){
     +'<div class="pvPf-marco">'+_pvMarco()+'</div>'
     +'<div class="pvPf-esc" style="transform:translate(-50%,-50%) scale('+k.toFixed(4)+')">'
       +'<div class="txCascade pvPf-in">'
-        +'<div class="pvPf-foto"><div class="pvPf-ph" style="background:'+(/1a2e4f/.test(d.mediaBg||'')||!d.mediaBg?'linear-gradient(180deg,#5BB8CD,#2B8AA3)':d.mediaBg)+'">'+(d.mediaHtml||'')+'</div></div>'
+        +'<div class="pvPf-foto"><div class="pvPf-ph" style="background:'+(/1a2e4f/.test(d.mediaBg||'')||!d.mediaBg?(_pvLirio()?'linear-gradient(180deg,#EFE3CC,#E2D2B2)':'linear-gradient(180deg,#5BB8CD,#2B8AA3)'):d.mediaBg)+'">'+(d.mediaHtml||'')+'</div></div>'
         +'<div class="pvPf-info">'
           +'<div class="pvPf-nombre">'+(d.nombre||'')+'</div>'
           +(club?'<div class="pvPf-club">'+club[1]+'</div>':'')

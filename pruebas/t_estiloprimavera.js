@@ -10,6 +10,7 @@
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_estiloprimavera.js
 const fs = require('fs');
 const { chromium, devices } = require('playwright');
+const { montarFirebase } = require('./apoyo/firebase_falso');
 const PUERTO = process.env.PUERTO || '8972';
 
 let fallas = 0;
@@ -153,6 +154,64 @@ const MONTAR = (estilo) => {
     ok(/name="ef_estilo"/.test(panel) && /input\[name="ef_estilo"\]:checked/.test(panel) && /\n\s+estilo,\s/.test(panel), 'Campeonatos → Estilo del campeonato se guarda en la ficha (estilo)');
     ok(/DATA\.event\.estilo=e\.estilo/.test(sinc) && /estilo:e\.estilo/.test(sinc), 'y el livecast lo toma de la ficha del campeonato');
   }
+
+  console.log('\nLirio: la variante de la credencial (vino, crema, verde, lirios)');
+  {
+    const { p, ctx } = await abrir('?tx=director&evento=suda2026_fesupo_full');
+    await montar(p, 'lirio');
+    const r = await p.evaluate(() => {
+      _txDirState = JSON.parse(JSON.stringify(TX_DIR_DEFAULT)); _txDirState.scoreboard.active = true;
+      _txDirLastSig = null; renderTxWidget();
+      const h = document.documentElement, w = document.getElementById('txWidget');
+      const head = w.querySelector('.pvSb-head'), nom = w.querySelector('.pvSb-name'), logo = w.querySelector('img.pvLogo');
+      return { fam: h.getAttribute('data-estilo'), v: h.getAttribute('data-estilo-var'), lirio: !!w.querySelector('.pvDeco-sb ellipse'),
+        logo: logo ? logo.getAttribute('src') : '', head: head ? getComputedStyle(head).backgroundImage : '', fuente: nom ? getComputedStyle(nom).fontFamily : '' };
+    });
+    ok(r.fam === 'primavera' && r.v === 'lirio', 'usa las piezas de Primavera con su variante (' + r.fam + '/' + r.v + ')');
+    ok(r.lirio, 'la rama del marcador lleva lirios');
+    ok(/estilos\/primavera\/logo\.webp/.test(r.logo), 'y el logo del campeonato, el mismo de siempre');
+    ok(/142, 30, 49/.test(r.head) && /Anton/.test(r.fuente), 'la barra del marcador es vino y la letra condensada');
+    const pf = await p.evaluate(() => {
+      _txDirState = JSON.parse(JSON.stringify(TX_DIR_DEFAULT)); _txDirState.profile.active = true; _txDirLastSig = null; renderTxWidget();
+      const el = document.querySelector('.pvPf'); return { fondo: el ? getComputedStyle(el).backgroundImage : '', lirios: !!document.querySelector('.pvPf-marco ellipse') };
+    });
+    ok(/248, 241, 228/.test(pf.fondo) && pf.lirios, 'el perfil, en papel crema con lirios en las esquinas');
+    const vuelta = await p.evaluate(() => {
+      DATA.event.estilo = 'primavera'; _txDirLastSig = null; renderTxWidget();
+      return { v: document.documentElement.getAttribute('data-estilo-var'), lirios: !!document.querySelector('.pvPf-marco ellipse'), tinta: _PV.ink };
+    });
+    ok(vuelta.v === null && !vuelta.lirios && vuelta.tinta === '#15110E', 'y al volver a Primavera vuelven sus flores y su contorno negro');
+    await ctx.close();
+    const x = await abrir('?evento=suda2026_fesupo_full&estilo=lirio');
+    await montar(x.p, '');
+    const a = await x.p.evaluate(() => { R(); return document.documentElement.getAttribute('data-estilo-var'); });
+    ok(a === 'lirio', '?estilo=lirio lo muestra aunque el campeonato no lo tenga');
+    await x.ctx.close();
+  }
+
+  console.log('\nSolo el owner elige el estilo');
+  for (const [rol, ve] of [['owner', true], ['admin', false]]) {
+    const ctx = await b.newContext({ viewport: { width: 1100, height: 1000 }, serviceWorkers: 'block' });
+    await montarFirebase(ctx);
+    const p = await ctx.newPage();
+    p.on('pageerror', e => errs.push('admin ' + rol + ': ' + e.message)); p.on('dialog', d => d.accept().catch(() => {}));
+    const EV = { id: 'regional_centro_2026', name: '“Primavera Open” Regional Centro Noviembre 2026', status: 'open', date: '2026-11-21', estilo: 'lirio' };
+    await p.addInitScript(([f, auth]) => { window.__FAKE = f; window.__AUTH = auth; },
+      [{ admins: [{ id: 'u1', role: rol, email: 'a@b.cl', nombre: 'Prueba' }], eventos: [EV] }, { uid: 'u1', email: 'a@b.cl' }]);
+    await p.goto(`http://localhost:${PUERTO}/admin.html`, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => typeof ST !== 'undefined' && ST.adminInfo && document.querySelector('.side-btn') && (ST.eventos || []).length === 1, null, { timeout: 25000 });
+    await p.evaluate(id => { go('campeonatos'); editEvento(id); }, EV.id);
+    await p.waitForSelector('#ef_name');
+    const radios = await p.evaluate(() => [...document.querySelectorAll('input[name="ef_estilo"]')].map(x => x.value + (x.checked ? '*' : '')).join(','));
+    if (ve) ok(radios === ',primavera,lirio*', 'el owner ve Normal, Primavera y Lirio, con el del campeonato marcado (' + radios + ')');
+    else ok(radios === '', 'un admin que no es owner no ve el selector');
+    const w = await p.evaluate(async () => { window.__ESCRITO = []; await saveEvento(); return (window.__ESCRITO.find(x => x.col === 'eventos') || {}).d; });
+    ok(w && w.estilo === 'lirio', (ve ? 'el owner' : 'el admin') + ' guarda otros cambios y el estilo sigue en Lirio');
+    await ctx.close();
+  }
+  const reglas = fs.readFileSync(__dirname + '/../reglas/firestore.rules', 'utf8');
+  ok(/allow update: if isAdmin\(\) && \(isOwner\(\) \|\| request\.resource\.data\.get\('estilo', ''\) == resource\.data\.get\('estilo', ''\)\)/.test(reglas),
+    'y en el servidor: solo el owner puede cambiar el estilo de un campeonato');
 
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();

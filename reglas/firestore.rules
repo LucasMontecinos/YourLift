@@ -152,7 +152,11 @@ service cloud.firestore {
 
     match /eventos/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      // El estilo del campeonato (Primavera, Lirio…) lo cambia solo el owner;
+      // los demás admins editan todo lo demás y el estilo queda como estaba.
+      allow create: if isAdmin() && (isOwner() || request.resource.data.get('estilo', '') == '');
+      allow update: if isAdmin() && (isOwner() || request.resource.data.get('estilo', '') == resource.data.get('estilo', ''));
+      allow delete: if isAdmin();
     }
 
     // Lo que tiene que cumplir una inscripción enviada desde el formulario público.
