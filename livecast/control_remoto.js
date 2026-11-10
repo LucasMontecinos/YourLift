@@ -186,14 +186,14 @@ const _RM_TAM=[
   ['timer','Timer'],['medals','Medallero'],['breakTimer','Ya volvemos'],['slam','Good / No lift'],
 ];
 function _rmAutoPerfil(){ const c=_dirState&&_dirState.autoPerfil; return !!(c&&c.on); }
-function _rmEscala(k){ const c=_dirState&&_dirState[k]; return (c&&c.scale)||1; }
+function _rmEscala(k){ const c=_dirState&&_dirState[k]; return (c&&c.scale)||TX_ESCALA_DEF(k); }
 function remoteTamPanel(){
   if(window._remoteMenu!=='tam')return '';
   const b='width:44px;height:40px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-family:Oswald;font-size:20px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;flex:none';
   let h='<div id="rmPanel" style="margin-top:10px;padding:14px;border-radius:14px;border:1.5px solid var(--border);background:var(--card)">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
     +'<div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:2px;color:var(--text)">TAMAÑO EN LA TRANSMISIÓN</div>'
-    +'<button onclick="remoteTamReset()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;letter-spacing:1px;cursor:pointer">TODO A 1.00x</button></div>';
+    +'<button onclick="remoteTamReset()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:Oswald;font-size:11px;letter-spacing:1px;cursor:pointer">TAMAÑOS DE FÁBRICA</button></div>';
   h+='<div style="font-size:11px;color:var(--muted);margin:6px 0 4px;line-height:1.5">Más grande se ve más cerca; más chico, más lejos. Es el mismo ajuste del Control TX.</div>';
   _RM_TAM.forEach(([k,lbl])=>{
     const sc=_rmEscala(k);
@@ -411,8 +411,9 @@ window.remoteTamDesliza=function(k,v,el,fin){
 };
 window.remoteTamReset=async function(){
   if(!_dirState)_dirState={};
-  _RM_TAM.forEach(([k])=>{ _dirState[k]=Object.assign({},_dirState[k]||{},{scale:1}); });
+  // Cada uno a su tamaño de fábrica: 1.00x, salvo el marcador, que va a 0.70x.
+  _RM_TAM.forEach(([k])=>{ _dirState[k]=Object.assign({},_dirState[k]||{},{scale:TX_ESCALA_DEF(k)}); });
   await _dirPush();
   R();
-  showToastLC('Todo a 1.00x');
+  showToastLC('Tamaños de fábrica: todo a 1.00x y el marcador a '+TX_SB_ESCALA.toFixed(2)+'x');
 };

@@ -48,8 +48,12 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
     'sale del borde de arriba del marcador, deslizándose hacia arriba, y vuelve a bajar: ' + JSON.stringify(pos));
   await p.waitForTimeout(500);
   await p.screenshot({ path: process.env.CAPTURA || '/dev/null' }).catch(() => {});
-  await p.waitForTimeout(5700);
-  ok(await cartel() === '', 'a los 6 segundos se va solo');
+  // Entra, se ve 2 segundos y sale (antes eran 6 s y se quedaba demasiado).
+  const desde = () => p.evaluate(() => _ahora() - DATA.athletes.find(x => x.id === 3).att.dl[2].cambioTs);
+  await p.waitForTimeout(Math.max(0, 2000 - await desde()));
+  ok(await cartel() !== '', 'a los 2 segundos sigue en pantalla');
+  await p.waitForTimeout(Math.max(0, 3400 - await desde()));
+  ok(await cartel() === '' && await p.evaluate(() => TX_CAMBIO_MS) <= 3000, 'y a los 3,4 s ya se fue solo');
 
   console.log('\nLos botones');
   const rm = fs.readFileSync(__dirname + '/../livecast/control_remoto.js', 'utf8');

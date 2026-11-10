@@ -1149,7 +1149,9 @@ function _autoPerfilVigilar(){
 // nombre del atleta, el movimiento y el peso nuevo, TX_CAMBIO_MS y se va. Vale
 // para cualquier atleta, no solo el que está en tarima: el cambio se hace casi
 // siempre antes de que le toque.
-const TX_CAMBIO_MS=6000;
+// Entra (0,55 s), queda 2 s y sale (0,45 s): se pidió así, a los 6 s de antes
+// se quedaba demasiado en pantalla.
+const TX_CAMBIO_MS=3000;
 function _txCambioReciente(){
   const ahora=(typeof _ahora==='function')?_ahora():Date.now();
   let mejor=null;
@@ -1228,7 +1230,7 @@ function renderTxDirector(container){
     +'|md-'+(md.mod||'')+'-'+(md.sex||'')+'-'+(md.div||'')+'-'+(md.cat||'')+'-'+(md.tipo||'')+'-'+(md.until||0)
     +'|'+((_txDirState.profile==null?void 0:_txDirState.profile.until)||0)+'|'+((_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.until)||0)+'|'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.until)||0)+'|'+((_txDirState.slam==null?void 0:_txDirState.slam.until)||0)
     +'|bt-'+(bt.startedAt||0)+'-'+(bt.durationSec||0)+'-'+(bt.pausedAt||0)+'-'+(bt.label||'')+'-'+_btVideosDe(bt).length+'-'+(bt.movement||'')+'-'+JSON.stringify(bt.style||{})
-    +'|sc-'+((_txDirState.profile==null?void 0:_txDirState.profile.scale)||1)+'-'+((_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.scale)||1)+'-'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.scale)||1)+'-'+((_txDirState.timer==null?void 0:_txDirState.timer.scale)||1)+'-'+((_txDirState.slam==null?void 0:_txDirState.slam.scale)||1)+'-'+((_txDirState.breakTimer==null?void 0:_txDirState.breakTimer.scale)||1)+'-'+((_txDirState.tablaActual==null?void 0:_txDirState.tablaActual.scale)||1)+'-'+((_txDirState.medals==null?void 0:_txDirState.medals.scale)||1)+'-'+((_txDirState.luces==null?void 0:_txDirState.luces.scale)||1)
+    +'|sc-'+((_txDirState.profile==null?void 0:_txDirState.profile.scale)||1)+'-'+((_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.scale)||TX_SB_ESCALA)+'-'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.scale)||1)+'-'+((_txDirState.timer==null?void 0:_txDirState.timer.scale)||1)+'-'+((_txDirState.slam==null?void 0:_txDirState.slam.scale)||1)+'-'+((_txDirState.breakTimer==null?void 0:_txDirState.breakTimer.scale)||1)+'-'+((_txDirState.tablaActual==null?void 0:_txDirState.tablaActual.scale)||1)+'-'+((_txDirState.medals==null?void 0:_txDirState.medals.scale)||1)+'-'+((_txDirState.luces==null?void 0:_txDirState.luces.scale)||1)
     +'|col-'+JSON.stringify(_txDirState.colors||{})+'|est-'+(typeof _estiloId==='function'?_estiloId():'')
     +'|rv-'+(DATA.relojVisible?1:0)
     +'|cbi-'+(_txDirActive('cambioIntento')?((_txCambioReciente()||{}).key||'')+'-'+((_txDirState.cambioIntento==null?void 0:_txDirState.cambioIntento.scale)||1):'off')
@@ -1336,7 +1338,7 @@ function renderTxDirector(container){
     // borde de arriba: así sale justo de ahí, sea cual sea el alto del marcador.
     const encima=(_cb&&!(animSb&&animSb.dir==='out'))?_txCartelCambioSube(_cb,_cbEsc,'position:absolute;left:0;bottom:100%;'):'';
     if(encima)_cbPuesto=true;
-    const sbHtml=_renderTxCerScoreboardBL(cur,{noAnimate:true,scale:(_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.scale)||1,animDir:(animSb==null?void 0:animSb.dir)||null,encima});
+    const sbHtml=_renderTxCerScoreboardBL(cur,{noAnimate:true,scale:(_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.scale)||TX_SB_ESCALA,animDir:(animSb==null?void 0:animSb.dir)||null,encima});
     const isSbEnter = animSb && animSb.dir==='in';
     // Sin logo: usar el HTML directo (la cascada _sbRowAnim ya viene del render con animDir)
     // Con logo: envolvemos para gatear logo zoom + explode, sin replay en updates
@@ -1608,8 +1610,11 @@ function _txStartLightsListener(){
   }catch(e){console.warn('[TX] lights subscribe fail',e)}
 }
 
-// Cuánto queda en pantalla la decisión del jurado.
-const JURADO_MS=12000;
+// Cuánto queda en pantalla la decisión del jurado (al revertir un intento):
+// entra (0,6 s), queda 2 s y sale (0,45 s). Antes eran 12 s y se pidió que
+// entrara, se viera 2 segundos y saliera. Vale también para el aviso en la
+// pantalla de Intentos de la tarima.
+const JURADO_MS=3100;
 
 // "DECISIÓN DEL JURADO" y debajo NULO o VÁLIDO (sin el "JURY HAS OVERRULED" en
 // inglés, se pidió así), con la luz como la de los jueces:
@@ -1623,9 +1628,16 @@ function renderTxJurado(j){
   const nombre=(a&&a.name)||j.name||'';
   const intento=(LIFT_S[j.lift]||'')+' '+((j.round|0)+1);
   const _pv=typeof _estiloPrim==='function'&&_estiloPrim();
+  // Entra y, al terminar su tiempo, sale por donde entró. Las demoras salen de
+  // la hora en que llegó, así un redibujo a mitad de camino no lo hace saltar.
+  let _jrAnim='txSlideInLeft .6s cubic-bezier(.2,.85,.3,1) both';
+  if(typeof _txJurado!=='undefined'&&_txJurado===j&&_txJuradoHasta>Date.now()){
+    const ya=Math.max(0,Date.now()-(_txJuradoHasta-JURADO_MS));
+    _jrAnim='txSlideInLeft .6s cubic-bezier(.2,.85,.3,1) -'+ya+'ms both,txSlideOutLeft .45s cubic-bezier(.7,0,.84,0) '+Math.max(0,JURADO_MS-450-ya)+'ms forwards';
+  }
   return '<div class="pvJr" style="margin:clamp(18px,2.4vw,40px);display:flex;align-items:center;gap:clamp(14px,1.6vw,26px);'
     +'padding:clamp(12px,1.3vw,20px) clamp(16px,1.8vw,30px);background:'+_txC('headerBg')+';border-left:6px solid '+_txC('accent')+';border-radius:10px;'
-    +'box-shadow:0 10px 40px rgba(0,0,0,.55);animation:txSlideInLeft .6s cubic-bezier(.2,.85,.3,1) both;font-family:Oswald,sans-serif">'
+    +'box-shadow:0 10px 40px rgba(0,0,0,.55);animation:'+_jrAnim+';font-family:Oswald,sans-serif">'
     +(_pv?_pvDeco('jr',620):'')
     +'<div class="pvJr-luz" style="display:flex;flex-direction:column;align-items:center;gap:8px">'
       +(_pv?_pvLuz(j.res==='g'?'#FFF4E6':'#E23B32',96):'<div style="width:clamp(46px,4.2vw,72px);height:clamp(46px,4.2vw,72px);border-radius:50%;background:'+e.bg+';border:4px solid '+e.bd+';box-shadow:'+e.glow+'"></div>')
@@ -2496,7 +2508,7 @@ function _dirEnsureListener(){
   _dirUnsubDocId=docId;
   try{
     _dirUnsub=window._fb.onSnapshot(window._fb.doc(fbDB,'livecast_director',docId),(snap)=>{
-      const DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',tipo:'total',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[]}};
+      const DEFAULT={profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:TX_SB_ESCALA},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',tipo:'total',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[]}};
       if(snap.exists()){
         const d=snap.data();
         _dirState=Object.assign({},DEFAULT,d.show||{});
@@ -2547,12 +2559,12 @@ function renderDirector(){
   const kbd=(k)=>'<kbd style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:32px;padding:0 10px;background:#0a1628;border:2px solid #D4A843;border-radius:6px;font-family:Oswald;font-size:16px;font-weight:700;color:#D4A843;letter-spacing:1px;box-shadow:0 2px 0 #D4A84355">'+k+'</kbd>';
   const scaleSlider=(key)=>{
     const c=_dirState[key]||{};
-    const sc=c.scale||1;
+    const sc=c.scale||TX_ESCALA_DEF(key);
     return '<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.05);display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
       +'<span style="font-size:10px;color:var(--muted);letter-spacing:1px;font-family:Oswald;min-width:60px">TAMAÑO</span>'
       +'<input type="range" min="0.5" max="2.0" step="0.05" value="'+sc+'" oninput="dirSetScale(\''+key+'\',this.value);this.nextElementSibling.textContent=parseFloat(this.value).toFixed(2)+\'x\'" style="flex:1;min-width:140px;cursor:pointer;accent-color:var(--gold)">'
       +'<span style="font-family:Oswald;font-size:13px;color:var(--gold);font-weight:700;min-width:48px;text-align:right">'+sc.toFixed(2)+'x</span>'
-      +'<button onclick="dirResetScale(\''+key+'\')" title="Reset a 1.00x" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:10px;cursor:pointer;font-family:Oswald;letter-spacing:1px">RESET</button>'
+      +'<button onclick="dirResetScale(\''+key+'\')" title="Volver a '+TX_ESCALA_DEF(key).toFixed(2)+'x" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:10px;cursor:pointer;font-family:Oswald;letter-spacing:1px">RESET</button>'
       +'</div>';
   };
   const compToggle=(key,icon,title,desc,shortcut,onClick)=>{
@@ -3638,7 +3650,7 @@ window.dirSetScale=async function(comp,scale){
   if(DATA.phase==='director')R();
 };
 
-window.dirResetScale=async function(comp){await window.dirSetScale(comp,1)};
+window.dirResetScale=async function(comp){await window.dirSetScale(comp,TX_ESCALA_DEF(comp))};
 
 window.dirSetColor=async function(key,val){
   if(!_dirState)_dirState={};

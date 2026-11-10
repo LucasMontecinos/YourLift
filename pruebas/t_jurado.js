@@ -124,7 +124,18 @@ export async function signOut(a){a._u=null;}
     }, jurado);
     ok(!r.antes, 'armado, no muestra nada mientras el jurado no decide');
     ok(!/OVERRULED/.test(r.txt) && /DECISIÓN DEL JURADO/.test(r.txt) && /NULO/.test(r.txt), 'al revertir aparece "DECISIÓN DEL JURADO · NULO" (sin el texto en inglés)');
-    await p.screenshot({ path: '/tmp/claude-0/-home-user-YourLift/0692ef33-d41b-5709-98fb-6a0aca869c32/scratchpad/jury_tx.png' });
+    // Entra, se ve 2 segundos y sale (antes quedaba 12 s en pantalla).
+    const t = await p.evaluate(async () => {
+      const visible = () => { const el = document.querySelector('.pvJr') || [...document.querySelectorAll('div')].find(d => /^DECISIÓN DEL JURADO/.test(d.innerText || '') && d.style.animation);
+        return !!el && parseFloat(getComputedStyle(el).opacity) > 0.5 && el.getBoundingClientRect().right > 0; };
+      await new Promise(r => setTimeout(r, 1300));                 // ~2 s desde que llegó
+      const aLos2 = visible();
+      await new Promise(r => setTimeout(r, 1700));                 // ~3,7 s
+      const aLos37 = /DECISIÓN DEL JURADO/.test(document.body.innerText) && visible();
+      return { aLos2, aLos37, ms: JURADO_MS };
+    });
+    ok(t.aLos2, 'a los 2 s sigue en pantalla');
+    ok(!t.aLos37 && t.ms <= 3200, 'y a los 3,7 s ya salió (entra, 2 s, sale: ' + t.ms + ' ms)');
   }
 
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs[0] : ''));

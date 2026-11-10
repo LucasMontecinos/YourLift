@@ -1102,7 +1102,11 @@ let _widgetObsNativeListening=false;
 // Lee comandos desde Firestore livecast_director/current.
 // Cada componente tiene {active, until?} independiente; el panel del
 // admin pushea cambios y este widget renderiza lo que esté activo.
-const TX_DIR_DEFAULT={jurado:{active:false,until:0,scale:1},cambioIntento:{active:false,until:0,scale:1},profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:1},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',tipo:'total',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[],movement:'',style:{bgColor:'#0A1628',accentColor:'#C41E3A',videoX:0,videoY:5,videoW:40,videoH:80,textX:44,textY:10,titleSize:8,movSize:5,timerSize:12,showLogos:true,blurAmount:24,overlayOpacity:0.65}}};
+// Tamaño del marcador cuando nadie lo tocó: a 1.00 se ve muy grande en la
+// transmisión; el que se usa en competencia es 0.70. RESET vuelve a este.
+const TX_SB_ESCALA=0.7;
+const TX_ESCALA_DEF=k=>k==='scoreboard'?TX_SB_ESCALA:1;
+const TX_DIR_DEFAULT={jurado:{active:false,until:0,scale:1},cambioIntento:{active:false,until:0,scale:1},profile:{active:false,until:0,scale:1},scoreboard:{active:false,until:0,scale:TX_SB_ESCALA},leaderboard:{active:false,until:0,cat:'',scale:1},timer:{active:false,until:0,scale:1},slam:{active:false,until:0,type:'g',scale:1},medals:{active:false,until:0,mod:'',sex:'',div:'',cat:'',tipo:'total',scale:1},breakTimer:{active:false,startedAt:0,durationSec:0,label:'',pausedAt:0,scale:1,videos:[],movement:'',style:{bgColor:'#0A1628',accentColor:'#C41E3A',videoX:0,videoY:5,videoW:40,videoH:80,textX:44,textY:10,titleSize:8,movSize:5,timerSize:12,showLogos:true,blurAmount:24,overlayOpacity:0.65}}};
 let _txDirState=null;
 // Firma del timer de descanso, para no redibujar las pantallas de tarima por
 // cambios del director que no las tocan.
