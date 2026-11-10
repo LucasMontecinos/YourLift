@@ -153,7 +153,7 @@ async function initFB(){
       // Si cambió el estilo del campeonato (admin → Campeonatos), se viste al
       // toque en todas las pantallas abiertas: transmisión, tarima y público.
       try{
-        const _est=(DATA.event&&DATA.event.estilo)||'';
+        const _est=(typeof _estiloId==='function')?_estiloId():((DATA.event&&DATA.event.estilo)||'');
         if(_est!==(window._estiloVisto||'')){
           window._estiloVisto=_est;
           if(TX_MODE){ try{_txDirLastSig=null;}catch(e){} renderTxWidget(); } else R();

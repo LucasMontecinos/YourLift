@@ -41,10 +41,35 @@ const ESTILOS={
   liriocrema:{nombre:'Lirio crema',familia:'primavera',variante:'lirio',sub:'crema'},
 };
 const _ESTILO_URL=(()=>{try{return new URLSearchParams(location.search).get('estilo')||'';}catch(e){return '';}})();
+// El estilo GUARDADO manda, y no se pierde. Lo que vale es la ficha del
+// campeonato (eventos/{id}.estilo), que el listener de eventos deja en
+// LIVE_EVENT_META. DATA.event no sirve de fuente: se reemplaza entero con cada
+// sincronización que manda la mesa de control, y si esa copia venía sin el
+// campo la pantalla volvía al negro hasta el próximo cambio en el admin. Así un
+// computador quedaba en negro y el teléfono con el estilo, según qué llegaba
+// primero. Además se recuerda en este equipo, para que al abrir no parpadee en
+// negro mientras llega la ficha.
+const _ESTILO_MEM={};
+function _estiloGuardado(id){
+  if(!id)return null;
+  if(!(id in _ESTILO_MEM)){ let v=null; try{ v=localStorage.getItem('yl_estilo_'+id); }catch(e){} _ESTILO_MEM[id]=v; }
+  return _ESTILO_MEM[id];
+}
+function _estiloRecordar(id,v){
+  if(!id||_ESTILO_MEM[id]===v)return;
+  _ESTILO_MEM[id]=v; try{ localStorage.setItem('yl_estilo_'+id,v); }catch(e){}
+}
 function _estiloId(){
   if(_ESTILO_URL==='normal')return '';
   if(ESTILOS[_ESTILO_URL])return _ESTILO_URL;
-  const e=(typeof DATA!=='undefined'&&DATA&&DATA.event&&DATA.event.estilo)||'';
+  const ev=(typeof DATA!=='undefined'&&DATA&&DATA.event)||null;
+  if(!ev)return '';
+  const M=window.LIVE_EVENT_META||{};
+  let e;
+  if(ev.id&&M[ev.id]){ e=M[ev.id].estilo||''; _estiloRecordar(ev.id,e); }   // la ficha del campeonato
+  else if(ev.name&&M[ev.name]&&M[ev.name].estilo) e=M[ev.name].estilo;
+  else if(ev.estilo) e=ev.estilo;
+  else e=_estiloGuardado(ev.id)||'';
   return ESTILOS[e]?e:'';
 }
 // ¿El campeonato tiene escena propia? (Primavera o una de sus variantes)
