@@ -58,10 +58,15 @@ window.clubLogo = function(name){
 // logo va siempre dentro de su baldosa: oscura por defecto, clara para los de
 // letras oscuras. Se cambia por club en Admin → Clubes (campo fondoLogo).
 window.CLUBS_FONDO = { 'hannya': 'claro' };
+// Estos llevan SIEMPRE la baldosa oscura, aunque en Admin → Clubes diga otra
+// cosa: sus logos son blancos (se pidió así).
+window.CLUBS_FONDO_FIJO = { 'himalaya': 'oscuro', 'blackbars': 'oscuro' };
 window.CLUB_FONDO_COLOR = { oscuro: '#0E1424', claro: '#FFFFFF' };
 window.clubFondo = function(name){
   if(!name) return 'oscuro';
   const n = window.normClub(name);
+  const fijo = window.CLUBS_FONDO_FIJO || {};
+  for(const key in fijo){ if(n.indexOf(key) >= 0) return fijo[key]; }
   const fs = window._CLUBS_FS || {};
   for(const key in fs){
     if(n.indexOf(key) >= 0 && (fs[key].fondoLogo === 'claro' || fs[key].fondoLogo === 'oscuro')) return fs[key].fondoLogo;
@@ -79,7 +84,12 @@ window.clubLogoImg = function(name, size, extraStyle){
   const url = window.clubLogo(name);
   if(!url) return '';
   const s = size || 24;
-  const xs = extraStyle || '';
+  // El fondo de la baldosa lo decide clubFondo y nada más. Si quien llama manda
+  // su propio "background:" se saca: no hacía nada (va antes del de la baldosa),
+  // pero los temas día y noche (compartido/dia.css, livecast/tema.css) cambian a
+  // la fuerza cualquier elemento que traiga ese azul escrito, y la baldosa
+  // oscura de un logo blanco quedaba clara: Himalaya no se veía.
+  const xs = String(extraStyle || '').replace(/(^|;)\s*background(-color)?\s*:[^;]*/gi, '$1');
   const f = window.clubFondo(name);
   const bg = window.CLUB_FONDO_COLOR[f] || window.CLUB_FONDO_COLOR.oscuro;
   return '<span class="club-logo club-logo-'+f+'" style="display:inline-grid;place-items:center;width:'+s+'px;height:'+s+'px;'

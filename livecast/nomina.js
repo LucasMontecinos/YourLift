@@ -316,6 +316,19 @@ function _mergeFirebaseAthletes(fbAthletes){
     }else{
       // El código de atleta, si el local no lo tenía (nóminas armadas antes).
       if(fa.codigo&&!existing.codigo){existing.codigo=fa.codigo;changed=true;}
+      // El nombre corregido en la inscripción (Admin) llega también acá: antes
+      // se quedaba el mal escrito ("Vicente Bareientos Diaz") y no cruzaba con el
+      // Cronograma, que lo tenía bien. Solo si es la misma persona por su código,
+      // si cambió de verdad (no solo mayúsculas o tildes) y si nadie lo corrigió
+      // a mano en el livecast (eso deja nombreOrig): esa corrección manda.
+      if(fa.codigo&&existing.codigo===fa.codigo&&fa.name&&!existing.nombreOrig
+        &&_nnCrono(fa.name)!==_nnCrono(existing.name||'')){
+        existing.nombreOrig=existing.name;
+        existing.name=fa.name;
+        if('nombre' in existing)existing.nombre=fa.name;
+        _markAtt(existing.id,'meta');          // que la escritura lo suba
+        changed=true;
+      }
       // Update flight if changed in Firestore
       if(fa.flight&&fa.flight!==existing.flight){
         existing.flight=fa.flight;changed=true;
