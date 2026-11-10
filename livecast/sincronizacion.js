@@ -410,6 +410,7 @@ function _avisoRoster(dif){
 function publicarEstaMesa(){
   if(!isAdmin||!DATA.event){alert('Solo una mesa con sesión de administrador puede publicar.');return;}
   if(!fbReady){alert('Sin conexión con el servidor. No se publicó nada: revisa internet y vuelve a intentar.');return;}
+  if(_srvEsperar())return;   // publicaría la versión con que abrió, no la del servidor
   const dif=window._rosterDif||{};
   const n=(DATA.athletes||[]).length;
   if(!confirm('PUBLICAR LO DE ESTA MESA\n\n'
@@ -450,6 +451,7 @@ window.publicarEstaMesa=publicarEstaMesa;
 // mismo que leen la web pública, los televisores y OBS.
 function _syncEstado(){
   if(!window.IS_CONTROLLER) return {c:'#8A9BB2',t:'SOLO MIRAS',d:'lo que cargues acá no se guarda'};
+  if(!_srvAdoptado())       return {c:'#D4A843',t:'CONECTANDO…',d:'trae lo del servidor antes de guardar'};
   if(window._syncFallo)     return {c:'#C41E3A',t:'NO SE ESTÁ GUARDANDO',d:'reintentando solo'};
   let pend=false;
   try{ pend=_syncInFlight||_syncPending||(_dataSig()!==window._lastSyncedSig); }catch(e){}
@@ -506,6 +508,61 @@ function _reintentarSync(){
   _reintentoTO=setTimeout(()=>{ _reintentoTO=null; try{ syncToFB(); }catch(e){} },4000);
 }
 
+// ── Recién llegada: primero escucha, después escribe ─────────────────────────
+//
+// Pasó con el computador con todo cargado (pesaje, racks, lotes sorteados,
+// aperturas): se abrió la tablet con la misma cuenta para el Control Remoto y
+// el computador quedó con "la versión de la tablet, que no tenía todo".
+//
+// Una pantalla que abre arma el campeonato con lo que tiene a mano —la nómina
+// de las inscripciones, sin pesaje ni lotes, en sentadilla, intento 1; o una
+// copia vieja guardada en ese aparato— y antes de recibir lo que hay en el
+// servidor ya estaba escribiendo: los inscritos que "le faltaban" los subía
+// como altas suyas (peso 0, sin racks, otro lote), mandaba su movimiento, ronda
+// y tanda, y por el canal rápido la tanda entera sin intentos. Las demás
+// pantallas lo tomaban como lo último.
+//
+// Ahora una pantalla no escribe NADA (documento, canal rápido, reloj) hasta
+// haber recibido y adoptado lo que hay en el servidor para ese campeonato. Si el
+// servidor no tiene nada todavía (campeonato que recién empieza), esta es la
+// primera y escribe normal. Lo que tenga guardado el caché del navegador no
+// cuenta: puede ser de ayer; vale lo que confirme el servidor.
+function _srvAdoptado(){
+  if(PRACTICE_MODE)return true;           // práctica: no hay servidor que respetar
+  let id=null; try{ id=fbDocId(); }catch(e){}
+  return !!id&&window._srvListoId===id&&window._srvListo===true;
+}
+// Para las acciones que reemplazan todo (publicar esta mesa, volver a cargar la
+// nómina, re-sortear…): con lo de esta pantalla todavía sin cruzar con el
+// servidor, publicarían una versión vieja.
+function _srvEsperar(){
+  if(_srvAdoptado())return false;
+  alert('Esta pantalla todavía está recibiendo lo que hay en el servidor.\n\n'
+    +'Espera unos segundos —hasta que el indicador de abajo deje de decir CONECTANDO— y vuelve a intentar.');
+  return true;
+}
+window._srvEsperar=_srvEsperar;
+// Lo que hay en el servidor ya está en esta pantalla: desde ahora escribe.
+// `existia`: false si el servidor no tenía nada (esta pantalla es la primera).
+function _srvMarcarListo(existia){
+  if(window._srvListo)return;
+  window._srvListo=true;
+  // Una escritura "que reemplaza todo" pedida sola mientras se conectaba (el
+  // borrado automático de sobrantes al cruzar con las inscripciones) estaba
+  // hecha sobre la versión vieja: no sale.
+  if(existia)window._forceFullWrite=false;
+  // Las inscripciones que llegaron mientras tanto se cruzan ahora, contra la
+  // nómina de verdad: entra solo quien de verdad falta.
+  const ins=window._insPendiente; window._insPendiente=null;
+  if(ins&&typeof _aplicarInscritos==='function'){ try{ _aplicarInscritos(ins); }catch(e){ console.warn('[FB] inscritos',e); } }
+  // Si el servidor no tenía nada, lo de esta pantalla es lo que hay: se publica.
+  // Si tenía, solo sale lo que el operador haya tocado mientras se conectaba.
+  const pend=!!(window._pendingEdits&&window._pendingEdits.size);
+  if((!existia&&window._srvQuiereEscribir)||pend){ try{ debouncedSync(); }catch(e){} }
+  window._srvQuiereEscribir=false;
+  try{ _syncPintaSemaforo(); }catch(e){}
+}
+
 async function syncToFB(){
   if(!fbReady||!window._fb||!fbDB||!isAdmin||_fbSyncing)return;
   if(!window.IS_CONTROLLER){
@@ -516,6 +573,8 @@ async function syncToFB(){
     try{ if(isAdmin && _dataSig()!==window._lastSyncedSig) _spectatorEditAlert(); }catch(e){}
     return;
   }
+  // Recién abierta y sin lo del servidor todavía: no escribe (ver _srvAdoptado).
+  if(!_srvAdoptado()){ window._srvQuiereEscribir=true; return; }
   // Si ya hay una escritura en curso, NO se descarta este cambio: se marca como
   // pendiente y se vuelve a escribir al terminar. (Antes se hacía `return` y el
   // cambio se perdía para siempre — cargando pesos rápido, o con la red lenta,
@@ -688,6 +747,7 @@ async function syncTimerOnlyToFB(forzar){
   if(!fbReady||!window._fb||!fbDB||!isAdmin)return;
   if(!window.IS_CONTROLLER)return; // Solo el controller escribe
   if(!window._iOwnTimer)return;    // Solo QUIEN inició el reloj lo refresca.
+  if(!_srvAdoptado())return;       // recién abierta: todavía no escribe
   // Los demás controladores lo muestran localmente (startTimer(false)) sin escribir
   // → evita 5 escrituras/seg sobre el mismo doc (contención Firestore).
   // El latido cada 10 s ya no se escribe. Cada escritura, aunque cambie solo el
@@ -729,6 +789,9 @@ function _flashFijarBase(arr){
 function _flashEscribir(){
   try{
     if(PRACTICE_MODE||!fbReady||!window._fb||!fbDB||!isAdmin||!window.IS_CONTROLLER||_fbSyncing||!DATA.event)return;
+    // Sin lo del servidor todavía, "la tanda en tarima" sería la de esta
+    // pantalla recién abierta, sin intentos: no se manda (ver _srvAdoptado).
+    if(!_srvAdoptado())return;
     const id=fbDocId(); if(!id)return;
     const base=window._flashBase, lista=DATA.athletes||[];
     let cambios=base?lista.filter(a=>a&&base[a.id]!==_jsonAth(a)):null;
@@ -875,13 +938,45 @@ function startFBSync(){
   if(!fbReady)return;
   if(fbUnsub){fbUnsub();fbUnsub=null}
   const id=fbDocId();if(!id)return;
+  // Otro campeonato (o el primero): hasta recibir lo del servidor, no escribe.
+  if(window._srvListoId!==id){ window._srvListoId=id; window._srvListo=false; window._srvQuiereEscribir=false; }
   const ref=window._fb.doc(fbDB,'livecast_sync',id);
   try{ _flashEscuchar(id); }catch(e){ console.warn('[flash]',e); }
-  fbUnsub=window._fb.onSnapshot(ref,(snap)=>{
-    if(!snap.exists())return;
+  // Si lo primero que llega sale del caché del navegador (puede ser de ayer),
+  // se muestra, pero la pantalla no queda lista para escribir hasta que el
+  // servidor lo confirme. Si el documento no cambió desde entonces, Firestore no
+  // vuelve a avisar, así que se le pregunta directo al servidor.
+  const _confirmarConServidor=()=>{
+    if(window._srvListo||window._srvListoId!==id||fbUnsub!==_esteUnsub)return;
+    const f=window._fb.getDocFromServer;
+    if(typeof f!=='function'){ _srvMarcarListo(true); return; }
+    f(ref).then(s=>{ if(window._srvListoId===id&&!window._srvListo)_alLlegar(s,true); })
+      .catch(()=>setTimeout(_confirmarConServidor,4000));   // sin red: se reintenta
+  };
+  let _esteUnsub=null;
+  const _alLlegar=(snap,delServidor)=>{
+    // ¿Es la primera lectura de este campeonato en esta pantalla?
+    const _primera=!window._srvListo;
+    const _deCache=!delServidor&&!!(snap.metadata&&snap.metadata.fromCache);
+    if(!snap.exists()){
+      // El servidor no tiene nada: campeonato que recién empieza, esta pantalla
+      // es la primera y escribe lo suyo.
+      if(_primera){ if(_deCache)_confirmarConServidor(); else _srvMarcarListo(false); }
+      return;
+    }
     _lastFbUpdate=Date.now();
     window._fbSyncRetries=0; // llegó un snapshot OK → reset del backoff de recuperación
     const d=snap.data();
+    if(_primera){
+      // Lo que esta pantalla haya marcado sola al abrir (altas al cruzar con las
+      // inscripciones) estaba hecho sobre su versión, no sobre la del servidor:
+      // se descarta. Lo que el operador cargó a mano en una casilla, se conserva.
+      try{
+        if(window._pendingEdits)[...window._pendingEdits].forEach(k=>{ if(/\|meta$/.test(k))window._pendingEdits.delete(k); });
+        Object.keys(window._recentAtt||{}).forEach(k=>{ if(/\|meta$/.test(k))delete window._recentAtt[k]; });
+      }catch(_){}
+      window._forceFullWrite=false;
+    }
     // Diferencia de hora entre esta máquina y la que escribió. Se usa para el
     // descuento del reloj, que ahora se calcula acá con la hora de arranque.
     if(typeof d.ts==='number'&&d.writer&&d.writer!==window._WRITER_ID){
@@ -897,7 +992,9 @@ function startFBSync(){
     }
     // Multi-controlador: ignorar SOLO el eco de mi propia escritura (evita parpadeo),
     // pero SÍ aplicar lo que escribieron los demás controladores → todos sincronizados.
-    if(d.writer && d.writer===window._WRITER_ID){
+    // (La primera lectura se adopta aunque la haya escrito esta misma pestaña: el
+    // firmante se guarda en la sesión del navegador y sobrevive a una recarga.)
+    if(d.writer && d.writer===window._WRITER_ID && !_primera){
       // Este es mi propia escritura volviendo del servidor. No se aplica —
       // parpadearía— pero vale por sí sola: es el MISMO documento que están
       // leyendo el público, los televisores y OBS. Que haya vuelto prueba que lo
@@ -947,7 +1044,10 @@ function startFBSync(){
       // change timers. Sin esto, un snapshot entrante de OTRO controlador (p.ej. su tick
       // de timer, que viaja con su copia de athletes) borra el peso recién ingresado
       // ("pongo el número y no sale nada") o me devuelve a SQ / Intento 1 / Tanda A.
-      const _localFresh = (Date.now()-(window._lastLocalAction||0))<2500;
+      // Al llegar recién, lo "recién tocado" de esta pantalla es su arranque
+      // (elegir el campeonato, abrir el Control Remoto), no una decisión del
+      // operador: manda el servidor.
+      const _localFresh = !_primera && (Date.now()-(window._lastLocalAction||0))<2500;
       // ¿Esto ya llegó antes, y más nuevo, por el canal local? Pasa en la pantalla
       // de tarima que sale del mismo computador de la planilla: el válido le llega
       // al instante por el canal, y segundos después Firestore le devuelve una
@@ -992,6 +1092,10 @@ function startFBSync(){
         console.warn('[FB] El roster local es de otro campeonato — se toma el del servidor sin mezclar');
         DATA.athletes=_remoteAth;
         try{ window._recentAtt={}; if(window._pendingEdits)window._pendingEdits.clear(); }catch(_){}
+      }else if(_primera&&!(window._pendingEdits&&window._pendingEdits.size)){
+        // Recién llegada y sin nada cargado a mano: lo del servidor tal cual. Una
+        // copia vieja de este aparato no tiene nada que aportar.
+        DATA.athletes=_remoteAth;
       }else{
         try{
           DATA.athletes = _mergeAthletes(DATA.athletes, _remoteAth);
@@ -1070,7 +1174,11 @@ function startFBSync(){
       }
     }catch(e){console.warn('[FB] Sync read error',e)}
     _fbSyncing=false;
-  },(err)=>{
+    // Ya tiene lo del servidor: desde ahora escribe. Si vino del caché, espera
+    // la confirmación.
+    if(_primera){ if(_deCache)_confirmarConServidor(); else _srvMarcarListo(true); }
+  };
+  _esteUnsub=fbUnsub=window._fb.onSnapshot(ref,s=>_alLlegar(s,false),(err)=>{
     // El listener se cortó (error terminal). Re-suscribir con backoff para
     // recuperar la conexión sin ciclar ante errores permanentes (permisos).
     console.warn('[FB] Sync listener error',err&&err.code,err&&err.message);
@@ -1586,6 +1694,7 @@ function recoverBackup(){
 function resetLiveData(){
   if(!isAdmin){alert('Solo admin puede reiniciar');return}
   if(!DATA.event){alert('No hay competencia activa');return}
+  if(_srvEsperar())return;
   const ev=DATA.event;
   const msg='REINICIAR datos en vivo de:\n"'+ev.name+'"\n\nSE BORRAN:\n• Intentos (squat / bench / deadlift)\n• Pesos cargados y resultados\n• Timer y cursores (lift, ronda)\n• Bombed (atletas eliminados)\n\nSE CONSERVAN:\n• Tandas, vuelos, lots\n• Pesaje (BW), racks\n• Listado de atletas\n\nEsto sobreescribe Firestore para TODOS los dispositivos y widgets de OBS.';
   // ANTES de borrar nada: comprobar que ESTA pantalla puede escribir en el servidor.

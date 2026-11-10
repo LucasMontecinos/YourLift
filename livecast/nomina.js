@@ -401,7 +401,17 @@ async function loadLiveAthletes(ev){
       .map((ins,j)=>_inscToAthlete(ins,j,window._cronoFlightMap));
 
     if(!fbAthletes.length)return; // no Firestore data — keep nominas.json data
+    // Con la competencia andando, el cruce se hace contra la nómina del
+    // servidor, no contra la que esta pantalla armó al abrir: si no, a una
+    // tablet recién abierta le "faltaban" todos (o le sobraban), y los subía como
+    // altas suyas —peso 0, sin racks, otro lote— encima de lo que el computador
+    // ya había cargado. Se guarda y se cruza al recibir lo del servidor.
+    if(DATA.phase!=='setup'&&typeof _srvAdoptado==='function'&&!_srvAdoptado()){ window._insPendiente=fbAthletes; return; }
+    _aplicarInscritos(fbAthletes);
+  });
+}
 
+function _aplicarInscritos(fbAthletes){
     if(DATA.phase==='setup'){
       // Full replace: Firestore is source of truth during setup
       DATA.athletes=fbAthletes.map((a,j)=>({...a,id:j,lot:a.lot||j+1}));
@@ -413,7 +423,6 @@ async function loadLiveAthletes(ev){
       // During competition: only merge new approvals, don't touch existing
       _mergeFirebaseAthletes(fbAthletes);
     }
-  });
 }
 
 // ── Acciones de los botones (window.…) ──────────────────────────────────────
@@ -427,6 +436,7 @@ window.recargarNomina=async function(){
     alert('Sin conexi\u00f3n con el servidor.\n\nNo se carg\u00f3 nada: si cambiara la n\u00f3mina solo en esta pantalla, quedar\u00eda distinta del resto.');
     return;
   }
+  if(window._srvEsperar&&window._srvEsperar())return;   // todav\u00eda sin lo del servidor
   if(!window.IS_CONTROLLER){
     if(!confirm('Esta pantalla est\u00e1 en modo ESPECTADOR: no puede guardar en el servidor.\n\n\u00bfCambiarla a CONTROLADOR y continuar?'))return;
     setSyncMode(true);

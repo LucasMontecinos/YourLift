@@ -494,6 +494,7 @@ function _nomAplica(){
 }
 
 function generateLots(){
+  if(window._srvEsperar&&window._srvEsperar())return;   // todavía sin lo del servidor
   const ya=_lotesYaSorteados();
   const msg=ya
     ? 'Los lotes YA fueron sorteados.\n\n¿Re-sortear y reemplazar todos los números actuales?\n\nLas ediciones manuales se perderán.'
@@ -720,6 +721,7 @@ window.lotesRestaurarRevisar=function(){
 };
 window.lotesRestaurarAplicar=function(){
   const p=window._lotesPlanActual;if(!p||!p.cambios.length)return;
+  if(window._srvEsperar&&window._srvEsperar())return;   // todavía sin lo del servidor
   p.cambios.forEach(c=>{c.a.lot=c.lot;});
   // Si alguno que no estaba en la lista quedó con un lote repetido, pasa al
   // primer lote libre de su tanda: los de la hoja mandan.
