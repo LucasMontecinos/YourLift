@@ -246,19 +246,21 @@ function nsudaFicha(slug){
   const foto=_nsudaFoto(a,slug);
   const ex=document.getElementById('nsudaFichaModal'); if(ex)ex.remove();
   const m=document.createElement('div'); m.id='nsudaFichaModal';
-  m.style.cssText='position:fixed;inset:0;background:rgba(4,10,20,.82);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px;backdrop-filter:blur(3px)';
+  m.style.cssText='position:fixed;inset:0;background:rgba(11,22,48,.55);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px;backdrop-filter:blur(3px)';
   const ini=_nsudaNombre(a).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-  let h=`<div style="background:linear-gradient(160deg,#0D1F38,#0a1628);border:2px solid rgba(212,168,67,.5);border-radius:16px;width:min(420px,94vw);max-height:90vh;overflow-y:auto;position:relative">`;
-  h+=`<button onclick="document.getElementById('nsudaFichaModal').remove()" style="position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:rgba(10,22,40,.8);color:var(--muted);font-size:15px;cursor:pointer;z-index:2"><i class=yl-i-cerrar></i></button>`;
+  // Fondo blanco, como el resto del sitio: era azul oscuro escrito fijo, y con
+  // el sitio claro el nombre y los datos (letra oscura) no se veían.
+  let h=`<div style="background:var(--card,#fff);color:var(--text);border:1px solid var(--border);border-top:4px solid var(--accent);border-radius:16px;width:min(420px,94vw);max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 24px 60px rgba(11,22,48,.28)">`;
+  h+=`<button onclick="document.getElementById('nsudaFichaModal').remove()" style="position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--card2);color:var(--muted);font-size:15px;cursor:pointer;z-index:2"><i class=yl-i-cerrar></i></button>`;
   h+=`<div style="display:flex;flex-direction:column;align-items:center;padding:26px 22px 10px">`;
-  h+=`<div style="width:110px;height:110px;border-radius:50%;overflow:hidden;border:3px solid var(--gold);background:rgba(29,49,80,.5);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(0,0,0,.5)">${foto?`<img src="${foto}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-family:Oswald;font-size:34px;color:var(--muted)">${ini}</span>`}</div>`;
+  h+=`<div style="width:110px;height:110px;border-radius:50%;overflow:hidden;border:3px solid var(--accent);background:var(--card2);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(11,22,48,.18)">${foto?`<img src="${foto}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-family:Oswald;font-size:34px;color:var(--muted)">${ini}</span>`}</div>`;
   h+=`<div style="font-family:Oswald;font-size:19px;font-weight:700;letter-spacing:.5px;margin-top:12px;text-align:center">${_nsudaNombre(a)}</div>`;
   h+=`<div style="font-size:12px;color:var(--muted);margin-top:3px">${a.pais}${a.born?' · '+a.born:''}${a.uni?'<div style="margin-top:2px">'+a.uni+'</div>':''}</div>`;
   if(a.cod)h+=`<a href="atleta.html?codigo=${encodeURIComponent(a.cod)}" style="margin-top:8px;font-size:11px;color:var(--gold);border:1px solid rgba(212,168,67,.45);padding:4px 12px;border-radius:12px;text-decoration:none;font-family:Oswald;letter-spacing:.5px">VER PERFIL YOURLIFT →</a>`;
   h+=`</div>`;
   h+=`<div style="padding:8px 22px 24px">`;
   rows.forEach(r=>{
-    h+=`<div style="background:rgba(10,22,40,.55);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:10px">`;
+    h+=`<div style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:10px">`;
     h+=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">`;
     h+=`<span style="font-family:Oswald;font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--gold)">${r.lista}</span>`;
     h+=`<span style="background:rgba(212,168,67,.12);color:var(--gold);padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600">${r.cat} kg</span>`;
@@ -268,7 +270,7 @@ function nsudaFicha(slug){
     const isBench=/Only Bench/i.test(r.lista);
     const cells=isBench?[['BP',r.bp]]:[['SQ',r.sq],['BP',r.bp],['DL',r.dl],['Total',r.total]];
     h+=`<div style="display:grid;grid-template-columns:repeat(${cells.length},1fr);gap:6px;text-align:center">`;
-    cells.forEach(([k,v])=>{h+=`<div style="background:rgba(29,49,80,.35);border-radius:8px;padding:7px 2px"><div style="font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:1px">${k}</div><div style="font-family:Oswald;font-size:16px;font-weight:700;color:${k==='Total'?'var(--gold)':'var(--text)'}">${v!=null?v:'—'}</div></div>`});
+    cells.forEach(([k,v])=>{h+=`<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:7px 2px"><div style="font-size:9px;color:var(--muted);font-family:Oswald;letter-spacing:1px">${k}</div><div style="font-family:Oswald;font-size:16px;font-weight:700;color:${k==='Total'?'var(--gold)':'var(--text)'}">${v!=null?v:'—'}</div></div>`});
     h+=`</div></div>`;
   });
   h+=`<div style="font-size:10px;color:var(--muted);text-align:center;margin-top:12px">Marcas nominadas · Sudamericano 2026 · Santiago de Chile</div>`;
@@ -592,15 +594,17 @@ window.nomFichaEv=function(key){
   const cod=_nomCodDe(a.codigo||a.cod||'',a.rut||'',a.nombre||''), foto=_nomFotoDe(cod,'','');
   const ex=document.getElementById('nomFichaEvModal'); if(ex)ex.remove();
   const m=document.createElement('div'); m.id='nomFichaEvModal';
-  m.style.cssText='position:fixed;inset:0;background:rgba(4,10,20,.82);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px;backdrop-filter:blur(3px)';
-  const dato=(l,v)=>v?`<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid rgba(29,49,80,.35)"><span style="color:var(--muted);font-size:11px">${l}</span><span style="font-size:12px;font-weight:600;text-align:right">${v}</span></div>`:'';
-  m.innerHTML=`<div style="background:#0D1F38;border:2px solid var(--gold);border-radius:14px;padding:20px;width:min(420px,95vw);max-height:88vh;overflow:auto">
+  m.style.cssText='position:fixed;inset:0;background:rgba(11,22,48,.55);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px;backdrop-filter:blur(3px)';
+  const dato=(l,v)=>v?`<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted);font-size:11px">${l}</span><span style="font-size:12px;font-weight:600;text-align:right;color:var(--text)">${v}</span></div>`:'';
+  // Fondo blanco, como el resto del sitio: era azul oscuro escrito fijo, y con
+  // el sitio claro el nombre y los datos (letra oscura) no se veían.
+  m.innerHTML=`<div style="background:var(--card,#fff);color:var(--text);border:1px solid var(--border);border-top:4px solid var(--accent);border-radius:14px;padding:20px;width:min(420px,95vw);max-height:88vh;overflow:auto;box-shadow:0 24px 60px rgba(11,22,48,.28)">
     <div style="display:flex;gap:14px;align-items:center;margin-bottom:14px">
-      <div style="width:64px;height:64px;border-radius:12px;overflow:hidden;background:rgba(29,49,80,.5);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center">
+      <div style="width:64px;height:64px;border-radius:12px;overflow:hidden;background:var(--card2);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center">
         ${foto?`<img src="${foto}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-family:Oswald;font-size:20px;color:var(--muted)">${String(a.nombre||'').split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase()}</span>`}
       </div>
       <div style="flex:1;min-width:0">
-        <div style="font-family:Oswald;font-size:16px;letter-spacing:.5px;line-height:1.2">${a.nombre||''}</div>
+        <div style="font-family:Oswald;font-size:16px;letter-spacing:.5px;line-height:1.2;color:var(--text)">${a.nombre||''}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${ev.name||''}</div>
       </div>
     </div>
