@@ -123,7 +123,9 @@ async function initFB(){
           window.LIVE_EVENT_META[d.id]={name:e.name,recordsEnabled,youtubeUrl:e.youtubeUrl||'',athleteCount:0,logoUrl:e.logoUrl||'',logoFedUrl:e.logoFedUrl||'',logosPantalla:Array.isArray(e.logosPantalla)?e.logosPantalla:[],
             // Campeonato abierto: su nómina sale de inscripciones_abiertas y sus
             // resultados no van al ranking (livecast/nomina.js, cierre.js).
-            abierto:e.abierto===true};
+            abierto:e.abierto===true,
+            // Estilo del campeonato (admin → Campeonatos): livecast/estilo.js.
+            estilo:e.estilo||''};
         }
         if((!_oculto||e.publicoVisible===true)&&DATA.event&&(DATA.event.id===d.id||DATA.event.name===e.name)){
           DATA.event.recordsEnabled=recordsEnabled;
@@ -138,6 +140,9 @@ async function initFB(){
           if(e.logoUrl||_mismoDoc)DATA.event.logoUrl=e.logoUrl||'';
           if(e.logoFedUrl||_mismoDoc)DATA.event.logoFedUrl=e.logoFedUrl||'';
           if(Array.isArray(e.logosPantalla)||_mismoDoc)DATA.event.logosPantalla=Array.isArray(e.logosPantalla)?e.logosPantalla:[];
+          // El estilo, con el mismo cuidado que el logo: solo lo borra el
+          // documento exacto del campeonato, no una copia con el mismo nombre.
+          if(e.estilo||_mismoDoc)DATA.event.estilo=e.estilo||'';
           // Qué logo va en el barrido de transición. Por defecto, el del
           // campeonato: es su momento en pantalla. Solo si alguien eligió a
           // propósito el de YourLift se usa ese.
@@ -145,6 +150,15 @@ async function initFB(){
         }
       });
       if(Object.keys(evs).length)LIVE_EVENTS=evs;
+      // Si cambió el estilo del campeonato (admin → Campeonatos), se viste al
+      // toque en todas las pantallas abiertas: transmisión, tarima y público.
+      try{
+        const _est=(DATA.event&&DATA.event.estilo)||'';
+        if(_est!==(window._estiloVisto||'')){
+          window._estiloVisto=_est;
+          if(TX_MODE){ try{_txDirLastSig=null;}catch(e){} renderTxWidget(); } else R();
+        }
+      }catch(e){}
       // Si cambió el link de la transmisión del campeonato que se está mirando,
       // se refleja al toque y sin recargar: son ocho días con una transmisión
       // por día, y pegar el link en el admin tiene que ser todo el trabajo.

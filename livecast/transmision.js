@@ -189,6 +189,7 @@ function txCatLabel(cat){const n=_normCat(cat);if(!n||!/\d/.test(n))return '';re
 function renderTxWidget(){
   if(!TX_MODE)return false;
   const c=document.getElementById('txWidget');if(!c)return true;
+  if(typeof _estiloAplicar==='function')_estiloAplicar();
   // Las pantallas del recinto también escuchan al director: de ahí sale el timer
   // de descanso. Es idempotente — si ya está escuchando el doc correcto, no hace
   // nada.
@@ -499,7 +500,7 @@ function _sbTarjeta(cur,o){
   const intentos=ra.att[L].map((at,j)=>{
     const is4=j===3&&at.extra;
     const x4lbl=((at.grantedRound||0)>=2)?'4º':'EXT';
-    let bg=cCell, sh='', tope='', col=WD;
+    let bg=cCell, sh='', tope='', col=WD, est=(at.r==='g'?'g':at.r==='n'?'n':(j===ci&&at.w>0)?'p':(at.w>0?'d':'e'));
     if(at.r==='g'){bg=_txC('goodLift');col=W;sh='text-shadow:0 1px 3px rgba(0,0,0,.5);';}
     else if(at.r==='n'){bg=_txC('noLift');col=W;}
     else if(j===ci&&at.w>0){col=W;sh='box-shadow:inset 0 0 0 4px '+(recTxt?'#FFD400':'#fff')+';';if(recTxt)tope='RÉCORD';}
@@ -507,7 +508,8 @@ function _sbTarjeta(cur,o){
     // intento no hay luces guardadas, no va nada: en un campeonato sin
     // luces el marcador queda igual que siempre.
     const lucesAt=_lucesDeIntento(at,9);
-    return '<div style="'+celda+'background:'+bg+';color:'+col+';'+sh+'">'
+    return '<div class="pvSb-att '+est+'" style="'+celda+'background:'+bg+';color:'+col+';'+sh+'">'
+      +(est==='p'&&typeof _estiloPrim==='function'&&_estiloPrim()?'<span class="pvSb-flor">'+_pvFlorIcono(40)+'</span>':'')
       +(tope?'<span style="font-size:12px;letter-spacing:.14em;margin-bottom:6px;font-weight:700;color:#FFD400">'+tope+'</span>':'')
       +'<span style="font-size:38px;font-weight:600">'+(at.w?_sbNum(at.w):'—')+(is4?'<sup style="font-size:12px;margin-left:2px">'+x4lbl+'</sup>':'')+'</span>'
       +(lucesAt?'<span style="margin-top:5px">'+lucesAt+'</span>':'')
@@ -518,33 +520,34 @@ function _sbTarjeta(cur,o){
   const totLbl=(L==='dl'||_pool.solo)?'TOTAL':'SUBTOTAL';
   const logos=(typeof _tiraLogos==='function')?_tiraLogos(['fed','camp'],'40px','10px'):'';
   const aD=o.animDir||null;
-  return '<div style="font-family:Oswald,\'Arial Narrow\',sans-serif;color:'+W+';min-width:1040px;max-width:'+(o.maxW||1800)+'px;box-shadow:0 10px 34px rgba(0,0,0,.45)">'
+  return '<div class="pvSb" style="font-family:Oswald,\'Arial Narrow\',sans-serif;color:'+W+';min-width:1040px;max-width:'+(o.maxW||1800)+'px;box-shadow:0 10px 34px rgba(0,0,0,.45)">'
+    +(typeof _pvDeco==='function'?_pvDeco('sb'):'')
     // Franja: categoría · récord · reloj · puesto
-    +'<div style="'+_sbRowAnim(aD,0)+'display:flex;align-items:center;gap:18px;background:linear-gradient(90deg,'+cHead+','+cHead2+');'+(conBlanco?'':'border-top:4px solid '+_txC('nameBg')+';')+'padding:10px 22px;font-size:22px;font-weight:500;letter-spacing:.14em;white-space:nowrap">'
-      +(logos?'<span style="display:flex;align-items:center">'+logos+'</span>':'')
-      +'<div style="color:'+W+'">'+catTxt+'</div>'
+    +'<div class="pvSb-head" style="'+_sbRowAnim(aD,0)+'display:flex;align-items:center;gap:18px;background:linear-gradient(90deg,'+cHead+','+cHead2+');'+(conBlanco?'':'border-top:4px solid '+_txC('nameBg')+';')+'padding:10px 22px;font-size:22px;font-weight:500;letter-spacing:.14em;white-space:nowrap">'
+      +(logos?'<span class="pvSb-logos" style="display:flex;align-items:center">'+logos+'</span>':'')
+      +'<div class="pvSb-cat" style="color:'+W+'">'+catTxt+'</div>'
       +(recTxt?'<span class="sr-parpadea" style="background:#FFD400;color:#000;font-weight:700;font-size:17px;letter-spacing:.1em;padding:3px 12px;border-radius:3px">'+recTxt+'</span>':'')
       +'<span style="margin-left:auto;display:flex;align-items:center;gap:16px">'
         +(DATA.relojVisible&&typeof _relojChip==='function'?_relojChip('sbRelojTx',22):'')
-        +(puesto?'<b style="font-weight:600;color:'+W+'">'+puesto+'</b>':'')
+        +(puesto?'<b class="pvSb-puesto" style="font-weight:600;color:'+W+'">'+puesto+'</b>':'')
       +'</span>'
     +'</div>'
     // Cuerpo
-    +'<div style="'+_sbRowAnim(aD,1)+'display:flex;align-items:stretch;background:'+cBody+';border-top:1px solid '+LN+'">'
+    +'<div class="pvSb-body" style="'+_sbRowAnim(aD,1)+'display:flex;align-items:stretch;background:'+cBody+';border-top:1px solid '+LN+'">'
       +'<div style="flex:1;display:flex;align-items:center;gap:20px;padding:16px 24px;min-width:0">'+ident
         +'<div style="min-width:0">'
-          +'<div style="font-size:'+(nombre.length>24?40:50)+'px;font-weight:600;line-height:1;letter-spacing:.02em;white-space:nowrap;color:'+W+'">'+nombre+'</div>'
-          +'<div style="font-family:\'DM Sans\',sans-serif;font-size:20px;color:'+W+';margin-top:7px;white-space:nowrap">'+sub+'</div>'
+          +'<div class="pvSb-name" style="font-size:'+(nombre.length>24?40:50)+'px;font-weight:600;line-height:1;letter-spacing:.02em;white-space:nowrap;color:'+W+'">'+nombre+'</div>'
+          +'<div class="pvSb-sub" style="font-family:\'DM Sans\',sans-serif;font-size:20px;color:'+W+';margin-top:7px;white-space:nowrap">'+sub+'</div>'
         +'</div>'
       +'</div>'
       +(prev.length?'<div style="display:flex;gap:6px;align-items:center;padding:0 14px;border-left:1px solid '+LN+'">'
-        +prev.map(([k,v])=>'<div style="'+celda+'min-width:104px;background:'+cCell+'"><span style="font-size:13px;letter-spacing:.16em;color:'+W+'">'+k+'</span><span style="font-size:32px;font-weight:600;color:'+W+';line-height:1.1">'+(v>0?_sbNum(v):'—')+'</span></div>').join('')
+        +prev.map(([k,v])=>'<div class="pvSb-prev" style="'+celda+'min-width:104px;background:'+cCell+'"><span style="font-size:13px;letter-spacing:.16em;color:'+W+'">'+k+'</span><span style="font-size:32px;font-weight:600;color:'+W+';line-height:1.1">'+(v>0?_sbNum(v):'—')+'</span></div>').join('')
       +'</div>':'')
       +'<div style="'+_sbRowAnim(aD,2)+'display:flex;align-items:center;gap:8px;padding:8px 16px;border-left:1px solid '+LN+'">'
-        +'<span style="font-size:16px;letter-spacing:.16em;color:'+W+';writing-mode:vertical-rl;transform:rotate(180deg)">'+MOV+'</span>'
+        +'<span class="pvSb-mov" style="font-size:16px;letter-spacing:.16em;color:'+W+';writing-mode:vertical-rl;transform:rotate(180deg)">'+MOV+'</span>'
         +intentos
       +'</div>'
-      +'<div style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 24px;border-left:1px solid '+LN+';min-width:160px;'+(dq?'background:'+_txC('noLift')+';':'')+'">'
+      +'<div class="pvSb-tot'+(dq?' dq':'')+'" style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 24px;border-left:1px solid '+LN+';min-width:160px;'+(dq?'background:'+_txC('noLift')+';':'')+'">'
         +'<span style="font-size:15px;letter-spacing:.16em;color:'+W+'">'+totLbl+'</span>'
         +'<span style="font-size:46px;font-weight:600;line-height:1.05;color:'+W+'">'+(dq?'DQ':(tot>0?_sbNum(tot):'—'))+'</span>'
       +'</div>'
@@ -1159,9 +1162,9 @@ function _txCartelCambio(cb,k){
   const MOV={sq:'SENTADILLA',bp:'PRESS DE BANCA',dl:'PESO MUERTO'}[cb.l]||'';
   const ORD=['1ER','2DO','3ER','4TO'][cb.j]||((cb.j+1)+'°');
   const nombre=(typeof _nombrePropio==='function')?_nombrePropio(cb.a.name||''):(cb.a.name||'');
-  return '<div style="display:flex;flex-direction:column;align-items:flex-start;gap:'+Math.round(6*k)+'px">'
+  return '<div class="pvCi" style="display:flex;flex-direction:column;align-items:flex-start;gap:'+Math.round(6*k)+'px">'
     +_cartelCambioHtml(Math.round(28*k)+'px')
-    +'<div style="background:rgba(10,10,11,.92);color:#fff;font-family:Oswald,sans-serif;padding:'+Math.round(8*k)+'px '+Math.round(16*k)+'px;border-left:'+Math.round(5*k)+'px solid #F2C230;white-space:nowrap">'
+    +'<div class="pvCi-det" style="background:rgba(10,10,11,.92);color:#fff;font-family:Oswald,sans-serif;padding:'+Math.round(8*k)+'px '+Math.round(16*k)+'px;border-left:'+Math.round(5*k)+'px solid #F2C230;white-space:nowrap">'
       +'<div style="font-size:'+Math.round(30*k)+'px;font-weight:600;line-height:1.1">'+esc(nombre)+'</div>'
       +'<div style="font-size:'+Math.round(20*k)+'px;letter-spacing:.12em;margin-top:'+Math.round(3*k)+'px">'+MOV+' · '+ORD+' INTENTO · <b style="color:#F2C230;font-size:1.25em">'+_sbNum(cb.w)+' KG</b></div>'
     +'</div></div>';
@@ -1217,7 +1220,7 @@ function renderTxDirector(container){
     +'|'+((_txDirState.profile==null?void 0:_txDirState.profile.until)||0)+'|'+((_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.until)||0)+'|'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.until)||0)+'|'+((_txDirState.slam==null?void 0:_txDirState.slam.until)||0)
     +'|bt-'+(bt.startedAt||0)+'-'+(bt.durationSec||0)+'-'+(bt.pausedAt||0)+'-'+(bt.label||'')+'-'+_btVideosDe(bt).length+'-'+(bt.movement||'')+'-'+JSON.stringify(bt.style||{})
     +'|sc-'+((_txDirState.profile==null?void 0:_txDirState.profile.scale)||1)+'-'+((_txDirState.scoreboard==null?void 0:_txDirState.scoreboard.scale)||1)+'-'+((_txDirState.leaderboard==null?void 0:_txDirState.leaderboard.scale)||1)+'-'+((_txDirState.timer==null?void 0:_txDirState.timer.scale)||1)+'-'+((_txDirState.slam==null?void 0:_txDirState.slam.scale)||1)+'-'+((_txDirState.breakTimer==null?void 0:_txDirState.breakTimer.scale)||1)+'-'+((_txDirState.tablaActual==null?void 0:_txDirState.tablaActual.scale)||1)+'-'+((_txDirState.medals==null?void 0:_txDirState.medals.scale)||1)+'-'+((_txDirState.luces==null?void 0:_txDirState.luces.scale)||1)
-    +'|col-'+JSON.stringify(_txDirState.colors||{})
+    +'|col-'+JSON.stringify(_txDirState.colors||{})+'|est-'+(typeof _estiloId==='function'?_estiloId():'')
     +'|rv-'+(DATA.relojVisible?1:0)
     +'|cbi-'+(_txDirActive('cambioIntento')?((_txCambioReciente()||{}).key||'')+'-'+((_txDirState.cambioIntento==null?void 0:_txDirState.cambioIntento.scale)||1):'off')
     +'|jur-'+(_txDirActive('jurado')?1:0)+'-'+((_txJurado&&Date.now()<_txJuradoHasta)?_txJuradoTs:0)+'-'+((_txDirState.jurado==null?void 0:_txDirState.jurado.scale)||1);
@@ -1610,18 +1613,20 @@ function renderTxJurado(j){
   const a=(DATA.athletes||[]).find(x=>x.id===j.id);
   const nombre=(a&&a.name)||j.name||'';
   const intento=(LIFT_S[j.lift]||'')+' '+((j.round|0)+1);
-  return '<div style="margin:clamp(18px,2.4vw,40px);display:flex;align-items:center;gap:clamp(14px,1.6vw,26px);'
+  const _pv=typeof _estiloPrim==='function'&&_estiloPrim();
+  return '<div class="pvJr" style="margin:clamp(18px,2.4vw,40px);display:flex;align-items:center;gap:clamp(14px,1.6vw,26px);'
     +'padding:clamp(12px,1.3vw,20px) clamp(16px,1.8vw,30px);background:'+_txC('headerBg')+';border-left:6px solid '+_txC('accent')+';border-radius:10px;'
     +'box-shadow:0 10px 40px rgba(0,0,0,.55);animation:txSlideInLeft .6s cubic-bezier(.2,.85,.3,1) both;font-family:Oswald,sans-serif">'
-    +'<div style="display:flex;flex-direction:column;align-items:center;gap:8px">'
-      +'<div style="width:clamp(46px,4.2vw,72px);height:clamp(46px,4.2vw,72px);border-radius:50%;background:'+e.bg+';border:4px solid '+e.bd+';box-shadow:'+e.glow+'"></div>'
+    +(_pv?_pvDeco('jr',620):'')
+    +'<div class="pvJr-luz" style="display:flex;flex-direction:column;align-items:center;gap:8px">'
+      +(_pv?_pvLuz(j.res==='g'?'#FFF4E6':'#E23B32',96):'<div style="width:clamp(46px,4.2vw,72px);height:clamp(46px,4.2vw,72px);border-radius:50%;background:'+e.bg+';border:4px solid '+e.bd+';box-shadow:'+e.glow+'"></div>')
       +(e.chip?'<div style="width:clamp(16px,1.4vw,24px);height:clamp(16px,1.4vw,24px);border-radius:50%;background:'+e.chip+';box-shadow:0 0 14px '+e.chip+'"></div>'
               :'<div style="height:clamp(16px,1.4vw,24px)"></div>')
     +'</div>'
     +'<div>'
-      +'<div style="font-size:clamp(20px,2.1vw,36px);font-weight:700;letter-spacing:3px;color:#fff;line-height:1">DECISIÓN DEL JURADO</div>'
-      +'<div style="font-size:clamp(26px,2.8vw,48px);font-weight:800;letter-spacing:4px;line-height:1.1;margin-top:6px;color:'+(j.res==='g'?'#22c55e':'#ef4444')+'">'+(j.res==='g'?'VÁLIDO':'NULO')+'</div>'
-      +(nombre?'<div style="font-size:clamp(13px,1.1vw,18px);color:rgba(220,230,245,.85);margin-top:8px;letter-spacing:1px">'+nombre+' · '+intento+'</div>':'')
+      +'<div class="pvJr-tit" style="font-size:clamp(20px,2.1vw,36px);font-weight:700;letter-spacing:3px;color:#fff;line-height:1">DECISIÓN DEL JURADO</div>'
+      +'<div class="pvJr-res '+(j.res==='g'?'g':'n')+'" style="font-size:clamp(26px,2.8vw,48px);font-weight:800;letter-spacing:4px;line-height:1.1;margin-top:6px;color:'+(j.res==='g'?'#22c55e':'#ef4444')+'">'+(j.res==='g'?'VÁLIDO':'NULO')+'</div>'
+      +(nombre?'<div class="pvJr-who" style="font-size:clamp(13px,1.1vw,18px);color:rgba(220,230,245,.85);margin-top:8px;letter-spacing:1px">'+nombre+' · '+intento+'</div>':'')
     +'</div>'
   +'</div>';
 }
@@ -1865,10 +1870,10 @@ function renderScreenLuces(a){
   const tanda=['TANDA '+(DATA.flight||''),_tar?'TARIMA '+_tar:''].filter(Boolean).join(' · ');
   const tira=_tiraLogosPantalla(['fed','camp'],p(64),p(18))
     ||'<img src="YourLift_logo.png" alt="" style="height:'+p(64)+';width:auto" onerror="this.style.display=\'none\'">';
-  const franja='<div style="position:absolute;left:0;right:0;top:0;height:'+p(100)+';box-sizing:border-box;background:#0b0b0c;border-bottom:1px solid #1f1f22;'
+  const franja='<div class="pvFr-top" style="position:absolute;left:0;right:0;top:0;height:'+p(100)+';box-sizing:border-box;background:#0b0b0c;border-bottom:1px solid #1f1f22;'
     +'display:flex;align-items:center;gap:'+p(26)+';padding:0 '+p(48)+';color:#fff">'
-    +'<b style="font-size:'+p(36)+';font-weight:600;letter-spacing:.08em;white-space:nowrap">DECISIÓN DE LOS JUECES</b>'
-    +'<span style="font-size:'+p(22)+';letter-spacing:.14em;color:#8a8a90;white-space:nowrap">'+tanda+'</span>'
+    +'<b class="pvFr-tit" style="font-size:'+p(36)+';font-weight:600;letter-spacing:.08em;white-space:nowrap">DECISIÓN DE LOS JUECES</b>'
+    +'<span class="pvFr-pill" style="font-size:'+p(22)+';letter-spacing:.14em;color:#8a8a90;white-space:nowrap">'+tanda+'</span>'
     +'<span style="margin-left:auto;display:flex;align-items:center">'+tira+'</span>'
     +'</div>';
 
@@ -1884,9 +1889,9 @@ function renderScreenLuces(a){
     const MOV={sq:'SENTADILLA',bp:'BANCA',dl:'PESO MUERTO'}[l]||'';
     const ORD=['1ER','2DO','3ER','4TO'][r]||((r+1)+'°');
     const logo=(window.clubLogoImg&&a.club)?window.clubLogoImg(a.club,Math.round(96*s),'padding:'+p(8)+';'):'';
-    cab='<div style="display:flex;align-items:center;justify-content:center;gap:'+p(26)+';font-size:'+p(72)+';font-weight:700;line-height:1.1;color:#fff">'
+    cab='<div class="pvGrande" style="display:flex;align-items:center;justify-content:center;gap:'+p(26)+';font-size:'+p(72)+';font-weight:700;line-height:1.1;color:#fff">'
       +logo+'<span>'+esc(_nombrePropio(a.name||''))+'</span></div>'
-      +'<div style="margin-top:'+p(16)+';font-size:'+p(38)+';letter-spacing:.16em;color:#9a9aa0">'
+      +'<div class="pvPillCrema" style="margin-top:'+p(16)+';font-size:'+p(38)+';letter-spacing:.16em;color:#9a9aa0">'
       +[MOV,ORD+' INTENTO',kg?_sbNum(kg)+' KG':''].filter(Boolean).join(' · ')+'</div>';
   }
   // Con las tres luces puestas, la decisión escrita: VÁLIDO (dos o tres blancas) o NULO.
@@ -1895,13 +1900,13 @@ function renderScreenLuces(a){
     +(okv?'background:#22c55e;color:#000':'background:#ef4444;color:#fff');
   const tres=vs.filter(Boolean).length===3;
   const okJueces=vs.filter(v=>v==='white').length>=2;
-  if(tres)ver='<span style="'+pillT(okJueces)+'">'+(okJueces?'VÁLIDO':'NULO')+'</span>';
+  if(tres)ver='<span class="pvVer '+(okJueces?'g':'n')+'" style="'+pillT(okJueces)+'">'+(okJueces?'VÁLIDO':'NULO')+'</span>';
   // Si el jurado revirtió este intento: su decisión y lo que dieron los jueces.
   const jr=_juradoDeLuces(lz);
   if(jr){
     const okJ=jr.res==='g';
     ver='<div style="font-size:'+p(34)+';font-weight:600;letter-spacing:.18em;color:#fff;margin-bottom:'+p(14)+'">JURADO REVIRTIÓ</div>'
-      +'<span style="'+pillT(okJ)+'">'+(okJ?'VÁLIDO':'NULO')+'</span>'
+      +'<span class="pvVer '+(okJ?'g':'n')+'" style="'+pillT(okJ)+'">'+(okJ?'VÁLIDO':'NULO')+'</span>'
       +(tres?'<div style="font-size:'+p(30)+';letter-spacing:.14em;color:#9a9aa0;margin-top:'+p(14)+'">LOS JUECES DIERON '+(okJueces?'VÁLIDO':'NULO')+'</div>':'');
   }
   // El atleta, las luces y la decisión son bloques del mismo editor de las otras
@@ -1909,7 +1914,8 @@ function renderScreenLuces(a){
   // la esquina para el tamaño. Se guarda en esta pantalla (cada televisor el suyo).
   const B=(typeof _piBlock==='function')?_piBlock:((k,h)=>h);
   const centrado=h=>'<div style="text-align:center;white-space:nowrap">'+h+'</div>';
-  return '<div class="pi-canvas" style="position:absolute;top:0;right:0;bottom:0;left:0;background:#000;overflow:hidden;font-family:Oswald,sans-serif;color:#fff">'
+  return '<div class="pi-canvas pvPant" style="position:absolute;top:0;right:0;bottom:0;left:0;background:#000;overflow:hidden;font-family:Oswald,sans-serif;color:#fff">'
+    +(typeof _pvPantDeco==='function'?_pvPantDeco('luces'):'')
     +franja
     +(cab?B('lCab',centrado(cab)):'')
     +B('lLuces',luces)
@@ -2002,6 +2008,17 @@ function renderTxProfile(cur,escala){
       +'filter:blur('+Math.max(4,Math.round(t*0.022))+'px);-webkit-mask-image:'+fade+';mask-image:'+fade+';'
       +'background:linear-gradient('+ang+',transparent 0 10%,#C41E3A 16% 21%,#ffffff 23.5% 24.5%,#1E4FA8 27% 32%,transparent 38%)"></div>';
   };
+  const mediaHtml=useGif
+              ? (gifIsImg
+                  ? `<img src="${media.gif_url}" alt="${cur.name||''}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center">`
+                  : `<video src="${media.gif_url}" autoplay loop muted playsinline data-gif-trim="1" data-gif-start="${media.gif_start||0}" data-gif-end="${(media.gif_end!=null?media.gif_end:(''))}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center"></video>`)
+              : media.foto_url
+                ? `<img src="${media.foto_url}" alt="${cur.name||''}" style="width:100%;height:100%;object-fit:cover" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px\\'>${initials}</span>'">`
+                : `<span style="font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px">${initials}</span>`;
+  // Estilo del campeonato (livecast/estilo.js): el perfil cambia entero —fondo
+  // de tablas, ramas, la foto en un marco de madera y los datos en placas—, así
+  // que tiene su propio dibujo, con los mismos datos.
+  if(typeof _estiloPrim==='function'&&_estiloPrim())return _pvPerfil({nombre:((firstName?firstName+' ':'')+lastName),club,cat,divS,age,years,pb,pbLabel,rows,mediaHtml,mediaBg,escala:_esc,ident:chipNombre});
   return `
     <div style="position:absolute;top:0;right:0;bottom:0;left:0;background:#000">
     ${_franjasPf('arriba')}${_franjasPf('abajo')}
@@ -2022,14 +2039,7 @@ function renderTxProfile(cur,escala){
         </div>
         <div style="display:grid;grid-template-columns:auto 1fr;gap:clamp(30px,4vw,70px);align-items:center;margin-top:clamp(10px,2vh,30px)">
           <div style="width:clamp(180px,18vw,280px);aspect-ratio:3/4;background:${mediaBg};border:3px solid ${_txC('accent')};border-radius:4px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(0,0,0,.5);position:relative;overflow:hidden">
-            ${useGif
-              ? (gifIsImg
-                  ? `<img src="${media.gif_url}" alt="${cur.name||''}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center">`
-                  : `<video src="${media.gif_url}" autoplay loop muted playsinline data-gif-trim="1" data-gif-start="${media.gif_start||0}" data-gif-end="${(media.gif_end!=null?media.gif_end:(''))}" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:${gifBlend};transform:scale(${media.gif_zoom||1}) translate(${media.gif_offset_x||0}%,${media.gif_offset_y||0}%);transform-origin:center center"></video>`)
-              : media.foto_url
-                ? `<img src="${media.foto_url}" alt="${cur.name||''}" style="width:100%;height:100%;object-fit:cover" onerror="this.outerHTML='<span style=\\'font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px\\'>${initials}</span>'">`
-                : `<span style="font-family:Oswald;font-size:clamp(60px,8vw,120px);font-weight:700;color:rgba(212,168,67,.55);letter-spacing:2px">${initials}</span>`
-            }
+            ${mediaHtml}
           </div>
           <div class="txCascade" style="display:flex;flex-direction:column;gap:clamp(10px,1.8vh,24px)">
             ${rows.map(r=>`
@@ -2120,30 +2130,32 @@ function renderTxLeaderboard(cur,lifterChanged,opts){
     const yo=a.id===ref.id;
     const gl=(proy>0&&a.bw&&typeof calcGL==='function')?calcGL(proy,a.bw,a.sex,_glMod(a)):0;
     const ident=_variosPaises()?_flagImg(_ctry(a),26,true):((window.clubLogoImg&&a.club)?window.clubLogoImg(a.club,40,'padding:3px;'):'');
-    return '<tr style="'+(yo?'background:'+X.hl+';':'')+'">'
-      +'<td style="'+td+'font-weight:600;width:80px;text-align:center">'+(i+1)+'°</td>'
-      +'<td style="'+td+'text-align:left;font-family:\'DM Sans\',sans-serif;font-weight:700;font-size:'+(muchos?21:24)+'px">'
+    const _pv=typeof _estiloPrim==='function'&&_estiloPrim();
+    return '<tr class="pvLb-row'+(yo?' cur':'')+'" style="'+(yo?'background:'+X.hl+';':'')+'">'
+      +'<td class="pvLb-pos" style="'+td+'font-weight:600;width:80px;text-align:center">'+(_pv&&i<3?_pvMedalla(i+1,48):(i+1)+'°')+'</td>'
+      +'<td class="pvLb-nom" style="'+td+'text-align:left;font-family:\'DM Sans\',sans-serif;font-weight:700;font-size:'+(muchos?21:24)+'px">'
         +'<div style="display:flex;align-items:center;gap:14px;white-space:nowrap">'+ident+'<span>'+esc(_nombrePropio(a.name||''))
         +' <small style="font-weight:400;color:'+X.mut+';font-size:'+(muchos?16:18)+'px">'+esc(_variosPaises()?(_ctryName(_ctry(a))||''):(a.club||''))+'</small></span></div></td>'
       +mov(a,'sq')+mov(a,'bp')+mov(a,'dl')
       +'<td style="'+td+'">'+(act>0?_sbNum(act):'—')+'</td>'
-      +'<td style="'+td+'font-weight:600">'+(proy>0?_sbNum(proy):'—')+'</td>'
-      +'<td style="'+td+'color:'+X.sub+';font-size:'+(muchos?21:24)+'px">'+(gl?gl.toFixed(2):'—')+'</td>'
+      +'<td class="pvLb-pj" style="'+td+'font-weight:600">'+(proy>0?_sbNum(proy):'—')+'</td>'
+      +'<td class="pvLb-gl" style="'+td+'color:'+X.sub+';font-size:'+(muchos?21:24)+'px">'+(gl?gl.toFixed(2):'—')+'</td>'
     +'</tr>';
   }).join('');
   return `<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(${k});pointer-events:none">
-    <div style="width:1480px;background:${X.bg};border:1px solid ${X.line};font-family:Oswald,'Arial Narrow',sans-serif;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.45)">
-      <div style="display:flex;align-items:center;gap:22px;padding:20px 28px;background:${X.head}">
-        ${_tiraLogos(['camp'],'40px','10px')}
-        <b style="font-size:34px;font-weight:600;letter-spacing:.1em">CLASIFICACIÓN</b>
-        <span style="font-size:22px;letter-spacing:.12em;color:#BDBDC2">${catTxt}</span>
-        <em style="margin-left:auto;font-style:normal;font-size:17px;letter-spacing:.14em;color:${X.mut}">${cuando}</em>
+    <div class="pvLb" style="width:1480px;background:${X.bg};border:1px solid ${X.line};font-family:Oswald,'Arial Narrow',sans-serif;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.45)">
+      ${typeof _pvDeco==='function'?_pvDeco('lb',1540):''}
+      <div class="pvLb-head" style="display:flex;align-items:center;gap:22px;padding:20px 28px;background:${X.head}">
+        <span class="pvLb-logos">${_tiraLogos(['camp'],'40px','10px')}</span>
+        <b class="pvLb-tit" style="font-size:34px;font-weight:600;letter-spacing:.1em">CLASIFICACIÓN</b>
+        <span class="pvLb-cat" style="font-size:22px;letter-spacing:.12em;color:#BDBDC2">${catTxt}</span>
+        <em class="pvLb-cuando" style="margin-left:auto;font-style:normal;font-size:17px;letter-spacing:.14em;color:${X.mut}">${cuando}</em>
       </div>
-      <table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">
+      <table class="pvLb-tab" style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">
         <thead><tr><th style="${th}text-align:center">POS</th><th style="${th}text-align:left">ATLETA</th><th style="${th}">SQ</th><th style="${th}">BP</th><th style="${th}">DL</th><th style="${th}">ACTUAL</th><th style="${th}">PROYECT.</th><th style="${th}">GL</th></tr></thead>
-        <tbody><tr><td colspan="8" style="font-size:15px;letter-spacing:.24em;color:#fff;background:${X.cell};text-align:left;padding:6px 28px;font-weight:600">${divTxt}</td></tr>${filas}</tbody>
+        <tbody><tr class="pvLb-grp"><td colspan="8" style="font-size:15px;letter-spacing:.24em;color:#fff;background:${X.cell};text-align:left;padding:6px 28px;font-weight:600">${divTxt}</td></tr>${filas}</tbody>
       </table>
-      <div style="padding:10px 28px 14px;font-family:'DM Sans',sans-serif;font-size:16px;color:${X.mut};border-top:1px solid ${X.line2}">En gris, lo declarado que falta levantar. El proyectado suma lo hecho y lo declarado.</div>
+      <div class="pvLb-foot" style="padding:10px 28px 14px;font-family:'DM Sans',sans-serif;font-size:16px;color:${X.mut};border-top:1px solid ${X.line2}">En gris, lo declarado que falta levantar. El proyectado suma lo hecho y lo declarado.</div>
     </div>
   </div>`;
 }
@@ -2190,16 +2202,17 @@ function renderTxTablaActual(cur,opts){
   const col='display:grid;grid-template-columns:36px 34px minmax(0,1fr) 96px 106px;gap:10px;align-items:center;padding:9px 20px;';
   return `
     <div style="position:fixed;top:${Math.round(56*k)}px;right:${Math.round(56*k)}px;z-index:50">
-      <div class="ta-card-explode" style="transform:scale(${k});transform-origin:top right;width:660px;font-family:Oswald,'Arial Narrow',sans-serif;color:#fff;background:${cBody};border:1px solid ${LN};box-shadow:0 18px 50px rgba(0,0,0,.45)">
-        <div data-ta-header style="display:flex;align-items:center;gap:16px;padding:14px 20px;background:linear-gradient(90deg,${cHead},${cHead2});${conBlanco?'':'border-top:4px solid '+_txC('nameBg')+';'}">
+      <div class="ta-card-explode pvTa" style="transform:scale(${k});transform-origin:top right;width:660px;font-family:Oswald,'Arial Narrow',sans-serif;color:#fff;background:${cBody};border:1px solid ${LN};box-shadow:0 18px 50px rgba(0,0,0,.45)">
+        ${typeof _pvDeco==='function'?_pvDeco('ta',700):''}
+        <div data-ta-header class="pvTa-head" style="display:flex;align-items:center;gap:16px;padding:14px 20px;background:linear-gradient(90deg,${cHead},${cHead2});${conBlanco?'':'border-top:4px solid '+_txC('nameBg')+';'}">
           ${(()=>{const t=_tiraLogos(['camp'],'44px','10px');
             return t?`<div class="ta-logo-anim" style="flex-shrink:0;display:flex">${t}</div>`:'';})()}
           <div data-ta-title style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex:1;min-width:0">
-            <b style="font-size:25px;font-weight:600;letter-spacing:.1em;white-space:nowrap">TABLA ACTUAL</b>
-            <span style="font-size:17px;letter-spacing:.14em;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${catTxt}</span>
+            <b class="pvTa-tit" style="font-size:25px;font-weight:600;letter-spacing:.1em;white-space:nowrap">TABLA ACTUAL</b>
+            <span class="pvTa-cat" style="font-size:17px;letter-spacing:.14em;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${catTxt}</span>
           </div>
         </div>
-        <div style="${col}padding-block:8px;font-size:13px;letter-spacing:.16em;color:#fff;border-top:1px solid ${LN}">
+        <div class="pvTa-th" style="${col}padding-block:8px;font-size:13px;letter-spacing:.16em;color:#fff;border-top:1px solid ${LN}">
           <span>#</span><span></span><span>ATLETA</span><span style="text-align:right">${lab}</span><span style="text-align:right">PROYECT.</span>
         </div>
         ${ranked.map(a=>{
@@ -2209,11 +2222,12 @@ function renderTxTablaActual(cur,opts){
           const proy=isCur?a.fTotal:forecastTotal(a);
           // Bandera si el campeonato tiene varios países; si no, el logo del club.
           const logo=(typeof _insignia==='function'?_insignia(a,34):'')||'<span></span>';
-          return `<div style="${col}border-top:1px solid ${LN};font-size:24px;${isCur?'background:rgba(255,255,255,.10);box-shadow:inset 4px 0 #fff;':''}">
-            <span style="font-weight:600">${pos||'—'}</span>${logo}
-            <span style="font-family:'DM Sans',sans-serif;font-weight:700;font-size:21px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_nombrePropio(a.name)}${isCur&&pendingW?'<small style="display:block;font-family:Oswald,sans-serif;font-weight:500;font-size:13px;letter-spacing:.14em;margin-top:2px">EN TARIMA · '+_sbNum(pendingW)+' KG</small>':''}</span>
+          const _pv=typeof _estiloPrim==='function'&&_estiloPrim();
+          return `<div class="pvTa-row${isCur?' cur':''}" style="${col}border-top:1px solid ${LN};font-size:24px;${isCur?'background:rgba(255,255,255,.10);box-shadow:inset 4px 0 #fff;':''}">
+            <span class="pvTa-pos" style="font-weight:600">${_pv&&pos>=1&&pos<=3?_pvMedalla(pos,40):(pos||'—')}</span>${logo}
+            <span class="pvTa-nom" style="font-family:'DM Sans',sans-serif;font-weight:700;font-size:21px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_nombrePropio(a.name)}${isCur&&pendingW?'<small style="display:block;font-family:Oswald,sans-serif;font-weight:500;font-size:13px;letter-spacing:.14em;margin-top:2px">EN TARIMA · '+_sbNum(pendingW)+' KG</small>':''}</span>
             <span style="text-align:right">${sub>0?_sbNum(sub):'—'}</span>
-            <span style="text-align:right;font-weight:600">${proy>0?_sbNum(proy):'—'}</span>
+            <span class="pvTa-pj" style="text-align:right;font-weight:600">${proy>0?_sbNum(proy):'—'}</span>
           </div>`;
         }).join('')}
       </div>
@@ -2256,16 +2270,17 @@ function renderTxMedals(md){
     const flag=_variosPaises()?_flagImg(_ctry(x.a),big?26:22):_logoClub(x.a,big?34:28,'margin-right:0;');
     // Siempre en negro (se pidió así). El ORO, la PLATA y el BRONCE son el
     // color de la medalla y no cambian — un primer lugar plateado no se entiende.
-    return `<div style="display:flex;align-items:center;gap:12px;background:linear-gradient(90deg,#0a0a0b,#000000);border-left:6px solid ${RANK_BG[r]};border-radius:8px;padding:${big?'12px 20px':'9px 18px'};box-shadow:0 8px 20px rgba(0,0,0,.5)">
-      <div style="width:${big?'40px':'32px'};height:${big?'40px':'32px'};flex-shrink:0;border-radius:50%;background:${RANK_BG[r]};display:flex;align-items:center;justify-content:center;font-family:Oswald;font-weight:800;font-size:${big?'20px':'16px'};color:#0A1628">${r}</div>
-      <div style="flex:1;font-family:Oswald;font-weight:700;font-size:${big?'24px':'18px'};color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.5)">${x.a.name||''}</div>
+    const _pv=typeof _estiloPrim==='function'&&_estiloPrim();
+    return `<div class="pvMd-row${big?' big':''}" style="display:flex;align-items:center;gap:12px;background:linear-gradient(90deg,#0a0a0b,#000000);border-left:6px solid ${RANK_BG[r]};border-radius:8px;padding:${big?'12px 20px':'9px 18px'};box-shadow:0 8px 20px rgba(0,0,0,.5)">
+      ${_pv?'<span class="pvMd-med">'+_pvMedalla(r,big?72:56)+'</span>':`<div style="width:${big?'40px':'32px'};height:${big?'40px':'32px'};flex-shrink:0;border-radius:50%;background:${RANK_BG[r]};display:flex;align-items:center;justify-content:center;font-family:Oswald;font-weight:800;font-size:${big?'20px':'16px'};color:#0A1628">${r}</div>`}
+      <div class="pvMd-nom" style="flex:1;font-family:Oswald;font-weight:700;font-size:${big?'24px':'18px'};color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.5)">${x.a.name||''}</div>
       ${flag}
-      <div style="font-family:Oswald;font-weight:800;font-size:${big?'24px':'18px'};color:${RANK_BG[r]}">${x.valor.toFixed(1)}</div>
+      <div class="pvMd-kg" style="font-family:Oswald;font-weight:800;font-size:${big?'24px':'18px'};color:${RANK_BG[r]}">${x.valor.toFixed(1)}</div>
     </div>`;
   };
   return `
-    <div style="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);width:min(760px,60vw);pointer-events:none">
-      <div style="text-align:center;margin-bottom:10px;font-family:Oswald;font-size:14px;letter-spacing:3px;color:#ffffff;text-shadow:0 2px 6px rgba(0,0,0,.6)">MEDALLERO ${MEDAL_TIPOS[tipo]||'TOTAL'} · ${divS} ${txCatLabel(md.cat)||md.cat} ${sexLabel} · ${_txModLabel(md.mod)}</div>
+    <div class="pvMd" style="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);width:min(760px,60vw);pointer-events:none">
+      <div class="pvMd-tit" style="text-align:center;margin-bottom:10px;font-family:Oswald;font-size:14px;letter-spacing:3px;color:#ffffff;text-shadow:0 2px 6px rgba(0,0,0,.6)">${typeof _pvDeco==='function'?_pvDeco('md',560):''}MEDALLERO ${MEDAL_TIPOS[tipo]||'TOTAL'} · ${divS} ${txCatLabel(md.cat)||md.cat} ${sexLabel} · ${_txModLabel(md.mod)}</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         ${row(1,ranked[0])}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -2923,6 +2938,11 @@ function renderDirector(){
   const activePal=(_dirState&&_dirState.palette)||(_sinColores?'negroBlanco':null);
   h+='<div style="margin-top:14px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px">';
   h+='<div style="font-family:Oswald;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:12px">PALETA DE COLORES</div>';
+  // Con un estilo de campeonato (admin → Campeonatos), la transmisión se viste
+  // con él y la paleta queda para lo que el estilo no toca.
+  if(typeof _estiloId==='function'&&_estiloId())h+='<div style="margin:-4px 0 12px;padding:10px 12px;border-radius:10px;border:2px solid #F28AAE;background:rgba(242,138,174,.10);font-size:12px;line-height:1.5;display:flex;gap:10px;align-items:center">'
+    +'<img src="'+_pvLogoUrl()+'" alt="" style="height:42px;flex-shrink:0">'
+    +'<span><b>Estilo del campeonato: '+ESTILOS[_estiloId()].nombre+'.</b> Marcador, tablas, medallero, jurado, cambio de intento y perfil salen con este estilo, igual que la Pantalla Tarima y la página del público. Se cambia en el admin → Campeonatos → Estilo del campeonato.</span></div>';
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">';
   Object.entries(_TX_COLOR_PALETTES).forEach(([key,pal])=>{
     const active=activePal===key;

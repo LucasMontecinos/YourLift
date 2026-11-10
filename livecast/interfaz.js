@@ -89,6 +89,7 @@ function pickEvent(i){
     if(!ev.logoUrl&&m.logoUrl)ev.logoUrl=m.logoUrl;
     if(!ev.logoFedUrl&&m.logoFedUrl)ev.logoFedUrl=m.logoFedUrl;
     if(!Array.isArray(ev.logosPantalla)&&Array.isArray(m.logosPantalla))ev.logosPantalla=m.logosPantalla;
+    if(!ev.estilo&&m.estilo)ev.estilo=m.estilo;
   })();
   _ensayoGrant();
   // ¿Tiene este campeonato sus logos en el repo? Se pregunta una vez por
@@ -194,6 +195,7 @@ function _aplicarTemaVivo(){
 
 function R(){
   try{ _aplicarTemaVivo(); }catch(e){}
+  try{ _estiloAplicar(); }catch(e){}
   try{ _sellarCeldas(DATA.athletes); }catch(e){}
   // Los récords logrados hoy se recalculan una vez por dibujado: los consulta cada
   // casilla de la tabla, pero tienen que reflejar lo último (incluido lo que

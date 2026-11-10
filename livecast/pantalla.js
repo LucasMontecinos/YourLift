@@ -391,12 +391,14 @@ function _yob2(a){
 // Celda de intento para la PANTALLA DE TARIMA: marca el resultado con COLOR DE FONDO
 // (válido = verde, nulo = rojo), legible a distancia en una proyección grande.
 function _attTd(at, base){
-  if(!at || (!at.w && at.r===null)) return '<td style="'+base+';color:rgba(150,170,200,.30)">—</td>';
+  if(!at || (!at.w && at.r===null)) return '<td class="pvAt e" style="'+base+';color:rgba(150,170,200,.30)">—</td>';
   const w=at.w||0; const val=w?w.toFixed(1):'—';
-  if(at.r==='g') return '<td style="'+base+';background:rgba(34,197,94,.88);color:#06210f;font-weight:800">'+val+'</td>';
-  if(at.r==='n') return '<td style="'+base+';background:rgba(225,40,40,.85);color:#fff;font-weight:800;text-decoration:line-through;text-decoration-thickness:2px">'+val+'</td>';
+  // El número va en un <span>: con el estilo del campeonato (livecast/estilo.js)
+  // es la placa con contorno; sin estilo no cambia nada.
+  if(at.r==='g') return '<td class="pvAt g" style="'+base+';background:rgba(34,197,94,.88);color:#06210f;font-weight:800"><span>'+val+'</span></td>';
+  if(at.r==='n') return '<td class="pvAt n" style="'+base+';background:rgba(225,40,40,.85);color:#fff;font-weight:800;text-decoration:line-through;text-decoration-thickness:2px"><span>'+val+'</span></td>';
   // peso declarado, sin juzgar todavía
-  return '<td style="'+base+';color:#fff;font-weight:700">'+val+'</td>';
+  return '<td class="pvAt d" style="'+base+';color:#fff;font-weight:700"><span>'+val+'</span></td>';
 }
 
 function renderTxJornada(){
@@ -486,7 +488,7 @@ function renderTxJornada(){
       return {a,tot,gl:calcGL(tot,a.bw,a.sex,_glMod(a))};
     }).sort((x,y)=>(y.tot-x.tot)||(y.gl-x.gl));
     // header de categoría
-    rows+='<tr style="height:'+hdrH.toFixed(2)+'px"><td colspan="16" style="padding:0 12px;background:linear-gradient(90deg,rgba(196,30,58,.32),rgba(196,30,58,.05));border-left:'+Math.max(3,Math.round(4*s))+'px solid #C41E3A;vertical-align:middle">'
+    rows+='<tr class="pvJo-grp" style="height:'+hdrH.toFixed(2)+'px"><td colspan="16" style="padding:0 12px;background:linear-gradient(90deg,rgba(196,30,58,.32),rgba(196,30,58,.05));border-left:'+Math.max(3,Math.round(4*s))+'px solid #C41E3A;vertical-align:middle">'
       +'<span style="font-family:Oswald;font-size:'+fs(16)+'px;font-weight:700;letter-spacing:2px;color:#fff">'+sexLabel+' '+parts[1]+' kg · '+divS+'</span>'
       +'<span style="font-family:Oswald;font-size:'+fs(12)+'px;color:rgba(220,230,245,.6);margin-left:10px;letter-spacing:1px">'+(parts[3]||'').replace('/PL','').replace('/BP',' · ONLY BENCH')+'</span>'
       +'<span style="font-family:Oswald;font-size:'+fs(12)+'px;color:rgba(212,168,67,.85);margin-left:10px">'+list.length+' atletas</span></td></tr>';
@@ -494,7 +496,7 @@ function renderTxJornada(){
       const a=row.a;
       const sub=l=>{const b=bestOf(a,l);return b?b.toFixed(1):'—';};
       const td='vertical-align:middle;text-align:center;font-family:Oswald;font-size:'+fs(14)+'px';
-      rows+='<tr style="height:'+unit.toFixed(2)+'px;border-bottom:1px solid rgba(212,168,67,.12);background:'+(i%2?'rgba(255,255,255,.035)':'transparent')+'">'
+      rows+='<tr class="pvJo-row" style="height:'+unit.toFixed(2)+'px;border-bottom:1px solid rgba(212,168,67,.12);background:'+(i%2?'rgba(255,255,255,.035)':'transparent')+'">'
         +'<td style="'+td+';font-weight:700;color:#D4A843;padding:0 4px">'+(row.tot>0?(i+1):'—')+'</td>'
         // El nombre se corta con puntos suspensivos si no cabe. El text-overflow
         // en la celda no alcanza: una celda de tabla se estira con su contenido,
@@ -530,8 +532,9 @@ function renderTxJornada(){
 
   const evName=(DATA.event&&DATA.event.name)||'';
   const flLabel=flights.join(' · ');
-  return '<div style="position:absolute;top:0;right:0;bottom:0;left:0;background:linear-gradient(135deg,#0A1628 0%,#0E1F3A 55%,#0A1628 100%);display:flex;flex-direction:column;overflow:hidden">'
-    +'<div style="height:'+topBarH+'px;box-sizing:border-box;padding:0 26px;background:rgba(10,22,40,.6);border-bottom:2px solid #D4A843;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">'
+  return '<div class="pvJo" style="position:absolute;top:0;right:0;bottom:0;left:0;background:linear-gradient(135deg,#0A1628 0%,#0E1F3A 55%,#0A1628 100%);display:flex;flex-direction:column;overflow:hidden">'
+    +(typeof _pvPantDeco==='function'?_pvPantDeco('jornada',topBarH):'')
+    +'<div class="pvJo-top" style="height:'+topBarH+'px;box-sizing:border-box;padding:0 26px;background:rgba(10,22,40,.6);border-bottom:2px solid #D4A843;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">'
       +'<div><div style="font-family:Oswald;font-size:'+Math.round(VH*0.013)+'px;letter-spacing:4px;color:rgba(212,168,67,.85)">TABLA DE CLASIFICACIÓN · JORNADA</div>'
       +'<div style="font-family:Oswald;font-size:'+Math.round(VH*0.024)+'px;font-weight:700;letter-spacing:1px;color:#fff;margin-top:2px">'+evName+' <span style="font-size:'+Math.round(VH*0.015)+'px;color:rgba(212,168,67,.8);margin-left:8px">Tandas: '+flLabel+(nPag>1?'  ·  Página '+(iPag+1)+' de '+nPag:'')+'</span></div></div>'
       // Los tres logos: federación, campeonato y YourLift. Van en la barra de
@@ -543,7 +546,7 @@ function renderTxJornada(){
       +'</div>'
     +'</div>'
     +'<div style="flex:1;overflow:hidden;padding:0 14px;box-sizing:border-box">'
-      +'<table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed">'
+      +'<table class="pvJo-tab" style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed">'
       // Anchos explícitos: ATLETA bien ancha para que el nombre completo entre
       +'<colgroup>'
         +'<col style="width:3%"><col style="width:21.8%"><col style="width:5.6%"><col style="width:3.4%"><col style="width:4.4%">'
@@ -614,7 +617,7 @@ function renderScreenBarra(a){
   // subtotal (el total en peso muerto). Es fondo: no se mueve ni se elige.
   const ra=(typeof _realAth==='function')?_realAth(a):a;
   const _nB=v=>{const x=Math.round((+v||0)*10)/10;return String(x);};
-  const _cel=(txt,bg,borde,dim,top)=>`<div style="min-width:12vh;height:8.6vh;padding:0 1.4vh;box-sizing:border-box;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:${bg};${borde?'box-shadow:inset 0 0 0 3px #fff;':''}color:${dim?'rgba(255,255,255,.5)':'#fff'};line-height:1">${top?`<span style="font-size:1.5vh;letter-spacing:.16em;margin-bottom:.5vh">${top}</span>`:''}<span style="font-size:${top?'3.8vh':'4.8vh'};font-weight:600">${txt}</span></div>`;
+  const _cel=(txt,bg,borde,dim,top)=>`<div class="pvCel ${bg==='#22C55E'?'g':bg==='#EF4444'?'n':borde?'p':'d'}" style="min-width:12vh;height:8.6vh;padding:0 1.4vh;box-sizing:border-box;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:${bg};${borde?'box-shadow:inset 0 0 0 3px #fff;':''}color:${dim?'rgba(255,255,255,.5)':'#fff'};line-height:1">${top?`<span style="font-size:1.5vh;letter-spacing:.16em;margin-bottom:.5vh">${top}</span>`:''}<span style="font-size:${top?'3.8vh':'4.8vh'};font-weight:600">${txt}</span></div>`;
   const _antes=(l==='bp'&&!/bench/i.test(String(a.mod||'')))?[['SQ','sq']]:(l==='dl'?[['SQ','sq'],['BP','bp']]:[]);
   const _celAntes=_antes.map(([k,m])=>{const v=(typeof bestOf==='function')?bestOf(ra,m):0;return _cel(v>0?_nB(v):'—','#161618',false,!(v>0),k);}).join('');
   const _celHoy=((ra.att&&ra.att[l])||[]).map((x,j)=>{
@@ -626,7 +629,7 @@ function renderScreenBarra(a){
   const _rk=(typeof catRankBySub==='function')?catRankBySub(ra):{pos:0};
   const _sbB=(typeof bestOf==='function')?['sq','bp','dl'].filter(m=>m==='sq'||l!=='sq').filter(m=>m!=='dl'||l==='dl').reduce((t,m)=>t+bestOf(ra,m),0):0;
   const _movN={sq:'SENTADILLA',bp:'BANCA',dl:'PESO MUERTO'}[l]||'';
-  const franjaAbajo=`<div style="position:absolute;left:0;right:0;bottom:0;height:13vh;background:#0b0b0c;border-top:1px solid #1f1f22;display:flex;align-items:center;gap:1.4vh;padding:0 3.4vw;pointer-events:none;font-family:Oswald,sans-serif;color:#fff">
+  const franjaAbajo=`<div class="pvFr-bot pvFr-celdas" style="position:absolute;left:0;right:0;bottom:0;height:13vh;background:#0b0b0c;border-top:1px solid #1f1f22;display:flex;align-items:center;gap:1.4vh;padding:0 3.4vw;pointer-events:none;font-family:Oswald,sans-serif;color:#fff">
       ${_celAntes?_celAntes+'<span style="width:1px;align-self:stretch;margin:2.4vh 1vh;background:#2a2a2e"></span>':''}
       <span style="font-size:2vh;letter-spacing:.16em;margin-right:1vh">${_movN}</span>${_celHoy}
       <span style="margin-left:auto;display:flex;gap:4vh;align-items:flex-end;text-align:right">
@@ -634,7 +637,8 @@ function renderScreenBarra(a){
         <span><span style="display:block;font-size:1.6vh;letter-spacing:.16em">${l==='dl'?'TOTAL':'SUBTOTAL'}</span><b style="font-size:5vh;font-weight:600;line-height:1">${_sbB>0?_nB(_sbB):'—'}</b></span>
       </span>
     </div>`;
-  return `<div class="pi-canvas" style="position:absolute;top:0;right:0;bottom:0;left:0;background:${fondo};font-family:Oswald,sans-serif;color:#fff;overflow:hidden">
+  return `<div class="pi-canvas pvPant" style="position:absolute;top:0;right:0;bottom:0;left:0;background:${fondo};font-family:Oswald,sans-serif;color:#fff;overflow:hidden">
+    ${typeof _pvPantDeco==='function'?_pvPantDeco('marco'):''}
     ${franjaAbajo}
     ${B('bSigla',`<div style="font-size:clamp(28px,5.4vw,86px);font-weight:700;letter-spacing:.06em;color:#fff;line-height:1;white-space:nowrap">${_LIFT_SIGLA[l]||''} ${r+1}</div>`)}
 
@@ -1189,9 +1193,10 @@ function renderScreenIntentos(cur,nxt){
   // las dos franjas oscuras quedan de fondo.
   const tituloHtml=`<b style="font-family:Oswald,sans-serif;color:#fff;font-size:3.4vh;font-weight:600;letter-spacing:.08em;white-space:nowrap">INTENTOS · CARGA DE BARRA</b>`;
   const tandaHtml=`<span style="font-family:Oswald,sans-serif;color:#fff;font-size:2vh;letter-spacing:.14em;white-space:nowrap">${['TANDA '+(DATA.flight||''),_tar?'TARIMA '+_tar:''].filter(Boolean).join(' · ')}</span>`;
-  const franjas=`<div style="position:absolute;left:0;right:0;top:0;height:9vh;background:#0b0b0c;border-bottom:1px solid #1f1f22;pointer-events:none"></div>
-    <div style="position:absolute;left:0;right:0;bottom:0;height:11vh;background:#0b0b0c;border-top:1px solid #1f1f22;pointer-events:none"></div>`;
-  return `<div class="pi-canvas" style="position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden${_fondoPant?';background:'+_fondoPant:''}" id="pantIntentosBox">
+  const franjas=`<div class="pvFr-top" style="position:absolute;left:0;right:0;top:0;height:9vh;background:#0b0b0c;border-bottom:1px solid #1f1f22;pointer-events:none"></div>
+    <div class="pvFr-bot" style="position:absolute;left:0;right:0;bottom:0;height:11vh;background:#0b0b0c;border-top:1px solid #1f1f22;pointer-events:none"></div>
+    ${typeof _pvPantDeco==='function'?_pvPantDeco('franja'):''}`;
+  return `<div class="pi-canvas pvPant" style="position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden${_fondoPant?';background:'+_fondoPant:''}" id="pantIntentosBox">
     ${franjas}
     ${_piBlock('titulo',tituloHtml,true)}
     ${_piBlock('tanda',tandaHtml,true)}

@@ -222,16 +222,18 @@ function renderRemote(){
     const bg=active?'linear-gradient(180deg,rgba(34,197,94,.28),rgba(34,197,94,.12))':'rgba(10,22,40,.55)';
     const bd=active?'#22c55e':'var(--border)';
     const col2=active?'#4ade80':'var(--text)';
-    return '<button onclick="'+onClick+'" style="grid-column:span '+(col||1)+';min-height:0;height:100%;border-radius:14px;border:2px solid '+bd+';background:'+bg+';color:'+col2+';font-family:Oswald;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px 10px;-webkit-tap-highlight-color:transparent;transition:transform .08s" ontouchstart="this.style.transform=\'scale(.96)\'" ontouchend="this.style.transform=\'scale(1)\'">'
+    const _pvc='pvRm-btn'+(active?' on':'')+(/ARMADO/.test(sub||'')?' arm':'')+(/GOOD LIFT/.test(label)?' gl':/NO LIFT/.test(label)?' nl':/ESCONDER/.test(label)?' hide':'');
+    return '<button class="'+_pvc+'" onclick="'+onClick+'" style="grid-column:span '+(col||1)+';min-height:0;height:100%;border-radius:14px;border:2px solid '+bd+';background:'+bg+';color:'+col2+';font-family:Oswald;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px 10px;-webkit-tap-highlight-color:transparent;transition:transform .08s" ontouchstart="this.style.transform=\'scale(.96)\'" ontouchend="this.style.transform=\'scale(1)\'">'
       +'<span style="font-size:16px;font-weight:700;letter-spacing:1px;text-align:center;line-height:1.1">'+label+'</span>'
       +(sub?'<span style="font-size:10px;font-weight:600;letter-spacing:1px;color:'+(active?'#86efac':'var(--muted)')+'">'+sub+'</span>':'')
       +'</button>';
   };
   // Cuatro columnas si hay ancho (computador, tablet echada), dos en el teléfono.
   const _rmCols=_rmColumnas();
-  let h='<div class="fade" style="max-width:'+(_rmCols===4?960:560)+'px;margin:0 auto">';
+  let h='<div class="fade pvRm" style="max-width:'+(_rmCols===4?960:560)+'px;margin:0 auto">';
   // Encabezado compacto
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
+  h+='<div class="pvRm-head" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
+  if(typeof _estiloPrim==='function'&&_estiloPrim())h+='<img class="pvLogo pvRm-logo" src="'+_pvLogoUrl()+'" alt=""><div class="pvDeco pvRm-rama">'+_pvRamaAncho({modo:'cuelga',alto:56,semilla:21,paso:200,inicio:120,escala:.55})+'</div>';
   h+='<div><h2 class="os" style="font-size:20px;letter-spacing:1px;margin:0"><i class=yl-i-telefono></i> CONTROL REMOTO</h2>'
     +'<div style="font-size:11px;color:var(--muted)">'+evName+(cur?' · en tarima: <b style="color:var(--gold)">'+esc(cur.name)+'</b>':'')+'</div></div>';
   // Estado real: necesita Firebase listo Y el evento resuelto (si no, empujaría al
@@ -269,7 +271,7 @@ function renderRemote(){
   const bt=_dirState&&_dirState.breakTimer, _descanso=!!(bt&&bt.active);
   const _slam=(t)=>{
     const g=t==='g';
-    return '<button onclick="dirShowSlam(\''+t+'\')" style="min-height:0;height:100%;border-radius:14px;border:2px solid '+(g?'#22c55e':'#ef4444')
+    return '<button class="pvRm-btn '+(g?'gl':'nl')+'" onclick="dirShowSlam(\''+t+'\')" style="min-height:0;height:100%;border-radius:14px;border:2px solid '+(g?'#22c55e':'#ef4444')
       +';background:linear-gradient(180deg,'+(g?'rgba(34,197,94,.25),rgba(34,197,94,.08)':'rgba(239,68,68,.25),rgba(239,68,68,.08)')
       +');color:'+(g?'#4ade80':'#f87171')+';font-family:Oswald;font-size:17px;font-weight:800;letter-spacing:1px;cursor:pointer;-webkit-tap-highlight-color:transparent">'
       +(g?'<i class=yl-i-check></i> GOOD LIFT':'<i class=yl-i-cruz></i> NO LIFT')+'</button>';
@@ -296,7 +298,7 @@ function renderRemote(){
     good:       oc=>oc?bigBtn('GOOD LIFT','',false,oc):_slam('g'),
     nolift:     oc=>oc?bigBtn('NO LIFT','',false,oc):_slam('n'),
     esconder:   oc=>oc?bigBtn('⨯ ESCONDER TODO','',false,oc,_rmCols===4?4:2)
-      :'<button onclick="dirHideAll()" style="grid-column:span '+(_rmCols===4?4:2)+';min-height:0;height:100%;border-radius:14px;border:2px solid var(--red);background:rgba(239,68,68,.1);color:#f87171;font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">⨯ ESCONDER TODO</button>',
+      :'<button class="pvRm-btn hide" onclick="dirHideAll()" style="grid-column:span '+(_rmCols===4?4:2)+';min-height:0;height:100%;border-radius:14px;border:2px solid var(--red);background:rgba(239,68,68,.1);color:#f87171;font-family:Oswald;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">⨯ ESCONDER TODO</button>',
   };
   const orden=_rmOrden(Object.keys(BOTONES));
   // Doce botones, y ESCONDER TODO ocupa una fila entera abajo con cuatro
