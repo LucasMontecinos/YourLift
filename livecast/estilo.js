@@ -27,12 +27,18 @@
 // Primavera) y además data-estilo-var="lirio"; livecast/estilo_lirio.css cambia
 // lo que hace falta. El logo es el del campeonato, el mismo en los dos.
 //
-// Para mirar cómo queda sin cambiar el campeonato: ?estilo=primavera o
-// ?estilo=lirio en el link (y ?estilo=normal para verlo sin estilo). Es solo
-// para esa pestaña.
+// Y "liriocrema", Lirio al revés, para comparar: más crema que vino. Los
+// paneles (marcador, tablas, la página del público, la tabla jornada, el
+// Control Remoto) son crema con letra vino. Es Lirio con una capa más: el
+// <html> lleva además data-estilo-sub="crema".
+//
+// Para mirar cómo queda sin cambiar el campeonato: ?estilo=primavera,
+// ?estilo=lirio o ?estilo=liriocrema en el link (y ?estilo=normal para verlo
+// sin estilo). Es solo para esa pestaña.
 const ESTILOS={
   primavera:{nombre:'Primavera',logo:'estilos/primavera/logo.webp'},
   lirio:{nombre:'Lirio',familia:'primavera'},
+  liriocrema:{nombre:'Lirio crema',familia:'primavera',variante:'lirio',sub:'crema'},
 };
 const _ESTILO_URL=(()=>{try{return new URLSearchParams(location.search).get('estilo')||'';}catch(e){return '';}})();
 function _estiloId(){
@@ -44,7 +50,7 @@ function _estiloId(){
 // ¿El campeonato tiene escena propia? (Primavera o una de sus variantes)
 function _estiloPrim(){ const id=_estiloId(); return id==='primavera'||!!(ESTILOS[id]&&ESTILOS[id].familia==='primavera'); }
 // La variante: 'lirio', o '' para Primavera tal cual.
-function _estiloVar(){ const id=_estiloId(); return (ESTILOS[id]&&ESTILOS[id].familia)?id:''; }
+function _estiloVar(){ const id=_estiloId(), e=ESTILOS[id]; return (e&&e.familia)?(e.variante||id):''; }
 function _pvLirio(){ return _estiloVar()==='lirio'; }
 function _pvLogoUrl(){ return ESTILOS.primavera.logo; }   // el logo del campeonato, en los dos
 let _estiloPuesto=null;
@@ -56,16 +62,20 @@ function _estiloAplicar(){
   const r=document.documentElement;
   const fam=(ESTILOS[id]&&ESTILOS[id].familia)||id;
   if(fam)r.setAttribute('data-estilo',fam); else r.removeAttribute('data-estilo');
-  if(fam&&fam!==id)r.setAttribute('data-estilo-var',id); else r.removeAttribute('data-estilo-var');
+  const vr=(ESTILOS[id]&&ESTILOS[id].familia)?(ESTILOS[id].variante||id):'';
+  const sub=(ESTILOS[id]&&ESTILOS[id].sub)||'';
+  if(vr)r.setAttribute('data-estilo-var',vr); else r.removeAttribute('data-estilo-var');
+  if(sub)r.setAttribute('data-estilo-sub',sub); else r.removeAttribute('data-estilo-sub');
   // Los colores de los dibujos (ramas, flores, medallas) son los de la variante.
-  Object.assign(_PV,id==='lirio'?_PV_LIRIO:_PV_PRIM);
+  Object.assign(_PV,vr==='lirio'?_PV_LIRIO:_PV_PRIM);
   const FUENTES={
     primavera:'https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;700;800;900&display=swap',
     lirio:'https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700;800&display=swap',
   };
-  if(FUENTES[id]&&!document.getElementById('estiloFuentes-'+id)){
-    const l=document.createElement('link'); l.id='estiloFuentes-'+id; l.rel='stylesheet';
-    l.href=FUENTES[id];
+  const fk=vr||id;
+  if(FUENTES[fk]&&!document.getElementById('estiloFuentes-'+fk)){
+    const l=document.createElement('link'); l.id='estiloFuentes-'+fk; l.rel='stylesheet';
+    l.href=FUENTES[fk];
     document.head.appendChild(l);
   }
 }

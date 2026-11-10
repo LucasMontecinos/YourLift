@@ -118,12 +118,12 @@ const MONTAR = (estilo) => {
     ok(lu.pant && !lu.marco && lu.logo, 'Luces: el logo, sin ramas encima');
     const jo = await modo('jornada');
     ok(jo.jo && jo.logo && jo.at > 0, 'Tabla jornada: rama en la franja, logo e intentos en placas (' + jo.at + ' válidos)');
-    // En Lirio, los datos (movimiento, rack, categoría, club) van en recuadro
-    // sólido: se leen sobre el papel y sobre la franja vino.
+    // En Lirio, los datos (movimiento, rack, categoría, club) y SIGUIENTE van en
+    // recuadro sólido rojo vino: se leen sobre el papel y sobre la franja vino.
     await montar(p, 'lirio');
     const lr = await p.evaluate(() => { window._SCREEN_STATE = { mode: 'intentos', flights: null, fondo: 'yourlift', luces: false }; window._piSelected = null; renderTxWidget();
-      return ['liftLabel', 'subtitle'].map(k => { const el = document.querySelector('.pi-block[data-pi-key="' + k + '"]>.pi-inner>*'); return el ? getComputedStyle(el).backgroundColor : 'no'; }); });
-    ok(lr.every(c => c === 'rgb(31, 110, 94)'), 'Lirio: los datos de los cargadores en recuadro verde sólido (' + lr.join(' · ') + ')');
+      return ['liftLabel', 'subtitle', 'next'].map(k => { const el = document.querySelector('.pi-block[data-pi-key="' + k + '"]>.pi-inner>*'); return el ? getComputedStyle(el).backgroundColor : 'no'; }); });
+    ok(lr.every(c => c === 'rgb(140, 29, 47)'), 'Lirio: los datos de los cargadores y SIGUIENTE en recuadro rojo vino (' + lr.join(' · ') + ')');
     await ctx.close();
   }
 
@@ -197,6 +197,27 @@ const MONTAR = (estilo) => {
     await x.ctx.close();
   }
 
+  console.log('\nLirio crema: Lirio al revés, más crema que vino');
+  {
+    const { p, ctx } = await abrir('?evento=suda2026_fesupo_full');
+    await montar(p, 'liriocrema');
+    const r = await p.evaluate(() => { isAdmin = false; DATA.phase = 'liveView'; R();
+      const h = document.documentElement, c = document.querySelector('#R .lv-cab .lv-tanda b');
+      return { v: h.getAttribute('data-estilo-var'), sub: h.getAttribute('data-estilo-sub'), tema: h.getAttribute('data-tema'),
+        lirios: !!document.querySelector('#R .pvLv-rama ellipse'), tanda: c ? [getComputedStyle(c).color, getComputedStyle(c).backgroundColor] : null }; });
+    ok(r.v === 'lirio' && r.sub === 'crema' && r.lirios, 'son las piezas de Lirio, con la capa crema (' + r.v + '/' + r.sub + ')');
+    ok(r.tema === 'dia', 'la página del público va clara (tema día), así las etiquetas chicas se leen');
+    ok(r.tanda && r.tanda[0] !== r.tanda[1], 'y la tanda activa se lee (' + (r.tanda || []).join(' sobre ') + ')');
+    await ctx.close();
+    const t = await abrir('?tx=director&evento=suda2026_fesupo_full');
+    await montar(t.p, 'liriocrema');
+    const body = await t.p.evaluate(() => { _txDirState = JSON.parse(JSON.stringify(TX_DIR_DEFAULT)); _txDirState.scoreboard.active = true; _txDirLastSig = null; renderTxWidget();
+      const b = document.querySelector('#txWidget .pvSb-body'), n = document.querySelector('#txWidget .pvSb-name');
+      return { fondo: b ? getComputedStyle(b).backgroundImage : '', nombre: n ? getComputedStyle(n).color : '' }; });
+    ok(/251, 246, 236/.test(body.fondo) && body.nombre === 'rgb(140, 29, 47)', 'el marcador, crema con el nombre en vino');
+    await t.ctx.close();
+  }
+
   console.log('\nSolo el owner elige el estilo');
   for (const [rol, ve] of [['owner', true], ['admin', false]]) {
     const ctx = await b.newContext({ viewport: { width: 1100, height: 1000 }, serviceWorkers: 'block' });
@@ -211,7 +232,7 @@ const MONTAR = (estilo) => {
     await p.evaluate(id => { go('campeonatos'); editEvento(id); }, EV.id);
     await p.waitForSelector('#ef_name');
     const radios = await p.evaluate(() => [...document.querySelectorAll('input[name="ef_estilo"]')].map(x => x.value + (x.checked ? '*' : '')).join(','));
-    if (ve) ok(radios === ',primavera,lirio*', 'el owner ve Normal, Primavera y Lirio, con el del campeonato marcado (' + radios + ')');
+    if (ve) ok(radios === ',primavera,lirio*,liriocrema', 'el owner ve Normal, Primavera, Lirio y Lirio crema, con el del campeonato marcado (' + radios + ')');
     else ok(radios === '', 'un admin que no es owner no ve el selector');
     const w = await p.evaluate(async () => { window.__ESCRITO = []; await saveEvento(); return (window.__ESCRITO.find(x => x.col === 'eventos') || {}).d; });
     ok(w && w.estilo === 'lirio', (ve ? 'el owner' : 'el admin') + ' guarda otros cambios y el estilo sigue en Lirio');

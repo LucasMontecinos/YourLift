@@ -175,7 +175,13 @@ function showToastLC(msg){
 // todas las pestañas de operación (se pidió dejarlo fijo). Las pantallas que van
 // al aire o al proyector (?tx=…) se quedan como están. La versión "dia" sigue
 // definida en tema.css, pero ya no se ofrece.
-function _temaVivo(){ return 'noche'; }
+// Con el estilo "Lirio crema", la vista del público es clara (crema): ahí va la
+// versión "dia", que pinta claras las etiquetas chicas (OPN, VIRTUAL…); con la
+// "noche" quedaban negras con letra vino. Las pestañas de operación, igual.
+function _temaVivo(){
+  try{ if(typeof _estiloId==='function'&&_estiloId()==='liriocrema'&&DATA.phase==='liveView')return 'dia'; }catch(e){}
+  return 'noche';
+}
 function _aplicarTemaVivo(){
   const raiz=document.documentElement;
   // Todas las pestañas del livecast. Solo quedan fuera las pantallas que van al
