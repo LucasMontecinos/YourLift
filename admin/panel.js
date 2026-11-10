@@ -58,7 +58,7 @@ window.openEditModal=function(title,field,currentValue,onSave){
   inner+=`</div><div class="modal-btns"><button class="btn btn-d" onclick="this.closest('.modal').remove()">CANCELAR</button><button class="btn btn-p" id="emSave">GUARDAR</button></div></div>`;
   m.innerHTML=inner;
   document.body.appendChild(m);
-  setTimeout(()=>document.getElementById('emInp').focus(),50);
+  setTimeout(()=>{ const el=document.getElementById('emInp'); if(el)el.focus(); },50);   // (si ya se cerró, nada)
   document.getElementById('emSave').onclick=async()=>{
     const v=document.getElementById('emInp').value;
     if(v===currentValue){m.remove();return}
@@ -72,6 +72,8 @@ window.editInsc=async function(insId,field){
   const ins=ST.inscripciones.find(x=>x.id===insId);if(!ins)return;
   const cur=ins[field]||'';
   openEditModal(`Editar ${field} de ${ins.nombre}`,field,cur,async(nv)=>{
+    // El nombre, sin espacios de más y nunca vacío.
+    if(field==='nombre'){ nv=String(nv||'').trim().replace(/\s+/g,' '); if(!nv){showToast('El nombre no puede quedar vacío',null,true);return;} }
     if(nv===cur)return;
     const old=cur;
     try{
@@ -6814,7 +6816,10 @@ function renderNominas(){
               : `<span style="color:var(--muted);font-size:11px;opacity:.5">—</span>`);
           return `<tr>
             <td style="color:var(--muted);font-family:Oswald">${idx+1}</td>
-            <td>${esc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${esc(i.rut||'')}</span></td>
+            ${/* El nombre también se corrige con un click, como el club o la
+                  categoría. Llega mal escrito ("Vicente Bareientos Diaz") y el
+                  livecast toma la corrección solo (por el código del atleta). */''}
+            <td><span class="${cls}" ${click('nombre')} title="${editable?'Click para corregir el nombre':''}">${esc(i.nombre)}</span><br><span style="font-size:9px;color:var(--muted)">${esc(i.rut||'')}</span></td>
             <td><span class="${cls}" ${click('sexo')}>${esc(i.sexo||'?')}</span></td>
             <td><span class="${cls}" ${click('division')}>${esc(i.division||'—')}</span></td>
             <td><span class="${cls}" ${click('categoria')}>${esc(i.categoria||'—')}</span></td>

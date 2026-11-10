@@ -10,6 +10,7 @@
 // Himalaya —logo blanco— salía clara: no se veía.
 //   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node t_nombreinsc.js
 const { chromium } = require('playwright');
+const { montarFirebase } = require('./apoyo/firebase_falso');
 const PUERTO = process.env.PUERTO || '8972';
 
 let fallas = 0;
@@ -57,6 +58,34 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) falla
   });
   ok(t[0] === 'rgb(14, 20, 36)|false', 'Himalaya: baldosa oscura siempre, aunque en Clubes diga clara (' + t[0] + ')');
   ok(t[1] === 'rgb(14, 20, 36)|false', 'y la de los demás logos blancos sigue oscura en el tema claro (' + t[1] + ')');
+
+  console.log('\nAdmin → Nóminas: el nombre se corrige con un click');
+  {
+    const ctx = await b.newContext({ viewport: { width: 1300, height: 900 }, serviceWorkers: 'block' });
+    await montarFirebase(ctx);
+    const q = await ctx.newPage(); q.on('pageerror', e => errs.push('admin: ' + e.message)); q.on('dialog', d => d.accept().catch(() => {}));
+    const EV = { id: 'regional_centro_2026', name: '“Primavera Open” Regional Centro Noviembre 2026', status: 'open', date: '2026-11-21' };
+    const INS = { id: 'regional_centro_2026_2078VBD-2024', evento: EV.id, status: 'approved', nombre: 'Vicente Bareientos Diaz', codigo: '2078VBD-2024',
+      sexo: 'Masculino', categoria: '-66 kg', division: 'Open', modalidad: 'Classic', club: 'Iron Forces Powerlifting', timestamp: { seconds: 1 } };
+    await q.addInitScript(([f, auth]) => { window.__FAKE = f; window.__AUTH = auth; },
+      [{ admins: [{ id: 'u1', role: 'owner', email: 'a@b.cl', nombre: 'Prueba' }], eventos: [EV], inscripciones: [INS], inscripciones_private: [] }, { uid: 'u1', email: 'a@b.cl' }]);
+    await q.goto(`http://localhost:${PUERTO}/admin.html`, { waitUntil: 'domcontentloaded' });
+    await q.waitForFunction(() => typeof ST !== 'undefined' && ST.adminInfo && document.querySelector('.side-btn'), null, { timeout: 25000 });
+    await q.evaluate(id => { go('nominas'); ST.filterEv = id; render(); }, EV.id);
+    await q.waitForFunction(() => [...document.querySelectorAll('#app span.editable')].some(x => /Bareientos/.test(x.textContent)), null, { timeout: 15000 }).catch(() => {});
+    const hay = await q.evaluate(() => { const x = [...document.querySelectorAll('#app span.editable')].find(x => /Bareientos/.test(x.textContent)); if (x) x.click(); return !!x; });
+    ok(hay, 'el nombre es clickeable en la nómina');
+    await q.waitForSelector('#emInp', { timeout: 5000 }).catch(() => {});
+    const w = await q.evaluate(async () => {
+      const i = document.getElementById('emInp'); if (!i) return null;
+      i.value = '  Vicente  Javier Barrientos Diaz '; window.__ESCRITO = [];
+      document.getElementById('emSave').click();
+      await new Promise(r => setTimeout(r, 600));
+      return (window.__ESCRITO || []).filter(x => x.col === 'inscripciones').map(x => x.id + '|' + (x.d && x.d.nombre));
+    });
+    ok(w && w.some(x => x === 'regional_centro_2026_2078VBD-2024|Vicente Javier Barrientos Diaz'), 'y se guarda en su inscripción, sin espacios de más (' + JSON.stringify(w) + ')');
+    await ctx.close();
+  }
 
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.slice(0, 2).join(' | ') : ''));
   await b.close();

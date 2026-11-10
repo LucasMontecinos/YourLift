@@ -54,7 +54,7 @@ window.openEditModal=function(title,field,currentValue,onSave){
   inner+=`</div><div class="modal-btns"><button class="btn btn-d" onclick="this.closest('.modal').remove()">CANCELAR</button><button class="btn btn-p" id="emSave">GUARDAR</button></div></div>`;
   m.innerHTML=inner;
   document.body.appendChild(m);
-  setTimeout(()=>document.getElementById('emInp').focus(),50);
+  setTimeout(()=>{ const el=document.getElementById('emInp'); if(el)el.focus(); },50);   // (si ya se cerró, nada)
   document.getElementById('emSave').onclick=async()=>{
     const v=document.getElementById('emInp').value;
     if(v===currentValue){m.remove();return}
@@ -68,6 +68,8 @@ window.editInsc=async function(insId,field){
   const ins=ST.inscripciones.find(x=>x.id===insId);if(!ins)return;
   const cur=ins[field]||'';
   openEditModal(`Editar ${field} de ${ins.nombre}`,field,cur,async(nv)=>{
+    // El nombre, sin espacios de más y nunca vacío.
+    if(field==='nombre'){ nv=String(nv||'').trim().replace(/\s+/g,' '); if(!nv){showToast('El nombre no puede quedar vacío',null,true);return;} }
     if(nv===cur)return;
     const old=cur;
     try{

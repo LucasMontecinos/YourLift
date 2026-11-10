@@ -219,7 +219,10 @@ function renderNominas(){
               : `<span style="color:var(--muted);font-size:11px;opacity:.5">—</span>`);
           return `<tr>
             <td style="color:var(--muted);font-family:Oswald">${idx+1}</td>
-            <td>${esc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${esc(i.rut||'')}</span></td>
+            ${/* El nombre también se corrige con un click, como el club o la
+                  categoría. Llega mal escrito ("Vicente Bareientos Diaz") y el
+                  livecast toma la corrección solo (por el código del atleta). */''}
+            <td><span class="${cls}" ${click('nombre')} title="${editable?'Click para corregir el nombre':''}">${esc(i.nombre)}</span><br><span style="font-size:9px;color:var(--muted)">${esc(i.rut||'')}</span></td>
             <td><span class="${cls}" ${click('sexo')}>${esc(i.sexo||'?')}</span></td>
             <td><span class="${cls}" ${click('division')}>${esc(i.division||'—')}</span></td>
             <td><span class="${cls}" ${click('categoria')}>${esc(i.categoria||'—')}</span></td>
