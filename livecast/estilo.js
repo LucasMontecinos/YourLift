@@ -85,8 +85,8 @@ function _estiloAplicar(){
 const _PV_PRIM={ink:'#15110E',wood:'#8B5530',woodL:'#C0864C',leaf:'#3E9A4A',leafL:'#69BE6C',leafD:'#246B30',
   pink:'#F28AAE',pinkL:'#F9BDD2',pinkD:'#DC6890',pollen:'#F6C744',cream:'#FFF4E6'};
 // Lirio: tallos y hojas verde azulado, lirios vino, sin contorno negro.
-const _PV_LIRIO={ink:'#5A0F1E',wood:'#1F6E5E',woodL:'#2F8A75',leaf:'#1F6E5E',leafL:'#2F8A75',leafD:'#174E43',
-  pink:'#8C1D2F',pinkL:'#AE3346',pinkD:'#5E0F1D',pollen:'#E2B866',cream:'#F6EEDF'};
+const _PV_LIRIO={ink:'#4C0116',wood:'#0B5047',woodL:'#17695D',leaf:'#0B5047',leafL:'#17695D',leafD:'#073A33',
+  pink:'#740221',pinkL:'#93183A',pinkD:'#4C0116',pollen:'#E2B866',cream:'#F1E2BD'};
 const _PV=Object.assign({},_PV_PRIM);
 function _pvRand(seed){ let a=seed>>>0||1; return ()=>{ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 function _pvTallo(d,w){
@@ -256,7 +256,7 @@ function _pvPerfil(d){
     +'<div class="pvPf-marco">'+_pvMarco()+'</div>'
     +'<div class="pvPf-esc" style="transform:translate(-50%,-50%) scale('+k.toFixed(4)+')">'
       +'<div class="txCascade pvPf-in">'
-        +'<div class="pvPf-foto"><div class="pvPf-ph" style="background:'+(/1a2e4f/.test(d.mediaBg||'')||!d.mediaBg?(_pvLirio()?'linear-gradient(180deg,#EFE3CC,#E2D2B2)':'linear-gradient(180deg,#5BB8CD,#2B8AA3)'):d.mediaBg)+'">'+(d.mediaHtml||'')+'</div></div>'
+        +'<div class="pvPf-foto"><div class="pvPf-ph" style="background:'+(/1a2e4f/.test(d.mediaBg||'')||!d.mediaBg?(_pvLirio()?'linear-gradient(180deg,#EBD8AA,#DFCB9A)':'linear-gradient(180deg,#5BB8CD,#2B8AA3)'):d.mediaBg)+'">'+(d.mediaHtml||'')+'</div></div>'
         +'<div class="pvPf-info">'
           +'<div class="pvPf-nombre">'+(d.nombre||'')+'</div>'
           +(club?'<div class="pvPf-club">'+club[1]+'</div>':'')

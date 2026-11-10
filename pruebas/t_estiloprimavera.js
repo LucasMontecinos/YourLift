@@ -123,7 +123,7 @@ const MONTAR = (estilo) => {
     await montar(p, 'lirio');
     const lr = await p.evaluate(() => { window._SCREEN_STATE = { mode: 'intentos', flights: null, fondo: 'yourlift', luces: false }; window._piSelected = null; renderTxWidget();
       return ['liftLabel', 'subtitle', 'next'].map(k => { const el = document.querySelector('.pi-block[data-pi-key="' + k + '"]>.pi-inner>*'); return el ? getComputedStyle(el).backgroundColor : 'no'; }); });
-    ok(lr.every(c => c === 'rgb(140, 29, 47)'), 'Lirio: los datos de los cargadores y SIGUIENTE en recuadro rojo vino (' + lr.join(' · ') + ')');
+    ok(lr.every(c => c === 'rgb(116, 2, 33)'), 'Lirio: los datos de los cargadores y SIGUIENTE en recuadro rojo vino (' + lr.join(' · ') + ')');
     await ctx.close();
   }
 
@@ -178,12 +178,12 @@ const MONTAR = (estilo) => {
     ok(r.fam === 'primavera' && r.v === 'lirio', 'usa las piezas de Primavera con su variante (' + r.fam + '/' + r.v + ')');
     ok(r.lirio, 'la rama del marcador lleva lirios');
     ok(/estilos\/primavera\/logo\.webp/.test(r.logo), 'y el logo del campeonato, el mismo de siempre');
-    ok(/142, 30, 49/.test(r.head) && /Anton/.test(r.fuente), 'la barra del marcador es vino y la letra condensada');
+    ok(/130, 6, 42/.test(r.head) && /Anton/.test(r.fuente), 'la barra del marcador es vino y la letra condensada');
     const pf = await p.evaluate(() => {
       _txDirState = JSON.parse(JSON.stringify(TX_DIR_DEFAULT)); _txDirState.profile.active = true; _txDirLastSig = null; renderTxWidget();
       const el = document.querySelector('.pvPf'); return { fondo: el ? getComputedStyle(el).backgroundImage : '', lirios: !!document.querySelector('.pvPf-marco ellipse') };
     });
-    ok(/248, 241, 228/.test(pf.fondo) && pf.lirios, 'el perfil, en papel crema con lirios en las esquinas');
+    ok(/246, 235, 207/.test(pf.fondo) && pf.lirios, 'el perfil, en papel crema con lirios en las esquinas');
     const vuelta = await p.evaluate(() => {
       DATA.event.estilo = 'primavera'; _txDirLastSig = null; renderTxWidget();
       return { v: document.documentElement.getAttribute('data-estilo-var'), lirios: !!document.querySelector('.pvPf-marco ellipse'), tinta: _PV.ink };
@@ -214,7 +214,7 @@ const MONTAR = (estilo) => {
     const body = await t.p.evaluate(() => { _txDirState = JSON.parse(JSON.stringify(TX_DIR_DEFAULT)); _txDirState.scoreboard.active = true; _txDirLastSig = null; renderTxWidget();
       const b = document.querySelector('#txWidget .pvSb-body'), n = document.querySelector('#txWidget .pvSb-name');
       return { fondo: b ? getComputedStyle(b).backgroundImage : '', nombre: n ? getComputedStyle(n).color : '' }; });
-    ok(/251, 246, 236/.test(body.fondo) && body.nombre === 'rgb(140, 29, 47)', 'el marcador, crema con el nombre en vino');
+    ok(/248, 238, 214/.test(body.fondo) && body.nombre === 'rgb(116, 2, 33)', 'el marcador, crema con el nombre en vino');
     await t.ctx.close();
   }
 
@@ -229,9 +229,9 @@ const MONTAR = (estilo) => {
     const pv = await fondo('primavera', 'manage');
     ok(pv.body === 'rgb(12, 37, 45)' && /Lilita/.test(pv.tit), 'Primavera: turquesa oscuro y el título con la letra del estilo');
     const li = await fondo('lirio', 'director');
-    ok(li.body === 'rgb(42, 7, 16)' && /Anton/.test(li.tit), 'Lirio: Control TX en vino oscuro, título en Anton');
+    ok(li.body === 'rgb(36, 0, 12)' && /Anton/.test(li.tit), 'Lirio: Control TX en vino oscuro, título en Anton');
     const cr = await fondo('liriocrema', 'results');
-    ok(cr.tema === 'dia' && cr.body === 'rgb(241, 231, 211)', 'Lirio crema: Resultados claro (papel crema)');
+    ok(cr.tema === 'dia' && cr.body === 'rgb(241, 226, 189)', 'Lirio crema: Resultados claro (papel crema)');
     await ctx.close();
   }
 
