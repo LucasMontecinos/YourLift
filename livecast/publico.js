@@ -527,7 +527,7 @@ function renderAtletaInfo(){
     // nulo y quedaban con las iniciales aunque su foto estuviera cargada: vive en
     // la nómina del Sudamericano, que se busca por nombre. De los 416 atletas,
     // 231 tienen foto ahí.
-    const fotoUrl=(db==null?void 0:db.foto_url)||(_fotoSudaFor(a)||{}).foto_url||'';
+    const fotoUrl=(db==null?void 0:db.foto_url)||(_fotoAbiertoFor(a)||{}).foto_url||(_fotoSudaFor(a)||{}).foto_url||'';
     h+='<div style="width:64px;height:64px;border-radius:12px;background:var(--bg);border:2px solid '+(fotoUrl?'rgba(212,168,67,.5)':'var(--border)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;overflow:hidden">';
     h+='<span style="font-family:Oswald;font-size:22px;font-weight:700;color:var(--border);position:absolute">'+initials+'</span>';
     if(fotoUrl){

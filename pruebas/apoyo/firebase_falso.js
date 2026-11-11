@@ -6,6 +6,8 @@
 //   window.__AUTH      usuario con sesión ({uid, email}); sin él, nadie entró
 //   window.__ESCRITO   lo que se escribió: [{op, col, id, d}] (d = los datos; un
 //                      campo borrado con deleteField() queda en null)
+//   window.__URL_DE    (opcional) ruta de Storage → enlace que da getDownloadURL
+//   window.__SUBIDO    rutas que se subieron a Storage; window.__BORRADO, las borradas
 //
 // Uso:
 //   const { montarFirebase } = require('./apoyo/firebase_falso');
@@ -53,7 +55,11 @@ const FIRESTORE = `
   export const serverTimestamp=()=>0; export const increment=n=>n; export const arrayUnion=(...a)=>a;
   // Lo que se escribe dentro de una transacción o de un lote también se anota.
   const E=r=>L({op:'escribe',col:r.__col,id:r.__id,n:0});
-  export const writeBatch=()=>({set(r,d){E(r);W('set',r,d);return this},update(r,d){E(r);W('update',r,d);return this},delete(r){W('delete',r);return this},commit:async()=>{}});
+  // window.__FALLA_LOTE(ops): si devuelve un error, el commit del lote falla con
+  // él (así se prueba qué hace una página cuando las reglas rechazan algo).
+  export const writeBatch=()=>{const ops=[];return {set(r,d){E(r);W('set',r,d);ops.push({col:r.__col,id:r.__id,d:JSON.parse(JSON.stringify(d))});return this},
+    update(r,d){E(r);W('update',r,d);ops.push({col:r.__col,id:r.__id,d:JSON.parse(JSON.stringify(d))});return this},delete(r){W('delete',r);return this},
+    commit:async()=>{const f=globalThis.__FALLA_LOTE;const e=typeof f==='function'?f(ops):null;if(e)throw e;}};};
   export const runTransaction=async(_d,fn)=>fn({get:async r=>getDoc(r),set(r,d){E(r);W('set',r,d)},update(r,d){E(r);W('update',r,d)}});
   export const Timestamp={now:()=>({seconds:0})};`;
 
@@ -68,8 +74,11 @@ const MODULOS = {
     export const setPersistence=async()=>{}; export const browserLocalPersistence={};`,
   'firebase-firestore.js': FIRESTORE,
   'firebase-storage.js': `
-    export const getStorage=()=>({}); export const ref=(_s,p)=>({fullPath:p||''}); export const uploadBytes=async(r)=>({ref:r,metadata:{fullPath:r&&r.fullPath}});
-    export const getDownloadURL=async()=>''; export const deleteObject=async()=>{}; export const listAll=async()=>({items:[],prefixes:[]});`,
+    export const getStorage=()=>({}); export const ref=(_s,p)=>({fullPath:p||''});
+    export const uploadBytes=async(r)=>{(globalThis.__SUBIDO=globalThis.__SUBIDO||[]).push(r&&r.fullPath);return {ref:r,metadata:{fullPath:r&&r.fullPath}};};
+    export const getDownloadURL=async(r)=>(typeof globalThis.__URL_DE==='function'?globalThis.__URL_DE(r&&r.fullPath):'');
+    export const deleteObject=async(r)=>{(globalThis.__BORRADO=globalThis.__BORRADO||[]).push(r&&r.fullPath);};
+    export const listAll=async()=>({items:[],prefixes:[]});`,
   'firebase-functions.js': `export const getFunctions=()=>({}); export const httpsCallable=()=>async()=>({data:{}});`,
 };
 

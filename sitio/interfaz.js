@@ -1036,7 +1036,7 @@ function renderEntrenadoresPub(){
 function renderTerminos(){
   // Va acá adentro y no como constante del archivo: la página se puede dibujar
   // (con #privacidad) antes de que el archivo termine de cargar.
-  const POLITICA_VIGENTE='27 de octubre de 2026';
+  const POLITICA_VIGENTE='11 de noviembre de 2026';
   const sec=(title,body,id)=>`
     <div ${id?`id="${id}" `:''}style="margin-bottom:28px">
       <div style="font-family:Oswald;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--gold);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(212,168,67,.2)">${title}</div>
@@ -1080,7 +1080,7 @@ function renderTerminos(){
      'El correo, 5 años después del campeonato'],
     ['Campeonatos abiertos (los que no son de la federación): nombre, correo, teléfono, fecha de nacimiento, club, género, división, categoría, modalidad, polera y talla, foto y comprobante de pago',
      'Inscribirte en ese campeonato, revisar el pago y entregar la polera. No se pide RUT ni código de atleta',
-     'Base de datos y carpeta privadas (Google Firebase); nombre, club, división y categoría salen en la nómina y la transmisión del campeonato',
+     'Base de datos y carpeta privadas (Google Firebase); nombre, club, división y categoría salen en la nómina y la transmisión del campeonato, y la foto también si lo autorizas y la organización la acepta',
      'La organización del campeonato abierto y soporte de YourLift SpA',
      'Los datos de contacto, la foto y el comprobante, hasta 12 meses después del campeonato'],
     ['Navegación',
@@ -1166,7 +1166,7 @@ function renderTerminos(){
 
     ${sec('10. CAMPEONATOS ABIERTOS',`
       Algunos campeonatos que se inscriben en YourLift ${b('no son de la federación')}: los organiza un club u otra entidad y se puede inscribir cualquiera. Se reconocen porque su formulario dice ${b('Campeonato abierto')} y no pide RUT ni código de atleta.<br><br>
-      En esos campeonatos el ${b('responsable de tus datos es su organización')}, la que aparece en el formulario; YourLift SpA opera la plataforma por su encargo. Tu inscripción ${b('no entra a la base de atletas de FECHIPO, al ranking ni a los récords')}. Tu nombre, club, división, categoría y resultados se ven en la nómina y la transmisión de ese campeonato; tu correo, teléfono, fecha de nacimiento, foto y comprobante los ve solo la organización y se borran a más tardar 12 meses después del campeonato. Para ejercer tus derechos sobre esos datos, usa el mismo formulario del punto 9 e indica el campeonato.
+      En esos campeonatos el ${b('responsable de tus datos es su organización')}, la que aparece en el formulario; YourLift SpA opera la plataforma por su encargo. Tu inscripción ${b('no entra a la base de atletas de FECHIPO, al ranking ni a los récords')}. Tu nombre, club, división, categoría y resultados se ven en la nómina y la transmisión de ese campeonato; tu correo, teléfono, fecha de nacimiento, foto y comprobante los ve solo la organización y se borran a más tardar 12 meses después del campeonato. Tu foto sale en la nómina y la transmisión solo si lo autorizas en el formulario (es opcional) y la organización la acepta; puedes pedir que la saquen cuando quieras. Para ejercer tus derechos sobre esos datos, usa el mismo formulario del punto 9 e indica el campeonato.
     `)}
 
     ${sec('11. CAMBIOS A ESTA POLÍTICA',`

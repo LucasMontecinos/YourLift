@@ -5494,6 +5494,13 @@ async function autoCloseOverdueEventos(){
 //                                     polera, talla, monto, foto y comprobante.
 //                                     Solo quien ve datos personales.
 //
+// La foto del atleta es privada. Sale en la nómina del sitio y en la
+// transmisión solo si el atleta lo autorizó (fotoAutoriza: la casilla opcional
+// del formulario, o se lo dijo a la organización) Y el admin la revisó y la
+// aceptó en Nóminas. Al aceptarla se copia a athlete_photos/ y el enlace queda
+// en inscripciones_abiertas/{id}.fotoUrl; al rechazarla o quitarla se borra la
+// copia.
+//
 // La configuración (precios, polera, datos de transferencia) va en el mismo
 // documento del campeonato: eventos/{id}.abierto y eventos/{id}.ab.
 
@@ -5620,7 +5627,95 @@ async function _abCargar(evId){
     ST.abLista=r.lista; ST.abSinPriv=r.sinPriv;
   }catch(e){ ST.abLista=[]; showToast('No se pudieron leer las inscripciones: '+(e.code||e.message),null,true); }
   render();
+  // Las fotos (privadas) se piden aparte, para verlas en miniatura al revisarlas.
+  if(ST.abLista&&ST.abLista.length&&!ST.abSinPriv){
+    const l=ST.abLista;
+    await Promise.all(l.filter(i=>i._rutas.fotoAtleta).map(async i=>{
+      const t={x:{docs:{fotoAtleta:i._rutas.fotoAtleta}}};
+      try{ await _resolverArchivos(t); }catch(e){}
+      const u=t.x.docs.fotoAtleta;
+      if(u&&!YLPrivacidad.esRutaArchivo(u))i._fotoVer=u;
+    }));
+    if(ST.abLista===l)render();
+  }
 }
+
+// ── La foto en la nómina: revisarla y aceptarla ─────────────
+// 'publicada' (aceptada, sale en la nómina), 'rechazada', 'autorizo' (marcó la
+// casilla, falta revisarla), 'sinautorizar' (subió foto, no marcó la casilla) o
+// 'sinfoto'.
+function _abFotoEstado(i){
+  if(i.fotoUrl)return 'publicada';
+  if(i.fotoEstado==='rechazada')return 'rechazada';
+  if(!i._rutas||!i._rutas.fotoAtleta)return i.fotoAutoriza?'autorizo':'sinfoto';
+  return i.fotoAutoriza?'autorizo':'sinautorizar';
+}
+function _abFotosPorRevisar(l){ return (l||[]).filter(i=>i.status!=='rejected'&&_abFotoEstado(i)==='autorizo'&&i._rutas&&i._rutas.fotoAtleta).length; }
+async function _abBorrarFotoPublica(i){
+  if(!i.fotoRuta)return;
+  try{ await deleteObject(storageRef(getStorage(app),i.fotoRuta)); }
+  catch(e){ if(e.code!=='storage/object-not-found')console.warn('[abierto] foto pública',i.fotoRuta,e.code||e.message); }
+}
+// La celda de la foto, en Nóminas y en Ver inscritos.
+function _abFotoCelda(i){
+  const est=_abFotoEstado(i);
+  const b=(t,f,col)=>`<button onclick="${f}" style="font-size:10px;padding:3px 8px;border-radius:5px;border:1px solid ${col};background:transparent;color:${col};cursor:pointer;font-family:inherit">${t}</button>`;
+  const src=est==='publicada'?i.fotoUrl:i._fotoVer;
+  const borde=est==='publicada'?'2px solid var(--green)':est==='autorizo'?'2px solid var(--gold)':'1px solid var(--border)';
+  const mini=src?`<img src="${_abEsc(src)}" alt="" onclick="${est==='publicada'?`window.open('${_abEsc(i.fotoUrl)}','_blank')`:`abAbrir('${i.id}','fotoAtleta')`}" title="Ver grande"
+      style="width:46px;height:46px;border-radius:8px;object-fit:cover;border:${borde};cursor:zoom-in;flex:none;${est==='rechazada'?'opacity:.45;filter:grayscale(1)':''}">`
+    :`<div style="width:46px;height:46px;border-radius:8px;border:1px dashed var(--border);flex:none;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--muted)">${est==='sinfoto'?'sin foto':'…'}</div>`;
+  const txt={publicada:['En la nómina','var(--green)'],rechazada:['Rechazada','var(--red)'],autorizo:['Autorizó · por revisar','var(--gold)'],
+    sinautorizar:['No marcó que se publique','var(--muted)'],sinfoto:['Sin foto','var(--muted)']}[est];
+  const hayFoto=!!(i._rutas&&i._rutas.fotoAtleta);
+  let acc='';
+  if(ST.abSinPriv&&est!=='publicada')acc='';
+  else if(est==='publicada')acc=b('Quitar foto',`abFotoQuitar('${i.id}')`,'var(--red)');
+  else if(hayFoto)acc=b('Aceptar foto',`abFotoAceptar('${i.id}')`,'var(--green)')+(est==='rechazada'?'':' '+b('Rechazar foto',`abFotoQuitar('${i.id}')`,'var(--red)'));
+  return `<div style="display:flex;align-items:center;gap:8px;min-width:230px">${mini}<div>
+    <div style="font-size:10px;font-weight:700;color:${txt[1]};margin-bottom:4px">${txt[0]}</div>${acc}</div></div>`;
+}
+
+window.abFotoAceptar=async function(id){
+  const i=(ST.abLista||[]).find(x=>x.id===id); if(!i||!i._rutas.fotoAtleta)return;
+  if(!i.fotoAutoriza&&!confirm((i.nombre||'Este atleta')+' no marcó en el formulario que su foto puede salir en la nómina.\n\n¿Te autorizó a publicarla (por WhatsApp, correo o en persona)? Queda registrado que la organización tiene su autorización.\n\nAl aceptar, su foto se ve en la nómina del sitio y en la transmisión.'))return;
+  showToast('Publicando la foto…');
+  try{
+    await _resolverArchivos({x:i._p});
+    const u=i._p.docs.fotoAtleta;
+    if(!u||YLPrivacidad.esRutaArchivo(u))throw new Error('no se pudo abrir la foto');
+    const blob=await (await fetch(u)).blob();
+    const tipo=/^image\//.test(blob.type)?blob.type:'image/jpeg';
+    const ext=/webp/.test(tipo)?'webp':/png/.test(tipo)?'png':'jpg';
+    // El nombre del archivo no lleva el nombre de la persona: campeonato e id.
+    const ruta='athlete_photos/abierto_'+String(i.evento||ST.abListaEv).replace(/[^A-Za-z0-9_-]/g,'_')+'_'+id+'_'+Date.now()+'.'+ext;
+    const ref=storageRef(getStorage(app),ruta);
+    await uploadBytes(ref,blob,{contentType:tipo});
+    const url=await getDownloadURL(ref);
+    const upd={fotoUrl:url,fotoRuta:ruta,fotoEstado:'aceptada',fotoRevisadaTs:new Date().toISOString()};
+    if(!i.fotoAutoriza){ upd.fotoAutoriza=true; upd.fotoAutorizaTs=new Date().toISOString(); upd.fotoAutorizaVia='organizacion'; }
+    await _abBorrarFotoPublica(i);            // si había una copia anterior
+    await updateDoc(doc(db,'inscripciones_abiertas',id),upd);
+    Object.assign(i,upd);
+    await logAction('abierta_foto_aceptar',id,null,i.nombre||'');
+    showToast('Foto publicada: ya sale en la nómina');
+    render();
+  }catch(e){ showToast('No se pudo publicar la foto: '+(e.code||e.message),null,true); }
+};
+
+// Rechazarla (sin publicar) o quitarla de la nómina (ya publicada): se borra la
+// copia pública. La foto privada sigue donde estaba, para la organización.
+window.abFotoQuitar=async function(id){
+  const i=(ST.abLista||[]).find(x=>x.id===id); if(!i)return;
+  if(i.fotoUrl&&!confirm('¿Quitar la foto de '+(i.nombre||'')+' de la nómina y la transmisión?'))return;
+  try{
+    await _abBorrarFotoPublica(i);
+    await updateDoc(doc(db,'inscripciones_abiertas',id),{fotoEstado:'rechazada',fotoUrl:deleteField(),fotoRuta:deleteField(),fotoRevisadaTs:new Date().toISOString()});
+    delete i.fotoUrl; delete i.fotoRuta; i.fotoEstado='rechazada';
+    await logAction('abierta_foto_quitar',id,null,i.nombre||'');
+    render();
+  }catch(e){ showToast('No se pudo cambiar la foto: '+(e.code||e.message),null,true); }
+};
 // La lista se queda: la usa también Nóminas.
 window.abCerrar=function(){ ST.abVer=null; render(); };
 
@@ -5656,6 +5751,7 @@ window.abEliminar=async function(id){
   if(!confirm('¿Eliminar la inscripción de '+(i.nombre||'')+'?\n\nSe borran también su foto y su comprobante. No se puede deshacer.'))return;
   try{
     await _abBorrarArchivos(i);
+    await _abBorrarFotoPublica(i);
     await deleteDoc(doc(db,'inscripciones_abiertas_priv',id)).catch(()=>{});
     await deleteDoc(doc(db,'inscripciones_abiertas',id));
     await logAction('abierta_eliminar',id,i.nombre||'',null);
@@ -5668,15 +5764,20 @@ window.abEliminar=async function(id){
 // teléfono, fecha de nacimiento, foto y comprobante. Quedan el nombre, el club
 // y la categoría (la nómina y el acta del campeonato).
 window.abBorrarPersonales=async function(){
-  const evId=ST.abVer, l=(ST.abLista||[]).filter(i=>Object.keys(i._p||{}).length>1||Object.keys(i._rutas||{}).length);
+  const evId=ST.abVer, l=(ST.abLista||[]).filter(i=>Object.keys(i._p||{}).length>1||Object.keys(i._rutas||{}).length||i.fotoUrl);
   if(!l.length){ showToast('No quedan datos personales en este campeonato'); return; }
-  if(!confirm('Se borran el correo, teléfono, fecha de nacimiento, foto y comprobante de '+l.length+' inscripción(es).\n\nQuedan el nombre, club, categoría y estado. Hazlo cuando ya no necesites revisar pagos ni contactar a nadie.\n\nNo se puede deshacer. ¿Seguir?'))return;
+  if(!confirm('Se borran el correo, teléfono, fecha de nacimiento, foto (también la publicada en la nómina) y comprobante de '+l.length+' inscripción(es).\n\nQuedan el nombre, club, categoría y estado. Hazlo cuando ya no necesites revisar pagos ni contactar a nadie.\n\nNo se puede deshacer. ¿Seguir?'))return;
   let n=0;
   for(const i of l){
     try{
       await _abBorrarArchivos(i);
+      if(i.fotoUrl||i.fotoRuta){
+        await _abBorrarFotoPublica(i);
+        await updateDoc(doc(db,'inscripciones_abiertas',i.id),{fotoUrl:deleteField(),fotoRuta:deleteField()});
+        delete i.fotoUrl; delete i.fotoRuta;
+      }
       await deleteDoc(doc(db,'inscripciones_abiertas_priv',i.id));
-      i._p={docs:{}}; i._rutas={}; n++;
+      i._p={docs:{}}; i._rutas={}; i._fotoVer=''; n++;
     }catch(e){ console.warn('[abierto] borrar',i.id,e.code||e.message); }
   }
   await logAction('abierta_borrar_personales',evId,null,String(n));
@@ -5730,9 +5831,9 @@ function renderAbInscritos(){
   </div>
   <div class="card" style="padding:0;overflow-x:auto">
     ${!l.length?'<div style="padding:30px;text-align:center;color:var(--muted)">Todavía no hay inscripciones.</div>':`
-    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:980px">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1160px">
       <thead><tr style="text-align:left;color:var(--muted);font-size:10px;letter-spacing:.5px;text-transform:uppercase">
-        ${['#','Atleta','División · categoría','Modalidad','Club','Contacto','Polera','Pago','Archivos','Estado',''].map(t=>`<th style="padding:10px 8px;border-bottom:1px solid var(--border)">${t}</th>`).join('')}
+        ${['#','Atleta','División · categoría','Modalidad','Club','Contacto','Polera','Pago','Foto en la nómina','Comprobante','Estado',''].map(t=>`<th style="padding:10px 8px;border-bottom:1px solid var(--border)">${t}</th>`).join('')}
       </tr></thead>
       <tbody>${l.map((i,k)=>`<tr style="border-bottom:1px solid rgba(29,49,80,.4);${i.status==='rejected'?'opacity:.55':''}">
         <td style="padding:8px">${k+1}</td>
@@ -5743,7 +5844,8 @@ function renderAbInscritos(){
         <td style="padding:8px;font-size:11px">${_abEsc(i._p.correo||'')}<br><span style="color:var(--muted)">${_abEsc(i._p.telefono||'')}</span></td>
         <td style="padding:8px">${i._p.polera?'Sí · '+_abEsc(i._p.talla||'?'):'<span style="color:var(--muted)">No</span>'}</td>
         <td style="padding:8px">${i._p.monto?_abPesos(i._p.monto):''}</td>
-        <td style="padding:8px;white-space:nowrap">${i._p.docs.fotoAtleta?btn('Foto',`abAbrir('${i.id}','fotoAtleta')`,'#8ab4e8'):''} ${i._p.docs.comprobante?btn('Comprobante',`abAbrir('${i.id}','comprobante')`,'var(--gold)'):''}</td>
+        <td style="padding:8px">${_abFotoCelda(i)}</td>
+        <td style="padding:8px;white-space:nowrap">${i._p.docs.comprobante?btn('Comprobante',`abAbrir('${i.id}','comprobante')`,'var(--gold)'):''}</td>
         <td style="padding:8px">${pill(i.status)}</td>
         <td style="padding:8px;white-space:nowrap">
           ${i.status!=='approved'?btn('Aprobar',`abEstado('${i.id}','approved')`,'var(--green)'):''}
@@ -5758,8 +5860,9 @@ function renderAbInscritos(){
 
 // ── En Nóminas ───────────────────────────────────────────────
 // El campeonato abierto sale en el mismo selector que los de la federación, con
-// su nómina: lo que llenó cada atleta en el formulario. Lo de pagos, foto y
-// comprobante está en Campeonatos → Ver inscritos.
+// su nómina: lo que llenó cada atleta en el formulario, y su foto para revisarla
+// y aceptarla (sale en la nómina del sitio solo si el atleta lo autorizó y el
+// admin la acepta). Pagos y comprobantes están en Campeonatos → Ver inscritos.
 function _abNominaOpciones(){
   return (ST.eventos||[]).filter(e=>e.abierto===true&&e.status!=='archived');
 }
@@ -5772,6 +5875,7 @@ function renderNomAbierta(ev,selectHtml){
   return `
     <div class="h1">Nóminas</div>
     <p class="subtitle">Campeonato abierto · ${cargando?'cargando…':l.length+' atletas'} · no entra al padrón, al ranking ni a los récords</p>
+    ${!cargando&&_abFotosPorRevisar(l)?`<div class="card" style="border-left:3px solid var(--gold);font-size:12px;padding:10px 14px"><b style="color:var(--gold)">${_abFotosPorRevisar(l)} foto(s) por revisar.</b> Los atletas autorizaron que su foto salga en la nómina: revísala y acéptala (o recházala) en la columna Foto. Hasta que la aceptes no se publica. Tócala para verla grande.</div>`:''}
     <div class="search-box">
       ${selectHtml}
       <button class="btn btn-b" onclick="abExcel()" style="padding:8px 16px;font-size:12px" ${l.length?'':'disabled'}>Exportar Excel</button>
@@ -5779,9 +5883,10 @@ function renderNomAbierta(ev,selectHtml){
     </div>
     <div class="card" style="padding:0;overflow-x:auto">
       <table class="tbl">
-        <tr><th>#</th><th>Nombre</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Modalidad</th><th>Club</th><th>Correo</th><th>Teléfono</th>${c.polera?'<th>Polera</th>':''}<th>Estado</th><th></th></tr>
+        <tr><th>#</th><th>Foto</th><th>Nombre</th><th>Sexo</th><th>División</th><th>Cat.</th><th>Modalidad</th><th>Club</th><th>Correo</th><th>Teléfono</th>${c.polera?'<th>Polera</th>':''}<th>Estado</th><th></th></tr>
         ${l.map((i,k)=>`<tr>
           <td style="color:var(--muted);font-family:Oswald">${k+1}</td>
+          <td>${_abFotoCelda(i)}</td>
           <td>${_abEsc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${_abEsc(i._p.fechaNac||i.anioNac||'')}</span></td>
           <td>${_abEsc(i.sexo||'?')}</td>
           <td>${_abEsc(i.division||'—')}</td>

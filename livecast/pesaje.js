@@ -147,14 +147,48 @@ function _mediaKey(a){
   return 'lc_'+_ctry(a).toLowerCase()+'_'+nm;
 }
 
+// ── Campeonato abierto: la foto que el atleta autorizó publicar ─────────────
+// Sus atletas no tienen código ni perfil en la federación. Su foto sale de la
+// inscripción (inscripciones_abiertas/{id}.fotoUrl) y solo existe si el atleta
+// autorizó publicarla y el admin la aceptó en Nóminas (admin/abiertos.js). Se
+// escucha por campeonato, la primera vez que se busca una foto.
+window._AB_FOTOS={};
+let _abFotosEv=null, _abFotosUnsub=null;
+function _abNomKey(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(); }
+function _abFotosEscuchar(){
+  const ev=(typeof DATA!=='undefined'&&DATA&&DATA.event)||null, id=ev&&ev.id;
+  if(!id||_abFotosEv===id||!fbReady||!window._fb||!fbDB||!window._fb.query)return;
+  const meta=(window.LIVE_EVENT_META||{})[id];
+  if(!(meta&&meta.abierto)&&ev.abierto!==true)return;
+  if(_abFotosUnsub){ try{_abFotosUnsub();}catch(e){} }
+  _abFotosEv=id; window._AB_FOTOS={};
+  _abFotosUnsub=window._fb.onSnapshot(
+    window._fb.query(window._fb.collection(fbDB,'inscripciones_abiertas'),window._fb.where('evento','==',id)),
+    snap=>{
+      const m={};
+      snap.docs.forEach(d=>{ const v=d.data()||{};
+        if(v.status!=='rejected'&&/^https:\/\/firebasestorage\.googleapis\.com\//.test(v.fotoUrl||''))m[_abNomKey(v.nombre)]=v.fotoUrl; });
+      window._AB_FOTOS=m;
+      try{ if(typeof TX_MODE!=='undefined'&&TX_MODE){ _txDirLastSig=null; renderTxWidget(); } else R(); }catch(e){}
+    },
+    e=>console.warn('[livecast] fotos del campeonato abierto:',e.message));
+}
+function _fotoAbiertoFor(a){
+  _abFotosEscuchar();
+  const F=window._AB_FOTOS||{};
+  const u=a&&(F[_abNomKey(a.name)]||(a.nombreOrig&&F[_abNomKey(a.nombreOrig)]));
+  return u?{foto_url:u}:null;
+}
+
 // Foto/GIF efectivos de un atleta: base = foto de inscripción aprobada en Admin
 // (si existe), y encima se superpone lo que se haya subido puntualmente desde
 // livecast (foto o GIF distinto para la transmisión), si lo hay.
 function _lcMediaFor(a){
   const own=(a&&window._LC_MEDIA[_mediaKey(a)])||null;
   // Orden: lo que se subió puntualmente desde livecast > la foto del perfil (por
-  // RUT) > la foto de la nómina del Sudamericano (por nombre).
-  const admin=_adminFotoFor(a)||_fotoSudaFor(a);
+  // código) > la aceptada de un campeonato abierto > la foto de la nómina del
+  // Sudamericano (por nombre).
+  const admin=_adminFotoFor(a)||_fotoAbiertoFor(a)||_fotoSudaFor(a);
   if(!own&&!admin)return null;
   const merged=Object.assign({},admin?{foto_url:admin.foto_url}:{},own||{});
   if(!merged.foto_url&&admin&&admin.foto_url)merged.foto_url=admin.foto_url;

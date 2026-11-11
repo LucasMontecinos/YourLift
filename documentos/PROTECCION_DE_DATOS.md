@@ -1,7 +1,8 @@
 # Protección de datos personales en YourLift
 
 Ley N° 19.628, modificada por la Ley N° 21.719. Vigente desde el 22 de octubre de 2026
-(campeonatos abiertos: 26 de octubre de 2026; aviso de cookies: 27 de octubre de 2026).
+(campeonatos abiertos: 26 de octubre de 2026; aviso de cookies: 27 de octubre de 2026;
+foto opcional en la nómina de un abierto: 11 de noviembre de 2026).
 
 Este documento es el que se usa puertas adentro. Lo que se le promete al público
 está en la política de privacidad del sitio (yourlift.cl/#privacidad, código en
@@ -53,6 +54,7 @@ cuenta personal (rol owner, superadmin o admin). Las cuentas de competencia
 | Correos de handlers | `cronograma_priv/{evento}`, `handlers_priv/{id}` | Panel (y el entrenador que los anotó) |
 | Campeonato abierto: nombre, club, género, año, división, categoría, modalidad, estado | Firestore `inscripciones_abiertas/{id al azar}` | Público (la nómina del campeonato en el sitio y el livecast) |
 | Campeonato abierto: correo, teléfono, fecha de nacimiento, polera, talla, monto, foto y comprobante | Firestore `inscripciones_abiertas_priv/{mismo id}`, Storage `athlete_files/abierto_{evento}/` | Panel |
+| Campeonato abierto: foto aceptada para la nómina (solo si el atleta autorizó y el admin la aceptó) | Storage `athlete_photos/abierto_{evento}_{id}_…`, enlace en `inscripciones_abiertas/{id}.fotoUrl` | Público (nómina del sitio y transmisión) |
 | Solicitudes de titulares | Firestore `solicitudes_datos` | Panel |
 | Incidentes | Firestore `incidentes` | Panel |
 | Registro de acciones del panel | Firestore `audit_log` | Panel |
@@ -95,6 +97,15 @@ datos; YourLift SpA es su encargado. El formulario es `inscripcion_abierta.html?
   resultados (`competition_results`) ni actualiza récords.
 - Las reglas solo aceptan inscripciones para un campeonato con `abierto: true` y
   estado `open`, con listas cerradas de campos.
+- La foto es privada por defecto. Sale en la nómina y la transmisión solo si:
+  1. el atleta lo autoriza (casilla opcional del formulario, `fotoAutoriza`), o se
+     lo dijo a la organización: al aceptarla el panel pregunta y queda
+     `fotoAutorizaVia: 'organizacion'`; y
+  2. un admin la revisa y la acepta en Admin → Nóminas. Recién ahí se copia a
+     `athlete_photos/` y se guarda `fotoUrl`. "Rechazar foto" / "Quitar foto"
+     borran la copia pública (la privada queda para la organización).
+  Si el atleta pide que la saquen, se usa "Quitar foto". "Borrar datos personales"
+  también borra la copia pública.
 
 ## 4. Solicitudes de los titulares (acceso, rectificación, supresión, oposición, portabilidad, bloqueo)
 

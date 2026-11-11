@@ -31,7 +31,11 @@ function _applyNominas(all,sinPintar){
             born:i.anioNac||(String(i.fechaNac||'').match(/\d{4}/)||[''])[0],division:i.division||'',categoria:i.categoria||'',
             modalidad:i.modalidad||'',club:inscClub,
             universidad:i.universidad||'',status:i.status,
-            sortOrder:idx+1,flight:i.flight||''
+            sortOrder:idx+1,flight:i.flight||'',
+            // Campeonato abierto: la foto que el atleta autorizó publicar y el
+            // admin aceptó (admin/abiertos.js). Los de la federación no la traen:
+            // su foto sale del perfil (atleta_fotos, por código).
+            foto:/^https:\/\/firebasestorage\.googleapis\.com\//.test(i.fotoUrl||'')?i.fotoUrl:''
           };
           // Overlay: aplicar ediciones del admin (nombre, club, etc.) por código.
           const out=applyEditOverlay(base);
@@ -573,8 +577,8 @@ function _nomFotoDe(codigo,rut,nombre){
   return (cod&&(window.ATL_FOTOS||{})[cod])||'';
 }
 
-function _nomAvatar(nombre,codigo,rut){
-  const foto=_nomFotoDe(codigo,rut,nombre);
+function _nomAvatar(nombre,codigo,rut,fotoDirecta){
+  const foto=fotoDirecta||_nomFotoDe(codigo,rut,nombre);
   const ini=String(nombre||'').split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
   return `<span style="display:inline-flex;width:24px;height:24px;border-radius:50%;overflow:hidden;background:rgba(29,49,80,.5);border:1px solid ${foto?'rgba(212,168,67,.5)':'var(--border)'};vertical-align:middle;margin-right:7px;align-items:center;justify-content:center;flex-shrink:0">`
     +(foto?`<img src="${foto}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`
@@ -591,7 +595,7 @@ window.nomFichaEv=function(key){
   const ev=(NM&&NM.events||[]).find(e=>(e.id||e.name)===evk);
   const a=ev&&(ev.athletes||[]).find(x=>x.nombre===nombre);
   if(!a)return;
-  const cod=_nomCodDe(a.codigo||a.cod||'',a.rut||'',a.nombre||''), foto=_nomFotoDe(cod,'','');
+  const cod=_nomCodDe(a.codigo||a.cod||'',a.rut||'',a.nombre||''), foto=a.foto||_nomFotoDe(cod,'','');
   const ex=document.getElementById('nomFichaEvModal'); if(ex)ex.remove();
   const m=document.createElement('div'); m.id='nomFichaEvModal';
   m.style.cssText='position:fixed;inset:0;background:rgba(11,22,48,.55);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px;backdrop-filter:blur(3px)';
@@ -627,7 +631,7 @@ function _nomEvRows(ev){
       mod:a.modalidad||'',team:a.club||'—',teamHtml:a.club||'—',uni:a.universidad||'',
       _codigo:a.codigo||a.cod||'',_rut:a.rut||'',
       // Avatar + nombre clickeable: misma experiencia que la nómina del Sudamericano
-      nameHtml:_nomAvatar(a.nombre,a.codigo||a.cod||'',a.rut||'')
+      nameHtml:_nomAvatar(a.nombre,a.codigo||a.cod||'',a.rut||'',a.foto||'')
         +`<span onclick="nomFichaEv('${_nomEvKey(ev,a)}')" style="font-weight:${isPend?400:600};${isPend?'opacity:.75':''};cursor:pointer;border-bottom:1px dashed rgba(212,168,67,.4)" title="Ver ficha">${a.nombre}</span>`,
       estadoHtml:ev.fromFirebase?(a.status==='approved'
         ?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)"><i class=yl-i-check></i> OK</span>`

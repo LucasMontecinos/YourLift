@@ -123,6 +123,8 @@ window.dispatchEvent(new Event('fba-listo'));
 // · NO pide RUT ni código de atleta. Pide lo justo para inscribir, cobrar y
 //   entregar la polera: nombre, correo, teléfono, fecha de nacimiento, club,
 //   género, división, categoría, modalidad, polera y talla, foto y comprobante.
+//   La foto es privada; sale en la nómina y la transmisión solo si el atleta lo
+//   autoriza (casilla opcional) y la organización la acepta en admin → Nóminas.
 //
 // · NO toca la base de atletas, el ranking ni los récords. Lo que llega va a
 //   inscripciones_abiertas (nombre, club, categoría… lo que necesitan la nómina
@@ -158,7 +160,7 @@ const MAX_MB=10;
 const state={
   f:{nombre:'',correo:'',fechaNac:'',telefono:'',sexo:'',club:'',clubOtro:'',division:'',categoria:'',modalidad:'',polera:'',talla:''},
   archivos:{}, nombres:{}, vistas:{},
-  consiente:false, enviando:false, error:'', ok:false, intento:false
+  consiente:false, fotoPublica:false, enviando:false, error:'', ok:false, intento:false
 };
 
 function conf(){
@@ -225,6 +227,10 @@ window.setCampo=function(k,v,redibujar){
   if(redibujar)render(); else refrescarBoton();
 };
 window.setConsiente=function(v){ state.consiente=!!v; refrescarBoton(); };
+// Que la foto salga en la nómina y la transmisión es aparte y opcional: sin
+// marcarla la foto la ve solo la organización. Marcada, igual la revisa la
+// organización antes de publicarla (admin → Nóminas).
+window.setFotoPublica=function(v){ state.fotoPublica=!!v; };
 
 // Fotos de teléfono de 5-8 MB: se achican antes de subir (máx. 1600 px). Un
 // PDF va tal cual.
@@ -288,15 +294,30 @@ window.enviar=async function(){
       status:'pending', privacyConsent:true, privacyConsentTs:new Date().toISOString(),
       timestamp:FB.serverTimestamp()
     };
+    // La autorización para publicar la foto. La foto en sí sigue en la carpeta
+    // privada: sale en la nómina solo cuando la organización la acepta.
+    if(state.fotoPublica){ pub.fotoAutoriza=true; pub.fotoAutorizaTs=new Date().toISOString(); }
     const priv={
       evento:EV_ID, correo:f.correo.trim(), telefono:f.telefono.trim(), fechaNac:f.fechaNac,
       polera:!!(c.polera&&f.polera==='si'), talla:c.polera&&f.polera==='si'?f.talla:'',
       monto:total(), docs, ts:FB.serverTimestamp()
     };
-    const b=FB.writeBatch(FB.db);
-    b.set(FB.doc(FB.db,'inscripciones_abiertas',id),pub);
-    b.set(FB.doc(FB.db,'inscripciones_abiertas_priv',id),priv);
-    await b.commit();
+    const guardar=async()=>{
+      const b=FB.writeBatch(FB.db);
+      b.set(FB.doc(FB.db,'inscripciones_abiertas',id),pub);
+      b.set(FB.doc(FB.db,'inscripciones_abiertas_priv',id),priv);
+      await b.commit();
+    };
+    try{ await guardar(); }
+    catch(e){
+      // Si las reglas publicadas en Firebase todavía no conocen la autorización
+      // de la foto (reglas/firestore.rules se publica a mano), la inscripción no
+      // se pierde: va sin ella, y la organización puede aceptar la foto igual
+      // (admin → Nóminas le pregunta si el atleta autorizó).
+      if(!pub.fotoAutoriza||!/permission/i.test(String(e&&(e.code||e.message))))throw e;
+      delete pub.fotoAutoriza; delete pub.fotoAutorizaTs;
+      await guardar();
+    }
     state.ok=true; state.enviando=false; window.scrollTo(0,0); render();
   }catch(e){
     console.error('[enviar]',e);
@@ -457,6 +478,10 @@ function zona(k,titulo,ayuda,acepta){
 function seccionFoto(){
   return `<div class="card fade"><h2>Foto del atleta <span style="color:var(--accent)">*</span></h2>
     ${zona('fotoAtleta','Foto del atleta','Toca para subir una foto tuya de frente, con buena luz.<br>JPG o PNG, hasta '+MAX_MB+' MB.','image/*')}
+    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px;border:1px solid var(--border);border-radius:10px;margin-top:12px">
+      <input type="checkbox" id="fotoPublica" ${state.fotoPublica?'checked':''} onchange="setFotoPublica(this.checked)" style="margin-top:2px;width:16px;height:16px;flex-shrink:0">
+      <span style="font-size:12px;line-height:1.6">Autorizo que <b>mi foto salga en la nómina y en la transmisión</b> de este campeonato, después de que la organización la revise. <span class="muted">Es opcional: si no lo marcas, tu foto la ve solo la organización.</span></span>
+    </label>
   </div>`;
 }
 
@@ -490,7 +515,7 @@ function seccionEnviar(){
     <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px;border:1px solid ${state.intento&&!state.consiente?'var(--red)':'var(--border)'};border-radius:10px;margin-bottom:14px">
       <input type="checkbox" ${state.consiente?'checked':''} onchange="setConsiente(this.checked);if(state.intento)render()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0">
       <span style="font-size:12px;line-height:1.6">Autorizo a la organización de <b>${esc(EV.name)}</b>${org?' ('+esc(org)+')':''}, responsable de estos datos, y a YourLift SpA, que opera la plataforma por su encargo, a usarlos para gestionar mi inscripción, el pago y la polera.
-        Mi nombre, club, división, categoría y resultados salen en la nómina y en la transmisión del campeonato. Mi correo, teléfono, fecha de nacimiento, foto y comprobante no se publican: los ve solo la organización, y se borran a más tardar 12 meses después del campeonato.
+        Mi nombre, club, división, categoría y resultados salen en la nómina y en la transmisión del campeonato. Mi correo, teléfono, fecha de nacimiento y comprobante no se publican: los ve solo la organización, y se borran a más tardar 12 meses después del campeonato. Mi foto tampoco, salvo que haya marcado arriba que puede salir en la nómina y la transmisión.
         Más detalle en la <a href="index.html#privacidad" target="_blank" style="color:var(--gold)">Política de Privacidad</a>.</span>
     </label>
     ${state.intento&&falta.length?`<div class="alert alert-error">Falta completar: ${falta.map(esc).join(' · ')}.</div>`:''}
