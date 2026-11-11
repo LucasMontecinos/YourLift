@@ -71,11 +71,11 @@ const errs = [];
     const id = DATA.event.id, M = window.LIVE_EVENT_META;
     M[id] = Object.assign({}, M[id], { estilo: '' }); R();
     const normal = document.documentElement.getAttribute('data-estilo') || '';
-    M[id] = Object.assign({}, M[id], { estilo: 'liriocrema' }); R();
-    return { normal, sub: document.documentElement.getAttribute('data-estilo-sub') || '', guardado: localStorage.getItem('yl_estilo_' + id) };
+    M[id] = Object.assign({}, M[id], { estilo: 'primavera' }); R();
+    return { normal, est: document.documentElement.getAttribute('data-estilo') || '', var_: document.documentElement.getAttribute('data-estilo-var') || '', guardado: localStorage.getItem('yl_estilo_' + id) };
   });
   ok(c.normal === '', 'si el owner lo saca (Normal), la página vuelve a lo de siempre');
-  ok(c.sub === 'crema' && c.guardado === 'liriocrema', 'y si pone Lirio crema, cambia y se recuerda el nuevo');
+  ok(c.est === 'primavera' && c.var_ === '' && c.guardado === 'primavera', 'y si pone otro (Primavera), cambia y se recuerda el nuevo');
 
   console.log('\nEl link para mirar otro estilo sigue funcionando');
   const u = await abrir(ctx, '&estilo=normal');

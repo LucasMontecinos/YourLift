@@ -27,20 +27,35 @@
 // Primavera) y además data-estilo-var="lirio"; livecast/estilo_lirio.css cambia
 // lo que hace falta. El logo es el del campeonato, el mismo en los dos.
 //
-// Y "liriocrema", Lirio al revés, para comparar: más crema que vino. Los
-// paneles (marcador, tablas, la página del público, la tabla jornada, el
-// Control Remoto) son crema con letra vino. Es Lirio con una capa más: el
-// <html> lleva además data-estilo-sub="crema".
+// Lirio es UN estilo que mezcla los dos que se probaron (Lirio y "Lirio crema",
+// que ya no se ofrece), según quién mira:
+//   · lo que va a la transmisión (Control TX y los widgets de OBS: marcador,
+//     perfil, clasificación…) y las pestañas de operación (Control en Vivo,
+//     Control Remoto, Atletas y pesaje, Resultados del operador): burdeo;
+//   · lo que ve la gente: la página del público (Competencia en Vivo, y todo
+//     lo que mira alguien sin sesión) y la Pantalla Tarima (?tx=screen y la
+//     tabla jornada): crema. Ahí el <html> lleva además data-estilo-sub="crema"
+//     y la página del público va con el tema día (livecast/interfaz.js).
+// Un campeonato que quedó guardado con "liriocrema" se ve con este Lirio.
 //
-// Para mirar cómo queda sin cambiar el campeonato: ?estilo=primavera,
-// ?estilo=lirio o ?estilo=liriocrema en el link (y ?estilo=normal para verlo
-// sin estilo). Es solo para esa pestaña.
+// Para mirar cómo queda sin cambiar el campeonato: ?estilo=primavera o
+// ?estilo=lirio en el link (y ?estilo=normal para verlo sin estilo). Es solo
+// para esa pestaña.
 const ESTILOS={
   primavera:{nombre:'Primavera',logo:'estilos/primavera/logo.webp'},
   lirio:{nombre:'Lirio',familia:'primavera'},
-  liriocrema:{nombre:'Lirio crema',familia:'primavera',variante:'lirio',sub:'crema'},
 };
-const _ESTILO_URL=(()=>{try{return new URLSearchParams(location.search).get('estilo')||'';}catch(e){return '';}})();
+const _ESTILO_ALIAS={liriocrema:'lirio'};
+const _estiloNorm=v=>_ESTILO_ALIAS[v]||v;
+// ¿Esta pantalla la mira el público? Ahí Lirio va en crema.
+function _lirioCrema(){
+  try{
+    if(typeof TX_MODE!=='undefined'&&TX_MODE)return TX_MODE==='screen'||TX_MODE==='jornada';
+    if(typeof isAdmin!=='undefined'&&!isAdmin)return true;
+    return !!(typeof DATA!=='undefined'&&DATA&&DATA.phase==='liveView');
+  }catch(e){ return false; }
+}
+const _ESTILO_URL=(()=>{try{return _estiloNorm(new URLSearchParams(location.search).get('estilo')||'');}catch(e){return '';}})();
 // El estilo GUARDADO manda, y no se pierde. Lo que vale es la ficha del
 // campeonato (eventos/{id}.estilo), que el listener de eventos deja en
 // LIVE_EVENT_META. DATA.event no sirve de fuente: se reemplaza entero con cada
@@ -66,10 +81,11 @@ function _estiloId(){
   if(!ev)return '';
   const M=window.LIVE_EVENT_META||{};
   let e;
-  if(ev.id&&M[ev.id]){ e=M[ev.id].estilo||''; _estiloRecordar(ev.id,e); }   // la ficha del campeonato
+  if(ev.id&&M[ev.id]){ e=_estiloNorm(M[ev.id].estilo||''); _estiloRecordar(ev.id,e); }   // la ficha del campeonato
   else if(ev.name&&M[ev.name]&&M[ev.name].estilo) e=M[ev.name].estilo;
   else if(ev.estilo) e=ev.estilo;
   else e=_estiloGuardado(ev.id)||'';
+  e=_estiloNorm(e);
   return ESTILOS[e]?e:'';
 }
 // ¿El campeonato tiene escena propia? (Primavera o una de sus variantes)
@@ -82,13 +98,15 @@ let _estiloPuesto=null;
 // Se llama en cada dibujo (R y renderTxWidget): solo hace algo si cambió.
 function _estiloAplicar(){
   const id=_estiloId();
-  if(id===_estiloPuesto)return;
-  _estiloPuesto=id;
+  const vr0=(ESTILOS[id]&&ESTILOS[id].familia)?(ESTILOS[id].variante||id):'';
+  // Lirio: crema en lo que mira el público, burdeo en la transmisión y la operación.
+  const sub=(vr0==='lirio'&&_lirioCrema())?'crema':'';
+  if(id+'|'+sub===_estiloPuesto)return;
+  _estiloPuesto=id+'|'+sub;
   const r=document.documentElement;
   const fam=(ESTILOS[id]&&ESTILOS[id].familia)||id;
   if(fam)r.setAttribute('data-estilo',fam); else r.removeAttribute('data-estilo');
   const vr=(ESTILOS[id]&&ESTILOS[id].familia)?(ESTILOS[id].variante||id):'';
-  const sub=(ESTILOS[id]&&ESTILOS[id].sub)||'';
   if(vr)r.setAttribute('data-estilo-var',vr); else r.removeAttribute('data-estilo-var');
   if(sub)r.setAttribute('data-estilo-sub',sub); else r.removeAttribute('data-estilo-sub');
   // Los colores de los dibujos (ramas, flores, medallas) son los de la variante.

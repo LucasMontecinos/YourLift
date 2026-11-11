@@ -197,25 +197,55 @@ const MONTAR = (estilo) => {
     await x.ctx.close();
   }
 
-  console.log('\nLirio crema: Lirio al revés, más crema que vino');
+  console.log('\nLirio: burdeo en la transmisión y la operación, crema en lo que ve el público');
   {
     const { p, ctx } = await abrir('?evento=suda2026_fesupo_full');
-    await montar(p, 'liriocrema');
-    const r = await p.evaluate(() => { isAdmin = false; DATA.phase = 'liveView'; R();
+    await montar(p, 'lirio');
+    const ver = (adm, fase) => p.evaluate(([a, f]) => { isAdmin = a; DATA.phase = f; R();
       const h = document.documentElement, c = document.querySelector('#R .lv-cab .lv-tanda b');
       return { v: h.getAttribute('data-estilo-var'), sub: h.getAttribute('data-estilo-sub'), tema: h.getAttribute('data-tema'),
-        lirios: !!document.querySelector('#R .pvLv-rama ellipse'), tanda: c ? [getComputedStyle(c).color, getComputedStyle(c).backgroundColor] : null }; });
-    ok(r.v === 'lirio' && r.sub === 'crema' && r.lirios, 'son las piezas de Lirio, con la capa crema (' + r.v + '/' + r.sub + ')');
-    ok(r.tema === 'dia', 'la página del público va clara (tema día), así las etiquetas chicas se leen');
-    ok(r.tanda && r.tanda[0] !== r.tanda[1], 'y la tanda activa se lee (' + (r.tanda || []).join(' sobre ') + ')');
+        body: getComputedStyle(document.body).backgroundColor,
+        lirios: !!document.querySelector('#R .pvLv-rama ellipse'), tanda: c ? [getComputedStyle(c).color, getComputedStyle(c).backgroundColor] : null }; }, [adm, fase]);
+    const pub = await ver(false, 'liveView');
+    ok(pub.v === 'lirio' && pub.sub === 'crema' && pub.lirios, 'la página del público: Lirio en crema (' + pub.v + '/' + pub.sub + ')');
+    ok(pub.tema === 'dia', 'clara (tema día), así las etiquetas chicas se leen');
+    ok(pub.tanda && pub.tanda[0] !== pub.tanda[1], 'y la tanda activa se lee (' + (pub.tanda || []).join(' sobre ') + ')');
+    const res = await ver(false, 'results');
+    ok(res.sub === 'crema' && res.tema === 'dia', 'todo lo que mira el público va en crema (Resultados también)');
+    const adm = await ver(true, 'liveView');
+    ok(adm.sub === 'crema', 'el operador que abre la versión del público la ve igual que el público: crema');
+    const ctl = await ver(true, 'compete');
+    ok(!ctl.sub && ctl.tema === 'noche' && ctl.body === 'rgb(36, 0, 12)', 'Control en Vivo: burdeo (' + ctl.body + ')');
+    const rem = await ver(true, 'remote');
+    ok(!rem.sub && rem.tema === 'noche', 'Control Remoto: burdeo');
     await ctx.close();
+
     const t = await abrir('?tx=director&evento=suda2026_fesupo_full');
-    await montar(t.p, 'liriocrema');
-    const body = await t.p.evaluate(() => { _txDirState = JSON.parse(JSON.stringify(TX_DIR_DEFAULT)); _txDirState.scoreboard.active = true; _txDirLastSig = null; renderTxWidget();
+    await montar(t.p, 'lirio');
+    const sb = await t.p.evaluate(() => { _txDirState = JSON.parse(JSON.stringify(TX_DIR_DEFAULT)); _txDirState.scoreboard.active = true; _txDirLastSig = null; renderTxWidget();
       const b = document.querySelector('#txWidget .pvSb-body'), n = document.querySelector('#txWidget .pvSb-name');
-      return { fondo: b ? getComputedStyle(b).backgroundImage : '', nombre: n ? getComputedStyle(n).color : '' }; });
-    ok(/248, 238, 214/.test(body.fondo) && body.nombre === 'rgb(116, 2, 33)', 'el marcador, crema con el nombre en vino');
+      return { sub: document.documentElement.getAttribute('data-estilo-sub'), fondo: b ? getComputedStyle(b).backgroundImage + getComputedStyle(b).backgroundColor : '', nombre: n ? getComputedStyle(n).color : '' }; });
+    ok(!sb.sub && !/248, 238, 214/.test(sb.fondo) && sb.nombre !== 'rgb(116, 2, 33)', 'la transmisión (Control TX, marcador de OBS): burdeo, con el nombre claro');
     await t.ctx.close();
+
+    const s2 = await abrir('?tx=screen&evento=suda2026_fesupo_full');
+    await montar(s2.p, 'lirio');
+    const pt = await s2.p.evaluate(() => { window._SCREEN_STATE = { mode: 'intentos', flights: null, fondo: 'yourlift', luces: false }; window._piSelected = null; renderTxWidget();
+      return document.documentElement.getAttribute('data-estilo-sub'); });
+    ok(pt === 'crema', 'la Pantalla Tarima (la que mira la gente en el recinto): crema');
+    await s2.ctx.close();
+
+    // "Lirio crema" ya no se ofrece: un campeonato que lo tenía se ve con Lirio.
+    const v = await abrir('?evento=suda2026_fesupo_full');
+    await montar(v.p, 'liriocrema');
+    const vi = await v.p.evaluate(() => { isAdmin = true; DATA.phase = 'compete'; R(); const a = [_estiloId(), document.documentElement.getAttribute('data-estilo-sub')];
+      isAdmin = false; DATA.phase = 'liveView'; R(); return a.concat([document.documentElement.getAttribute('data-estilo-sub')]); });
+    ok(vi[0] === 'lirio' && !vi[1] && vi[2] === 'crema', 'un campeonato guardado con "Lirio crema" se ve con el Lirio de ahora (' + vi.join('/') + ')');
+    await v.ctx.close();
+    const u = await abrir('?evento=suda2026_fesupo_full&estilo=liriocrema');
+    await montar(u.p, '');
+    ok(await u.p.evaluate(() => _estiloId()) === 'lirio', 'y el link viejo ?estilo=liriocrema también');
+    await u.ctx.close();
   }
 
   console.log('\nLas pestañas de operación también llevan el estilo');
@@ -230,8 +260,10 @@ const MONTAR = (estilo) => {
     ok(pv.body === 'rgb(12, 37, 45)' && /Lilita/.test(pv.tit), 'Primavera: turquesa oscuro y el título con la letra del estilo');
     const li = await fondo('lirio', 'director');
     ok(li.body === 'rgb(36, 0, 12)' && /Anton/.test(li.tit), 'Lirio: Control TX en vino oscuro, título en Anton');
-    const cr = await fondo('liriocrema', 'results');
-    ok(cr.tema === 'dia' && cr.body === 'rgb(241, 226, 189)', 'Lirio crema: Resultados claro (papel crema)');
+    const re = await fondo('lirio', 'results');
+    ok(re.tema === 'noche' && re.body === 'rgb(36, 0, 12)', 'Lirio: Resultados del operador en burdeo');
+    const cr = await fondo('lirio', 'liveView');
+    ok(cr.tema === 'dia' && cr.body === 'rgb(241, 226, 189)', 'y la versión del público, en crema');
     await ctx.close();
   }
 
@@ -249,7 +281,7 @@ const MONTAR = (estilo) => {
     await p.evaluate(id => { go('campeonatos'); editEvento(id); }, EV.id);
     await p.waitForSelector('#ef_name');
     const radios = await p.evaluate(() => [...document.querySelectorAll('input[name="ef_estilo"]')].map(x => x.value + (x.checked ? '*' : '')).join(','));
-    if (ve) ok(radios === ',primavera,lirio*,liriocrema', 'el owner ve Normal, Primavera, Lirio y Lirio crema, con el del campeonato marcado (' + radios + ')');
+    if (ve) ok(radios === ',primavera,lirio*', 'el owner ve Normal, Primavera y Lirio (Lirio crema ya no), con el del campeonato marcado (' + radios + ')');
     else ok(radios === '', 'un admin que no es owner no ve el selector');
     const w = await p.evaluate(async () => { window.__ESCRITO = []; await saveEvento(); return (window.__ESCRITO.find(x => x.col === 'eventos') || {}).d; });
     ok(w && w.estilo === 'lirio', (ve ? 'el owner' : 'el admin') + ' guarda otros cambios y el estilo sigue en Lirio');
