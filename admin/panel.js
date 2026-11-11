@@ -42,12 +42,16 @@ function showToast(msg,undoFn=null,isError=false){
 
 window.showToast=showToast;
 
-window.openEditModal=function(title,field,currentValue,onSave){
-  const opts=FIELD_OPTS[field];
+// extra (opcional): {opciones:[…]} reemplaza las opciones de la federación (los
+// campeonatos abiertos usan las de su formulario); {clubs:[…]} suma clubes a la lista.
+window.openEditModal=function(title,field,currentValue,onSave,extra){
+  extra=extra||{};
+  let opts=extra.opciones||FIELD_OPTS[field];
+  if(opts&&currentValue&&opts.indexOf(currentValue)<0)opts=[currentValue].concat(opts);   // nunca cambiar sin querer
   const m=document.createElement('div');m.className='modal';
   let inner=`<div class="modal-c"><h3>${title}</h3><div class="field"><label>${field}</label>`;
   if(field==='club'){
-    const allClubs=[...new Set((ST.data||[]).map(a=>a.club).filter(Boolean))].sort();
+    const allClubs=[...new Set((ST.data||[]).map(a=>a.club).concat(extra.clubs||[]).filter(Boolean))].sort((x,y)=>String(x).localeCompare(String(y),'es'));
     inner+=`<input type="text" id="emInp" list="emClubList" value="${(currentValue||'').replace(/"/g,'&quot;')}" placeholder="Escribe o selecciona un club" autocomplete="off" style="width:100%">
     <datalist id="emClubList">${allClubs.map(c=>`<option value="${c.replace(/"/g,'&quot;')}">`).join('')}</datalist>`;
   } else if(opts){
@@ -5837,10 +5841,10 @@ function renderAbInscritos(){
       </tr></thead>
       <tbody>${l.map((i,k)=>`<tr style="border-bottom:1px solid rgba(29,49,80,.4);${i.status==='rejected'?'opacity:.55':''}">
         <td style="padding:8px">${k+1}</td>
-        <td style="padding:8px"><div style="font-weight:600">${_abEsc(i.nombre)}</div><div style="color:var(--muted);font-size:11px">${_abEsc(i.sexo||'')}${i._p.fechaNac?' · '+_abEsc(i._p.fechaNac):i.anioNac?' · '+_abEsc(i.anioNac):''}</div></td>
-        <td style="padding:8px">${_abEsc(i.division||'')}<br><span style="color:var(--muted)">${_abEsc(i.categoria||'')}</span></td>
-        <td style="padding:8px">${_abEsc(i.modalidad||'')}</td>
-        <td style="padding:8px">${_abEsc(_abClub(i))}</td>
+        <td style="padding:8px"><div style="font-weight:600">${_abEd(i,'nombre',_abEsc(i.nombre))}</div><div style="color:var(--muted);font-size:11px">${_abEd(i,'sexo',_abEsc(i.sexo||'?'))}${i._p.fechaNac?' · '+_abEsc(i._p.fechaNac):i.anioNac?' · '+_abEsc(i.anioNac):''}</div></td>
+        <td style="padding:8px">${_abEd(i,'division',_abEsc(i.division||'—'))}<br><span style="color:var(--muted)">${_abEd(i,'categoria',_abEsc(i.categoria||'—'))}</span></td>
+        <td style="padding:8px">${_abEd(i,'modalidad',_abEsc(i.modalidad||'—'))}</td>
+        <td style="padding:8px">${_abEd(i,'club',_abEsc(_abClub(i)||'—'))}</td>
         <td style="padding:8px;font-size:11px">${_abEsc(i._p.correo||'')}<br><span style="color:var(--muted)">${_abEsc(i._p.telefono||'')}</span></td>
         <td style="padding:8px">${i._p.polera?'Sí · '+_abEsc(i._p.talla||'?'):'<span style="color:var(--muted)">No</span>'}</td>
         <td style="padding:8px">${i._p.monto?_abPesos(i._p.monto):''}</td>
@@ -5857,6 +5861,51 @@ function renderAbInscritos(){
   </div>
   <p style="font-size:11px;color:var(--muted);line-height:1.6;max-width:760px">Aprobar = el pago está revisado. La nómina del sitio y el livecast muestran a las aprobadas y a las por revisar, igual que en un campeonato de la federación; las rechazadas no. Nada de esto pasa a la base de atletas, al ranking ni a los récords.</p>`;
 }
+
+// ── Corregir lo que llenó el atleta ─────────────────────────
+// Nombre, género, división, categoría, modalidad y club se corrigen con un
+// click, igual que en la nómina de la federación (antes no se podía: solo
+// aprobar o rechazar). Las opciones son las del formulario abierto, no las de la
+// federación. El club se escribe o se elige; "Independiente" es para quien no
+// tiene club. Lo personal (correo, teléfono, fecha) no se toca acá.
+const AB_DIVS=['Sub-Junior','Junior','Open','Master I','Master II','Master III','Master IV'];
+const AB_CATS={Masculino:['-53 kg','-59 kg','-66 kg','-74 kg','-83 kg','-93 kg','-105 kg','-120 kg','+120 kg'],
+               Femenino:['-43 kg','-47 kg','-52 kg','-57 kg','-63 kg','-69 kg','-76 kg','-84 kg','+84 kg']};
+const AB_EDITABLES={nombre:'nombre',sexo:'género',division:'división',categoria:'categoría',modalidad:'modalidad',club:'club'};
+function _abEd(i,campo,html){
+  return `<span class="editable" onclick="abEditar('${i.id}','${campo}')" title="Click para corregir">${html}</span>`;
+}
+window.abEditar=function(id,campo){
+  const i=(ST.abLista||[]).find(x=>x.id===id); if(!i||!AB_EDITABLES[campo])return;
+  const ev=(ST.eventos||[]).find(e=>e.id===(i.evento||ST.abListaEv))||{}, c=_abConf(ev);
+  const actual=campo==='club'?_abClub(i):(i[campo]||'');
+  const opciones={sexo:['Femenino','Masculino'],division:AB_DIVS,
+    categoria:AB_CATS[i.sexo]||AB_CATS.Femenino.concat(AB_CATS.Masculino),modalidad:c.mods}[campo];
+  const clubs=['Independiente'].concat((ST.abLista||[]).map(_abClub));
+  openEditModal(`Corregir ${AB_EDITABLES[campo]} de ${_abEsc(i.nombre||'')}`,campo,actual,async nv=>{
+    nv=String(nv||'').trim().replace(/\s+/g,' ');
+    if(!nv){ showToast('No puede quedar vacío',null,true); return; }
+    if(campo==='nombre'&&(nv.length<3||nv.length>120)){ showToast('El nombre tiene que tener entre 3 y 120 letras',null,true); return; }
+    if(nv===actual)return;
+    // El club escrito a mano iba en clubOtro (club: 'Otro'): al corregirlo queda
+    // como club, sin el "Otro".
+    const upd=campo==='club'?{club:nv,clubOtro:''}:{[campo]:nv};
+    const antes=campo==='club'?{club:i.club||'',clubOtro:i.clubOtro||''}:{[campo]:i[campo]||''};
+    try{
+      await updateDoc(doc(db,'inscripciones_abiertas',id),upd);
+      Object.assign(i,upd);
+      await logAction('abierta_editar',id+'.'+campo,actual,nv,{nombre:i.nombre||''});
+      render();
+      const aviso=campo==='sexo'&&i.categoria&&(AB_CATS[nv]||[]).indexOf(i.categoria)<0?' · revisa la categoría':'';
+      showToast(`${AB_EDITABLES[campo][0].toUpperCase()+AB_EDITABLES[campo].slice(1)} corregido: ${i.nombre||''}${aviso}`,async()=>{
+        await updateDoc(doc(db,'inscripciones_abiertas',id),antes);
+        Object.assign(i,antes);
+        await logAction('abierta_editar_deshacer',id+'.'+campo,nv,actual,{nombre:i.nombre||''});
+        render(); showToast('Cambio revertido');
+      });
+    }catch(e){ showToast('No se pudo corregir: '+(e.code||e.message),null,true); }
+  },{opciones,clubs});
+};
 
 // ── En Nóminas ───────────────────────────────────────────────
 // El campeonato abierto sale en el mismo selector que los de la federación, con
@@ -5887,12 +5936,12 @@ function renderNomAbierta(ev,selectHtml){
         ${l.map((i,k)=>`<tr>
           <td style="color:var(--muted);font-family:Oswald">${k+1}</td>
           <td>${_abFotoCelda(i)}</td>
-          <td>${_abEsc(i.nombre)}<br><span style="font-size:9px;color:var(--muted)">${_abEsc(i._p.fechaNac||i.anioNac||'')}</span></td>
-          <td>${_abEsc(i.sexo||'?')}</td>
-          <td>${_abEsc(i.division||'—')}</td>
-          <td>${_abEsc(i.categoria||'—')}</td>
-          <td>${_abEsc(i.modalidad||'—')}</td>
-          <td>${window.clubLogoImg?window.clubLogoImg(_abClub(i),18,'background:var(--bg);padding:1px;'):''} ${_abEsc(_abClub(i)||'—')}</td>
+          <td>${_abEd(i,'nombre',_abEsc(i.nombre))}<br><span style="font-size:9px;color:var(--muted)">${_abEsc(i._p.fechaNac||i.anioNac||'')}</span></td>
+          <td>${_abEd(i,'sexo',_abEsc(i.sexo||'?'))}</td>
+          <td>${_abEd(i,'division',_abEsc(i.division||'—'))}</td>
+          <td>${_abEd(i,'categoria',_abEsc(i.categoria||'—'))}</td>
+          <td>${_abEd(i,'modalidad',_abEsc(i.modalidad||'—'))}</td>
+          <td>${_abEd(i,'club',`${window.clubLogoImg?window.clubLogoImg(_abClub(i),18,'background:var(--bg);padding:1px;'):''} ${_abEsc(_abClub(i)||'—')}`)}</td>
           <td style="font-size:11px">${i._p.correo?`<span onclick="copiarCorreo('${_abEsc(i._p.correo)}')" title="Click para copiar" style="cursor:pointer;color:var(--blue);border-bottom:1px dashed rgba(96,165,250,.5)">${_abEsc(i._p.correo)}</span>`:'<span style="color:var(--muted)">—</span>'}</td>
           <td style="font-size:11px">${_abEsc(i._p.telefono||'—')}</td>
           ${c.polera?`<td style="font-size:11px">${i._p.polera?_abEsc(i._p.talla||'Sí'):'<span style="color:var(--muted)">No</span>'}</td>`:''}

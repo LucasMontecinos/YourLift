@@ -38,12 +38,16 @@ function showToast(msg,undoFn=null,isError=false){
 
 window.showToast=showToast;
 
-window.openEditModal=function(title,field,currentValue,onSave){
-  const opts=FIELD_OPTS[field];
+// extra (opcional): {opciones:[…]} reemplaza las opciones de la federación (los
+// campeonatos abiertos usan las de su formulario); {clubs:[…]} suma clubes a la lista.
+window.openEditModal=function(title,field,currentValue,onSave,extra){
+  extra=extra||{};
+  let opts=extra.opciones||FIELD_OPTS[field];
+  if(opts&&currentValue&&opts.indexOf(currentValue)<0)opts=[currentValue].concat(opts);   // nunca cambiar sin querer
   const m=document.createElement('div');m.className='modal';
   let inner=`<div class="modal-c"><h3>${title}</h3><div class="field"><label>${field}</label>`;
   if(field==='club'){
-    const allClubs=[...new Set((ST.data||[]).map(a=>a.club).filter(Boolean))].sort();
+    const allClubs=[...new Set((ST.data||[]).map(a=>a.club).concat(extra.clubs||[]).filter(Boolean))].sort((x,y)=>String(x).localeCompare(String(y),'es'));
     inner+=`<input type="text" id="emInp" list="emClubList" value="${(currentValue||'').replace(/"/g,'&quot;')}" placeholder="Escribe o selecciona un club" autocomplete="off" style="width:100%">
     <datalist id="emClubList">${allClubs.map(c=>`<option value="${c.replace(/"/g,'&quot;')}">`).join('')}</datalist>`;
   } else if(opts){
