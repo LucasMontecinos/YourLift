@@ -107,6 +107,59 @@ const MONTAR = `(o)=>{
     await ctx.close();
   }
 
+  // Todo lo que viste Lirio también sale en Panda: cada pieza con su caña de
+  // bambú (nada de lirios) y el logo del campeonato donde va el logo.
+  const bambu = s => /#5B8E2B/i.test(s) && !/#740221|#F28AAE/i.test(s);
+  console.log('\nTodo lo de la transmisión');
+  {
+    const { p, ctx } = await abrir('tx=director', 'panda', LOGO);
+    const ver = (st, fn) => p.evaluate(([s, f]) => {
+      _txDirState = JSON.parse(JSON.stringify(TX_DIR_DEFAULT));
+      Object.keys(s).forEach(k => { _txDirState[k] = Object.assign({}, _txDirState[k] || {}, s[k]); });
+      _txDirLastSig = null; renderTxWidget();
+      return eval('(' + f + ')')(document.getElementById('txWidget'));
+    }, [st, fn.toString()]);
+    const svgs = w => [...w.querySelectorAll('.pvDeco svg,.pvPf-marco svg')].map(s => s.innerHTML).join('');
+    const ta = await ver({ scoreboard: { active: true }, tablaActual: { active: true, until: 0 } }, w => ({ deco: [...w.querySelectorAll('.pvDeco-ta svg')].map(s => s.innerHTML).join(''), med: w.querySelectorAll('.pvTa svg.pvMedalla').length }));
+    ok(bambu(ta.deco) && ta.med === 3, 'tabla actual: caña de bambú y las medallas de los tres primeros');
+    const lb = await ver({ leaderboard: { active: true, cat: '63' } }, w => ({ deco: [...w.querySelectorAll('.pvDeco-lb svg,.pvDeco-lbv svg')].map(s => s.innerHTML).join(''), n: w.querySelectorAll('.pvDeco-lb svg,.pvDeco-lbv svg').length, logo: (w.querySelector('.pvLb img.pvLogo,.pvDeco ~ img.pvLogo,img.pvLogo') || {}).getAttribute ? w.querySelector('img.pvLogo').getAttribute('src') : '' }));
+    ok(lb.n === 2 && bambu(lb.deco), 'clasificación: bambú arriba y al costado');
+    ok(lb.logo === LOGO, 'clasificación: con el logo del campeonato');
+    const md = await ver({ medals: { active: true, cat: '63', sex: 'Mujer', div: 'Open', mod: 'classic', tipo: 'sq' } }, w => ({ deco: [...w.querySelectorAll('.pvDeco-md svg')].map(s => s.innerHTML).join(''), med: w.querySelectorAll('.pvMd-med svg.pvMedalla').length }));
+    ok(bambu(md.deco) && md.med > 0, 'medallero: bambú en el letrero y las medallas');
+    const pf = await ver({ profile: { active: true } }, w => ({ deco: [...w.querySelectorAll('.pvPf-marco svg')].map(s => s.innerHTML).join(''), logo: (w.querySelector('.pvPf-ev img.pvLogo') || { getAttribute: () => '' }).getAttribute('src') }));
+    ok(bambu(pf.deco) && pf.logo === LOGO, 'perfil: bambú en las esquinas y el logo del campeonato');
+    const jr = await p.evaluate(() => { const d = document.createElement('div'); d.innerHTML = renderTxJurado({ id: 2, res: 'n', card: 'red', lift: 'sq', round: 1 }); return (d.querySelector('.pvDeco-jr svg') || {}).innerHTML || ''; });
+    ok(bambu(jr), 'decisión del jurado: con su caña de bambú');
+    const ci = await p.evaluate(() => { DATA.athletes[0].att.sq[1] = { w: 135, r: null, cambios: 1, cambioTs: _ahora() };
+      _txDirState = JSON.parse(JSON.stringify(TX_DIR_DEFAULT)); _txDirState.scoreboard.active = true; _txDirState.cambioIntento.active = true; _txDirLastSig = null; renderTxWidget();
+      const c = document.querySelector('#txWidget .pvCi'); return c ? getComputedStyle(c).backgroundColor : ''; });
+    ok(ci === 'rgb(247, 246, 242)', 'cambio de intento: el cartel blanco (' + ci + ')');
+    await ctx.close();
+  }
+
+  console.log('\nTabla jornada, Control Remoto y la Competencia en Vivo del espectador en el teléfono');
+  {
+    const s = await abrir('tx=screen', 'panda', LOGO);
+    const jo = await s.p.evaluate(() => { window._SCREEN_STATE = { mode: 'jornada', flights: null, fondo: 'yourlift', luces: false }; renderTxWidget();
+      return { deco: (document.querySelector('.pvJo .pvJo-rama svg') || {}).innerHTML || '', logo: (document.querySelector('img.pvJo-logo') || { getAttribute: () => '' }).getAttribute('src') }; });
+    ok(bambu(jo.deco) && jo.logo === LOGO, 'tabla jornada: bambú en la franja y el logo del campeonato');
+    await s.ctx.close();
+    const ctx = await b.newContext(Object.assign({}, require('playwright').devices['iPhone 13']));
+    const p = await ctx.newPage(); p.on('pageerror', e => errs.push('teléfono: ' + e.message));
+    await p.goto(`http://localhost:${PUERTO}/livecast.html?evento=suda2026_fesupo_full&estilo=panda`, { waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => typeof DATA !== 'undefined' && typeof R === 'function' && DATA.athletes && DATA.athletes.length, null, { timeout: 25000 });
+    await p.waitForTimeout(1200);
+    await p.evaluate(([f, x]) => eval('(' + f + ')')(x), [MONTAR, { estilo: 'panda', logo: LOGO }]);
+    const lv = await p.evaluate(() => { isAdmin = false; DATA.phase = 'liveView'; R();
+      return { deco: (document.querySelector('.pvLv-rama svg') || {}).innerHTML || '', logo: (document.querySelector('.lv-cab .pvLv-logo') || { getAttribute: () => '' }).getAttribute('src'), sub: document.documentElement.getAttribute('data-estilo-sub') }; });
+    ok(bambu(lv.deco) && lv.logo === LOGO && lv.sub === 'crema', 'Competencia en Vivo del espectador (teléfono): blanca, con bambú y el logo');
+    const rm = await p.evaluate(() => { isAdmin = true; DATA.phase = 'remote'; R();
+      return { deco: (document.querySelector('.pvRm-rama svg') || {}).innerHTML || '', logo: (document.querySelector('.pvRm .pvRm-logo') || { getAttribute: () => '' }).getAttribute('src'), btn: document.querySelectorAll('.pvRm-btn').length }; });
+    ok(bambu(rm.deco) && rm.logo === LOGO && rm.btn >= 8, 'Control Remoto: bambú, el logo y los botones (' + rm.btn + ')');
+    await ctx.close();
+  }
+
   console.log('\nLirio sigue como estaba');
   {
     const { p, ctx } = await abrir('tx=director', 'lirio', LOGO);
