@@ -40,7 +40,9 @@ const MONTAR = `(modo)=>{
   const montar = m => p.evaluate(([f, x]) => eval('(' + f + ')')(x), [MONTAR, m]);
   const caja = sel => p.evaluate(s => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width, h: r.height }; }, sel);
 
-  async function probar(modo, clave, titulo) {
+  // dx, dy: hacia dónde se arrastran. En Intentos las luces arrancan a la
+  // izquierda (al lado de la punta de la barra): se llevan a la derecha.
+  async function probar(modo, clave, titulo, dx, dy) {
     console.log('\n' + titulo);
     await montar(modo);
     const sel = '.pi-block[data-pi-key="' + clave + '"]';
@@ -54,10 +56,10 @@ const MONTAR = `(modo)=>{
     // Arrastrar hacia arriba a la izquierda
     const c1 = await caja(sel);
     await p.mouse.move(c1.x, c1.y); await p.mouse.down();
-    await p.mouse.move(c1.x - 300, c1.y - 200, { steps: 8 }); await p.mouse.up();
+    await p.mouse.move(c1.x + dx, c1.y + dy, { steps: 8 }); await p.mouse.up();
     await p.waitForTimeout(150);
     const c2 = await caja(sel);
-    ok(c2.x < c1.x - 250 && c2.y < c1.y - 150, 'se arrastran a otro lugar (' + Math.round(c1.x) + ',' + Math.round(c1.y) + ' → ' + Math.round(c2.x) + ',' + Math.round(c2.y) + ')');
+    ok(Math.abs(c2.x - (c1.x + dx)) < 50 && Math.abs(c2.y - (c1.y + dy)) < 50, 'se arrastran a otro lugar (' + Math.round(c1.x) + ',' + Math.round(c1.y) + ' → ' + Math.round(c2.x) + ',' + Math.round(c2.y) + ')');
     // Agrandar con la manija
     const m = await caja('.pi-resize[data-pi-key="' + clave + '"]');
     await p.mouse.move(m.x, m.y); await p.mouse.down();
@@ -74,8 +76,8 @@ const MONTAR = `(modo)=>{
     await p.screenshot({ path: process.env.CAPTURA_DIR ? process.env.CAPTURA_DIR + '/luces_' + modo + '.png' : '/dev/null' }).catch(() => {});
   }
 
-  await probar('intentos', 'luces', 'Pantalla de Intentos');
-  await probar('luces', 'lLuces', 'Pantalla de Luces');
+  await probar('intentos', 'luces', 'Pantalla de Intentos', 300, 150);
+  await probar('luces', 'lLuces', 'Pantalla de Luces', -300, -200);
 
   // El reloj del intento (el que prende la Planilla) también es un bloque.
   async function probarReloj(modo, clave, titulo) {
@@ -89,10 +91,12 @@ const MONTAR = `(modo)=>{
     await p.mouse.click(c0.x, c0.y); await p.waitForTimeout(150);
     const c1 = await caja(sel);
     await p.mouse.move(c1.x, c1.y); await p.mouse.down();
-    await p.mouse.move(c1.x - 200, c1.y + 250, { steps: 8 }); await p.mouse.up();
+    // En Intentos el reloj arranca a la izquierda: se lleva a la derecha.
+    const rx = c1.x < 400 ? 200 : -200;
+    await p.mouse.move(c1.x + rx, c1.y + 150, { steps: 8 }); await p.mouse.up();
     await p.waitForTimeout(150);
     const c2 = await caja(sel);
-    ok(c2.x < c1.x - 150 && c2.y > c1.y + 200, 'se arrastra a otro lugar');
+    ok(Math.abs(c2.x - (c1.x + rx)) < 40 && c2.y > c1.y + 110, 'se arrastra a otro lugar');
     await p.evaluate(() => { window._piSelected = null; renderTxWidget(); });
     const txt = await p.evaluate(s => { const e = document.querySelector(s); return e ? e.textContent.trim() : ''; }, sel);
     ok(/^\d:\d\d$/.test(txt), 'y sigue marcando el tiempo ahí (' + txt + ')');
@@ -124,22 +128,25 @@ const MONTAR = `(modo)=>{
     await p.mouse.click(a.x, a.y); await p.waitForTimeout(120);
     const b0 = await caja(sel);
     await p.mouse.move(b0.x, b0.y); await p.mouse.down();
-    await p.mouse.move(b0.x + 120, b0.y + 90, { steps: 6 }); await p.mouse.up();
+    // Lo que está a la derecha (el peso) se corre a la izquierda: si no, la
+    // manija del tamaño queda fuera de la pantalla.
+    const hacia = antes.x > 50 ? -1 : 1;
+    await p.mouse.move(b0.x + 120 * hacia, b0.y + 90, { steps: 6 }); await p.mouse.up();
     const m = await caja('.pi-resize[data-pi-key="' + k + '"]');
     await p.mouse.move(m.x, m.y); await p.mouse.down();
     await p.mouse.move(m.x, m.y + 60, { steps: 4 }); await p.mouse.up();
     await p.evaluate(() => { window._piSelected = null; renderTxWidget(); });
     const des = await p.evaluate(x => Object.assign({}, _piPos(x)), k);
-    ok(des.x > antes.x + 5 && des.y > antes.y + 8 && des.scale > 115,
+    ok((des.x - antes.x) * hacia > 5 && des.y > antes.y + 8 && des.scale > antes.scale + 15,
       k + ': se mueve y se agranda (x ' + antes.x + '→' + des.x.toFixed(1) + ', y ' + antes.y + '→' + des.y.toFixed(1) + ', escala ' + Math.round(des.scale) + '%)');
   }
 
   console.log('\nRestablecer');
   await p.evaluate(() => lucesResetLayout());
   ok(await p.evaluate(() => window._piLayout.lLuces.x === 50 && window._piLayout.lLuces.scale === 100), 'el ⟲ de la pantalla de Luces la deja como venía');
-  ok(await p.evaluate(() => window._piLayout.luces.x !== 50), 'y no toca lo acomodado en Intentos');
+  ok(await p.evaluate(() => window._piLayout.luces.x !== PI_DEFAULT_LAYOUT.luces.x), 'y no toca lo acomodado en Intentos');
   await p.evaluate(() => piResetLayout());
-  ok(await p.evaluate(() => window._piLayout.luces.x === 50 && window._piLayout.luces.y === 89), 'Restablecer posiciones de Intentos vuelve las luces abajo al centro');
+  ok(await p.evaluate(() => window._piLayout.luces.x === PI_DEFAULT_LAYOUT.luces.x && window._piLayout.luces.y === PI_DEFAULT_LAYOUT.luces.y), 'Restablecer posiciones de Intentos vuelve las luces a su lugar de fábrica');
 
   ok(errs.length === 0, 'sin errores de JavaScript' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();

@@ -691,9 +691,13 @@ function _piDefLogoN(key){
   // Separados 15% para que no se tapen —cada logo ocupa cerca de 14% de ancho—
   // y saltando de fila cada seis, que es lo que entra a lo ancho.
   const col=i%6, fila=Math.floor(i/6);
-  return m[1]==='b'
-    ? {x:88-col*15,y:Math.max(50,76-fila*11),scale:100}   // atleta en barra: sobre la franja de abajo, de derecha a izquierda
-    : {x:94-col*9,y:Math.min(40,4.5+fila*9),scale:100};  // intentos: en la franja de arriba, de derecha a izquierda
+  if(m[1]==='b')return {x:88-col*15,y:Math.max(50,76-fila*11),scale:100};   // atleta en barra: sobre la franja de abajo, de derecha a izquierda
+  // Intentos: como la federación y el campeonato de fábrica, el primero a la
+  // izquierda bajo la franja y el segundo arriba a la derecha; los demás, en la
+  // franja de arriba, de derecha a izquierda desde ese.
+  if(i===0)return Object.assign({},PI_DEFAULT_LAYOUT.logoFed);
+  if(i===1)return Object.assign({},PI_DEFAULT_LAYOUT.logoCamp);
+  return {x:85-(i-2)*9,y:4.5,scale:100};
 }
 
 function _piDefBloque(key){
@@ -716,6 +720,11 @@ function _piLoadLayout(){
     const raw=localStorage.getItem(PI_LAYOUT_KEY);
     if(raw){
       const saved=JSON.parse(raw);const merged={};
+      // Guardada con una disposición de fábrica vieja de la Pantalla cargadores:
+      // esa pantalla parte de nuevo con la de ahora (las de "Atleta en barra" y
+      // Luces, que empiezan con b o l y mayúscula, se quedan como estaban).
+      if(saved.__ver!==PI_LAYOUT_VER)Object.keys(saved).forEach(k=>{ if(!/^[bl][A-Z]/.test(k))delete saved[k]; });
+      delete saved.__ver;
       Object.keys(PI_DEFAULT_LAYOUT).forEach(k=>{merged[k]=Object.assign({},PI_DEFAULT_LAYOUT[k],saved[k]||{});});
       Object.keys(saved).forEach(k=>{ if(!merged[k]&&_RX_LOGO_N.test(k))merged[k]=Object.assign({},_piDefLogoN(k),saved[k]); });
       return merged;
@@ -724,7 +733,7 @@ function _piLoadLayout(){
   return JSON.parse(JSON.stringify(PI_DEFAULT_LAYOUT));
 }
 
-function _piSaveLayout(){try{localStorage.setItem(PI_LAYOUT_KEY,JSON.stringify(window._piLayout))}catch(e){}}
+function _piSaveLayout(){try{localStorage.setItem(PI_LAYOUT_KEY,JSON.stringify(Object.assign({__ver:PI_LAYOUT_VER},window._piLayout)))}catch(e){}}
 
 // Restablece solo las claves de una pantalla: las dos disposiciones viven en el
 // mismo archivo guardado, y acomodar una no tiene por qué deshacer la otra.
@@ -1080,23 +1089,19 @@ function renderScreenIntentos(cur,nxt){
   x+=puntaW;
   const VW=x+20;
   const bbSvg=`<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" style="height:34.6vh;width:auto;max-width:none;display:block">${s.join('')}</svg>`;
-  // Pronóstico de posición (idéntico criterio al del widget de OBS)
-  const peers=DATA.athletes.filter(a=>a.sex===cur.sex&&a.cat===cur.cat&&a.div===cur.div&&a.mod===cur.mod);
-  const curGL=calcGL(totalOf(cur),cur.bw,cur.sex,_glMod(cur));
-  const hypBest=Math.max(bestOf(cur,DATA.lift),weight);
-  const sqH=DATA.lift==='sq'?hypBest:bestOf(cur,'sq');
-  const bpH=DATA.lift==='bp'?hypBest:bestOf(cur,'bp');
-  const dlH=DATA.lift==='dl'?hypBest:bestOf(cur,'dl');
-  const hypTotal=(sqH&&bpH&&dlH)?sqH+bpH+dlH:0;
-  const hypGL=hypTotal>0?calcGL(hypTotal,cur.bw,cur.sex,_glMod(cur)):0;
-  const othersGL=peers.filter(a=>a.id!==cur.id).map(a=>calcGL(totalOf(a),a.bw,a.sex,_glMod(a))).filter(g=>g>0).sort((a,b)=>b-a);
-  const curRank=curGL>0?othersGL.filter(g=>g>curGL).length+1:null;
-  const newRank=hypGL>0?othersGL.filter(g=>g>hypGL).length+1:null;
+  // Si lo levanta, en qué puesto queda. Antes se calculaba con el total y solo
+  // salía en peso muerto: en sentadilla y banca, sin total, no decía nada. Ahora
+  // es el mismo pronóstico de Control en Vivo y el marcador (_posForecast): el
+  // subtotal hasta el movimiento en curso, dentro del mismo sexo, categoría,
+  // división y modalidad.
+  const _pf=(typeof _posForecast==='function'&&weight>0)?_posForecast(cur):null;
+  const curRank=_pf&&_pf.now?_pf.now:null;
+  const newRank=_pf&&_pf.ifOk?_pf.ifOk:null;
   let posTxt='';
   if(newRank!==null){
-    if(curRank!==null&&curRank!==newRank)posTxt=`Si es válido pasará del <b>${curRank}°</b> al <b>${newRank}° lugar</b>`;
-    else if(curRank!==null)posTxt=`Mantiene el <b>${newRank}° lugar</b> si es válido`;
-    else posTxt=`Si es válido: <b>${newRank}° lugar</b>`;
+    if(curRank!==null&&curRank!==newRank)posTxt=`PASA DEL <b>${curRank}°</b> AL <b>${newRank}° LUGAR</b>`;
+    else if(curRank!==null)posTxt=`SIGUE <b>${newRank}° LUGAR</b>`;
+    else posTxt=`QUEDA <b>${newRank}° LUGAR</b>`;
   }
   const liftName={sq:'SENTADILLA',bp:'PRESS DE BANCA',dl:'PESO MUERTO'}[DATA.lift]||DATA.lift.toUpperCase();
   let roundLabel=['1er INTENTO','2do INTENTO','3er INTENTO'][DATA.round]||`INTENTO ${DATA.round+1}`;
@@ -1142,8 +1147,17 @@ function renderScreenIntentos(cur,nxt){
     :(_variosPaises()?_flagImg(_ctry(cur),Math.round(innerHeight*0.04)):'');
   const nameHtml=`<div style="display:flex;align-items:center;gap:1.6vh;font-family:Oswald;font-size:4vh;font-weight:600;letter-spacing:.06em;color:${textColor};line-height:1.1;white-space:nowrap">${_lgN}<span>${cur.name||''}</span>${cur.lot?`<span style="font-weight:400;font-size:.62em;letter-spacing:.12em;color:#fff">· LOTE ${cur.lot}</span>`:''}</div>`;
   const subtitleHtml=`<div style="font-family:Oswald;font-size:2.2vh;letter-spacing:.14em;color:#fff;white-space:nowrap">${[sexLbl,cur.club,cur.cat,cur.div,_modTarima(cur)].filter(Boolean).map(x=>(x+'').toUpperCase()).join(' · ')}</div>`;
-  // En blanco, como todo en esta pantalla (se pidió así para leerla de lejos).
-  const positionHtml=posTxt?`<div style="font-family:Oswald;font-size:2.6vh;letter-spacing:.04em;color:#fff;white-space:nowrap">${posTxt}</div>`:'';
+  // En blanco, como todo en esta pantalla (se pidió así para leerla de lejos), y
+  // del mismo tamaño de letra que el nombre: arriba, chico, "SI LO LEVANTA".
+  const positionHtml=posTxt?`<div style="font-family:Oswald;color:#fff;white-space:nowrap;text-align:center;line-height:1.1">`
+    +`<div style="font-size:1.9vh;letter-spacing:.2em">SI LO LEVANTA</div>`
+    +`<div style="font-size:4vh;font-weight:600;letter-spacing:.06em">${posTxt}</div></div>`:'';
+  // Cuántos atletas tiene la tanda (los mismos que cuenta el panel de la
+  // pantalla al elegir tandas: los que siguen en competencia).
+  const _nTanda=DATA.athletes.filter(a=>a.flight===DATA.flight&&!a.bombed).length;
+  const nTandaHtml=_nTanda?`<div style="font-family:Oswald;color:#fff;white-space:nowrap;text-align:center;line-height:1">`
+    +`<div style="font-size:1.6vh;letter-spacing:.18em;margin-bottom:.4vh">ATLETAS EN LA TANDA</div>`
+    +`<div style="font-size:4.4vh;font-weight:600">${_nTanda}</div></div>`:'';
   // Solo el dibujo de la barra. Se sacaron, a pedido de la mesa, la línea
   // "Por lado: 4 × 25 + 10 … collar 2.5 = 115" y el cuadro RACK que iba junto a
   // la barra: la altura de rack ya se lee en el rótulo del movimiento
@@ -1208,10 +1222,11 @@ function renderScreenIntentos(cur,nxt){
     ${(typeof _txJurado!=='undefined'&&_txJurado&&Date.now()<_txJuradoHasta)?_piBlock('jurado',_juradoTarimaHtml(_txJurado)):''}
     ${_piBlock('weight',weightHtml,true)}
     ${_piBlock('discos',bbHtml,'der')}
-    ${_piBlock('name',nameHtml,true)}
+    ${_piBlock('name',nameHtml)}
     ${_piBlock('subtitle',subtitleHtml,true)}
-    ${positionHtml?_piBlock('position',positionHtml,true):''}
+    ${positionHtml?_piBlock('position',positionHtml):''}
     ${nextHtml?_piBlock('next',nextHtml):''}
+    ${nTandaHtml?_piBlock('nTanda',nTandaHtml):''}
     ${_lucesEnTarima()?_piBlock('luces',renderLucesTarima(true)):''}
     ${_logosPantallaSubidos().length
       ? _logosPantallaSubidos().map((u,i)=>_piLogoBloque('logoN'+i,u,'6.4vh','13vw')).join('')

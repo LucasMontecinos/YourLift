@@ -1248,35 +1248,45 @@ const _LIFT_SIGLA={sq:'SQ',bp:'BP',dl:'DL'};
 // nueva todas arrancan con la disposición nueva; las posiciones que se habían
 // guardado eran para la pantalla vieja y la desarmaban.
 const PI_LAYOUT_KEY='yl_pant_intentos_layout_v2';
+// Versión de la disposición de fábrica de la Pantalla cargadores. Al subirla,
+// cada pantalla deja una vez lo que tenía acomodado en ESA pantalla y toma la de
+// fábrica nueva (las de "Atleta en barra" y Luces no se tocan). Si no, el
+// televisor que ya tenía posiciones guardadas seguía con las viejas.
+const PI_LAYOUT_VER=3;
 const PI_DEFAULT_LAYOUT={
   // El cartel de descanso arranca en el medio, tapando la pantalla: cuando está
   // puesto es lo único que importa. De ahí se corre a donde convenga.
   descanso:{x:50,y:45,scale:100},
-  // Intentos, como la vista previa: a la izquierda (crecen hacia la derecha
-  // desde x-5 %) el cartel de récord, el movimiento, el peso grande, el nombre
-  // y la posición; a la derecha la barra; abajo, en la franja, quién sigue.
-  record:{x:8,y:16,scale:100},
-  liftLabel:{x:8,y:23,scale:100},
-  weight:{x:8,y:43,scale:100},
+  // Pantalla cargadores, como la dejó acomodada la mesa (v3): arriba el movimiento
+  // y, debajo, el nombre del que está en tarima; la barra a la izquierda y el peso
+  // a la derecha, con "si lo levanta, en qué puesto queda" abajo del peso; en la
+  // franja de abajo quién sigue y cuántos atletas tiene la tanda.
+  // Los que crecen hacia la derecha desde x-5 % son título, tanda, categoría,
+  // movimiento, récord y peso; el nombre, quién sigue y el puesto van centrados
+  // en su x, así quedan al medio sea cual sea el largo del nombre.
+  record:{x:66.5,y:33,scale:100},     // INTENTO DE RÉCORD, encima del peso
+  liftLabel:{x:35.4,y:13.9,scale:130},
+  weight:{x:66.5,y:52,scale:100},
   // La barra va anclada por la DERECHA (x es su borde
   // derecho): con más discos la barra crece hacia adentro, no hacia el borde.
   // Clave nueva ('discos', antes 'barbell', que iba centrada): una posición
   // guardada con el centro, leída como borde derecho, la corría de lugar.
-  discos:{x:84,y:50,scale:100},
-  // La franja de arriba: el título y la tanda (desde el borde izquierdo).
+  discos:{x:59.2,y:55.5,scale:266},
+  // La franja de arriba: el título, la tanda y la categoría (desde el borde izquierdo).
   titulo:{x:7.9,y:4.5,scale:100},
   tanda:{x:35.4,y:4.5,scale:100},
-  comp:{x:7,y:6.8,scale:100},          // TIEMPO COMPENSATORIO
-  name:{x:8,y:67,scale:100},
-  subtitle:{x:8,y:73,scale:100},
-  position:{x:8,y:79,scale:100},
-  next:{x:50,y:94.5,scale:100},
-  // Los dos logos de la Pantalla de Intentos: arrancan arriba, en las esquinas,
-  // que es donde no estorban a nada de lo que ya había.
-  logoFed:{x:86,y:4.5,scale:100},     // los logos, en la franja de arriba
-  logoCamp:{x:94,y:4.5,scale:100},
-  cambio:{x:40,y:16,scale:100},       // CAMBIO DE INTENTO (3er peso muerto)
-  jurado:{x:70,y:16,scale:100},       // aviso: el jurado revirtió el último intento juzgado
+  subtitle:{x:56.7,y:4.9,scale:80},
+  comp:{x:7,y:30,scale:100},          // TIEMPO COMPENSATORIO
+  name:{x:50,y:22,scale:135},
+  position:{x:76,y:77.5,scale:135},
+  next:{x:50,y:90,scale:140},
+  nTanda:{x:91,y:94.5,scale:100},     // cuántos atletas tiene la tanda, en la franja de abajo
+  // Los dos logos: la federación a la izquierda, bajo la franja; el del
+  // campeonato arriba a la derecha.
+  logoFed:{x:8.4,y:17,scale:100},
+  logoCamp:{x:94.7,y:8.8,scale:205},
+  cambio:{x:78,y:14.5,scale:100},     // CAMBIO DE INTENTO (3er peso muerto)
+  jurado:{x:14,y:33,scale:100},       // aviso: el jurado revirtió el último intento juzgado
   // "Atleta en barra" usa el mismo editor. Las claves llevan b- adelante para no
   // pisarse con las de arriba: las dos disposiciones conviven en el mismo archivo
   // guardado, y cada pantalla dibuja las suyas.
@@ -1293,12 +1303,13 @@ const PI_DEFAULT_LAYOUT={
   bLogo:{x:90,y:75,scale:100},        // logo del campeonato
   bLogoFed:{x:90,y:62,scale:100},     // logo de la federación (la franja de abajo lleva los intentos)
   bLuces:{x:50,y:80,scale:100},       // las luces de los jueces, sobre la franja de intentos
-  // Las luces en la Pantalla de Intentos: arrancan donde estaban fijas (abajo al
-  // centro, sobre la franja), y de ahí se arrastran o se agrandan como el resto.
-  luces:{x:50,y:89,scale:100},
-  // El reloj del intento: arriba a la derecha en Intentos y arriba al centro en
-  // "Atleta en barra", donde estaba fijo. También se mueve y se agranda.
-  reloj:{x:93,y:8,scale:100},
+  // Las luces en la Pantalla de Intentos: a la izquierda, en el hueco sobre la
+  // punta de la barra (abajo al centro va quién sigue). Se arrastran o se
+  // agrandan como el resto.
+  luces:{x:9,y:44,scale:100},
+  // El reloj del intento: en Intentos a la izquierda, bajo las luces; arriba al
+  // centro en "Atleta en barra", donde estaba fijo. También se mueve y se agranda.
+  reloj:{x:9,y:66,scale:100},
   bReloj:{x:50,y:9,scale:100},
   // La pantalla de LUCES (las tres grandes). Llevan l adelante, como las de
   // "Atleta en barra" llevan b: el atleta arriba, las luces y el VÁLIDO/NULO.
