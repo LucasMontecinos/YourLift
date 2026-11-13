@@ -180,7 +180,8 @@ function showToastLC(msg){
 // la "noche" quedaban negras con letra vino. Las pestañas de operación siguen en
 // "noche" (burdeo). Los colores del estilo van encima (estilo_lirio.css).
 function _temaVivo(){
-  try{ if(typeof _estiloVar==='function'&&_estiloVar()==='lirio'&&_lirioCrema())return 'dia'; }catch(e){}
+  // Lirio y Panda: la página del público va clara (crema o blanco), con el tema día.
+  try{ if(typeof _pvPlano==='function'&&_pvPlano()&&_lirioCrema())return 'dia'; }catch(e){}
   return 'noche';
 }
 function _aplicarTemaVivo(){

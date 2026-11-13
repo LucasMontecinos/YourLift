@@ -1020,7 +1020,7 @@ function _startBarrido(dir){
     // la entrada se veía de otro color que lo que aparecía detrás.
     +'<div style="position:absolute;top:-30%;left:-30%;width:80%;height:160%;background:'+_c[2]+';'+_bd+'animation:'+ks+' '+dur+'s cubic-bezier(.7,0,.3,1) .16s forwards;transform:translateX(-160%) skewX(-18deg)"></div>'
     +'<div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;animation:txLogoBeat '+dur+'s ease-out forwards;opacity:0">'
-      +(_pv?'<img class="pvLogo" src="'+_pvLogoUrl()+'" alt="" style="max-width:min(60vw,640px);max-height:min(62vh,620px);object-fit:contain">':_barridoLogoImg())
+      +((_pv&&_pvLogoUrl())?'<img class="pvLogo" src="'+_pvLogoUrl()+'" alt="" style="max-width:min(60vw,640px);max-height:min(62vh,620px);object-fit:contain">':_barridoLogoImg())
     +'</div>';
   document.body.appendChild(_txBarridoEl);
   setTimeout(()=>{if(_txBarridoEl&&_txBarridoEl.parentNode){_txBarridoEl.parentNode.removeChild(_txBarridoEl);_txBarridoEl=null;}},TX_ANIM_MS.fullscreen+200);
@@ -2965,7 +2965,7 @@ function renderDirector(){
   // Con un estilo de campeonato (admin → Campeonatos), la transmisión se viste
   // con él y la paleta queda para lo que el estilo no toca.
   if(typeof _estiloId==='function'&&_estiloId())h+='<div style="margin:-4px 0 12px;padding:10px 12px;border-radius:10px;border:2px solid #F28AAE;background:rgba(242,138,174,.10);font-size:12px;line-height:1.5;display:flex;gap:10px;align-items:center">'
-    +'<img src="'+_pvLogoUrl()+'" alt="" style="height:42px;flex-shrink:0">'
+    +(_pvLogoUrl()?'<img src="'+_pvLogoUrl()+'" alt="" style="height:42px;flex-shrink:0">':'')
     +'<span><b>Estilo del campeonato: '+ESTILOS[_estiloId()].nombre+'.</b> Marcador, tablas, medallero, jurado, cambio de intento y perfil salen con este estilo, igual que la Pantalla Tarima y la página del público. Se cambia en el admin → Campeonatos → Estilo del campeonato.</span></div>';
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">';
   Object.entries(_TX_COLOR_PALETTES).forEach(([key,pal])=>{

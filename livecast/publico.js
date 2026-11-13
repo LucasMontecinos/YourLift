@@ -118,7 +118,7 @@ function renderLiveView(){
   // título, el campeonato, el idioma, día/noche y la tanda que está compitiendo.
   h += '<header class="lv-cab">';
   // Estilo del campeonato (livecast/estilo.js): el logo y la rama.
-  if(typeof _estiloPrim==='function'&&_estiloPrim())h += '<img class="pvLogo pvLv-logo" src="'+_pvLogoUrl()+'" alt=""><div class="pvDeco pvLv-rama">'+_pvRamaAncho({modo:'cuelga',alto:76,semilla:23,paso:330,inicio:220,escala:.8})+'</div>';
+  if(typeof _estiloPrim==='function'&&_estiloPrim())h += _pvLogoImg('pvLv-logo')+'<div class="pvDeco pvLv-rama">'+_pvRamaAncho({modo:'cuelga',alto:76,semilla:23,paso:330,inicio:220,escala:.8})+'</div>';
   h += '<div class="lv-cab-t"><h2>COMPETENCIA EN VIVO</h2>';
   h += '<p>'+((DATA.event==null?void 0:DATA.event.name)||'')+'</p></div>';
   h += '<div class="lv-cab-d">';

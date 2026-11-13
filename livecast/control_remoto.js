@@ -233,7 +233,7 @@ function renderRemote(){
   let h='<div class="fade pvRm" style="max-width:'+(_rmCols===4?960:560)+'px;margin:0 auto">';
   // Encabezado compacto
   h+='<div class="pvRm-head" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
-  if(typeof _estiloPrim==='function'&&_estiloPrim())h+='<img class="pvLogo pvRm-logo" src="'+_pvLogoUrl()+'" alt=""><div class="pvDeco pvRm-rama">'+_pvRamaAncho({modo:'cuelga',alto:56,semilla:21,paso:200,inicio:120,escala:.55})+'</div>';
+  if(typeof _estiloPrim==='function'&&_estiloPrim())h+=_pvLogoImg('pvRm-logo')+'<div class="pvDeco pvRm-rama">'+_pvRamaAncho({modo:'cuelga',alto:56,semilla:21,paso:200,inicio:120,escala:.55})+'</div>';
   h+='<div><h2 class="os" style="font-size:20px;letter-spacing:1px;margin:0"><i class=yl-i-telefono></i> CONTROL REMOTO</h2>'
     +'<div style="font-size:11px;color:var(--muted)">'+evName+(cur?' · en tarima: <b style="color:var(--gold)">'+esc(cur.name)+'</b>':'')+'</div></div>';
   // Estado real: necesita Firebase listo Y el evento resuelto (si no, empujaría al

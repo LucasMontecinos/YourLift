@@ -281,7 +281,7 @@ const MONTAR = (estilo) => {
     await p.evaluate(id => { go('campeonatos'); editEvento(id); }, EV.id);
     await p.waitForSelector('#ef_name');
     const radios = await p.evaluate(() => [...document.querySelectorAll('input[name="ef_estilo"]')].map(x => x.value + (x.checked ? '*' : '')).join(','));
-    if (ve) ok(radios === ',primavera,lirio*', 'el owner ve Normal, Primavera y Lirio (Lirio crema ya no), con el del campeonato marcado (' + radios + ')');
+    if (ve) ok(radios === ',primavera,lirio*,panda', 'el owner ve Normal, Primavera, Lirio y Panda (Lirio crema ya no), con el del campeonato marcado (' + radios + ')');
     else ok(radios === '', 'un admin que no es owner no ve el selector');
     const w = await p.evaluate(async () => { window.__ESCRITO = []; await saveEvento(); return (window.__ESCRITO.find(x => x.col === 'eventos') || {}).d; });
     ok(w && w.estilo === 'lirio', (ve ? 'el owner' : 'el admin') + ' guarda otros cambios y el estilo sigue en Lirio');
