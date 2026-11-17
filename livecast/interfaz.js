@@ -463,6 +463,11 @@ function renderShell(){
   if(!isAdmin)h+='<button class="side-btn '+(p==='liveView'?'active':'')+'" onclick="go(\'liveView\')"><span class="icon"><i class=yl-i-video></i></span>Competencia en Vivo</button>';
   h+='<button class="side-btn '+(p==='results'?'active':'')+'" onclick="go(\'results\')"><span class="icon"><i class=yl-i-trofeo></i></span>Resultados</button>';
   h+='<button class="side-btn '+(p==='atletaInfo'?'active':'')+'" onclick="go(\'atletaInfo\')"><span class="icon"><i class=yl-i-usuario></i></span>Atletas</button>';
+  // Datos abiertos: el enlace de solo lectura para otras apps (ver
+  // livecast/datos_abiertos.js). Va aparte: es para quien programa, no para el
+  // espectador.
+  h+='<div class="side-label">Para desarrolladores</div>';
+  h+='<button class="side-btn '+(p==='datosAbiertos'?'active':'')+'" onclick="go(\'datosAbiertos\')"><span class="icon"><i class=yl-i-enlace></i></span>Datos abiertos</button>';
   if(window._ensayoFree)h+='<button class="side-btn" onclick="ensayoToggleRole()" style="border:1px solid rgba(96,165,250,.5);color:#60a5fa;margin-top:4px"><span class="icon">'+(isAdmin?'<i class=yl-i-ojo></i>':'<i class=yl-i-ajustes></i>')+'</span>'+(isAdmin?'Cambiar a modo espectador':'Cambiar a modo admin')+'</button>';
   // Vuelo activo, primero por día. Con 36 tandas —A hasta AJ, ocho días— la tira
   // completa era una pared de botones donde encontrar el propio era contar
@@ -526,7 +531,7 @@ function renderShell(){
   h+='</div>';
   }
   h+='</div><div class="main">';
-  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='docs'&&isAdmin)h+=renderDocs();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='remote'&&isAdmin)h+=renderRemote();else if(p==='screen'&&isAdmin)h+=renderScreenControl();else if(p==='results')h+=renderResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(!isAdmin&&(p==='manage'||p==='docs'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director'||p==='remote'||p==='screen')){DATA.phase='liveView';h+=renderLiveView();}
+  if(p==='manage'&&isAdmin)h+=renderManage();else if(p==='docs'&&isAdmin)h+=renderDocs();else if(p==='compete'&&isAdmin)h+=renderCompete();else if(p==='obsTx'&&isAdmin)h+=renderObsTx();else if(p==='director'&&isAdmin)h+=renderDirector();else if(p==='remote'&&isAdmin)h+=renderRemote();else if(p==='screen'&&isAdmin)h+=renderScreenControl();else if(p==='results')h+=renderResults();else if(p==='liveView')h+=renderLiveView();else if(p==='atletaInfo')h+=renderAtletaInfo();else if(p==='datosAbiertos')h+=renderDatosAbiertos();else if(!isAdmin&&(p==='manage'||p==='docs'||p==='compete'||p==='transmision'||p==='obsTx'||p==='director'||p==='remote'||p==='screen')){DATA.phase='liveView';h+=renderLiveView();}
   h+='</div></div>';return h;
 }
 

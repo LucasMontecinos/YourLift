@@ -209,7 +209,7 @@ window.ADMIN_ROLE=null;
 // pero de ahí en adelante solo ve lo de la transmisión (Control TX, Control Remoto
 // y Pantalla de Tarima). No entra a Atletas & Pesaje ni a
 // Control en Vivo, así que no puede tocar la competencia por accidente.
-const _PAGS_STREAMING=['setup','transmision','obsTx','director','remote','screen','results','atletaInfo','liveView'];
+const _PAGS_STREAMING=['setup','transmision','obsTx','director','remote','screen','results','atletaInfo','liveView','datosAbiertos'];
 // ══════════════════════════════════════════════
 // FIREBASE REAL-TIME SYNC
 // ══════════════════════════════════════════════

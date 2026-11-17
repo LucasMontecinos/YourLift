@@ -1048,8 +1048,8 @@ function renderTerminos(){
   const cab='padding:8px 10px;text-align:left;font-family:Oswald;font-size:10px;letter-spacing:1.5px;color:var(--muted);border-bottom:1px solid var(--border)';
   // Cada dato: qué es · para qué · dónde está · quién lo ve · cuánto tiempo.
   const filas=[
-    ['Nombre, club, categoría, división, modalidad, resultados, récords, año de nacimiento, código de atleta y foto de perfil (si se aprueba)',
-     'Nóminas, resultados, ranking, récords, certificados y la transmisión de cada campeonato',
+    ['Nombre, club, categoría, división, modalidad, peso corporal del pesaje, resultados, récords, año de nacimiento, código de atleta y foto de perfil (si se aprueba)',
+     'Nóminas, resultados, ranking, récords, certificados, la transmisión y los datos abiertos de cada competencia en vivo',
      'Sitio público yourlift.cl',
      'Cualquier persona: es la información deportiva de competencias públicas',
      'Sin plazo: es el historial deportivo oficial de la federación'],
@@ -1119,7 +1119,7 @@ function renderTerminos(){
     ]))}
 
     ${sec('4. QUIÉN TIENE ACCESO',ul([
-      `${b('Cualquier persona')}: solo lo deportivo que se publica (punto 2).`,
+      `${b('Cualquier persona')}: solo lo deportivo que se publica (punto 2). Eso incluye a otras apps —por ejemplo, de entrenadores— que lean los ${b('datos abiertos')} de una competencia en vivo: nombre, club, sexo, categoría, división, modalidad, peso corporal, tanda, lote e intentos, lo mismo que se ve en la página en vivo. Esos datos no llevan RUT, fecha de nacimiento, código de atleta ni contactos.`,
       `${b('Administradores de FECHIPO')} (comisión técnica y organizadores autorizados), cada uno con su cuenta personal: ven lo privado para revisar inscripciones y documentos. Cada acción del panel queda registrada.`,
       `${b('Cuentas de competencia')} (transmisión, mesa técnica, jueces): ven lo que necesita la competencia y nada más; no ven RUT, fechas de nacimiento, documentos ni contactos.`,
       `${b('YourLift SpA')}, para operar y dar soporte a la plataforma.`,

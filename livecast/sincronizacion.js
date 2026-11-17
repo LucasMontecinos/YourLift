@@ -706,6 +706,8 @@ async function syncToFB(){
         // Hasta entonces el semáforo no da verde.
         window._pubPendiente=true;
         _syncWriteOk(); _spectatorEditOk();
+        // Datos abiertos: la copia pública de formato fijo (livecast/datos_abiertos.js)
+        try{ if(typeof _daProgramar==='function')_daProgramar(); }catch(_){}
         return;
       }catch(e){
         if(attempt===4){
