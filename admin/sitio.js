@@ -76,20 +76,6 @@ window.pubHideAll=async function(){
   render(); showToast('Listo: no se muestra ninguna competencia al público');
 };
 
-// Deja visibles SOLO los días del Sudamericano y apaga todo lo demás. Es lo que
-// se pide durante el campeonato: que la gente entre y vea los nueve días, nada más.
-window.pubSoloSuda=async function(){
-  const evs=_pubEvs();
-  const suda=evs.filter(e=>/^suda2026_d\d+$/.test(e.id));
-  if(!suda.length){showToast('No encontré los días del Sudamericano',null,true);return;}
-  const apagar=evs.filter(e=>e.publicoVisible===true&&!/^suda2026_d\d+$/.test(e.id));
-  if(!confirm('Van a quedar visibles los '+suda.length+' días del Sudamericano'
-    +(apagar.length?(' y se ocultan '+apagar.length+' competencia(s): '+apagar.map(e=>e.name||e.id).join(', ')):'')+'.\n\n¿Seguimos?'))return;
-  for(const e of suda){ await window.pubToggle(e.id,true); }
-  for(const e of apagar){ await window.pubToggle(e.id,false); }
-  showToast('Listo: en Competencia en Vivo se ven solo los días del Sudamericano');
-};
-
 // Eventos que se le pueden mostrar al público: los de Firestore MÁS los que solo
 // viven en nominas.json (los nueve días del Sudamericano y el ensayo).
 function _pubEvs(){
@@ -168,7 +154,6 @@ function renderPublico(){
     <span style="font-family:Oswald;font-size:13px">${nOn} de ${evs.length} visibles para el público</span>
     <span style="flex:1"></span>
     <a href="index.html#envivo" target="_blank" class="btn" style="padding:8px 14px;font-size:12px;background:transparent;border:1px solid var(--border);text-decoration:none">Ver como público ↗</a>
-    <button class="btn" onclick="pubSoloSuda()" style="padding:8px 14px;font-size:12px;background:rgba(212,168,67,.12);border:1px solid var(--gold);color:var(--gold)" title="Deja visibles los nueve días del Sudamericano y oculta todo lo demás">Solo los 9 días del Sudamericano</button>
     ${nOn?`<button class="btn" onclick="pubHideAll()" style="padding:8px 14px;font-size:12px;background:transparent;border:1px solid var(--red);color:var(--red)">Ocultar todas</button>`:''}
   </div>`;
   if(!evs.length)return h+`<div class="card" style="padding:24px;text-align:center;color:var(--muted)">No hay campeonatos cargados todavía.</div>`;
