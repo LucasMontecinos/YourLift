@@ -68,7 +68,10 @@ async function main() {
 
     const iPriv = adm.indexOf('const priv = editable ? (ST.inscripcionesPrivate');
     ok(iPriv > 0, 'la fila sigue leyendo inscripciones_private');
-    const cuerpo = adm.slice(iPriv, iPriv + 4000);
+    // La fila creció (corregir nombre de un click, campeonato abierto): con 4000
+    // la celda quedaba fuera del tramo y la prueba fallaba sin que nada se
+    // hubiera roto.
+    const cuerpo = adm.slice(iPriv, iPriv + 9000);
     const celda = cuerpo.slice(cuerpo.indexOf('${priv.correo'), cuerpo.indexOf('${priv.correo') + 700);
     ok(celda.length > 100, 'la celda del correo está en la fila');
     ok(!/\$\{\s*i\.correo/.test(cuerpo), 'en ningún lado se lee el correo de la inscripción pública');
