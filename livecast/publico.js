@@ -208,7 +208,7 @@ function renderLiveView(){
     // El aviso de "estás mirando otra tanda" queda FUERA del panel: es lo único
     // de acá que hay que ver sí o sí, aunque los botones estén plegados.
     if(libre&&_tandaEnTarima&&_tandaEnTarima!==currentFlight){
-      h += '<div style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.45);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#9dc4f5;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+      h += '<div class="lv-otra" style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.45);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#9dc4f5;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
         +'<span>Estás mirando la tanda '+currentFlight+'. En tarima está compitiendo la '+_tandaEnTarima+'.</span>'
         +'<button onclick="liveVerTanda(null)" style="padding:5px 12px;border-radius:6px;border:1px solid #60a5fa;background:transparent;color:#60a5fa;font-family:Oswald;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;white-space:nowrap">IR A LA TARIMA</button>'
         +'</div>';

@@ -210,6 +210,22 @@ const MONTAR = (estilo) => {
     ok(pub.v === 'lirio' && pub.sub === 'crema' && pub.lirios, 'la página del público: Lirio en crema (' + pub.v + '/' + pub.sub + ')');
     ok(pub.tema === 'dia', 'clara (tema día), así las etiquetas chicas se leen');
     ok(pub.tanda && pub.tanda[0] !== pub.tanda[1], 'y la tanda activa se lee (' + (pub.tanda || []).join(' sobre ') + ')');
+    // El aviso "Estás mirando la tanda X. En tarima está compitiendo la Y.": su
+    // celeste de siempre casi no se leía sobre el crema.
+    const otra = await p.evaluate(() => {
+      // Dos tandas: la que está en tarima (según la mesa) y otra que mira el público
+      const enTarima = DATA.flight, ult = DATA.athletes[DATA.athletes.length - 1], fl0 = ult.flight;
+      let otraT = (DATA.athletes.find(a => a.flight && a.flight !== enTarima) || {}).flight;
+      if (!otraT) { otraT = enTarima === 'B' ? 'C' : 'B'; ult.flight = otraT; }
+      window._NAV_REMOTA = { lift: DATA.lift, round: DATA.round, flight: enTarima, forcedCurrent: null };
+      liveVerTanda(otraT);
+      const el = document.querySelector('#R .lv-otra'), bt = el && el.querySelector('button');
+      const r = el && bt ? [getComputedStyle(el).color, getComputedStyle(bt).color] : null;
+      liveVerTanda(null); ult.flight = fl0; window._NAV_REMOTA = null; R();
+      return r;
+    });
+    const oscuro = c => { const m = /(\d+), (\d+), (\d+)/.exec(c || ''); return !!m && (0.2126 * m[1] + 0.7152 * m[2] + 0.0722 * m[3]) / 255 < 0.35; };
+    ok(otra && oscuro(otra[0]) && oscuro(otra[1]), 'mirando otra tanda, el aviso y su botón IR A LA TARIMA se leen sobre el crema (' + (otra || []).join(' / ') + ')');
     const res = await ver(false, 'results');
     ok(res.sub === 'crema' && res.tema === 'dia', 'todo lo que mira el público va en crema (Resultados también)');
     const adm = await ver(true, 'liveView');
