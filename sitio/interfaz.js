@@ -1128,7 +1128,7 @@ function renderTerminos(){
     ]))}
 
     ${sec('4. QUIÉN TIENE ACCESO',ul([
-      `${b('Cualquier persona')}: solo lo deportivo que se publica (punto 2). Eso incluye a otras apps —por ejemplo, de entrenadores— que lean los ${b('datos abiertos')} de una competencia en vivo: nombre, club, sexo, categoría, división, modalidad, peso corporal, tanda, lote e intentos, lo mismo que se ve en la página en vivo. Esos datos no llevan RUT, fecha de nacimiento, código de atleta ni contactos.`,
+      `${b('Cualquier persona')}: solo lo deportivo que se publica (punto 2). Eso incluye a otras apps —por ejemplo, de entrenadores— que lean los ${b('datos abiertos')} de una competencia en vivo: los mismos que usa la página en vivo (nombre, club, categoría, división, modalidad, peso corporal, tanda, lote e intentos). No llevan RUT, fecha de nacimiento completa ni contactos.`,
       `${b('Administradores de FECHIPO')} (comisión técnica y organizadores autorizados), cada uno con su cuenta personal: ven lo privado para revisar inscripciones y documentos. Cada acción del panel queda registrada.`,
       `${b('Cuentas de competencia')} (transmisión, mesa técnica, jueces): ven lo que necesita la competencia y nada más; no ven RUT, fechas de nacimiento, documentos ni contactos.`,
       `${b('YourLift SpA')}, para operar y dar soporte a la plataforma.`,
