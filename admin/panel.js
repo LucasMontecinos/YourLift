@@ -16170,8 +16170,91 @@ async function loadPortada(){
   // Formato viejo (una sola foto: {foto,pc,movil}) → lista de una.
   let fotos=Array.isArray(d.fotos)?d.fotos:((d.foto||d.pc||d.movil)?[{url:d.foto||'',pc:d.pc,movil:d.movil}]:[]);
   if(!fotos.length)fotos=[_PT_FOTO()];
-  ST.portada={intervalo:+d.intervalo||6,fotos:fotos.map(f=>({url:f.url||'',pc:{..._PT_FOTO().pc,...(f.pc||{})},movil:{..._PT_FOTO().movil,...(f.movil||{})}}))};
+  ST.portada={intervalo:+d.intervalo||6,fotos:fotos.map(f=>({url:f.url||'',pc:{..._PT_FOTO().pc,...(f.pc||{})},movil:{..._PT_FOTO().movil,...(f.movil||{})}})),
+    secciones:{..._PT_SEC_DEF,...(d.secciones||{})},
+    publico:Array.isArray(d.publico)?d.publico.filter(x=>x&&x.id).map(x=>({id:x.id,nombre:x.nombre||'',fecha:x.fecha||'',personas:+x.personas||0})):[],
+    medido:null};
   ST._portadaLoaded=true; if(ST.view==='portada')render();
+  ptCargarMedido();
+}
+
+// ── Los bloques de abajo del inicio (sitio/inicio.js) ──
+// Se guardan en el mismo documento: secciones {clave: sí/no} y, para "Personas
+// que siguieron la competencia", la lista que el owner decide publicar.
+const _PT_SEC_DEF={proximos:true,campeonatos:true,totales:true,records:false,publico:false};
+const _PT_SECS=[
+  ['proximos','Próximos campeonatos','Las competencias que vienen, con su estado.'],
+  ['publico','Personas que siguieron la competencia','Cuántas personas siguieron en vivo los campeonatos que elijas abajo.'],
+  ['campeonatos','Campeonatos','Lo último: los 3 campeonatos más recientes, con la mejor marca (GL) de cada uno.'],
+  ['records','Récords','Los 3 récords nacionales más recientes (los que tienen fecha).'],
+  ['totales','Totales','Top 5 GL del año: los mejores totales en Classic y Equipado, hombres y mujeres.'],
+];
+// Lo medido por el livecast: analytics_daily/{día}.lc_u.{campeonato} = equipos
+// distintos que abrieron la Competencia en Vivo ese día (cada equipo cuenta una
+// sola vez por campeonato). Se suman los días. Es solo para el owner.
+async function ptCargarMedido(){
+  try{
+    const desde=new Date(Date.now()-400*864e5).toISOString().slice(0,10);
+    const snap=await getDocs(query(collection(db,'analytics_daily'),where('date','>=',desde)));
+    const M={};
+    snap.forEach(dd=>{ const v=dd.data()||{};
+      Object.entries(v.lc_u||{}).forEach(([id,n])=>{ const m=M[id]||(M[id]={personas:0,aperturas:0}); m.personas+=(+n||0); });
+      Object.entries(v.lc||{}).forEach(([id,n])=>{ const m=M[id]||(M[id]={personas:0,aperturas:0}); m.aperturas+=(+n||0); });
+    });
+    if(ST.portada)ST.portada.medido=M;
+  }catch(e){ if(ST.portada)ST.portada.medido={}; console.warn('[portada] personas:',e.message); }
+  if(ST.view==='portada')render();
+}
+window.ptSec=function(k,on){ ST.portada.secciones[k]=!!on; if(k==='publico')render(); };
+window.ptPubSel=function(id,on){
+  const L=ST.portada.publico, i=L.findIndex(x=>x.id===id);
+  if(on&&i<0&&L.length>=3){ showToast('Se muestran hasta 3: saca uno antes de marcar otro',null,true); render(); return; }
+  if(on&&i<0){
+    const ev=(ST.eventos||[]).find(e=>e.id===id)||{}, m=(ST.portada.medido||{})[id]||{};
+    L.push({id,nombre:ev.name||id,fecha:ev.date||'',personas:+m.personas||0});
+  }else if(!on&&i>=0)L.splice(i,1);
+  render();
+};
+window.ptPubNum=function(id,v){ const x=ST.portada.publico.find(x=>x.id===id); if(x)x.personas=Math.max(0,Math.round(+v||0)); };
+function _ptSeccionesHtml(p){
+  const S=p.secciones;
+  let h=`<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin:18px 0">
+    <b style="font-family:Oswald;letter-spacing:2px;color:var(--gold)">QUÉ SE VE EN EL INICIO</b>
+    <p style="font-size:12px;color:var(--muted);margin:6px 0 12px">Marca los bloques que van abajo de la foto. Salen en este orden; la franja de colaboradores va siempre después de los próximos campeonatos.</p>
+    <div style="display:grid;gap:8px">`;
+  _PT_SECS.forEach(([k,t,dsc])=>{
+    h+=`<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:8px">
+      <input type="checkbox" ${S[k]?'checked':''} onchange="ptSec('${k}',this.checked)" style="margin-top:3px">
+      <span><b style="font-size:13px">${t}</b><br><span style="font-size:12px;color:var(--muted)">${dsc}</span></span></label>`;
+  });
+  h+=`</div>`;
+  if(S.publico){
+    const M=p.medido;
+    const hoy=new Date().toISOString().slice(0,10);
+    const ids=new Set(Object.keys(M||{}));
+    p.publico.forEach(x=>ids.add(x.id));
+    const evs=(ST.eventos||[]).filter(e=>e&&e.id&&(ids.has(e.id)||(e.date&&e.date<=hoy))&&e.status!=='archived');
+    p.publico.forEach(x=>{ if(!evs.some(e=>e.id===x.id))evs.push({id:x.id,name:x.nombre,date:x.fecha}); });
+    evs.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+    h+=`<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <b style="font-size:13px">Personas que siguieron la competencia</b>
+      <p style="font-size:12px;color:var(--muted);margin:4px 0 10px">El livecast cuenta a cada persona (cada teléfono o computador) una vez por campeonato, sin guardar nada de ella. Se mide desde noviembre de 2026; para los anteriores puedes escribir la cifra a mano (por ejemplo, las vistas de YouTube). Marca los que quieres mostrar (hasta 3).</p>`;
+    if(M===null)h+=`<div style="font-size:12px;color:var(--muted)">Cargando lo medido…</div>`;
+    h+=`<div style="display:grid;gap:6px">`;
+    evs.slice(0,12).forEach(e=>{
+      const sel=p.publico.find(x=>x.id===e.id), m=(M||{})[e.id];
+      const idq=esc(e.id).replace(/'/g,"\\'");
+      h+=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 10px;border:1px solid var(--border);border-radius:8px;${sel?'background:rgba(34,197,94,.06)':''}">
+        <input type="checkbox" ${sel?'checked':''} onchange="ptPubSel('${idq}',this.checked)">
+        <span style="flex:1;min-width:200px;font-size:13px">${esc(e.name||e.id)}<span style="color:var(--muted);font-size:11px"> · ${esc(e.date||'')}</span></span>
+        <span style="font-size:11px;color:var(--muted)">${m?('medido: '+m.personas+' personas'):'sin medición'}</span>
+        ${sel?`<label style="font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center">Mostrar <input class="inp" type="number" min="0" value="${sel.personas}" oninput="ptPubNum('${idq}',this.value)" style="width:90px"> personas</label>`:''}
+      </div>`;
+    });
+    if(!evs.length)h+=`<div style="font-size:12px;color:var(--muted)">Todavía no hay campeonatos.</div>`;
+    h+=`</div></div>`;
+  }
+  return h+`</div>`;
 }
 // Mueve la vista previa en vivo, sin volver a dibujar la pantalla (el control
 // deslizante perdería el foco a cada paso).
@@ -16211,7 +16294,10 @@ window.ptSave=async function(){
     const p=ST.portada, iv=document.getElementById('pt_int'); if(iv)p.intervalo=Math.max(3,Math.min(60,+iv.value||6));
     await setDoc(doc(db,'site_backgrounds','portada'),{
       fotos:p.fotos.map(f=>({url:f.url||'',pc:{x:+f.pc.x,y:+f.pc.y},movil:{x:+f.movil.x,y:+f.movil.y}})),
-      intervalo:p.intervalo,foto:null,pc:null,movil:null,updatedAt:serverTimestamp()},{merge:true});
+      intervalo:p.intervalo,foto:null,pc:null,movil:null,
+      secciones:{..._PT_SEC_DEF,...(p.secciones||{})},
+      publico:(p.publico||[]).slice(0,3).map(x=>({id:x.id,nombre:x.nombre||'',fecha:x.fecha||'',personas:Math.max(0,Math.round(+x.personas||0))})),
+      updatedAt:serverTimestamp()},{merge:true});
     // El sitio guarda la configuración 24 h en este navegador: se borra acá para
     // que el owner vea el cambio al tiro. El resto la ve cuando se le venza.
     try{ localStorage.removeItem('_yfc_bgSettings'); }catch(_){}
@@ -16256,8 +16342,9 @@ function renderPortada(){
       </div></div>`;
   };
   return `<div class="h1">Portada</div>
-    <p class="subtitle">Las fotos de la portada de yourlift.cl. Con más de una, van pasando solas. Muévelas para que no se corte la cara: en computador van a la derecha del texto y en el teléfono arriba.</p>
+    <p class="subtitle">Las fotos de la portada de yourlift.cl y qué bloques van abajo. Con más de una foto, van pasando solas. Muévelas para que no se corte la cara: en computador van a la derecha del texto y en el teléfono arriba.</p>
     <div style="margin:16px 0">${p.fotos.map(tarjeta).join('')}</div>
+    ${_ptSeccionesHtml(p)}
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <label class="btn" style="cursor:pointer">+ Agregar fotos<input type="file" accept="image/*" multiple onchange="ptSubir(this)" style="display:none"></label>
       ${p.fotos.some(f=>!f.url)?'':'<button class="btn" onclick="ptOriginal()">Agregar la foto original</button>'}

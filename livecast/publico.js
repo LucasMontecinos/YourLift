@@ -98,7 +98,33 @@ function _anchoDaParaLinea(){
   return (window.innerWidth||1400) >= min;
 }
 
+// ── Personas que siguieron la competencia ──
+// Cada equipo que abre la Competencia en Vivo de un campeonato cuenta UNA vez
+// para ese campeonato (una marca en este navegador), en analytics_daily/{día}:
+// el mismo contador de visitas del sitio, que ya acepta escrituras sin cuenta.
+// No guarda nada de la persona. lc = veces que se abrió; lc_u = equipos
+// distintos. Admin → Portada suma lc_u por campeonato y el owner decide si lo
+// muestra en el inicio. No cuentan la mesa, la transmisión, las pantallas ni
+// los ensayos.
+const _lcContado={};
+function _contarEspectador(){
+  try{
+    if(isAdmin||TX_MODE||PRACTICE_MODE||window._ensayoFree||!fbReady||!window._fb||!fbDB||!window._fb.increment)return;
+    const ev=DATA&&DATA.event;
+    const id=String((ev&&ev.id)||'').replace(/[^A-Za-z0-9_-]+/g,'_');
+    if(!id||/^ensayo/i.test(id)||/ENSAYO/.test(String(ev.name||''))||_lcContado[id])return;
+    _lcContado[id]=true;
+    const d=new Date(), ymd=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    let nuevo=false;
+    try{ const k='yl_lcv_'+id; if(!localStorage.getItem(k)){ localStorage.setItem(k,'1'); nuevo=true; } }catch(e){}
+    const p={date:ymd,lc:{[id]:window._fb.increment(1)}};
+    if(nuevo)p.lc_u={[id]:window._fb.increment(1)};
+    window._fb.setDoc(window._fb.doc(fbDB,'analytics_daily',ymd),p,{merge:true}).catch(()=>{});
+  }catch(e){}
+}
+
 function renderLiveView(){
+  setTimeout(_contarEspectador,0);
   const _enLinea = _anchoDaParaLinea();
   window._ultLinea = _enLinea;
   const currentFlight = DATA.flight;

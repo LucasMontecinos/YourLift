@@ -60,8 +60,8 @@ async function initFB(){
       // ── Récords: getDocs + caché 1h ──
       try{
         const cr=_fsCache('records',60*60*1000);
-        if(cr){if(cr.classic||cr.equipped){R=sinRetiradas(cr);if(ST.v==='records')renderFondo();}}
-        else{const rs=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'records','data'));if(rs.exists()){const r=rs.data();if(r&&(r.classic||r.equipped)){R=sinRetiradas(r);_fsSetCache('records',r);if(ST.v==='records')renderFondo();}}}
+        if(cr){if(cr.classic||cr.equipped){R=sinRetiradas(cr);if(ST.v==='records'||ST.v==='home')renderFondo();}}
+        else{const rs=await window.FBQ.getDoc(window.FBQ.doc(fbDB,'records','data'));if(rs.exists()){const r=rs.data();if(r&&(r.classic||r.equipped)){R=sinRetiradas(r);_fsSetCache('records',r);if(ST.v==='records'||ST.v==='home')renderFondo();}}}
       }catch(e){console.warn('[records]',e);}
       })(),
       (async()=>{
@@ -937,7 +937,10 @@ function home(){
   </header>
   ${liveEmbed()}`;
 
+  // Los bloques de abajo los elige el owner en Admin → Portada (sitio/inicio.js).
+  const S=(typeof _inicioSecciones==='function')?_inicioSecciones():{proximos:true,campeonatos:true,totales:true};
   // Próximas competencias: las que vienen, con su estado.
+  if(S.proximos){
   const vistos={};const prox=[];
   proximos.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).forEach(e=>{
     const bn=baseName(e.name);if(vistos[bn])return;vistos[bn]=1;prox.push({...e,name:bn});
@@ -961,10 +964,16 @@ function home(){
     h+=`</div>`;
   }
   h+=`</section>`;
+  }
   h+=`${sponsorStrip()}`;
+  // Personas que siguieron la competencia (la cifra la publica el owner)
+  if(S.publico){ const x=typeof _publicoHtml==='function'?_publicoHtml():''; if(x)h+=`<section class="yl-sec" id="ylPublico">${x}</section>`; }
   // Lo último y el top 5 GL se llenan cuando llegan el ranking y data.json.
-  h+=`<section class="yl-sec" id="ylUltimo">${typeof _ultimoHtml==='function'?_ultimoHtml():''}</section>`;
-  h+=`<section class="yl-sec yl-lid" id="ylLideres">${typeof _lideresHtml==='function'?_lideresHtml():''}</section>`;
+  // Comparten la carga: si solo va "lo último", igual hay que pedirla.
+  if(S.campeonatos&&!S.totales&&typeof _lideresCargar==='function')_lideresCargar();
+  if(S.campeonatos)h+=`<section class="yl-sec" id="ylUltimo">${typeof _ultimoHtml==='function'?_ultimoHtml():''}</section>`;
+  if(S.records){ const x=typeof _recordsHtml==='function'?_recordsHtml():''; if(x)h+=`<section class="yl-sec" id="ylRecords">${x}</section>`; }
+  if(S.totales)h+=`<section class="yl-sec yl-lid" id="ylLideres">${typeof _lideresHtml==='function'?_lideresHtml():''}</section>`;
   return h;
 }
 

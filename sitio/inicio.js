@@ -225,3 +225,57 @@ setInterval(function(){
   _PORT.t0=Date.now(); _PORT.i=(_PORT.i+1)%sl.length;
   sl.forEach(function(x,k){x.classList.toggle('on',k===_PORT.i);});
 },500);
+
+// ── Los bloques de abajo del inicio: los elige el owner en Admin → Portada ──
+// site_backgrounds/portada.secciones = {proximos, campeonatos, totales,
+// records, publico}. Lo que no se eligió nunca usa lo de antes: próximas
+// competencias, lo último (campeonatos) y el top 5 GL (totales).
+var _SEC_DEF={proximos:true,campeonatos:true,totales:true,records:false,publico:false};
+function _inicioSecciones(){
+  var c=(((window._BG_SETTINGS||{}).portada)||{}).secciones||{}, o={};
+  Object.keys(_SEC_DEF).forEach(function(k){ o[k]=(typeof c[k]==='boolean')?c[k]:_SEC_DEF[k]; });
+  return o;
+}
+var _MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function _fx(f){var m=String(f||'').match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);if(!m)return '';return (m[3]?(+m[3])+' ':'')+_MESES[(+m[2])-1]+' '+m[1];}
+function _miles(n){n=Math.round(+n||0);return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'.');}
+
+// Personas que siguieron la competencia. El livecast cuenta a cada equipo una
+// vez por campeonato (analytics_daily, sin datos de la persona) y el owner
+// publica la cifra desde Admin → Portada: acá solo se muestra lo publicado.
+function _publicoHtml(){
+  var L=((((window._BG_SETTINGS||{}).portada)||{}).publico)||[];
+  L=L.filter(function(x){return x&&(+x.personas>0);});
+  if(!L.length)return '';
+  var h='<div class="yl-sec-h"><h2 class="yl-d">Personas que siguieron la competencia</h2><a onclick="sv(\'envivo\')">Competencia en vivo →</a></div><div class="yl-res">';
+  L.slice(0,3).forEach(function(x){
+    var nom=String(x.nombre||'').replace(/\s*FECHIPO\s*/gi,' ').replace(/\s+/g,' ').trim();
+    h+='<article class="yl-resc"><span class="e">'+_esc(nom)+(x.fecha?' · '+_fx(x.fecha):'')+'</span>'
+      +'<h3>la siguieron en vivo en YourLift</h3>'
+      +'<strong class="yl-d">'+_miles(x.personas)+'<small>personas</small></strong></article>';
+  });
+  return h+'</div>';
+}
+
+// Récords recientes: los últimos récords nacionales con fecha (de los mismos
+// récords de la sección Récords).
+function _recordsHtml(){
+  var D=(typeof R!=='undefined'&&R)||null; if(!D)return '';
+  var MOD={classic:'Classic',equipped:'Equipado',bench:'Banca Classic',bench_eq:'Banca Equipado',universitario:'Universitario'};
+  var MOV={sq:'sentadilla',bp:'press banca',dl:'peso muerto',total:'total'};
+  var L=[];
+  Object.keys(D).forEach(function(m){ var x=D[m]; if(!x||typeof x!=='object'||!MOD[m])return;
+    Object.keys(x).forEach(function(l){ if(!MOV[l]||!Array.isArray(x[l]))return;
+      x[l].forEach(function(r){ if(r&&/^\d{4}-\d{2}/.test(String(r.fecha||''))&&+r.marca>0)L.push({m:m,l:l,r:r}); }); }); });
+  if(!L.length)return '';
+  L.sort(function(a,b){return String(b.r.fecha).localeCompare(String(a.r.fecha));});
+  var h='<div class="yl-sec-h"><h2 class="yl-d">Récords recientes</h2><a onclick="sv(\'records\')">Todos los récords →</a></div><div class="yl-res">';
+  L.slice(0,3).forEach(function(o){ var r=o.r;
+    var ev=String(r.campeonato||r.evento||'').replace(/\s*FECHIPO\s*/gi,' ').replace(/\s+/g,' ').trim();
+    h+='<article class="yl-resc"><span class="e">'+_esc(ev)+' · '+_fx(r.fecha)+'</span>'
+      +'<h3>'+_esc(_corto(r.nombre))+', récord de '+MOV[o.l]+'</h3>'
+      +'<strong class="yl-d">'+_kg(r.marca)+'<small>kg</small></strong>'
+      +'<p>'+MOD[o.m]+(r.categoria?' · '+_catTxt(r.categoria):'')+(r.division?' · '+_esc(r.division):'')+'</p></article>';
+  });
+  return h+'</div>';
+}

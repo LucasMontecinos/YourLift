@@ -12,8 +12,9 @@
 //
 // Quién la escribe: la mesa (el controlador), después de cada escritura
 // confirmada de la competencia, y además cada tanto por si algo cambió sin
-// pasar por ahí. Solo escribe si el contenido cambió. Si falla, avisa en la
-// consola y nada más: la competencia no depende de esto.
+// pasar por ahí. Solo escribe si el contenido cambió, nunca mientras la
+// competencia tiene una escritura en camino y como mucho cada 3 s. Si falla,
+// avisa en la consola y nada más: la competencia no depende de esto.
 //
 // Qué lleva: exactamente lo que ya se ve en la Competencia en Vivo. Nombre,
 // club, sexo, división, categoría, modalidad, peso corporal, día, tanda, lote,
@@ -121,20 +122,30 @@ function _daPuedeEscribir() {
   return !PRACTICE_MODE && fbReady && window._fb && fbDB && isAdmin && window.IS_CONTROLLER && DATA && DATA.event
     && (typeof _srvAdoptado !== 'function' || _srvAdoptado());
 }
+// La competencia tiene prioridad: esta copia se sube solo cuando la mesa no
+// tiene una escritura de la competencia viajando ni pendiente, y como mucho
+// una vez cada 3 s. Con wifi malo, subirla justo encima de la siguiente
+// escritura de la competencia le restaba ancho de banda a lo que importa.
+const DA_MIN_MS = 3000;
+let _daUltT = 0;
+function _daReintentar(ms) { clearTimeout(_daTimer); _daTimer = setTimeout(_daEscribir, ms); }
 function _daProgramar() {
   if (!_daPuedeEscribir()) return;
-  clearTimeout(_daTimer);
-  _daTimer = setTimeout(_daEscribir, 350);
+  _daReintentar(1200);
 }
 async function _daEscribir() {
   if (!_daPuedeEscribir()) return;
   if (_daEnCurso) { _daPend = true; return; }
+  if ((typeof _syncInFlight !== 'undefined' && _syncInFlight) || (typeof _syncPending !== 'undefined' && _syncPending)) { _daReintentar(1000); return; }
+  const falta = DA_MIN_MS - (Date.now() - _daUltT);
+  if (falta > 0) { _daReintentar(falta); return; }
   const id = _daId();
   if (!id) return;
   let cuerpo;
   try { cuerpo = JSON.stringify(_daArmar()); } catch (e) { console.warn('[datos abiertos] no se pudo armar', e && e.message); return; }
   if (cuerpo === _daUlt && id === _daUltId) return;
   _daEnCurso = true;
+  _daUltT = Date.now();
   try {
     const ahora = Date.now();
     const datos = '{"actualizado":"' + new Date(ahora).toISOString() + '",' + cuerpo.slice(1);
